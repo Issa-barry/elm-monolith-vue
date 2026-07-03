@@ -12,7 +12,7 @@ test.beforeEach(async ({ page }) => {
 test('cashback index renders and supports search/filter controls', async ({
     page,
 }) => {
-    await page.goto('/cashback');
+    await page.goto('/backoffice/cashback');
     await expect(page).toHaveURL(/\/cashback/, { timeout: 20_000 });
     await expect(
         page.getByRole('heading', { name: /cashback/i }).first(),
@@ -31,7 +31,7 @@ test('cashback index renders and supports search/filter controls', async ({
 test('cashback row actions menu is available when transactions exist', async ({
     page,
 }) => {
-    await page.goto('/cashback');
+    await page.goto('/backoffice/cashback');
     await expect(page).toHaveURL(/\/cashback/, { timeout: 20_000 });
 
     const actionButtons = page.locator(

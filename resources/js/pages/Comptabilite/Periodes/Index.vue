@@ -55,9 +55,9 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Comptabilité', href: '/comptabilite' },
-    { title: 'Périodes', href: '/comptabilite/periodes' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Comptabilité', href: '/backoffice/comptabilite' },
+    { title: 'Périodes', href: '/backoffice/comptabilite/periodes' },
 ];
 
 const filterFields: FilterField[] = [
@@ -80,7 +80,7 @@ function fmt(n: number) {
 }
 
 const { onRowClick, bodyRowPt } = useClickableTableRow<Periode>(
-    (periode) => `/comptabilite/periodes/${periode.id}`,
+    (periode) => `/backoffice/comptabilite/periodes/${periode.id}`,
 );
 
 const typeBadge = (type: string) =>
@@ -109,7 +109,7 @@ const typeBadge = (type: string) =>
                         salariés
                     </p>
                 </div>
-                <Link v-if="can_create" href="/comptabilite/periodes/creer">
+                <Link v-if="can_create" href="/backoffice/comptabilite/periodes/creer">
                     <Button>
                         <Plus class="mr-2 h-4 w-4" />
                         Nouvelle période
@@ -153,7 +153,7 @@ const typeBadge = (type: string) =>
 
             <!-- Filtres -->
             <DataFilters
-                url="/comptabilite/periodes"
+                url="/backoffice/comptabilite/periodes"
                 :values="filters"
                 :fields="filterFields"
                 :result-count="periodes.data.length"
@@ -176,7 +176,7 @@ const typeBadge = (type: string) =>
                     >
                         <template #body="{ data }">
                             <Link
-                                :href="`/comptabilite/periodes/${data.id}`"
+                                :href="`/backoffice/comptabilite/periodes/${data.id}`"
                                 class="font-mono text-xs font-semibold text-primary hover:underline"
                             >
                                 {{ data.reference }}
@@ -241,7 +241,7 @@ const typeBadge = (type: string) =>
                     <Column header="" style="width: 80px">
                         <template #body="{ data }">
                             <Link
-                                :href="`/comptabilite/periodes/${data.id}`"
+                                :href="`/backoffice/comptabilite/periodes/${data.id}`"
                                 class="text-xs text-primary hover:underline"
                             >
                                 Voir

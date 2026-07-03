@@ -48,7 +48,7 @@ async function selectMultiSelectOption(page: any, optionLabel: string) {
 test.describe('Ventes — filtre multi-statut', () => {
     test('le drawer de filtres s\'ouvre et affiche le MultiSelect statut', async ({ page }) => {
         await login(page);
-        await page.goto('/ventes');
+        await page.goto('/backoffice/ventes');
         await expect(page).toHaveURL(/\/ventes/, { timeout: 15_000 });
 
         await openFilterDrawer(page);
@@ -60,7 +60,7 @@ test.describe('Ventes — filtre multi-statut', () => {
 
     test('sélectionner un statut filtre les commandes et met à jour l\'URL', async ({ page }) => {
         await login(page);
-        await page.goto('/ventes');
+        await page.goto('/backoffice/ventes');
         await expect(page).toHaveURL(/\/ventes/, { timeout: 15_000 });
 
         await openFilterDrawer(page);
@@ -84,7 +84,7 @@ test.describe('Ventes — filtre multi-statut', () => {
 
     test('sélectionner plusieurs statuts est possible', async ({ page }) => {
         await login(page);
-        await page.goto('/ventes');
+        await page.goto('/backoffice/ventes');
         await expect(page).toHaveURL(/\/ventes/, { timeout: 15_000 });
 
         await openFilterDrawer(page);
@@ -109,7 +109,7 @@ test.describe('Ventes — filtre multi-statut', () => {
 
     test('réinitialiser efface les statuts sélectionnés', async ({ page }) => {
         await login(page);
-        await page.goto('/ventes?statuts[]=brouillon');
+        await page.goto('/backoffice/ventes?statuts[]=brouillon');
         await expect(page).toHaveURL(/\/ventes/, { timeout: 15_000 });
 
         await openFilterDrawer(page);
@@ -122,7 +122,7 @@ test.describe('Ventes — filtre multi-statut', () => {
 
     test('le filtre agence est aussi un MultiSelect (admin)', async ({ page }) => {
         await login(page);
-        await page.goto('/ventes');
+        await page.goto('/backoffice/ventes');
         await expect(page).toHaveURL(/\/ventes/, { timeout: 15_000 });
 
         // Le sélecteur agence est affiché inline dans la barre d'outils (pas

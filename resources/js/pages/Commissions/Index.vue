@@ -73,8 +73,8 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Commissions', href: '/commissions' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Commissions', href: '/backoffice/commissions' },
 ];
 
 // ── Navigation (server-side) ──────────────────────────────────────────────────
@@ -82,7 +82,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 function setTab(t: 'livreurs' | 'proprietaires') {
     const defaultPeriode = t === 'proprietaires' ? 'month' : 'week';
     router.get(
-        '/commissions',
+        '/backoffice/commissions',
         { tab: t, periode: defaultPeriode },
         { preserveScroll: false, replace: true },
     );
@@ -90,7 +90,7 @@ function setTab(t: 'livreurs' | 'proprietaires') {
 
 function setPeriode(p: string) {
     router.get(
-        '/commissions',
+        '/backoffice/commissions',
         { tab: props.tab, periode: p },
         { preserveScroll: true, replace: true },
     );
@@ -233,7 +233,7 @@ function handlePaiementSubmit(payload: {
     paiementErrors.value = {};
     const b = selectedBeneficiaire.value;
     router.post(
-        `/commissions/beneficiaires/${b.type_beneficiaire}/${b.beneficiaire_id}/paiements`,
+        `/backoffice/commissions/beneficiaires/${b.type_beneficiaire}/${b.beneficiaire_id}/paiements`,
         payload,
         {
             preserveScroll: true,
@@ -263,7 +263,7 @@ function formatGNF(val: number): string {
 }
 
 function detailUrl(b: BeneficiaireRow): string {
-    return `/commissions/beneficiaires/${b.type_beneficiaire}/${b.beneficiaire_id}`;
+    return `/backoffice/commissions/beneficiaires/${b.type_beneficiaire}/${b.beneficiaire_id}`;
 }
 
 const { onRowClick, bodyRowPt } =
@@ -280,7 +280,7 @@ const { onRowClick, bodyRowPt } =
             <div class="sticky top-0 z-10 border-b bg-background">
                 <div class="flex items-center justify-between px-4 py-3">
                     <Link
-                        href="/dashboard"
+                        href="/backoffice/dashboard"
                         class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground"
                     >
                         <ArrowLeft class="h-5 w-5" />

@@ -48,12 +48,12 @@ const props = defineProps<{
 const { can } = usePermissions();
 
 const { onRowClick, bodyRowPt } = useClickableTableRow<Periode>(
-    (periode) => `/paie/${periode.id}`,
+    (periode) => `/backoffice/paie/${periode.id}`,
 );
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Paie', href: '/paie' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Paie', href: '/backoffice/paie' },
 ];
 
 const anneesOptions = Array.from({ length: 10 }, (_, i) => {
@@ -103,7 +103,7 @@ function statutSeverity(statut: string) {
                     <CalendarDays class="h-6 w-6 text-primary" />
                     <h1 class="text-2xl font-bold">Périodes de paie</h1>
                 </div>
-                <Link v-if="can('rh-paie.create')" href="/paie/create">
+                <Link v-if="can('rh-paie.create')" href="/backoffice/paie/create">
                     <Button size="sm">
                         <Plus class="mr-1 h-4 w-4" />
                         Nouvelle période
@@ -113,7 +113,7 @@ function statutSeverity(statut: string) {
 
             <!-- Filtres -->
             <DataFilters
-                url="/paie"
+                url="/backoffice/paie"
                 :values="filters"
                 :fields="filterFields"
                 :result-count="periodesFiltrees.length"
@@ -140,7 +140,7 @@ function statutSeverity(statut: string) {
                 <Column field="lignes_count" header="Lignes" sortable />
                 <Column header="Actions" style="width: 8rem">
                     <template #body="{ data }">
-                        <Link :href="`/paie/${data.id}`">
+                        <Link :href="`/backoffice/paie/${data.id}`">
                             <Button variant="outline" size="sm"
                                 >Détail →</Button
                             >

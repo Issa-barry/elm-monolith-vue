@@ -89,8 +89,8 @@ const props = defineProps<{
 // ── Breadcrumbs ───────────────────────────────────────────────────────────────
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Commissions logistiques', href: '/logistique/commissions' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Commissions logistiques', href: '/backoffice/logistique/commissions' },
     { title: props.commission.transfert_reference ?? 'Commission', href: '' },
 ];
 
@@ -166,7 +166,7 @@ function submitVersement() {
     versementForm.errors = {};
 
     router.post(
-        `/commissions-logistique/parts/${part.id}/versements`,
+        `/backoffice/commissions-logistique/parts/${part.id}/versements`,
         {
             montant: versementForm.montant,
             mode_paiement: versementForm.mode_paiement,
@@ -217,7 +217,7 @@ function formatModePaiement(mode: string): string {
             <div class="flex flex-wrap items-start justify-between gap-4">
                 <div class="flex items-center gap-3">
                     <Link
-                        href="/logistique/commissions"
+                        href="/backoffice/logistique/commissions"
                         class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-muted/80"
                     >
                         <ArrowLeft class="h-4 w-4" />
@@ -269,7 +269,7 @@ function formatModePaiement(mode: string): string {
                         class="text-sm text-muted-foreground"
                     />
                     <Link
-                        :href="`/logistique/${commission.transfert_id}`"
+                        :href="`/backoffice/logistique/${commission.transfert_id}`"
                         class="text-xs text-primary hover:underline"
                     >
                         Voir le transfert →

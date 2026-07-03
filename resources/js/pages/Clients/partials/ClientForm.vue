@@ -487,7 +487,7 @@ function onSubmit() {
 
         <!-- Pied -->
         <div class="hidden items-center justify-between sm:flex">
-            <a href="/clients">
+            <a href="/backoffice/clients">
                 <Button type="button" variant="outline"> Retour </Button>
             </a>
             <Button v-if="!isReadOnly" type="submit" :disabled="processing">

@@ -110,7 +110,7 @@ class TransfertLogistiqueIndexFilterTest extends TestCase
         $this->creerTransfert($org, $siteC, $siteB, $vehicule, $admin);
 
         $response = $this->actingAs($admin)
-            ->get('/logistique/transferts?depart_site_ids[]='.$siteA->id);
+            ->get('/backoffice/logistique/transferts?depart_site_ids[]='.$siteA->id);
 
         $response->assertOk();
         $response->assertInertia(fn (Assert $page) => $page
@@ -133,7 +133,7 @@ class TransfertLogistiqueIndexFilterTest extends TestCase
         $this->creerTransfert($org, $siteA, $siteC, $vehicule, $admin);
 
         $response = $this->actingAs($admin)
-            ->get('/logistique/transferts?arrivee_site_ids[]='.$siteB->id);
+            ->get('/backoffice/logistique/transferts?arrivee_site_ids[]='.$siteB->id);
 
         $response->assertOk();
         $response->assertInertia(fn (Assert $page) => $page
@@ -157,7 +157,7 @@ class TransfertLogistiqueIndexFilterTest extends TestCase
         $this->creerTransfert($org, $siteC, $siteB, $vehicule, $admin); // éliminé par départ
 
         $response = $this->actingAs($admin)
-            ->get('/logistique/transferts?depart_site_ids[]='.$siteA->id.'&arrivee_site_ids[]='.$siteB->id);
+            ->get('/backoffice/logistique/transferts?depart_site_ids[]='.$siteA->id.'&arrivee_site_ids[]='.$siteB->id);
 
         $response->assertOk();
         $response->assertInertia(fn (Assert $page) => $page
@@ -181,7 +181,7 @@ class TransfertLogistiqueIndexFilterTest extends TestCase
         $this->creerTransfert($org, $siteA, $siteB, $vehicule, $admin); // visible
         $this->creerTransfert($org, $siteC, $siteB, $vehicule, $admin); // invisible
 
-        $response = $this->actingAs($nonAdmin)->get('/logistique/transferts');
+        $response = $this->actingAs($nonAdmin)->get('/backoffice/logistique/transferts');
 
         $response->assertOk();
         $response->assertInertia(fn (Assert $page) => $page
@@ -206,7 +206,7 @@ class TransfertLogistiqueIndexFilterTest extends TestCase
 
         // Tente de forcer siteC via query params
         $response = $this->actingAs($nonAdmin)
-            ->get('/logistique/transferts?depart_site_ids[]='.$siteC->id);
+            ->get('/backoffice/logistique/transferts?depart_site_ids[]='.$siteC->id);
 
         $response->assertOk();
         // Doit voir seulement son propre site A, le param siteC est ignoré

@@ -19,7 +19,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function goToCreate(page: Page): Promise<void> {
-    await page.goto('/packings/create');
+    await page.goto('/backoffice/packings/create');
     await page.waitForSelector('#packing-form', { timeout: 20_000 });
 }
 
@@ -125,7 +125,7 @@ test('edit packing -> change shift Jour to Nuit -> persisted', async ({
 test('packing list shows shift label', async ({ page }) => {
     await createPacking(page, 'Nuit');
 
-    await page.goto('/packings');
+    await page.goto('/backoffice/packings');
     await expect(page.locator('body')).toContainText(/nuit/i, {
         timeout: 10_000,
     });

@@ -126,12 +126,12 @@ const { can } = usePermissions();
 const page = usePage();
 
 const { onRowClick, bodyRowPt } = useClickableTableRow<CommandeRow>((c) =>
-    c.commande_id ? `/ventes/${c.commande_id}` : null,
+    c.commande_id ? `/backoffice/ventes/${c.commande_id}` : null,
 );
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Commissions', href: '/commissions' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Commissions', href: '/backoffice/commissions' },
     { title: props.resume_global.nom, href: '' },
 ];
 
@@ -188,7 +188,7 @@ const nbFiltresActifs = computed(
 
 function applyFiltresServeur() {
     router.get(
-        `/commissions/beneficiaires/${props.resume_global.type}/${props.resume_global.id}`,
+        `/backoffice/commissions/beneficiaires/${props.resume_global.type}/${props.resume_global.id}`,
         {
             ...(filtresServeur.date_from
                 ? { date_from: filtresServeur.date_from }
@@ -236,7 +236,7 @@ function onPeriodeChange(value: string) {
     if (filtresServeur.date_from) params.date_from = filtresServeur.date_from;
     if (filtresServeur.date_to) params.date_to = filtresServeur.date_to;
     router.get(
-        `/commissions/beneficiaires/${props.resume_global.type}/${props.resume_global.id}`,
+        `/backoffice/commissions/beneficiaires/${props.resume_global.type}/${props.resume_global.id}`,
         params,
         { preserveScroll: true, replace: true },
     );
@@ -335,7 +335,7 @@ function submitPaiement() {
     paiementForm.processing = true;
     paiementErrors.value = {};
     router.post(
-        `/commissions/beneficiaires/${props.resume_global.type}/${props.resume_global.id}/paiements`,
+        `/backoffice/commissions/beneficiaires/${props.resume_global.type}/${props.resume_global.id}/paiements`,
         {
             montant: paiementForm.montant,
             mode_paiement: paiementForm.mode_paiement,
@@ -413,7 +413,7 @@ function submitFrais() {
         return;
     fraisForm.processing = true;
     router.patch(
-        `/commissions/parts/${fraisCommande.value.part_id}/frais`,
+        `/backoffice/commissions/parts/${fraisCommande.value.part_id}/frais`,
         {
             frais: fraisForm.frais,
             type_frais: fraisForm.type_frais,
@@ -462,7 +462,7 @@ function closeDetailDialog() {
             <div class="sticky top-0 z-10 border-b bg-background">
                 <div class="flex items-center justify-between px-4 py-3">
                     <Link
-                        href="/commissions"
+                        href="/backoffice/commissions"
                         class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground"
                     >
                         <ArrowLeft class="h-5 w-5" />
@@ -675,7 +675,7 @@ function closeDetailDialog() {
             <div class="flex items-center justify-between gap-4">
                 <div>
                     <p class="text-sm text-muted-foreground">
-                        <Link href="/commissions" class="hover:text-foreground"
+                        <Link href="/backoffice/commissions" class="hover:text-foreground"
                             >Commissions</Link
                         >
                         <span class="mx-1">›</span>
@@ -884,7 +884,7 @@ function closeDetailDialog() {
                             <div class="min-w-0 space-y-1 leading-tight">
                                 <Link
                                     v-if="data.commande_id"
-                                    :href="`/ventes/${data.commande_id}`"
+                                    :href="`/backoffice/ventes/${data.commande_id}`"
                                     class="inline-block max-w-full truncate rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground hover:text-foreground"
                                 >
                                     {{ data.commande_reference ?? '—' }}
@@ -1543,7 +1543,7 @@ function closeDetailDialog() {
                         <span class="text-muted-foreground">Commande</span>
                         <Link
                             v-if="detailCommande.commande_id"
-                            :href="`/ventes/${detailCommande.commande_id}`"
+                            :href="`/backoffice/ventes/${detailCommande.commande_id}`"
                             class="font-mono text-xs font-semibold text-primary hover:underline"
                         >
                             {{ detailCommande.commande_reference ?? '—' }}

@@ -19,9 +19,9 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Packings', href: '/packings' },
-    { title: 'Nouveau packing', href: '/packings/create' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Packings', href: '/backoffice/packings' },
+    { title: 'Nouveau packing', href: '/backoffice/packings/create' },
 ];
 
 const form = useForm({
@@ -34,7 +34,7 @@ const form = useForm({
 });
 
 function submit() {
-    form.post('/packings');
+    form.post('/backoffice/packings');
 }
 </script>
 
@@ -48,7 +48,7 @@ function submit() {
         >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
-                    href="/packings"
+                    href="/backoffice/packings"
                     class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
                 >
                     <ArrowLeft class="h-4 w-4" />

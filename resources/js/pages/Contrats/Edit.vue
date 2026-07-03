@@ -30,8 +30,8 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Contrats', href: '/contrats' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Contrats', href: '/backoffice/contrats' },
     { title: 'Modifier', href: '#' },
 ];
 
@@ -47,7 +47,7 @@ const form = useForm({
 const isCdd = computed(() => form.type_contrat === 'cdd');
 
 function submit() {
-    form.put(`/contrats/${props.contrat.id}`);
+    form.put(`/backoffice/contrats/${props.contrat.id}`);
 }
 </script>
 
@@ -56,7 +56,7 @@ function submit() {
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="p-6">
             <div class="mb-6 flex items-center gap-4">
-                <Link href="/contrats">
+                <Link href="/backoffice/contrats">
                     <Button variant="ghost" size="icon"
                         ><ArrowLeft class="h-4 w-4"
                     /></Button>
@@ -180,7 +180,7 @@ function submit() {
                 </div>
 
                 <div class="flex items-center justify-between">
-                    <Link href="/contrats">
+                    <Link href="/backoffice/contrats">
                         <Button type="button" variant="outline"
                             ><ArrowLeft class="mr-2 h-4 w-4" />Annuler</Button
                         >

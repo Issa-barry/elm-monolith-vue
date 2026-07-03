@@ -72,14 +72,14 @@ const typeLabel = {
 };
 
 const typeRoute = {
-    livreur: '/comptabilite/fiches/livreurs',
-    proprietaire: '/comptabilite/fiches/proprietaires',
-    salarie: '/comptabilite/fiches/salaries',
+    livreur: '/backoffice/comptabilite/fiches/livreurs',
+    proprietaire: '/backoffice/comptabilite/fiches/proprietaires',
+    salarie: '/backoffice/comptabilite/fiches/salaries',
 };
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Comptabilité', href: '/comptabilite' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Comptabilité', href: '/backoffice/comptabilite' },
     {
         title:
             typeLabel[
@@ -88,11 +88,11 @@ const breadcrumbs: BreadcrumbItem[] = [
         href:
             typeRoute[
                 props.fiche.beneficiaire_type as keyof typeof typeRoute
-            ] ?? '/comptabilite',
+            ] ?? '/backoffice/comptabilite',
     },
     {
         title: props.fiche.reference,
-        href: `/comptabilite/fiches/${props.fiche.id}`,
+        href: `/backoffice/comptabilite/fiches/${props.fiche.id}`,
     },
 ];
 
@@ -128,7 +128,7 @@ function submitPaiement() {
     submittingPaiement.value = true;
     paiementErrors.value = {};
     router.post(
-        `/comptabilite/fiches/${props.fiche.id}/paiements`,
+        `/backoffice/comptabilite/fiches/${props.fiche.id}/paiements`,
         paiementForm.value,
         {
             onError: (e) => {
@@ -152,7 +152,7 @@ function submitPaiement() {
 }
 
 function exportPdf() {
-    window.open(`/comptabilite/fiches/${props.fiche.id}/pdf`, '_blank');
+    window.open(`/backoffice/comptabilite/fiches/${props.fiche.id}/pdf`, '_blank');
 }
 </script>
 

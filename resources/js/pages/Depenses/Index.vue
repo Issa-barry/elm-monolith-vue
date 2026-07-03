@@ -125,8 +125,8 @@ const { can } = usePermissions();
 const toast = useToast();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Dépenses', href: '/depenses' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Dépenses', href: '/backoffice/depenses' },
 ];
 
 function currentParams() {
@@ -183,7 +183,7 @@ const filterFields = computed<FilterField[]>(() => [
         type: 'autocomplete',
         inline: true,
         placeholder: 'Nom ou prénom…',
-        suggestionsUrl: '/depenses/suggestions',
+        suggestionsUrl: '/backoffice/depenses/suggestions',
         suggestionsField: 'concerne',
     },
     {
@@ -192,7 +192,7 @@ const filterFields = computed<FilterField[]>(() => [
         type: 'autocomplete',
         inline: true,
         placeholder: 'Ex: 622…',
-        suggestionsUrl: '/depenses/suggestions',
+        suggestionsUrl: '/backoffice/depenses/suggestions',
         suggestionsField: 'telephone_concerne',
     },
     {
@@ -201,7 +201,7 @@ const filterFields = computed<FilterField[]>(() => [
         type: 'autocomplete',
         inline: true,
         placeholder: 'Nom ou immatriculation…',
-        suggestionsUrl: '/depenses/suggestions',
+        suggestionsUrl: '/backoffice/depenses/suggestions',
         suggestionsField: 'vehicule',
     },
     // ── Drawer : filtres avancés ─────────────────────────────────────────────
@@ -255,12 +255,12 @@ function buildExportParams(): URLSearchParams {
 
 function exportExcel() {
     const params = buildExportParams();
-    window.location.href = `/depenses/export/excel?${params.toString()}`;
+    window.location.href = `/backoffice/depenses/export/excel?${params.toString()}`;
 }
 
 function imprimer() {
     const params = buildExportParams();
-    window.open(`/depenses/imprimer?${params.toString()}`, '_blank');
+    window.open(`/backoffice/depenses/imprimer?${params.toString()}`, '_blank');
 }
 
 // ── Popup concerné ──────────────────────────────────────────────────────────
@@ -307,7 +307,7 @@ function openAudit(id: string) {
 
 function soumettre(id: string) {
     router.patch(
-        `/depenses/${id}/soumettre`,
+        `/backoffice/depenses/${id}/soumettre`,
         {},
         {
             preserveScroll: true,
@@ -324,7 +324,7 @@ function soumettre(id: string) {
 
 function valider(id: string) {
     router.patch(
-        `/depenses/${id}/valider`,
+        `/backoffice/depenses/${id}/valider`,
         {},
         {
             preserveScroll: true,
@@ -377,7 +377,7 @@ function confirmerRejet() {
 
     rejectProcessing.value = true;
     router.patch(
-        `/depenses/${rejectingDepenseId.value}/rejeter`,
+        `/backoffice/depenses/${rejectingDepenseId.value}/rejeter`,
         {
             motif_rejet: rejectMotif.value,
             commentaire_rejet:
@@ -411,7 +411,7 @@ function confirmerRejet() {
 
 function destroy(id: string) {
     if (!confirm('Supprimer cette dépense en brouillon ?')) return;
-    router.delete(`/depenses/${id}`, { preserveScroll: true });
+    router.delete(`/backoffice/depenses/${id}`, { preserveScroll: true });
 }
 
 function fmt(n: number) {
@@ -478,7 +478,7 @@ const categorieColors: Record<string, string> = {
                         <Printer class="mr-1.5 h-3.5 w-3.5" />
                         Imprimer
                     </Button>
-                    <Link v-if="props.can_create" href="/depenses/create">
+                    <Link v-if="props.can_create" href="/backoffice/depenses/create">
                         <Button>
                             <Plus class="mr-2 h-4 w-4" />
                             Nouvelle dépense
@@ -517,7 +517,7 @@ const categorieColors: Record<string, string> = {
 
             <!-- Filtres -->
             <DataFilters
-                url="/depenses"
+                url="/backoffice/depenses"
                 :values="filterValues"
                 :sites="sites"
                 :result-count="depenses.total"
@@ -742,7 +742,7 @@ const categorieColors: Record<string, string> = {
                                             <!-- Voir -->
                                             <DropdownMenuItem as-child>
                                                 <Link
-                                                    :href="`/depenses/${d.id}`"
+                                                    :href="`/backoffice/depenses/${d.id}`"
                                                     class="flex w-full items-center gap-2"
                                                 >
                                                     <Eye class="h-4 w-4" />
@@ -772,7 +772,7 @@ const categorieColors: Record<string, string> = {
                                                 as-child
                                             >
                                                 <Link
-                                                    :href="`/depenses/${d.id}/edit`"
+                                                    :href="`/backoffice/depenses/${d.id}/edit`"
                                                     class="flex w-full items-center gap-2"
                                                 >
                                                     <Pencil class="h-4 w-4" />
@@ -847,7 +847,7 @@ const categorieColors: Record<string, string> = {
                                     <p>Aucune dépense enregistrée.</p>
                                     <Link
                                         v-if="props.can_create"
-                                        href="/depenses/create"
+                                        href="/backoffice/depenses/create"
                                     >
                                         <Button variant="outline" size="sm">
                                             <Plus class="mr-2 h-4 w-4" />

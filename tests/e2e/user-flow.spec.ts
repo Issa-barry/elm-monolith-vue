@@ -16,7 +16,7 @@ const PREFIX = 'e2eusrflow';
 
 test.setTimeout(180_000);
 
-registerCleanup('/users', PREFIX);
+registerCleanup('/backoffice/users', PREFIX);
 
 // ─── Création ─────────────────────────────────────────────────────────────────
 
@@ -126,7 +126,7 @@ test('create user without required fields → stays on create page', async ({
     page,
 }) => {
     await login(page);
-    await page.goto('/users/create');
+    await page.goto('/backoffice/users/create');
 
     await page
         .locator('#user-form button[type="submit"]:visible')
@@ -143,7 +143,7 @@ test('create user with password mismatch → error shown', async ({ page }) => {
     const tel = `6${randomDigits(8)}`;
 
     await login(page);
-    await page.goto('/users/create');
+    await page.goto('/backoffice/users/create');
     await fillUserInfoAndAdvance(page, { prenom, nom, tel });
 
     // Mots de passe différents
@@ -161,7 +161,7 @@ test('create user with password mismatch → error shown', async ({ page }) => {
 
 test('status filter → shows only active users', async ({ page }) => {
     await login(page);
-    await page.goto('/users');
+    await page.goto('/backoffice/users');
 
     await applyDrawerFilterOption(page, 'statut', /^actif$/i);
 

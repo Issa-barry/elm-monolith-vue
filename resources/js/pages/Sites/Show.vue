@@ -146,8 +146,8 @@ watch(flashSuccess, (msg) => {
 });
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Sites', href: '/sites' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Sites', href: '/backoffice/sites' },
     { title: props.site.nom, href: '#' },
 ];
 
@@ -289,7 +289,7 @@ function openInviteDialog() {
 }
 
 function submitInvite() {
-    inviteForm.post(`/sites/${props.site.id}/invitations`, {
+    inviteForm.post(`/backoffice/sites/${props.site.id}/invitations`, {
         preserveScroll: true,
         onSuccess: () => {
             inviteDialogVisible.value = false;
@@ -302,7 +302,7 @@ function submitInvite() {
 
 function resendInvitation(invitationId: number) {
     router.post(
-        `/invitations/${invitationId}/resend`,
+        `/backoffice/invitations/${invitationId}/resend`,
         {},
         {
             preserveScroll: true,
@@ -318,7 +318,7 @@ function resendInvitation(invitationId: number) {
 }
 
 function revokeInvitation(invitationId: number) {
-    router.delete(`/invitations/${invitationId}`, {
+    router.delete(`/backoffice/invitations/${invitationId}`, {
         preserveScroll: true,
         onSuccess: () =>
             toast.add({
@@ -355,7 +355,7 @@ function revokeInvitation(invitationId: number) {
                     </p>
                 </template>
                 <template #actions>
-                    <Link href="/sites">
+                    <Link href="/backoffice/sites">
                         <Button variant="outline" size="sm">
                             <ArrowLeft class="mr-1.5 h-4 w-4" />
                             Retour
@@ -453,7 +453,7 @@ function revokeInvitation(invitationId: number) {
                                 </h3>
                                 <Link
                                     v-if="can('sites.update')"
-                                    :href="`/sites/${site.id}/edit`"
+                                    :href="`/backoffice/sites/${site.id}/edit`"
                                 >
                                     <Button variant="outline" size="sm">
                                         <Pencil class="mr-1.5 h-3.5 w-3.5" />
@@ -630,7 +630,7 @@ function revokeInvitation(invitationId: number) {
                                         >Site parent</span
                                     >
                                     <Link
-                                        :href="`/sites/${site.parent_id}`"
+                                        :href="`/backoffice/sites/${site.parent_id}`"
                                         class="inline-flex items-center gap-1.5 font-medium text-primary hover:underline"
                                     >
                                         <Building2
@@ -679,7 +679,7 @@ function revokeInvitation(invitationId: number) {
                                 <Link
                                     v-for="enfant in site.enfants"
                                     :key="enfant.id"
-                                    :href="`/sites/${enfant.id}`"
+                                    :href="`/backoffice/sites/${enfant.id}`"
                                     class="flex items-center gap-3 px-5 py-3 text-sm transition-colors hover:bg-muted/40"
                                 >
                                     <div
@@ -739,7 +739,7 @@ function revokeInvitation(invitationId: number) {
                             </h3>
                             <Link
                                 v-if="can_create_vehicule"
-                                :href="`/vehicules/create?site_id=${site.id}`"
+                                :href="`/backoffice/vehicules/create?site_id=${site.id}`"
                                 data-testid="add-site-vehicle-btn"
                             >
                                 <Button size="sm">
@@ -753,7 +753,7 @@ function revokeInvitation(invitationId: number) {
                             <Link
                                 v-for="v in vehicules"
                                 :key="v.id"
-                                :href="`/vehicules/${v.id}`"
+                                :href="`/backoffice/vehicules/${v.id}`"
                                 class="flex items-center gap-3 px-5 py-3 text-sm transition-colors hover:bg-muted/40"
                             >
                                 <div
@@ -802,7 +802,7 @@ function revokeInvitation(invitationId: number) {
                             </p>
                             <Link
                                 v-if="can_create_vehicule"
-                                :href="`/vehicules/create?site_id=${site.id}`"
+                                :href="`/backoffice/vehicules/create?site_id=${site.id}`"
                             >
                                 <Button variant="outline" size="sm">
                                     <Plus class="mr-2 h-4 w-4" />

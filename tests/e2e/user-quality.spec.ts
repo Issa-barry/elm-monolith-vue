@@ -16,7 +16,7 @@ const PREFIX = 'e2eusrqual';
 
 test.setTimeout(180_000);
 
-registerCleanup('/users', PREFIX);
+registerCleanup('/backoffice/users', PREFIX);
 
 // ─── Recherche ────────────────────────────────────────────────────────────────
 
@@ -29,7 +29,7 @@ test('search by name filters the list', async ({ page }) => {
     await login(page);
     await createUser(page, { prenom, nom, tel });
 
-    await page.goto('/users');
+    await page.goto('/backoffice/users');
 
     // Recherche par prénom – doit trouver
     const search = getVisibleSearchInput(page);
@@ -60,7 +60,7 @@ test('search by email filters the list', async ({ page }) => {
     await login(page);
     await createUser(page, { prenom, nom, tel, email });
 
-    await page.goto('/users');
+    await page.goto('/backoffice/users');
     const search = getVisibleSearchInput(page);
     await search.fill(email);
     await search.press('Enter');
@@ -76,7 +76,7 @@ test('search by email filters the list', async ({ page }) => {
 
 test('stats cards display correct counts', async ({ page }) => {
     await login(page);
-    await page.goto('/users');
+    await page.goto('/backoffice/users');
 
     const totalCard = page.getByText('Total utilisateurs').locator('..').locator('p.text-3xl');
     const activeCard = page.getByText('Utilisateurs actifs').locator('..').locator('p.text-3xl');
@@ -111,7 +111,7 @@ test('inactive filter shows only inactive users', async ({ page }) => {
     await expect(page).toHaveURL(/\/users\/[a-z0-9]+\/edit$/);
 
     // Vérifier le filtre "Inactif" sur la liste
-    await page.goto('/users');
+    await page.goto('/backoffice/users');
     await applyDrawerFilterOption(page, 'statut', /^inactif$/i);
 
     const rows = page.locator('[data-testid="staff-users-table"] tbody tr:visible');
@@ -135,7 +135,7 @@ test('duplicate phone number shows validation error', async ({ page }) => {
     await createUser(page, { prenom: `${PREFIX}${uid}A`, nom: `Dup${uid}A`, tel });
 
     // Second utilisateur avec le même téléphone – doit échouer
-    await page.goto('/users/create');
+    await page.goto('/backoffice/users/create');
     await fillUserInfoAndAdvance(page, { prenom: `${PREFIX}${uid}B`, nom: `Dup${uid}B`, tel });
     await page.locator('#password').fill('Password123');
     await page.locator('#password_confirmation').fill('Password123');
@@ -160,7 +160,7 @@ test('prenom is saved as title case and nom as uppercase', async ({ page }) => {
     await createUser(page, { prenom: 'mamadou', nom: 'barry', tel });
 
     // Le nom doit apparaître en majuscules dans la liste
-    await page.goto('/users');
+    await page.goto('/backoffice/users');
     const search = getVisibleSearchInput(page);
     await search.fill('mamadou barry');
     await search.press('Enter');
@@ -196,7 +196,7 @@ test('edit action in dropdown navigates to edit page', async ({ page }) => {
 
 test('users index page has correct title and breadcrumb', async ({ page }) => {
     await login(page);
-    await page.goto('/users');
+    await page.goto('/backoffice/users');
 
     await expect(page).toHaveTitle(/utilisateurs/i);
     await expect(page.getByRole('heading', { name: /^utilisateurs$/i })).toBeVisible();

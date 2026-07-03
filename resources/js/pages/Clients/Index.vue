@@ -69,7 +69,7 @@ const confirm = useConfirm();
 const toast = useToast();
 
 const { onRowClick, bodyRowPt } = useClickableTableRow<Client>(
-    (client) => `/clients/${client.id}`,
+    (client) => `/backoffice/clients/${client.id}`,
 );
 
 const statut = ref<string>('tous');
@@ -139,8 +139,8 @@ const mobileFiltered = computed(() => {
 });
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Clients', href: '/clients' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Clients', href: '/backoffice/clients' },
 ];
 
 function flagUrl(code: string) {
@@ -171,7 +171,7 @@ function confirmDelete(c: Client) {
         acceptLabel: 'Supprimer',
         acceptClass: 'p-button-danger',
         accept: () => {
-            router.delete(`/clients/${c.id}`, {
+            router.delete(`/backoffice/clients/${c.id}`, {
                 onSuccess: () =>
                     toast.add({
                         severity: 'success',
@@ -195,7 +195,7 @@ function confirmDelete(c: Client) {
             <div
                 class="sticky top-0 z-10 flex items-center gap-2 border-b bg-background px-3 py-2"
             >
-                <Link href="/dashboard">
+                <Link href="/backoffice/dashboard">
                     <Button
                         variant="ghost"
                         size="icon"
@@ -207,7 +207,7 @@ function confirmDelete(c: Client) {
                 <span class="flex-1 text-center text-sm font-semibold"
                     >Clients</span
                 >
-                <Link v-if="can('clients.create')" href="/clients/create">
+                <Link v-if="can('clients.create')" href="/backoffice/clients/create">
                     <Button size="sm" class="h-8 px-3 text-xs">
                         <Plus class="mr-1 h-3.5 w-3.5" />
                         Nouveau
@@ -299,7 +299,7 @@ function confirmDelete(c: Client) {
                                 as-child
                             >
                                 <Link
-                                    :href="`/clients/${c.id}`"
+                                    :href="`/backoffice/clients/${c.id}`"
                                     class="flex w-full items-center gap-2"
                                 >
                                     <Eye class="h-4 w-4" />
@@ -311,7 +311,7 @@ function confirmDelete(c: Client) {
                                 as-child
                             >
                                 <Link
-                                    :href="`/clients/${c.id}/edit`"
+                                    :href="`/backoffice/clients/${c.id}/edit`"
                                     class="flex w-full items-center gap-2"
                                 >
                                     <Pencil class="h-4 w-4" />
@@ -345,7 +345,7 @@ function confirmDelete(c: Client) {
             >
                 <Users class="h-12 w-12 opacity-30" />
                 <p class="text-sm">Aucun client trouvé.</p>
-                <Link v-if="can('clients.create')" href="/clients/create">
+                <Link v-if="can('clients.create')" href="/backoffice/clients/create">
                     <Button variant="outline" size="sm">
                         <Plus class="mr-2 h-4 w-4" />
                         Ajouter le premier client
@@ -368,7 +368,7 @@ function confirmDelete(c: Client) {
                         }}
                     </p>
                 </div>
-                <Link v-if="can('clients.create')" href="/clients/create">
+                <Link v-if="can('clients.create')" href="/backoffice/clients/create">
                     <Button>
                         <Plus class="mr-2 h-4 w-4" />
                         Nouveau client
@@ -561,7 +561,7 @@ function confirmDelete(c: Client) {
                                             as-child
                                         >
                                             <Link
-                                                :href="`/clients/${data.id}`"
+                                                :href="`/backoffice/clients/${data.id}`"
                                                 class="flex w-full items-center gap-2"
                                             >
                                                 <Eye class="h-4 w-4" />
@@ -573,7 +573,7 @@ function confirmDelete(c: Client) {
                                             as-child
                                         >
                                             <Link
-                                                :href="`/clients/${data.id}/edit`"
+                                                :href="`/backoffice/clients/${data.id}/edit`"
                                                 class="flex w-full items-center gap-2"
                                             >
                                                 <Pencil class="h-4 w-4" />
@@ -610,7 +610,7 @@ function confirmDelete(c: Client) {
                             <p class="text-sm">Aucun client trouvé.</p>
                             <Link
                                 v-if="can('clients.create')"
-                                href="/clients/create"
+                                href="/backoffice/clients/create"
                             >
                                 <Button variant="outline" size="sm">
                                     <Plus class="mr-2 h-4 w-4" />

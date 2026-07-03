@@ -35,8 +35,8 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Produits', href: '/produits' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Produits', href: '/backoffice/produits' },
     { title: props.produit.nom, href: '#' },
 ];
 
@@ -57,7 +57,7 @@ const form = useForm({
 });
 
 function submit() {
-    form.post(`/produits/${props.produit.id}`, { forceFormData: true });
+    form.post(`/backoffice/produits/${props.produit.id}`, { forceFormData: true });
 }
 </script>
 
@@ -71,7 +71,7 @@ function submit() {
         >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
-                    href="/produits"
+                    href="/backoffice/produits"
                     class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
                 >
                     <ArrowLeft class="h-4 w-4" />

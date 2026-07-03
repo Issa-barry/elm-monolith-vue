@@ -447,7 +447,7 @@ class DepenseComptabiliteTest extends TestCase
         [$employe, $contrat] = $this->makeEmployeAvecContrat(1_200_000);
 
         $this->actingAs($this->user)
-            ->get('/comptabilite/salaires?mois=6&annee=2026')
+            ->get('/backoffice/comptabilite/salaires?mois=6&annee=2026')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Comptabilite/Salaire/Index')
@@ -470,8 +470,8 @@ class DepenseComptabiliteTest extends TestCase
     {
         [$employe, $contrat] = $this->makeEmployeAvecContrat();
 
-        $this->actingAs($this->user)->get('/comptabilite/salaires?mois=6&annee=2026');
-        $this->actingAs($this->user)->get('/comptabilite/salaires?mois=6&annee=2026');
+        $this->actingAs($this->user)->get('/backoffice/comptabilite/salaires?mois=6&annee=2026');
+        $this->actingAs($this->user)->get('/backoffice/comptabilite/salaires?mois=6&annee=2026');
 
         $this->assertDatabaseCount('paie_lignes', 1);
     }
@@ -492,7 +492,7 @@ class DepenseComptabiliteTest extends TestCase
         ]);
 
         $this->actingAs($this->user)
-            ->get('/comptabilite/salaires?mois=6&annee=2026')
+            ->get('/backoffice/comptabilite/salaires?mois=6&annee=2026')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->where('lignes.0.deductions', 80_000)
@@ -566,7 +566,7 @@ class DepenseComptabiliteTest extends TestCase
         ]);
 
         $this->actingAs($this->user)
-            ->get('/comptabilite/commissions/logistique')
+            ->get('/backoffice/comptabilite/commissions/logistique')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Comptabilite/CommissionLogistique/Index')
@@ -621,7 +621,7 @@ class DepenseComptabiliteTest extends TestCase
         ]);
 
         $this->actingAs($this->user)
-            ->get('/comptabilite/commissions/vente')
+            ->get('/backoffice/comptabilite/commissions/vente')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Comptabilite/CommissionVente/Index')
@@ -679,7 +679,7 @@ class DepenseComptabiliteTest extends TestCase
         ]);
 
         $this->actingAs($this->user)
-            ->get('/comptabilite/commissions/proprietaires')
+            ->get('/backoffice/comptabilite/commissions/proprietaires')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Comptabilite/CommissionProprietaire/Index')
@@ -736,7 +736,7 @@ class DepenseComptabiliteTest extends TestCase
         ]);
 
         $this->actingAs($this->user)
-            ->get('/comptabilite/commissions/proprietaires')
+            ->get('/backoffice/comptabilite/commissions/proprietaires')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Comptabilite/CommissionProprietaire/Index')
@@ -746,7 +746,7 @@ class DepenseComptabiliteTest extends TestCase
             );
 
         $this->actingAs($this->user)
-            ->get("/comptabilite/commissions/proprietaires/{$proprietaire->id}")
+            ->get("/backoffice/comptabilite/commissions/proprietaires/{$proprietaire->id}")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Comptabilite/CommissionProprietaire/Show')

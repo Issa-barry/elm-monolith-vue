@@ -41,13 +41,13 @@ const vehiculesItems = computed((): QuickMenuHref[] => {
     if (!moduleActive('vehicules')) return [];
 
     const items: QuickMenuHref[] = [];
-    if (can('proprietaires.read')) items.push('/proprietaires');
-    if (can('vehicules.read')) items.push('/vehicules');
-    if (can('equipes-livraison.read')) items.push('/equipes-livraison');
+    if (can('proprietaires.read')) items.push('/backoffice/proprietaires');
+    if (can('vehicules.read')) items.push('/backoffice/vehicules');
+    if (can('equipes-livraison.read')) items.push('/backoffice/equipes-livraison');
     return items;
 });
 const vehiculesQuickHref = computed<QuickMenuHref>(
-    () => vehiculesItems.value[0] ?? '/vehicules',
+    () => vehiculesItems.value[0] ?? '/backoffice/vehicules',
 );
 
 const quickMenuItems = computed((): QuickMenuItem[] =>
@@ -60,31 +60,31 @@ const quickMenuItems = computed((): QuickMenuItem[] =>
         },
         {
             title: 'Ventes',
-            href: '/ventes',
+            href: '/backoffice/ventes',
             icon: ShoppingCart,
             visible: canSee('ventes.read', 'ventes'),
         },
         {
             title: 'Achats',
-            href: '/achats',
+            href: '/backoffice/achats',
             icon: PackageCheck,
             visible: canSee('achats.read', 'achats'),
         },
         {
             title: 'Packings',
-            href: '/packings',
+            href: '/backoffice/packings',
             icon: Layers,
             visible: canSee('packings.read', 'packings'),
         },
         {
             title: 'Clients',
-            href: '/clients',
+            href: '/backoffice/clients',
             icon: UserRoundCheck,
             visible: can('clients.read'),
         },
         {
             title: 'Prestataires',
-            href: '/prestataires',
+            href: '/backoffice/prestataires',
             icon: HandCoins,
             visible: canSee('prestataires.read', 'prestataires'),
         },
@@ -96,25 +96,25 @@ const quickMenuItems = computed((): QuickMenuItem[] =>
         },
         {
             title: 'Produits',
-            href: '/produits',
+            href: '/backoffice/produits',
             icon: Package,
             visible: canSee('produits.read', 'produits'),
         },
         {
             title: 'Logistique',
-            href: '/logistique/transferts',
+            href: '/backoffice/logistique/transferts',
             icon: Truck,
             visible: canSee('logistique.read', 'logistique'),
         },
         {
             title: 'Sites',
-            href: '/sites',
+            href: '/backoffice/sites',
             icon: Building2,
             visible: canSee('sites.read', 'sites'),
         },
         {
             title: 'Utilisateurs',
-            href: '/users',
+            href: '/backoffice/users',
             icon: UserCog,
             visible: canSee('users.read', 'utilisateurs'),
         },

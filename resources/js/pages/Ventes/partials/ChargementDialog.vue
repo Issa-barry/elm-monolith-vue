@@ -88,7 +88,7 @@ function submit(): void {
     dialogErrors.value = [];
 
     router.post(
-        `/ventes/${props.commandeId}/statut/avancer`,
+        `/backoffice/ventes/${props.commandeId}/statut/avancer`,
         {
             lignes: chargementLignes.value.map((l) => ({
                 id: l.id,

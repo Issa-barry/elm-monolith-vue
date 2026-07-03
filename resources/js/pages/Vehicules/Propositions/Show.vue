@@ -55,9 +55,9 @@ const flashSuccess = computed(
 const errors = computed(() => (page.props as any).errors ?? {});
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Véhicules', href: '/vehicules' },
-    { title: 'Propositions', href: '/vehicules/propositions' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Véhicules', href: '/backoffice/vehicules' },
+    { title: 'Propositions', href: '/backoffice/vehicules/propositions' },
     { title: props.proposition.immatriculation, href: '#' },
 ];
 
@@ -87,7 +87,7 @@ function closeModal() {
 
 function priseEnCharge() {
     router.patch(
-        `/vehicules/propositions/${props.proposition.id}/prendre-en-charge`,
+        `/backoffice/vehicules/propositions/${props.proposition.id}/prendre-en-charge`,
         {},
         { preserveScroll: true },
     );
@@ -99,8 +99,8 @@ function submitNote() {
 
     const url =
         showModal.value === 'complement'
-            ? `/vehicules/propositions/${props.proposition.id}/demander-complement`
-            : `/vehicules/propositions/${props.proposition.id}/rejeter`;
+            ? `/backoffice/vehicules/propositions/${props.proposition.id}/demander-complement`
+            : `/backoffice/vehicules/propositions/${props.proposition.id}/rejeter`;
 
     router.patch(
         url,
@@ -124,7 +124,7 @@ function valider() {
         return;
 
     router.post(
-        `/vehicules/propositions/${props.proposition.id}/valider`,
+        `/backoffice/vehicules/propositions/${props.proposition.id}/valider`,
         {},
         { preserveScroll: false },
     );
@@ -139,7 +139,7 @@ function valider() {
             <!-- Retour + titre -->
             <div class="flex items-center gap-3">
                 <Link
-                    href="/vehicules/propositions"
+                    href="/backoffice/vehicules/propositions"
                     class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-muted/80"
                 >
                     <ArrowLeft class="h-4 w-4" />

@@ -57,8 +57,8 @@ const confirm = useConfirm();
 const toast = useToast();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Employés', href: '/employes' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Employés', href: '/backoffice/employes' },
     { title: `${props.employe.prenom} ${props.employe.nom}`, href: '#' },
 ];
 
@@ -73,7 +73,7 @@ const form = useForm({
 });
 
 function submit() {
-    form.put(`/employes/${props.employe.id}`);
+    form.put(`/backoffice/employes/${props.employe.id}`);
 }
 
 const TYPE_CONTRAT_CLASS: Record<string, string> = {
@@ -96,7 +96,7 @@ function deleteContrat(c: ContratRow) {
         acceptLabel: 'Supprimer',
         acceptClass: 'p-button-danger',
         accept: () => {
-            router.delete(`/contrats/${c.id}`, {
+            router.delete(`/backoffice/contrats/${c.id}`, {
                 onSuccess: () =>
                     toast.add({
                         severity: 'success',
@@ -118,7 +118,7 @@ function deleteContrat(c: ContratRow) {
             <!-- Header -->
             <div class="mb-6 flex items-start justify-between">
                 <div class="flex items-center gap-4">
-                    <Link href="/employes">
+                    <Link href="/backoffice/employes">
                         <Button variant="ghost" size="icon"
                             ><ArrowLeft class="h-4 w-4"
                         /></Button>
@@ -153,7 +153,7 @@ function deleteContrat(c: ContratRow) {
                 </div>
                 <Link
                     v-if="!employe.contrat_actif"
-                    :href="`/contrats/create?employe_id=${employe.id}`"
+                    :href="`/backoffice/contrats/create?employe_id=${employe.id}`"
                 >
                     <Button variant="outline" size="sm"
                         ><Plus class="mr-1.5 h-4 w-4" />Nouveau contrat</Button
@@ -311,7 +311,7 @@ function deleteContrat(c: ContratRow) {
                         </h3>
                         <Link
                             v-if="!employe.contrat_actif"
-                            :href="`/contrats/create?employe_id=${employe.id}`"
+                            :href="`/backoffice/contrats/create?employe_id=${employe.id}`"
                         >
                             <Button variant="outline" size="sm"
                                 ><Plus
@@ -376,7 +376,7 @@ function deleteContrat(c: ContratRow) {
                                 </p>
                             </div>
                             <div class="flex gap-1">
-                                <Link :href="`/contrats/${c.id}/edit`">
+                                <Link :href="`/backoffice/contrats/${c.id}/edit`">
                                     <Button
                                         variant="ghost"
                                         size="icon"

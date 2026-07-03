@@ -78,8 +78,8 @@ const flashSuccess = computed(
 );
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Cashback clients', href: '/cashback' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Cashback clients', href: '/backoffice/cashback' },
 ];
 
 // ── Filtres ───────────────────────────────────────────────────────────────────
@@ -181,7 +181,7 @@ function openValider(t: Transaction) {
 }
 function submitValider() {
     if (!validerTarget.value) return;
-    validerForm.patch(`/cashback/${validerTarget.value.id}/valider`, {
+    validerForm.patch(`/backoffice/cashback/${validerTarget.value.id}/valider`, {
         preserveScroll: true,
         onSuccess: () => {
             validerVisible.value = false;
@@ -211,7 +211,7 @@ function openVerser(t: Transaction) {
 }
 function submitVerser() {
     if (!verserTarget.value) return;
-    verserForm.patch(`/cashback/${verserTarget.value.id}/verser`, {
+    verserForm.patch(`/backoffice/cashback/${verserTarget.value.id}/verser`, {
         preserveScroll: true,
         onSuccess: () => {
             verserVisible.value = false;
@@ -265,7 +265,7 @@ function formatPhone(phone: string | null): string {
                 class="sticky top-0 z-10 flex items-center justify-between border-b bg-background px-4 py-3"
             >
                 <Link
-                    href="/dashboard"
+                    href="/backoffice/dashboard"
                     class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
                 >
                     <ArrowLeft class="h-5 w-5" />
@@ -503,7 +503,7 @@ function formatPhone(phone: string | null): string {
 
             <!-- Filtres -->
             <DataFilters
-                url="/cashback"
+                url="/backoffice/cashback"
                 :values="{
                     search: search,
                     statut: filters.statut ?? 'tous',

@@ -82,9 +82,9 @@ const confirm = useConfirm();
 const toast = useToast();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Paie', href: '/paie' },
-    { title: props.periode.label, href: `/paie/${props.periode.id}` },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Paie', href: '/backoffice/paie' },
+    { title: props.periode.label, href: `/backoffice/paie/${props.periode.id}` },
 ];
 
 const globalFilter = ref('');
@@ -100,7 +100,7 @@ const expandedRows = ref<Record<string, boolean>>({});
 // ── Actions workflow ──────────────────────────────────────────────────────────
 function calculer() {
     router.post(
-        `/paie/${props.periode.id}/calculer`,
+        `/backoffice/paie/${props.periode.id}/calculer`,
         {},
         {
             onSuccess: () =>
@@ -114,7 +114,7 @@ function calculer() {
 }
 function valider() {
     router.post(
-        `/paie/${props.periode.id}/valider`,
+        `/backoffice/paie/${props.periode.id}/valider`,
         {},
         {
             onSuccess: () =>
@@ -128,7 +128,7 @@ function valider() {
 }
 function marquerPaye() {
     router.post(
-        `/paie/${props.periode.id}/paye`,
+        `/backoffice/paie/${props.periode.id}/paye`,
         {},
         {
             onSuccess: () =>
@@ -146,7 +146,7 @@ function cloturer() {
         header: 'Clôturer la période',
         accept: () =>
             router.post(
-                `/paie/${props.periode.id}/cloturer`,
+                `/backoffice/paie/${props.periode.id}/cloturer`,
                 {},
                 {
                     onSuccess: () =>
@@ -163,7 +163,7 @@ function supprimerPeriode() {
     confirm.require({
         message: 'Supprimer cette période de paie ?',
         header: 'Confirmation',
-        accept: () => router.delete(`/paie/${props.periode.id}`),
+        accept: () => router.delete(`/backoffice/paie/${props.periode.id}`),
     });
 }
 
@@ -200,14 +200,14 @@ function openVariableModal(ligne: Ligne, variable?: Variable) {
 
 function submitVariable() {
     if (editingVariable.value) {
-        varForm.put(`/paie-variables/${editingVariable.value.id}`, {
+        varForm.put(`/backoffice/paie-variables/${editingVariable.value.id}`, {
             onSuccess: () => {
                 showVariableModal.value = false;
                 varForm.reset();
             },
         });
     } else {
-        varForm.post(`/paie-lignes/${selectedLigne.value!.id}/variables`, {
+        varForm.post(`/backoffice/paie-lignes/${selectedLigne.value!.id}/variables`, {
             onSuccess: () => {
                 showVariableModal.value = false;
                 varForm.reset();
@@ -221,7 +221,7 @@ function supprimerVariable(variable: Variable) {
         message: `Supprimer la variable "${variable.libelle}" ?`,
         header: 'Confirmation',
         accept: () =>
-            router.delete(`/paie-variables/${variable.id}`, {
+            router.delete(`/backoffice/paie-variables/${variable.id}`, {
                 onSuccess: () =>
                     toast.add({
                         severity: 'success',
@@ -249,7 +249,7 @@ function submitPaiement(payload: { montant: number; mode_paiement: string }) {
     paiementErrors.value = {};
 
     router.post(
-        `/paie-lignes/${selectedLigne.value.id}/paiements`,
+        `/backoffice/paie-lignes/${selectedLigne.value.id}/paiements`,
         {
             montant: payload.montant,
             mode_paiement: payload.mode_paiement,
@@ -278,7 +278,7 @@ function supprimerPaiement(paiement: Paiement) {
         message: 'Supprimer ce paiement ?',
         header: 'Confirmation',
         accept: () =>
-            router.delete(`/paie-paiements/${paiement.id}`, {
+            router.delete(`/backoffice/paie-paiements/${paiement.id}`, {
                 onSuccess: () =>
                     toast.add({
                         severity: 'success',

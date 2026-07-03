@@ -157,7 +157,7 @@ const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
 
         <!-- Pied -->
         <div class="hidden items-center justify-between sm:flex">
-            <a href="/sites">
+            <a href="/backoffice/sites">
                 <Button type="button" variant="outline"> Retour </Button>
             </a>
             <Button type="submit" :disabled="processing">

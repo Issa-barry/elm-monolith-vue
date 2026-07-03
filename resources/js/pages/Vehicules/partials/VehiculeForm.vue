@@ -262,7 +262,7 @@ function handleSubmit() {
                                         Aucun résultat
                                     </span>
                                     <Link
-                                        href="/proprietaires/create"
+                                        href="/backoffice/proprietaires/create"
                                         class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
                                     >
                                         + Créer
@@ -613,7 +613,7 @@ function handleSubmit() {
 
         <!-- Pied de page -->
         <div class="order-6 hidden items-center justify-between sm:flex">
-            <a href="/vehicules">
+            <a href="/backoffice/vehicules">
                 <Button type="button" variant="outline">Retour</Button>
             </a>
             <Button

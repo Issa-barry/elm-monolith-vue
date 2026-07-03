@@ -37,8 +37,8 @@ const flashSuccess = computed(
 );
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Prestataires', href: '/prestataires' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Prestataires', href: '/backoffice/prestataires' },
     { title: props.prestataire.reference, href: '#' },
 ];
 
@@ -59,7 +59,7 @@ const form = useForm({
 });
 
 function submit() {
-    form.put(`/prestataires/${props.prestataire.id}`);
+    form.put(`/backoffice/prestataires/${props.prestataire.id}`);
 }
 
 function handleFormUpdate(updated: Record<string, unknown>) {
@@ -90,7 +90,7 @@ watch(
         >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
-                    href="/prestataires"
+                    href="/backoffice/prestataires"
                     class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
                 >
                     <ArrowLeft class="h-4 w-4" />

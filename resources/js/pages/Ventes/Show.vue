@@ -186,8 +186,8 @@ const toast = useToast();
 
 // ── Breadcrumbs ───────────────────────────────────────────────────────────────
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Ventes', href: '/ventes' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Ventes', href: '/backoffice/ventes' },
     { title: props.commande.reference, href: '#' },
 ];
 
@@ -362,7 +362,7 @@ function confirmer() {
     if (actionProcessing.value) return;
     actionProcessing.value = true;
     router.patch(
-        `/ventes/${props.commande.id}/valider`,
+        `/backoffice/ventes/${props.commande.id}/valider`,
         {},
         {
             onSuccess: () =>
@@ -381,7 +381,7 @@ function demarrerChargement() {
     if (actionProcessing.value) return;
     actionProcessing.value = true;
     router.post(
-        `/ventes/${props.commande.id}/statut/avancer`,
+        `/backoffice/ventes/${props.commande.id}/statut/avancer`,
         {},
         {
             onSuccess: () =>
@@ -414,7 +414,7 @@ const annulerForm = useForm({
 });
 
 function submitAnnuler() {
-    annulerForm.patch(`/ventes/${props.commande.id}/annuler`, {
+    annulerForm.patch(`/backoffice/ventes/${props.commande.id}/annuler`, {
         onSuccess: () => {
             annulerDialogVisible.value = false;
             const flashError = (usePage().props as Record<string, any>).flash
@@ -476,7 +476,7 @@ function openEncaisserDialog() {
 
 function submitEncaisser() {
     if (!props.facture) return;
-    encaisserForm.post(`/factures/${props.facture.id}/encaissements`, {
+    encaisserForm.post(`/backoffice/factures/${props.facture.id}/encaissements`, {
         onSuccess: () => {
             encaisserDialogVisible.value = false;
             toast.add({
@@ -579,7 +579,7 @@ function connectorIsActive(idx: number): boolean {
         >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
-                    href="/ventes"
+                    href="/backoffice/ventes"
                     class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
                 >
                     <ArrowLeft class="h-4 w-4" />
@@ -623,7 +623,7 @@ function connectorIsActive(idx: number): boolean {
                                 as-child
                             >
                                 <Link
-                                    :href="`/ventes/${commande.id}/edit`"
+                                    :href="`/backoffice/ventes/${commande.id}/edit`"
                                     class="flex w-full cursor-pointer items-center gap-2"
                                 >
                                     <Pencil class="h-4 w-4" />
@@ -683,7 +683,7 @@ function connectorIsActive(idx: number): boolean {
             <!-- En-tête commande ─────────────────────────────────────────────── -->
             <div class="hidden items-start justify-between gap-4 sm:flex">
                 <div class="flex items-start gap-4">
-                    <Link href="/ventes">
+                    <Link href="/backoffice/ventes">
                         <Button
                             variant="ghost"
                             size="icon"
@@ -728,7 +728,7 @@ function connectorIsActive(idx: number): boolean {
                     <!-- Modifier (brouillon) -->
                     <Link
                         v-if="commande.can_modifier"
-                        :href="`/ventes/${commande.id}/edit`"
+                        :href="`/backoffice/ventes/${commande.id}/edit`"
                     >
                         <Button variant="outline" size="sm">
                             <Pencil class="mr-2 h-4 w-4" />

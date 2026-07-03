@@ -70,9 +70,9 @@ const props = defineProps<{
 }>();
 
 const typeRoute = {
-    livreur: '/comptabilite/fiches/livreurs',
-    proprietaire: '/comptabilite/fiches/proprietaires',
-    salarie: '/comptabilite/fiches/salaries',
+    livreur: '/backoffice/comptabilite/fiches/livreurs',
+    proprietaire: '/backoffice/comptabilite/fiches/proprietaires',
+    salarie: '/backoffice/comptabilite/fiches/salaries',
 };
 
 const typeTitle = {
@@ -82,8 +82,8 @@ const typeTitle = {
 };
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Comptabilité', href: '/comptabilite' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Comptabilité', href: '/backoffice/comptabilite' },
     { title: typeTitle[props.type], href: typeRoute[props.type] },
 ];
 
@@ -123,7 +123,7 @@ function fmt(n: number) {
 }
 
 const { onRowClick, bodyRowPt } = useClickableTableRow<Fiche>(
-    (fiche) => `/comptabilite/fiches/${fiche.id}`,
+    (fiche) => `/backoffice/comptabilite/fiches/${fiche.id}`,
 );
 
 function exportExcel() {
@@ -134,7 +134,7 @@ function exportExcel() {
     if (props.filters.periode_id)
         params.set('periode_id', props.filters.periode_id);
     window.open(
-        '/comptabilite/fiches/export/excel?' + params.toString(),
+        '/backoffice/comptabilite/fiches/export/excel?' + params.toString(),
         '_blank',
     );
 }
@@ -239,7 +239,7 @@ function exportExcel() {
                         <template #body="{ data }">
                             <Link
                                 v-if="data.periode_id"
-                                :href="`/comptabilite/periodes/${data.periode_id}`"
+                                :href="`/backoffice/comptabilite/periodes/${data.periode_id}`"
                                 class="font-mono text-xs text-primary hover:underline"
                             >
                                 {{ data.periode_reference }}
@@ -261,7 +261,7 @@ function exportExcel() {
                     <Column header="Bénéficiaire" style="min-width: 180px">
                         <template #body="{ data }">
                             <Link
-                                :href="`/comptabilite/fiches/${data.id}`"
+                                :href="`/backoffice/comptabilite/fiches/${data.id}`"
                                 class="font-medium hover:underline"
                             >
                                 {{ data.beneficiaire_nom }}
@@ -309,7 +309,7 @@ function exportExcel() {
                     <Column header="" style="width: 60px">
                         <template #body="{ data }">
                             <Link
-                                :href="`/comptabilite/fiches/${data.id}`"
+                                :href="`/backoffice/comptabilite/fiches/${data.id}`"
                                 class="text-xs text-primary hover:underline"
                             >
                                 Voir

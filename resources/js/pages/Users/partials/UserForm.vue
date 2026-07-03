@@ -545,7 +545,7 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
         <!-- Actions desktop -->
         <div class="hidden items-center justify-between sm:flex">
             <Button variant="outline" type="button" as-child>
-                <a :href="backHref ?? '/users'">
+                <a :href="backHref ?? '/backoffice/users'">
                     <ArrowLeft class="mr-2 h-4 w-4" />
                     Retour
                 </a>

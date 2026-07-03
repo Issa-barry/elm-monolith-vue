@@ -101,8 +101,8 @@ const props = defineProps<{
 const { can } = usePermissions();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Commissions', href: '/commissions' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Commissions', href: '/backoffice/commissions' },
     { title: props.commission.commande_reference ?? 'Commission', href: '' },
 ];
 
@@ -203,7 +203,7 @@ function submitVersementDialog() {
     versementForm.processing = true;
     const today = new Date().toISOString().slice(0, 10);
     router.post(
-        `/commissions/${props.commission.id}/parts/${part.id}/versements`,
+        `/backoffice/commissions/${props.commission.id}/parts/${part.id}/versements`,
         {
             montant: versementForm.montant,
             mode_paiement: versementForm.mode_paiement,
@@ -231,7 +231,7 @@ const typesFraisLabels: Record<string, string> = {
 // ── Suppression versement ─────────────────────────────────────────────────────
 
 function deleteVersement(versementId: number) {
-    router.delete(`/versements-commissions/${versementId}`, {
+    router.delete(`/backoffice/versements-commissions/${versementId}`, {
         preserveScroll: true,
     });
 }
@@ -831,7 +831,7 @@ function isVersementDisabled(part: CommissionPart): boolean {
 
             <!-- ── Pied de page ───────────────────────────────────────────────── -->
             <div class="flex items-center">
-                <Link href="/commissions">
+                <Link href="/backoffice/commissions">
                     <Button variant="outline" class="gap-2">
                         <ArrowLeft class="h-4 w-4" />
                         Retour

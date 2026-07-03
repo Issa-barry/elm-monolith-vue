@@ -67,7 +67,7 @@ const { can } = usePermissions();
 const confirm = useConfirm();
 
 const { onRowClick, bodyRowPt } = useClickableTableRow<Proprietaire>(
-    (proprietaire) => `/proprietaires/${proprietaire.id}`,
+    (proprietaire) => `/backoffice/proprietaires/${proprietaire.id}`,
 );
 const toast = useToast();
 
@@ -138,8 +138,8 @@ const mobileFiltered = computed(() => {
 });
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Propriétaires', href: '/proprietaires' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Propriétaires', href: '/backoffice/proprietaires' },
 ];
 
 function flagUrl(code: string) {
@@ -170,7 +170,7 @@ function confirmDelete(p: Proprietaire) {
         acceptLabel: 'Supprimer',
         acceptClass: 'p-button-danger',
         accept: () => {
-            router.delete(`/proprietaires/${p.id}`, {
+            router.delete(`/backoffice/proprietaires/${p.id}`, {
                 onSuccess: () =>
                     toast.add({
                         severity: 'success',
@@ -194,7 +194,7 @@ function confirmDelete(p: Proprietaire) {
             <div
                 class="sticky top-0 z-10 flex items-center gap-2 border-b bg-background px-3 py-2"
             >
-                <Link href="/dashboard">
+                <Link href="/backoffice/dashboard">
                     <Button
                         variant="ghost"
                         size="icon"
@@ -208,7 +208,7 @@ function confirmDelete(p: Proprietaire) {
                 >
                 <Link
                     v-if="can('proprietaires.create')"
-                    href="/proprietaires/create"
+                    href="/backoffice/proprietaires/create"
                 >
                     <Button size="sm" class="h-8 px-3 text-xs">
                         <Plus class="mr-1 h-3.5 w-3.5" />
@@ -251,7 +251,7 @@ function confirmDelete(p: Proprietaire) {
                     <div class="min-w-0 flex-1">
                         <div class="truncate text-sm font-medium">
                             <Link
-                                :href="`/proprietaires/${p.id}`"
+                                :href="`/backoffice/proprietaires/${p.id}`"
                                 class="hover:underline"
                             >
                                 {{ p.nom_complet }}
@@ -303,7 +303,7 @@ function confirmDelete(p: Proprietaire) {
                         <DropdownMenuContent align="end" class="w-44">
                             <DropdownMenuItem as-child>
                                 <Link
-                                    :href="`/proprietaires/${p.id}`"
+                                    :href="`/backoffice/proprietaires/${p.id}`"
                                     class="flex w-full items-center gap-2"
                                 >
                                     <Eye class="h-4 w-4" />
@@ -321,7 +321,7 @@ function confirmDelete(p: Proprietaire) {
                                 as-child
                             >
                                 <Link
-                                    :href="`/proprietaires/${p.id}/edit`"
+                                    :href="`/backoffice/proprietaires/${p.id}/edit`"
                                     class="flex w-full items-center gap-2"
                                 >
                                     <Pencil class="h-4 w-4" />
@@ -356,7 +356,7 @@ function confirmDelete(p: Proprietaire) {
                 <p class="text-sm">Aucun propriétaire trouvé.</p>
                 <Link
                     v-if="can('proprietaires.create')"
-                    href="/proprietaires/create"
+                    href="/backoffice/proprietaires/create"
                 >
                     <Button variant="outline" size="sm">
                         <Plus class="mr-2 h-4 w-4" />
@@ -382,7 +382,7 @@ function confirmDelete(p: Proprietaire) {
                 </div>
                 <Link
                     v-if="can('proprietaires.create')"
-                    href="/proprietaires/create"
+                    href="/backoffice/proprietaires/create"
                 >
                     <Button>
                         <Plus class="mr-2 h-4 w-4" />
@@ -462,7 +462,7 @@ function confirmDelete(p: Proprietaire) {
                                 </div>
                                 <div>
                                     <Link
-                                        :href="`/proprietaires/${data.id}`"
+                                        :href="`/backoffice/proprietaires/${data.id}`"
                                         class="font-medium hover:underline"
                                     >
                                         {{ data.nom_complet }}
@@ -559,7 +559,7 @@ function confirmDelete(p: Proprietaire) {
                                     >
                                         <DropdownMenuItem as-child>
                                             <Link
-                                                :href="`/proprietaires/${data.id}`"
+                                                :href="`/backoffice/proprietaires/${data.id}`"
                                                 class="flex w-full items-center gap-2"
                                             >
                                                 <Eye class="h-4 w-4" />
@@ -577,7 +577,7 @@ function confirmDelete(p: Proprietaire) {
                                             as-child
                                         >
                                             <Link
-                                                :href="`/proprietaires/${data.id}/edit`"
+                                                :href="`/backoffice/proprietaires/${data.id}/edit`"
                                                 class="flex w-full items-center gap-2"
                                             >
                                                 <Pencil class="h-4 w-4" />
@@ -613,7 +613,7 @@ function confirmDelete(p: Proprietaire) {
                             <p class="text-sm">Aucun propriétaire trouvé.</p>
                             <Link
                                 v-if="can('proprietaires.create')"
-                                href="/proprietaires/create"
+                                href="/backoffice/proprietaires/create"
                             >
                                 <Button variant="outline" size="sm">
                                     <Plus class="mr-2 h-4 w-4" />

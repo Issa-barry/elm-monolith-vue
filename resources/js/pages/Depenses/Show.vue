@@ -71,7 +71,7 @@ interface DepenseDetail {
 const props = defineProps<{ depense: DepenseDetail }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Dépenses', href: '/depenses' },
+    { title: 'Dépenses', href: '/backoffice/depenses' },
     { title: props.depense.type_libelle, href: '#' },
 ];
 
@@ -133,7 +133,7 @@ async function fetchHistorique() {
     historiqueLoading.value = true;
     historiqueError.value = false;
     try {
-        const res = await fetch(`/depenses/${props.depense.id}/historique`, {
+        const res = await fetch(`/backoffice/depenses/${props.depense.id}/historique`, {
             headers: { Accept: 'application/json' },
         });
         if (!res.ok) throw new Error();
@@ -168,7 +168,7 @@ function fermerDialogRejet() {
 function soumettre() {
     processing.value = true;
     router.patch(
-        `/depenses/${props.depense.id}/soumettre`,
+        `/backoffice/depenses/${props.depense.id}/soumettre`,
         {},
         {
             onSuccess: () =>
@@ -188,7 +188,7 @@ function soumettre() {
 function valider() {
     processing.value = true;
     router.patch(
-        `/depenses/${props.depense.id}/valider`,
+        `/backoffice/depenses/${props.depense.id}/valider`,
         {},
         {
             onSuccess: () =>
@@ -228,7 +228,7 @@ function rejeter() {
 
     processing.value = true;
     router.patch(
-        `/depenses/${props.depense.id}/rejeter`,
+        `/backoffice/depenses/${props.depense.id}/rejeter`,
         {
             motif_rejet: rejectMotif.value,
             commentaire_rejet:
@@ -261,7 +261,7 @@ function rejeter() {
 
 function supprimer() {
     if (!confirm('Supprimer cette dépense ?')) return;
-    router.delete(`/depenses/${props.depense.id}`);
+    router.delete(`/backoffice/depenses/${props.depense.id}`);
 }
 
 function formatDate(iso: string | null): string {
@@ -284,7 +284,7 @@ function formatDate(iso: string | null): string {
                 <div class="flex flex-wrap items-start justify-between gap-4">
                     <div class="flex items-center gap-3">
                         <Link
-                            href="/depenses"
+                            href="/backoffice/depenses"
                             class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-muted/80"
                         >
                             <ArrowLeft class="h-4 w-4" />
@@ -320,7 +320,7 @@ function formatDate(iso: string | null): string {
                             size="sm"
                             as-child
                         >
-                            <a :href="`/depenses/${depense.id}/edit`">
+                            <a :href="`/backoffice/depenses/${depense.id}/edit`">
                                 <Edit class="mr-1 h-3.5 w-3.5" />
                                 Modifier
                             </a>

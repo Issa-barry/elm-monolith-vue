@@ -50,7 +50,7 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $this->get('/depenses')
+        $this->get('/backoffice/depenses')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Depenses/Index')
@@ -66,7 +66,7 @@ class DepenseTest extends TestCase
         Depense::factory()->create(['organization_id' => $this->org->id, 'user_id' => $this->user->id, 'depense_type_id' => $this->typeInterne->id]);
         Depense::factory()->create(); // autre org
 
-        $this->get('/depenses')
+        $this->get('/backoffice/depenses')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
     }
@@ -75,7 +75,7 @@ class DepenseTest extends TestCase
 
     public function test_create_renders_form_with_props(): void
     {
-        $this->get('/depenses/create')
+        $this->get('/backoffice/depenses/create')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Depenses/Create')
@@ -90,12 +90,12 @@ class DepenseTest extends TestCase
 
     public function test_store_creates_interne_depense(): void
     {
-        $this->post('/depenses', [
+        $this->post('/backoffice/depenses', [
             'depense_type_id' => $this->typeInterne->id,
             'montant' => 25000,
             'date_depense' => now()->toDateString(),
             'statut' => StatutDepense::BROUILLON->value,
-        ])->assertRedirect('/depenses');
+        ])->assertRedirect('/backoffice/depenses');
 
         $this->assertDatabaseHas('depenses', [
             'organization_id' => $this->org->id,
@@ -111,7 +111,7 @@ class DepenseTest extends TestCase
     {
         $typeVehicule = DepenseType::factory()->vehicule()->create(['organization_id' => $this->org->id]);
 
-        $this->post('/depenses', [
+        $this->post('/backoffice/depenses', [
             'depense_type_id' => $typeVehicule->id,
             'montant' => 50000,
             'date_depense' => now()->toDateString(),
@@ -128,13 +128,13 @@ class DepenseTest extends TestCase
             'statut' => 'actif',
         ]);
 
-        $this->post('/depenses', [
+        $this->post('/backoffice/depenses', [
             'depense_type_id' => $typeEmploye->id,
             'beneficiaire_id' => $employe->id,
             'montant' => 100000,
             'date_depense' => now()->toDateString(),
             'statut' => StatutDepense::BROUILLON->value,
-        ])->assertRedirect('/depenses');
+        ])->assertRedirect('/backoffice/depenses');
 
         $this->assertDatabaseHas('depenses', [
             'beneficiaire_type' => CategorieDepense::EMPLOYE->value,
@@ -144,7 +144,7 @@ class DepenseTest extends TestCase
 
     public function test_store_requires_montant_positive(): void
     {
-        $this->post('/depenses', [
+        $this->post('/backoffice/depenses', [
             'depense_type_id' => $this->typeInterne->id,
             'montant' => 0,
             'date_depense' => now()->toDateString(),
@@ -159,7 +159,7 @@ class DepenseTest extends TestCase
             'is_active' => false,
         ]);
 
-        $this->post('/depenses', [
+        $this->post('/backoffice/depenses', [
             'depense_type_id' => $inactiveType->id,
             'montant' => 10000,
             'date_depense' => now()->toDateString(),
@@ -171,7 +171,7 @@ class DepenseTest extends TestCase
     {
         $otherOrgType = DepenseType::factory()->interne()->create(); // autre org
 
-        $this->post('/depenses', [
+        $this->post('/backoffice/depenses', [
             'depense_type_id' => $otherOrgType->id,
             'montant' => 10000,
             'date_depense' => now()->toDateString(),
@@ -189,7 +189,7 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $this->get("/depenses/{$depense->id}")
+        $this->get("/backoffice/depenses/{$depense->id}")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Depenses/Show')
@@ -207,7 +207,7 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $this->get("/depenses/{$depense->id}/edit")
+        $this->get("/backoffice/depenses/{$depense->id}/edit")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->component('Depenses/Edit'));
     }
@@ -220,7 +220,7 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $this->get("/depenses/{$depense->id}/edit")->assertForbidden();
+        $this->get("/backoffice/depenses/{$depense->id}/edit")->assertForbidden();
     }
 
     public function test_update_modifies_brouillon_depense(): void
@@ -232,7 +232,7 @@ class DepenseTest extends TestCase
             'montant' => 10000,
         ]);
 
-        $this->put("/depenses/{$depense->id}", [
+        $this->put("/backoffice/depenses/{$depense->id}", [
             'depense_type_id' => $this->typeInterne->id,
             'montant' => 20000,
             'date_depense' => now()->toDateString(),
@@ -251,7 +251,7 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $this->patch("/depenses/{$depense->id}/soumettre")->assertRedirect();
+        $this->patch("/backoffice/depenses/{$depense->id}/soumettre")->assertRedirect();
 
         $this->assertDatabaseHas('depenses', [
             'id' => $depense->id,
@@ -267,7 +267,7 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $this->patch("/depenses/{$depense->id}/soumettre")
+        $this->patch("/backoffice/depenses/{$depense->id}/soumettre")
             ->assertSessionHasErrors(['statut']);
     }
 
@@ -279,7 +279,7 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $this->patch("/depenses/{$depense->id}/valider")->assertRedirect();
+        $this->patch("/backoffice/depenses/{$depense->id}/valider")->assertRedirect();
 
         $this->assertDatabaseHas('depenses', [
             'id' => $depense->id,
@@ -296,7 +296,7 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $this->patch("/depenses/{$depense->id}/rejeter", [])
+        $this->patch("/backoffice/depenses/{$depense->id}/rejeter", [])
             ->assertSessionHasErrors(['motif_rejet']);
     }
 
@@ -308,7 +308,7 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $this->patch("/depenses/{$depense->id}/rejeter", [
+        $this->patch("/backoffice/depenses/{$depense->id}/rejeter", [
             'motif_rejet' => 'Non conforme',
         ])->assertRedirect();
 
@@ -328,7 +328,7 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $this->patch("/depenses/{$depense->id}/rejeter", [
+        $this->patch("/backoffice/depenses/{$depense->id}/rejeter", [
             'motif_rejet' => 'Justificatif insuffisant.',
         ])->assertSessionHasErrors(['motif_rejet']);
     }
@@ -341,7 +341,7 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $this->patch("/depenses/{$depense->id}/rejeter", [
+        $this->patch("/backoffice/depenses/{$depense->id}/rejeter", [
             'motif_rejet' => 'Autre',
         ])->assertSessionHasErrors(['commentaire_rejet']);
     }
@@ -354,7 +354,7 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $this->patch("/depenses/{$depense->id}/rejeter", [
+        $this->patch("/backoffice/depenses/{$depense->id}/rejeter", [
             'motif_rejet' => 'Autre',
             'commentaire_rejet' => 'abc',
         ])->assertSessionHasErrors(['commentaire_rejet']);
@@ -368,7 +368,7 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $this->patch("/depenses/{$depense->id}/rejeter", [
+        $this->patch("/backoffice/depenses/{$depense->id}/rejeter", [
             'motif_rejet' => 'Autre',
             'commentaire_rejet' => 'Montant incohérent avec le justificatif fourni.',
         ])->assertRedirect();
@@ -389,7 +389,7 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $this->patch("/depenses/{$depense->id}/rejeter", [
+        $this->patch("/backoffice/depenses/{$depense->id}/rejeter", [
             'motif_rejet' => 'Non conforme',
             'commentaire_rejet' => 'Ce commentaire doit être ignoré.',
         ])->assertRedirect();
@@ -412,7 +412,7 @@ class DepenseTest extends TestCase
             'commentaire_rejet' => 'Montant incohérent.',
         ]);
 
-        $this->get("/depenses/{$depense->id}")
+        $this->get("/backoffice/depenses/{$depense->id}")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Depenses/Show')
@@ -435,7 +435,7 @@ class DepenseTest extends TestCase
             'montant' => 50000,
         ]);
 
-        $this->patch("/depenses/{$depense->id}/valider")->assertRedirect();
+        $this->patch("/backoffice/depenses/{$depense->id}/valider")->assertRedirect();
 
         $this->assertDatabaseHas('depenses', [
             'id' => $depense->id,
@@ -466,7 +466,7 @@ class DepenseTest extends TestCase
             'commentaire' => 'Frais de deplacement divers',
         ]);
 
-        $this->get('/depenses?search=gasoil')
+        $this->get('/backoffice/depenses?search=gasoil')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
     }
@@ -488,7 +488,7 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $this->get('/depenses?search=Carburant')
+        $this->get('/backoffice/depenses?search=Carburant')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
     }
@@ -503,7 +503,7 @@ class DepenseTest extends TestCase
         ]);
         Depense::factory()->create(['commentaire' => 'Achat materiel']); // autre org
 
-        $this->get('/depenses?search=materiel')
+        $this->get('/backoffice/depenses?search=materiel')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
     }
@@ -529,7 +529,7 @@ class DepenseTest extends TestCase
             'beneficiaire_id' => $autreVehicule->id,
         ]);
 
-        $this->get('/depenses?search=Camion')
+        $this->get('/backoffice/depenses?search=Camion')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
     }
@@ -555,7 +555,7 @@ class DepenseTest extends TestCase
             'beneficiaire_id' => $autreVehicule->id,
         ]);
 
-        $this->get('/depenses?search=ELM-001')
+        $this->get('/backoffice/depenses?search=ELM-001')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
     }
@@ -591,7 +591,7 @@ class DepenseTest extends TestCase
             'beneficiaire_id' => $autreEmploye->id,
         ]);
 
-        $this->get('/depenses?search=Diallo')
+        $this->get('/backoffice/depenses?search=Diallo')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
     }
@@ -625,7 +625,7 @@ class DepenseTest extends TestCase
             'beneficiaire_id' => $autreLivreur->id,
         ]);
 
-        $this->get('/depenses?search=611223344')
+        $this->get('/backoffice/depenses?search=611223344')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
     }
@@ -639,7 +639,7 @@ class DepenseTest extends TestCase
             'commentaire' => 'Achat materiel',
         ]);
 
-        $this->get('/depenses?search=zzzzznotfound')
+        $this->get('/backoffice/depenses?search=zzzzznotfound')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 0));
     }
@@ -657,7 +657,7 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $this->get('/depenses?search=')
+        $this->get('/backoffice/depenses?search=')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 2));
     }
@@ -672,7 +672,7 @@ class DepenseTest extends TestCase
             'beneficiaire_id' => null,
         ]);
 
-        $this->get('/depenses?search=ELM-001')
+        $this->get('/backoffice/depenses?search=ELM-001')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 0));
     }
@@ -690,7 +690,7 @@ class DepenseTest extends TestCase
             'beneficiaire_id' => $vehicule->id,
         ]);
 
-        $this->get('/depenses')
+        $this->get('/backoffice/depenses')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Depenses/Index')
@@ -706,7 +706,7 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $this->get('/depenses')
+        $this->get('/backoffice/depenses')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->where('depenses.data.0.vehicule_nom', null)
@@ -721,9 +721,9 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $this->patch("/depenses/{$depense->id}/valider");
+        $this->patch("/backoffice/depenses/{$depense->id}/valider");
 
-        $this->get('/depenses')
+        $this->get('/backoffice/depenses')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->where('depenses.data.0.validateur.name', $this->user->name)
@@ -738,7 +738,7 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $this->get('/depenses')
+        $this->get('/backoffice/depenses')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->where('depenses.data.0.validateur', null)
@@ -755,7 +755,7 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $response = $this->get('/depenses/export/excel');
+        $response = $this->get('/backoffice/depenses/export/excel');
 
         $response->assertOk()
             ->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
@@ -774,7 +774,7 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $response = $this->get('/depenses/export/excel?statut=brouillon');
+        $response = $this->get('/backoffice/depenses/export/excel?statut=brouillon');
 
         $response->assertOk();
         $content = $response->streamedContent();
@@ -784,7 +784,7 @@ class DepenseTest extends TestCase
 
     public function test_export_excel_has_reference_column(): void
     {
-        $response = $this->get('/depenses/export/excel');
+        $response = $this->get('/backoffice/depenses/export/excel');
         $response->assertOk();
         $content = $response->streamedContent();
         $this->assertStringContainsString('Référence', $content);
@@ -792,7 +792,7 @@ class DepenseTest extends TestCase
 
     public function test_export_excel_has_valide_par_column(): void
     {
-        $response = $this->get('/depenses/export/excel');
+        $response = $this->get('/backoffice/depenses/export/excel');
         $response->assertOk();
         $content = $response->streamedContent();
         $this->assertStringContainsString('Validé par', $content);
@@ -800,7 +800,7 @@ class DepenseTest extends TestCase
 
     public function test_export_excel_has_no_signature_column(): void
     {
-        $response = $this->get('/depenses/export/excel');
+        $response = $this->get('/backoffice/depenses/export/excel');
         $response->assertOk();
         $content = $response->streamedContent();
         $this->assertStringNotContainsString('Signature', $content);
@@ -813,9 +813,9 @@ class DepenseTest extends TestCase
             'user_id' => $this->user->id,
             'depense_type_id' => $this->typeInterne->id,
         ]);
-        $this->patch("/depenses/{$depense->id}/valider");
+        $this->patch("/backoffice/depenses/{$depense->id}/valider");
 
-        $response = $this->get('/depenses/export/excel?statut=valide');
+        $response = $this->get('/backoffice/depenses/export/excel?statut=valide');
         $response->assertOk();
         $content = $response->streamedContent();
         $this->assertStringContainsString($this->user->name, $content);
@@ -829,7 +829,7 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $response = $this->get('/depenses/export/excel');
+        $response = $this->get('/backoffice/depenses/export/excel');
         $response->assertOk();
         $content = $response->streamedContent();
         $this->assertStringContainsString($depense->id, $content);
@@ -837,7 +837,7 @@ class DepenseTest extends TestCase
 
     public function test_export_excel_has_telephone_concerne_column(): void
     {
-        $response = $this->get('/depenses/export/excel');
+        $response = $this->get('/backoffice/depenses/export/excel');
         $response->assertOk();
         $content = $response->streamedContent();
         $this->assertStringContainsString('Téléphone concerné', $content);
@@ -845,7 +845,7 @@ class DepenseTest extends TestCase
 
     public function test_export_excel_has_frais_column(): void
     {
-        $response = $this->get('/depenses/export/excel');
+        $response = $this->get('/backoffice/depenses/export/excel');
         $response->assertOk();
         $content = $response->streamedContent();
         $this->assertStringContainsString('Dépenses', $content);
@@ -868,7 +868,7 @@ class DepenseTest extends TestCase
             'beneficiaire_id' => $employe->id,
         ]);
 
-        $response = $this->get('/depenses/export/excel');
+        $response = $this->get('/backoffice/depenses/export/excel');
         $response->assertOk();
         $content = $response->streamedContent();
         $this->assertStringContainsString('+224600000000', $content);
@@ -876,7 +876,7 @@ class DepenseTest extends TestCase
 
     public function test_pdf_route_no_longer_exists(): void
     {
-        $this->get('/depenses/export/pdf')->assertNotFound();
+        $this->get('/backoffice/depenses/export/pdf')->assertNotFound();
     }
 
     // ── Filtre véhicule ──────────────────────────────────────────────────────
@@ -902,7 +902,7 @@ class DepenseTest extends TestCase
             'beneficiaire_id' => $autreVehicule->id,
         ]);
 
-        $this->get('/depenses?vehicule=Camion')
+        $this->get('/backoffice/depenses?vehicule=Camion')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
     }
@@ -928,7 +928,7 @@ class DepenseTest extends TestCase
             'beneficiaire_id' => $autreVehicule->id,
         ]);
 
-        $this->get('/depenses?vehicule=ELM-001')
+        $this->get('/backoffice/depenses?vehicule=ELM-001')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
     }
@@ -966,7 +966,7 @@ class DepenseTest extends TestCase
             'beneficiaire_id' => $autreEmploye->id,
         ]);
 
-        $this->get('/depenses?concerne=Diallo')
+        $this->get('/backoffice/depenses?concerne=Diallo')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
     }
@@ -1000,7 +1000,7 @@ class DepenseTest extends TestCase
             'beneficiaire_id' => $autreEmploye->id,
         ]);
 
-        $this->get('/depenses?concerne=611223344')
+        $this->get('/backoffice/depenses?concerne=611223344')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 1));
     }
@@ -1022,7 +1022,7 @@ class DepenseTest extends TestCase
             'montant' => 30000,
         ]);
 
-        $this->get('/depenses?montant=75000')
+        $this->get('/backoffice/depenses?montant=75000')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('depenses.data', 1)
@@ -1067,7 +1067,7 @@ class DepenseTest extends TestCase
             'site_id' => $site3->id,
         ]);
 
-        $this->get('/depenses?'.http_build_query(['site_ids' => [$site1->id, $site2->id]]))
+        $this->get('/backoffice/depenses?'.http_build_query(['site_ids' => [$site1->id, $site2->id]]))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->has('depenses.data', 2));
     }
@@ -1076,7 +1076,7 @@ class DepenseTest extends TestCase
     {
         $site = $this->user->sites()->first();
 
-        $this->get('/depenses?'.http_build_query(['site_ids' => [$site->id]]))
+        $this->get('/backoffice/depenses?'.http_build_query(['site_ids' => [$site->id]]))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->where('filters.site_ids', [$site->id])
@@ -1105,7 +1105,7 @@ class DepenseTest extends TestCase
             'site_id' => $site2->id,
         ]);
 
-        $this->get('/depenses')
+        $this->get('/backoffice/depenses')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('depenses.data', 2)
@@ -1125,7 +1125,7 @@ class DepenseTest extends TestCase
             'telephone' => '+224600000000',
         ]);
 
-        $response = $this->getJson("/depenses/concerne-detail?type=employe&id={$employe->id}");
+        $response = $this->getJson("/backoffice/depenses/concerne-detail?type=employe&id={$employe->id}");
 
         $response->assertOk()
             ->assertJson([
@@ -1137,7 +1137,7 @@ class DepenseTest extends TestCase
 
     public function test_concerne_detail_endpoint_returns_404_for_unknown_id(): void
     {
-        $this->getJson('/depenses/concerne-detail?type=employe&id=unknown')
+        $this->getJson('/backoffice/depenses/concerne-detail?type=employe&id=unknown')
             ->assertNotFound();
     }
 
@@ -1149,7 +1149,7 @@ class DepenseTest extends TestCase
             'immatriculation' => 'ELM-001-GN',
         ]);
 
-        $response = $this->getJson("/depenses/vehicule-detail?id={$vehicule->id}");
+        $response = $this->getJson("/backoffice/depenses/vehicule-detail?id={$vehicule->id}");
 
         $response->assertOk()
             ->assertJson([
@@ -1160,7 +1160,7 @@ class DepenseTest extends TestCase
 
     public function test_vehicule_detail_endpoint_returns_404_for_unknown_id(): void
     {
-        $this->getJson('/depenses/vehicule-detail?id=unknown')
+        $this->getJson('/backoffice/depenses/vehicule-detail?id=unknown')
             ->assertNotFound();
     }
 
@@ -1174,7 +1174,7 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $this->delete("/depenses/{$depense->id}")->assertRedirect();
+        $this->delete("/backoffice/depenses/{$depense->id}")->assertRedirect();
 
         $this->assertSoftDeleted('depenses', ['id' => $depense->id]);
     }
@@ -1187,14 +1187,14 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $this->delete("/depenses/{$depense->id}")->assertForbidden();
+        $this->delete("/backoffice/depenses/{$depense->id}")->assertForbidden();
     }
 
     public function test_destroy_forbidden_for_other_org(): void
     {
         $otherDepense = Depense::factory()->brouillon()->create();
 
-        $this->delete("/depenses/{$otherDepense->id}")->assertForbidden();
+        $this->delete("/backoffice/depenses/{$otherDepense->id}")->assertForbidden();
     }
 
     // ── Filtre REJETE ─────────────────────────────────────────────────────────
@@ -1212,7 +1212,7 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $this->get('/depenses?statut=rejete')
+        $this->get('/backoffice/depenses?statut=rejete')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('depenses.data', 1)
@@ -1228,7 +1228,7 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $this->patch("/depenses/{$depense->id}", [
+        $this->patch("/backoffice/depenses/{$depense->id}", [
             'depense_type_id' => $this->typeInterne->id,
             'montant' => 75000,
             'date_depense' => '2026-06-14',
@@ -1245,32 +1245,32 @@ class DepenseTest extends TestCase
 
     public function test_imprimer_returns_ok_html(): void
     {
-        $this->get('/depenses/imprimer')
+        $this->get('/backoffice/depenses/imprimer')
             ->assertOk()
             ->assertHeader('Content-Type', 'text/html; charset=UTF-8');
     }
 
     public function test_imprimer_has_signature_column(): void
     {
-        $content = $this->get('/depenses/imprimer')->content();
+        $content = $this->get('/backoffice/depenses/imprimer')->content();
         $this->assertStringContainsString('Signature', $content);
     }
 
     public function test_imprimer_has_no_valide_par_column(): void
     {
-        $content = $this->get('/depenses/imprimer')->content();
+        $content = $this->get('/backoffice/depenses/imprimer')->content();
         $this->assertStringNotContainsString('Validé par', $content);
     }
 
     public function test_imprimer_has_window_print_script(): void
     {
-        $content = $this->get('/depenses/imprimer')->content();
+        $content = $this->get('/backoffice/depenses/imprimer')->content();
         $this->assertStringContainsString('window.print()', $content);
     }
 
     public function test_imprimer_has_a4_print_rule(): void
     {
-        $content = $this->get('/depenses/imprimer')->content();
+        $content = $this->get('/backoffice/depenses/imprimer')->content();
         $this->assertStringContainsString('size: A4', $content);
     }
 
@@ -1290,7 +1290,7 @@ class DepenseTest extends TestCase
             'date_depense' => '2020-02-20',
         ]);
 
-        $content = $this->get('/depenses/imprimer?statut=brouillon')->content();
+        $content = $this->get('/backoffice/depenses/imprimer?statut=brouillon')->content();
         $this->assertStringContainsString('15/01/2020', $content);
         $this->assertStringNotContainsString('20/02/2020', $content);
     }
@@ -1313,7 +1313,7 @@ class DepenseTest extends TestCase
             'site_id' => $site2->id,
         ]);
 
-        $content = $this->get('/depenses/imprimer')->content();
+        $content = $this->get('/backoffice/depenses/imprimer')->content();
         $this->assertStringContainsString('page-break-after', $content);
         $this->assertStringContainsString('Matoto', $content);
         $this->assertStringContainsString('Dabompa', $content);
@@ -1337,7 +1337,7 @@ class DepenseTest extends TestCase
             'site_id' => $site2->id,
         ]);
 
-        $content = $this->get('/depenses/imprimer?'.http_build_query(['site_ids' => [$site1->id]]))->content();
+        $content = $this->get('/backoffice/depenses/imprimer?'.http_build_query(['site_ids' => [$site1->id]]))->content();
         $this->assertStringContainsString('Conakry', $content);
         $this->assertStringNotContainsString('Kindia', $content);
     }
@@ -1351,7 +1351,7 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $content = $this->get('/depenses/imprimer')->content();
+        $content = $this->get('/backoffice/depenses/imprimer')->content();
         $this->assertStringContainsString($this->org->name, $content);
     }
 
@@ -1363,13 +1363,13 @@ class DepenseTest extends TestCase
             'depense_type_id' => $this->typeInterne->id,
         ]);
 
-        $content = $this->get('/depenses/imprimer')->content();
+        $content = $this->get('/backoffice/depenses/imprimer')->content();
         $this->assertStringContainsString($this->user->name, $content);
     }
 
     public function test_imprimer_forbidden_for_unauthenticated(): void
     {
         $this->app['auth']->logout();
-        $this->get('/depenses/imprimer')->assertRedirect('/login');
+        $this->get('/backoffice/depenses/imprimer')->assertRedirect('/login');
     }
 }

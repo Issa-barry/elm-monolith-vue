@@ -79,8 +79,8 @@ const props = defineProps<{
 // ── Breadcrumbs ───────────────────────────────────────────────────────────────
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Commissions', href: '/logistique/commissions' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Commissions', href: '/backoffice/logistique/commissions' },
     { title: props.livreur.nom, href: '' },
 ];
 
@@ -96,7 +96,7 @@ const periodeOptions: PeriodeOption[] = [
 function onPeriodeChange(value: string) {
     const params: Record<string, string> = {};
     if (value) params.periode = value;
-    router.get(`/logistique/commissions/livreurs/${props.livreur.id}`, params, {
+    router.get(`/backoffice/logistique/commissions/livreurs/${props.livreur.id}`, params, {
         preserveScroll: true,
         replace: true,
     });
@@ -183,7 +183,7 @@ function submitPaiement() {
     paiementForm.processing = true;
     paiementForm.errors = {};
     router.post(
-        `/logistique/commissions/livreurs/${props.livreur.id}/paiements`,
+        `/backoffice/logistique/commissions/livreurs/${props.livreur.id}/paiements`,
         {
             montant: paiementForm.montant,
             mode_paiement: paiementForm.mode_paiement,
@@ -239,7 +239,7 @@ function formatMode(mode: string): string {
         >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
-                    href="/logistique/commissions"
+                    href="/backoffice/logistique/commissions"
                     class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
                 >
                     <ArrowLeft class="h-4 w-4" />
@@ -296,7 +296,7 @@ function formatMode(mode: string): string {
             >
                 <div class="flex items-center gap-3">
                     <Link
-                        href="/logistique/commissions"
+                        href="/backoffice/logistique/commissions"
                         class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-muted/80"
                     >
                         <ArrowLeft class="h-4 w-4" />

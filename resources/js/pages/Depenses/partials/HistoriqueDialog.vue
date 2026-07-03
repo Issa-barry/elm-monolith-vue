@@ -39,7 +39,7 @@ watch(
         loading.value = true;
         fetchError.value = null;
         try {
-            const response = await fetch(`/depenses/${id}/historique`, {
+            const response = await fetch(`/backoffice/depenses/${id}/historique`, {
                 headers: { 'X-Requested-With': 'XMLHttpRequest' },
                 credentials: 'same-origin',
             });

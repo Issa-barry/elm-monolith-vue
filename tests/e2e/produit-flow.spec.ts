@@ -11,7 +11,7 @@ const E2E_PRODUCT_PREFIX = 'E2E Produit';
 
 test.setTimeout(180_000);
 
-registerCleanup('/produits', E2E_PRODUCT_PREFIX);
+registerCleanup('/backoffice/produits', E2E_PRODUCT_PREFIX);
 
 test('login + create product + verify list', async ({ page }) => {
     const unique = `${Date.now()}-${randomDigits(3)}`;
@@ -20,7 +20,7 @@ test('login + create product + verify list', async ({ page }) => {
 
     await login(page);
 
-    await page.goto('/produits/create');
+    await page.goto('/backoffice/produits/create');
     await expect(
         page.getByRole('heading', { name: /nouveau produit/i }),
     ).toBeVisible();

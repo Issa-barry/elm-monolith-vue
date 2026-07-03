@@ -20,8 +20,8 @@ interface TypeVehiculeData {
 const props = defineProps<{ type: TypeVehiculeData }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Types de véhicules', href: '/type-vehicules' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Types de véhicules', href: '/backoffice/type-vehicules' },
     { title: props.type.nom, href: '#' },
 ];
 
@@ -35,7 +35,7 @@ const form = useForm({
 });
 
 function submit() {
-    form.post(`/type-vehicules/${props.type.id}`);
+    form.post(`/backoffice/type-vehicules/${props.type.id}`);
 }
 </script>
 
@@ -142,7 +142,7 @@ function submit() {
                 </div>
 
                 <div class="flex items-center justify-between pt-2">
-                    <a href="/type-vehicules">
+                    <a href="/backoffice/type-vehicules">
                         <Button type="button" variant="outline">Retour</Button>
                     </a>
                     <Button type="submit" :disabled="form.processing">

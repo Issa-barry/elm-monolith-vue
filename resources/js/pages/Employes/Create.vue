@@ -18,8 +18,8 @@ defineProps<{
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Employés', href: '/employes' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Employés', href: '/backoffice/employes' },
     { title: 'Nouveau', href: '#' },
 ];
 
@@ -34,7 +34,7 @@ const form = useForm({
 });
 
 function submit() {
-    form.post('/employes');
+    form.post('/backoffice/employes');
 }
 </script>
 
@@ -43,7 +43,7 @@ function submit() {
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="p-6">
             <div class="mb-6 flex items-center gap-4">
-                <Link href="/employes">
+                <Link href="/backoffice/employes">
                     <Button variant="ghost" size="icon"
                         ><ArrowLeft class="h-4 w-4"
                     /></Button>
@@ -204,7 +204,7 @@ function submit() {
                 </div>
 
                 <div class="flex items-center justify-between">
-                    <Link href="/employes">
+                    <Link href="/backoffice/employes">
                         <Button type="button" variant="outline"
                             ><ArrowLeft class="mr-2 h-4 w-4" />Annuler</Button
                         >

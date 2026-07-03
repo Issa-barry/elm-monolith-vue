@@ -49,8 +49,8 @@ const toast = useToast();
 
 // ── Breadcrumbs ───────────────────────────────────────────────────────────────
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Achats', href: '/achats' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Achats', href: '/backoffice/achats' },
     { title: props.commande.reference, href: '#' },
 ];
 
@@ -84,7 +84,7 @@ function openReceptionDialog() {
 }
 
 function submitReception() {
-    receptionForm.patch(`/achats/${props.commande.id}/receptionner`, {
+    receptionForm.patch(`/backoffice/achats/${props.commande.id}/receptionner`, {
         onSuccess: () => {
             receptionDialogVisible.value = false;
             toast.add({
@@ -104,7 +104,7 @@ const annulerForm = useForm({
 });
 
 function submitAnnuler() {
-    annulerForm.patch(`/achats/${props.commande.id}/annuler`, {
+    annulerForm.patch(`/backoffice/achats/${props.commande.id}/annuler`, {
         onSuccess: () => {
             annulerDialogVisible.value = false;
             toast.add({
@@ -128,7 +128,7 @@ function submitAnnuler() {
         >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
-                    href="/achats"
+                    href="/backoffice/achats"
                     class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
                 >
                     <ArrowLeft class="h-4 w-4" />
@@ -145,7 +145,7 @@ function submitAnnuler() {
             <!-- En-tête ──────────────────────────────────────────────────────── -->
             <div class="hidden items-start justify-between gap-4 sm:flex">
                 <div class="flex items-start gap-4">
-                    <Link href="/achats">
+                    <Link href="/backoffice/achats">
                         <Button
                             variant="ghost"
                             size="icon"
@@ -177,7 +177,7 @@ function submitAnnuler() {
 
                 <div class="flex items-center gap-2">
                     <!-- PDF -->
-                    <a :href="`/achats/${commande.id}/pdf`" target="_blank">
+                    <a :href="`/backoffice/achats/${commande.id}/pdf`" target="_blank">
                         <Button variant="outline" size="sm">
                             <Download class="mr-2 h-4 w-4" />
                             PDF
@@ -408,7 +408,7 @@ function submitAnnuler() {
             <!-- Actions mobile ───────────────────────────────────────────────── -->
             <div class="space-y-3 sm:hidden">
                 <a
-                    :href="`/achats/${commande.id}/pdf`"
+                    :href="`/backoffice/achats/${commande.id}/pdf`"
                     target="_blank"
                     class="block"
                 >

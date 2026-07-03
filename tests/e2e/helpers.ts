@@ -184,7 +184,7 @@ export async function fillLoginIdentifier(
 
 export async function login(page: Page): Promise<void> {
     // Verify whether storageState already loaded a valid session.
-    await page.goto('/dashboard');
+    await page.goto('/backoffice/dashboard');
     if (!page.url().includes('/login')) {
         return;
     }
@@ -402,7 +402,7 @@ export async function selectOptionFromCombobox(
 export async function navigateToFirstSiteVehiclesTab(
     page: Page,
 ): Promise<string> {
-    await page.goto('/sites');
+    await page.goto('/backoffice/sites');
     await page.waitForLoadState('networkidle');
 
     const firstRow = page
@@ -527,7 +527,7 @@ export async function createUser(
         password = 'Password123',
     }: CreateUserParams,
 ): Promise<void> {
-    await page.goto('/users/create');
+    await page.goto('/backoffice/users/create');
     await fillUserInfoAndAdvance(page, { prenom, nom, tel, email, role });
     await page.locator('#password').fill(password);
     await page.locator('#password_confirmation').fill(password);
@@ -542,7 +542,7 @@ export async function findUserInList(
     page: Page,
     query: string,
 ): Promise<Locator> {
-    await page.goto('/users');
+    await page.goto('/backoffice/users');
     const search = getVisibleSearchInput(page);
     await search.fill(query);
     await search.press('Enter');

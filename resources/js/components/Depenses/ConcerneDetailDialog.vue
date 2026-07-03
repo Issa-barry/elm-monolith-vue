@@ -45,7 +45,7 @@ watch(
                 type: props.beneficiaireType,
                 id: props.beneficiaireId,
             });
-            const res = await fetch(`/depenses/concerne-detail?${params}`, {
+            const res = await fetch(`/backoffice/depenses/concerne-detail?${params}`, {
                 headers: { Accept: 'application/json' },
             });
             if (!res.ok) throw new Error();

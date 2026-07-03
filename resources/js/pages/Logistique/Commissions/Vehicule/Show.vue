@@ -52,8 +52,8 @@ const props = defineProps<{
 // ── Breadcrumbs ───────────────────────────────────────────────────────────────
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Commissions', href: '/logistique/commissions' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Commissions', href: '/backoffice/logistique/commissions' },
     { title: props.vehicule.nom, href: '' },
 ];
 
@@ -127,7 +127,7 @@ function submitPaiement() {
     paiementForm.errors = {};
 
     router.post(
-        `/logistique/commissions/vehicules/${props.vehicule.id}/paiements`,
+        `/backoffice/logistique/commissions/vehicules/${props.vehicule.id}/paiements`,
         {
             beneficiary_type: row.type,
             beneficiary_id: row.id,
@@ -171,7 +171,7 @@ function openHistorique(row: SoldeRow | null = null) {
 }
 
 function releveUrl(type: 'livreur' | 'proprietaire', id: number): string {
-    return `/logistique/commissions/vehicules/${props.vehicule.id}/beneficiaires/${type}/${id}`;
+    return `/backoffice/logistique/commissions/vehicules/${props.vehicule.id}/beneficiaires/${type}/${id}`;
 }
 
 // ── Formatage ─────────────────────────────────────────────────────────────────
@@ -194,7 +194,7 @@ function formatMode(mode: string): string {
             <div class="flex flex-wrap items-start justify-between gap-4">
                 <div class="flex items-center gap-3">
                     <Link
-                        href="/logistique/commissions"
+                        href="/backoffice/logistique/commissions"
                         class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-muted/80"
                     >
                         <ArrowLeft class="h-4 w-4" />

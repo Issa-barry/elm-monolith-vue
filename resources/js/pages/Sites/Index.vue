@@ -60,7 +60,7 @@ const confirm = useConfirm();
 const toast = useToast();
 
 const { onRowClick, bodyRowPt } = useClickableTableRow<Site>(
-    (site) => `/sites/${site.id}`,
+    (site) => `/backoffice/sites/${site.id}`,
 );
 
 const type = ref<string>('');
@@ -133,8 +133,8 @@ const mobileFiltered = computed(() => {
 });
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Sites', href: '/sites' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Sites', href: '/backoffice/sites' },
 ];
 
 function escapeHtml(value: string): string {
@@ -248,7 +248,7 @@ function confirmDelete(s: Site) {
         acceptLabel: 'Supprimer',
         acceptClass: 'p-button-danger',
         accept: () => {
-            router.delete(`/sites/${s.id}`, {
+            router.delete(`/backoffice/sites/${s.id}`, {
                 onSuccess: () =>
                     toast.add({
                         severity: 'success',
@@ -272,7 +272,7 @@ function confirmDelete(s: Site) {
             <div
                 class="sticky top-0 z-10 flex items-center gap-2 border-b bg-background px-3 py-2"
             >
-                <Link href="/dashboard">
+                <Link href="/backoffice/dashboard">
                     <Button
                         variant="ghost"
                         size="icon"
@@ -284,7 +284,7 @@ function confirmDelete(s: Site) {
                 <span class="flex-1 text-center text-sm font-semibold"
                     >Sites</span
                 >
-                <Link v-if="can('sites.create')" href="/sites/create">
+                <Link v-if="can('sites.create')" href="/backoffice/sites/create">
                     <Button size="sm" class="h-8 px-3 text-xs">
                         <Plus class="mr-1 h-3.5 w-3.5" />
                         Nouveau
@@ -366,7 +366,7 @@ function confirmDelete(s: Site) {
                         <DropdownMenuContent align="end" class="w-44">
                             <DropdownMenuItem as-child>
                                 <Link
-                                    :href="`/sites/${s.id}`"
+                                    :href="`/backoffice/sites/${s.id}`"
                                     class="flex w-full items-center gap-2"
                                 >
                                     <Eye class="h-4 w-4" />
@@ -378,7 +378,7 @@ function confirmDelete(s: Site) {
                                 as-child
                             >
                                 <Link
-                                    :href="`/sites/${s.id}/edit`"
+                                    :href="`/backoffice/sites/${s.id}/edit`"
                                     class="flex w-full items-center gap-2"
                                 >
                                     <Pencil class="h-4 w-4" />
@@ -410,7 +410,7 @@ function confirmDelete(s: Site) {
             >
                 <Building2 class="h-12 w-12 opacity-30" />
                 <p class="text-sm">Aucun site trouvé.</p>
-                <Link v-if="can('sites.create')" href="/sites/create">
+                <Link v-if="can('sites.create')" href="/backoffice/sites/create">
                     <Button variant="outline" size="sm">
                         <Plus class="mr-2 h-4 w-4" />
                         Ajouter le premier site
@@ -436,7 +436,7 @@ function confirmDelete(s: Site) {
                         <Download class="mr-2 h-4 w-4" />
                         Exporter Excel
                     </Button>
-                    <Link v-if="can('sites.create')" href="/sites/create">
+                    <Link v-if="can('sites.create')" href="/backoffice/sites/create">
                         <Button>
                             <Plus class="mr-2 h-4 w-4" />
                             Nouveau site
@@ -579,7 +579,7 @@ function confirmDelete(s: Site) {
                                     >
                                         <DropdownMenuItem as-child>
                                             <Link
-                                                :href="`/sites/${data.id}`"
+                                                :href="`/backoffice/sites/${data.id}`"
                                                 class="flex w-full items-center gap-2"
                                             >
                                                 <Eye class="h-4 w-4" />
@@ -591,7 +591,7 @@ function confirmDelete(s: Site) {
                                             as-child
                                         >
                                             <Link
-                                                :href="`/sites/${data.id}/edit`"
+                                                :href="`/backoffice/sites/${data.id}/edit`"
                                                 class="flex w-full items-center gap-2"
                                             >
                                                 <Pencil class="h-4 w-4" />
@@ -627,7 +627,7 @@ function confirmDelete(s: Site) {
                             <p class="text-sm">Aucun site trouvé.</p>
                             <Link
                                 v-if="can('sites.create')"
-                                href="/sites/create"
+                                href="/backoffice/sites/create"
                             >
                                 <Button variant="outline" size="sm">
                                     <Plus class="mr-2 h-4 w-4" />

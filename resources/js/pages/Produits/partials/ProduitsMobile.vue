@@ -78,7 +78,7 @@ const typeBadgeClass: Record<string, string> = {
                 class="relative flex items-center justify-center px-4 pt-4 pb-3"
             >
                 <Link
-                    href="/dashboard"
+                    href="/backoffice/dashboard"
                     class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
                 >
                     <ArrowLeft class="h-4 w-4" />
@@ -95,7 +95,7 @@ const typeBadgeClass: Record<string, string> = {
 
                 <Link
                     v-if="can('produits.create')"
-                    href="/produits/create"
+                    href="/backoffice/produits/create"
                     class="absolute right-4 shrink-0"
                 >
                     <button
@@ -148,7 +148,7 @@ const typeBadgeClass: Record<string, string> = {
                 </div>
 
                 <!-- Infos -->
-                <Link :href="`/produits/${data.id}`" class="min-w-0 flex-1">
+                <Link :href="`/backoffice/produits/${data.id}`" class="min-w-0 flex-1">
                     <div class="flex items-center gap-1.5">
                         <p
                             class="truncate text-[13px] leading-tight font-semibold"
@@ -189,7 +189,7 @@ const typeBadgeClass: Record<string, string> = {
                     <DropdownMenuContent align="end" class="w-44">
                         <DropdownMenuItem as-child>
                             <Link
-                                :href="`/produits/${data.id}`"
+                                :href="`/backoffice/produits/${data.id}`"
                                 class="flex w-full items-center gap-2"
                             >
                                 <Eye class="h-4 w-4" />
@@ -202,7 +202,7 @@ const typeBadgeClass: Record<string, string> = {
                             as-child
                         >
                             <Link
-                                :href="`/produits/${data.id}/edit`"
+                                :href="`/backoffice/produits/${data.id}/edit`"
                                 class="flex w-full items-center gap-2"
                             >
                                 <Pencil class="h-4 w-4" />
@@ -263,7 +263,7 @@ const typeBadgeClass: Record<string, string> = {
             </div>
             <Link
                 v-if="can('produits.create') && !search"
-                href="/produits/create"
+                href="/backoffice/produits/create"
             >
                 <button
                     class="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-transform active:scale-95"

@@ -122,7 +122,7 @@ class CommissionDetailKpiTest extends TestCase
         $livreur = $this->makeLivreur();
 
         $this->actingAs($this->user)
-            ->get("/comptabilite/commissions/logistique/livreurs/{$livreur->id}")
+            ->get("/backoffice/comptabilite/commissions/logistique/livreurs/{$livreur->id}")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Comptabilite/CommissionLogistique/Livreur/Show')
@@ -153,7 +153,7 @@ class CommissionDetailKpiTest extends TestCase
         $this->makePartLogistique($commission, $livreur, brut: 10000, frais: 500, verse: 0, statut: 'impaye');
 
         $this->actingAs($this->user)
-            ->get("/comptabilite/commissions/logistique/livreurs/{$livreur->id}")
+            ->get("/backoffice/comptabilite/commissions/logistique/livreurs/{$livreur->id}")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->where('commission_summary.brut_cumule', 10000)
@@ -171,7 +171,7 @@ class CommissionDetailKpiTest extends TestCase
         $livreur = $this->makeLivreur();
 
         $this->actingAs($this->user)
-            ->get("/comptabilite/commissions/logistique/livreurs/{$livreur->id}")
+            ->get("/backoffice/comptabilite/commissions/logistique/livreurs/{$livreur->id}")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->where('can_payer', true)
@@ -192,7 +192,7 @@ class CommissionDetailKpiTest extends TestCase
         $part = $this->makePartLogistique($commission, $livreur, brut: 10000, frais: 0, verse: 0, statut: 'impaye');
 
         $this->actingAs($this->user)
-            ->post("/comptabilite/commissions/logistique/livreurs/{$livreur->id}/paiements", [
+            ->post("/backoffice/comptabilite/commissions/logistique/livreurs/{$livreur->id}/paiements", [
                 'montant' => 4000,
                 'mode_paiement' => 'especes',
             ])
@@ -223,7 +223,7 @@ class CommissionDetailKpiTest extends TestCase
         ]);
 
         $this->actingAs($this->user)
-            ->get("/comptabilite/commissions/vente/livreurs/{$livreur->id}")
+            ->get("/backoffice/comptabilite/commissions/vente/livreurs/{$livreur->id}")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Comptabilite/CommissionVente/Livreur/Show')
@@ -255,7 +255,7 @@ class CommissionDetailKpiTest extends TestCase
         ]);
 
         $this->actingAs($this->user)
-            ->get("/comptabilite/commissions/proprietaires/{$proprio->id}")
+            ->get("/backoffice/comptabilite/commissions/proprietaires/{$proprio->id}")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Comptabilite/CommissionProprietaire/Show')
@@ -291,7 +291,7 @@ class CommissionDetailKpiTest extends TestCase
         ]);
 
         $this->actingAs($this->user)
-            ->get("/comptabilite/commissions/vente/livreurs/{$livreur->id}")
+            ->get("/backoffice/comptabilite/commissions/vente/livreurs/{$livreur->id}")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('commission_details', 1)
@@ -316,7 +316,7 @@ class CommissionDetailKpiTest extends TestCase
         $this->makePartLogistique($commission, $livreur, brut: 10000, frais: 0, verse: 4000, statut: 'partiel');
 
         $this->actingAs($this->user)
-            ->get("/comptabilite/commissions/logistique/livreurs/{$livreur->id}")
+            ->get("/backoffice/comptabilite/commissions/logistique/livreurs/{$livreur->id}")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('commission_details', 1)
@@ -348,7 +348,7 @@ class CommissionDetailKpiTest extends TestCase
         ]);
 
         $this->actingAs($this->user)
-            ->get("/comptabilite/commissions/proprietaires/{$proprio->id}")
+            ->get("/backoffice/comptabilite/commissions/proprietaires/{$proprio->id}")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('commission_details', 1)
@@ -381,7 +381,7 @@ class CommissionDetailKpiTest extends TestCase
         ]);
 
         $this->actingAs($this->user)
-            ->get("/comptabilite/commissions/logistique/livreurs/{$livreur->id}")
+            ->get("/backoffice/comptabilite/commissions/logistique/livreurs/{$livreur->id}")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('expenses', 1)
@@ -403,7 +403,7 @@ class CommissionDetailKpiTest extends TestCase
         ]);
 
         $this->actingAs($this->user)
-            ->get("/comptabilite/commissions/vente/livreurs/{$livreur->id}")
+            ->get("/backoffice/comptabilite/commissions/vente/livreurs/{$livreur->id}")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('expenses', 0)
@@ -432,7 +432,7 @@ class CommissionDetailKpiTest extends TestCase
         ]);
 
         $this->actingAs($this->user)
-            ->get("/comptabilite/commissions/vente/livreurs/{$livreur->id}?periode=2026-06-P1")
+            ->get("/backoffice/comptabilite/commissions/vente/livreurs/{$livreur->id}?periode=2026-06-P1")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('expenses', 1)
@@ -440,7 +440,7 @@ class CommissionDetailKpiTest extends TestCase
             );
 
         $this->actingAs($this->user)
-            ->get("/comptabilite/commissions/vente/livreurs/{$livreur->id}?periode=2026-06-P2")
+            ->get("/backoffice/comptabilite/commissions/vente/livreurs/{$livreur->id}?periode=2026-06-P2")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('expenses', 1)
@@ -448,7 +448,7 @@ class CommissionDetailKpiTest extends TestCase
             );
 
         $this->actingAs($this->user)
-            ->get("/comptabilite/commissions/vente/livreurs/{$livreur->id}?periode=")
+            ->get("/backoffice/comptabilite/commissions/vente/livreurs/{$livreur->id}?periode=")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('expenses', 2)
@@ -499,7 +499,7 @@ class CommissionDetailKpiTest extends TestCase
         ]);
 
         $this->actingAs($this->user)
-            ->get("/comptabilite/commissions/vente/livreurs/{$livreur->id}?vehicule_id[]={$vehiculeA->id}")
+            ->get("/backoffice/comptabilite/commissions/vente/livreurs/{$livreur->id}?vehicule_id[]={$vehiculeA->id}")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->where('commission_summary.brut_cumule', 10000)
@@ -508,7 +508,7 @@ class CommissionDetailKpiTest extends TestCase
             );
 
         $this->actingAs($this->user)
-            ->get("/comptabilite/commissions/vente/livreurs/{$livreur->id}")
+            ->get("/backoffice/comptabilite/commissions/vente/livreurs/{$livreur->id}")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->where('commission_summary.brut_cumule', 35000)
@@ -563,7 +563,7 @@ class CommissionDetailKpiTest extends TestCase
         ]);
 
         $this->actingAs($this->user)
-            ->get("/comptabilite/commissions/vente/livreurs/{$livreur->id}?site_ids[]={$siteA->id}")
+            ->get("/backoffice/comptabilite/commissions/vente/livreurs/{$livreur->id}?site_ids[]={$siteA->id}")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->where('commission_summary.brut_cumule', 12000)
@@ -608,7 +608,7 @@ class CommissionDetailKpiTest extends TestCase
         $autreVehicule = $this->makeVehicule();
 
         $this->actingAs($this->user)
-            ->get("/comptabilite/commissions/vente/livreurs/{$livreur->id}?vehicule_id[]={$autreVehicule->id}")
+            ->get("/backoffice/comptabilite/commissions/vente/livreurs/{$livreur->id}?vehicule_id[]={$autreVehicule->id}")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('payments', 1)
@@ -640,14 +640,14 @@ class CommissionDetailKpiTest extends TestCase
         ]);
 
         $this->actingAs($this->user)
-            ->get("/comptabilite/commissions/proprietaires/{$proprio->id}")
+            ->get("/backoffice/comptabilite/commissions/proprietaires/{$proprio->id}")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('expenses', 2)
             );
 
         $this->actingAs($this->user)
-            ->get("/comptabilite/commissions/proprietaires/{$proprio->id}?vehicule_id[]={$vehicule->id}")
+            ->get("/backoffice/comptabilite/commissions/proprietaires/{$proprio->id}?vehicule_id[]={$vehicule->id}")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('expenses', 1)
@@ -672,7 +672,7 @@ class CommissionDetailKpiTest extends TestCase
         $this->makePartLogistique($commissionB, $livreur, brut: 6000, frais: 0, verse: 0, statut: 'impaye');
 
         $this->actingAs($this->user)
-            ->get("/comptabilite/commissions/logistique/livreurs/{$livreur->id}?site_ids[]={$siteA->id}")
+            ->get("/backoffice/comptabilite/commissions/logistique/livreurs/{$livreur->id}?site_ids[]={$siteA->id}")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->where('commission_summary.brut_cumule', 10000)

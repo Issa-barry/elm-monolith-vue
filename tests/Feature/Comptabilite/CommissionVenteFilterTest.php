@@ -30,7 +30,7 @@ class CommissionVenteFilterTest extends TestCase
 
     public function test_index_avec_statut_envoye_en_tableau_ne_plante_pas(): void
     {
-        $this->get('/comptabilite/commissions/vente?'.http_build_query(['statut' => ['impaye']]))
+        $this->get('/backoffice/comptabilite/commissions/vente?'.http_build_query(['statut' => ['impaye']]))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Comptabilite/CommissionVente/Index')
@@ -40,19 +40,19 @@ class CommissionVenteFilterTest extends TestCase
 
     public function test_index_avec_periode_envoyee_en_tableau_ne_plante_pas(): void
     {
-        $this->get('/comptabilite/commissions/vente?'.http_build_query(['periode' => ['2026-06-P1']]))
+        $this->get('/backoffice/comptabilite/commissions/vente?'.http_build_query(['periode' => ['2026-06-P1']]))
             ->assertOk();
     }
 
     public function test_index_avec_site_ids_envoyes_ne_plante_pas(): void
     {
-        $this->get('/comptabilite/commissions/vente?'.http_build_query(['site_ids' => [$this->user->sites()->first()->id]]))
+        $this->get('/backoffice/comptabilite/commissions/vente?'.http_build_query(['site_ids' => [$this->user->sites()->first()->id]]))
             ->assertOk();
     }
 
     public function test_export_excel_avec_filtres_en_tableau_ne_plante_pas(): void
     {
-        $this->get('/comptabilite/commissions/vente/export/excel?'.http_build_query([
+        $this->get('/backoffice/comptabilite/commissions/vente/export/excel?'.http_build_query([
             'statut' => ['impaye'],
             'periode' => ['2026-06-P1'],
         ]))->assertOk();
@@ -60,7 +60,7 @@ class CommissionVenteFilterTest extends TestCase
 
     public function test_export_pdf_avec_filtres_en_tableau_ne_plante_pas(): void
     {
-        $this->get('/comptabilite/commissions/vente/export/pdf?'.http_build_query([
+        $this->get('/backoffice/comptabilite/commissions/vente/export/pdf?'.http_build_query([
             'statut' => ['impaye'],
             'periode' => ['2026-06-P1'],
         ]))->assertOk();

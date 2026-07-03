@@ -239,7 +239,7 @@ class CommissionPeriodeTest extends TestCase
         $this->makePart($org, $livreur, '2026-04-26'); // P2
 
         $this->actingAs($user)
-            ->get("/logistique/commissions/livreurs/{$livreur->id}?periode=2026-04-P1")
+            ->get("/backoffice/logistique/commissions/livreurs/{$livreur->id}?periode=2026-04-P1")
             ->assertInertia(
                 fn (Assert $page) => $page
                     ->component('Logistique/Commissions/Livreur/Show')
@@ -260,7 +260,7 @@ class CommissionPeriodeTest extends TestCase
         $this->makePart($org, $livreur, '2026-04-26');
 
         $this->actingAs($user)
-            ->get("/logistique/commissions/livreurs/{$livreur->id}")
+            ->get("/backoffice/logistique/commissions/livreurs/{$livreur->id}")
             ->assertInertia(
                 fn (Assert $page) => $page
                     ->component('Logistique/Commissions/Livreur/Show')
@@ -279,7 +279,7 @@ class CommissionPeriodeTest extends TestCase
         $this->makePart($org, $livreur, '2026-04-12');
 
         $this->actingAs($user)
-            ->get("/logistique/commissions/livreurs/{$livreur->id}")
+            ->get("/backoffice/logistique/commissions/livreurs/{$livreur->id}")
             ->assertInertia(
                 fn (Assert $page) => $page
                     ->component('Logistique/Commissions/Livreur/Show')
@@ -299,7 +299,7 @@ class CommissionPeriodeTest extends TestCase
         $this->makePart($org, $livreur, '2026-04-12');
 
         $this->actingAs($user)
-            ->get("/logistique/commissions/livreurs/{$livreur->id}")
+            ->get("/backoffice/logistique/commissions/livreurs/{$livreur->id}")
             ->assertInertia(
                 fn (Assert $page) => $page
                     ->component('Logistique/Commissions/Livreur/Show')

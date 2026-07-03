@@ -71,9 +71,9 @@ const { can } = usePermissions();
 const canUpdateUnitPrice = computed(() => can('ventes.prix.update'));
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Ventes', href: '/ventes' },
-    { title: props.commande.reference, href: `/ventes/${props.commande.id}` },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Ventes', href: '/backoffice/ventes' },
+    { title: props.commande.reference, href: `/backoffice/ventes/${props.commande.id}` },
     { title: 'Modifier', href: '#' },
 ];
 
@@ -292,7 +292,7 @@ const canSubmit = computed(
 
 // ── Soumission ────────────────────────────────────────────────────────────────
 function submit() {
-    form.put(`/ventes/${props.commande.id}`);
+    form.put(`/backoffice/ventes/${props.commande.id}`);
 }
 </script>
 
@@ -308,7 +308,7 @@ function submit() {
         >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
-                    :href="`/ventes/${commande.id}`"
+                    :href="`/backoffice/ventes/${commande.id}`"
                     class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
                 >
                     <ArrowLeft class="h-4 w-4" />
@@ -835,7 +835,7 @@ function submit() {
 
                 <!-- Footer -->
                 <div class="flex items-center justify-between">
-                    <Link :href="`/ventes/${commande.id}`">
+                    <Link :href="`/backoffice/ventes/${commande.id}`">
                         <Button type="button" variant="outline">Retour</Button>
                     </Link>
                     <Button type="submit" :disabled="!canSubmit">

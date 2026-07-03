@@ -241,7 +241,7 @@ function fromDate(val: Date | null): string {
 
         <!-- Pied de formulaire ───────────────────────────────────────────────── -->
         <div class="hidden items-center justify-between sm:flex">
-            <a href="/packings">
+            <a href="/backoffice/packings">
                 <Button type="button" variant="outline"> Retour </Button>
             </a>
             <Button type="submit" :disabled="processing">

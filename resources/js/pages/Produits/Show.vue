@@ -108,8 +108,8 @@ const showStockModal = ref(false);
 const showHistoriqueModal = ref(false);
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Produits', href: '/produits' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Produits', href: '/backoffice/produits' },
     { title: props.produit.nom, href: '#' },
 ];
 
@@ -182,7 +182,7 @@ const ajustements = props.mouvements.map((m) => ({
         >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
-                    href="/produits"
+                    href="/backoffice/produits"
                     class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
                 >
                     <ArrowLeft class="h-4 w-4" />
@@ -197,7 +197,7 @@ const ajustements = props.mouvements.map((m) => ({
                 </div>
                 <Link
                     v-if="can('produits.update')"
-                    :href="`/produits/${produit.id}/edit`"
+                    :href="`/backoffice/produits/${produit.id}/edit`"
                     class="absolute right-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-transform active:scale-95"
                 >
                     <Pencil class="h-4 w-4" />
@@ -209,7 +209,7 @@ const ajustements = props.mouvements.map((m) => ({
             <!-- ─── Header desktop ─── -->
             <div class="hidden items-start justify-between sm:flex">
                 <div class="flex items-center gap-3">
-                    <Link href="/produits">
+                    <Link href="/backoffice/produits">
                         <Button variant="ghost" size="icon" class="h-9 w-9">
                             <ArrowLeft class="h-4 w-4" />
                         </Button>
@@ -250,7 +250,7 @@ const ajustements = props.mouvements.map((m) => ({
                     </Button>
                     <Link
                         v-if="can('produits.update')"
-                        :href="`/produits/${produit.id}/edit`"
+                        :href="`/backoffice/produits/${produit.id}/edit`"
                     >
                         <Button>
                             <Pencil class="mr-2 h-4 w-4" />

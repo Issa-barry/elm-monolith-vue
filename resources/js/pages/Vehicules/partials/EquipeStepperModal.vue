@@ -421,9 +421,9 @@ function submit() {
     };
 
     if (props.equipe) {
-        router.patch(`/equipes-livraison/${props.equipe.id}`, payload, options);
+        router.patch(`/backoffice/equipes-livraison/${props.equipe.id}`, payload, options);
     } else {
-        router.post('/equipes-livraison', payload, options);
+        router.post('/backoffice/equipes-livraison', payload, options);
     }
 }
 

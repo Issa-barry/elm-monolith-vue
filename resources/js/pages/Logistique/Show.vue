@@ -172,14 +172,14 @@ const toast = useToast();
 
 const contexteLabel =
     props.contexte === 'receptions' ? 'Réceptions' : 'Transferts';
-const contexteHref = `/logistique/${props.contexte}`;
+const contexteHref = `/backoffice/logistique/${props.contexte}`;
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
     { title: contexteLabel, href: contexteHref },
     {
         title: props.transfert.reference,
-        href: `/logistique/${props.transfert.id}`,
+        href: `/backoffice/logistique/${props.transfert.id}`,
     },
 ];
 
@@ -308,7 +308,7 @@ function avancerDirect() {
     processing.value = true;
     dialogErrors.value = [];
     router.post(
-        `/logistique/${props.transfert.id}/statut/avancer`,
+        `/backoffice/logistique/${props.transfert.id}/statut/avancer`,
         {},
         {
             onSuccess: () => {
@@ -332,7 +332,7 @@ function submitChargement() {
     processing.value = true;
     dialogErrors.value = [];
     router.post(
-        `/logistique/${props.transfert.id}/statut/avancer`,
+        `/backoffice/logistique/${props.transfert.id}/statut/avancer`,
         {
             lignes: chargementLignes.value.map((l) => ({
                 id: l.id,
@@ -362,7 +362,7 @@ function submitChargement() {
 function annulerTransfert() {
     processing.value = true;
     router.post(
-        `/logistique/${props.transfert.id}/statut/annuler`,
+        `/backoffice/logistique/${props.transfert.id}/statut/annuler`,
         {},
         {
             onFinish: () => {
@@ -402,7 +402,7 @@ watch(showCommissionDialog, (open) => {
 });
 
 function submitCommission() {
-    commissionForm.post(`/logistique/${props.transfert.id}/commission`, {
+    commissionForm.post(`/backoffice/logistique/${props.transfert.id}/commission`, {
         onSuccess: () => {
             showCommissionDialog.value = false;
             toast.add({
@@ -513,7 +513,7 @@ function submitValiderAccord() {
     validationProcessing.value = true;
     validationErrors.value = [];
     router.post(
-        `/logistique/${props.transfert.id}/validation-reception`,
+        `/backoffice/logistique/${props.transfert.id}/validation-reception`,
         { decision: 'accord', montant_par_pack: montantParPack.value },
         {
             onSuccess: () => {
@@ -542,7 +542,7 @@ function submitValiderInvalider() {
     validationProcessing.value = true;
     validationErrors.value = [];
     router.post(
-        `/logistique/${props.transfert.id}/validation-reception`,
+        `/backoffice/logistique/${props.transfert.id}/validation-reception`,
         { decision: 'invalider' },
         {
             onSuccess: () => {
@@ -676,7 +676,7 @@ function activiteDotClass(action: string): string {
 
                     <Link
                         v-if="can_update && transfert.is_editable"
-                        :href="`/logistique/${transfert.id}/editer`"
+                        :href="`/backoffice/logistique/${transfert.id}/editer`"
                     >
                         <Button variant="outline" size="sm">
                             <Pencil class="mr-1.5 h-3.5 w-3.5" />

@@ -62,7 +62,7 @@ const confirm = useConfirm();
 const toast = useToast();
 
 const { onRowClick, bodyRowPt } = useClickableTableRow<Packing>(
-    (packing) => `/packings/${packing.id}`,
+    (packing) => `/backoffice/packings/${packing.id}`,
 );
 
 const search = ref('');
@@ -95,8 +95,8 @@ const mobileFiltered = computed(() => {
 const desktopFiltered = computed(() => mobileFiltered.value);
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Packings', href: '/packings' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Packings', href: '/backoffice/packings' },
 ];
 
 // ── Badges shift ──────────────────────────────────────────────────────────────
@@ -131,7 +131,7 @@ function confirmAnnuler(packing: Packing) {
         acceptClass: 'p-button-warning',
         accept: () => {
             router.patch(
-                `/packings/${packing.id}/annuler`,
+                `/backoffice/packings/${packing.id}/annuler`,
                 {},
                 {
                     onSuccess: () =>
@@ -157,7 +157,7 @@ function confirmDelete(packing: Packing) {
         acceptLabel: 'Supprimer',
         acceptClass: 'p-button-danger',
         accept: () => {
-            router.delete(`/packings/${packing.id}`, {
+            router.delete(`/backoffice/packings/${packing.id}`, {
                 onSuccess: () =>
                     toast.add({
                         severity: 'success',
@@ -181,7 +181,7 @@ function confirmDelete(packing: Packing) {
             <div
                 class="sticky top-0 z-10 flex items-center gap-2 border-b bg-background px-3 py-2"
             >
-                <Link href="/dashboard">
+                <Link href="/backoffice/dashboard">
                     <Button
                         variant="ghost"
                         size="icon"
@@ -193,7 +193,7 @@ function confirmDelete(packing: Packing) {
                 <span class="flex-1 text-center text-sm font-semibold"
                     >Packings</span
                 >
-                <Link v-if="can('packings.create')" href="/packings/create">
+                <Link v-if="can('packings.create')" href="/backoffice/packings/create">
                     <Button size="sm" class="h-8 px-3 text-xs">
                         <Plus class="mr-1 h-3.5 w-3.5" />
                         Nouveau
@@ -245,7 +245,7 @@ function confirmDelete(packing: Packing) {
                     <!-- Info -->
                     <div class="min-w-0 flex-1">
                         <Link
-                            :href="`/packings/${p.id}`"
+                            :href="`/backoffice/packings/${p.id}`"
                             class="font-mono text-xs font-semibold tracking-wide text-foreground hover:underline"
                         >
                             {{ p.reference }}
@@ -292,7 +292,7 @@ function confirmDelete(packing: Packing) {
                                 as-child
                             >
                                 <Link
-                                    :href="`/packings/${p.id}`"
+                                    :href="`/backoffice/packings/${p.id}`"
                                     class="flex w-full items-center gap-2"
                                 >
                                     <Eye class="h-4 w-4" />
@@ -304,7 +304,7 @@ function confirmDelete(packing: Packing) {
                                 as-child
                             >
                                 <Link
-                                    :href="`/packings/${p.id}/edit`"
+                                    :href="`/backoffice/packings/${p.id}/edit`"
                                     class="flex w-full items-center gap-2"
                                 >
                                     <Pencil class="h-4 w-4" />
@@ -345,7 +345,7 @@ function confirmDelete(packing: Packing) {
             >
                 <Layers class="h-12 w-12 opacity-30" />
                 <p class="text-sm">Aucun packing trouvé.</p>
-                <Link v-if="can('packings.create')" href="/packings/create">
+                <Link v-if="can('packings.create')" href="/backoffice/packings/create">
                     <Button variant="outline" size="sm">
                         <Plus class="mr-2 h-4 w-4" />
                         Créer le premier packing
@@ -370,7 +370,7 @@ function confirmDelete(packing: Packing) {
                     </p>
                 </div>
 
-                <Link v-if="can('packings.create')" href="/packings/create">
+                <Link v-if="can('packings.create')" href="/backoffice/packings/create">
                     <Button>
                         <Plus class="mr-2 h-4 w-4" />
                         Nouveau packing
@@ -435,7 +435,7 @@ function confirmDelete(packing: Packing) {
                     >
                         <template #body="{ data }">
                             <Link
-                                :href="`/packings/${data.id}`"
+                                :href="`/backoffice/packings/${data.id}`"
                                 class="font-mono text-xs font-semibold tracking-wide whitespace-nowrap text-foreground hover:underline"
                             >
                                 {{ data.reference }}
@@ -591,7 +591,7 @@ function confirmDelete(packing: Packing) {
                                             as-child
                                         >
                                             <Link
-                                                :href="`/packings/${data.id}`"
+                                                :href="`/backoffice/packings/${data.id}`"
                                                 class="flex w-full items-center gap-2"
                                             >
                                                 <Eye class="h-4 w-4" />
@@ -606,7 +606,7 @@ function confirmDelete(packing: Packing) {
                                             as-child
                                         >
                                             <Link
-                                                :href="`/packings/${data.id}/edit`"
+                                                :href="`/backoffice/packings/${data.id}/edit`"
                                                 class="flex w-full items-center gap-2"
                                             >
                                                 <Pencil class="h-4 w-4" />
@@ -657,7 +657,7 @@ function confirmDelete(packing: Packing) {
                             <p class="text-sm">Aucun packing trouvé.</p>
                             <Link
                                 v-if="can('packings.create')"
-                                href="/packings/create"
+                                href="/backoffice/packings/create"
                             >
                                 <Button variant="outline" size="sm">
                                     <Plus class="mr-2 h-4 w-4" />

@@ -30,7 +30,7 @@ const sidebarNavItems = computed((): NavItem[] => {
     ];
 
     if (isAdmin.value) {
-        items.push({ title: 'Roles & Permissions', href: '/roles' });
+        items.push({ title: 'Roles & Permissions', href: '/backoffice/roles' });
     }
 
     if (can('parametres.update')) {

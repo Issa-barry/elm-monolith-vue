@@ -152,8 +152,8 @@ const inscrits = computed(
 );
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Comptes', href: '/comptes' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Comptes', href: '/backoffice/comptes' },
 ];
 
 function confirmToggle(a: Account) {
@@ -167,7 +167,7 @@ function confirmToggle(a: Account) {
         acceptClass: a.is_active ? 'p-button-danger' : 'p-button-success',
         accept: () => {
             router.patch(
-                `/comptes/${a.id}/toggle-active`,
+                `/backoffice/comptes/${a.id}/toggle-active`,
                 {},
                 {
                     onSuccess: () =>

@@ -41,7 +41,7 @@ const showChargee = computed(
 );
 
 const qrUrl = computed(
-    () => `${window.location.origin}/ventes/${props.commande.id}`,
+    () => `${window.location.origin}/backoffice/ventes/${props.commande.id}`,
 );
 
 function formatGNF(val: number): string {

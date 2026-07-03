@@ -75,11 +75,11 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Comptabilité', href: '/comptabilite' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Comptabilité', href: '/backoffice/comptabilite' },
     {
         title: 'Commission propriétaire',
-        href: '/comptabilite/commissions/proprietaires',
+        href: '/backoffice/comptabilite/commissions/proprietaires',
     },
 ];
 
@@ -170,7 +170,7 @@ function handlePaiementSubmit(payload: {
     paiementProcessing.value = true;
     paiementErrors.value = {};
     router.post(
-        `/comptabilite/commissions/proprietaires/${selectedBenef.value.beneficiaire_id}/paiements`,
+        `/backoffice/comptabilite/commissions/proprietaires/${selectedBenef.value.beneficiaire_id}/paiements`,
         payload,
         {
             preserveScroll: true,
@@ -201,7 +201,7 @@ function buildParams(): URLSearchParams {
 
 function exportExcel() {
     window.open(
-        '/comptabilite/commissions/proprietaires/export/excel?' +
+        '/backoffice/comptabilite/commissions/proprietaires/export/excel?' +
             buildParams().toString(),
         '_blank',
     );
@@ -209,7 +209,7 @@ function exportExcel() {
 
 function exportPdf() {
     window.open(
-        '/comptabilite/commissions/proprietaires/export/pdf?' +
+        '/backoffice/comptabilite/commissions/proprietaires/export/pdf?' +
             buildParams().toString(),
         '_blank',
     );
@@ -337,7 +337,7 @@ function fmtTel(tel: string | null | undefined): string {
 
             <!-- Filtres -->
             <DataFilters
-                url="/comptabilite/commissions/proprietaires"
+                url="/backoffice/comptabilite/commissions/proprietaires"
                 :values="currentFilters"
                 :fields="filterFields"
                 :sites="sites"
@@ -397,7 +397,7 @@ function fmtTel(tel: string | null | undefined): string {
                             <ClickableTableRow
                                 v-for="b in beneficiaires"
                                 :key="b.beneficiaire_id"
-                                :href="`/comptabilite/commissions/proprietaires/${b.beneficiaire_id}`"
+                                :href="`/backoffice/comptabilite/commissions/proprietaires/${b.beneficiaire_id}`"
                                 :aria-label="`Voir le détail de ${b.beneficiaire_nom}`"
                                 class="even:bg-muted/20"
                             >
@@ -488,7 +488,7 @@ function fmtTel(tel: string | null | undefined): string {
                                         <DropdownMenuContent align="end">
                                             <DropdownMenuItem as-child>
                                                 <Link
-                                                    :href="`/comptabilite/commissions/proprietaires/${b.beneficiaire_id}`"
+                                                    :href="`/backoffice/comptabilite/commissions/proprietaires/${b.beneficiaire_id}`"
                                                     class="flex w-full cursor-pointer items-center"
                                                 >
                                                     Détail

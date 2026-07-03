@@ -173,7 +173,7 @@ function formatNum(val: number): string {
 }
 
 function submit() {
-    form.post(`/produits/${props.produit.id}/ajuster-stock`, {
+    form.post(`/backoffice/produits/${props.produit.id}/ajuster-stock`, {
         preserveScroll: true,
         onSuccess: () => close(),
     });

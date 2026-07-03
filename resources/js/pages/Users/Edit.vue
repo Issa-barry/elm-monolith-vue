@@ -40,8 +40,8 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Utilisateurs', href: '/users' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Utilisateurs', href: '/backoffice/users' },
     { title: `${props.user.prenom} ${props.user.nom}`, href: '#' },
 ];
 
@@ -113,7 +113,7 @@ watch(
 );
 
 function submitInfo() {
-    infoForm.put(`/users/${props.user.id}`);
+    infoForm.put(`/backoffice/users/${props.user.id}`);
 }
 
 // ── Formulaire mot de passe ───────────────────────────────────────────────────
@@ -123,7 +123,7 @@ const passwordForm = useForm({
 });
 
 function submitPassword() {
-    passwordForm.put(`/users/${props.user.id}/password`, {
+    passwordForm.put(`/backoffice/users/${props.user.id}/password`, {
         onSuccess: () => passwordForm.reset(),
     });
 }
@@ -140,7 +140,7 @@ function submitPassword() {
         >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
-                    href="/users"
+                    href="/backoffice/users"
                     class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
                 >
                     <ArrowLeft class="h-4 w-4" />
@@ -229,7 +229,7 @@ function submitPassword() {
                         :sites="sites"
                         :is-edit="true"
                         :show-password="false"
-                        back-href="/users"
+                        back-href="/backoffice/users"
                         @submit="submitInfo"
                         @update:form="Object.assign(infoForm, $event)"
                         @clear-error="infoForm.clearErrors($event as any)"
@@ -303,7 +303,7 @@ function submitPassword() {
                         <div
                             class="hidden items-center justify-between sm:flex"
                         >
-                            <Link href="/users">
+                            <Link href="/backoffice/users">
                                 <button
                                     type="button"
                                     class="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium transition-colors hover:bg-accent"
