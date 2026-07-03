@@ -31,7 +31,7 @@ test('commande -> confirmation -> chargement -> encaissement facture -> visible 
     await login(page);
 
     // ── 1. Créer une commande ──────────────────────────────────────────────────
-    await page.goto('/ventes/create');
+    await page.goto('/backoffice/ventes/create');
     await expect(page).toHaveURL(/\/ventes\/create$/, { timeout: 20_000 });
 
     const vehiculeNom = await selectFirstVehicule(page);
@@ -107,7 +107,7 @@ test('commande -> confirmation -> chargement -> encaissement facture -> visible 
     );
 
     // ── 4. Aller sur /factures et encaisser ────────────────────────────────────
-    await page.goto('/factures');
+    await page.goto('/backoffice/factures');
     await expect(page).toHaveURL(/\/factures/, { timeout: 20_000 });
     await expect(page.locator('body')).toContainText(/factures de vente/i, {
         timeout: 20_000,

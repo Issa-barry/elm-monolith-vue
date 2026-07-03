@@ -47,7 +47,7 @@ test('détail Commission logistique — 5 cartes, tabs, dialog paiement', async 
     page,
 }) => {
     await login(page);
-    await page.goto('/comptabilite/commissions/logistique');
+    await page.goto('/backoffice/comptabilite/commissions/logistique');
 
     const row = page
         .locator('tbody tr', { hasText: /Thierno\s+SALL/i })
@@ -83,7 +83,7 @@ test('détail Commission vente — 5 cartes et tabs identiques', async ({
     page,
 }) => {
     await login(page);
-    await page.goto('/comptabilite/commissions/vente');
+    await page.goto('/backoffice/comptabilite/commissions/vente');
 
     const row = page.locator('tbody tr:has(td)').first();
     const hasRow = await row.isVisible({ timeout: 10_000 }).catch(() => false);
@@ -121,7 +121,7 @@ test('détail Commission propriétaire — libellé « Dépenses véhicules »',
     page,
 }) => {
     await login(page);
-    await page.goto('/comptabilite/commissions/proprietaires');
+    await page.goto('/backoffice/comptabilite/commissions/proprietaires');
 
     const row = page.locator('tbody tr:has(td)').first();
     const hasRow = await row.isVisible({ timeout: 10_000 }).catch(() => false);
@@ -155,7 +155,7 @@ test('filtres globaux Commission vente — URL persiste et Réinitialiser foncti
     page,
 }) => {
     await login(page);
-    await page.goto('/comptabilite/commissions/vente');
+    await page.goto('/backoffice/comptabilite/commissions/vente');
 
     const row = page.locator('tbody tr:has(td)').first();
     const hasRow = await row.isVisible({ timeout: 10_000 }).catch(() => false);
@@ -201,7 +201,7 @@ test('filtres globaux présents et identiques sur Commission logistique et propr
 }) => {
     await login(page);
 
-    await page.goto('/comptabilite/commissions/logistique');
+    await page.goto('/backoffice/comptabilite/commissions/logistique');
     const logistiqueRow = page
         .locator('tbody tr', { hasText: /Thierno\s+SALL/i })
         .first();
@@ -215,7 +215,7 @@ test('filtres globaux présents et identiques sur Commission logistique et propr
         timeout: 15_000,
     });
 
-    await page.goto('/comptabilite/commissions/proprietaires');
+    await page.goto('/backoffice/comptabilite/commissions/proprietaires');
     const proprietaireRow = page.locator('tbody tr:has(td)').first();
     const hasProprietaireRow = await proprietaireRow
         .isVisible({ timeout: 10_000 })

@@ -369,7 +369,7 @@ function onTelephoneInput(value: string | null | undefined) {
 
         <!-- Pied -->
         <div class="hidden items-center justify-between sm:flex">
-            <a :href="props.backHref ?? '/proprietaires'">
+            <a :href="props.backHref ?? '/backoffice/proprietaires'">
                 <Button type="button" variant="outline"> Retour </Button>
             </a>
             <Button type="submit" :disabled="processing">

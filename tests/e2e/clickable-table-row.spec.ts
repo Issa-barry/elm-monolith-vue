@@ -15,7 +15,7 @@ test('ligne cliquable Commission vente : clic, clavier, et menu "..." isolé', a
     page,
 }) => {
     await login(page);
-    await page.goto('/comptabilite/commissions/vente');
+    await page.goto('/backoffice/comptabilite/commissions/vente');
     await expect(page).toHaveURL(/\/comptabilite\/commissions\/vente/, {
         timeout: 15_000,
     });

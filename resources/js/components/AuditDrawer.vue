@@ -86,7 +86,7 @@ async function fetchLogs() {
         });
         if (props.module) params.set('module', props.module);
         const res = await fetch(
-            `/comptabilite/historique/entite?${params.toString()}`,
+            `/backoffice/comptabilite/historique/entite?${params.toString()}`,
             { headers: { Accept: 'application/json' } },
         );
         if (!res.ok) throw new Error('HTTP ' + res.status);

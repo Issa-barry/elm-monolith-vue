@@ -46,8 +46,8 @@ const flashSuccess = computed(
 );
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Clients', href: '/clients' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Clients', href: '/backoffice/clients' },
     {
         title: `${props.client.prenom} ${props.client.nom}`,
         href: '#',
@@ -88,7 +88,7 @@ watch(
 );
 
 function submit() {
-    form.put(`/clients/${props.client.id}`);
+    form.put(`/backoffice/clients/${props.client.id}`);
 }
 
 function formatMontant(v: number): string {
@@ -106,7 +106,7 @@ function formatMontant(v: number): string {
         >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
-                    href="/clients"
+                    href="/backoffice/clients"
                     class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
                 >
                     <ArrowLeft class="h-4 w-4" />
@@ -211,7 +211,7 @@ function formatMontant(v: number): string {
                     }}</strong>
                     à verser.
                     <a
-                        href="/cashback"
+                        href="/backoffice/cashback"
                         class="ml-1 underline hover:no-underline"
                         >Gérer →</a
                     >

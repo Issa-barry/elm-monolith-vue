@@ -39,10 +39,13 @@ watch(
         loading.value = true;
         fetchError.value = null;
         try {
-            const response = await fetch(`/depenses/${id}/historique`, {
-                headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                credentials: 'same-origin',
-            });
+            const response = await fetch(
+                `/backoffice/depenses/${id}/historique`,
+                {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    credentials: 'same-origin',
+                },
+            );
             if (!response.ok) throw new Error();
             const data = await response.json();
             logs.value = data.logs;

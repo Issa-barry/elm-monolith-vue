@@ -44,9 +44,11 @@ const props = defineProps<{
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Tableau de bord',
-        href: props.is_staff ? '/dashboard' : '/client/dashboard',
+        href: props.is_staff ? '/backoffice/dashboard' : '/client/dashboard',
     },
-    ...(props.is_staff ? [{ title: 'Livreurs', href: '/livreurs' }] : []),
+    ...(props.is_staff
+        ? [{ title: 'Livreurs', href: '/backoffice/livreurs' }]
+        : []),
     { title: props.livreur.nom_complet, href: '#' },
 ];
 
@@ -270,7 +272,13 @@ const showInfo = ref(false);
 
                 <!-- ── Retour ──────────────────────────────────────────── -->
                 <div class="pt-2 text-center">
-                    <Link :href="is_staff ? '/livreurs' : '/client/dashboard'">
+                    <Link
+                        :href="
+                            is_staff
+                                ? '/backoffice/livreurs'
+                                : '/client/dashboard'
+                        "
+                    >
                         <Button
                             variant="ghost"
                             size="sm"

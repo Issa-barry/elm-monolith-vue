@@ -23,10 +23,13 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Comptabilité', href: '/comptabilite' },
-    { title: 'Périodes', href: '/comptabilite/periodes' },
-    { title: 'Nouvelle période', href: '/comptabilite/periodes/creer' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Comptabilité', href: '/backoffice/comptabilite' },
+    { title: 'Périodes', href: '/backoffice/comptabilite/periodes' },
+    {
+        title: 'Nouvelle période',
+        href: '/backoffice/comptabilite/periodes/creer',
+    },
 ];
 
 const form = ref({
@@ -47,7 +50,7 @@ const siteOptions = [
 function submit() {
     submitting.value = true;
     errors.value = {};
-    router.post('/comptabilite/periodes', form.value, {
+    router.post('/backoffice/comptabilite/periodes', form.value, {
         onError: (e) => {
             errors.value = e;
             submitting.value = false;
@@ -171,7 +174,7 @@ function submit() {
 
                 <div class="flex items-center justify-end gap-3 pt-2">
                     <Button type="button" variant="outline" as-child>
-                        <a href="/comptabilite/periodes">Annuler</a>
+                        <a href="/backoffice/comptabilite/periodes">Annuler</a>
                     </Button>
                     <Button type="submit" :disabled="submitting">
                         {{ submitting ? 'Création…' : 'Créer la période' }}

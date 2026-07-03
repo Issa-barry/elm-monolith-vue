@@ -80,7 +80,7 @@ class EquipeLivraisonTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule->id]))
-            ->assertRedirectContains('/vehicules/');
+            ->assertRedirectContains('/backoffice/vehicules/');
 
         $this->assertDatabaseHas('equipes_livraison', [
             'organization_id' => $this->org->id,
@@ -97,7 +97,7 @@ class EquipeLivraisonTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule->id]))
-            ->assertRedirectContains('/vehicules/');
+            ->assertRedirectContains('/backoffice/vehicules/');
 
         $this->assertDatabaseHas('livreurs', [
             'telephone' => '+224620000001',
@@ -167,7 +167,7 @@ class EquipeLivraisonTest extends TestCase
                     'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
             ]))
-            ->assertRedirectContains('/vehicules/');
+            ->assertRedirectContains('/backoffice/vehicules/');
 
         $this->assertDatabaseHas('equipes_livraison', [
             'organization_id' => $this->org->id,
@@ -203,7 +203,7 @@ class EquipeLivraisonTest extends TestCase
                     'montant_par_pack' => 24.50, 'ordre' => 0,
                 ]],
             ]))
-            ->assertRedirectContains('/vehicules/');
+            ->assertRedirectContains('/backoffice/vehicules/');
 
         $equipe = EquipeLivraison::where('organization_id', $this->org->id)
             ->where('proprietaire_id', $proprietaire->id)
@@ -286,7 +286,7 @@ class EquipeLivraisonTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule->id]))
-            ->assertRedirectContains('/vehicules/');
+            ->assertRedirectContains('/backoffice/vehicules/');
 
         // Même véhicule, membre différent pour éviter conflit livreur
         $this->actingAs($this->user)
@@ -309,13 +309,13 @@ class EquipeLivraisonTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule1->id]))
-            ->assertRedirectContains('/vehicules/');
+            ->assertRedirectContains('/backoffice/vehicules/');
 
         $equipe = EquipeLivraison::where('organization_id', $this->org->id)->first();
 
         $this->actingAs($this->user)
             ->delete(route('equipes-livraison.destroy', $equipe))
-            ->assertRedirectContains('/vehicules/');
+            ->assertRedirectContains('/backoffice/vehicules/');
 
         // Le même nom doit être disponible après suppression (soft-delete)
         // vehicule1 est libéré après le soft-delete de l'équipe
@@ -329,7 +329,7 @@ class EquipeLivraisonTest extends TestCase
                     'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
             ]))
-            ->assertRedirectContains('/vehicules/');
+            ->assertRedirectContains('/backoffice/vehicules/');
     }
 
     public function test_store_fails_si_livreur_deja_dans_autre_equipe(): void
@@ -339,7 +339,7 @@ class EquipeLivraisonTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule->id]))
-            ->assertRedirectContains('/vehicules/');
+            ->assertRedirectContains('/backoffice/vehicules/');
 
         // Même livreur (+224620000001) dans une autre équipe
         $vehicule2 = $this->makeVehicule();
@@ -365,14 +365,14 @@ class EquipeLivraisonTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule->id]))
-            ->assertRedirectContains('/vehicules/');
+            ->assertRedirectContains('/backoffice/vehicules/');
 
         $equipe = EquipeLivraison::where('organization_id', $this->org->id)->first();
 
         // Mettre à jour en conservant le même membre → doit réussir
         $this->actingAs($this->user)
             ->patch(route('equipes-livraison.update', $equipe), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule->id]))
-            ->assertRedirectContains('/vehicules/');
+            ->assertRedirectContains('/backoffice/vehicules/');
     }
 
     public function test_update_fails_si_livreur_deja_dans_autre_equipe(): void
@@ -384,7 +384,7 @@ class EquipeLivraisonTest extends TestCase
         // Equipe 1 avec +224620000001
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule1->id]))
-            ->assertRedirectContains('/vehicules/');
+            ->assertRedirectContains('/backoffice/vehicules/');
 
         // Equipe 2 avec +224620000002
         $this->actingAs($this->user)
@@ -398,7 +398,7 @@ class EquipeLivraisonTest extends TestCase
                     'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
             ]))
-            ->assertRedirectContains('/vehicules/');
+            ->assertRedirectContains('/backoffice/vehicules/');
 
         $equipe2 = EquipeLivraison::where('organization_id', $this->org->id)
             ->where('vehicule_id', $vehicule2->id)->first();
@@ -441,7 +441,7 @@ class EquipeLivraisonTest extends TestCase
                     'montant_par_pack' => 45, 'ordre' => 0,
                 ]],
             ]))
-            ->assertRedirectContains('/vehicules/');
+            ->assertRedirectContains('/backoffice/vehicules/');
 
         $this->assertDatabaseHas('equipes_livraison', [
             'id' => $equipe->id,

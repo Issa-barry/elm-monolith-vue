@@ -18,7 +18,7 @@ test('paiement partiel commission logistique — Déjà payé et Reste à payer 
 }) => {
     await login(page);
 
-    await page.goto('/logistique/commissions');
+    await page.goto('/backoffice/logistique/commissions');
     await expect(page).toHaveURL(/\/logistique\/commissions/, { timeout: 20_000 });
     await expect(page.locator('body')).toContainText(/commissions logistiques/i, {
         timeout: 20_000,
@@ -89,7 +89,7 @@ test('livreur déjà payé intégralement — Reste à payer = 0 GNF', async ({
 }) => {
     await login(page);
 
-    await page.goto('/logistique/commissions');
+    await page.goto('/backoffice/logistique/commissions');
     await expect(page).toHaveURL(/\/logistique\/commissions/, { timeout: 20_000 });
 
     // Boubacar KONATÉ est payé avec 24 000 GNF (120 packs × 200 × 100 %)

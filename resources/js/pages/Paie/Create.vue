@@ -10,9 +10,9 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Paie', href: '/paie' },
-    { title: 'Nouvelle période', href: '/paie/create' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Paie', href: '/backoffice/paie' },
+    { title: 'Nouvelle période', href: '/backoffice/paie/create' },
 ];
 
 const moisLabels = [
@@ -48,7 +48,7 @@ const form = useForm({
 });
 
 function submit() {
-    form.post('/paie');
+    form.post('/backoffice/paie');
 }
 </script>
 
@@ -122,7 +122,7 @@ function submit() {
                     <Button type="submit" :disabled="form.processing"
                         >Créer la période</Button
                     >
-                    <a href="/paie">
+                    <a href="/backoffice/paie">
                         <Button variant="outline" type="button">Annuler</Button>
                     </a>
                 </div>

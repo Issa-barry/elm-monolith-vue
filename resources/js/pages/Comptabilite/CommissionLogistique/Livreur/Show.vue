@@ -45,11 +45,11 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Comptabilité', href: '/comptabilite' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Comptabilité', href: '/backoffice/comptabilite' },
     {
         title: 'Commission logistique',
-        href: '/comptabilite/commissions/logistique',
+        href: '/backoffice/comptabilite/commissions/logistique',
     },
     { title: props.livreur.nom, href: '' },
 ];
@@ -66,7 +66,7 @@ const activeFiltersLabel = useCommissionActiveFiltersSummary({
 function reload(next: CommissionGlobalFiltersValue) {
     filters.value = next;
     router.get(
-        `/comptabilite/commissions/logistique/livreurs/${props.livreur.id}`,
+        `/backoffice/comptabilite/commissions/logistique/livreurs/${props.livreur.id}`,
         {
             periode: next.periode || undefined,
             vehicule_id: next.vehicule_ids,
@@ -85,7 +85,7 @@ const showPaiementDialog = ref(false);
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 sm:px-6">
             <CommissionDetailHeader
-                :back-href="'/comptabilite/commissions/logistique'"
+                :back-href="'/backoffice/comptabilite/commissions/logistique'"
                 eyebrow="Livreur — Logistique"
                 :title="livreur.nom"
                 :telephone="livreur.telephone"
@@ -186,6 +186,6 @@ const showPaiementDialog = ref(false);
         :beneficiaire-nom="livreur.nom"
         :solde-a-payer="commission_summary.reste_a_payer"
         :modes-paiement="modes_paiement"
-        :payment-route="`/comptabilite/commissions/logistique/livreurs/${livreur.id}/paiements`"
+        :payment-route="`/backoffice/comptabilite/commissions/logistique/livreurs/${livreur.id}/paiements`"
     />
 </template>

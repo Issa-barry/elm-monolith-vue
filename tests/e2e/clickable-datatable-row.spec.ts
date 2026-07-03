@@ -15,7 +15,7 @@ test('ligne DataTable cliquable (Ventes) : clic, clavier, et menu "..." isolé',
     page,
 }) => {
     await login(page);
-    await page.goto('/ventes');
+    await page.goto('/backoffice/ventes');
     await expect(page).toHaveURL(/\/ventes/, { timeout: 15_000 });
 
     const rows = page.locator('tbody tr[role="link"]');

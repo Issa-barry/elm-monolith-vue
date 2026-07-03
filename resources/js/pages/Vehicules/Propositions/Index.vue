@@ -44,8 +44,8 @@ const flashSuccess = computed(
 );
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Véhicules', href: '/vehicules' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Véhicules', href: '/backoffice/vehicules' },
     { title: 'Propositions', href: '#' },
 ];
 
@@ -104,7 +104,7 @@ const colorClasses: Record<string, string> = {
 
             <!-- Filtres -->
             <DataFilters
-                url="/vehicules/propositions"
+                url="/backoffice/vehicules/propositions"
                 :values="filters"
                 :fields="filterFields"
                 :result-count="propositions.length"
@@ -177,7 +177,7 @@ const colorClasses: Record<string, string> = {
 
                         <!-- Action -->
                         <Link
-                            :href="`/vehicules/propositions/${p.id}`"
+                            :href="`/backoffice/vehicules/propositions/${p.id}`"
                             class="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                         >
                             <Eye class="h-4 w-4" />

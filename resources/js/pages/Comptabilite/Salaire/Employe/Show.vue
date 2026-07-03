@@ -32,9 +32,9 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Comptabilité', href: '/comptabilite' },
-    { title: 'Paiement salaire', href: '/comptabilite/salaires' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Comptabilité', href: '/backoffice/comptabilite' },
+    { title: 'Paiement salaire', href: '/backoffice/comptabilite/salaires' },
     { title: props.employe.nom, href: '' },
 ];
 
@@ -47,7 +47,7 @@ const showPaiementDialog = ref(false);
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 sm:px-6">
             <CommissionDetailHeader
-                :back-href="'/comptabilite/salaires'"
+                :back-href="'/backoffice/comptabilite/salaires'"
                 eyebrow="Salarié"
                 :title="employe.nom"
                 :telephone="employe.telephone"
@@ -142,6 +142,6 @@ const showPaiementDialog = ref(false);
         :beneficiaire-nom="employe.nom"
         :solde-a-payer="commission_summary.reste_a_payer"
         :modes-paiement="modes_paiement"
-        :payment-route="`/comptabilite/salaires/employes/${employe.id}/paiements`"
+        :payment-route="`/backoffice/comptabilite/salaires/employes/${employe.id}/paiements`"
     />
 </template>

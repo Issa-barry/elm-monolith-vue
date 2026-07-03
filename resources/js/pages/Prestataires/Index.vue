@@ -96,8 +96,8 @@ const filteredPrestataires = computed(() => applyFilters(props.prestataires));
 const mobileFiltered = computed(() => applyFilters(props.prestataires));
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Prestataires', href: '/prestataires' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Prestataires', href: '/backoffice/prestataires' },
 ];
 
 const typeColor: Record<string, string> = {
@@ -119,7 +119,7 @@ function confirmDelete(p: Prestataire) {
         acceptLabel: 'Supprimer',
         acceptClass: 'p-button-danger',
         accept: () => {
-            router.delete(`/prestataires/${p.id}`, {
+            router.delete(`/backoffice/prestataires/${p.id}`, {
                 onSuccess: () =>
                     toast.add({
                         severity: 'success',
@@ -143,7 +143,7 @@ function confirmDelete(p: Prestataire) {
             <div
                 class="sticky top-0 z-10 flex items-center gap-2 border-b bg-background px-3 py-2"
             >
-                <Link href="/dashboard">
+                <Link href="/backoffice/dashboard">
                     <Button
                         variant="ghost"
                         size="icon"
@@ -157,7 +157,7 @@ function confirmDelete(p: Prestataire) {
                 >
                 <Link
                     v-if="can('prestataires.create')"
-                    href="/prestataires/create"
+                    href="/backoffice/prestataires/create"
                 >
                     <Button size="sm" class="h-8 px-3 text-xs">
                         <Plus class="mr-1 h-3.5 w-3.5" />
@@ -246,7 +246,7 @@ function confirmDelete(p: Prestataire) {
                                 as-child
                             >
                                 <Link
-                                    :href="`/prestataires/${p.id}/edit`"
+                                    :href="`/backoffice/prestataires/${p.id}/edit`"
                                     class="flex w-full items-center gap-2"
                                 >
                                     <Pencil class="h-4 w-4" />
@@ -281,7 +281,7 @@ function confirmDelete(p: Prestataire) {
                 <p class="text-sm">Aucun prestataire trouvé.</p>
                 <Link
                     v-if="can('prestataires.create')"
-                    href="/prestataires/create"
+                    href="/backoffice/prestataires/create"
                 >
                     <Button variant="outline" size="sm">
                         <Plus class="mr-2 h-4 w-4" />
@@ -307,7 +307,7 @@ function confirmDelete(p: Prestataire) {
                 </div>
                 <Link
                     v-if="can('prestataires.create')"
-                    href="/prestataires/create"
+                    href="/backoffice/prestataires/create"
                 >
                     <Button>
                         <Plus class="mr-2 h-4 w-4" />
@@ -539,7 +539,7 @@ function confirmDelete(p: Prestataire) {
                                             as-child
                                         >
                                             <Link
-                                                :href="`/prestataires/${data.id}/edit`"
+                                                :href="`/backoffice/prestataires/${data.id}/edit`"
                                                 class="flex w-full items-center gap-2"
                                             >
                                                 <Pencil class="h-4 w-4" />
@@ -575,7 +575,7 @@ function confirmDelete(p: Prestataire) {
                             <p class="text-sm">Aucun prestataire trouvé.</p>
                             <Link
                                 v-if="can('prestataires.create')"
-                                href="/prestataires/create"
+                                href="/backoffice/prestataires/create"
                             >
                                 <Button variant="outline" size="sm">
                                     <Plus class="mr-2 h-4 w-4" />

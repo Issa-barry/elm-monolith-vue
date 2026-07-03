@@ -20,8 +20,8 @@ interface SiteOption {
 defineProps<{ roles: RoleOption[]; sites: SiteOption[] }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Utilisateurs', href: '/users' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Utilisateurs', href: '/backoffice/users' },
     { title: 'Nouveau compte', href: '#' },
 ];
 
@@ -91,7 +91,7 @@ function submit() {
         return;
     }
 
-    form.post('/users');
+    form.post('/backoffice/users');
 }
 </script>
 
@@ -106,7 +106,7 @@ function submit() {
         >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
-                    href="/users"
+                    href="/backoffice/users"
                     class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
                 >
                     <ArrowLeft class="h-4 w-4" />
@@ -181,7 +181,7 @@ function submit() {
                         :is-edit="false"
                         :show-password="false"
                         submit-label="Continuer"
-                        back-href="/users"
+                        back-href="/backoffice/users"
                         @submit="goToPassword"
                         @update:form="Object.assign(form, $event)"
                         @clear-error="form.clearErrors($event as any)"

@@ -93,7 +93,7 @@ const config = computed(() => {
 
             <!-- Actions -->
             <div class="mt-8 flex justify-center gap-3">
-                <Link href="/dashboard">
+                <Link href="/backoffice/dashboard">
                     <Button>
                         <Home class="mr-2 h-4 w-4" />
                         Retour à l'accueil

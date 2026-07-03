@@ -154,7 +154,7 @@ class ReceptionValidationAdminTest extends TestCase
 
     private function urlValidation(TransfertLogistique $t): string
     {
-        return "/logistique/{$t->id}/validation-reception";
+        return "/backoffice/logistique/{$t->id}/validation-reception";
     }
 
     // ── Tests ─────────────────────────────────────────────────────────────────
@@ -166,7 +166,7 @@ class ReceptionValidationAdminTest extends TestCase
 
         $this->actingAs($this->admin)
             ->post($this->urlValidation($transfert), ['decision' => 'accord', 'montant_par_pack' => 200])
-            ->assertRedirect("/logistique/{$transfert->id}");
+            ->assertRedirect("/backoffice/logistique/{$transfert->id}");
 
         $transfert->refresh();
         $this->assertEquals('accord', $transfert->validation_reception);
@@ -191,7 +191,7 @@ class ReceptionValidationAdminTest extends TestCase
                 'decision' => 'refus',
                 'motif' => 'Quantités non conformes au bon de livraison',
             ])
-            ->assertRedirect("/logistique/{$transfert->id}");
+            ->assertRedirect("/backoffice/logistique/{$transfert->id}");
 
         $transfert->refresh();
         $this->assertEquals('refus', $transfert->validation_reception);

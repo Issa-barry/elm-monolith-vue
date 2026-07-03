@@ -187,7 +187,7 @@ test('wrong credentials -> stays on /login with error message', async ({
 test('access protected route -> login -> redirected back to intended URL', async ({
     page,
 }) => {
-    await page.goto('/users');
+    await page.goto('/backoffice/users');
 
     await expect(page).toHaveURL(/\/login(?:\?.*)?$/, { timeout: 20_000 });
 
@@ -253,7 +253,7 @@ test('remember me unchecked -> clear cookies -> redirected to /login', async ({
 
     await page.context().clearCookies();
 
-    await page.goto('/users');
+    await page.goto('/backoffice/users');
     await expect(page).toHaveURL(/\/login(?:\?.*)?$/, { timeout: 20_000 });
 });
 
@@ -275,7 +275,7 @@ test('remember me checked -> session cookie removed -> still authenticated', asy
         await page.context().addCookies(nonSessionCookies);
     }
 
-    await page.goto('/users');
+    await page.goto('/backoffice/users');
     await expect(page).not.toHaveURL(/\/login/, { timeout: 30_000 });
     await expect(page).toHaveURL(/\/users/, { timeout: 10_000 });
 });

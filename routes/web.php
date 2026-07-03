@@ -111,318 +111,320 @@ Route::get('/help', function () {
 
 Route::post('contact', [ContactController::class, 'store'])->name('contact.store');
 
-Route::get('dashboard', [DashboardController::class, 'index'])
-    ->middleware(['auth', 'verified', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'require.site'])
-    ->name('dashboard');
+// ── Espace staff (back-office) ──────────────────────────────────────────────
+Route::prefix('backoffice')->group(function () {
+    Route::get('dashboard', [DashboardController::class, 'index'])
+        ->middleware(['auth', 'verified', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'require.site'])
+        ->name('dashboard');
 
-// ── Espace staff ──────────────────────────────────────────────────────────────
-Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'require.site'])->group(function () {
+    Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'require.site'])->group(function () {
 
-    // Messages de contact
-    Route::get('contact-messages/unread-count', [ContactController::class, 'unreadCount'])->name('contact-messages.unread-count');
-    Route::patch('contact-messages/{contactMessage}/read', [ContactController::class, 'markRead'])->name('contact-messages.read');
+        // Messages de contact
+        Route::get('contact-messages/unread-count', [ContactController::class, 'unreadCount'])->name('contact-messages.unread-count');
+        Route::patch('contact-messages/{contactMessage}/read', [ContactController::class, 'markRead'])->name('contact-messages.read');
 
-    // Clients
-    Route::resource('clients', ClientController::class);
+        // Clients
+        Route::resource('clients', ClientController::class);
 
-    // ── Module : Ventes ───────────────────────────────────────────────────────
-    Route::middleware('module:'.ModuleFeature::VENTES)->group(function () {
-        Route::get('ventes/check-solvabilite', [CommandeVenteController::class, 'checkSolvabilite'])->name('ventes.check-solvabilite');
-        Route::resource('ventes', CommandeVenteController::class)->except([]);
-        Route::get('pdv', [PdvController::class, 'index'])->name('pdv.index');
-        Route::post('pdv/checkout', [PdvController::class, 'checkout'])->name('pdv.checkout');
-        Route::patch('ventes/{commande_vente}/valider', [CommandeVenteController::class, 'valider'])->name('ventes.valider');
-        Route::patch('ventes/{commande_vente}/annuler', [CommandeVenteController::class, 'annuler'])->name('ventes.annuler');
-        Route::post('ventes/{commande_vente}/statut/avancer', [CommandeVenteStatutController::class, 'avancer'])->name('ventes.statut.avancer');
-        Route::post('ventes/{commande_vente}/statut/annuler', [CommandeVenteStatutController::class, 'annuler'])->name('ventes.statut.annuler');
-        Route::get('factures', [FactureVenteController::class, 'index'])->name('factures.index');
+        // ── Module : Ventes ───────────────────────────────────────────────────────
+        Route::middleware('module:'.ModuleFeature::VENTES)->group(function () {
+            Route::get('ventes/check-solvabilite', [CommandeVenteController::class, 'checkSolvabilite'])->name('ventes.check-solvabilite');
+            Route::resource('ventes', CommandeVenteController::class)->except([]);
+            Route::get('pdv', [PdvController::class, 'index'])->name('pdv.index');
+            Route::post('pdv/checkout', [PdvController::class, 'checkout'])->name('pdv.checkout');
+            Route::patch('ventes/{commande_vente}/valider', [CommandeVenteController::class, 'valider'])->name('ventes.valider');
+            Route::patch('ventes/{commande_vente}/annuler', [CommandeVenteController::class, 'annuler'])->name('ventes.annuler');
+            Route::post('ventes/{commande_vente}/statut/avancer', [CommandeVenteStatutController::class, 'avancer'])->name('ventes.statut.avancer');
+            Route::post('ventes/{commande_vente}/statut/annuler', [CommandeVenteStatutController::class, 'annuler'])->name('ventes.statut.annuler');
+            Route::get('factures', [FactureVenteController::class, 'index'])->name('factures.index');
 
-        // Commissions
-        Route::get('commissions', [CommissionVenteController::class, 'index'])->name('commissions.index');
-        Route::get('commissions/beneficiaires/{type}/{beneficiaireId}', [CommissionVenteController::class, 'showBeneficiaire'])->name('commissions.beneficiaires.show');
-        Route::get('commissions/{commission_vente}', [CommissionVenteController::class, 'show'])->name('commissions.show');
+            // Commissions
+            Route::get('commissions', [CommissionVenteController::class, 'index'])->name('commissions.index');
+            Route::get('commissions/beneficiaires/{type}/{beneficiaireId}', [CommissionVenteController::class, 'showBeneficiaire'])->name('commissions.beneficiaires.show');
+            Route::get('commissions/{commission_vente}', [CommissionVenteController::class, 'show'])->name('commissions.show');
 
-        // Paiement groupé bénéficiaire (nouveau workflow)
-        Route::post('commissions/beneficiaires/{type}/{beneficiaireId}/paiements', [PaiementCommissionVenteController::class, 'store'])->name('commissions.beneficiaires.paiements.store');
+            // Paiement groupé bénéficiaire (nouveau workflow)
+            Route::post('commissions/beneficiaires/{type}/{beneficiaireId}/paiements', [PaiementCommissionVenteController::class, 'store'])->name('commissions.beneficiaires.paiements.store');
 
-        // Frais par part (livreur)
-        Route::patch('commissions/parts/{part}/frais', [FraisCommissionPartController::class, 'update'])->name('commissions.parts.frais.update');
+            // Frais par part (livreur)
+            Route::patch('commissions/parts/{part}/frais', [FraisCommissionPartController::class, 'update'])->name('commissions.parts.frais.update');
 
-        // Versements par part (ancien système — conservé pour compatibilité)
-        Route::post('commissions/{commission}/parts/{part}/versements', [VersementCommissionController::class, 'store'])->name('commissions.parts.versements.store');
-        Route::delete('versements-commissions/{versement_commission}', [VersementCommissionController::class, 'destroy'])->name('commissions.versements.destroy');
+            // Versements par part (ancien système — conservé pour compatibilité)
+            Route::post('commissions/{commission}/parts/{part}/versements', [VersementCommissionController::class, 'store'])->name('commissions.parts.versements.store');
+            Route::delete('versements-commissions/{versement_commission}', [VersementCommissionController::class, 'destroy'])->name('commissions.versements.destroy');
 
-        // Encaissements factures
-        Route::post('factures/{facture_vente}/encaissements', [EncaissementVenteController::class, 'store'])->name('encaissements.store');
-        Route::delete('encaissements/{encaissement_vente}', [EncaissementVenteController::class, 'destroy'])->name('encaissements.destroy');
-    });
-
-    // ── Module : Achats ───────────────────────────────────────────────────────
-    Route::middleware('module:'.ModuleFeature::ACHATS)->group(function () {
-        Route::resource('achats', CommandeAchatController::class)->except(['edit', 'update']);
-        Route::patch('achats/{achat}/receptionner', [CommandeAchatController::class, 'receptionner'])->name('achats.receptionner');
-        Route::patch('achats/{achat}/annuler', [CommandeAchatController::class, 'annuler'])->name('achats.annuler');
-        Route::get('achats/{achat}/pdf', [CommandeAchatController::class, 'pdf'])->name('achats.pdf');
-    });
-
-    // ── Module : Packings ─────────────────────────────────────────────────────
-    Route::middleware('module:'.ModuleFeature::PACKINGS)->group(function () {
-        Route::resource('packings', PackingController::class);
-        Route::patch('packings/{packing}/annuler', [PackingController::class, 'annuler'])->name('packings.annuler');
-        Route::post('packings/{packing}/versements', [VersementController::class, 'store'])->name('packings.versements.store');
-        Route::delete('packings/{packing}/versements/{versement}', [VersementController::class, 'destroy'])->name('packings.versements.destroy');
-    });
-
-    // ── Module : Prestataires ─────────────────────────────────────────────────
-    Route::middleware('module:'.ModuleFeature::PRESTATAIRES)->group(function () {
-        Route::resource('prestataires', PrestataireController::class);
-    });
-
-    // ── Module : Véhicules ────────────────────────────────────────────────────
-    Route::middleware('module:'.ModuleFeature::VEHICULES)->group(function () {
-        // Propositions : doit être avant Route::resource('vehicules') pour éviter que
-        // vehicules/{vehicule} intercepte /vehicules/propositions en priorité.
-        Route::prefix('vehicules/propositions')->name('propositions-vehicules.')->group(function () {
-            Route::get('/', [PropositionVehiculeController::class, 'index'])->name('index');
-            Route::get('/{propositionVehicule}', [PropositionVehiculeController::class, 'show'])->name('show');
-            Route::patch('/{propositionVehicule}/prendre-en-charge', [PropositionVehiculeController::class, 'priseEnCharge'])->name('prendre-en-charge');
-            Route::patch('/{propositionVehicule}/demander-complement', [PropositionVehiculeController::class, 'demanderComplement'])->name('demander-complement');
-            Route::patch('/{propositionVehicule}/rejeter', [PropositionVehiculeController::class, 'rejeter'])->name('rejeter');
-            Route::post('/{propositionVehicule}/valider', [PropositionVehiculeController::class, 'valider'])->name('valider');
+            // Encaissements factures
+            Route::post('factures/{facture_vente}/encaissements', [EncaissementVenteController::class, 'store'])->name('encaissements.store');
+            Route::delete('encaissements/{encaissement_vente}', [EncaissementVenteController::class, 'destroy'])->name('encaissements.destroy');
         });
 
-        Route::resource('type-vehicules', TypeVehiculeController::class)->except(['show']);
-        Route::resource('vehicules', VehiculeController::class);
-        Route::post('vehicules/{vehicule}/frais', [VehiculeController::class, 'storeFrais'])->name('vehicules.frais.store');
-        Route::patch('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'updateFrais'])->name('vehicules.frais.update');
-        Route::delete('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'destroyFrais'])->name('vehicules.frais.destroy');
-        Route::resource('proprietaires', ProprietaireController::class);
-        // Livreurs : gestion centralisée depuis les Équipes (lecture seule + API modale)
-        Route::get('livreurs', [LivreurController::class, 'index'])->name('livreurs.index');
-        Route::post('livreurs', [LivreurController::class, 'store'])->name('livreurs.store');
-        Route::patch('livreurs/{livreur}/toggle', [LivreurController::class, 'toggle'])->name('livreurs.toggle');
-        Route::patch('livreurs/{livreur}/approuver', [LivreurController::class, 'approuver'])->name('livreurs.approuver');
-        Route::delete('livreurs/{livreur}', [LivreurController::class, 'destroy'])->name('livreurs.destroy');
+        // ── Module : Achats ───────────────────────────────────────────────────────
+        Route::middleware('module:'.ModuleFeature::ACHATS)->group(function () {
+            Route::resource('achats', CommandeAchatController::class)->except(['edit', 'update']);
+            Route::patch('achats/{achat}/receptionner', [CommandeAchatController::class, 'receptionner'])->name('achats.receptionner');
+            Route::patch('achats/{achat}/annuler', [CommandeAchatController::class, 'annuler'])->name('achats.annuler');
+            Route::get('achats/{achat}/pdf', [CommandeAchatController::class, 'pdf'])->name('achats.pdf');
+        });
 
-        Route::resource('equipes-livraison', EquipeLivraisonController::class)
-            ->only(['index', 'store', 'show', 'update', 'destroy']);
+        // ── Module : Packings ─────────────────────────────────────────────────────
+        Route::middleware('module:'.ModuleFeature::PACKINGS)->group(function () {
+            Route::resource('packings', PackingController::class);
+            Route::patch('packings/{packing}/annuler', [PackingController::class, 'annuler'])->name('packings.annuler');
+            Route::post('packings/{packing}/versements', [VersementController::class, 'store'])->name('packings.versements.store');
+            Route::delete('packings/{packing}/versements/{versement}', [VersementController::class, 'destroy'])->name('packings.versements.destroy');
+        });
+
+        // ── Module : Prestataires ─────────────────────────────────────────────────
+        Route::middleware('module:'.ModuleFeature::PRESTATAIRES)->group(function () {
+            Route::resource('prestataires', PrestataireController::class);
+        });
+
+        // ── Module : Véhicules ────────────────────────────────────────────────────
+        Route::middleware('module:'.ModuleFeature::VEHICULES)->group(function () {
+            // Propositions : doit être avant Route::resource('vehicules') pour éviter que
+            // vehicules/{vehicule} intercepte /vehicules/propositions en priorité.
+            Route::prefix('vehicules/propositions')->name('propositions-vehicules.')->group(function () {
+                Route::get('/', [PropositionVehiculeController::class, 'index'])->name('index');
+                Route::get('/{propositionVehicule}', [PropositionVehiculeController::class, 'show'])->name('show');
+                Route::patch('/{propositionVehicule}/prendre-en-charge', [PropositionVehiculeController::class, 'priseEnCharge'])->name('prendre-en-charge');
+                Route::patch('/{propositionVehicule}/demander-complement', [PropositionVehiculeController::class, 'demanderComplement'])->name('demander-complement');
+                Route::patch('/{propositionVehicule}/rejeter', [PropositionVehiculeController::class, 'rejeter'])->name('rejeter');
+                Route::post('/{propositionVehicule}/valider', [PropositionVehiculeController::class, 'valider'])->name('valider');
+            });
+
+            Route::resource('type-vehicules', TypeVehiculeController::class)->except(['show']);
+            Route::resource('vehicules', VehiculeController::class);
+            Route::post('vehicules/{vehicule}/frais', [VehiculeController::class, 'storeFrais'])->name('vehicules.frais.store');
+            Route::patch('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'updateFrais'])->name('vehicules.frais.update');
+            Route::delete('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'destroyFrais'])->name('vehicules.frais.destroy');
+            Route::resource('proprietaires', ProprietaireController::class);
+            // Livreurs : gestion centralisée depuis les Équipes (lecture seule + API modale)
+            Route::get('livreurs', [LivreurController::class, 'index'])->name('livreurs.index');
+            Route::post('livreurs', [LivreurController::class, 'store'])->name('livreurs.store');
+            Route::patch('livreurs/{livreur}/toggle', [LivreurController::class, 'toggle'])->name('livreurs.toggle');
+            Route::patch('livreurs/{livreur}/approuver', [LivreurController::class, 'approuver'])->name('livreurs.approuver');
+            Route::delete('livreurs/{livreur}', [LivreurController::class, 'destroy'])->name('livreurs.destroy');
+
+            Route::resource('equipes-livraison', EquipeLivraisonController::class)
+                ->only(['index', 'store', 'show', 'update', 'destroy']);
+        });
+
+        // ── Module : Produits ─────────────────────────────────────────────────────
+        Route::middleware('module:'.ModuleFeature::PRODUITS)->group(function () {
+            Route::resource('produits', ProduitController::class);
+            Route::post('produits/{produit}/ajuster-stock', [ProduitController::class, 'ajusterStock'])
+                ->name('produits.ajuster-stock');
+            Route::get('produits/{produit}/historique', [ProduitController::class, 'historique'])
+                ->name('produits.historique');
+            Route::patch('produits/{produit}/archiver', [ProduitController::class, 'archiver'])
+                ->name('produits.archiver');
+        });
+
+        // ── Module : Sites ────────────────────────────────────────────────────────
+        Route::middleware('module:'.ModuleFeature::SITES)->group(function () {
+            Route::resource('sites', SiteController::class);
+            Route::post('sites/{site}/invitations', [UserInvitationController::class, 'store'])
+                ->name('sites.invitations.store')
+                ->middleware('throttle:10,1');
+        });
+
+        // ── Comptes (super admin) ─────────────────────────────────────────────────
+        Route::get('comptes', [AccountController::class, 'index'])->name('comptes.index');
+        Route::patch('comptes/{user}/toggle-active', [AccountController::class, 'toggleActive'])->name('comptes.toggle-active');
+
+        // ── Module : Utilisateurs ─────────────────────────────────────────────────
+        Route::middleware('module:'.ModuleFeature::UTILISATEURS)->group(function () {
+            Route::resource('users', UserController::class)->except(['show']);
+            Route::put('users/{user}/password', [UserController::class, 'updatePassword'])->name('users.update-password');
+            Route::resource('roles', RoleController::class)->only(['index', 'edit', 'update']);
+            Route::post('invitations/{invitation}/resend', [UserInvitationController::class, 'resend'])
+                ->name('invitations.resend');
+            Route::delete('invitations/{invitation}', [UserInvitationController::class, 'destroy'])
+                ->name('invitations.destroy');
+        });
+
+        // ── Module : Cashback clients ─────────────────────────────────────────────
+        Route::middleware('module:'.ModuleFeature::CASHBACK)->group(function () {
+            Route::get('cashback', [CashbackController::class, 'index'])->name('cashback.index');
+            Route::patch('cashback/{cashbackTransaction}/valider', [CashbackController::class, 'valider'])->name('cashback.valider');
+            Route::patch('cashback/{cashbackTransaction}/verser', [CashbackController::class, 'verser'])->name('cashback.verser');
+        });
+
+        // ── Module : Dépenses opérationnelles ────────────────────────────────────
+        Route::middleware('module:'.ModuleFeature::DEPENSES)->group(function () {
+            Route::get('depenses/export/excel', [DepenseController::class, 'exportCsv'])->name('depenses.export.excel');
+            Route::get('depenses/imprimer', [DepenseController::class, 'imprimer'])->name('depenses.imprimer');
+            Route::get('depenses/suggestions', [DepenseController::class, 'suggestions'])->name('depenses.suggestions');
+            Route::get('depenses/concerne-detail', [DepenseController::class, 'concereneDetail'])->name('depenses.concerne-detail');
+            Route::get('depenses/vehicule-detail', [DepenseController::class, 'vehiculeDetail'])->name('depenses.vehicule-detail');
+            Route::resource('depenses', DepenseController::class);
+            Route::patch('depenses/{depense}/soumettre', [DepenseController::class, 'soumettre'])->name('depenses.soumettre');
+            Route::patch('depenses/{depense}/valider', [DepenseController::class, 'valider'])->name('depenses.valider');
+            Route::patch('depenses/{depense}/rejeter', [DepenseController::class, 'rejeter'])->name('depenses.rejeter');
+            Route::get('depenses/{depense}/historique', [DepenseController::class, 'historique'])->name('depenses.historique');
+        });
+
+        // ── Module : RH (Ressources humaines) ────────────────────────────────────
+        Route::middleware('module:'.ModuleFeature::RH)->group(function () {
+            Route::resource('employes', EmployeController::class);
+            Route::resource('contrats', ContratController::class)->except(['show']);
+
+            // Paie (legacy — lecture seule, gestion déplacée dans Comptabilité > Salaires)
+            Route::get('paie', [PaieController::class, 'index'])->name('paie.index');
+            Route::get('paie/{paie}', [PaieController::class, 'show'])->name('paie.show');
+
+            // Variables de paie
+            Route::post('paie-lignes/{ligne}/variables', [PaieVariableController::class, 'store'])->name('paie-variables.store');
+            Route::put('paie-variables/{variable}', [PaieVariableController::class, 'update'])->name('paie-variables.update');
+            Route::delete('paie-variables/{variable}', [PaieVariableController::class, 'destroy'])->name('paie-variables.destroy');
+
+            // Paiements de paie
+            Route::post('paie-lignes/{ligne}/paiements', [PaiePaiementController::class, 'store'])->name('paie-paiements.store');
+            Route::delete('paie-paiements/{paiement}', [PaiePaiementController::class, 'destroy'])->name('paie-paiements.destroy');
+        });
+
+        // ── Module : Comptabilité ─────────────────────────────────────────────────
+        Route::middleware('module:'.ModuleFeature::COMPTABILITE)->prefix('comptabilite')->name('comptabilite.')->group(function () {
+            Route::get('/', [ComptabiliteDashboardController::class, 'index'])->name('dashboard');
+
+            Route::get('fiches/livreurs', [PaiementFicheController::class, 'indexLivreurs'])->name('fiches.livreurs');
+            Route::get('fiches/proprietaires', [PaiementFicheController::class, 'indexProprietaires'])->name('fiches.proprietaires');
+            Route::get('fiches/salaries', [PaiementFicheController::class, 'indexSalaries'])->name('fiches.salaries');
+            Route::get('fiches/export/excel', [PaiementFicheController::class, 'exportExcel'])->name('fiches.excel');
+            Route::get('fiches/{fiche}', [PaiementFicheController::class, 'show'])->name('fiches.show');
+            Route::get('fiches/{fiche}/pdf', [PaiementFicheController::class, 'exportPdf'])->name('fiches.pdf');
+
+            Route::post('fiches/{fiche}/paiements', [PaiementFichePaiementController::class, 'store'])->name('fiches.paiements.store');
+            Route::delete('fiches-paiements/{paiement}', [PaiementFichePaiementController::class, 'destroy'])->name('fiches.paiements.destroy');
+
+            Route::get('journal', [JournalTresorerieController::class, 'index'])->name('journal');
+
+            // ── Commission livreurs logistique ────────────────────────────────────
+            Route::get('commissions/logistique', [ComptabiliteCommissionLogistiqueController::class, 'index'])
+                ->name('commissions.logistique.index');
+            Route::get('commissions/logistique/export/excel', [ComptabiliteCommissionLogistiqueController::class, 'exportExcel'])
+                ->name('commissions.logistique.excel');
+            Route::get('commissions/logistique/export/pdf', [ComptabiliteCommissionLogistiqueController::class, 'exportPdf'])
+                ->name('commissions.logistique.pdf');
+            Route::get('commissions/logistique/livreurs/{livreurId}', [ComptabiliteCommissionLogistiqueController::class, 'showLivreur'])
+                ->name('commissions.logistique.livreur');
+            Route::post('commissions/logistique/livreurs/{livreurId}/paiements', [ComptabiliteCommissionLogistiqueController::class, 'payerLivreur'])
+                ->name('commissions.logistique.livreur.paiements');
+
+            // ── Commission livreurs vente ──────────────────────────────────────────
+            Route::get('commissions/vente', [ComptabiliteCommissionVenteController::class, 'index'])
+                ->name('commissions.vente.index');
+            Route::get('commissions/vente/export/excel', [ComptabiliteCommissionVenteController::class, 'exportExcel'])
+                ->name('commissions.vente.excel');
+            Route::get('commissions/vente/export/pdf', [ComptabiliteCommissionVenteController::class, 'exportPdf'])
+                ->name('commissions.vente.pdf');
+            Route::get('commissions/vente/livreurs/{livreurId}', [ComptabiliteCommissionVenteController::class, 'showLivreur'])
+                ->name('commissions.vente.livreur');
+            Route::post('commissions/vente/livreurs/{livreurId}/paiements', [ComptabiliteCommissionVenteController::class, 'payerLivreur'])
+                ->name('commissions.vente.livreur.paiements');
+
+            // ── Commission propriétaires ───────────────────────────────────────────
+            Route::get('commissions/proprietaires', [CommissionProprietaireController::class, 'index'])
+                ->name('commissions.proprietaires.index');
+            Route::get('commissions/proprietaires/export/excel', [CommissionProprietaireController::class, 'exportExcel'])
+                ->name('commissions.proprietaires.excel');
+            Route::get('commissions/proprietaires/export/pdf', [CommissionProprietaireController::class, 'exportPdf'])
+                ->name('commissions.proprietaires.pdf');
+            Route::get('commissions/proprietaires/{proprietaireId}', [CommissionProprietaireController::class, 'show'])
+                ->name('commissions.proprietaires.show');
+            Route::post('commissions/proprietaires/{proprietaireId}/paiements', [CommissionProprietaireController::class, 'payer'])
+                ->name('commissions.proprietaires.paiements');
+
+            // ── Périodes de paiement ──────────────────────────────────────────────
+            Route::get('periodes', [PaiementPeriodeController::class, 'index'])->name('periodes.index');
+            Route::get('periodes/creer', [PaiementPeriodeController::class, 'create'])->name('periodes.create');
+            Route::post('periodes', [PaiementPeriodeController::class, 'store'])->name('periodes.store');
+            Route::get('periodes/{periode}', [PaiementPeriodeController::class, 'show'])->name('periodes.show');
+            Route::get('periodes/{periode}/pdf', [PaiementPeriodeController::class, 'exportPdf'])->name('periodes.pdf');
+            Route::post('periodes/{periode}/calculer', [PaiementPeriodeController::class, 'calculer'])->name('periodes.calculer');
+            Route::post('periodes/{periode}/valider', [PaiementPeriodeController::class, 'valider'])->name('periodes.valider');
+            Route::post('periodes/{periode}/cloturer', [PaiementPeriodeController::class, 'cloturer'])->name('periodes.cloturer');
+            Route::delete('periodes/{periode}', [PaiementPeriodeController::class, 'destroy'])->name('periodes.destroy');
+
+            // ── Paiement salaires ─────────────────────────────────────────────────
+            Route::get('salaires', [SalaireController::class, 'index'])
+                ->name('salaires.index');
+            Route::post('salaires/{ligne}/payer', [SalaireController::class, 'payerLigne'])
+                ->name('salaires.payer');
+            Route::get('salaires/export/excel', [SalaireController::class, 'exportExcel'])
+                ->name('salaires.excel');
+            Route::get('salaires/export/pdf', [SalaireController::class, 'exportPdf'])
+                ->name('salaires.pdf');
+            Route::get('salaires/employes/{employeId}', [SalaireController::class, 'showEmploye'])
+                ->name('salaires.employe');
+            Route::post('salaires/employes/{employeId}/paiements', [SalaireController::class, 'payerEmploye'])
+                ->name('salaires.employe.paiements');
+
+            // ── Historique des actions ────────────────────────────────────────────
+            Route::get('historique', [HistoriqueActionsController::class, 'index'])
+                ->name('historique.index');
+            Route::get('historique/entite', [HistoriqueActionsController::class, 'entite'])
+                ->name('historique.entite');
+
+        });
+
+        // ── Module : Logistique inter-sites ───────────────────────────────────────
+        Route::middleware('module:'.ModuleFeature::LOGISTIQUE)->group(function () {
+            // Redirection rétro-compatibilité : /logistique → /logistique/transferts
+            Route::get('logistique', function () {
+                return redirect()->route('logistique.transferts.index', [], 302);
+            })->name('logistique.index');
+
+            // Vues index séparées (statiques, AVANT le wildcard {transfert_logistique})
+            Route::get('logistique/transferts', [TransfertLogistiqueController::class, 'indexTransferts'])->name('logistique.transferts.index');
+            Route::get('logistique/receptions', [TransfertLogistiqueController::class, 'indexReceptions'])->name('logistique.receptions.index');
+
+            // Commissions logistiques — par livreur (système global)
+            Route::get('logistique/commissions', [CommissionVehiculeController::class, 'index'])
+                ->name('logistique.commissions.index');
+            Route::get('logistique/commissions/livreurs/{livreurId}', [CommissionVehiculeController::class, 'showLivreur'])
+                ->name('logistique.commissions.livreur');
+            Route::post('logistique/commissions/livreurs/{livreurId}/paiements', [CommissionPaymentController::class, 'storeLivreur'])
+                ->name('logistique.commissions.livreur.paiements');
+
+            // Rétro-compat : accès par véhicule (depuis page transfert Show)
+            Route::get('logistique/commissions/vehicules/{vehicule}', [CommissionVehiculeController::class, 'show'])
+                ->name('logistique.commissions.vehicule');
+            Route::get('logistique/commissions/vehicules/{vehicule}/beneficiaires/{type}/{beneficiaireId}', [CommissionVehiculeController::class, 'releve'])
+                ->name('logistique.commissions.releve');
+            Route::post('logistique/commissions/vehicules/{vehicule}/paiements', [CommissionPaymentController::class, 'store'])
+                ->name('logistique.commissions.paiements.store');
+
+            // Rétro-compat : accès direct par commission (page transfert Show)
+            Route::get('logistique/commissions/detail/{commission_logistique}', [CommissionLogistiqueController::class, 'show'])
+                ->name('logistique.commissions.show');
+
+            Route::get('logistique/creer', [TransfertLogistiqueController::class, 'create'])->name('logistique.create');
+            Route::post('logistique', [TransfertLogistiqueController::class, 'store'])->name('logistique.store');
+            Route::get('logistique/{transfert_logistique}', [TransfertLogistiqueController::class, 'show'])->name('logistique.show');
+            Route::get('logistique/{transfert_logistique}/editer', [TransfertLogistiqueController::class, 'edit'])->name('logistique.edit');
+            Route::put('logistique/{transfert_logistique}', [TransfertLogistiqueController::class, 'update'])->name('logistique.update');
+            Route::delete('logistique/{transfert_logistique}', [TransfertLogistiqueController::class, 'destroy'])->name('logistique.destroy');
+
+            // Transitions de statut
+            Route::post('logistique/{transfert_logistique}/statut/avancer', [TransfertStatutController::class, 'avancer'])->name('logistique.statut.avancer');
+            Route::post('logistique/{transfert_logistique}/statut/annuler', [TransfertStatutController::class, 'annuler'])->name('logistique.statut.annuler');
+
+            // Validation admin de la réception (génère la commission automatiquement)
+            Route::post('logistique/{transfert_logistique}/validation-reception', [ReceptionValidationAdminController::class, 'store'])->name('logistique.validation-reception.store');
+
+            // Commission logistique (accès direct, backward compat)
+            Route::post('logistique/{transfert_logistique}/commission', [CommissionLogistiqueController::class, 'store'])->name('logistique.commission.store');
+
+            // Versements de parts de commission
+            Route::post('commissions-logistique/parts/{part}/versements', [VersementCommissionLogistiqueController::class, 'store'])
+                ->name('logistique.commission.versements.store');
+        });
+
+        // ── Recherche globale (dashboard — session auth) ──────────────────────
+        Route::get('search/global', GlobalSearchController::class)
+            ->name('search.global');
     });
-
-    // ── Module : Produits ─────────────────────────────────────────────────────
-    Route::middleware('module:'.ModuleFeature::PRODUITS)->group(function () {
-        Route::resource('produits', ProduitController::class);
-        Route::post('produits/{produit}/ajuster-stock', [ProduitController::class, 'ajusterStock'])
-            ->name('produits.ajuster-stock');
-        Route::get('produits/{produit}/historique', [ProduitController::class, 'historique'])
-            ->name('produits.historique');
-        Route::patch('produits/{produit}/archiver', [ProduitController::class, 'archiver'])
-            ->name('produits.archiver');
-    });
-
-    // ── Module : Sites ────────────────────────────────────────────────────────
-    Route::middleware('module:'.ModuleFeature::SITES)->group(function () {
-        Route::resource('sites', SiteController::class);
-        Route::post('sites/{site}/invitations', [UserInvitationController::class, 'store'])
-            ->name('sites.invitations.store')
-            ->middleware('throttle:10,1');
-    });
-
-    // ── Comptes (super admin) ─────────────────────────────────────────────────
-    Route::get('comptes', [AccountController::class, 'index'])->name('comptes.index');
-    Route::patch('comptes/{user}/toggle-active', [AccountController::class, 'toggleActive'])->name('comptes.toggle-active');
-
-    // ── Module : Utilisateurs ─────────────────────────────────────────────────
-    Route::middleware('module:'.ModuleFeature::UTILISATEURS)->group(function () {
-        Route::resource('users', UserController::class)->except(['show']);
-        Route::put('users/{user}/password', [UserController::class, 'updatePassword'])->name('users.update-password');
-        Route::resource('roles', RoleController::class)->only(['index', 'edit', 'update']);
-        Route::post('invitations/{invitation}/resend', [UserInvitationController::class, 'resend'])
-            ->name('invitations.resend');
-        Route::delete('invitations/{invitation}', [UserInvitationController::class, 'destroy'])
-            ->name('invitations.destroy');
-    });
-
-    // ── Module : Cashback clients ─────────────────────────────────────────────
-    Route::middleware('module:'.ModuleFeature::CASHBACK)->group(function () {
-        Route::get('cashback', [CashbackController::class, 'index'])->name('cashback.index');
-        Route::patch('cashback/{cashbackTransaction}/valider', [CashbackController::class, 'valider'])->name('cashback.valider');
-        Route::patch('cashback/{cashbackTransaction}/verser', [CashbackController::class, 'verser'])->name('cashback.verser');
-    });
-
-    // ── Module : Dépenses opérationnelles ────────────────────────────────────
-    Route::middleware('module:'.ModuleFeature::DEPENSES)->group(function () {
-        Route::get('depenses/export/excel', [DepenseController::class, 'exportCsv'])->name('depenses.export.excel');
-        Route::get('depenses/imprimer', [DepenseController::class, 'imprimer'])->name('depenses.imprimer');
-        Route::get('depenses/suggestions', [DepenseController::class, 'suggestions'])->name('depenses.suggestions');
-        Route::get('depenses/concerne-detail', [DepenseController::class, 'concereneDetail'])->name('depenses.concerne-detail');
-        Route::get('depenses/vehicule-detail', [DepenseController::class, 'vehiculeDetail'])->name('depenses.vehicule-detail');
-        Route::resource('depenses', DepenseController::class);
-        Route::patch('depenses/{depense}/soumettre', [DepenseController::class, 'soumettre'])->name('depenses.soumettre');
-        Route::patch('depenses/{depense}/valider', [DepenseController::class, 'valider'])->name('depenses.valider');
-        Route::patch('depenses/{depense}/rejeter', [DepenseController::class, 'rejeter'])->name('depenses.rejeter');
-        Route::get('depenses/{depense}/historique', [DepenseController::class, 'historique'])->name('depenses.historique');
-    });
-
-    // ── Module : RH (Ressources humaines) ────────────────────────────────────
-    Route::middleware('module:'.ModuleFeature::RH)->group(function () {
-        Route::resource('employes', EmployeController::class);
-        Route::resource('contrats', ContratController::class)->except(['show']);
-
-        // Paie (legacy — lecture seule, gestion déplacée dans Comptabilité > Salaires)
-        Route::get('paie', [PaieController::class, 'index'])->name('paie.index');
-        Route::get('paie/{paie}', [PaieController::class, 'show'])->name('paie.show');
-
-        // Variables de paie
-        Route::post('paie-lignes/{ligne}/variables', [PaieVariableController::class, 'store'])->name('paie-variables.store');
-        Route::put('paie-variables/{variable}', [PaieVariableController::class, 'update'])->name('paie-variables.update');
-        Route::delete('paie-variables/{variable}', [PaieVariableController::class, 'destroy'])->name('paie-variables.destroy');
-
-        // Paiements de paie
-        Route::post('paie-lignes/{ligne}/paiements', [PaiePaiementController::class, 'store'])->name('paie-paiements.store');
-        Route::delete('paie-paiements/{paiement}', [PaiePaiementController::class, 'destroy'])->name('paie-paiements.destroy');
-    });
-
-    // ── Module : Comptabilité ─────────────────────────────────────────────────
-    Route::middleware('module:'.ModuleFeature::COMPTABILITE)->prefix('comptabilite')->name('comptabilite.')->group(function () {
-        Route::get('/', [ComptabiliteDashboardController::class, 'index'])->name('dashboard');
-
-        Route::get('fiches/livreurs', [PaiementFicheController::class, 'indexLivreurs'])->name('fiches.livreurs');
-        Route::get('fiches/proprietaires', [PaiementFicheController::class, 'indexProprietaires'])->name('fiches.proprietaires');
-        Route::get('fiches/salaries', [PaiementFicheController::class, 'indexSalaries'])->name('fiches.salaries');
-        Route::get('fiches/export/excel', [PaiementFicheController::class, 'exportExcel'])->name('fiches.excel');
-        Route::get('fiches/{fiche}', [PaiementFicheController::class, 'show'])->name('fiches.show');
-        Route::get('fiches/{fiche}/pdf', [PaiementFicheController::class, 'exportPdf'])->name('fiches.pdf');
-
-        Route::post('fiches/{fiche}/paiements', [PaiementFichePaiementController::class, 'store'])->name('fiches.paiements.store');
-        Route::delete('fiches-paiements/{paiement}', [PaiementFichePaiementController::class, 'destroy'])->name('fiches.paiements.destroy');
-
-        Route::get('journal', [JournalTresorerieController::class, 'index'])->name('journal');
-
-        // ── Commission livreurs logistique ────────────────────────────────────
-        Route::get('commissions/logistique', [ComptabiliteCommissionLogistiqueController::class, 'index'])
-            ->name('commissions.logistique.index');
-        Route::get('commissions/logistique/export/excel', [ComptabiliteCommissionLogistiqueController::class, 'exportExcel'])
-            ->name('commissions.logistique.excel');
-        Route::get('commissions/logistique/export/pdf', [ComptabiliteCommissionLogistiqueController::class, 'exportPdf'])
-            ->name('commissions.logistique.pdf');
-        Route::get('commissions/logistique/livreurs/{livreurId}', [ComptabiliteCommissionLogistiqueController::class, 'showLivreur'])
-            ->name('commissions.logistique.livreur');
-        Route::post('commissions/logistique/livreurs/{livreurId}/paiements', [ComptabiliteCommissionLogistiqueController::class, 'payerLivreur'])
-            ->name('commissions.logistique.livreur.paiements');
-
-        // ── Commission livreurs vente ──────────────────────────────────────────
-        Route::get('commissions/vente', [ComptabiliteCommissionVenteController::class, 'index'])
-            ->name('commissions.vente.index');
-        Route::get('commissions/vente/export/excel', [ComptabiliteCommissionVenteController::class, 'exportExcel'])
-            ->name('commissions.vente.excel');
-        Route::get('commissions/vente/export/pdf', [ComptabiliteCommissionVenteController::class, 'exportPdf'])
-            ->name('commissions.vente.pdf');
-        Route::get('commissions/vente/livreurs/{livreurId}', [ComptabiliteCommissionVenteController::class, 'showLivreur'])
-            ->name('commissions.vente.livreur');
-        Route::post('commissions/vente/livreurs/{livreurId}/paiements', [ComptabiliteCommissionVenteController::class, 'payerLivreur'])
-            ->name('commissions.vente.livreur.paiements');
-
-        // ── Commission propriétaires ───────────────────────────────────────────
-        Route::get('commissions/proprietaires', [CommissionProprietaireController::class, 'index'])
-            ->name('commissions.proprietaires.index');
-        Route::get('commissions/proprietaires/export/excel', [CommissionProprietaireController::class, 'exportExcel'])
-            ->name('commissions.proprietaires.excel');
-        Route::get('commissions/proprietaires/export/pdf', [CommissionProprietaireController::class, 'exportPdf'])
-            ->name('commissions.proprietaires.pdf');
-        Route::get('commissions/proprietaires/{proprietaireId}', [CommissionProprietaireController::class, 'show'])
-            ->name('commissions.proprietaires.show');
-        Route::post('commissions/proprietaires/{proprietaireId}/paiements', [CommissionProprietaireController::class, 'payer'])
-            ->name('commissions.proprietaires.paiements');
-
-        // ── Périodes de paiement ──────────────────────────────────────────────
-        Route::get('periodes', [PaiementPeriodeController::class, 'index'])->name('periodes.index');
-        Route::get('periodes/creer', [PaiementPeriodeController::class, 'create'])->name('periodes.create');
-        Route::post('periodes', [PaiementPeriodeController::class, 'store'])->name('periodes.store');
-        Route::get('periodes/{periode}', [PaiementPeriodeController::class, 'show'])->name('periodes.show');
-        Route::get('periodes/{periode}/pdf', [PaiementPeriodeController::class, 'exportPdf'])->name('periodes.pdf');
-        Route::post('periodes/{periode}/calculer', [PaiementPeriodeController::class, 'calculer'])->name('periodes.calculer');
-        Route::post('periodes/{periode}/valider', [PaiementPeriodeController::class, 'valider'])->name('periodes.valider');
-        Route::post('periodes/{periode}/cloturer', [PaiementPeriodeController::class, 'cloturer'])->name('periodes.cloturer');
-        Route::delete('periodes/{periode}', [PaiementPeriodeController::class, 'destroy'])->name('periodes.destroy');
-
-        // ── Paiement salaires ─────────────────────────────────────────────────
-        Route::get('salaires', [SalaireController::class, 'index'])
-            ->name('salaires.index');
-        Route::post('salaires/{ligne}/payer', [SalaireController::class, 'payerLigne'])
-            ->name('salaires.payer');
-        Route::get('salaires/export/excel', [SalaireController::class, 'exportExcel'])
-            ->name('salaires.excel');
-        Route::get('salaires/export/pdf', [SalaireController::class, 'exportPdf'])
-            ->name('salaires.pdf');
-        Route::get('salaires/employes/{employeId}', [SalaireController::class, 'showEmploye'])
-            ->name('salaires.employe');
-        Route::post('salaires/employes/{employeId}/paiements', [SalaireController::class, 'payerEmploye'])
-            ->name('salaires.employe.paiements');
-
-        // ── Historique des actions ────────────────────────────────────────────
-        Route::get('historique', [HistoriqueActionsController::class, 'index'])
-            ->name('historique.index');
-        Route::get('historique/entite', [HistoriqueActionsController::class, 'entite'])
-            ->name('historique.entite');
-
-    });
-
-    // ── Module : Logistique inter-sites ───────────────────────────────────────
-    Route::middleware('module:'.ModuleFeature::LOGISTIQUE)->group(function () {
-        // Redirection rétro-compatibilité : /logistique → /logistique/transferts
-        Route::get('logistique', function () {
-            return redirect()->route('logistique.transferts.index', [], 302);
-        })->name('logistique.index');
-
-        // Vues index séparées (statiques, AVANT le wildcard {transfert_logistique})
-        Route::get('logistique/transferts', [TransfertLogistiqueController::class, 'indexTransferts'])->name('logistique.transferts.index');
-        Route::get('logistique/receptions', [TransfertLogistiqueController::class, 'indexReceptions'])->name('logistique.receptions.index');
-
-        // Commissions logistiques — par livreur (système global)
-        Route::get('logistique/commissions', [CommissionVehiculeController::class, 'index'])
-            ->name('logistique.commissions.index');
-        Route::get('logistique/commissions/livreurs/{livreurId}', [CommissionVehiculeController::class, 'showLivreur'])
-            ->name('logistique.commissions.livreur');
-        Route::post('logistique/commissions/livreurs/{livreurId}/paiements', [CommissionPaymentController::class, 'storeLivreur'])
-            ->name('logistique.commissions.livreur.paiements');
-
-        // Rétro-compat : accès par véhicule (depuis page transfert Show)
-        Route::get('logistique/commissions/vehicules/{vehicule}', [CommissionVehiculeController::class, 'show'])
-            ->name('logistique.commissions.vehicule');
-        Route::get('logistique/commissions/vehicules/{vehicule}/beneficiaires/{type}/{beneficiaireId}', [CommissionVehiculeController::class, 'releve'])
-            ->name('logistique.commissions.releve');
-        Route::post('logistique/commissions/vehicules/{vehicule}/paiements', [CommissionPaymentController::class, 'store'])
-            ->name('logistique.commissions.paiements.store');
-
-        // Rétro-compat : accès direct par commission (page transfert Show)
-        Route::get('logistique/commissions/detail/{commission_logistique}', [CommissionLogistiqueController::class, 'show'])
-            ->name('logistique.commissions.show');
-
-        Route::get('logistique/creer', [TransfertLogistiqueController::class, 'create'])->name('logistique.create');
-        Route::post('logistique', [TransfertLogistiqueController::class, 'store'])->name('logistique.store');
-        Route::get('logistique/{transfert_logistique}', [TransfertLogistiqueController::class, 'show'])->name('logistique.show');
-        Route::get('logistique/{transfert_logistique}/editer', [TransfertLogistiqueController::class, 'edit'])->name('logistique.edit');
-        Route::put('logistique/{transfert_logistique}', [TransfertLogistiqueController::class, 'update'])->name('logistique.update');
-        Route::delete('logistique/{transfert_logistique}', [TransfertLogistiqueController::class, 'destroy'])->name('logistique.destroy');
-
-        // Transitions de statut
-        Route::post('logistique/{transfert_logistique}/statut/avancer', [TransfertStatutController::class, 'avancer'])->name('logistique.statut.avancer');
-        Route::post('logistique/{transfert_logistique}/statut/annuler', [TransfertStatutController::class, 'annuler'])->name('logistique.statut.annuler');
-
-        // Validation admin de la réception (génère la commission automatiquement)
-        Route::post('logistique/{transfert_logistique}/validation-reception', [ReceptionValidationAdminController::class, 'store'])->name('logistique.validation-reception.store');
-
-        // Commission logistique (accès direct, backward compat)
-        Route::post('logistique/{transfert_logistique}/commission', [CommissionLogistiqueController::class, 'store'])->name('logistique.commission.store');
-
-        // Versements de parts de commission
-        Route::post('commissions-logistique/parts/{part}/versements', [VersementCommissionLogistiqueController::class, 'store'])
-            ->name('logistique.commission.versements.store');
-    });
-
-    // ── Recherche globale (dashboard — session auth) ──────────────────────────
-    Route::get('search/global', GlobalSearchController::class)
-        ->name('search.global');
 });
 
 // ── Espace client ─────────────────────────────────────────────────────────────

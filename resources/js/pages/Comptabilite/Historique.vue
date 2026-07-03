@@ -59,9 +59,9 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Comptabilité', href: '/comptabilite' },
-    { title: 'Historique', href: '/comptabilite/historique' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Comptabilité', href: '/backoffice/comptabilite' },
+    { title: 'Historique', href: '/backoffice/comptabilite/historique' },
 ];
 
 const filterFields: FilterField[] = [
@@ -187,7 +187,7 @@ function formatJson(val: unknown): string {
 
             <!-- Filtres -->
             <DataFilters
-                url="/comptabilite/historique"
+                url="/backoffice/comptabilite/historique"
                 :values="historiqueFilters"
                 :fields="filterFields"
                 :result-count="logs.total"

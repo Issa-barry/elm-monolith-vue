@@ -73,9 +73,9 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Comptabilité', href: '/comptabilite' },
-    { title: 'Paiement salaire', href: '/comptabilite/salaires' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Comptabilité', href: '/backoffice/comptabilite' },
+    { title: 'Paiement salaire', href: '/backoffice/comptabilite/salaires' },
 ];
 
 const MOIS_LABELS = [
@@ -150,12 +150,15 @@ function buildParams() {
 
 function exportExcel() {
     window.open(
-        '/comptabilite/salaires/export/excel?' + buildParams(),
+        '/backoffice/comptabilite/salaires/export/excel?' + buildParams(),
         '_blank',
     );
 }
 function exportPdf() {
-    window.open('/comptabilite/salaires/export/pdf?' + buildParams(), '_blank');
+    window.open(
+        '/backoffice/comptabilite/salaires/export/pdf?' + buildParams(),
+        '_blank',
+    );
 }
 
 const showPaiementDialog = ref(false);
@@ -186,7 +189,7 @@ function handlePaiementSubmit(payload: {
     paiementProcessing.value = true;
     paiementErrors.value = {};
     router.post(
-        `/comptabilite/salaires/${selectedLigne.value.id}/payer`,
+        `/backoffice/comptabilite/salaires/${selectedLigne.value.id}/payer`,
         { ...payload, date_paiement: new Date().toISOString().slice(0, 10) },
         {
             preserveScroll: true,
@@ -335,7 +338,7 @@ const periodeCourante = computed(
 
             <!-- Filtres -->
             <DataFilters
-                url="/comptabilite/salaires"
+                url="/backoffice/comptabilite/salaires"
                 :values="currentFilters"
                 :fields="filterFields"
                 :sites="sites"
@@ -489,7 +492,7 @@ const periodeCourante = computed(
                                         >
                                             <DropdownMenuItem as-child>
                                                 <Link
-                                                    :href="`/comptabilite/salaires/employes/${l.employe_id}`"
+                                                    :href="`/backoffice/comptabilite/salaires/employes/${l.employe_id}`"
                                                     class="flex w-full cursor-pointer items-center"
                                                 >
                                                     <Eye class="mr-2 h-4 w-4" />
@@ -524,7 +527,7 @@ const periodeCourante = computed(
                                             <DropdownMenuSeparator />
                                             <DropdownMenuItem as-child>
                                                 <a
-                                                    :href="`/comptabilite/salaires/export/pdf?mois=${filtre_mois}&annee=${filtre_annee}`"
+                                                    :href="`/backoffice/comptabilite/salaires/export/pdf?mois=${filtre_mois}&annee=${filtre_annee}`"
                                                     target="_blank"
                                                     class="flex w-full cursor-pointer items-center"
                                                 >

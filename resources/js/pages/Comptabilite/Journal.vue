@@ -49,9 +49,9 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Comptabilité', href: '/comptabilite' },
-    { title: 'Journal financier', href: '/comptabilite/journal' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Comptabilité', href: '/backoffice/comptabilite' },
+    { title: 'Journal financier', href: '/backoffice/comptabilite/journal' },
 ];
 
 const filterFields: FilterField[] = [
@@ -145,7 +145,7 @@ function fmt(n: number) {
 
             <!-- Filtres -->
             <DataFilters
-                url="/comptabilite/journal"
+                url="/backoffice/comptabilite/journal"
                 :values="filters"
                 :fields="filterFields"
                 :sites="journalSites"

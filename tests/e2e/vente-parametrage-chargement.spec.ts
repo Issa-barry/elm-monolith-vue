@@ -116,7 +116,7 @@ test.describe('Paramétrage chargement complet', () => {
         await login(page);
         await setChargementCompletRequired(page, true); // chargement complet requis
 
-        await page.goto('/ventes/create');
+        await page.goto('/backoffice/ventes/create');
         await expect(page).toHaveURL(/\/ventes\/create$/, {
             timeout: 20_000,
         });
@@ -160,7 +160,7 @@ test.describe('Paramétrage chargement complet', () => {
         await login(page);
         await setChargementCompletRequired(page, false); // autoriser partiel
 
-        await page.goto('/ventes/create');
+        await page.goto('/backoffice/ventes/create');
         await expect(page).toHaveURL(/\/ventes\/create$/, {
             timeout: 20_000,
         });

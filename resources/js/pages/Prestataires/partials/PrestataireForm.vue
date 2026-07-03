@@ -478,7 +478,7 @@ function onPhoneInput(value: string | null | undefined) {
 
         <!-- Pied -->
         <div class="hidden items-center justify-between sm:flex">
-            <a href="/prestataires">
+            <a href="/backoffice/prestataires">
                 <Button type="button" variant="outline"> Retour </Button>
             </a>
             <Button type="submit" :disabled="processing">

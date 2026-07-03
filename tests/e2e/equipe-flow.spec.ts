@@ -16,7 +16,7 @@ test.setTimeout(120_000);
 
 /** Navigue vers la fiche d'un véhicule E2EEQ-, onglet Équipe. */
 async function navigateToVehiculeEquipeTab(page: Page) {
-    await page.goto('/vehicules');
+    await page.goto('/backoffice/vehicules');
     const vehiculeRow = page
         .locator('.p-datatable-table tbody tr:not(.p-datatable-emptymessage)', {
             hasText: new RegExp(escapeRegExp(E2E_VH_PREFIX), 'i'),
@@ -87,7 +87,7 @@ test.afterAll(async ({ browser }) => {
     const page = await context.newPage();
     try {
         await login(page);
-        await cleanupRowsByPrefix(page, '/vehicules', SETUP_VH_PREFIX);
+        await cleanupRowsByPrefix(page, '/backoffice/vehicules', SETUP_VH_PREFIX);
     } catch (e) {
         console.warn('E2E equipe afterAll cleanup warning:', e);
     } finally {
@@ -101,7 +101,7 @@ test.afterEach(async ({ browser }) => {
         const page = await context.newPage();
         try {
             await login(page);
-            await page.goto('/equipes-livraison');
+            await page.goto('/backoffice/equipes-livraison');
             const searchInput = page
                 .locator(
                     'input[placeholder*="recherche" i]:not([data-testid="global-search"]):visible',
@@ -237,7 +237,7 @@ test('créer une équipe depuis la fiche véhicule avec stepper', async ({
 test('equipe index ne propose pas de bouton création directe', async ({
     page,
 }) => {
-    await page.goto('/equipes-livraison');
+    await page.goto('/backoffice/equipes-livraison');
     await expect(
         page.getByRole('link', { name: /nouvelle équipe/i }),
     ).not.toBeVisible();

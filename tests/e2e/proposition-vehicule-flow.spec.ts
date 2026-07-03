@@ -93,7 +93,7 @@ test('client submits vehicule proposition -> backoffice can open and handle it',
     await login(page);
     await ensureModuleEnabled(page, 'module.vehicules');
 
-    await page.goto('/vehicules/propositions');
+    await page.goto('/backoffice/vehicules/propositions');
     await expect(page).toHaveURL(/\/vehicules\/propositions/, {
         timeout: 20_000,
     });
@@ -103,17 +103,17 @@ test('client submits vehicule proposition -> backoffice can open and handle it',
             hasText: new RegExp(escapeRegExp(immatriculation), 'i'),
         })
         .filter({
-            has: page.locator('a[href*="/vehicules/propositions/"]'),
+            has: page.locator('a[href*="/backoffice/vehicules/propositions/"]'),
         })
         .first()
-        .locator('a[href*="/vehicules/propositions/"]')
+        .locator('a[href*="/backoffice/vehicules/propositions/"]')
         .first();
 
     const hasTargetLink = await targetLink
         .isVisible({ timeout: 15_000 })
         .catch(() => false);
     const fallbackLink = page
-        .locator('a[href*="/vehicules/propositions/"]')
+        .locator('a[href*="/backoffice/vehicules/propositions/"]')
         .first();
 
     if (!hasTargetLink) {

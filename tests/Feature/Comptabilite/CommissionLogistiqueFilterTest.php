@@ -28,7 +28,7 @@ class CommissionLogistiqueFilterTest extends TestCase
 
     public function test_index_avec_statut_envoye_en_tableau_ne_plante_pas(): void
     {
-        $this->get('/comptabilite/commissions/logistique?'.http_build_query(['statut' => ['impaye']]))
+        $this->get('/backoffice/comptabilite/commissions/logistique?'.http_build_query(['statut' => ['impaye']]))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Comptabilite/CommissionLogistique/Index')
@@ -38,19 +38,19 @@ class CommissionLogistiqueFilterTest extends TestCase
 
     public function test_index_avec_periode_envoyee_en_tableau_ne_plante_pas(): void
     {
-        $this->get('/comptabilite/commissions/logistique?'.http_build_query(['periode' => ['2026-06-P1']]))
+        $this->get('/backoffice/comptabilite/commissions/logistique?'.http_build_query(['periode' => ['2026-06-P1']]))
             ->assertOk();
     }
 
     public function test_index_avec_site_ids_envoyes_ne_plante_pas(): void
     {
-        $this->get('/comptabilite/commissions/logistique?'.http_build_query(['site_ids' => [$this->user->sites()->first()->id]]))
+        $this->get('/backoffice/comptabilite/commissions/logistique?'.http_build_query(['site_ids' => [$this->user->sites()->first()->id]]))
             ->assertOk();
     }
 
     public function test_export_excel_avec_filtres_en_tableau_ne_plante_pas(): void
     {
-        $this->get('/comptabilite/commissions/logistique/export/excel?'.http_build_query([
+        $this->get('/backoffice/comptabilite/commissions/logistique/export/excel?'.http_build_query([
             'statut' => ['impaye'],
             'periode' => ['2026-06-P1'],
             'site_ids' => [$this->user->sites()->first()->id],
@@ -59,7 +59,7 @@ class CommissionLogistiqueFilterTest extends TestCase
 
     public function test_export_pdf_avec_filtres_en_tableau_ne_plante_pas(): void
     {
-        $this->get('/comptabilite/commissions/logistique/export/pdf?'.http_build_query([
+        $this->get('/backoffice/comptabilite/commissions/logistique/export/pdf?'.http_build_query([
             'statut' => ['impaye'],
             'periode' => ['2026-06-P1'],
             'site_ids' => [$this->user->sites()->first()->id],

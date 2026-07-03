@@ -366,7 +366,7 @@ class CashbackTest extends TestCase
         ]);
 
         $this->actingAs($user)
-            ->get('/cashback')
+            ->get('/backoffice/cashback')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Cashback/Index')
@@ -416,7 +416,7 @@ class CashbackTest extends TestCase
         $org = $this->createOrgWithCashback();
         $user = $this->staffUser($org, 'admin_entreprise');
 
-        $this->actingAs($user)->get('/cashback')->assertOk();
+        $this->actingAs($user)->get('/backoffice/cashback')->assertOk();
     }
 
     public function test_index_interdit_role_client(): void
@@ -426,7 +426,7 @@ class CashbackTest extends TestCase
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('client');
 
-        $this->actingAs($user)->get('/cashback')->assertForbidden();
+        $this->actingAs($user)->get('/backoffice/cashback')->assertForbidden();
     }
 
     public function test_index_filtre_par_statut(): void
@@ -440,7 +440,7 @@ class CashbackTest extends TestCase
         $this->makeTransaction($org, $client2, 20000, CashbackTransaction::STATUT_VALIDE);
 
         $this->actingAs($user)
-            ->get('/cashback?statut=en_attente')
+            ->get('/backoffice/cashback?statut=en_attente')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Cashback/Index')
@@ -458,7 +458,7 @@ class CashbackTest extends TestCase
         $t = $this->makeTransaction($org, $client, 10000, CashbackTransaction::STATUT_EN_ATTENTE);
 
         $this->actingAs($user)
-            ->patch("/cashback/{$t->id}/valider", ['note' => 'Vérifié'])
+            ->patch("/backoffice/cashback/{$t->id}/valider", ['note' => 'Vérifié'])
             ->assertRedirect();
 
         $t->refresh();
@@ -475,7 +475,7 @@ class CashbackTest extends TestCase
         $t = $this->makeTransaction($org, $client, 10000, CashbackTransaction::STATUT_VALIDE);
 
         $this->actingAs($user)
-            ->patch("/cashback/{$t->id}/verser", [
+            ->patch("/backoffice/cashback/{$t->id}/verser", [
                 'montant' => 10000,
                 'mode_paiement' => 'especes',
                 'date_versement' => '2026-04-10',
@@ -496,7 +496,7 @@ class CashbackTest extends TestCase
         $t = $this->makeTransaction($org, $client, 10000, CashbackTransaction::STATUT_VALIDE);
 
         $this->actingAs($user)
-            ->patch("/cashback/{$t->id}/verser", [
+            ->patch("/backoffice/cashback/{$t->id}/verser", [
                 'montant' => 3000,
                 'mode_paiement' => 'mobile_money',
                 'date_versement' => '2026-04-10',
@@ -517,7 +517,7 @@ class CashbackTest extends TestCase
         $t = $this->makeTransaction($org, $client, 10000, CashbackTransaction::STATUT_EN_ATTENTE);
 
         $this->actingAs($user)
-            ->patch("/cashback/{$t->id}/verser", [
+            ->patch("/backoffice/cashback/{$t->id}/verser", [
                 'montant' => 10000,
                 'mode_paiement' => 'especes',
                 'date_versement' => '2026-04-10',
@@ -534,7 +534,7 @@ class CashbackTest extends TestCase
 
         // Sur une route web, Laravel redirige avec les erreurs en session (302)
         $this->actingAs($user)
-            ->patch("/cashback/{$t->id}/verser", [
+            ->patch("/backoffice/cashback/{$t->id}/verser", [
                 'montant' => 99999,
                 'mode_paiement' => 'especes',
                 'date_versement' => '2026-04-10',

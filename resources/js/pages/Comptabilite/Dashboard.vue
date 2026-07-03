@@ -50,8 +50,8 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Comptabilité', href: '/comptabilite' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Comptabilité', href: '/backoffice/comptabilite' },
 ];
 
 const dateFrom = ref(props.filtres.date_from);
@@ -65,7 +65,7 @@ const siteOptions = computed(() => [
 
 function applyFilters() {
     router.get(
-        '/comptabilite',
+        '/backoffice/comptabilite',
         {
             date_from: dateFrom.value || undefined,
             date_to: dateTo.value || undefined,
@@ -95,7 +95,7 @@ function fmt(n: number) {
                     </p>
                 </div>
                 <div class="flex gap-2">
-                    <Link href="/comptabilite/periodes/creer">
+                    <Link href="/backoffice/comptabilite/periodes/creer">
                         <Button size="sm">Nouvelle période</Button>
                     </Link>
                 </div>
@@ -203,7 +203,7 @@ function fmt(n: number) {
 
             <!-- Raccourcis -->
             <div class="grid gap-3 sm:grid-cols-3">
-                <Link href="/comptabilite/periodes" class="group">
+                <Link href="/backoffice/comptabilite/periodes" class="group">
                     <div
                         class="flex items-center gap-3 rounded-xl border bg-card p-4 transition-colors group-hover:border-primary/40 group-hover:bg-primary/5"
                     >
@@ -222,7 +222,10 @@ function fmt(n: number) {
                         </div>
                     </div>
                 </Link>
-                <Link href="/comptabilite/fiches/livreurs" class="group">
+                <Link
+                    href="/backoffice/comptabilite/fiches/livreurs"
+                    class="group"
+                >
                     <div
                         class="flex items-center gap-3 rounded-xl border bg-card p-4 transition-colors group-hover:border-primary/40 group-hover:bg-primary/5"
                     >
@@ -241,7 +244,7 @@ function fmt(n: number) {
                         </div>
                     </div>
                 </Link>
-                <Link href="/comptabilite/journal" class="group">
+                <Link href="/backoffice/comptabilite/journal" class="group">
                     <div
                         class="flex items-center gap-3 rounded-xl border bg-card p-4 transition-colors group-hover:border-primary/40 group-hover:bg-primary/5"
                     >
@@ -269,7 +272,7 @@ function fmt(n: number) {
                 >
                     <h2 class="text-sm font-semibold">Derniers mouvements</h2>
                     <Link
-                        href="/comptabilite/journal"
+                        href="/backoffice/comptabilite/journal"
                         class="text-xs text-primary hover:underline"
                         >Voir tout</Link
                     >

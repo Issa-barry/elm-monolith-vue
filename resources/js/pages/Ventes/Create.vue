@@ -99,9 +99,9 @@ const { can } = usePermissions();
 const canUpdateUnitPrice = computed(() => can('ventes.prix.update'));
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Ventes', href: '/ventes' },
-    { title: 'Nouvelle commande', href: '/ventes/create' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Ventes', href: '/backoffice/ventes' },
+    { title: 'Nouvelle commande', href: '/backoffice/ventes/create' },
 ];
 
 // ── Form ──────────────────────────────────────────────────────────────────────
@@ -139,7 +139,7 @@ async function onVehiculeSelect(v: VehiculeOption | null) {
         vehiculeSolvabilite.value = null;
         try {
             const res = await fetch(
-                `/ventes/check-solvabilite?vehicule_id=${v.id}`,
+                `/backoffice/ventes/check-solvabilite?vehicule_id=${v.id}`,
             );
             vehiculeSolvabilite.value = await res.json();
         } finally {
@@ -196,7 +196,7 @@ async function onClientSelect(c: ClientOption | null) {
         clientSolvabilite.value = null;
         try {
             const res = await fetch(
-                `/ventes/check-solvabilite?client_id=${c.id}`,
+                `/backoffice/ventes/check-solvabilite?client_id=${c.id}`,
             );
             clientSolvabilite.value = await res.json();
         } finally {
@@ -403,7 +403,7 @@ function submit() {
 }
 
 function confirmerEtCreer() {
-    form.post('/ventes');
+    form.post('/backoffice/ventes');
 }
 </script>
 
@@ -417,7 +417,7 @@ function confirmerEtCreer() {
         >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
-                    href="/ventes"
+                    href="/backoffice/ventes"
                     class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
                 >
                     <ArrowLeft class="h-4 w-4" />
@@ -1546,7 +1546,7 @@ function confirmerEtCreer() {
 
                 <!-- Footer -->
                 <div class="flex items-center justify-between">
-                    <Link href="/ventes">
+                    <Link href="/backoffice/ventes">
                         <Button type="button" variant="outline">Retour</Button>
                     </Link>
                     <Button type="submit" :disabled="!canSubmit">
@@ -1930,7 +1930,7 @@ function confirmerEtCreer() {
                             >
                                 <td class="px-4 py-3">
                                     <a
-                                        :href="`/ventes/${f.commande_id}`"
+                                        :href="`/backoffice/ventes/${f.commande_id}`"
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         class="inline-flex items-center gap-1 font-mono text-xs text-primary underline underline-offset-2 hover:opacity-75"

@@ -14,7 +14,7 @@ const PREFIX = 'e2esite';
 
 test.setTimeout(180_000);
 
-registerCleanup('/sites', PREFIX);
+registerCleanup('/backoffice/sites', PREFIX);
 
 test.beforeEach(async ({ page }) => {
     await login(page);
@@ -32,7 +32,7 @@ function rowByName(page: Page, name: string): Locator {
 async function createSite(page: Page, suffix: string): Promise<string> {
     const nom = `${PREFIX}-${suffix}`;
 
-    await page.goto('/sites/create');
+    await page.goto('/backoffice/sites/create');
     await expect(page).toHaveURL(/\/sites\/create$/, { timeout: 20_000 });
 
     await page.locator('#nom').fill(nom);

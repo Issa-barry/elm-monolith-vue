@@ -76,7 +76,7 @@ function submit() {
     processing.value = true;
     dialogErrors.value = [];
     router.post(
-        `/logistique/${props.transfertId}/statut/avancer`,
+        `/backoffice/logistique/${props.transfertId}/statut/avancer`,
         {
             lignes: receptionLignes.value.map((l) => ({
                 id: l.id,

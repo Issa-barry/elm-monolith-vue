@@ -13,7 +13,7 @@ test("filtre agence Kouria persiste après Rechercher, met à jour l'URL et filt
     page,
 }) => {
     await login(page);
-    await page.goto('/ventes');
+    await page.goto('/backoffice/ventes');
     await expect(page).toHaveURL(/\/ventes/, { timeout: 15_000 });
 
     const agenceMultiselect = page

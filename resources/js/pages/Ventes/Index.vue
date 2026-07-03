@@ -117,12 +117,12 @@ const confirm = useConfirm();
 const toast = useToast();
 
 const { onRowClick, bodyRowPt } = useClickableTableRow<Commande>(
-    (commande) => `/ventes/${commande.id}`,
+    (commande) => `/backoffice/ventes/${commande.id}`,
 );
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Ventes', href: '/ventes' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Ventes', href: '/backoffice/ventes' },
 ];
 
 // ── Options statique ──────────────────────────────────────────────────────────
@@ -164,6 +164,7 @@ const filterFields: FilterField[] = [
         type: 'multi-select',
         options: filtresStatut,
         placeholder: 'Tous les statuts',
+        inline: true,
     },
     {
         key: 'statut_facture',
@@ -189,6 +190,7 @@ const filterFields: FilterField[] = [
         label: 'Véhicule',
         type: 'text',
         placeholder: 'Nom ou immatriculation…',
+        inline: true,
     },
     {
         key: 'proprietaire',
@@ -201,6 +203,7 @@ const filterFields: FilterField[] = [
         label: 'Livreur',
         type: 'text',
         placeholder: 'Nom, prénom ou téléphone…',
+        inline: true,
     },
     {
         key: 'client',
@@ -213,6 +216,7 @@ const filterFields: FilterField[] = [
         label: 'N° commande',
         type: 'text',
         placeholder: 'CMD-…',
+        inline: true,
     },
 ];
 
@@ -255,7 +259,7 @@ function confirmer(commande: Commande) {
     if (confirmationProcessing.value) return;
     confirmationProcessing.value = true;
     router.patch(
-        `/ventes/${commande.id}/valider`,
+        `/backoffice/ventes/${commande.id}/valider`,
         {},
         {
             onSuccess: () =>
@@ -294,17 +298,20 @@ function openAnnulerDialog(commande: Commande) {
 
 function submitAnnuler() {
     if (!selectedCommande.value) return;
-    annulerForm.patch(`/ventes/${selectedCommande.value.id}/annuler`, {
-        onSuccess: () => {
-            annulerDialogVisible.value = false;
-            toast.add({
-                severity: 'success',
-                summary: 'Annulée',
-                detail: 'Commande annulée avec succès.',
-                life: 3000,
-            });
+    annulerForm.patch(
+        `/backoffice/ventes/${selectedCommande.value.id}/annuler`,
+        {
+            onSuccess: () => {
+                annulerDialogVisible.value = false;
+                toast.add({
+                    severity: 'success',
+                    summary: 'Annulée',
+                    detail: 'Commande annulée avec succès.',
+                    life: 3000,
+                });
+            },
         },
-    });
+    );
 }
 
 const annulerDisabled = computed(
@@ -343,7 +350,7 @@ function openEncaisserDialog(commande: Commande) {
 function submitEncaisser() {
     if (!encaisserCommande.value?.facture_id) return;
     encaisserForm.post(
-        `/factures/${encaisserCommande.value.facture_id}/encaissements`,
+        `/backoffice/factures/${encaisserCommande.value.facture_id}/encaissements`,
         {
             onSuccess: () => {
                 encaisserDialogVisible.value = false;
@@ -377,7 +384,7 @@ function confirmDelete(c: Commande) {
         acceptLabel: 'Supprimer',
         acceptClass: 'p-button-danger',
         accept: () => {
-            router.delete(`/ventes/${c.id}`, {
+            router.delete(`/backoffice/ventes/${c.id}`, {
                 onSuccess: () =>
                     toast.add({
                         severity: 'success',
@@ -402,13 +409,16 @@ function confirmDelete(c: Commande) {
                 class="sticky top-0 z-10 flex items-center justify-between border-b bg-background px-4 py-3"
             >
                 <Link
-                    href="/dashboard"
+                    href="/backoffice/dashboard"
                     class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
                 >
                     <ArrowLeft class="h-5 w-5" />
                 </Link>
                 <span class="text-base font-semibold">Ventes</span>
-                <Link v-if="can('ventes.create')" href="/ventes/create">
+                <Link
+                    v-if="can('ventes.create')"
+                    href="/backoffice/ventes/create"
+                >
                     <Button size="sm" class="h-8 px-3 text-xs">
                         <Plus class="mr-1 h-3.5 w-3.5" />
                         Nouveau
@@ -466,7 +476,7 @@ function confirmDelete(c: Commande) {
                 <Link
                     v-for="c in mobileFiltered"
                     :key="c.id"
-                    :href="`/ventes/${c.id}`"
+                    :href="`/backoffice/ventes/${c.id}`"
                     class="flex items-start justify-between gap-3 px-4 py-3 hover:bg-muted/10 active:bg-muted/20"
                 >
                     <div class="min-w-0 flex-1">
@@ -516,7 +526,10 @@ function confirmDelete(c: Commande) {
             >
                 <ShoppingCart class="h-10 w-10 opacity-30" />
                 <p class="text-sm">Aucune commande trouvée.</p>
-                <Link v-if="can('ventes.create')" href="/ventes/create">
+                <Link
+                    v-if="can('ventes.create')"
+                    href="/backoffice/ventes/create"
+                >
                     <Button variant="outline" size="sm">
                         <Plus class="mr-2 h-4 w-4" />
                         Créer la première commande
@@ -537,7 +550,10 @@ function confirmDelete(c: Commande) {
                         Suivi et encaissement des commandes.
                     </p>
                 </div>
-                <Link v-if="can('ventes.create')" href="/ventes/create">
+                <Link
+                    v-if="can('ventes.create')"
+                    href="/backoffice/ventes/create"
+                >
                     <Button>
                         <Plus class="mr-2 h-4 w-4" />
                         Nouvelle commande
@@ -576,7 +592,7 @@ function confirmDelete(c: Commande) {
 
             <!-- Filtres -->
             <DataFilters
-                url="/ventes"
+                url="/backoffice/ventes"
                 :base-params="{ periode: 'all' }"
                 :values="filterValues"
                 :sites="sites"
@@ -585,7 +601,7 @@ function confirmDelete(c: Commande) {
             />
 
             <!-- Tableau -->
-            <div class="overflow-hidden rounded-xl border bg-card">
+            <div class="overflow-x-auto rounded-xl border bg-card">
                 <DataTable
                     :value="commandesFiltrees"
                     :paginator="commandesFiltrees.length > 20"
@@ -595,7 +611,7 @@ function confirmDelete(c: Commande) {
                     removable-sort
                     class="text-sm"
                     :pt="{
-                        root: { class: 'w-full' },
+                        root: { class: 'w-full min-w-[1100px]' },
                         tbody: { class: 'divide-y' },
                         bodyRow: bodyRowPt,
                     }"
@@ -610,7 +626,7 @@ function confirmDelete(c: Commande) {
                     >
                         <template #body="{ data }">
                             <Link
-                                :href="`/ventes/${data.id}`"
+                                :href="`/backoffice/ventes/${data.id}`"
                                 class="hover:underline"
                             >
                                 <span
@@ -622,34 +638,37 @@ function confirmDelete(c: Commande) {
                         </template>
                     </Column>
 
-                    <!-- Véhicule / Client -->
-                    <Column header="Véhicule / Client" style="min-width: 160px">
+                    <!-- Véhicule -->
+                    <Column header="Véhicule" style="min-width: 140px">
                         <template #body="{ data }">
-                            <div v-if="data.vehicule_nom" class="font-medium">
-                                {{ data.vehicule_nom }}
-                            </div>
-                            <div
-                                v-if="data.client_nom"
-                                class="text-muted-foreground"
-                                :class="{ 'text-xs': data.vehicule_nom }"
-                            >
-                                {{ data.client_nom }}
-                            </div>
                             <span
-                                v-if="!data.vehicule_nom && !data.client_nom"
-                                class="text-muted-foreground"
-                                >—</span
+                                v-if="data.vehicule_nom"
+                                class="font-medium"
+                                >{{ data.vehicule_nom }}</span
                             >
+                            <span v-else class="text-muted-foreground">—</span>
                         </template>
                     </Column>
 
-                    <!-- Chauffeur -->
-                    <Column header="Chauffeur" style="min-width: 130px">
+                    <!-- Livreur -->
+                    <Column header="Livreur" style="min-width: 130px">
                         <template #body="{ data }">
                             <span
                                 v-if="data.chauffeur_nom"
                                 class="text-muted-foreground"
                                 >{{ data.chauffeur_nom }}</span
+                            >
+                            <span v-else class="text-muted-foreground">—</span>
+                        </template>
+                    </Column>
+
+                    <!-- Client -->
+                    <Column header="Client" style="min-width: 140px">
+                        <template #body="{ data }">
+                            <span
+                                v-if="data.client_nom"
+                                class="text-muted-foreground"
+                                >{{ data.client_nom }}</span
                             >
                             <span v-else class="text-muted-foreground">—</span>
                         </template>
@@ -757,7 +776,7 @@ function confirmDelete(c: Commande) {
                                     >
                                         <DropdownMenuItem as-child>
                                             <Link
-                                                :href="`/ventes/${data.id}`"
+                                                :href="`/backoffice/ventes/${data.id}`"
                                                 class="flex w-full cursor-pointer items-center gap-2"
                                             >
                                                 <ShoppingCart class="h-4 w-4" />
@@ -769,7 +788,7 @@ function confirmDelete(c: Commande) {
                                             as-child
                                         >
                                             <Link
-                                                :href="`/ventes/${data.id}/edit`"
+                                                :href="`/backoffice/ventes/${data.id}/edit`"
                                                 class="flex w-full cursor-pointer items-center gap-2"
                                             >
                                                 <Pencil class="h-4 w-4" />
@@ -852,7 +871,7 @@ function confirmDelete(c: Commande) {
                             <p class="text-sm">Aucune commande trouvée.</p>
                             <Link
                                 v-if="can('ventes.create')"
-                                href="/ventes/create"
+                                href="/backoffice/ventes/create"
                             >
                                 <Button variant="outline" size="sm">
                                     <Plus class="mr-2 h-4 w-4" />

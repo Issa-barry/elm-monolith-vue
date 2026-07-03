@@ -14,7 +14,7 @@ const PREFIX = 'e2epresta';
 
 test.setTimeout(180_000);
 
-registerCleanup('/prestataires', PREFIX);
+registerCleanup('/backoffice/prestataires', PREFIX);
 
 test.beforeEach(async ({ page }) => {
     await login(page);
@@ -32,7 +32,7 @@ async function createPrestataire(page: Page, suffix: string): Promise<string> {
     const nom = 'Flow';
     const phone = `6${randomDigits(8)}`;
 
-    await page.goto('/prestataires/create');
+    await page.goto('/backoffice/prestataires/create');
     await expect(page).toHaveURL(/\/prestataires\/create$/, {
         timeout: 20_000,
     });
@@ -89,7 +89,7 @@ test('create prestataire -> edit status -> verify inactive in list', async ({
         timeout: 20_000,
     });
 
-    await page.goto('/prestataires');
+    await page.goto('/backoffice/prestataires');
     await search.fill(prenom);
     await search.press('Enter');
     await page.waitForLoadState('networkidle');

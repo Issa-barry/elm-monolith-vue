@@ -115,7 +115,7 @@ function editerDepense(d: DepenseRow) {
         });
         return;
     }
-    router.visit(`/depenses/${d.id}/edit`);
+    router.visit(`/backoffice/depenses/${d.id}/edit`);
 }
 const showStepperModal = ref(false);
 const flashSuccess = computed(
@@ -125,8 +125,8 @@ const flashSuccess = computed(
 const activeTab = ref<'informations' | 'equipe' | 'depenses'>('informations');
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Véhicules', href: '/vehicules' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Véhicules', href: '/backoffice/vehicules' },
     { title: props.vehicule.nom_vehicule, href: '#' },
 ];
 
@@ -171,7 +171,7 @@ function formatGNF(val: number): string {
         >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
-                    href="/vehicules"
+                    href="/backoffice/vehicules"
                     class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
                 >
                     <ArrowLeft class="h-4 w-4" />
@@ -186,7 +186,7 @@ function formatGNF(val: number): string {
                 </div>
                 <Link
                     v-if="can('vehicules.update')"
-                    :href="`/vehicules/${vehicule.id}/edit`"
+                    :href="`/backoffice/vehicules/${vehicule.id}/edit`"
                     class="absolute right-4"
                 >
                     <Button
@@ -246,7 +246,7 @@ function formatGNF(val: number): string {
                 <template #actions>
                     <Link
                         v-if="vehicule.proprietaire_id"
-                        :href="`/proprietaires/${vehicule.proprietaire_id}`"
+                        :href="`/backoffice/proprietaires/${vehicule.proprietaire_id}`"
                         target="_blank"
                         data-testid="voir-fiche-proprietaire-btn"
                     >
@@ -255,7 +255,7 @@ function formatGNF(val: number): string {
                             Fiche propriétaire
                         </Button>
                     </Link>
-                    <Link href="/vehicules">
+                    <Link href="/backoffice/vehicules">
                         <Button variant="outline" size="sm">
                             <ArrowLeft class="mr-1.5 h-4 w-4" />
                             Liste de véhicules
@@ -263,7 +263,7 @@ function formatGNF(val: number): string {
                     </Link>
                     <Link
                         v-if="can('vehicules.update')"
-                        :href="`/vehicules/${vehicule.id}/edit`"
+                        :href="`/backoffice/vehicules/${vehicule.id}/edit`"
                     >
                         <Button size="sm">
                             <Pencil class="mr-1.5 h-4 w-4" />
@@ -357,7 +357,7 @@ function formatGNF(val: number): string {
                         </h2>
                         <Link
                             v-if="can('vehicules.update')"
-                            :href="`/vehicules/${vehicule.id}/edit`"
+                            :href="`/backoffice/vehicules/${vehicule.id}/edit`"
                         >
                             <Button size="sm" variant="outline">
                                 <Pencil class="mr-1.5 h-4 w-4" />

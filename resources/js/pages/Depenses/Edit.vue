@@ -64,7 +64,7 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Dépenses', href: '/depenses' },
+    { title: 'Dépenses', href: '/backoffice/depenses' },
     { title: 'Modifier la dépense', href: '#' },
 ];
 
@@ -231,7 +231,7 @@ const toast = useToast();
 
 function submitAs(statut: 'brouillon' | 'soumis') {
     form.statut = statut;
-    form.put(`/depenses/${props.depense.id}`, {
+    form.put(`/backoffice/depenses/${props.depense.id}`, {
         onSuccess: () => {
             toast.add({
                 severity: 'success',
@@ -699,7 +699,9 @@ function submitAs(statut: 'brouillon' | 'soumis') {
                                 size="sm"
                                 as-child
                             >
-                                <a :href="`/depenses/${depense.id}`">Annuler</a>
+                                <a :href="`/backoffice/depenses/${depense.id}`"
+                                    >Annuler</a
+                                >
                             </Button>
                             <div class="flex gap-2">
                                 <Button

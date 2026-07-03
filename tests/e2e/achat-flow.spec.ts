@@ -20,7 +20,7 @@ test('create achat -> annuler -> supprimer depuis la liste', async ({
 }) => {
     const note = `E2E-ACHAT-${Date.now()}${randomDigits(2)}`.slice(-18);
 
-    await page.goto('/achats/create');
+    await page.goto('/backoffice/achats/create');
     await expect(page).toHaveURL(/\/achats\/create$/, { timeout: 20_000 });
 
     await page
@@ -57,7 +57,7 @@ test('create achat -> annuler -> supprimer depuis la liste', async ({
         timeout: 20_000,
     });
 
-    await page.goto('/achats');
+    await page.goto('/backoffice/achats');
     await expect(page).toHaveURL(/\/achats$/, { timeout: 15_000 });
 
     const search = getVisibleSearchInput(page);

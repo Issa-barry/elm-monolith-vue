@@ -28,8 +28,8 @@ const flashSuccess = computed(
 );
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Propriétaires', href: '/proprietaires' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Propriétaires', href: '/backoffice/proprietaires' },
     {
         title: `${props.proprietaire.prenom} ${props.proprietaire.nom}`,
         href: '#',
@@ -68,7 +68,7 @@ watch(
 );
 
 function submit() {
-    form.put(`/proprietaires/${props.proprietaire.id}`);
+    form.put(`/backoffice/proprietaires/${props.proprietaire.id}`);
 }
 </script>
 
@@ -82,7 +82,7 @@ function submit() {
         >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
-                    :href="`/proprietaires/${proprietaire.id}`"
+                    :href="`/backoffice/proprietaires/${proprietaire.id}`"
                     class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
                 >
                     <ArrowLeft class="h-4 w-4" />
@@ -102,7 +102,7 @@ function submit() {
             <div class="mx-auto hidden max-w-2xl px-6 pt-6 pb-0 sm:block">
                 <div class="mb-8 flex items-center gap-3">
                     <Link
-                        :href="`/proprietaires/${proprietaire.id}`"
+                        :href="`/backoffice/proprietaires/${proprietaire.id}`"
                         class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-muted/80"
                     >
                         <ArrowLeft class="h-4 w-4" />
@@ -132,7 +132,7 @@ function submit() {
                 :form="form"
                 :errors="form.errors"
                 :processing="form.processing"
-                :back-href="`/proprietaires/${proprietaire.id}`"
+                :back-href="`/backoffice/proprietaires/${proprietaire.id}`"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />
