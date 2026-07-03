@@ -354,6 +354,7 @@ const hasActiveFilters = computed(
             <!-- select / multi-select -->
             <div
                 v-if="field.type === 'multi-select' || field.type === 'select'"
+                :data-testid="`filter-inline-${field.key}`"
                 class="relative flex shrink-0 flex-col gap-1"
             >
                 <span class="text-xs font-medium text-muted-foreground">{{
