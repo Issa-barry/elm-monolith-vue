@@ -15,8 +15,7 @@
   .intro { font-size: 15px; color: #475569; line-height: 1.6; margin: 0 0 24px; }
   .code-box { background: #eff6ff; border: 2px dashed #93c5fd; border-radius: 12px; padding: 24px; text-align: center; margin: 0 0 24px; }
   .code-label { font-size: 12px; color: #64748b; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin: 0 0 8px; }
-  .code { font-size: 42px; font-weight: 800; color: #1d4ed8; letter-spacing: 12px; margin: 0 0 16px; font-variant-numeric: tabular-nums; -webkit-user-select: all; user-select: all; }
-  .copy-hint { display: inline-block; background: #1d4ed8; color: #ffffff; font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: 999px; }
+  .code { font-size: 42px; font-weight: 800; color: #1d4ed8; letter-spacing: 12px; margin: 0; font-variant-numeric: tabular-nums; -webkit-user-select: all; user-select: all; }
   .expiry { font-size: 13px; color: #94a3b8; text-align: center; margin: 0 0 24px; }
   .warning { background: #fef9c3; border-left: 4px solid #facc15; border-radius: 8px; padding: 12px 16px; font-size: 13px; color: #713f12; line-height: 1.5; margin: 0 0 24px; }
   .footer { padding: 20px 24px; border-top: 1px solid #e2e8f0; text-align: center; font-size: 12px; color: #94a3b8; line-height: 1.6; }
@@ -37,7 +36,6 @@
       <div class="code-box">
         <p class="code-label">Votre code</p>
         <p class="code">{{ $code }}</p>
-        <span class="copy-hint">📋 Copiez ce code</span>
       </div>
       <p class="expiry">⏱ Ce code est valable <strong>10 minutes</strong>.</p>
       <div class="warning">
