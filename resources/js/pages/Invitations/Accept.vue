@@ -524,10 +524,8 @@ function logoutAndGoToLogin() {
             <!-- ── Étape 2 : OTP ──────────────────────────────────────────── -->
             <div v-else-if="step === 'otp'" class="grid gap-6">
                 <p class="text-sm text-muted-foreground">
-                    Un code de vérification a été envoyé au
-                    <span class="font-medium text-foreground">{{
-                        fullPhone
-                    }}</span
+                    Un code de vérification a été envoyé à
+                    <span class="font-medium text-foreground">{{ email }}</span
                     >.
                 </p>
 
@@ -697,8 +695,7 @@ function logoutAndGoToLogin() {
                 >
                     <Spinner v-if="form.processing" />
                     <CheckCircle v-else class="mr-2 h-4 w-4" />
-                    Créer mon compte et rejoindre
-                    {{ siteLabel || site_nom || 'votre site' }}
+                    Créer mon compte
                 </Button>
             </div>
         </div>
