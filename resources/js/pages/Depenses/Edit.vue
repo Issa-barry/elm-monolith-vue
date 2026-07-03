@@ -699,7 +699,9 @@ function submitAs(statut: 'brouillon' | 'soumis') {
                                 size="sm"
                                 as-child
                             >
-                                <a :href="`/backoffice/depenses/${depense.id}`">Annuler</a>
+                                <a :href="`/backoffice/depenses/${depense.id}`"
+                                    >Annuler</a
+                                >
                             </Button>
                             <div class="flex gap-2">
                                 <Button

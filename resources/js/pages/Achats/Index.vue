@@ -126,17 +126,20 @@ function openAnnulerDialog(commande: Commande) {
 
 function submitAnnuler() {
     if (!selectedCommande.value) return;
-    annulerForm.patch(`/backoffice/achats/${selectedCommande.value.id}/annuler`, {
-        onSuccess: () => {
-            annulerDialogVisible.value = false;
-            toast.add({
-                severity: 'success',
-                summary: 'Annulée',
-                detail: 'Commande annulée avec succès.',
-                life: 3000,
-            });
+    annulerForm.patch(
+        `/backoffice/achats/${selectedCommande.value.id}/annuler`,
+        {
+            onSuccess: () => {
+                annulerDialogVisible.value = false;
+                toast.add({
+                    severity: 'success',
+                    summary: 'Annulée',
+                    detail: 'Commande annulée avec succès.',
+                    life: 3000,
+                });
+            },
         },
-    });
+    );
 }
 
 // ── Suppression ───────────────────────────────────────────────────────────────
@@ -180,7 +183,10 @@ function confirmDelete(c: Commande) {
                     <ArrowLeft class="h-5 w-5" />
                 </Link>
                 <span class="text-base font-semibold">Achats</span>
-                <Link v-if="can('achats.create')" href="/backoffice/achats/create">
+                <Link
+                    v-if="can('achats.create')"
+                    href="/backoffice/achats/create"
+                >
                     <Button size="sm" class="h-8 px-3 text-xs">
                         <Plus class="mr-1 h-3.5 w-3.5" />
                         Nouveau
@@ -261,7 +267,10 @@ function confirmDelete(c: Commande) {
             >
                 <PackageCheck class="h-10 w-10 opacity-30" />
                 <p class="text-sm">Aucune commande trouvée.</p>
-                <Link v-if="can('achats.create')" href="/backoffice/achats/create">
+                <Link
+                    v-if="can('achats.create')"
+                    href="/backoffice/achats/create"
+                >
                     <Button variant="outline" size="sm">
                         <Plus class="mr-2 h-4 w-4" />
                         Créer le premier bon de commande
@@ -285,7 +294,10 @@ function confirmDelete(c: Commande) {
                         de commande
                     </p>
                 </div>
-                <Link v-if="can('achats.create')" href="/backoffice/achats/create">
+                <Link
+                    v-if="can('achats.create')"
+                    href="/backoffice/achats/create"
+                >
                     <Button>
                         <Plus class="mr-2 h-4 w-4" />
                         Nouveau bon de commande

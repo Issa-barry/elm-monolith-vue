@@ -193,7 +193,10 @@ function confirmDelete(packing: Packing) {
                 <span class="flex-1 text-center text-sm font-semibold"
                     >Packings</span
                 >
-                <Link v-if="can('packings.create')" href="/backoffice/packings/create">
+                <Link
+                    v-if="can('packings.create')"
+                    href="/backoffice/packings/create"
+                >
                     <Button size="sm" class="h-8 px-3 text-xs">
                         <Plus class="mr-1 h-3.5 w-3.5" />
                         Nouveau
@@ -345,7 +348,10 @@ function confirmDelete(packing: Packing) {
             >
                 <Layers class="h-12 w-12 opacity-30" />
                 <p class="text-sm">Aucun packing trouvé.</p>
-                <Link v-if="can('packings.create')" href="/backoffice/packings/create">
+                <Link
+                    v-if="can('packings.create')"
+                    href="/backoffice/packings/create"
+                >
                     <Button variant="outline" size="sm">
                         <Plus class="mr-2 h-4 w-4" />
                         Créer le premier packing
@@ -370,7 +376,10 @@ function confirmDelete(packing: Packing) {
                     </p>
                 </div>
 
-                <Link v-if="can('packings.create')" href="/backoffice/packings/create">
+                <Link
+                    v-if="can('packings.create')"
+                    href="/backoffice/packings/create"
+                >
                     <Button>
                         <Plus class="mr-2 h-4 w-4" />
                         Nouveau packing

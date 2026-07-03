@@ -284,7 +284,10 @@ function confirmDelete(s: Site) {
                 <span class="flex-1 text-center text-sm font-semibold"
                     >Sites</span
                 >
-                <Link v-if="can('sites.create')" href="/backoffice/sites/create">
+                <Link
+                    v-if="can('sites.create')"
+                    href="/backoffice/sites/create"
+                >
                     <Button size="sm" class="h-8 px-3 text-xs">
                         <Plus class="mr-1 h-3.5 w-3.5" />
                         Nouveau
@@ -410,7 +413,10 @@ function confirmDelete(s: Site) {
             >
                 <Building2 class="h-12 w-12 opacity-30" />
                 <p class="text-sm">Aucun site trouvé.</p>
-                <Link v-if="can('sites.create')" href="/backoffice/sites/create">
+                <Link
+                    v-if="can('sites.create')"
+                    href="/backoffice/sites/create"
+                >
                     <Button variant="outline" size="sm">
                         <Plus class="mr-2 h-4 w-4" />
                         Ajouter le premier site
@@ -436,7 +442,10 @@ function confirmDelete(s: Site) {
                         <Download class="mr-2 h-4 w-4" />
                         Exporter Excel
                     </Button>
-                    <Link v-if="can('sites.create')" href="/backoffice/sites/create">
+                    <Link
+                        v-if="can('sites.create')"
+                        href="/backoffice/sites/create"
+                    >
                         <Button>
                             <Plus class="mr-2 h-4 w-4" />
                             Nouveau site

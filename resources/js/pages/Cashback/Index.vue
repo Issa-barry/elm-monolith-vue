@@ -181,12 +181,15 @@ function openValider(t: Transaction) {
 }
 function submitValider() {
     if (!validerTarget.value) return;
-    validerForm.patch(`/backoffice/cashback/${validerTarget.value.id}/valider`, {
-        preserveScroll: true,
-        onSuccess: () => {
-            validerVisible.value = false;
+    validerForm.patch(
+        `/backoffice/cashback/${validerTarget.value.id}/valider`,
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                validerVisible.value = false;
+            },
         },
-    });
+    );
 }
 
 // ── Dialog verser ─────────────────────────────────────────────────────────────

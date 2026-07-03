@@ -152,7 +152,10 @@ function submitPaiement() {
 }
 
 function exportPdf() {
-    window.open(`/backoffice/comptabilite/fiches/${props.fiche.id}/pdf`, '_blank');
+    window.open(
+        `/backoffice/comptabilite/fiches/${props.fiche.id}/pdf`,
+        '_blank',
+    );
 }
 </script>
 

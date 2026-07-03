@@ -84,7 +84,10 @@ const toast = useToast();
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
     { title: 'Paie', href: '/backoffice/paie' },
-    { title: props.periode.label, href: `/backoffice/paie/${props.periode.id}` },
+    {
+        title: props.periode.label,
+        href: `/backoffice/paie/${props.periode.id}`,
+    },
 ];
 
 const globalFilter = ref('');
@@ -207,12 +210,15 @@ function submitVariable() {
             },
         });
     } else {
-        varForm.post(`/backoffice/paie-lignes/${selectedLigne.value!.id}/variables`, {
-            onSuccess: () => {
-                showVariableModal.value = false;
-                varForm.reset();
+        varForm.post(
+            `/backoffice/paie-lignes/${selectedLigne.value!.id}/variables`,
+            {
+                onSuccess: () => {
+                    showVariableModal.value = false;
+                    varForm.reset();
+                },
             },
-        });
+        );
     }
 }
 

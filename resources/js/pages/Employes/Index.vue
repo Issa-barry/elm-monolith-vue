@@ -180,7 +180,10 @@ function confirmDelete(e: Employe) {
                         }}
                     </p>
                 </div>
-                <Link v-if="can('rh-employes.create')" href="/backoffice/employes/create">
+                <Link
+                    v-if="can('rh-employes.create')"
+                    href="/backoffice/employes/create"
+                >
                     <Button><Plus class="mr-2 h-4 w-4" />Nouvel employé</Button>
                 </Link>
             </div>

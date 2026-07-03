@@ -43,7 +43,8 @@ const vehiculesItems = computed((): QuickMenuHref[] => {
     const items: QuickMenuHref[] = [];
     if (can('proprietaires.read')) items.push('/backoffice/proprietaires');
     if (can('vehicules.read')) items.push('/backoffice/vehicules');
-    if (can('equipes-livraison.read')) items.push('/backoffice/equipes-livraison');
+    if (can('equipes-livraison.read'))
+        items.push('/backoffice/equipes-livraison');
     return items;
 });
 const vehiculesQuickHref = computed<QuickMenuHref>(

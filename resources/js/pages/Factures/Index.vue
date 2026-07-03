@@ -282,24 +282,28 @@ function handleEncaissSubmit(payload: {
     if (!factureActive.value) return;
     encaissProcessing.value = true;
     encaissErrors.value = {};
-    router.post(`/backoffice/factures/${factureActive.value.id}/encaissements`, payload, {
-        preserveScroll: true,
-        onSuccess: () => {
-            dialogVisible.value = false;
-            toast.add({
-                severity: 'success',
-                summary: 'Validé',
-                detail: 'Encaissement enregistré avec succès.',
-                life: 3000,
-            });
+    router.post(
+        `/backoffice/factures/${factureActive.value.id}/encaissements`,
+        payload,
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                dialogVisible.value = false;
+                toast.add({
+                    severity: 'success',
+                    summary: 'Validé',
+                    detail: 'Encaissement enregistré avec succès.',
+                    life: 3000,
+                });
+            },
+            onError: (e) => {
+                encaissErrors.value = e as Record<string, string>;
+            },
+            onFinish: () => {
+                encaissProcessing.value = false;
+            },
         },
-        onError: (e) => {
-            encaissErrors.value = e as Record<string, string>;
-        },
-        onFinish: () => {
-            encaissProcessing.value = false;
-        },
-    });
+    );
 }
 
 // ── Progression ───────────────────────────────────────────────────────────────

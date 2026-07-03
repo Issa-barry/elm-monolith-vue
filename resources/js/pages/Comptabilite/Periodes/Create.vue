@@ -26,7 +26,10 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
     { title: 'Comptabilité', href: '/backoffice/comptabilite' },
     { title: 'Périodes', href: '/backoffice/comptabilite/periodes' },
-    { title: 'Nouvelle période', href: '/backoffice/comptabilite/periodes/creer' },
+    {
+        title: 'Nouvelle période',
+        href: '/backoffice/comptabilite/periodes/creer',
+    },
 ];
 
 const form = ref({

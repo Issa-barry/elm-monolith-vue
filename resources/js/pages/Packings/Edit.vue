@@ -35,7 +35,10 @@ const props = defineProps<{
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
     { title: 'Packings', href: '/backoffice/packings' },
-    { title: props.packing.reference, href: `/backoffice/packings/${props.packing.id}` },
+    {
+        title: props.packing.reference,
+        href: `/backoffice/packings/${props.packing.id}`,
+    },
     { title: 'Modifier', href: '#' },
 ];
 

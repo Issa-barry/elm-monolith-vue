@@ -222,7 +222,10 @@ function fmt(n: number) {
                         </div>
                     </div>
                 </Link>
-                <Link href="/backoffice/comptabilite/fiches/livreurs" class="group">
+                <Link
+                    href="/backoffice/comptabilite/fiches/livreurs"
+                    class="group"
+                >
                     <div
                         class="flex items-center gap-3 rounded-xl border bg-card p-4 transition-colors group-hover:border-primary/40 group-hover:bg-primary/5"
                     >

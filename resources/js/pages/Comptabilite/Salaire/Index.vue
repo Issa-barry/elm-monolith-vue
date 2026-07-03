@@ -155,7 +155,10 @@ function exportExcel() {
     );
 }
 function exportPdf() {
-    window.open('/backoffice/comptabilite/salaires/export/pdf?' + buildParams(), '_blank');
+    window.open(
+        '/backoffice/comptabilite/salaires/export/pdf?' + buildParams(),
+        '_blank',
+    );
 }
 
 const showPaiementDialog = ref(false);

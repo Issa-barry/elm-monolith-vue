@@ -84,17 +84,20 @@ function openReceptionDialog() {
 }
 
 function submitReception() {
-    receptionForm.patch(`/backoffice/achats/${props.commande.id}/receptionner`, {
-        onSuccess: () => {
-            receptionDialogVisible.value = false;
-            toast.add({
-                severity: 'success',
-                summary: 'Réceptionné',
-                detail: 'Commande réceptionnée. Le stock a été mis à jour.',
-                life: 4000,
-            });
+    receptionForm.patch(
+        `/backoffice/achats/${props.commande.id}/receptionner`,
+        {
+            onSuccess: () => {
+                receptionDialogVisible.value = false;
+                toast.add({
+                    severity: 'success',
+                    summary: 'Réceptionné',
+                    detail: 'Commande réceptionnée. Le stock a été mis à jour.',
+                    life: 4000,
+                });
+            },
         },
-    });
+    );
 }
 
 // ── Annulation ────────────────────────────────────────────────────────────────
@@ -177,7 +180,10 @@ function submitAnnuler() {
 
                 <div class="flex items-center gap-2">
                     <!-- PDF -->
-                    <a :href="`/backoffice/achats/${commande.id}/pdf`" target="_blank">
+                    <a
+                        :href="`/backoffice/achats/${commande.id}/pdf`"
+                        target="_blank"
+                    >
                         <Button variant="outline" size="sm">
                             <Download class="mr-2 h-4 w-4" />
                             PDF

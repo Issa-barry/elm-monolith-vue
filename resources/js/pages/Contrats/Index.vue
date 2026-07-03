@@ -128,7 +128,10 @@ function confirmDelete(c: Contrat) {
                         }}
                     </p>
                 </div>
-                <Link v-if="can('rh-contrats.create')" href="/backoffice/contrats/create">
+                <Link
+                    v-if="can('rh-contrats.create')"
+                    href="/backoffice/contrats/create"
+                >
                     <Button
                         ><Plus class="mr-2 h-4 w-4" />Nouveau contrat</Button
                     >

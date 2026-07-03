@@ -133,9 +133,12 @@ async function fetchHistorique() {
     historiqueLoading.value = true;
     historiqueError.value = false;
     try {
-        const res = await fetch(`/backoffice/depenses/${props.depense.id}/historique`, {
-            headers: { Accept: 'application/json' },
-        });
+        const res = await fetch(
+            `/backoffice/depenses/${props.depense.id}/historique`,
+            {
+                headers: { Accept: 'application/json' },
+            },
+        );
         if (!res.ok) throw new Error();
         const data = await res.json();
         historiqueLogs.value = data.logs ?? [];
@@ -320,7 +323,9 @@ function formatDate(iso: string | null): string {
                             size="sm"
                             as-child
                         >
-                            <a :href="`/backoffice/depenses/${depense.id}/edit`">
+                            <a
+                                :href="`/backoffice/depenses/${depense.id}/edit`"
+                            >
                                 <Edit class="mr-1 h-3.5 w-3.5" />
                                 Modifier
                             </a>

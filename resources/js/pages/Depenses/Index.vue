@@ -478,7 +478,10 @@ const categorieColors: Record<string, string> = {
                         <Printer class="mr-1.5 h-3.5 w-3.5" />
                         Imprimer
                     </Button>
-                    <Link v-if="props.can_create" href="/backoffice/depenses/create">
+                    <Link
+                        v-if="props.can_create"
+                        href="/backoffice/depenses/create"
+                    >
                         <Button>
                             <Plus class="mr-2 h-4 w-4" />
                             Nouvelle dépense

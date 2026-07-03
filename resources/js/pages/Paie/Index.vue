@@ -103,7 +103,10 @@ function statutSeverity(statut: string) {
                     <CalendarDays class="h-6 w-6 text-primary" />
                     <h1 class="text-2xl font-bold">Périodes de paie</h1>
                 </div>
-                <Link v-if="can('rh-paie.create')" href="/backoffice/paie/create">
+                <Link
+                    v-if="can('rh-paie.create')"
+                    href="/backoffice/paie/create"
+                >
                     <Button size="sm">
                         <Plus class="mr-1 h-4 w-4" />
                         Nouvelle période

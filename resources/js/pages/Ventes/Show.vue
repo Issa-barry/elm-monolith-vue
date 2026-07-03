@@ -476,17 +476,20 @@ function openEncaisserDialog() {
 
 function submitEncaisser() {
     if (!props.facture) return;
-    encaisserForm.post(`/backoffice/factures/${props.facture.id}/encaissements`, {
-        onSuccess: () => {
-            encaisserDialogVisible.value = false;
-            toast.add({
-                severity: 'success',
-                summary: 'Encaissement enregistré',
-                detail: `${formatGNF(encaisserForm.montant ?? 0)} enregistré avec succès.`,
-                life: 3000,
-            });
+    encaisserForm.post(
+        `/backoffice/factures/${props.facture.id}/encaissements`,
+        {
+            onSuccess: () => {
+                encaisserDialogVisible.value = false;
+                toast.add({
+                    severity: 'success',
+                    summary: 'Encaissement enregistré',
+                    detail: `${formatGNF(encaisserForm.montant ?? 0)} enregistré avec succès.`,
+                    life: 3000,
+                });
+            },
         },
-    });
+    );
 }
 
 // ── Colonnes lignes conditionnelles ───────────────────────────────────────────

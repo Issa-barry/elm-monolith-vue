@@ -483,7 +483,10 @@ function confirmDelete(u: StaffUser) {
                         >
                             <UserCircle class="h-12 w-12 opacity-30" />
                             <p class="text-sm">Aucun utilisateur trouvé.</p>
-                            <Link v-if="isSuperAdmin" href="/backoffice/users/create">
+                            <Link
+                                v-if="isSuperAdmin"
+                                href="/backoffice/users/create"
+                            >
                                 <Button variant="outline" size="sm">
                                     <Plus class="mr-2 h-4 w-4" />
                                     Créer le premier compte

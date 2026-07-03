@@ -76,11 +76,20 @@ const vehiculesItems = computed((): NavItem[] => {
     if (can('proprietaires.read'))
         sub.push({ title: 'Propriétaires', href: '/backoffice/proprietaires' });
     if (can('vehicules.read'))
-        sub.push({ title: 'Liste de véhicules', href: '/backoffice/vehicules' });
+        sub.push({
+            title: 'Liste de véhicules',
+            href: '/backoffice/vehicules',
+        });
     if (can('equipes-livraison.read'))
-        sub.push({ title: 'Équipes de livraison', href: '/backoffice/equipes-livraison' });
+        sub.push({
+            title: 'Équipes de livraison',
+            href: '/backoffice/equipes-livraison',
+        });
     if (can('type-vehicules.read'))
-        sub.push({ title: 'Types de véhicules', href: '/backoffice/type-vehicules' });
+        sub.push({
+            title: 'Types de véhicules',
+            href: '/backoffice/type-vehicules',
+        });
     if (can('propositions.read'))
         sub.push({
             title: 'Propositions',
@@ -105,7 +114,10 @@ const mainNavItems = computed((): NavItem[] => {
             { title: 'Factures', href: '/backoffice/factures' },
         ];
         if (moduleActive('cashback')) {
-            ventesSubItems.push({ title: 'Cashback', href: '/backoffice/cashback' });
+            ventesSubItems.push({
+                title: 'Cashback',
+                href: '/backoffice/cashback',
+            });
         }
         items.push({
             title: 'Ventes',
@@ -116,9 +128,17 @@ const mainNavItems = computed((): NavItem[] => {
     }
 
     if (canSee('achats.read', 'achats'))
-        items.push({ title: 'Achats', href: '/backoffice/achats', icon: PackageCheck });
+        items.push({
+            title: 'Achats',
+            href: '/backoffice/achats',
+            icon: PackageCheck,
+        });
     if (canSee('packings.read', 'packings'))
-        items.push({ title: 'Packings', href: '/backoffice/packings', icon: Layers });
+        items.push({
+            title: 'Packings',
+            href: '/backoffice/packings',
+            icon: Layers,
+        });
     if (can('clients.read'))
         items.push({
             title: 'Clients',
@@ -160,7 +180,10 @@ const mainNavItems = computed((): NavItem[] => {
             href: '/backoffice/logistique/transferts',
             icon: Truck,
             items: [
-                { title: 'Transferts', href: '/backoffice/logistique/transferts' },
+                {
+                    title: 'Transferts',
+                    href: '/backoffice/logistique/transferts',
+                },
                 {
                     title: 'Réceptions',
                     href: '/backoffice/logistique/receptions',
@@ -174,7 +197,11 @@ const mainNavItems = computed((): NavItem[] => {
     }
 
     if (canSee('depenses.read', 'depenses'))
-        items.push({ title: 'Dépenses', href: '/backoffice/depenses', icon: Receipt });
+        items.push({
+            title: 'Dépenses',
+            href: '/backoffice/depenses',
+            icon: Receipt,
+        });
 
     if (rhItems.value.length > 0) {
         items.push({
@@ -204,20 +231,38 @@ const mainNavItems = computed((): NavItem[] => {
                     title: 'Commission propriétaire',
                     href: '/backoffice/comptabilite/commissions/proprietaires',
                 },
-                { title: 'Paiement salaire', href: '/backoffice/comptabilite/salaires' },
-                { title: 'Journal financier', href: '/backoffice/comptabilite/journal' },
+                {
+                    title: 'Paiement salaire',
+                    href: '/backoffice/comptabilite/salaires',
+                },
+                {
+                    title: 'Journal financier',
+                    href: '/backoffice/comptabilite/journal',
+                },
             ],
         });
     }
 
     if (canSee('sites.read', 'sites'))
-        items.push({ title: 'Sites', href: '/backoffice/sites', icon: Building2 });
+        items.push({
+            title: 'Sites',
+            href: '/backoffice/sites',
+            icon: Building2,
+        });
 
     if (canSee('users.read', 'utilisateurs'))
-        items.push({ title: 'Utilisateurs', href: '/backoffice/users', icon: UserCog });
+        items.push({
+            title: 'Utilisateurs',
+            href: '/backoffice/users',
+            icon: UserCog,
+        });
 
     if (isSuperAdmin.value)
-        items.push({ title: 'Comptes', href: '/backoffice/comptes', icon: UsersRound });
+        items.push({
+            title: 'Comptes',
+            href: '/backoffice/comptes',
+            icon: UsersRound,
+        });
 
     return items;
 });

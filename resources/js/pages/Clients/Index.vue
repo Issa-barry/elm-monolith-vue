@@ -207,7 +207,10 @@ function confirmDelete(c: Client) {
                 <span class="flex-1 text-center text-sm font-semibold"
                     >Clients</span
                 >
-                <Link v-if="can('clients.create')" href="/backoffice/clients/create">
+                <Link
+                    v-if="can('clients.create')"
+                    href="/backoffice/clients/create"
+                >
                     <Button size="sm" class="h-8 px-3 text-xs">
                         <Plus class="mr-1 h-3.5 w-3.5" />
                         Nouveau
@@ -345,7 +348,10 @@ function confirmDelete(c: Client) {
             >
                 <Users class="h-12 w-12 opacity-30" />
                 <p class="text-sm">Aucun client trouvé.</p>
-                <Link v-if="can('clients.create')" href="/backoffice/clients/create">
+                <Link
+                    v-if="can('clients.create')"
+                    href="/backoffice/clients/create"
+                >
                     <Button variant="outline" size="sm">
                         <Plus class="mr-2 h-4 w-4" />
                         Ajouter le premier client
@@ -368,7 +374,10 @@ function confirmDelete(c: Client) {
                         }}
                     </p>
                 </div>
-                <Link v-if="can('clients.create')" href="/backoffice/clients/create">
+                <Link
+                    v-if="can('clients.create')"
+                    href="/backoffice/clients/create"
+                >
                     <Button>
                         <Plus class="mr-2 h-4 w-4" />
                         Nouveau client

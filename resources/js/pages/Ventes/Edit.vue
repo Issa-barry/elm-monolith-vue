@@ -73,7 +73,10 @@ const canUpdateUnitPrice = computed(() => can('ventes.prix.update'));
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
     { title: 'Ventes', href: '/backoffice/ventes' },
-    { title: props.commande.reference, href: `/backoffice/ventes/${props.commande.id}` },
+    {
+        title: props.commande.reference,
+        href: `/backoffice/ventes/${props.commande.id}`,
+    },
     { title: 'Modifier', href: '#' },
 ];
 

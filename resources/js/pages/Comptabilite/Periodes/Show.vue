@@ -159,7 +159,9 @@ function doValider() {
         acceptLabel: 'Valider',
         rejectLabel: 'Annuler',
         accept: () =>
-            router.post(`/backoffice/comptabilite/periodes/${props.periode.id}/valider`),
+            router.post(
+                `/backoffice/comptabilite/periodes/${props.periode.id}/valider`,
+            ),
     });
 }
 
@@ -170,7 +172,9 @@ function doCloturer() {
         acceptLabel: 'Clôturer',
         rejectLabel: 'Annuler',
         accept: () =>
-            router.post(`/backoffice/comptabilite/periodes/${props.periode.id}/cloturer`),
+            router.post(
+                `/backoffice/comptabilite/periodes/${props.periode.id}/cloturer`,
+            ),
     });
 }
 
@@ -182,9 +186,13 @@ function doDelete() {
         rejectLabel: 'Annuler',
         acceptClass: 'p-button-danger',
         accept: () =>
-            router.delete(`/backoffice/comptabilite/periodes/${props.periode.id}`, {
-                onSuccess: () => router.visit('/backoffice/comptabilite/periodes'),
-            }),
+            router.delete(
+                `/backoffice/comptabilite/periodes/${props.periode.id}`,
+                {
+                    onSuccess: () =>
+                        router.visit('/backoffice/comptabilite/periodes'),
+                },
+            ),
     });
 }
 
@@ -196,7 +204,10 @@ function exportExcel() {
 }
 
 function exportPdf() {
-    window.open(`/backoffice/comptabilite/periodes/${props.periode.id}/pdf`, '_blank');
+    window.open(
+        `/backoffice/comptabilite/periodes/${props.periode.id}/pdf`,
+        '_blank',
+    );
 }
 </script>
 

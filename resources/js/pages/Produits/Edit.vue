@@ -57,7 +57,9 @@ const form = useForm({
 });
 
 function submit() {
-    form.post(`/backoffice/produits/${props.produit.id}`, { forceFormData: true });
+    form.post(`/backoffice/produits/${props.produit.id}`, {
+        forceFormData: true,
+    });
 }
 </script>
 

@@ -63,7 +63,10 @@ const props = defineProps<{
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
-    { title: 'Commissions logistiques', href: '/backoffice/logistique/commissions' },
+    {
+        title: 'Commissions logistiques',
+        href: '/backoffice/logistique/commissions',
+    },
 ];
 
 // ── Filtres ───────────────────────────────────────────────────────────────────

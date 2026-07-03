@@ -140,15 +140,18 @@ function confirmDeleteVersement(v: Versement) {
         acceptLabel: 'Supprimer',
         acceptClass: 'p-button-danger',
         accept: () => {
-            router.delete(`/backoffice/packings/${props.packing.id}/versements/${v.id}`, {
-                onSuccess: () =>
-                    toast.add({
-                        severity: 'success',
-                        summary: 'Supprimé',
-                        detail: 'Versement supprimé.',
-                        life: 3000,
-                    }),
-            });
+            router.delete(
+                `/backoffice/packings/${props.packing.id}/versements/${v.id}`,
+                {
+                    onSuccess: () =>
+                        toast.add({
+                            severity: 'success',
+                            summary: 'Supprimé',
+                            detail: 'Versement supprimé.',
+                            life: 3000,
+                        }),
+                },
+            );
         },
     });
 }

@@ -96,10 +96,14 @@ const periodeOptions: PeriodeOption[] = [
 function onPeriodeChange(value: string) {
     const params: Record<string, string> = {};
     if (value) params.periode = value;
-    router.get(`/backoffice/logistique/commissions/livreurs/${props.livreur.id}`, params, {
-        preserveScroll: true,
-        replace: true,
-    });
+    router.get(
+        `/backoffice/logistique/commissions/livreurs/${props.livreur.id}`,
+        params,
+        {
+            preserveScroll: true,
+            replace: true,
+        },
+    );
 }
 
 // ── Groupement par période (vue "toutes périodes") ────────────────────────────

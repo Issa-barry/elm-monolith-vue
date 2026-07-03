@@ -402,32 +402,35 @@ watch(showCommissionDialog, (open) => {
 });
 
 function submitCommission() {
-    commissionForm.post(`/backoffice/logistique/${props.transfert.id}/commission`, {
-        onSuccess: () => {
-            showCommissionDialog.value = false;
-            toast.add({
-                severity: 'success',
-                summary: 'Commission générée',
-                life: 3000,
-            });
-        },
-        onError: (errors) => {
-            const firstError = Object.values(errors)[0];
-            if (
-                firstError &&
-                !errors.base_calcul &&
-                !errors.valeur_base &&
-                !errors.quantite_reference
-            ) {
+    commissionForm.post(
+        `/backoffice/logistique/${props.transfert.id}/commission`,
+        {
+            onSuccess: () => {
+                showCommissionDialog.value = false;
                 toast.add({
-                    severity: 'error',
-                    summary: 'Erreur',
-                    detail: String(firstError),
-                    life: 5000,
+                    severity: 'success',
+                    summary: 'Commission générée',
+                    life: 3000,
                 });
-            }
+            },
+            onError: (errors) => {
+                const firstError = Object.values(errors)[0];
+                if (
+                    firstError &&
+                    !errors.base_calcul &&
+                    !errors.valeur_base &&
+                    !errors.quantite_reference
+                ) {
+                    toast.add({
+                        severity: 'error',
+                        summary: 'Erreur',
+                        detail: String(firstError),
+                        life: 5000,
+                    });
+                }
+            },
         },
-    });
+    );
 }
 
 // ── Versement ─────────────────────────────────────────────────────────────────

@@ -109,7 +109,10 @@ const typeBadge = (type: string) =>
                         salariés
                     </p>
                 </div>
-                <Link v-if="can_create" href="/backoffice/comptabilite/periodes/creer">
+                <Link
+                    v-if="can_create"
+                    href="/backoffice/comptabilite/periodes/creer"
+                >
                     <Button>
                         <Plus class="mr-2 h-4 w-4" />
                         Nouvelle période

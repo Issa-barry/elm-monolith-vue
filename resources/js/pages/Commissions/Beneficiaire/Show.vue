@@ -675,7 +675,9 @@ function closeDetailDialog() {
             <div class="flex items-center justify-between gap-4">
                 <div>
                     <p class="text-sm text-muted-foreground">
-                        <Link href="/backoffice/commissions" class="hover:text-foreground"
+                        <Link
+                            href="/backoffice/commissions"
+                            class="hover:text-foreground"
                             >Commissions</Link
                         >
                         <span class="mx-1">›</span>

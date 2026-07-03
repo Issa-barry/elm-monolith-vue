@@ -148,7 +148,10 @@ const typeBadgeClass: Record<string, string> = {
                 </div>
 
                 <!-- Infos -->
-                <Link :href="`/backoffice/produits/${data.id}`" class="min-w-0 flex-1">
+                <Link
+                    :href="`/backoffice/produits/${data.id}`"
+                    class="min-w-0 flex-1"
+                >
                     <div class="flex items-center gap-1.5">
                         <p
                             class="truncate text-[13px] leading-tight font-semibold"

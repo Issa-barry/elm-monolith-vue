@@ -144,7 +144,11 @@ function clearFilters() {
     searchInput.value = '';
     showOnlyRuptures.value = false;
     showOnlyFaibles.value = false;
-    router.get('/backoffice/produits', {}, { preserveState: true, replace: true });
+    router.get(
+        '/backoffice/produits',
+        {},
+        { preserveState: true, replace: true },
+    );
 }
 
 const currentSiteLabel = computed(() => {
@@ -415,12 +419,15 @@ async function openHistoriqueModal(produit: Produit) {
     showHistoriqueModal.value = true;
     historiqueLoading.value = true;
     try {
-        const res = await fetch(`/backoffice/produits/${produit.id}/historique`, {
-            headers: {
-                Accept: 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
+        const res = await fetch(
+            `/backoffice/produits/${produit.id}/historique`,
+            {
+                headers: {
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
             },
-        });
+        );
         const data = await res.json();
         ajustements.value = data.ajustements ?? [];
         modifications.value = data.modifications ?? [];
@@ -563,7 +570,10 @@ function confirmArchive(produit: Produit) {
                         <Download class="mr-2 h-4 w-4" />
                         Exporter Excel
                     </Button>
-                    <Link v-if="can('produits.create')" href="/backoffice/produits/create">
+                    <Link
+                        v-if="can('produits.create')"
+                        href="/backoffice/produits/create"
+                    >
                         <Button>
                             <Plus class="mr-2 h-4 w-4" />
                             Nouveau produit

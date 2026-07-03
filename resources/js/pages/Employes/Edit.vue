@@ -376,7 +376,9 @@ function deleteContrat(c: ContratRow) {
                                 </p>
                             </div>
                             <div class="flex gap-1">
-                                <Link :href="`/backoffice/contrats/${c.id}/edit`">
+                                <Link
+                                    :href="`/backoffice/contrats/${c.id}/edit`"
+                                >
                                     <Button
                                         variant="ghost"
                                         size="icon"
