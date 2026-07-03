@@ -29,9 +29,13 @@ class PeriodeCalculatorService
         $nbFiches = 0;
 
         DB::transaction(function () use ($periode, &$nbFiches) {
+            // forceDelete() : PaiementFiche utilise SoftDeletes, mais un delete() classique
+            // laisse la ligne physique en place et provoque une violation de la contrainte
+            // d'unicité (periode_id, beneficiaire_type, beneficiaire_id) au réinsert suivant.
             $periode->fiches()
                 ->where('statut', '!=', StatutFichePaiement::PAYE->value)
-                ->delete();
+                ->get()
+                ->each(fn (PaiementFiche $f) => $f->forceDelete());
 
             $nbFiches = match ($periode->type) {
                 TypePeriodePaiement::LIVREUR => $this->calculerLivreurs($periode),
@@ -98,7 +102,7 @@ class PeriodeCalculatorService
                     'source_id' => $part->id,
                     'type_ligne' => TypeLignePaiement::COMMISSION_VENTE->value,
                     'libelle' => 'Commission vente '.$ref,
-                    'montant' => (float) $part->montant_net,
+                    'montant' => $part->montant_a_payer,
                     'ordre' => $ordre++,
                 ]);
             }
@@ -110,7 +114,7 @@ class PeriodeCalculatorService
                     'source_id' => $part->id,
                     'type_ligne' => TypeLignePaiement::COMMISSION_LOGISTIQUE->value,
                     'libelle' => 'Commission logistique '.$ref,
-                    'montant' => (float) $part->montant_net,
+                    'montant' => $part->montant_a_payer,
                     'ordre' => $ordre++,
                 ]);
             }
@@ -197,7 +201,7 @@ class PeriodeCalculatorService
                     'source_id' => $part->id,
                     'type_ligne' => TypeLignePaiement::COMMISSION_VENTE->value,
                     'libelle' => 'Commission vente '.$ref,
-                    'montant' => (float) $part->montant_net,
+                    'montant' => $part->montant_a_payer,
                     'ordre' => $ordre++,
                 ]);
             }
@@ -209,7 +213,7 @@ class PeriodeCalculatorService
                     'source_id' => $part->id,
                     'type_ligne' => TypeLignePaiement::COMMISSION_LOGISTIQUE->value,
                     'libelle' => 'Commission logistique '.$ref,
-                    'montant' => (float) $part->montant_net,
+                    'montant' => $part->montant_a_payer,
                     'ordre' => $ordre++,
                 ]);
             }

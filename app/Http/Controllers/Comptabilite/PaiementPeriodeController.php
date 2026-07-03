@@ -3,15 +3,14 @@
 namespace App\Http\Controllers\Comptabilite;
 
 use App\Enums\AuditEvent;
-use App\Enums\StatutFichePaiement;
 use App\Enums\StatutPeriodePaiement;
 use App\Enums\TypePeriodePaiement;
 use App\Http\Controllers\Controller;
 use App\Models\Organization;
-use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
 use App\Models\Site;
 use App\Services\AuditLogService;
+use App\Services\CommissionAdjustmentService;
 use App\Services\PeriodeCalculatorService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -124,66 +123,70 @@ class PaiementPeriodeController extends Controller
             ->with('success', 'Période créée avec succès.');
     }
 
-    public function show(PaiementPeriode $periode): Response
+    public function show(PaiementPeriode $periode, Request $request): Response
     {
         $this->authorize('view', $periode);
 
         $periode->load('site', 'createur', 'validateur');
 
-        $allFiches = $periode->fiches()->with('site')->get();
+        $allFiches = $periode->fiches()->get();
 
-        $fiches = $allFiches->sortBy('beneficiaire_nom')->map(fn (PaiementFiche $f) => [
-            'id' => $f->id,
-            'reference' => $f->reference,
-            'beneficiaire_nom' => $f->beneficiaire_nom,
-            'beneficiaire_type' => $f->beneficiaire_type,
-            'site' => $f->site ? ['id' => $f->site->id, 'nom' => $f->site->nom] : null,
-            'montant_brut' => (float) $f->montant_brut,
-            'total_deductions' => (float) $f->total_deductions,
-            'montant_net' => (float) $f->montant_net,
-            'montant_paye' => (float) $f->montant_paye,
-            'statut' => $f->statut?->value,
-            'statut_label' => $f->statut?->label(),
-        ])->values();
+        $filters = $request->only(['vehicule', 'livreur', 'proprietaire', 'etat']);
 
-        $repartitionAgences = $allFiches
-            ->groupBy('site_id')
-            ->map(function ($group) {
-                $site = $group->first()->site;
-                $net = (float) $group->sum('montant_net');
-                $paye = (float) $group->sum('montant_paye');
+        // Le détail de période est centré véhicule : c'est ainsi que le métier travaille
+        // (aucun concept de véhicule pour les périodes salarié).
+        $vehicules = [];
+        if (in_array($periode->type, [TypePeriodePaiement::LIVREUR, TypePeriodePaiement::PROPRIETAIRE], true)) {
+            $vehicules = collect(CommissionAdjustmentService::vehiculesParPeriode($periode));
 
-                return [
-                    'site_nom' => $site?->nom ?? 'Sans agence',
-                    'nb_beneficiaires' => $group->count(),
-                    'montant_brut' => (float) $group->sum('montant_brut'),
-                    'total_deductions' => (float) $group->sum('total_deductions'),
-                    'montant_net' => $net,
-                    'montant_paye' => $paye,
-                    'reste' => max(0.0, $net - $paye),
-                ];
-            })
-            ->sortByDesc('montant_net')
-            ->values();
+            if (array_filter($filters)) {
+                $beneficiairesParVehicule = collect(CommissionAdjustmentService::groupesParCommission($periode))
+                    ->groupBy(fn (array $g) => $g['vehicule_id'] ?? '__sans_vehicule__')
+                    ->map(fn ($groupes) => $groupes->flatMap(fn (array $g) => $g['parts'])->pluck('beneficiaire_nom'));
+
+                $vehicules = $vehicules->filter(function (array $v) use ($filters, $beneficiairesParVehicule) {
+                    if (! empty($filters['vehicule'])) {
+                        $needle = mb_strtolower(trim($filters['vehicule']));
+                        if (! str_contains(mb_strtolower($v['vehicule_nom']), $needle) && ! str_contains(mb_strtolower($v['vehicule_immat'] ?? ''), $needle)) {
+                            return false;
+                        }
+                    }
+                    if (! empty($filters['etat'])) {
+                        if ($v['equilibre'] !== ($filters['etat'] === 'valide')) {
+                            return false;
+                        }
+                    }
+                    if (! empty($filters['livreur']) || ! empty($filters['proprietaire'])) {
+                        $needle = mb_strtolower(trim($filters['livreur'] ?? $filters['proprietaire']));
+                        $noms = $beneficiairesParVehicule->get($v['vehicule_id'] ?? '__sans_vehicule__', collect());
+                        if (! $noms->contains(fn (string $n) => str_contains(mb_strtolower($n), $needle))) {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                });
+            }
+
+            $vehicules = $vehicules->values()->all();
+        }
 
         return Inertia::render('Comptabilite/Periodes/Show', [
             'periode' => $this->transform($periode),
-            'fiches' => $fiches,
+            'vehicules' => $vehicules,
+            'filters' => $filters,
             'stats' => [
                 'total_brut' => (float) $allFiches->sum('montant_brut'),
-                'total_deductions' => (float) $allFiches->sum('total_deductions'),
                 'total_net' => (float) $allFiches->sum('montant_net'),
                 'total_paye' => (float) $allFiches->sum('montant_paye'),
-                'nb_a_payer' => $allFiches->where('statut', StatutFichePaiement::A_PAYER->value)->count(),
-                'nb_partiellement_paye' => $allFiches->where('statut', StatutFichePaiement::PARTIELLEMENT_PAYE->value)->count(),
-                'nb_paye' => $allFiches->where('statut', StatutFichePaiement::PAYE->value)->count(),
+                'reste' => max(0.0, (float) $allFiches->sum('montant_net') - (float) $allFiches->sum('montant_paye')),
             ],
-            'repartition_agences' => $repartitionAgences,
             'can' => [
                 'calculer' => auth()->user()->can('calculer', $periode),
                 'valider' => auth()->user()->can('valider', $periode),
                 'cloturer' => auth()->user()->can('cloturer', $periode),
                 'delete' => auth()->user()->can('delete', $periode),
+                'ajuster' => auth()->user()->can('ajuster', $periode),
             ],
         ]);
     }
@@ -219,6 +222,23 @@ class PaiementPeriodeController extends Controller
     public function valider(PaiementPeriode $periode): RedirectResponse
     {
         $this->authorize('valider', $periode);
+
+        $nonValidees = CommissionAdjustmentService::partsNonValidees($periode);
+        if ($nonValidees->isNotEmpty()) {
+            $n = $nonValidees->count();
+
+            return back()->with('error', "{$n} commission".($n > 1 ? 's' : '')." non validée".($n > 1 ? 's' : '').". Passez par l'écran d'ajustement avant de valider la période.");
+        }
+
+        $resume = CommissionAdjustmentService::resumeEcarts($periode);
+        if (! empty($resume['par_vehicule'])) {
+            $ecart = $resume['ecart'];
+            $abs = number_format(abs($ecart), 0, ',', ' ');
+            $n = count($resume['par_vehicule']);
+            $sens = $ecart < 0 ? "il reste {$abs} GNF à redistribuer" : "le montant ajusté dépasse de {$abs} GNF le montant théorique";
+
+            return back()->with('error', "Impossible de valider : {$sens} sur {$n} véhicule(s). La somme des montants ajustés doit toujours égaler la somme des montants théoriques, véhicule par véhicule sur l'ensemble de la période. Passez par l'écran d'ajustement.");
+        }
 
         $periode->update([
             'statut' => StatutPeriodePaiement::VALIDEE->value,
