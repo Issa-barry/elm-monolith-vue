@@ -62,8 +62,11 @@ const props = defineProps<{
 // ── Breadcrumbs ───────────────────────────────────────────────────────────────
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Commissions logistiques', href: '/logistique/commissions' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    {
+        title: 'Commissions logistiques',
+        href: '/backoffice/logistique/commissions',
+    },
 ];
 
 // ── Filtres ───────────────────────────────────────────────────────────────────
@@ -137,7 +140,7 @@ function handlePaiementSubmit(payload: {
     paiementProcessing.value = true;
     paiementErrors.value = {};
     router.post(
-        `/logistique/commissions/livreurs/${selectedLivreur.value.livreur_id}/paiements`,
+        `/backoffice/logistique/commissions/livreurs/${selectedLivreur.value.livreur_id}/paiements`,
         payload,
         {
             preserveScroll: true,
@@ -264,7 +267,7 @@ function formatPhone(tel: string | null): string {
 
             <!-- ── Filtres ────────────────────────────────────────────────────── -->
             <DataFilters
-                url="/logistique/commissions"
+                url="/backoffice/logistique/commissions"
                 :values="filterValues"
                 :fields="filterFields"
                 :result-count="livreurs.length"
@@ -385,7 +388,7 @@ function formatPhone(tel: string | null): string {
                                     <DropdownMenuContent align="end">
                                         <DropdownMenuItem as-child>
                                             <Link
-                                                :href="`/logistique/commissions/livreurs/${l.livreur_id}`"
+                                                :href="`/backoffice/logistique/commissions/livreurs/${l.livreur_id}`"
                                                 class="flex w-full cursor-pointer items-center"
                                             >
                                                 Détail

@@ -100,8 +100,8 @@ function formatGNF(val: number): string {
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Proprietaires', href: '/proprietaires' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Proprietaires', href: '/backoffice/proprietaires' },
     { title: props.proprietaire.nom_complet, href: '#' },
 ];
 
@@ -183,7 +183,7 @@ function closeLightbox() {
                     </p>
                 </template>
                 <template #actions>
-                    <Link href="/proprietaires">
+                    <Link href="/backoffice/proprietaires">
                         <Button variant="outline" size="sm">
                             <ArrowLeft class="mr-1.5 h-4 w-4" />
                             Retour
@@ -275,7 +275,7 @@ function closeLightbox() {
                         </h2>
                         <Link
                             v-if="can('proprietaires.update')"
-                            :href="`/proprietaires/${proprietaire.id}/edit`"
+                            :href="`/backoffice/proprietaires/${proprietaire.id}/edit`"
                         >
                             <Button size="sm" variant="outline">
                                 <Pencil class="mr-1.5 h-4 w-4" />
@@ -353,7 +353,7 @@ function closeLightbox() {
                         </div>
                         <Link
                             v-if="can_create_vehicule"
-                            :href="`/vehicules/create?proprietaire_id=${proprietaire.id}`"
+                            :href="`/backoffice/vehicules/create?proprietaire_id=${proprietaire.id}`"
                             data-testid="add-owner-vehicle-btn"
                         >
                             <Button size="sm">
@@ -444,7 +444,7 @@ function closeLightbox() {
                                     <td class="px-4 py-3">
                                         <Link
                                             v-if="can('vehicules.read')"
-                                            :href="`/vehicules/${vehicule.id}`"
+                                            :href="`/backoffice/vehicules/${vehicule.id}`"
                                             class="font-medium hover:underline"
                                         >
                                             {{ vehicule.nom_vehicule }}
@@ -523,7 +523,7 @@ function closeLightbox() {
                                     <td class="px-4 py-3">
                                         <Link
                                             v-if="can('vehicules.update')"
-                                            :href="`/vehicules/${vehicule.id}/edit`"
+                                            :href="`/backoffice/vehicules/${vehicule.id}/edit`"
                                         >
                                             <Button size="sm" variant="outline">
                                                 <Pencil
@@ -606,7 +606,7 @@ function closeLightbox() {
                             />
                             <Link
                                 v-if="can('depenses.update')"
-                                :href="`/depenses/${d.id}/edit`"
+                                :href="`/backoffice/depenses/${d.id}/edit`"
                                 class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
                             >
                                 <Pencil class="h-3.5 w-3.5" />

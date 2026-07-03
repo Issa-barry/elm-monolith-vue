@@ -195,7 +195,7 @@ function save() {
     saving.value = true;
 
     router.put(
-        `/roles/${props.role.id}`,
+        `/backoffice/roles/${props.role.id}`,
         { permissions: [...activePermissions.value] },
         {
             onSuccess: () => {
@@ -212,8 +212,8 @@ function save() {
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Dashboard', href: '/dashboard' },
-    { title: 'Rôles & Permissions', href: '/roles' },
+    { title: 'Dashboard', href: '/backoffice/dashboard' },
+    { title: 'Rôles & Permissions', href: '/backoffice/roles' },
     { title: cfg.value.label, href: '#' },
 ];
 </script>
@@ -225,7 +225,7 @@ const breadcrumbs: BreadcrumbItem[] = [
         <div
             class="sticky top-0 z-10 flex items-center gap-3 border-b bg-background px-4 py-3 sm:hidden"
         >
-            <Link href="/roles">
+            <Link href="/backoffice/roles">
                 <Button variant="ghost" size="icon" class="h-8 w-8 shrink-0">
                     <ArrowLeft class="h-4 w-4" />
                 </Button>
@@ -241,7 +241,7 @@ const breadcrumbs: BreadcrumbItem[] = [
                 class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
             >
                 <div class="flex items-center gap-4">
-                    <Link href="/roles">
+                    <Link href="/backoffice/roles">
                         <Button variant="ghost" size="icon" class="h-8 w-8">
                             <ArrowLeft class="h-4 w-4" />
                         </Button>

@@ -437,7 +437,7 @@ const displayImage = computed(
 
         <!-- Pied de formulaire (desktop uniquement) ─────────────────────── -->
         <div class="hidden items-center justify-between sm:flex">
-            <a href="/produits">
+            <a href="/backoffice/produits">
                 <Button type="button" variant="outline"> Retour </Button>
             </a>
             <Button type="submit" :disabled="processing">

@@ -32,7 +32,7 @@ const selectedPeriod = ref(
 
 function changePeriod() {
     router.get(
-        '/dashboard',
+        '/backoffice/dashboard',
         { periode: selectedPeriod.value.value },
         { preserveState: true, preserveScroll: true },
     );

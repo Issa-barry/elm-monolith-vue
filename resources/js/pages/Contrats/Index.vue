@@ -57,8 +57,8 @@ const confirm = useConfirm();
 const toast = useToast();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Contrats', href: '/contrats' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Contrats', href: '/backoffice/contrats' },
 ];
 
 const filterFields: FilterField[] = [
@@ -100,7 +100,7 @@ function confirmDelete(c: Contrat) {
         acceptLabel: 'Supprimer',
         acceptClass: 'p-button-danger',
         accept: () => {
-            router.delete(`/contrats/${c.id}`, {
+            router.delete(`/backoffice/contrats/${c.id}`, {
                 onSuccess: () =>
                     toast.add({
                         severity: 'success',
@@ -128,7 +128,10 @@ function confirmDelete(c: Contrat) {
                         }}
                     </p>
                 </div>
-                <Link v-if="can('rh-contrats.create')" href="/contrats/create">
+                <Link
+                    v-if="can('rh-contrats.create')"
+                    href="/backoffice/contrats/create"
+                >
                     <Button
                         ><Plus class="mr-2 h-4 w-4" />Nouveau contrat</Button
                     >
@@ -137,7 +140,7 @@ function confirmDelete(c: Contrat) {
 
             <!-- Filtres -->
             <DataFilters
-                url="/contrats"
+                url="/backoffice/contrats"
                 :values="filters"
                 :fields="filterFields"
                 :result-count="filteredContrats.length"
@@ -163,7 +166,7 @@ function confirmDelete(c: Contrat) {
                     >
                         <template #body="{ data }">
                             <Link
-                                :href="`/employes/${data.employe_id}/edit`"
+                                :href="`/backoffice/employes/${data.employe_id}/edit`"
                                 class="font-medium hover:underline"
                             >
                                 {{ data.employe_nom_complet }}
@@ -240,7 +243,7 @@ function confirmDelete(c: Contrat) {
                                             as-child
                                         >
                                             <Link
-                                                :href="`/contrats/${data.id}/edit`"
+                                                :href="`/backoffice/contrats/${data.id}/edit`"
                                                 class="flex w-full items-center gap-2"
                                             >
                                                 <Pencil

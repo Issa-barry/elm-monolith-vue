@@ -68,8 +68,8 @@ const toast = useToast();
 
 // ── Breadcrumbs ───────────────────────────────────────────────────────────────
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Packings', href: '/packings' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Packings', href: '/backoffice/packings' },
     { title: props.packing.reference, href: '#' },
 ];
 
@@ -125,7 +125,7 @@ const versementForm = useForm({
 });
 
 function addVersement() {
-    versementForm.post(`/packings/${props.packing.id}/versements`, {
+    versementForm.post(`/backoffice/packings/${props.packing.id}/versements`, {
         onSuccess: () => versementForm.reset(),
     });
 }
@@ -140,15 +140,18 @@ function confirmDeleteVersement(v: Versement) {
         acceptLabel: 'Supprimer',
         acceptClass: 'p-button-danger',
         accept: () => {
-            router.delete(`/packings/${props.packing.id}/versements/${v.id}`, {
-                onSuccess: () =>
-                    toast.add({
-                        severity: 'success',
-                        summary: 'Supprimé',
-                        detail: 'Versement supprimé.',
-                        life: 3000,
-                    }),
-            });
+            router.delete(
+                `/backoffice/packings/${props.packing.id}/versements/${v.id}`,
+                {
+                    onSuccess: () =>
+                        toast.add({
+                            severity: 'success',
+                            summary: 'Supprimé',
+                            detail: 'Versement supprimé.',
+                            life: 3000,
+                        }),
+                },
+            );
         },
     });
 }
@@ -164,7 +167,7 @@ function confirmAnnuler() {
         acceptClass: 'p-button-warning',
         accept: () => {
             router.patch(
-                `/packings/${props.packing.id}/annuler`,
+                `/backoffice/packings/${props.packing.id}/annuler`,
                 {},
                 {
                     onSuccess: () =>
@@ -196,7 +199,7 @@ const canAddVersement = computed(
         <div
             class="sticky top-0 z-10 flex items-center gap-3 border-b bg-background px-4 py-3 sm:hidden"
         >
-            <Link href="/packings">
+            <Link href="/backoffice/packings">
                 <Button variant="ghost" size="icon" class="h-8 w-8 shrink-0">
                     <ArrowLeft class="h-4 w-4" />
                 </Button>
@@ -208,7 +211,7 @@ const canAddVersement = computed(
             </p>
             <Link
                 v-if="packing.can_edit && can('packings.update')"
-                :href="`/packings/${packing.id}/edit`"
+                :href="`/backoffice/packings/${packing.id}/edit`"
             >
                 <Button variant="ghost" size="icon" class="h-8 w-8 shrink-0">
                     <Pencil class="h-4 w-4" />
@@ -231,7 +234,7 @@ const canAddVersement = computed(
                 <div class="flex items-center gap-2">
                     <Link
                         v-if="packing.can_edit && can('packings.update')"
-                        :href="`/packings/${packing.id}/edit`"
+                        :href="`/backoffice/packings/${packing.id}/edit`"
                     >
                         <Button variant="outline" size="sm">
                             <Pencil class="mr-2 h-4 w-4" />

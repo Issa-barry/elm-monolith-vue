@@ -31,7 +31,7 @@ const props = defineProps<{
 const breadcrumbItems: BreadcrumbItem[] = [
     {
         title: 'Roles & Permissions',
-        href: '/roles',
+        href: '/backoffice/roles',
     },
 ];
 
@@ -180,7 +180,7 @@ function usersLabel(count: number): string {
                                                     :as-child="true"
                                                 >
                                                     <Link
-                                                        :href="`/roles/${role.id}/edit`"
+                                                        :href="`/backoffice/roles/${role.id}/edit`"
                                                         as="button"
                                                         class="block w-full"
                                                     >
@@ -226,7 +226,7 @@ function usersLabel(count: number): string {
                             </p>
                         </div>
                     </div>
-                    <Link :href="`/roles/${role.id}/edit`">
+                    <Link :href="`/backoffice/roles/${role.id}/edit`">
                         <Button variant="outline" size="sm">
                             <ShieldCheck class="h-4 w-4" />
                         </Button>

@@ -15,7 +15,7 @@ test('login + create type vehicule + verify in list + edit + delete', async ({
     await login(page);
 
     // Step 1: Navigate to Types de véhicules
-    await page.goto('/type-vehicules');
+    await page.goto('/backoffice/type-vehicules');
     await expect(page).toHaveURL(/\/type-vehicules$/);
 
     // Step 2: Create
@@ -56,7 +56,7 @@ test('login + create type vehicule + verify in list + edit + delete', async ({
 test('default types appear in list', async ({ page }) => {
     await login(page);
 
-    await page.goto('/type-vehicules');
+    await page.goto('/backoffice/type-vehicules');
     await expect(page).toHaveURL(/\/type-vehicules$/);
 
     // All default types (Camion, Minibus 200/270, Tricycle moto) should appear

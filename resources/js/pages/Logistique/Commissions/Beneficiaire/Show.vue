@@ -41,11 +41,11 @@ const props = defineProps<{
 // ── Breadcrumbs ───────────────────────────────────────────────────────────────
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Commissions', href: '/logistique/commissions' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Commissions', href: '/backoffice/logistique/commissions' },
     {
         title: props.vehicule.nom,
-        href: `/logistique/commissions/vehicules/${props.vehicule.id}`,
+        href: `/backoffice/logistique/commissions/vehicules/${props.vehicule.id}`,
     },
     { title: props.beneficiaire.nom, href: '' },
 ];
@@ -74,7 +74,7 @@ function formatGNF(val: number): string {
             <!-- ── En-tête ──────────────────────────────────────────────────── -->
             <div class="flex items-start gap-3">
                 <Link
-                    :href="`/logistique/commissions/vehicules/${vehicule.id}`"
+                    :href="`/backoffice/logistique/commissions/vehicules/${vehicule.id}`"
                     class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-muted/80"
                 >
                     <ArrowLeft class="h-4 w-4" />

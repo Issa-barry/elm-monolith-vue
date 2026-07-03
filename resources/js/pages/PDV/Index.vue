@@ -408,7 +408,7 @@ const ticketCommande = ref<TicketCommande | null>(null);
 
 const ticketQrUrl = computed(() =>
     ticketCommande.value
-        ? `${window.location.origin}/ventes/${ticketCommande.value.commande_id}`
+        ? `${window.location.origin}/backoffice/ventes/${ticketCommande.value.commande_id}`
         : '',
 );
 
@@ -507,7 +507,7 @@ function buildEscPosReceipt(ticket: TicketCommande, lw = W): Uint8Array {
     nl();
 
     // ── QR code (ESC/POS GS ( k)
-    const qrData = `${window.location.origin}/ventes/${ticket.commande_id}`;
+    const qrData = `${window.location.origin}/backoffice/ventes/${ticket.commande_id}`;
     const qrBytes = new TextEncoder().encode(qrData);
     const pLen = qrBytes.length + 3;
     center();
@@ -719,7 +719,7 @@ function submit(action: 'encaisser' | 'commande'): void {
     }));
     checkoutAction.value = action;
 
-    checkoutForm.post('/pdv/checkout', {
+    checkoutForm.post('/backoffice/pdv/checkout', {
         preserveState: true,
         onSuccess: (page) => {
             const flash = (page.props as Record<string, unknown>).flash as
@@ -1089,7 +1089,7 @@ function submit(action: 'encaisser' | 'commande'): void {
                     >
                         Panier
                     </h2>
-                    <Link href="/ventes">
+                    <Link href="/backoffice/ventes">
                         <Button
                             icon="pi pi-times"
                             text

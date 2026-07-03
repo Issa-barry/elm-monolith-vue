@@ -83,14 +83,14 @@ class DepenseCreationScopeTest extends TestCase
     public function test_admin_peut_creer_depense_sans_droit_configure(): void
     {
         $this->actingAs($this->adminUser())
-            ->post('/depenses', $this->storePayload())
+            ->post('/backoffice/depenses', $this->storePayload())
             ->assertRedirect();
     }
 
     public function test_commerciale_sans_droit_recoit_403(): void
     {
         $this->actingAs($this->commercialeUser())
-            ->post('/depenses', $this->storePayload())
+            ->post('/backoffice/depenses', $this->storePayload())
             ->assertForbidden();
     }
 
@@ -106,7 +106,7 @@ class DepenseCreationScopeTest extends TestCase
         ]);
 
         $this->actingAs($user)
-            ->post('/depenses', $this->storePayload())
+            ->post('/backoffice/depenses', $this->storePayload())
             ->assertRedirect();
     }
 
@@ -122,7 +122,7 @@ class DepenseCreationScopeTest extends TestCase
         ]);
 
         $this->actingAs($user)
-            ->post('/depenses', $this->storePayload())
+            ->post('/backoffice/depenses', $this->storePayload())
             ->assertRedirect();
     }
 
@@ -145,7 +145,7 @@ class DepenseCreationScopeTest extends TestCase
         ]);
 
         $this->actingAs($user)
-            ->post('/depenses', $this->storePayload())
+            ->post('/backoffice/depenses', $this->storePayload())
             ->assertForbidden();
     }
 
@@ -161,7 +161,7 @@ class DepenseCreationScopeTest extends TestCase
         ]);
 
         $this->actingAs($user)
-            ->post('/depenses', $this->storePayload())
+            ->post('/backoffice/depenses', $this->storePayload())
             ->assertForbidden();
     }
 }

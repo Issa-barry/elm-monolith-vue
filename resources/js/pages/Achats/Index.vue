@@ -59,12 +59,12 @@ const confirm = useConfirm();
 const toast = useToast();
 
 const { onRowClick, bodyRowPt } = useClickableTableRow<Commande>(
-    (commande) => `/achats/${commande.id}`,
+    (commande) => `/backoffice/achats/${commande.id}`,
 );
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Achats', href: '/achats' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Achats', href: '/backoffice/achats' },
 ];
 
 const search = ref('');
@@ -126,17 +126,20 @@ function openAnnulerDialog(commande: Commande) {
 
 function submitAnnuler() {
     if (!selectedCommande.value) return;
-    annulerForm.patch(`/achats/${selectedCommande.value.id}/annuler`, {
-        onSuccess: () => {
-            annulerDialogVisible.value = false;
-            toast.add({
-                severity: 'success',
-                summary: 'Annulée',
-                detail: 'Commande annulée avec succès.',
-                life: 3000,
-            });
+    annulerForm.patch(
+        `/backoffice/achats/${selectedCommande.value.id}/annuler`,
+        {
+            onSuccess: () => {
+                annulerDialogVisible.value = false;
+                toast.add({
+                    severity: 'success',
+                    summary: 'Annulée',
+                    detail: 'Commande annulée avec succès.',
+                    life: 3000,
+                });
+            },
         },
-    });
+    );
 }
 
 // ── Suppression ───────────────────────────────────────────────────────────────
@@ -149,7 +152,7 @@ function confirmDelete(c: Commande) {
         acceptLabel: 'Supprimer',
         acceptClass: 'p-button-danger',
         accept: () => {
-            router.delete(`/achats/${c.id}`, {
+            router.delete(`/backoffice/achats/${c.id}`, {
                 onSuccess: () =>
                     toast.add({
                         severity: 'success',
@@ -174,13 +177,16 @@ function confirmDelete(c: Commande) {
                 class="sticky top-0 z-10 flex items-center justify-between border-b bg-background px-4 py-3"
             >
                 <Link
-                    href="/dashboard"
+                    href="/backoffice/dashboard"
                     class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
                 >
                     <ArrowLeft class="h-5 w-5" />
                 </Link>
                 <span class="text-base font-semibold">Achats</span>
-                <Link v-if="can('achats.create')" href="/achats/create">
+                <Link
+                    v-if="can('achats.create')"
+                    href="/backoffice/achats/create"
+                >
                     <Button size="sm" class="h-8 px-3 text-xs">
                         <Plus class="mr-1 h-3.5 w-3.5" />
                         Nouveau
@@ -209,7 +215,7 @@ function confirmDelete(c: Commande) {
                 <Link
                     v-for="c in mobileFiltered"
                     :key="c.id"
-                    :href="`/achats/${c.id}`"
+                    :href="`/backoffice/achats/${c.id}`"
                     class="flex items-start justify-between gap-3 px-4 py-3 hover:bg-muted/10 active:bg-muted/20"
                 >
                     <div class="min-w-0 flex-1">
@@ -261,7 +267,10 @@ function confirmDelete(c: Commande) {
             >
                 <PackageCheck class="h-10 w-10 opacity-30" />
                 <p class="text-sm">Aucune commande trouvée.</p>
-                <Link v-if="can('achats.create')" href="/achats/create">
+                <Link
+                    v-if="can('achats.create')"
+                    href="/backoffice/achats/create"
+                >
                     <Button variant="outline" size="sm">
                         <Plus class="mr-2 h-4 w-4" />
                         Créer le premier bon de commande
@@ -285,7 +294,10 @@ function confirmDelete(c: Commande) {
                         de commande
                     </p>
                 </div>
-                <Link v-if="can('achats.create')" href="/achats/create">
+                <Link
+                    v-if="can('achats.create')"
+                    href="/backoffice/achats/create"
+                >
                     <Button>
                         <Plus class="mr-2 h-4 w-4" />
                         Nouveau bon de commande
@@ -337,7 +349,7 @@ function confirmDelete(c: Commande) {
                     >
                         <template #body="{ data }">
                             <Link
-                                :href="`/achats/${data.id}`"
+                                :href="`/backoffice/achats/${data.id}`"
                                 class="font-mono text-sm font-semibold tracking-wide hover:underline"
                             >
                                 {{ data.reference }}
@@ -459,7 +471,7 @@ function confirmDelete(c: Commande) {
                                     >
                                         <DropdownMenuItem as-child>
                                             <Link
-                                                :href="`/achats/${data.id}`"
+                                                :href="`/backoffice/achats/${data.id}`"
                                                 class="flex w-full cursor-pointer items-center gap-2"
                                             >
                                                 <PackageCheck class="h-4 w-4" />
@@ -510,7 +522,7 @@ function confirmDelete(c: Commande) {
                             <p class="text-sm">Aucun bon de commande trouvé.</p>
                             <Link
                                 v-if="can('achats.create')"
-                                href="/achats/create"
+                                href="/backoffice/achats/create"
                             >
                                 <Button variant="outline" size="sm">
                                     <Plus class="mr-2 h-4 w-4" />

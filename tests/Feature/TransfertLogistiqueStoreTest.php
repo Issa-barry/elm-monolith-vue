@@ -90,7 +90,7 @@ class TransfertLogistiqueStoreTest extends TestCase
         $produit = $this->makeProduit($org);
         $user = $this->makeUser($org, $siteA);
 
-        $response = $this->actingAs($user)->post('/logistique', [
+        $response = $this->actingAs($user)->post('/backoffice/logistique', [
             'site_source_id' => $siteA->id,
             'site_destination_id' => $siteB->id,
             'vehicule_id' => $vehicule->id,
@@ -130,7 +130,7 @@ class TransfertLogistiqueStoreTest extends TestCase
         // Admin affecté à siteA mais crée le transfert depuis siteC
         $user = $this->makeUser($org, $siteA);
 
-        $this->actingAs($user)->post('/logistique', [
+        $this->actingAs($user)->post('/backoffice/logistique', [
             'site_source_id' => $siteC->id,
             'site_destination_id' => $siteB->id,
             'vehicule_id' => $vehicule->id,
@@ -164,7 +164,7 @@ class TransfertLogistiqueStoreTest extends TestCase
         $user->givePermissionTo(['logistique.create', 'logistique.read']);
         $user->sites()->attach($siteA->id, ['role' => 'employe', 'is_default' => true]);
 
-        $this->actingAs($user)->post('/logistique', [
+        $this->actingAs($user)->post('/backoffice/logistique', [
             'site_source_id' => $siteC->id, // tentative de forcer un autre site
             'site_destination_id' => $siteB->id,
             'vehicule_id' => $vehicule->id,
@@ -192,7 +192,7 @@ class TransfertLogistiqueStoreTest extends TestCase
         $produit = $this->makeProduit($org);
         $user = $this->makeUser($org, $siteA);
 
-        $response = $this->actingAs($user)->post('/logistique', [
+        $response = $this->actingAs($user)->post('/backoffice/logistique', [
             'site_destination_id' => $siteB->id,
             'vehicule_id' => $vehicule->id,
             'lignes' => [
@@ -212,7 +212,7 @@ class TransfertLogistiqueStoreTest extends TestCase
         $vehicule = $this->makeVehicule($org);
         $user = $this->makeUser($org, $siteA);
 
-        $response = $this->actingAs($user)->post('/logistique', [
+        $response = $this->actingAs($user)->post('/backoffice/logistique', [
             'site_destination_id' => $siteB->id,
             'vehicule_id' => $vehicule->id,
             'lignes' => [],
@@ -224,7 +224,7 @@ class TransfertLogistiqueStoreTest extends TestCase
 
     public function test_store_redirige_si_non_authentifie(): void
     {
-        $this->post('/logistique', [])->assertRedirect('/login');
+        $this->post('/backoffice/logistique', [])->assertRedirect('/login');
     }
 
     public function test_store_refuse_si_permission_manquante(): void
@@ -238,7 +238,7 @@ class TransfertLogistiqueStoreTest extends TestCase
         // pas de logistique.create
         $user->sites()->attach($siteA->id, ['role' => 'employe', 'is_default' => true]);
 
-        $this->actingAs($user)->post('/logistique', [
+        $this->actingAs($user)->post('/backoffice/logistique', [
             'site_destination_id' => 999,
             'vehicule_id' => 999,
             'lignes' => [],

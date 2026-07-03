@@ -41,9 +41,9 @@ const { onRowClick, bodyRowPt } = useClickableTableRow<Livreur>(
 );
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Équipes de livraison', href: '/equipes-livraison' },
-    { title: 'Livreurs', href: '/livreurs' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Équipes de livraison', href: '/backoffice/equipes-livraison' },
+    { title: 'Livreurs', href: '/backoffice/livreurs' },
 ];
 
 const search = ref('');
@@ -99,7 +99,7 @@ const livreursFiltres = computed(() => {
 
 function approuver(livreur: Livreur) {
     router.patch(
-        `/livreurs/${livreur.id}/approuver`,
+        `/backoffice/livreurs/${livreur.id}/approuver`,
         {},
         { preserveScroll: true },
     );
@@ -125,7 +125,7 @@ function approuver(livreur: Livreur) {
                         }}
                         — Gérez les livreurs depuis les
                         <Link
-                            href="/equipes-livraison"
+                            href="/backoffice/equipes-livraison"
                             class="underline underline-offset-2 hover:text-foreground"
                         >
                             Équipes de livraison </Link
@@ -134,7 +134,7 @@ function approuver(livreur: Livreur) {
                 </div>
                 <Link
                     v-if="can('equipes-livraison.read')"
-                    href="/equipes-livraison"
+                    href="/backoffice/equipes-livraison"
                 >
                     <Button variant="outline">
                         <Users class="mr-2 h-4 w-4" />
@@ -233,7 +233,7 @@ function approuver(livreur: Livreur) {
                             <Link
                                 v-for="eq in data.equipes"
                                 :key="eq.id"
-                                :href="`/equipes-livraison/${eq.id}/edit`"
+                                :href="`/backoffice/equipes-livraison/${eq.id}/edit`"
                                 class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs hover:bg-muted"
                             >
                                 {{ eq.nom }}

@@ -27,8 +27,8 @@ const flash = computed(
 );
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Types de véhicules', href: '/type-vehicules' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Types de véhicules', href: '/backoffice/type-vehicules' },
 ];
 
 const search = ref('');
@@ -60,7 +60,7 @@ const filterFields: FilterField[] = [
 
 function destroy(id: string) {
     if (confirm('Supprimer ce type de véhicule ?')) {
-        router.delete(`/type-vehicules/${id}`);
+        router.delete(`/backoffice/type-vehicules/${id}`);
     }
 }
 </script>
@@ -80,7 +80,7 @@ function destroy(id: string) {
                         flotte.
                     </p>
                 </div>
-                <Link href="/type-vehicules/create">
+                <Link href="/backoffice/type-vehicules/create">
                     <button
                         class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
                     >
@@ -170,7 +170,7 @@ function destroy(id: string) {
                                     class="flex items-center justify-end gap-2"
                                 >
                                     <Link
-                                        :href="`/type-vehicules/${type.id}/edit`"
+                                        :href="`/backoffice/type-vehicules/${type.id}/edit`"
                                     >
                                         <button
                                             class="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"

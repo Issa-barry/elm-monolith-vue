@@ -134,13 +134,13 @@ class CommissionVehiculeTest extends TestCase
         $user = $this->makeUser($org);
 
         $this->actingAs($user)
-            ->get('/logistique/commissions')
+            ->get('/backoffice/logistique/commissions')
             ->assertStatus(200);
     }
 
     public function test_index_redirige_si_non_authentifie(): void
     {
-        $this->get('/logistique/commissions')
+        $this->get('/backoffice/logistique/commissions')
             ->assertRedirect(route('login'));
     }
 
@@ -154,7 +154,7 @@ class CommissionVehiculeTest extends TestCase
         $this->makePart($commission, $livreur, ['montant_net' => 2000]);
 
         $this->actingAs($user)
-            ->get('/logistique/commissions')
+            ->get('/backoffice/logistique/commissions')
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Logistique/Commissions/Index')
                 ->has('livreurs', 1)
@@ -185,7 +185,7 @@ class CommissionVehiculeTest extends TestCase
         ]);
 
         $this->actingAs($user)
-            ->get('/logistique/commissions?periode=2026-04-P1')
+            ->get('/backoffice/logistique/commissions?periode=2026-04-P1')
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Logistique/Commissions/Index')
                 ->has('livreurs', 1)
@@ -216,7 +216,7 @@ class CommissionVehiculeTest extends TestCase
         ]);
 
         $this->actingAs($user)
-            ->get('/logistique/commissions')
+            ->get('/backoffice/logistique/commissions')
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Logistique/Commissions/Index')
                 ->where('selected_periode', '')
@@ -238,7 +238,7 @@ class CommissionVehiculeTest extends TestCase
         $this->makePart($comm2, $livreur2);
 
         $this->actingAs($user1)
-            ->get('/logistique/commissions')
+            ->get('/backoffice/logistique/commissions')
             ->assertInertia(fn (Assert $page) => $page
                 ->has('livreurs', 0)
             );
@@ -253,7 +253,7 @@ class CommissionVehiculeTest extends TestCase
         $vehicule = $this->makeVehicule($org);
 
         $this->actingAs($user)
-            ->get("/logistique/commissions/vehicules/{$vehicule->id}")
+            ->get("/backoffice/logistique/commissions/vehicules/{$vehicule->id}")
             ->assertStatus(200);
     }
 
@@ -265,7 +265,7 @@ class CommissionVehiculeTest extends TestCase
         $vehicule2 = $this->makeVehicule($org2);
 
         $this->actingAs($user)
-            ->get("/logistique/commissions/vehicules/{$vehicule2->id}")
+            ->get("/backoffice/logistique/commissions/vehicules/{$vehicule2->id}")
             ->assertStatus(403);
     }
 
@@ -280,7 +280,7 @@ class CommissionVehiculeTest extends TestCase
         $this->makePart($commission, $livreur, ['montant_net' => 3000]);
 
         $this->actingAs($user)
-            ->get("/logistique/commissions/vehicules/{$vehicule->id}")
+            ->get("/backoffice/logistique/commissions/vehicules/{$vehicule->id}")
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Logistique/Commissions/Vehicule/Show')
                 ->has('livreurs', 1)
@@ -301,7 +301,7 @@ class CommissionVehiculeTest extends TestCase
         $this->makePart($commission, $livreur);
 
         $this->actingAs($user)
-            ->get("/logistique/commissions/vehicules/{$vehicule->id}/beneficiaires/livreur/{$livreur->id}")
+            ->get("/backoffice/logistique/commissions/vehicules/{$vehicule->id}/beneficiaires/livreur/{$livreur->id}")
             ->assertStatus(200);
     }
 
@@ -312,7 +312,7 @@ class CommissionVehiculeTest extends TestCase
         $vehicule = $this->makeVehicule($org);
 
         $this->actingAs($user)
-            ->get("/logistique/commissions/vehicules/{$vehicule->id}/beneficiaires/inconnu/1")
+            ->get("/backoffice/logistique/commissions/vehicules/{$vehicule->id}/beneficiaires/inconnu/1")
             ->assertStatus(422);
     }
 
@@ -342,7 +342,7 @@ class CommissionVehiculeTest extends TestCase
         $part->recalculStatut();
 
         $this->actingAs($user)
-            ->get("/logistique/commissions/vehicules/{$vehicule->id}/beneficiaires/livreur/{$livreur->id}")
+            ->get("/backoffice/logistique/commissions/vehicules/{$vehicule->id}/beneficiaires/livreur/{$livreur->id}")
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Logistique/Commissions/Beneficiaire/Show')
                 ->has('parts', 1)
@@ -364,7 +364,7 @@ class CommissionVehiculeTest extends TestCase
         $part = $this->makePart($commission, $livreur, ['montant_net' => 3000]);
 
         $this->actingAs($user)
-            ->post("/logistique/commissions/vehicules/{$vehicule->id}/paiements", [
+            ->post("/backoffice/logistique/commissions/vehicules/{$vehicule->id}/paiements", [
                 'beneficiary_type' => 'livreur',
                 'beneficiary_id' => $livreur->id,
                 'montant' => 2000,
@@ -400,7 +400,7 @@ class CommissionVehiculeTest extends TestCase
         $part = $this->makePart($commission, $livreur, ['montant_net' => 2500]);
 
         $this->actingAs($user)
-            ->post("/logistique/commissions/vehicules/{$vehicule->id}/paiements", [
+            ->post("/backoffice/logistique/commissions/vehicules/{$vehicule->id}/paiements", [
                 'beneficiary_type' => 'livreur',
                 'beneficiary_id' => $livreur->id,
                 'montant' => 2500,
@@ -421,7 +421,7 @@ class CommissionVehiculeTest extends TestCase
         $this->makePart($commission, $livreur, ['montant_net' => 1000]);
 
         $this->actingAs($user)
-            ->post("/logistique/commissions/vehicules/{$vehicule->id}/paiements", [
+            ->post("/backoffice/logistique/commissions/vehicules/{$vehicule->id}/paiements", [
                 'beneficiary_type' => 'livreur',
                 'beneficiary_id' => $livreur->id,
                 'montant' => 9999,
@@ -435,7 +435,7 @@ class CommissionVehiculeTest extends TestCase
         $org = $this->makeOrg();
         $vehicule = $this->makeVehicule($org);
 
-        $this->post("/logistique/commissions/vehicules/{$vehicule->id}/paiements", [
+        $this->post("/backoffice/logistique/commissions/vehicules/{$vehicule->id}/paiements", [
             'beneficiary_type' => 'livreur',
             'beneficiary_id' => 1,
             'montant' => 1000,
@@ -450,7 +450,7 @@ class CommissionVehiculeTest extends TestCase
         $vehicule = $this->makeVehicule($org);
 
         $this->actingAs($user)
-            ->post("/logistique/commissions/vehicules/{$vehicule->id}/paiements", [])
+            ->post("/backoffice/logistique/commissions/vehicules/{$vehicule->id}/paiements", [])
             ->assertSessionHasErrors(['beneficiary_type', 'beneficiary_id', 'montant', 'mode_paiement']);
     }
 
@@ -461,7 +461,7 @@ class CommissionVehiculeTest extends TestCase
         $vehicule = $this->makeVehicule($org);
 
         $this->actingAs($user)
-            ->post("/logistique/commissions/vehicules/{$vehicule->id}/paiements", [
+            ->post("/backoffice/logistique/commissions/vehicules/{$vehicule->id}/paiements", [
                 'beneficiary_type' => 'livreur',
                 'beneficiary_id' => 1,
                 'montant' => 1000,
@@ -490,7 +490,7 @@ class CommissionVehiculeTest extends TestCase
         ]);
 
         $this->actingAs($user)
-            ->post("/logistique/commissions/vehicules/{$vehicule->id}/paiements", [
+            ->post("/backoffice/logistique/commissions/vehicules/{$vehicule->id}/paiements", [
                 'beneficiary_type' => 'livreur',
                 'beneficiary_id' => $livreur->id,
                 'montant' => 1500,
@@ -526,7 +526,7 @@ class CommissionVehiculeTest extends TestCase
         $this->makePart($comm, $livreurB, ['beneficiaire_nom' => 'Ibrahima Diallo', 'montant_net' => 3000]);
 
         $this->actingAs($user)
-            ->get('/logistique/commissions?search=Mamadou')
+            ->get('/backoffice/logistique/commissions?search=Mamadou')
             ->assertInertia(fn (Assert $page) => $page
                 ->has('livreurs', 1)
                 ->where('livreurs.0.nom', 'Mamadou Barry')
@@ -547,7 +547,7 @@ class CommissionVehiculeTest extends TestCase
         $this->makePart($comm, $livreurB, ['beneficiaire_nom' => 'Livreur B', 'montant_net' => 1500]);
 
         $this->actingAs($user)
-            ->get('/logistique/commissions?search=622000001')
+            ->get('/backoffice/logistique/commissions?search=622000001')
             ->assertInertia(fn (Assert $page) => $page
                 ->has('livreurs', 1)
                 ->where('livreurs.0.telephone', '+224622000001')
@@ -566,7 +566,7 @@ class CommissionVehiculeTest extends TestCase
 
         // Format "+224 622 000 012" doit trouver le même livreur
         $this->actingAs($user)
-            ->get('/logistique/commissions?search=+224+622+000+012')
+            ->get('/backoffice/logistique/commissions?search=+224+622+000+012')
             ->assertInertia(fn (Assert $page) => $page->has('livreurs', 1));
     }
 
@@ -584,7 +584,7 @@ class CommissionVehiculeTest extends TestCase
         $this->makePart($comm, $livreurB, ['beneficiaire_nom' => 'Livreur B', 'montant_net' => 7500]);
 
         $this->actingAs($user)
-            ->get('/logistique/commissions?search=4800')
+            ->get('/backoffice/logistique/commissions?search=4800')
             ->assertInertia(fn (Assert $page) => $page->has('livreurs', 1));
     }
 
@@ -600,7 +600,7 @@ class CommissionVehiculeTest extends TestCase
 
         // "4 800 GNF" et "4800" doivent tous deux trouver la même ligne
         $this->actingAs($user)
-            ->get('/logistique/commissions?search=4800+GNF')
+            ->get('/backoffice/logistique/commissions?search=4800+GNF')
             ->assertInertia(fn (Assert $page) => $page->has('livreurs', 1));
     }
 
@@ -628,7 +628,7 @@ class CommissionVehiculeTest extends TestCase
 
         // Filtre statut=impaye + search=Alpha → uniquement livreurA
         $this->actingAs($user)
-            ->get('/logistique/commissions?statut=impaye&search=Alpha')
+            ->get('/backoffice/logistique/commissions?statut=impaye&search=Alpha')
             ->assertInertia(fn (Assert $page) => $page
                 ->has('livreurs', 1)
                 ->where('livreurs.0.nom', 'Alpha Diallo')
@@ -646,7 +646,7 @@ class CommissionVehiculeTest extends TestCase
         $this->makePart($comm, $livreur, ['beneficiaire_nom' => 'Mamadou Barry', 'montant_net' => 1000]);
 
         $this->actingAs($user)
-            ->get('/logistique/commissions?search=Inexistant')
+            ->get('/backoffice/logistique/commissions?search=Inexistant')
             ->assertInertia(fn (Assert $page) => $page
                 ->has('livreurs', 0)
                 ->where('kpis.nb_livreurs', 0)
@@ -678,7 +678,7 @@ class CommissionVehiculeTest extends TestCase
         $this->makePart($commB, $livreurB, ['beneficiaire_nom' => 'Livreur B', 'montant_net' => 1500]);
 
         $this->actingAs($user)
-            ->get('/logistique/commissions?search=Camion+Alpha')
+            ->get('/backoffice/logistique/commissions?search=Camion+Alpha')
             ->assertInertia(fn (Assert $page) => $page
                 ->has('livreurs', 1)
                 ->where('livreurs.0.nom', 'Livreur A')
@@ -701,7 +701,7 @@ class CommissionVehiculeTest extends TestCase
         $this->makePart($comm, $livreur, ['beneficiaire_nom' => 'Test Immat', 'montant_net' => 3000]);
 
         $this->actingAs($user)
-            ->get('/logistique/commissions?search=CT-999-GN')
+            ->get('/backoffice/logistique/commissions?search=CT-999-GN')
             ->assertInertia(fn (Assert $page) => $page->has('livreurs', 1));
     }
 
@@ -728,7 +728,7 @@ class CommissionVehiculeTest extends TestCase
 
         // "Barry" matche les deux, "622" ne matche que livreurA → 1 résultat
         $this->actingAs($user)
-            ->get('/logistique/commissions?search=Barry+622')
+            ->get('/backoffice/logistique/commissions?search=Barry+622')
             ->assertInertia(fn (Assert $page) => $page
                 ->has('livreurs', 1)
                 ->where('livreurs.0.telephone', '+224622000001')
@@ -760,7 +760,7 @@ class CommissionVehiculeTest extends TestCase
 
         // "impaye" → uniquement le livreurA (impaye > 0, et nom sans "impaye")
         $this->actingAs($user)
-            ->get('/logistique/commissions?search=impaye')
+            ->get('/backoffice/logistique/commissions?search=impaye')
             ->assertInertia(fn (Assert $page) => $page
                 ->has('livreurs', 1)
                 ->where('livreurs.0.nom', 'Diallo Ousmane')
@@ -782,7 +782,7 @@ class CommissionVehiculeTest extends TestCase
 
         // Recherche sans accents → doit trouver
         $this->actingAs($user)
-            ->get('/logistique/commissions?search=Eleonore')
+            ->get('/backoffice/logistique/commissions?search=Eleonore')
             ->assertInertia(fn (Assert $page) => $page->has('livreurs', 1));
     }
 }

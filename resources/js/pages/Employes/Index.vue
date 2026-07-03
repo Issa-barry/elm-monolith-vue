@@ -77,8 +77,8 @@ const confirm = useConfirm();
 const toast = useToast();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Employés', href: '/employes' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Employés', href: '/backoffice/employes' },
 ];
 
 const filterFields: FilterField[] = [
@@ -150,7 +150,7 @@ function confirmDelete(e: Employe) {
         acceptLabel: 'Supprimer',
         acceptClass: 'p-button-danger',
         accept: () => {
-            router.delete(`/employes/${e.id}`, {
+            router.delete(`/backoffice/employes/${e.id}`, {
                 onSuccess: () =>
                     toast.add({
                         severity: 'success',
@@ -180,14 +180,17 @@ function confirmDelete(e: Employe) {
                         }}
                     </p>
                 </div>
-                <Link v-if="can('rh-employes.create')" href="/employes/create">
+                <Link
+                    v-if="can('rh-employes.create')"
+                    href="/backoffice/employes/create"
+                >
                     <Button><Plus class="mr-2 h-4 w-4" />Nouvel employé</Button>
                 </Link>
             </div>
 
             <!-- Filtres -->
             <DataFilters
-                url="/employes"
+                url="/backoffice/employes"
                 :values="filters"
                 :fields="filterFields"
                 :result-count="employes.length"
@@ -342,7 +345,7 @@ function confirmDelete(e: Employe) {
                                             as-child
                                         >
                                             <Link
-                                                :href="`/employes/${data.id}/edit`"
+                                                :href="`/backoffice/employes/${data.id}/edit`"
                                                 class="flex w-full items-center gap-2"
                                             >
                                                 <Pencil
@@ -355,7 +358,7 @@ function confirmDelete(e: Employe) {
                                             as-child
                                         >
                                             <Link
-                                                :href="`/contrats/create?employe_id=${data.id}`"
+                                                :href="`/backoffice/contrats/create?employe_id=${data.id}`"
                                                 class="flex w-full items-center gap-2"
                                             >
                                                 <Briefcase
@@ -387,7 +390,7 @@ function confirmDelete(e: Employe) {
                             <p class="text-sm">Aucun employé trouvé.</p>
                             <Link
                                 v-if="can('rh-employes.create')"
-                                href="/employes/create"
+                                href="/backoffice/employes/create"
                             >
                                 <Button variant="outline" size="sm">
                                     <Plus class="mr-2 h-4 w-4" />Créer le

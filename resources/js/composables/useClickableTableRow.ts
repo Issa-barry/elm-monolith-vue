@@ -9,7 +9,7 @@ import { router } from '@inertiajs/vue3';
  *
  * Usage :
  *   const { onRowClick, bodyRowPt } = useClickableTableRow<Row>(
- *       (row) => `/ventes/${row.id}`,
+ *       (row) => `/backoffice/ventes/${row.id}`,
  *   );
  *
  *   <DataTable @row-click="onRowClick" :pt="{ bodyRow: bodyRowPt }">

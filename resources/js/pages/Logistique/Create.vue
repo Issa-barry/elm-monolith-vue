@@ -77,13 +77,13 @@ const props = withDefaults(
 const isEditing = computed(() => !!props.transfert);
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Logistique', href: '/logistique' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Logistique', href: '/backoffice/logistique' },
     {
         title: isEditing.value ? 'Modifier le transfert' : 'Nouveau transfert',
         href: isEditing.value
-            ? `/logistique/${props.transfert?.id}/editer`
-            : '/logistique/creer',
+            ? `/backoffice/logistique/${props.transfert?.id}/editer`
+            : '/backoffice/logistique/creer',
     },
 ];
 
@@ -239,9 +239,9 @@ const canSubmit = computed(
 
 function submit() {
     if (isEditing.value) {
-        form.put(`/logistique/${props.transfert!.id}`);
+        form.put(`/backoffice/logistique/${props.transfert!.id}`);
     } else {
-        form.post('/logistique');
+        form.post('/backoffice/logistique');
     }
 }
 </script>
@@ -256,7 +256,7 @@ function submit() {
         >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
-                    href="/logistique"
+                    href="/backoffice/logistique"
                     class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
                 >
                     <ArrowLeft class="h-4 w-4" />
@@ -727,7 +727,7 @@ function submit() {
 
                     <!-- Footer desktop -->
                     <div class="hidden items-center justify-between sm:flex">
-                        <Link href="/logistique">
+                        <Link href="/backoffice/logistique">
                             <Button type="button" variant="outline"
                                 >Retour</Button
                             >

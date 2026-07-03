@@ -12,7 +12,7 @@ const PREFIX = 'e2eproflow';
 
 test.setTimeout(180_000);
 
-registerCleanup('/proprietaires', PREFIX);
+registerCleanup('/backoffice/proprietaires', PREFIX);
 
 async function navigateToEdit(
     page: Parameters<typeof login>[0],
@@ -28,7 +28,7 @@ async function createProprietaireInApp(
     page: Parameters<typeof login>[0],
     params: { prenom: string; nom: string; tel: string; adresse?: string; ville?: string },
 ): Promise<void> {
-    await page.goto('/proprietaires/create');
+    await page.goto('/backoffice/proprietaires/create');
     await page.locator('#prenom').fill(params.prenom);
     await page.locator('#nom').fill(params.nom);
     if (params.ville || params.adresse) {
@@ -158,7 +158,7 @@ test('create proprietaire + toggle status → inactif in list', async ({
     await expect(page.locator('text=mis à jour')).toBeVisible();
 
     // Vérifier dans la liste
-    await page.goto('/proprietaires');
+    await page.goto('/backoffice/proprietaires');
     await page.waitForLoadState('networkidle');
     const updated = await findRowByName(page, prenom);
     await expect(updated).toBeVisible();
@@ -171,7 +171,7 @@ test('create proprietaire without required fields → stays on create page', asy
     page,
 }) => {
     await login(page);
-    await page.goto('/proprietaires/create');
+    await page.goto('/backoffice/proprietaires/create');
 
     await page
         .locator('#proprietaire-form button[type="submit"]:visible')

@@ -59,7 +59,7 @@ async function createTransfertAndGenerateCommission(
     page: Page,
     vehicleName: RegExp,
 ): Promise<string> {
-    await page.goto('/logistique/creer');
+    await page.goto('/backoffice/logistique/creer');
     await page.locator('#logistique-form').waitFor({ state: 'visible', timeout: 20_000 });
 
     const form = page.locator('#logistique-form');
@@ -156,7 +156,7 @@ async function createTransfertAndGenerateCommission(
  * total — pas besoin de saisir un montant).
  */
 async function payFullCommission(page: Page, livreurRegex: RegExp): Promise<void> {
-    await page.goto('/logistique/commissions');
+    await page.goto('/backoffice/logistique/commissions');
 
     const row = page.locator('tbody tr', { hasText: livreurRegex }).first();
     await row.waitFor({ state: 'visible', timeout: 20_000 });

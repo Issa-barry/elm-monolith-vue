@@ -39,7 +39,7 @@ watch(
         detail.value = null;
         try {
             const res = await fetch(
-                `/depenses/vehicule-detail?id=${props.vehiculeId}`,
+                `/backoffice/depenses/vehicule-detail?id=${props.vehiculeId}`,
                 { headers: { Accept: 'application/json' } },
             );
             if (!res.ok) throw new Error();

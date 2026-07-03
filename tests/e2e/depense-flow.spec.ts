@@ -36,7 +36,7 @@ async function createDepenseInterne(
     comment: string,
     montant: number,
 ): Promise<void> {
-    await page.goto('/depenses/create');
+    await page.goto('/backoffice/depenses/create');
     await expect(page).toHaveURL(/\/depenses\/create$/, { timeout: 20_000 });
 
     await selectConcerne(page, 'interne');
@@ -63,7 +63,7 @@ async function createDepenseVehicule(
     comment: string,
     montant: number,
 ): Promise<void> {
-    await page.goto('/depenses/create');
+    await page.goto('/backoffice/depenses/create');
     await expect(page).toHaveURL(/\/depenses\/create$/, { timeout: 20_000 });
 
     await selectConcerne(page, 'vehicule');
@@ -101,7 +101,7 @@ async function createDepenseVehicule(
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 test('concerné first — type disabled tant que non choisi', async ({ page }) => {
-    await page.goto('/depenses/create');
+    await page.goto('/backoffice/depenses/create');
     await expect(page).toHaveURL(/\/depenses\/create$/, { timeout: 20_000 });
 
     await expect(page.locator('#dep-type')).toBeDisabled();
@@ -114,7 +114,7 @@ test('concerné first — type disabled tant que non choisi', async ({ page }) =
 });
 
 test('changer concerné réinitialise type et bénéficiaire', async ({ page }) => {
-    await page.goto('/depenses/create');
+    await page.goto('/backoffice/depenses/create');
 
     await selectConcerne(page, 'vehicule');
     await expect(page.locator('#dep-type')).not.toBeDisabled({
@@ -159,7 +159,7 @@ test('create depense interne brouillon -> modifier -> supprimer', async ({
         .click();
     await expect(page).toHaveURL(/\/depenses\/[a-z0-9]+$/, { timeout: 20_000 });
 
-    await page.goto('/depenses');
+    await page.goto('/backoffice/depenses');
     const updatedRow = depenseRowByComment(page, comment);
     await expect(updatedRow).toBeVisible({ timeout: 15_000 });
 
@@ -231,7 +231,7 @@ test('stat cards reflect active filters', async ({ page }) => {
 
     await createDepenseInterne(page, comment, 5000);
 
-    await page.goto('/depenses');
+    await page.goto('/backoffice/depenses');
     await page.waitForLoadState('networkidle');
 
     const totalCard = page
@@ -267,7 +267,7 @@ test('stat cards reflect active filters', async ({ page }) => {
 
     await expect(totalCard).not.toHaveText('0', { timeout: 10_000 });
 
-    await page.goto('/depenses');
+    await page.goto('/backoffice/depenses');
     const row = depenseRowByComment(page, comment);
     await expect(row).toBeVisible({ timeout: 10_000 });
     await row
@@ -292,7 +292,7 @@ test('workflow rejete → modifier montant → resoumettre → statut soumis', a
     await createDepenseInterne(page, comment, 3000);
 
     // 2. La soumettre
-    await page.goto('/depenses');
+    await page.goto('/backoffice/depenses');
     const row = depenseRowByComment(page, comment);
     await expect(row).toBeVisible({ timeout: 15_000 });
     await row.getByRole('button', { name: /actions/i }).first().click();
@@ -331,7 +331,7 @@ test('workflow rejete → modifier montant → resoumettre → statut soumis', a
     await page.waitForLoadState('networkidle');
 
     // 5. Vérifier que le statut est bien "Soumis" (et non toujours "Rejeté")
-    await page.goto('/depenses');
+    await page.goto('/backoffice/depenses');
     await page.waitForLoadState('networkidle');
     await expect(depenseRowByComment(page, comment)).toContainText(/soumis/i, {
         timeout: 15_000,
@@ -350,7 +350,7 @@ test('admin valide depense cross-agence — can_valider vrai hors son site', asy
     await createDepenseInterne(page, comment, 8000);
 
     // Soumettre
-    await page.goto('/depenses');
+    await page.goto('/backoffice/depenses');
     const row = depenseRowByComment(page, comment);
     await expect(row).toBeVisible({ timeout: 15_000 });
     await row.getByRole('button', { name: /actions/i }).first().click();
@@ -381,7 +381,7 @@ test('champ site présent et accessible sur le form edit', async ({ page }) => {
 
     await createDepenseInterne(page, comment, 1000);
 
-    await page.goto('/depenses');
+    await page.goto('/backoffice/depenses');
     const row = depenseRowByComment(page, comment);
     await expect(row).toBeVisible({ timeout: 15_000 });
     await row.getByRole('button', { name: /actions/i }).first().click();
@@ -394,7 +394,7 @@ test('champ site présent et accessible sur le form edit', async ({ page }) => {
     await expect(page.locator('#dep-site')).toBeVisible({ timeout: 5_000 });
 
     // Nettoyage : naviguer directement vers la liste puis supprimer
-    await page.goto('/depenses');
+    await page.goto('/backoffice/depenses');
     await page.waitForLoadState('networkidle');
     const cleanRow = depenseRowByComment(page, comment);
     if (await cleanRow.isVisible({ timeout: 5_000 }).catch(() => false)) {
@@ -408,7 +408,7 @@ test('champ site présent et accessible sur le form edit', async ({ page }) => {
 test('filtre agence (site_ids) persiste après Appliquer — chip, case cochée et URL', async ({
     page,
 }) => {
-    await page.goto('/depenses');
+    await page.goto('/backoffice/depenses');
     await expect(page).toHaveURL(/\/depenses$/, { timeout: 15_000 });
 
     // Le sélecteur "agence" générique vit dans la barre d'outils (pas dans

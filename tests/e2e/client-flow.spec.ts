@@ -12,7 +12,7 @@ const PREFIX = 'e2ecliflow';
 
 test.setTimeout(180_000);
 
-registerCleanup('/clients', PREFIX);
+registerCleanup('/backoffice/clients', PREFIX);
 
 async function createClientInApp(
     page: Parameters<typeof login>[0],
@@ -24,7 +24,7 @@ async function createClientInApp(
         ville?: string;
     },
 ): Promise<void> {
-    await page.goto('/clients/create');
+    await page.goto('/backoffice/clients/create');
     await page.locator('#prenom').fill(params.prenom);
     await page.locator('#nom').fill(params.nom);
 
@@ -83,7 +83,7 @@ test('create client with Guinea and empty ville -> defaults to Conakry', async (
     const tel = `6${randomDigits(8)}`;
 
     await login(page);
-    await page.goto('/clients/create');
+    await page.goto('/backoffice/clients/create');
 
     const paysCombo = page.locator('#client-form').getByRole('combobox').first();
     await selectOptionFromCombobox(page, paysCombo, /guin(?!.*bissau)/i);
@@ -149,7 +149,7 @@ test('view client from list -> readonly form -> modifier redirects to edit', asy
         adresse: 'Lecture seule',
     });
 
-    await page.goto('/clients');
+    await page.goto('/backoffice/clients');
     await page.waitForLoadState('networkidle');
 
     const row = await findRowByName(page, prenom);
@@ -192,7 +192,7 @@ test('create client + toggle status -> inactif in list', async ({ page }) => {
 
     await expect(page).toHaveURL(/\/clients\/[a-z0-9]+\/edit$/);
 
-    await page.goto('/clients');
+    await page.goto('/backoffice/clients');
     await page.waitForLoadState('networkidle');
     const updated = await findRowByName(page, prenom);
     await expect(updated).toBeVisible();
@@ -210,7 +210,7 @@ test('create client with duplicate telephone -> stays on create with field error
     await login(page);
     await createClientInApp(page, { prenom: prenom1, nom: `Dup${uid}`, tel });
 
-    await page.goto('/clients/create');
+    await page.goto('/backoffice/clients/create');
     await page.locator('#prenom').fill(prenom2);
     await page.locator('#nom').fill(`Dup2${uid}`);
 
@@ -236,7 +236,7 @@ test('delete client -> no longer visible in list', async ({ page }) => {
     await login(page);
     await createClientInApp(page, { prenom, nom, tel });
 
-    await page.goto('/clients');
+    await page.goto('/backoffice/clients');
     await page.waitForLoadState('networkidle');
 
     const row = await findRowByName(page, prenom);
@@ -263,7 +263,7 @@ test('create client without required fields -> stays on create page', async ({
     page,
 }) => {
     await login(page);
-    await page.goto('/clients/create');
+    await page.goto('/backoffice/clients/create');
 
     await page
         .locator('#client-form button[type="submit"]:visible')
@@ -275,7 +275,7 @@ test('create client without required fields -> stays on create page', async ({
 
 test('stat cards reflect active search filter', async ({ page }) => {
     await login(page);
-    await page.goto('/clients');
+    await page.goto('/backoffice/clients');
     await page.waitForLoadState('networkidle');
 
     const totalCard = page

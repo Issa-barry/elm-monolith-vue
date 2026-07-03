@@ -64,7 +64,7 @@ watch(searchQuery, (val) => {
     debounceTimer = setTimeout(async () => {
         try {
             const params = new URLSearchParams({ q: val.trim(), limit: '5' });
-            const res = await fetch(`/search/global?${params}`, {
+            const res = await fetch(`/backoffice/search/global?${params}`, {
                 headers: { Accept: 'application/json' },
             });
             if (!res.ok) return;
@@ -89,11 +89,11 @@ function closeSearch() {
 }
 
 const categoryRoutes: Record<string, (id: string) => string> = {
-    clients: (id) => `/clients/${id}`,
-    commandes: (id) => `/ventes/${id}`,
-    factures: (_id) => `/factures`,
-    vehicules: (id) => `/vehicules/${id}`,
-    proprietaires: (id) => `/proprietaires/${id}`,
+    clients: (id) => `/backoffice/clients/${id}`,
+    commandes: (id) => `/backoffice/ventes/${id}`,
+    factures: (_id) => `/backoffice/factures`,
+    vehicules: (id) => `/backoffice/vehicules/${id}`,
+    proprietaires: (id) => `/backoffice/proprietaires/${id}`,
 };
 
 function navigateTo(category: string, id: string) {
@@ -313,7 +313,7 @@ onMounted(() => {
                             >
                         </div>
                         <Link
-                            href="/produits"
+                            href="/backoffice/produits"
                             class="block px-4 py-2.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50"
                         >
                             Voir les produits en rupture →
@@ -332,7 +332,7 @@ onMounted(() => {
                             >
                         </div>
                         <Link
-                            href="/produits"
+                            href="/backoffice/produits"
                             class="block px-4 py-2.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50"
                         >
                             Voir les produits en alerte →
@@ -353,7 +353,7 @@ onMounted(() => {
                             >
                         </div>
                         <Link
-                            href="/contact-messages"
+                            href="/backoffice/contact-messages"
                             class="block px-4 py-2.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50"
                         >
                             Voir les messages →
@@ -366,7 +366,7 @@ onMounted(() => {
                         class="border-t px-4 py-2"
                     >
                         <Link
-                            href="/produits"
+                            href="/backoffice/produits"
                             class="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
                         >
                             <Package class="h-3.5 w-3.5" />

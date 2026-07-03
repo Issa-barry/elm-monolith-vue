@@ -75,11 +75,11 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Comptabilité', href: '/comptabilite' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Comptabilité', href: '/backoffice/comptabilite' },
     {
         title: 'Commissions logistique',
-        href: '/comptabilite/commissions/logistique',
+        href: '/backoffice/comptabilite/commissions/logistique',
     },
 ];
 
@@ -167,7 +167,7 @@ function handlePaiementSubmit(payload: {
     paiementProcessing.value = true;
     paiementErrors.value = {};
     router.post(
-        `/comptabilite/commissions/logistique/livreurs/${selectedLivreur.value.livreur_id}/paiements`,
+        `/backoffice/comptabilite/commissions/logistique/livreurs/${selectedLivreur.value.livreur_id}/paiements`,
         payload,
         {
             preserveScroll: true,
@@ -203,7 +203,7 @@ function buildParams(): URLSearchParams {
 
 function exportExcel() {
     window.open(
-        '/comptabilite/commissions/logistique/export/excel?' +
+        '/backoffice/comptabilite/commissions/logistique/export/excel?' +
             buildParams().toString(),
         '_blank',
     );
@@ -211,7 +211,7 @@ function exportExcel() {
 
 function exportPdf() {
     window.open(
-        '/comptabilite/commissions/logistique/export/pdf?' +
+        '/backoffice/comptabilite/commissions/logistique/export/pdf?' +
             buildParams().toString(),
         '_blank',
     );
@@ -336,7 +336,7 @@ function fmtTel(tel: string | null | undefined): string {
 
             <!-- Filtres -->
             <DataFilters
-                url="/comptabilite/commissions/logistique"
+                url="/backoffice/comptabilite/commissions/logistique"
                 :values="currentFilters"
                 :fields="filterFields"
                 :sites="sites"
@@ -401,7 +401,7 @@ function fmtTel(tel: string | null | undefined): string {
                             <ClickableTableRow
                                 v-for="l in livreurs"
                                 :key="l.livreur_id"
-                                :href="`/comptabilite/commissions/logistique/livreurs/${l.livreur_id}`"
+                                :href="`/backoffice/comptabilite/commissions/logistique/livreurs/${l.livreur_id}`"
                                 :aria-label="`Voir le détail de ${l.nom}`"
                                 class="even:bg-muted/20"
                             >
@@ -530,7 +530,7 @@ function fmtTel(tel: string | null | undefined): string {
                                         <DropdownMenuContent align="end">
                                             <DropdownMenuItem as-child>
                                                 <Link
-                                                    :href="`/comptabilite/commissions/logistique/livreurs/${l.livreur_id}`"
+                                                    :href="`/backoffice/comptabilite/commissions/logistique/livreurs/${l.livreur_id}`"
                                                     class="flex w-full cursor-pointer items-center"
                                                 >
                                                     Détail

@@ -111,8 +111,8 @@ const { can } = usePermissions();
 const toast = useToast();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Factures', href: '/factures' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Factures', href: '/backoffice/factures' },
 ];
 
 const periodes = [
@@ -282,24 +282,28 @@ function handleEncaissSubmit(payload: {
     if (!factureActive.value) return;
     encaissProcessing.value = true;
     encaissErrors.value = {};
-    router.post(`/factures/${factureActive.value.id}/encaissements`, payload, {
-        preserveScroll: true,
-        onSuccess: () => {
-            dialogVisible.value = false;
-            toast.add({
-                severity: 'success',
-                summary: 'Validé',
-                detail: 'Encaissement enregistré avec succès.',
-                life: 3000,
-            });
+    router.post(
+        `/backoffice/factures/${factureActive.value.id}/encaissements`,
+        payload,
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                dialogVisible.value = false;
+                toast.add({
+                    severity: 'success',
+                    summary: 'Validé',
+                    detail: 'Encaissement enregistré avec succès.',
+                    life: 3000,
+                });
+            },
+            onError: (e) => {
+                encaissErrors.value = e as Record<string, string>;
+            },
+            onFinish: () => {
+                encaissProcessing.value = false;
+            },
         },
-        onError: (e) => {
-            encaissErrors.value = e as Record<string, string>;
-        },
-        onFinish: () => {
-            encaissProcessing.value = false;
-        },
-    });
+    );
 }
 
 // ── Progression ───────────────────────────────────────────────────────────────
@@ -323,7 +327,7 @@ function _progressPercent(f: FactureItem): number {
                 class="sticky top-0 z-10 flex items-center justify-between border-b bg-background px-4 py-3"
             >
                 <Link
-                    href="/dashboard"
+                    href="/backoffice/dashboard"
                     class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
                 >
                     <ArrowLeft class="h-5 w-5" />
@@ -342,7 +346,7 @@ function _progressPercent(f: FactureItem): number {
                     Livreur : <strong>{{ livreur.nom_complet }}</strong>
                 </span>
                 <a
-                    href="/factures"
+                    href="/backoffice/factures"
                     class="flex items-center gap-0.5 opacity-70"
                 >
                     <X class="h-3.5 w-3.5" />
@@ -523,7 +527,7 @@ function _progressPercent(f: FactureItem): number {
                     </span>
                 </span>
                 <a
-                    href="/factures"
+                    href="/backoffice/factures"
                     class="ml-auto flex items-center gap-1 text-xs opacity-70 hover:opacity-100"
                 >
                     <X class="h-3.5 w-3.5" />
@@ -603,7 +607,7 @@ function _progressPercent(f: FactureItem): number {
 
             <!-- Filtres -->
             <DataFilters
-                url="/factures"
+                url="/backoffice/factures"
                 :base-params="filterBaseParams"
                 :values="filterValues"
                 :result-count="facturesFiltrees.length"

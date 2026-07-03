@@ -58,7 +58,7 @@ class PdvCheckoutTest extends TestCase
     public function test_pdv_index_renders_with_produits(): void
     {
         $this->actingAs($this->user)
-            ->get('/pdv')
+            ->get('/backoffice/pdv')
             ->assertStatus(200)
             ->assertInertia(fn ($page) => $page
                 ->component('PDV/Index')
@@ -70,14 +70,14 @@ class PdvCheckoutTest extends TestCase
 
     public function test_pdv_index_redirects_unauthenticated(): void
     {
-        $this->get('/pdv')->assertRedirect(route('login'));
+        $this->get('/backoffice/pdv')->assertRedirect(route('login'));
     }
 
     // ── POST /pdv/checkout — Vente rapide ─────────────────────────────────────
 
     public function test_checkout_vente_rapide_creates_commande_en_cours(): void
     {
-        $response = $this->actingAs($this->user)->post('/pdv/checkout', [
+        $response = $this->actingAs($this->user)->post('/backoffice/pdv/checkout', [
             'mode' => 'Vente rapide',
             'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 2]],
         ]);
@@ -94,7 +94,7 @@ class PdvCheckoutTest extends TestCase
 
     public function test_checkout_decremente_le_stock(): void
     {
-        $this->actingAs($this->user)->post('/pdv/checkout', [
+        $this->actingAs($this->user)->post('/backoffice/pdv/checkout', [
             'mode' => 'Vente rapide',
             'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 5]],
         ]);
@@ -104,7 +104,7 @@ class PdvCheckoutTest extends TestCase
 
     public function test_checkout_cree_une_facture(): void
     {
-        $this->actingAs($this->user)->post('/pdv/checkout', [
+        $this->actingAs($this->user)->post('/backoffice/pdv/checkout', [
             'mode' => 'Vente rapide',
             'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 1]],
         ]);
@@ -119,7 +119,7 @@ class PdvCheckoutTest extends TestCase
     public function test_checkout_mode_client_requires_client_id(): void
     {
         $this->actingAs($this->user)
-            ->post('/pdv/checkout', [
+            ->post('/backoffice/pdv/checkout', [
                 'mode' => 'Client',
                 'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 1]],
             ])
@@ -131,7 +131,7 @@ class PdvCheckoutTest extends TestCase
         $client = Client::factory()->create(['organization_id' => $this->org->id]);
 
         $this->actingAs($this->user)
-            ->post('/pdv/checkout', [
+            ->post('/backoffice/pdv/checkout', [
                 'mode' => 'Client',
                 'client_id' => $client->id,
                 'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 1]],
@@ -147,7 +147,7 @@ class PdvCheckoutTest extends TestCase
     public function test_checkout_mode_livreur_requires_vehicule_id(): void
     {
         $this->actingAs($this->user)
-            ->post('/pdv/checkout', [
+            ->post('/backoffice/pdv/checkout', [
                 'mode' => 'Livreur',
                 'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 1]],
             ])
@@ -164,7 +164,7 @@ class PdvCheckoutTest extends TestCase
         ]);
 
         $this->actingAs($this->user)
-            ->post('/pdv/checkout', [
+            ->post('/backoffice/pdv/checkout', [
                 'mode' => 'Livreur',
                 'vehicule_id' => $vehicule->id,
                 'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 10]],
@@ -177,7 +177,7 @@ class PdvCheckoutTest extends TestCase
     public function test_checkout_refuse_si_stock_insuffisant(): void
     {
         $this->actingAs($this->user)
-            ->post('/pdv/checkout', [
+            ->post('/backoffice/pdv/checkout', [
                 'mode' => 'Vente rapide',
                 'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 999]],
             ])
@@ -189,7 +189,7 @@ class PdvCheckoutTest extends TestCase
     public function test_checkout_refuse_panier_vide(): void
     {
         $this->actingAs($this->user)
-            ->post('/pdv/checkout', [
+            ->post('/backoffice/pdv/checkout', [
                 'mode' => 'Vente rapide',
                 'lignes' => [],
             ])
@@ -198,7 +198,7 @@ class PdvCheckoutTest extends TestCase
 
     public function test_checkout_redirects_unauthenticated(): void
     {
-        $this->post('/pdv/checkout', [
+        $this->post('/backoffice/pdv/checkout', [
             'mode' => 'Vente rapide',
             'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 1]],
         ])->assertRedirect(route('login'));

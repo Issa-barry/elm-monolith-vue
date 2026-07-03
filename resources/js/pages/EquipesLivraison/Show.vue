@@ -41,9 +41,9 @@ const props = defineProps<{ equipe: EquipeData }>();
 const { can } = usePermissions();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Véhicules', href: '/vehicules' },
-    { title: 'Équipes de livraison', href: '/equipes-livraison' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Véhicules', href: '/backoffice/vehicules' },
+    { title: 'Équipes de livraison', href: '/backoffice/equipes-livraison' },
     { title: props.equipe.vehicule_nom ?? '—', href: '#' },
 ];
 
@@ -92,7 +92,7 @@ function roleLabel(role: string, numero?: number): string {
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <Link href="/equipes-livraison">
+                    <Link href="/backoffice/equipes-livraison">
                         <Button variant="outline">
                             <ArrowLeft class="mr-2 h-4 w-4" />
                             Retour
@@ -103,7 +103,7 @@ function roleLabel(role: string, numero?: number): string {
                             can('equipes-livraison.update') &&
                             equipe.vehicule_id
                         "
-                        :href="`/vehicules/${equipe.vehicule_id}`"
+                        :href="`/backoffice/vehicules/${equipe.vehicule_id}`"
                     >
                         <Button>
                             <Pencil class="mr-2 h-4 w-4" />

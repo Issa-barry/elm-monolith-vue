@@ -5,14 +5,14 @@ const E2E_STOCK_PREFIX = 'E2ESTK-';
 
 test.setTimeout(120_000);
 
-registerCleanup('/produits', E2E_STOCK_PREFIX);
+registerCleanup('/backoffice/produits', E2E_STOCK_PREFIX);
 
 test.beforeEach(async ({ page }) => {
     await login(page);
 });
 
 test('ajuster stock depuis la liste — augmenter', async ({ page }) => {
-    await page.goto('/produits');
+    await page.goto('/backoffice/produits');
     await expect(page).toHaveURL(/\/produits$/);
 
     // Find a product that has a stock (any row)
@@ -63,12 +63,12 @@ test('ajuster stock depuis la liste — augmenter', async ({ page }) => {
     await expect(dialog).toBeHidden({ timeout: 10_000 });
 
     // Navigate back to reload stock
-    await page.goto('/produits');
+    await page.goto('/backoffice/produits');
     await expect(page).toHaveURL(/\/produits$/);
 });
 
 test('ajuster stock depuis la liste — diminuer', async ({ page }) => {
-    await page.goto('/produits');
+    await page.goto('/backoffice/produits');
     await expect(page).toHaveURL(/\/produits$/);
 
     // Find a product with non-zero stock
@@ -111,7 +111,7 @@ test('ajuster stock depuis la liste — diminuer', async ({ page }) => {
 });
 
 test('ajuster stock depuis la fiche produit', async ({ page }) => {
-    await page.goto('/produits');
+    await page.goto('/backoffice/produits');
     await expect(page).toHaveURL(/\/produits$/);
 
     // Click on first product name to go to show page
@@ -156,7 +156,7 @@ test('ajuster stock depuis la fiche produit', async ({ page }) => {
 test('ajuster stock — remplir un champ efface lautre (exclusion mutuelle)', async ({
     page,
 }) => {
-    await page.goto('/produits');
+    await page.goto('/backoffice/produits');
     await expect(page).toHaveURL(/\/produits$/);
 
     const firstStockRow = page.locator('tbody tr').first();
@@ -199,7 +199,7 @@ test('ajuster stock — remplir un champ efface lautre (exclusion mutuelle)', as
 test('ajuster stock — bouton Valider désactivé si aucun champ renseigne', async ({
     page,
 }) => {
-    await page.goto('/produits');
+    await page.goto('/backoffice/produits');
     await expect(page).toHaveURL(/\/produits$/);
 
     const firstRow = page.locator('tbody tr').first();

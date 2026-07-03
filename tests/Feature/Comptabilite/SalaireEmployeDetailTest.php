@@ -82,7 +82,7 @@ class SalaireEmployeDetailTest extends TestCase
         $this->makeLignePeriode($employe, 2, 2025);
 
         $this->actingAs($this->user)
-            ->get("/comptabilite/salaires/employes/{$employe->id}")
+            ->get("/backoffice/comptabilite/salaires/employes/{$employe->id}")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Comptabilite/Salaire/Employe/Show')
@@ -104,7 +104,7 @@ class SalaireEmployeDetailTest extends TestCase
         $userSansPermission = $this->makeUserWithPermissions($this->org, []);
 
         $this->actingAs($userSansPermission)
-            ->get("/comptabilite/salaires/employes/{$employe->id}")
+            ->get("/backoffice/comptabilite/salaires/employes/{$employe->id}")
             ->assertStatus(403);
     }
 
@@ -128,7 +128,7 @@ class SalaireEmployeDetailTest extends TestCase
         $fevrier->refresh();
 
         $this->actingAs($this->user)
-            ->post("/comptabilite/salaires/employes/{$employe->id}/paiements", [
+            ->post("/backoffice/comptabilite/salaires/employes/{$employe->id}/paiements", [
                 'montant' => 1_200_000,
                 'mode_paiement' => 'especes',
             ])
@@ -152,7 +152,7 @@ class SalaireEmployeDetailTest extends TestCase
         $this->makeLignePeriode($employe, 1, 2025);
 
         $this->actingAs($this->user)
-            ->post("/comptabilite/salaires/employes/{$employe->id}/paiements", [
+            ->post("/backoffice/comptabilite/salaires/employes/{$employe->id}/paiements", [
                 'montant' => 999_999,
                 'mode_paiement' => 'especes',
             ])
@@ -166,7 +166,7 @@ class SalaireEmployeDetailTest extends TestCase
         $userSansPermission = $this->makeUserWithPermissions($this->org, ['comptabilite.read']);
 
         $this->actingAs($userSansPermission)
-            ->post("/comptabilite/salaires/employes/{$employe->id}/paiements", [
+            ->post("/backoffice/comptabilite/salaires/employes/{$employe->id}/paiements", [
                 'montant' => 100_000,
                 'mode_paiement' => 'especes',
             ])

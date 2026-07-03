@@ -54,13 +54,13 @@ const confirm = useConfirm();
 const toast = useToast();
 
 const { onRowClick, bodyRowPt } = useClickableTableRow<Equipe>(
-    (equipe) => `/equipes-livraison/${equipe.id}`,
+    (equipe) => `/backoffice/equipes-livraison/${equipe.id}`,
 );
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Véhicules', href: '/vehicules' },
-    { title: 'Équipes de livraison', href: '/equipes-livraison' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Véhicules', href: '/backoffice/vehicules' },
+    { title: 'Équipes de livraison', href: '/backoffice/equipes-livraison' },
 ];
 
 const search = ref('');
@@ -179,7 +179,7 @@ function confirmDelete(equipe: Equipe) {
         acceptLabel: 'Supprimer',
         acceptClass: 'p-button-danger',
         accept: () => {
-            router.delete(`/equipes-livraison/${equipe.id}`, {
+            router.delete(`/backoffice/equipes-livraison/${equipe.id}`, {
                 onSuccess: () =>
                     toast.add({
                         severity: 'success',
@@ -381,7 +381,7 @@ function confirmDelete(equipe: Equipe) {
                                     as-child
                                 >
                                     <Link
-                                        :href="`/equipes-livraison/${data.id}`"
+                                        :href="`/backoffice/equipes-livraison/${data.id}`"
                                         class="flex items-center gap-2"
                                     >
                                         <Eye class="h-4 w-4" />
@@ -403,7 +403,7 @@ function confirmDelete(equipe: Equipe) {
                                     as-child
                                 >
                                     <Link
-                                        :href="`/vehicules/${data.vehicule_id}`"
+                                        :href="`/backoffice/vehicules/${data.vehicule_id}`"
                                         class="flex items-center gap-2"
                                     >
                                         <Pencil class="h-4 w-4" />

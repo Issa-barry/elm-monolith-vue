@@ -129,7 +129,7 @@ const confirm = useConfirm();
 const toast = useToast();
 
 const { onRowClick, bodyRowPt } = useClickableTableRow<Produit>(
-    (produit) => `/produits/${produit.id}`,
+    (produit) => `/backoffice/produits/${produit.id}`,
 );
 
 // ── Filtres serveur ───────────────────────────────────────────────────────────
@@ -144,7 +144,11 @@ function clearFilters() {
     searchInput.value = '';
     showOnlyRuptures.value = false;
     showOnlyFaibles.value = false;
-    router.get('/produits', {}, { preserveState: true, replace: true });
+    router.get(
+        '/backoffice/produits',
+        {},
+        { preserveState: true, replace: true },
+    );
 }
 
 const currentSiteLabel = computed(() => {
@@ -227,8 +231,8 @@ const filteredProduits = computed(() => {
 });
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Produits', href: '/produits' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Produits', href: '/backoffice/produits' },
 ];
 
 // ── Export Excel ──────────────────────────────────────────────────────────────
@@ -415,12 +419,15 @@ async function openHistoriqueModal(produit: Produit) {
     showHistoriqueModal.value = true;
     historiqueLoading.value = true;
     try {
-        const res = await fetch(`/produits/${produit.id}/historique`, {
-            headers: {
-                Accept: 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
+        const res = await fetch(
+            `/backoffice/produits/${produit.id}/historique`,
+            {
+                headers: {
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
             },
-        });
+        );
         const data = await res.json();
         ajustements.value = data.ajustements ?? [];
         modifications.value = data.modifications ?? [];
@@ -440,7 +447,7 @@ function confirmDelete(produit: Produit) {
         acceptLabel: 'Supprimer',
         acceptClass: 'p-button-danger',
         accept: () => {
-            router.delete(`/produits/${produit.id}`, {
+            router.delete(`/backoffice/produits/${produit.id}`, {
                 onSuccess: () => {
                     toast.add({
                         severity: 'success',
@@ -464,7 +471,7 @@ function confirmArchive(produit: Produit) {
         acceptClass: 'p-button-warning',
         accept: () => {
             router.patch(
-                `/produits/${produit.id}/archiver`,
+                `/backoffice/produits/${produit.id}/archiver`,
                 {},
                 {
                     onSuccess: () => {
@@ -563,7 +570,10 @@ function confirmArchive(produit: Produit) {
                         <Download class="mr-2 h-4 w-4" />
                         Exporter Excel
                     </Button>
-                    <Link v-if="can('produits.create')" href="/produits/create">
+                    <Link
+                        v-if="can('produits.create')"
+                        href="/backoffice/produits/create"
+                    >
                         <Button>
                             <Plus class="mr-2 h-4 w-4" />
                             Nouveau produit
@@ -574,7 +584,7 @@ function confirmArchive(produit: Produit) {
 
             <!-- Barre de filtres -->
             <DataFilters
-                url="/produits"
+                url="/backoffice/produits"
                 :values="{
                     search: filters.search ?? '',
                     type: filters.type ?? '',
@@ -667,7 +677,7 @@ function confirmArchive(produit: Produit) {
                     >
                         <template #body="{ data }">
                             <Link
-                                :href="`/produits/${data.id}`"
+                                :href="`/backoffice/produits/${data.id}`"
                                 class="flex items-center gap-1.5 underline-offset-2 hover:underline"
                             >
                                 <span class="font-medium">{{ data.nom }}</span>
@@ -854,7 +864,7 @@ function confirmArchive(produit: Produit) {
                                     >
                                         <DropdownMenuItem as-child>
                                             <Link
-                                                :href="`/produits/${data.id}`"
+                                                :href="`/backoffice/produits/${data.id}`"
                                                 class="flex w-full items-center gap-2"
                                             >
                                                 <Eye class="h-4 w-4" />
@@ -890,7 +900,7 @@ function confirmArchive(produit: Produit) {
                                             as-child
                                         >
                                             <Link
-                                                :href="`/produits/${data.id}/edit`"
+                                                :href="`/backoffice/produits/${data.id}/edit`"
                                                 class="flex w-full items-center gap-2"
                                             >
                                                 <Pencil class="h-4 w-4" />
@@ -942,7 +952,7 @@ function confirmArchive(produit: Produit) {
                             <p class="text-sm">Aucun produit trouvé.</p>
                             <Link
                                 v-if="can('produits.create')"
-                                href="/produits/create"
+                                href="/backoffice/produits/create"
                             >
                                 <Button variant="outline" size="sm">
                                     <Plus class="mr-2 h-4 w-4" />

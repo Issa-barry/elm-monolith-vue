@@ -66,7 +66,7 @@ async function goToTransfertDetail(
     page: Page,
     reference: string,
 ): Promise<void> {
-    await page.goto('/logistique/transferts');
+    await page.goto('/backoffice/logistique/transferts');
     await expect(page.locator('body')).toContainText(reference, {
         timeout: 20_000,
     });
@@ -95,7 +95,7 @@ function stepperCard(page: Page) {
 test('logistique pages render (transferts + receptions + create)', async ({
     page,
 }) => {
-    await page.goto('/logistique/transferts');
+    await page.goto('/backoffice/logistique/transferts');
     await expect(page).toHaveURL(/\/logistique\/transferts$/, {
         timeout: 20_000,
     });
@@ -103,7 +103,7 @@ test('logistique pages render (transferts + receptions + create)', async ({
         timeout: 20_000,
     });
 
-    await page.goto('/logistique/receptions');
+    await page.goto('/backoffice/logistique/receptions');
     await expect(page).toHaveURL(/\/logistique\/receptions$/, {
         timeout: 20_000,
     });
@@ -111,7 +111,7 @@ test('logistique pages render (transferts + receptions + create)', async ({
         timeout: 20_000,
     });
 
-    await page.goto('/logistique/creer');
+    await page.goto('/backoffice/logistique/creer');
     await expect(page).toHaveURL(/\/logistique\/creer$/, { timeout: 20_000 });
     await expect(page.locator('#logistique-form')).toBeVisible({
         timeout: 15_000,
@@ -119,7 +119,7 @@ test('logistique pages render (transferts + receptions + create)', async ({
 });
 
 test('create transfert -> annuler depuis la page détail', async ({ page }) => {
-    await page.goto('/logistique/creer');
+    await page.goto('/backoffice/logistique/creer');
     await expect(page.locator('#logistique-form')).toBeVisible({
         timeout: 20_000,
     });
@@ -150,7 +150,7 @@ test('create transfert -> annuler depuis la page détail', async ({ page }) => {
 test('stepper — 6 étapes dont "Commission" grise dès la création', async ({
     page,
 }) => {
-    await page.goto('/logistique/creer');
+    await page.goto('/backoffice/logistique/creer');
     await expect(page.locator('#logistique-form')).toBeVisible({
         timeout: 20_000,
     });

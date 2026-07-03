@@ -111,20 +111,20 @@ const { can } = usePermissions();
 const toast = useToast();
 
 const { onRowClick, bodyRowPt } = useClickableTableRow<Transfert>(
-    (transfert) => `/logistique/${transfert.id}`,
+    (transfert) => `/backoffice/logistique/${transfert.id}`,
 );
 
 // ── Breadcrumbs ───────────────────────────────────────────────────────────────
 
 const breadcrumbs = computed((): BreadcrumbItem[] => [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Logistique', href: '/logistique/transferts' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Logistique', href: '/backoffice/logistique/transferts' },
     {
         title: props.vue === 'receptions' ? 'Réceptions' : 'Transferts',
         href:
             props.vue === 'receptions'
-                ? '/logistique/receptions'
-                : '/logistique/transferts',
+                ? '/backoffice/logistique/receptions'
+                : '/backoffice/logistique/transferts',
     },
 ]);
 
@@ -132,8 +132,8 @@ const breadcrumbs = computed((): BreadcrumbItem[] => [
 
 function indexUrl(): string {
     return props.vue === 'receptions'
-        ? '/logistique/receptions'
-        : '/logistique/transferts';
+        ? '/backoffice/logistique/receptions'
+        : '/backoffice/logistique/transferts';
 }
 
 const siteOptions = computed(() =>
@@ -219,7 +219,7 @@ function avancerDirect(t: Transfert) {
     if (avancementEnCours.value) return;
     avancementEnCours.value = t.id;
     router.post(
-        `/logistique/${t.id}/statut/avancer`,
+        `/backoffice/logistique/${t.id}/statut/avancer`,
         {},
         {
             preserveScroll: true,
@@ -280,7 +280,7 @@ const commStatutDot: Record<string, string> = {
                 class="sticky top-0 z-10 flex items-center justify-between border-b bg-background px-4 py-3"
             >
                 <Link
-                    href="/dashboard"
+                    href="/backoffice/dashboard"
                     class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
                 >
                     <ArrowLeft class="h-5 w-5" />
@@ -290,7 +290,7 @@ const commStatutDot: Record<string, string> = {
                 </span>
                 <Link
                     v-if="can_create && vue === 'transferts'"
-                    href="/logistique/creer"
+                    href="/backoffice/logistique/creer"
                 >
                     <Button size="sm" class="h-8 px-3 text-xs">
                         <Plus class="mr-1 h-3.5 w-3.5" />
@@ -320,7 +320,7 @@ const commStatutDot: Record<string, string> = {
                 <Link
                     v-for="t in mobileFiltered"
                     :key="t.id"
-                    :href="`/logistique/${t.id}`"
+                    :href="`/backoffice/logistique/${t.id}`"
                     class="flex items-start justify-between gap-3 px-4 py-3 hover:bg-muted/10 active:bg-muted/20"
                 >
                     <div class="min-w-0 flex-1">
@@ -371,7 +371,7 @@ const commStatutDot: Record<string, string> = {
                 </p>
                 <Link
                     v-if="can_create && vue === 'transferts'"
-                    href="/logistique/creer"
+                    href="/backoffice/logistique/creer"
                 >
                     <Button variant="outline" size="sm">
                         <Plus class="mr-2 h-4 w-4" />
@@ -397,7 +397,7 @@ const commStatutDot: Record<string, string> = {
                 </div>
                 <Link
                     v-if="can_create && vue === 'transferts'"
-                    href="/logistique/creer"
+                    href="/backoffice/logistique/creer"
                 >
                     <Button>
                         <Plus class="mr-2 h-4 w-4" />
@@ -537,7 +537,7 @@ const commStatutDot: Record<string, string> = {
                     >
                         <template #body="{ data }">
                             <Link
-                                :href="`/logistique/${data.id}`"
+                                :href="`/backoffice/logistique/${data.id}`"
                                 class="font-mono text-sm font-semibold tracking-wide hover:underline"
                             >
                                 {{ data.reference }}
@@ -649,7 +649,7 @@ const commStatutDot: Record<string, string> = {
                                     >
                                         <DropdownMenuItem as-child>
                                             <Link
-                                                :href="`/logistique/${data.id}`"
+                                                :href="`/backoffice/logistique/${data.id}`"
                                                 class="flex w-full cursor-pointer items-center gap-2"
                                             >
                                                 <PackageSearch
@@ -666,7 +666,7 @@ const commStatutDot: Record<string, string> = {
                                             as-child
                                         >
                                             <Link
-                                                :href="`/logistique/${data.id}/editer`"
+                                                :href="`/backoffice/logistique/${data.id}/editer`"
                                                 class="flex w-full cursor-pointer items-center gap-2"
                                             >
                                                 <Pencil class="h-4 w-4" />
@@ -702,7 +702,7 @@ const commStatutDot: Record<string, string> = {
                                             as-child
                                         >
                                             <Link
-                                                :href="`/logistique/${data.id}`"
+                                                :href="`/backoffice/logistique/${data.id}`"
                                                 class="flex w-full cursor-pointer items-center gap-2"
                                             >
                                                 <Truck class="h-4 w-4" />
@@ -729,7 +729,7 @@ const commStatutDot: Record<string, string> = {
                                         >
                                             <Link
                                                 method="post"
-                                                :href="`/logistique/${data.id}/statut/annuler`"
+                                                :href="`/backoffice/logistique/${data.id}/statut/annuler`"
                                                 class="flex w-full cursor-pointer items-center gap-2"
                                             >
                                                 <XCircle class="h-4 w-4" />
@@ -757,7 +757,7 @@ const commStatutDot: Record<string, string> = {
                             </p>
                             <Link
                                 v-if="can_create && vue === 'transferts'"
-                                href="/logistique/creer"
+                                href="/backoffice/logistique/creer"
                             >
                                 <Button variant="outline" size="sm">
                                     <Plus class="mr-2 h-4 w-4" />

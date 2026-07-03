@@ -53,8 +53,8 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Dépenses', href: '/depenses' },
-    { title: 'Nouvelle dépense', href: '/depenses/create' },
+    { title: 'Dépenses', href: '/backoffice/depenses' },
+    { title: 'Nouvelle dépense', href: '/backoffice/depenses/create' },
 ];
 
 // ── Concerné ─────────────────────────────────────────────────────────────────
@@ -184,7 +184,7 @@ function openConfirmDialog() {
 
 function onConfirm() {
     form.statut = 'soumis';
-    form.post('/depenses', {
+    form.post('/backoffice/depenses', {
         forceFormData: false,
         onSuccess: () => {
             showConfirmDialog.value = false;
@@ -206,7 +206,7 @@ function onCancel() {
 
 function submitBrouillon() {
     form.statut = 'brouillon';
-    form.post('/depenses', {
+    form.post('/backoffice/depenses', {
         forceFormData: false,
         onSuccess: () => {
             toast.add({
@@ -672,7 +672,7 @@ function submitBrouillon() {
                             size="sm"
                             as-child
                         >
-                            <a href="/depenses">Annuler</a>
+                            <a href="/backoffice/depenses">Annuler</a>
                         </Button>
                         <div class="flex gap-2">
                             <Button

@@ -181,8 +181,8 @@ function resetFilters() {
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Utilisateurs', href: '/users' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Utilisateurs', href: '/backoffice/users' },
 ];
 
 function canActOn(u: StaffUser): boolean {
@@ -199,7 +199,7 @@ function confirmDelete(u: StaffUser) {
         acceptLabel: 'Supprimer',
         acceptClass: 'p-button-danger',
         accept: () => {
-            router.delete(`/users/${u.id}`, {
+            router.delete(`/backoffice/users/${u.id}`, {
                 onSuccess: () =>
                     toast.add({
                         severity: 'success',
@@ -231,7 +231,7 @@ function confirmDelete(u: StaffUser) {
                         staff
                     </p>
                 </div>
-                <Link v-if="isSuperAdmin" href="/users/create">
+                <Link v-if="isSuperAdmin" href="/backoffice/users/create">
                     <Button>
                         <Plus class="mr-2 h-4 w-4" />
                         Nouveau compte
@@ -444,7 +444,7 @@ function confirmDelete(u: StaffUser) {
                                             as-child
                                         >
                                             <Link
-                                                :href="`/users/${data.id}/edit`"
+                                                :href="`/backoffice/users/${data.id}/edit`"
                                                 class="flex w-full items-center gap-2"
                                             >
                                                 <Pencil class="h-4 w-4" />
@@ -483,7 +483,10 @@ function confirmDelete(u: StaffUser) {
                         >
                             <UserCircle class="h-12 w-12 opacity-30" />
                             <p class="text-sm">Aucun utilisateur trouvé.</p>
-                            <Link v-if="isSuperAdmin" href="/users/create">
+                            <Link
+                                v-if="isSuperAdmin"
+                                href="/backoffice/users/create"
+                            >
                                 <Button variant="outline" size="sm">
                                     <Plus class="mr-2 h-4 w-4" />
                                     Créer le premier compte

@@ -66,7 +66,7 @@ const confirm = useConfirm();
 const toast = useToast();
 
 const { onRowClick, bodyRowPt } = useClickableTableRow<Vehicule>(
-    (vehicule) => `/vehicules/${vehicule.id}`,
+    (vehicule) => `/backoffice/vehicules/${vehicule.id}`,
 );
 
 // Mobile — filtrage immédiat
@@ -228,8 +228,8 @@ const mobileFiltered = computed(() =>
 );
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Véhicules', href: '/vehicules' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Véhicules', href: '/backoffice/vehicules' },
 ];
 
 const lightboxUrl = ref<string | null>(null);
@@ -258,7 +258,7 @@ function confirmDelete(v: Vehicule) {
         acceptLabel: 'Supprimer',
         acceptClass: 'p-button-danger',
         accept: () => {
-            router.delete(`/vehicules/${v.id}`, {
+            router.delete(`/backoffice/vehicules/${v.id}`, {
                 onSuccess: () =>
                     toast.add({
                         severity: 'success',
@@ -282,7 +282,7 @@ function confirmDelete(v: Vehicule) {
             <div
                 class="sticky top-0 z-10 flex items-center gap-2 border-b bg-background px-3 py-2"
             >
-                <Link href="/dashboard">
+                <Link href="/backoffice/dashboard">
                     <Button
                         variant="ghost"
                         size="icon"
@@ -418,7 +418,7 @@ function confirmDelete(v: Vehicule) {
                         <DropdownMenuContent align="end" class="w-44">
                             <DropdownMenuItem as-child>
                                 <Link
-                                    :href="`/vehicules/${v.id}`"
+                                    :href="`/backoffice/vehicules/${v.id}`"
                                     class="flex w-full items-center gap-2"
                                 >
                                     <Eye class="h-4 w-4" />
@@ -430,7 +430,7 @@ function confirmDelete(v: Vehicule) {
                                 as-child
                             >
                                 <Link
-                                    :href="`/vehicules/${v.id}/edit`"
+                                    :href="`/backoffice/vehicules/${v.id}/edit`"
                                     class="flex w-full items-center gap-2"
                                 >
                                     <Pencil class="h-4 w-4" />
@@ -558,7 +558,7 @@ function confirmDelete(v: Vehicule) {
                     >
                         <template #body="{ data }">
                             <Link
-                                :href="`/vehicules/${data.id}`"
+                                :href="`/backoffice/vehicules/${data.id}`"
                                 class="block leading-tight hover:underline"
                             >
                                 <div class="font-medium">
@@ -696,7 +696,7 @@ function confirmDelete(v: Vehicule) {
                                     >
                                         <DropdownMenuItem as-child>
                                             <Link
-                                                :href="`/vehicules/${data.id}`"
+                                                :href="`/backoffice/vehicules/${data.id}`"
                                                 class="flex w-full items-center gap-2"
                                             >
                                                 <Eye class="h-4 w-4" />
@@ -708,7 +708,7 @@ function confirmDelete(v: Vehicule) {
                                             as-child
                                         >
                                             <Link
-                                                :href="`/vehicules/${data.id}/edit`"
+                                                :href="`/backoffice/vehicules/${data.id}/edit`"
                                                 class="flex w-full items-center gap-2"
                                             >
                                                 <Pencil class="h-4 w-4" />

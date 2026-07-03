@@ -83,12 +83,12 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Comptabilité', href: '/comptabilite' },
-    { title: 'Périodes', href: '/comptabilite/periodes' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Comptabilité', href: '/backoffice/comptabilite' },
+    { title: 'Périodes', href: '/backoffice/comptabilite/periodes' },
     {
         title: props.periode.reference,
-        href: `/comptabilite/periodes/${props.periode.id}`,
+        href: `/backoffice/comptabilite/periodes/${props.periode.id}`,
     },
 ];
 
@@ -103,13 +103,13 @@ const voirCommissionsUrl = computed(() => {
     const f = props.periode.date_fin ?? '';
     switch (props.periode.type) {
         case 'livreur':
-            return `/comptabilite/commission-logistique?date_debut=${d}&date_fin=${f}`;
+            return `/backoffice/comptabilite/commission-logistique?date_debut=${d}&date_fin=${f}`;
         case 'proprietaire':
-            return `/comptabilite/commission-proprietaire?date_debut=${d}&date_fin=${f}`;
+            return `/backoffice/comptabilite/commission-proprietaire?date_debut=${d}&date_fin=${f}`;
         case 'salarie':
-            return `/comptabilite/salaires`;
+            return `/backoffice/comptabilite/salaires`;
         default:
-            return '/comptabilite';
+            return '/backoffice/comptabilite';
     }
 });
 
@@ -118,13 +118,13 @@ function fmt(n: number) {
 }
 
 const { onRowClick, bodyRowPt } = useClickableTableRow<Fiche>(
-    (fiche) => `/comptabilite/fiches/${fiche.id}`,
+    (fiche) => `/backoffice/comptabilite/fiches/${fiche.id}`,
 );
 
 function doCalculer() {
     calculerWarning.value = null;
     router.post(
-        `/comptabilite/periodes/${props.periode.id}/calculer`,
+        `/backoffice/comptabilite/periodes/${props.periode.id}/calculer`,
         {},
         {
             onSuccess: () => {
@@ -159,7 +159,9 @@ function doValider() {
         acceptLabel: 'Valider',
         rejectLabel: 'Annuler',
         accept: () =>
-            router.post(`/comptabilite/periodes/${props.periode.id}/valider`),
+            router.post(
+                `/backoffice/comptabilite/periodes/${props.periode.id}/valider`,
+            ),
     });
 }
 
@@ -170,7 +172,9 @@ function doCloturer() {
         acceptLabel: 'Clôturer',
         rejectLabel: 'Annuler',
         accept: () =>
-            router.post(`/comptabilite/periodes/${props.periode.id}/cloturer`),
+            router.post(
+                `/backoffice/comptabilite/periodes/${props.periode.id}/cloturer`,
+            ),
     });
 }
 
@@ -182,21 +186,28 @@ function doDelete() {
         rejectLabel: 'Annuler',
         acceptClass: 'p-button-danger',
         accept: () =>
-            router.delete(`/comptabilite/periodes/${props.periode.id}`, {
-                onSuccess: () => router.visit('/comptabilite/periodes'),
-            }),
+            router.delete(
+                `/backoffice/comptabilite/periodes/${props.periode.id}`,
+                {
+                    onSuccess: () =>
+                        router.visit('/backoffice/comptabilite/periodes'),
+                },
+            ),
     });
 }
 
 function exportExcel() {
     window.open(
-        `/comptabilite/fiches/export/excel?periode_id=${props.periode.id}`,
+        `/backoffice/comptabilite/fiches/export/excel?periode_id=${props.periode.id}`,
         '_blank',
     );
 }
 
 function exportPdf() {
-    window.open(`/comptabilite/periodes/${props.periode.id}/pdf`, '_blank');
+    window.open(
+        `/backoffice/comptabilite/periodes/${props.periode.id}/pdf`,
+        '_blank',
+    );
 }
 </script>
 
@@ -483,7 +494,7 @@ function exportPdf() {
                     <Column header="Bénéficiaire" style="min-width: 200px">
                         <template #body="{ data }">
                             <Link
-                                :href="`/comptabilite/fiches/${data.id}`"
+                                :href="`/backoffice/comptabilite/fiches/${data.id}`"
                                 class="font-medium hover:underline"
                             >
                                 {{ data.beneficiaire_nom }}

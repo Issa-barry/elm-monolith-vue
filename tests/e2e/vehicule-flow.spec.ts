@@ -13,7 +13,7 @@ const E2E_VEHICULE_IMMATRICULATION_PREFIX = 'E2EVH-';
 
 test.setTimeout(120_000);
 
-registerCleanup('/vehicules', E2E_VEHICULE_IMMATRICULATION_PREFIX);
+registerCleanup('/backoffice/vehicules', E2E_VEHICULE_IMMATRICULATION_PREFIX);
 
 test('login + create vehicule interne via site + verify in site tab + verify global list + update', async ({
     page,
@@ -59,7 +59,7 @@ test('login + create vehicule interne via site + verify in site tab + verify glo
     });
 
     // Step 6: Verify the vehicle also appears in the global list
-    await page.goto('/vehicules');
+    await page.goto('/backoffice/vehicules');
     await expect(page).toHaveURL(/\/vehicules$/);
 
     const searchInput = getVisibleSearchInput(page);
@@ -88,7 +88,7 @@ test('login + create vehicule interne via site + verify in site tab + verify glo
     await page.waitForURL(/\/vehicules\/[a-z0-9]+(\/edit)?$/, { timeout: 15_000 });
 
     // Step 8: Verify the modification is visible in the global list
-    await page.goto('/vehicules');
+    await page.goto('/backoffice/vehicules');
     const searchInput2 = getVisibleSearchInput(page);
     await searchInput2.fill(immatriculation);
     await searchInput2.press('Enter');
@@ -107,7 +107,7 @@ test('externe — radio pris_en_charge_par_usine non sélectionné bloque le for
 }) => {
     await login(page);
 
-    await page.goto('/vehicules/create');
+    await page.goto('/backoffice/vehicules/create');
     await expect(page).toHaveURL(/\/vehicules\/create$/);
 
     const submitBtn = page
@@ -144,7 +144,7 @@ test('externe — radio pris_en_charge_par_usine Oui sélectionnable', async ({
 }) => {
     await login(page);
 
-    await page.goto('/vehicules/create');
+    await page.goto('/backoffice/vehicules/create');
     await expect(page).toHaveURL(/\/vehicules\/create$/);
 
     const comboboxes = page.locator('#vehicule-form').getByRole('combobox');
@@ -170,14 +170,14 @@ test('show — vehicule externe : bouton "Voir la fiche propriétaire" visible, 
     page,
 }) => {
     await login(page);
-    await page.goto('/vehicules');
+    await page.goto('/backoffice/vehicules');
 
     // Find first show-page link in the desktop DataTable
-    await page.waitForSelector('.p-datatable-tbody a[href*="/vehicules/"]', {
+    await page.waitForSelector('.p-datatable-tbody a[href*="/backoffice/vehicules/"]', {
         timeout: 15_000,
     });
     const links = page.locator(
-        '.p-datatable-tbody a[href*="/vehicules/"]:not([href*="/edit"])',
+        '.p-datatable-tbody a[href*="/backoffice/vehicules/"]:not([href*="/edit"])',
     );
 
     // Iterate through the first few vehicules until we find one with a proprietaire
@@ -200,8 +200,8 @@ test('show — vehicule externe : bouton "Voir la fiche propriétaire" visible, 
             break;
         }
 
-        await page.goto('/vehicules');
-        await page.waitForSelector('.p-datatable-tbody a[href*="/vehicules/"]', {
+        await page.goto('/backoffice/vehicules');
+        await page.waitForSelector('.p-datatable-tbody a[href*="/backoffice/vehicules/"]', {
             timeout: 10_000,
         });
     }

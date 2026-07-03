@@ -30,7 +30,7 @@ async function getCsrfToken(page: Page): Promise<string> {
     let encoded = await readCookie();
     if (!encoded) {
         // Forcer une navigation pour initialiser la session/cookie si nécessaire.
-        await page.goto('/livreurs');
+        await page.goto('/backoffice/livreurs');
         encoded = await readCookie();
     }
 
@@ -66,7 +66,7 @@ async function createLivreurViaApi(
     page: Page,
     payload: LivreurCreatePayload,
 ): Promise<string> {
-    const response = await sendLivreurRequest(page, 'POST', '/livreurs', payload);
+    const response = await sendLivreurRequest(page, 'POST', '/backoffice/livreurs', payload);
     expect(response.status()).toBe(201);
 
     const body = await response.json();
@@ -79,7 +79,7 @@ async function toggleLivreurViaApi(page: Page, livreurId: string): Promise<boole
     const response = await sendLivreurRequest(
         page,
         'PATCH',
-        `/livreurs/${livreurId}/toggle`,
+        `/backoffice/livreurs/${livreurId}/toggle`,
     );
     expect(response.ok()).toBeTruthy();
 
@@ -88,7 +88,7 @@ async function toggleLivreurViaApi(page: Page, livreurId: string): Promise<boole
 }
 
 async function deleteLivreurViaApi(page: Page, livreurId: string): Promise<void> {
-    const response = await sendLivreurRequest(page, 'DELETE', `/livreurs/${livreurId}`);
+    const response = await sendLivreurRequest(page, 'DELETE', `/backoffice/livreurs/${livreurId}`);
     expect(response.ok()).toBeTruthy();
 }
 
@@ -105,7 +105,7 @@ test('create livreur with all fields -> verify in list', async ({ page }) => {
         telephone: tel,
     });
 
-    await page.goto('/livreurs');
+    await page.goto('/backoffice/livreurs');
     try {
         const row = await findRowByName(page, prenom);
         await expect(row).toBeVisible();
@@ -132,7 +132,7 @@ test('toggle livreur status via API -> data persists in list', async ({ page }) 
         const isActive = await toggleLivreurViaApi(page, livreurId);
         expect(isActive).toBe(false);
 
-        await page.goto('/livreurs');
+        await page.goto('/backoffice/livreurs');
         const updatedRow = await findRowByName(page, prenom);
         await expect(updatedRow).toBeVisible();
         await expect(updatedRow).toContainText(/inactif/i);
@@ -158,13 +158,13 @@ test('delete livreur via API -> removed from list', async ({ page }) => {
         telephone: tel,
     });
 
-    await page.goto('/livreurs');
+    await page.goto('/backoffice/livreurs');
     const createdRow = await findRowByName(page, prenom);
     await expect(createdRow).toBeVisible();
 
     await deleteLivreurViaApi(page, livreurId);
 
-    await page.goto('/livreurs');
+    await page.goto('/backoffice/livreurs');
     const search = getVisibleSearchInput(page);
     await search.fill(prenom);
     await search.press('Enter');
@@ -182,7 +182,7 @@ test('create livreur without required fields -> returns validation errors', asyn
 }) => {
     await login(page);
 
-    const response = await sendLivreurRequest(page, 'POST', '/livreurs', {
+    const response = await sendLivreurRequest(page, 'POST', '/backoffice/livreurs', {
         prenom: '',
         nom: '',
         telephone: '',

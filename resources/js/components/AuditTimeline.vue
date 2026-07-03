@@ -41,7 +41,7 @@ async function fetchLogs() {
             params.append('site_ids[]', String(siteId));
         }
         const res = await fetch(
-            `/comptabilite/historique/entite?${params.toString()}`,
+            `/backoffice/comptabilite/historique/entite?${params.toString()}`,
             { headers: { Accept: 'application/json' } },
         );
         if (!res.ok) throw new Error();

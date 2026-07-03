@@ -37,9 +37,9 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/dashboard' },
-    { title: 'Achats', href: '/achats' },
-    { title: 'Nouveau bon de commande', href: '/achats/create' },
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Achats', href: '/backoffice/achats' },
+    { title: 'Nouveau bon de commande', href: '/backoffice/achats/create' },
 ];
 
 // ── Form ──────────────────────────────────────────────────────────────────────
@@ -141,7 +141,7 @@ const canSubmit = computed(
 
 // ── Soumission ────────────────────────────────────────────────────────────────
 function submit() {
-    form.post('/achats');
+    form.post('/backoffice/achats');
 }
 </script>
 
@@ -155,7 +155,7 @@ function submit() {
         >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
-                    href="/achats"
+                    href="/backoffice/achats"
                     class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
                 >
                     <ArrowLeft class="h-4 w-4" />
@@ -477,7 +477,7 @@ function submit() {
 
                 <!-- Footer desktop -->
                 <div class="hidden items-center justify-between sm:flex">
-                    <Link href="/achats">
+                    <Link href="/backoffice/achats">
                         <Button type="button" variant="outline">Retour</Button>
                     </Link>
                     <Button type="submit" :disabled="!canSubmit">
