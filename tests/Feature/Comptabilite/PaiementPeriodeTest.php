@@ -71,57 +71,70 @@ class PaiementPeriodeTest extends TestCase
             ->assertRedirect(route('login'));
     }
 
-    // ── store ─────────────────────────────────────────────────────────────────
+    // ── génération automatique ────────────────────────────────────────────────
 
-    public function test_creation_periode_livreur_valide(): void
+    public function test_index_cree_automatiquement_la_periode_courante_de_chaque_type(): void
     {
-        $this->actingAs($this->user)
-            ->post(route('comptabilite.periodes.store'), [
-                'type' => 'livreur',
-                'date_debut' => '2026-06-01',
-                'date_fin' => '2026-06-15',
-            ])
-            ->assertRedirect();
+        $this->travelTo('2026-07-10 12:00:00');
+
+        $response = $this->actingAs($this->user)->get(route('comptabilite.periodes.index'));
+        $response->assertStatus(200);
+
+        $response->assertInertia(fn (Assert $page) => $page
+            ->where('cycle.periode_courante_label', 'Juillet 2026 - P1')
+            ->has('cycle.par_type', 3)
+        );
 
         $this->assertDatabaseHas('paiement_periodes', [
             'organization_id' => $this->org->id,
             'type' => 'livreur',
-            'statut' => StatutPeriodePaiement::BROUILLON->value,
+            'reference' => 'PAY-202607-P1-LIV',
+        ]);
+        $this->assertDatabaseHas('paiement_periodes', [
+            'organization_id' => $this->org->id,
+            'type' => 'proprietaire',
+            'reference' => 'PAY-202607-P1-PRO',
+        ]);
+        $this->assertDatabaseHas('paiement_periodes', [
+            'organization_id' => $this->org->id,
+            'type' => 'salarie',
+            'reference' => 'PAY-202607-P1-SAL',
         ]);
     }
 
-    public function test_reference_generee_au_format_correct(): void
+    public function test_voir_periode_inexistante_la_cree_puis_redirige(): void
     {
-        $this->actingAs($this->user)
-            ->post(route('comptabilite.periodes.store'), [
-                'type' => 'livreur',
-                'date_debut' => '2026-06-01',
-                'date_fin' => '2026-06-15',
-            ]);
+        $this->assertDatabaseMissing('paiement_periodes', [
+            'organization_id' => $this->org->id,
+            'reference' => 'PAY-202608-P2-LIV',
+        ]);
 
-        $periode = PaiementPeriode::where('organization_id', $this->org->id)->first();
-        $this->assertMatchesRegularExpression('/^PAY-\d{6}-\d{4}$/', $periode->reference);
+        $response = $this->actingAs($this->user)
+            ->get(route('comptabilite.periodes.voir', ['type' => 'livreur', 'annee' => 2026, 'mois' => 8, 'quinzaine' => 'P2']));
+
+        $periode = PaiementPeriode::where('organization_id', $this->org->id)
+            ->where('reference', 'PAY-202608-P2-LIV')
+            ->first();
+
+        $this->assertNotNull($periode);
+        $this->assertSame('2026-08-16', $periode->date_debut->toDateString());
+        $this->assertSame('2026-08-31', $periode->date_fin->toDateString());
+        $response->assertRedirect(route('comptabilite.periodes.show', $periode));
     }
 
-    public function test_store_echoue_sans_type(): void
+    public function test_voir_periode_existante_ne_duplique_pas(): void
     {
         $this->actingAs($this->user)
-            ->post(route('comptabilite.periodes.store'), [
-                'date_debut' => '2026-06-01',
-                'date_fin' => '2026-06-15',
-            ])
-            ->assertSessionHasErrors('type');
-    }
+            ->get(route('comptabilite.periodes.voir', ['type' => 'livreur', 'annee' => 2026, 'mois' => 8, 'quinzaine' => 'P2']));
+        $this->actingAs($this->user)
+            ->get(route('comptabilite.periodes.voir', ['type' => 'livreur', 'annee' => 2026, 'mois' => 8, 'quinzaine' => 'P2']));
 
-    public function test_store_echoue_si_date_fin_avant_date_debut(): void
-    {
-        $this->actingAs($this->user)
-            ->post(route('comptabilite.periodes.store'), [
-                'type' => 'livreur',
-                'date_debut' => '2026-06-15',
-                'date_fin' => '2026-06-01',
-            ])
-            ->assertSessionHasErrors('date_fin');
+        $this->assertSame(
+            1,
+            PaiementPeriode::where('organization_id', $this->org->id)
+                ->where('reference', 'PAY-202608-P2-LIV')
+                ->count(),
+        );
     }
 
     // ── calculer ──────────────────────────────────────────────────────────────
@@ -333,18 +346,14 @@ class PaiementPeriodeTest extends TestCase
         ]);
     }
 
-    public function test_non_admin_ne_peut_pas_creer_periode(): void
+    public function test_sans_droit_comptabilite_ne_peut_pas_resoudre_une_periode(): void
     {
         Role::firstOrCreate(['name' => 'employe', 'guard_name' => 'web']);
         $employe = User::factory()->create(['organization_id' => $this->org->id]);
         $employe->assignRole('employe');
 
         $this->actingAs($employe)
-            ->post(route('comptabilite.periodes.store'), [
-                'type' => 'livreur',
-                'date_debut' => '2026-06-01',
-                'date_fin' => '2026-06-15',
-            ])
+            ->get(route('comptabilite.periodes.voir', ['type' => 'livreur', 'annee' => 2026, 'mois' => 6, 'quinzaine' => 'P1']))
             ->assertStatus(403);
     }
 

@@ -19,10 +19,16 @@ enum TypePeriodePaiement: string
 
     public function periodicity(): string
     {
+        return 'quinzaine';
+    }
+
+    /** Abréviation utilisée dans la référence auto-générée (ex: PAY-202607-P1-LIV). */
+    public function abreviation(): string
+    {
         return match ($this) {
-            self::LIVREUR => 'quinzaine',
-            self::PROPRIETAIRE => 'mensuelle',
-            self::SALARIE => 'mensuelle',
+            self::LIVREUR => 'LIV',
+            self::PROPRIETAIRE => 'PRO',
+            self::SALARIE => 'SAL',
         };
     }
 

@@ -8,27 +8,44 @@ use App\Enums\TypePeriodePaiement;
 use App\Http\Controllers\Controller;
 use App\Models\Organization;
 use App\Models\PaiementPeriode;
-use App\Models\Site;
 use App\Services\AuditLogService;
 use App\Services\CommissionAdjustmentService;
 use App\Services\PeriodeCalculatorService;
+use App\Services\PeriodePaiementService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class PaiementPeriodeController extends Controller
 {
-    public function __construct(private PeriodeCalculatorService $calculator) {}
+    public function __construct(
+        private PeriodeCalculatorService $calculator,
+        private PeriodePaiementService $periodes,
+    ) {}
 
     public function index(Request $request): Response
     {
         $this->authorize('viewAny', PaiementPeriode::class);
 
         $orgId = auth()->user()->organization_id;
-        $filters = $request->only(['type', 'statut', 'date_debut', 'date_fin', 'search']);
+        $filters = $request->only(['type', 'statut', 'annee', 'mois', 'quinzaine', 'search']);
+
+        // Le cycle courant s'applique aux 3 types en même temps (même quinzaine) : on
+        // s'assure que la période "en cours" de chaque type existe déjà, pour que le
+        // tableau de bord puisse toujours l'afficher sans jamais avoir à la créer
+        // manuellement.
+        $courantes = collect(TypePeriodePaiement::cases())
+            ->mapWithKeys(fn (TypePeriodePaiement $type) => [
+                $type->value => $this->periodes->getCurrentPeriod($orgId, $type, auth()->id()),
+            ]);
+
+        $now = Carbon::now();
+        $quinzaineCourante = PeriodePaiementService::quinzaineForDate($now);
+        $dateSuivante = Carbon::parse($courantes->first()->date_fin)->addDay();
 
         $query = PaiementPeriode::forOrg($orgId)->with('site');
 
@@ -38,22 +55,27 @@ class PaiementPeriodeController extends Controller
         if (! empty($filters['statut'])) {
             $query->where('statut', $filters['statut']);
         }
-        if (! empty($filters['date_debut'])) {
-            $query->whereDate('date_debut', '>=', $filters['date_debut']);
+        if (! empty($filters['annee'])) {
+            $annee = (int) $filters['annee'];
+            $query->whereBetween('date_debut', ["{$annee}-01-01", "{$annee}-12-31"]);
         }
-        if (! empty($filters['date_fin'])) {
-            $query->whereDate('date_fin', '<=', $filters['date_fin']);
+        if (! empty($filters['mois'])) {
+            $query->whereMonth('date_debut', (int) $filters['mois']);
+        }
+        if (! empty($filters['quinzaine']) && in_array($filters['quinzaine'], [PeriodePaiementService::P1, PeriodePaiementService::P2], true)) {
+            if ($filters['quinzaine'] === PeriodePaiementService::P1) {
+                $query->whereDay('date_debut', '<=', 15);
+            } else {
+                $query->whereDay('date_debut', '>', 15);
+            }
         }
         if (! empty($filters['search'])) {
             $s = mb_strtolower(trim($filters['search']));
             $query->where(fn ($q) => $q->whereRaw('LOWER(reference) LIKE ?', ["%{$s}%"]));
         }
 
-        $kpis = (clone $query)
-            ->selectRaw('statut, COUNT(*) as total')
-            ->groupBy('statut')
-            ->pluck('total', 'statut');
-
+        // Tri Année DESC, Mois DESC, P2 avant P1 : garanti par date_debut DESC seul,
+        // puisque le 16 (P2) est toujours postérieur au 1er (P1) du même mois.
         $periodes = $query->orderByDesc('date_debut')
             ->paginate(20)
             ->withQueryString()
@@ -64,63 +86,47 @@ class PaiementPeriodeController extends Controller
             'types' => TypePeriodePaiement::options(),
             'statuts' => StatutPeriodePaiement::options(),
             'filters' => $filters,
-            'kpis' => [
-                'brouillon' => (int) ($kpis[StatutPeriodePaiement::BROUILLON->value] ?? 0),
-                'calculee' => (int) ($kpis[StatutPeriodePaiement::CALCULEE->value] ?? 0),
-                'validee' => (int) ($kpis[StatutPeriodePaiement::VALIDEE->value] ?? 0),
-                'cloturee' => (int) ($kpis[StatutPeriodePaiement::CLOTUREE->value] ?? 0),
+            'cycle' => [
+                'annee_courante' => $now->year,
+                'periode_courante_label' => PeriodePaiementService::labelFor($now->year, $now->month, $quinzaineCourante),
+                'periode_suivante_label' => PeriodePaiementService::labelFor($dateSuivante->year, $dateSuivante->month, PeriodePaiementService::quinzaineForDate($dateSuivante)),
+                'par_type' => collect(TypePeriodePaiement::cases())->map(fn (TypePeriodePaiement $type) => [
+                    'type' => $type->value,
+                    'type_label' => $type->label(),
+                    'periode' => $this->transform($courantes[$type->value]),
+                ])->values(),
             ],
-            'can_create' => auth()->user()->can('create', PaiementPeriode::class),
         ]);
     }
 
-    public function create(): Response
+    /**
+     * Résout (et crée si nécessaire) la période correspondant à un type/année/mois/quinzaine,
+     * puis redirige vers sa fiche détaillée. Permet de consulter une période qui n'existe pas
+     * encore sans jamais passer par une création manuelle.
+     */
+    public function voir(string $type, int $annee, int $mois, string $quinzaine): RedirectResponse
     {
-        $this->authorize('create', PaiementPeriode::class);
+        $this->authorize('viewAny', PaiementPeriode::class);
 
-        $orgId = auth()->user()->organization_id;
+        $data = validator(
+            ['type' => $type, 'quinzaine' => $quinzaine, 'mois' => $mois],
+            [
+                'type' => ['required', Rule::in(TypePeriodePaiement::values())],
+                'quinzaine' => ['required', Rule::in([PeriodePaiementService::P1, PeriodePaiementService::P2])],
+                'mois' => ['required', 'integer', 'between:1,12'],
+            ],
+        )->validate();
 
-        return Inertia::render('Comptabilite/Periodes/Create', [
-            'types' => TypePeriodePaiement::options(),
-            'sites' => Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']),
-        ]);
-    }
+        [$debut] = PeriodePaiementService::dateRangeFor($annee, $mois, $data['quinzaine']);
 
-    public function store(Request $request): RedirectResponse
-    {
-        $this->authorize('create', PaiementPeriode::class);
+        $periode = $this->periodes->getOrCreatePeriod(
+            auth()->user()->organization_id,
+            TypePeriodePaiement::from($data['type']),
+            $debut,
+            auth()->id(),
+        );
 
-        $orgId = auth()->user()->organization_id;
-
-        $data = $request->validate([
-            'type' => ['required', 'in:'.implode(',', TypePeriodePaiement::values())],
-            'site_id' => ['nullable', 'exists:sites,id'],
-            'date_debut' => ['required', 'date'],
-            'date_fin' => ['required', 'date', 'after_or_equal:date_debut'],
-            'observations' => ['nullable', 'string'],
-        ]);
-
-        $periode = PaiementPeriode::create([
-            'organization_id' => $orgId,
-            'reference' => $this->genererReference($orgId, $data['date_debut']),
-            'type' => $data['type'],
-            'site_id' => $data['site_id'] ?? null,
-            'date_debut' => $data['date_debut'],
-            'date_fin' => $data['date_fin'],
-            'statut' => StatutPeriodePaiement::BROUILLON->value,
-            'observations' => $data['observations'] ?? null,
-            'created_by' => auth()->id(),
-        ]);
-
-        app(AuditLogService::class)->record($periode, AuditEvent::CREATED, auth()->user(), null, null, [
-            'module' => 'periodes_paiement',
-            'site_id' => $periode->site_id,
-            'description' => "Période {$periode->reference} créée",
-        ]);
-
-        return redirect()
-            ->route('comptabilite.periodes.show', $periode)
-            ->with('success', 'Période créée avec succès.');
+        return redirect()->route('comptabilite.periodes.show', $periode);
     }
 
     public function show(PaiementPeriode $periode, Request $request): Response
@@ -227,7 +233,7 @@ class PaiementPeriodeController extends Controller
         if ($nonValidees->isNotEmpty()) {
             $n = $nonValidees->count();
 
-            return back()->with('error', "{$n} commission".($n > 1 ? 's' : '')." non validée".($n > 1 ? 's' : '').". Passez par l'écran d'ajustement avant de valider la période.");
+            return back()->with('error', "{$n} commission".($n > 1 ? 's' : '').' non validée'.($n > 1 ? 's' : '').". Passez par l'écran d'ajustement avant de valider la période.");
         }
 
         $resume = CommissionAdjustmentService::resumeEcarts($periode);
@@ -346,6 +352,7 @@ class PaiementPeriodeController extends Controller
             'reference' => $p->reference,
             'type' => $p->type?->value,
             'type_label' => $p->type?->label(),
+            'quinzaine' => $p->date_debut ? PeriodePaiementService::quinzaineForDate($p->date_debut) : null,
             'site' => $p->site ? ['id' => $p->site->id, 'nom' => $p->site->nom] : null,
             'date_debut' => $p->date_debut?->toDateString(),
             'date_fin' => $p->date_fin?->toDateString(),
@@ -356,15 +363,5 @@ class PaiementPeriodeController extends Controller
             'total_net' => $p->total_net,
             'total_paye' => $p->total_paye,
         ];
-    }
-
-    private function genererReference(string $orgId, string $dateDebut): string
-    {
-        $prefix = 'PAY-'.Carbon::parse($dateDebut)->format('Ym').'-';
-        $count = PaiementPeriode::forOrg($orgId)
-            ->where('reference', 'like', $prefix.'%')
-            ->count();
-
-        return $prefix.str_pad($count + 1, 4, '0', STR_PAD_LEFT);
     }
 }

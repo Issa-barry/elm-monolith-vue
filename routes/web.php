@@ -336,10 +336,9 @@ Route::prefix('backoffice')->group(function () {
             Route::post('commissions/proprietaires/{proprietaireId}/paiements', [CommissionProprietaireController::class, 'payer'])
                 ->name('commissions.proprietaires.paiements');
 
-            // ── Périodes de paiement ──────────────────────────────────────────────
+            // ── Périodes de paiement (générées automatiquement, jamais créées à la main) ──
             Route::get('periodes', [PaiementPeriodeController::class, 'index'])->name('periodes.index');
-            Route::get('periodes/creer', [PaiementPeriodeController::class, 'create'])->name('periodes.create');
-            Route::post('periodes', [PaiementPeriodeController::class, 'store'])->name('periodes.store');
+            Route::get('periodes/voir/{type}/{annee}/{mois}/{quinzaine}', [PaiementPeriodeController::class, 'voir'])->name('periodes.voir');
             Route::get('periodes/{periode}', [PaiementPeriodeController::class, 'show'])->name('periodes.show');
             Route::get('periodes/{periode}/pdf', [PaiementPeriodeController::class, 'exportPdf'])->name('periodes.pdf');
             Route::post('periodes/{periode}/calculer', [PaiementPeriodeController::class, 'calculer'])->name('periodes.calculer');
