@@ -1,14 +1,13 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
-import { Button } from '@/components/ui/button';
 import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/vue3';
-import { Calendar, Plus } from 'lucide-vue-next';
+import { Calendar } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 
@@ -17,6 +16,7 @@ interface Periode {
     reference: string;
     type: string;
     type_label: string;
+    quinzaine: 'P1' | 'P2' | null;
     site: { id: string; nom: string } | null;
     date_debut: string | null;
     date_fin: string | null;
@@ -32,11 +32,17 @@ interface Option {
     label: string;
 }
 
-interface Kpis {
-    brouillon: number;
-    calculee: number;
-    validee: number;
-    cloturee: number;
+interface CycleParType {
+    type: string;
+    type_label: string;
+    periode: Periode;
+}
+
+interface Cycle {
+    annee_courante: number;
+    periode_courante_label: string;
+    periode_suivante_label: string;
+    par_type: CycleParType[];
 }
 
 const props = defineProps<{
@@ -46,12 +52,12 @@ const props = defineProps<{
     filters: {
         type?: string;
         statut?: string;
-        date_debut?: string;
-        date_fin?: string;
+        annee?: string;
+        mois?: string;
+        quinzaine?: string;
         search?: string;
     };
-    kpis: Kpis;
-    can_create: boolean;
+    cycle: Cycle;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -60,17 +66,65 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Périodes', href: '/backoffice/comptabilite/periodes' },
 ];
 
+const anneeOptions: Option[] = Array.from({ length: 5 }, (_, i) => {
+    const annee = props.cycle.annee_courante + 1 - i;
+    return { value: String(annee), label: String(annee) };
+});
+
+const moisOptions: Option[] = [
+    'Janvier',
+    'Février',
+    'Mars',
+    'Avril',
+    'Mai',
+    'Juin',
+    'Juillet',
+    'Août',
+    'Septembre',
+    'Octobre',
+    'Novembre',
+    'Décembre',
+].map((label, i) => ({ value: String(i + 1), label }));
+
+const quinzaineOptions: Option[] = [
+    { value: 'P1', label: 'P1 (1 → 15)' },
+    { value: 'P2', label: 'P2 (16 → fin du mois)' },
+];
+
 const filterFields: FilterField[] = [
+    {
+        key: 'annee',
+        label: 'Année',
+        type: 'select',
+        inline: true,
+        options: anneeOptions,
+    },
+    {
+        key: 'mois',
+        label: 'Mois',
+        type: 'select',
+        inline: true,
+        options: moisOptions,
+    },
+    {
+        key: 'quinzaine',
+        label: 'Quinzaine',
+        type: 'select',
+        inline: true,
+        options: quinzaineOptions,
+    },
     {
         key: 'type',
         label: 'Type',
         type: 'select',
+        inline: true,
         options: props.types,
     },
     {
         key: 'statut',
         label: 'Statut',
         type: 'select',
+        inline: true,
         options: props.statuts,
     },
 ];
@@ -99,58 +153,62 @@ const typeBadge = (type: string) =>
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex flex-col gap-6 p-6">
             <!-- Header -->
-            <div class="flex items-center justify-between">
-                <div>
-                    <h1 class="text-2xl font-semibold tracking-tight">
-                        Périodes de paiement
-                    </h1>
-                    <p class="mt-1 text-sm text-muted-foreground">
-                        Gérer les cycles de paiement livreurs, propriétaires et
-                        salariés
-                    </p>
-                </div>
-                <Link
-                    v-if="can_create"
-                    href="/backoffice/comptabilite/periodes/creer"
-                >
-                    <Button>
-                        <Plus class="mr-2 h-4 w-4" />
-                        Nouvelle période
-                    </Button>
-                </Link>
+            <div>
+                <h1 class="text-2xl font-semibold tracking-tight">
+                    Périodes de paiement
+                </h1>
+                <p class="mt-1 text-sm text-muted-foreground">
+                    Gérer les cycles de paiement livreurs, propriétaires et
+                    salariés
+                </p>
             </div>
 
-            <!-- KPI cards -->
-            <div class="grid gap-3 sm:grid-cols-4">
-                <div class="rounded-xl border bg-card p-4 text-center">
-                    <p
-                        class="text-2xl font-bold text-zinc-600 dark:text-zinc-400"
-                    >
-                        {{ kpis.brouillon }}
+            <!-- Cycle en cours -->
+            <div class="rounded-xl border bg-card p-4">
+                <div
+                    class="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm"
+                >
+                    <p>
+                        <span class="text-muted-foreground"
+                            >Période en cours :</span
+                        >
+                        <span class="ml-1.5 font-semibold">{{
+                            cycle.periode_courante_label
+                        }}</span>
                     </p>
-                    <p class="mt-1 text-xs text-muted-foreground">Brouillon</p>
+                    <p>
+                        <span class="text-muted-foreground"
+                            >Période suivante :</span
+                        >
+                        <span class="ml-1.5 font-semibold">{{
+                            cycle.periode_suivante_label
+                        }}</span>
+                    </p>
                 </div>
-                <div class="rounded-xl border bg-card p-4 text-center">
-                    <p
-                        class="text-2xl font-bold text-blue-600 dark:text-blue-400"
+
+                <div class="mt-4 grid gap-3 sm:grid-cols-3">
+                    <Link
+                        v-for="entry in cycle.par_type"
+                        :key="entry.type"
+                        :href="`/backoffice/comptabilite/periodes/${entry.periode.id}`"
+                        class="flex flex-col gap-2 rounded-lg border bg-background p-3 transition-colors hover:bg-muted/40"
                     >
-                        {{ kpis.calculee }}
-                    </p>
-                    <p class="mt-1 text-xs text-muted-foreground">Calculée</p>
-                </div>
-                <div class="rounded-xl border bg-card p-4 text-center">
-                    <p
-                        class="text-2xl font-bold text-emerald-600 dark:text-emerald-400"
-                    >
-                        {{ kpis.validee }}
-                    </p>
-                    <p class="mt-1 text-xs text-muted-foreground">Validée</p>
-                </div>
-                <div class="rounded-xl border bg-card p-4 text-center">
-                    <p class="text-2xl font-bold text-slate-500">
-                        {{ kpis.cloturee }}
-                    </p>
-                    <p class="mt-1 text-xs text-muted-foreground">Clôturée</p>
+                        <span
+                            class="text-xs font-medium text-muted-foreground"
+                            >{{ entry.type_label }}</span
+                        >
+                        <StatusDot
+                            :status="entry.periode.statut"
+                            :label="entry.periode.statut_label"
+                        />
+                        <p
+                            v-if="entry.periode.nb_fiches > 0"
+                            class="text-xs text-muted-foreground"
+                        >
+                            {{ entry.periode.nb_fiches }} fiches ·
+                            {{ fmt(entry.periode.total_net) }}
+                        </p>
+                    </Link>
                 </div>
             </div>
 
@@ -160,6 +218,7 @@ const typeBadge = (type: string) =>
                 :values="filters"
                 :fields="filterFields"
                 :result-count="periodes.data.length"
+                hide-agence-selector
             />
 
             <!-- Table -->
@@ -175,7 +234,7 @@ const typeBadge = (type: string) =>
                     <Column
                         field="reference"
                         header="Référence"
-                        style="width: 180px"
+                        style="width: 200px"
                     >
                         <template #body="{ data }">
                             <Link

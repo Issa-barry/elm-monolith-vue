@@ -2,11 +2,13 @@
 
 namespace App\Models;
 
+use App\Enums\OrigineCommissionPart;
 use App\Enums\StatutCommission;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class CommissionLogistiquePart extends Model
 {
@@ -27,6 +29,10 @@ class CommissionLogistiquePart extends Model
         'commentaire_frais',
         'montant_net',
         'montant_verse',
+        'montant_actuel',
+        'origine',
+        'validated_by',
+        'validated_at',
         'statut',
         'earned_at',
         'periode',
@@ -42,6 +48,9 @@ class CommissionLogistiquePart extends Model
             'frais_supplementaires' => 'decimal:2',
             'montant_net' => 'decimal:2',
             'montant_verse' => 'decimal:2',
+            'montant_actuel' => 'decimal:2',
+            'origine' => OrigineCommissionPart::class,
+            'validated_at' => 'datetime',
             'statut' => StatutCommission::class,
             'earned_at' => 'date',
         ];
@@ -74,11 +83,27 @@ class CommissionLogistiquePart extends Model
         return $this->hasMany(CommissionPaymentItem::class, 'part_id');
     }
 
+    public function adjustments(): MorphMany
+    {
+        return $this->morphMany(CommissionPartAdjustment::class, 'commission_part')->latest('created_at');
+    }
+
+    public function validateur(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'validated_by');
+    }
+
     // ── Accessors ─────────────────────────────────────────────────────────────
 
     public function getMontantRestantAttribute(): float
     {
         return max(0.0, (float) $this->montant_net - (float) $this->montant_verse);
+    }
+
+    /** Montant réellement dû : ajusté par un responsable, sinon montant théorique net. */
+    public function getMontantAPayerAttribute(): float
+    {
+        return $this->montant_actuel !== null ? (float) $this->montant_actuel : (float) $this->montant_net;
     }
 
     public function getStatutLabelAttribute(): string
@@ -114,6 +139,17 @@ class CommissionLogistiquePart extends Model
     public function isPayable(): bool
     {
         return $this->statut instanceof StatutCommission && $this->statut->isPayable();
+    }
+
+    public function estValidee(): bool
+    {
+        return $this->validated_at !== null;
+    }
+
+    /** Une part déjà entièrement versée ne doit plus pouvoir être ajustée ou validée. */
+    public function peutEtreAjustee(): bool
+    {
+        return ! $this->isPaye();
     }
 
     // ── Métier ────────────────────────────────────────────────────────────────

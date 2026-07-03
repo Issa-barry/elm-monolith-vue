@@ -95,8 +95,8 @@ function fmt(n: number) {
                     </p>
                 </div>
                 <div class="flex gap-2">
-                    <Link href="/backoffice/comptabilite/periodes/creer">
-                        <Button size="sm">Nouvelle période</Button>
+                    <Link href="/backoffice/comptabilite/periodes">
+                        <Button size="sm">Voir les périodes</Button>
                     </Link>
                 </div>
             </div>
