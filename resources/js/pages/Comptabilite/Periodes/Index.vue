@@ -165,7 +165,9 @@ const typeBadge = (type: string) =>
 
             <!-- Cycle en cours -->
             <div class="rounded-xl border bg-card p-4">
-                <div class="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
+                <div
+                    class="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm"
+                >
                     <p>
                         <span class="text-muted-foreground"
                             >Période en cours :</span
@@ -191,9 +193,10 @@ const typeBadge = (type: string) =>
                         :href="`/backoffice/comptabilite/periodes/${entry.periode.id}`"
                         class="flex flex-col gap-2 rounded-lg border bg-background p-3 transition-colors hover:bg-muted/40"
                     >
-                        <span class="text-xs font-medium text-muted-foreground">{{
-                            entry.type_label
-                        }}</span>
+                        <span
+                            class="text-xs font-medium text-muted-foreground"
+                            >{{ entry.type_label }}</span
+                        >
                         <StatusDot
                             :status="entry.periode.statut"
                             :label="entry.periode.statut_label"

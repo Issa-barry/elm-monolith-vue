@@ -369,8 +369,8 @@ function submitRemplacant() {
                     </div>
                     <p class="mt-1 text-sm text-muted-foreground">
                         Période du {{ periode.date_debut }} au
-                        {{ periode.date_fin }} — équipe globale du véhicule
-                        sur la période
+                        {{ periode.date_fin }} — équipe globale du véhicule sur
+                        la période
                     </p>
                 </div>
                 <div class="flex items-center gap-2">
@@ -400,9 +400,7 @@ function submitRemplacant() {
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-4">
-                    <p class="text-xs text-muted-foreground">
-                        Montant ajusté
-                    </p>
+                    <p class="text-xs text-muted-foreground">Montant ajusté</p>
                     <p class="mt-1 text-lg font-bold tabular-nums">
                         {{ fmt(vehicule.ajuste) }}
                     </p>
@@ -552,7 +550,7 @@ function submitRemplacant() {
                             </span>
                             <span
                                 v-else
-                                class="text-sm tabular-nums text-muted-foreground"
+                                class="text-sm text-muted-foreground tabular-nums"
                                 >—</span
                             >
                         </template>
@@ -578,9 +576,7 @@ function submitRemplacant() {
 
                     <Column header="" style="width: 130px">
                         <template #body="{ data }">
-                            <div
-                                class="flex items-center justify-end gap-1.5"
-                            >
+                            <div class="flex items-center justify-end gap-1.5">
                                 <Button
                                     variant="outline"
                                     size="sm"
@@ -628,8 +624,8 @@ function submitRemplacant() {
         >
             <div v-if="ajusterTarget" class="space-y-4 py-2">
                 <p class="text-sm text-muted-foreground">
-                    {{ ajusterTarget.beneficiaire_nom }} — Montant théorique
-                    de la période :
+                    {{ ajusterTarget.beneficiaire_nom }} — Montant théorique de
+                    la période :
                     <strong>{{ fmt(ajusterTarget.theorique) }}</strong>
                 </p>
 
@@ -665,10 +661,7 @@ function submitRemplacant() {
                         rows="2"
                     />
                 </div>
-                <p
-                    v-if="ajusterError"
-                    class="text-xs text-destructive"
-                >
+                <p v-if="ajusterError" class="text-xs text-destructive">
                     {{ ajusterError }}
                 </p>
             </div>
@@ -695,8 +688,8 @@ function submitRemplacant() {
         >
             <div v-if="absenceTarget" class="space-y-4 py-2">
                 <p class="text-sm text-muted-foreground">
-                    {{ absenceTarget.beneficiaire_nom }} — le montant sera mis
-                    à 0 GNF sur les
+                    {{ absenceTarget.beneficiaire_nom }} — le montant sera mis à
+                    0 GNF sur les
                     {{
                         absenceTarget.parts.filter((p) => p.peut_etre_ajustee)
                             .length
@@ -721,9 +714,7 @@ function submitRemplacant() {
                     @click="showAbsenceDialog = false"
                     >Annuler</Button
                 >
-                <Button
-                    :disabled="absenceProcessing"
-                    @click="submitAbsence"
+                <Button :disabled="absenceProcessing" @click="submitAbsence"
                     >Confirmer l'absence</Button
                 >
             </template>
@@ -739,7 +730,9 @@ function submitRemplacant() {
         >
             <div class="space-y-4 py-2">
                 <div>
-                    <Label class="mb-1.5 block text-sm">Type de commission</Label>
+                    <Label class="mb-1.5 block text-sm"
+                        >Type de commission</Label
+                    >
                     <Dropdown
                         v-model="remplacantForm.commission_type"
                         :options="[
@@ -753,7 +746,9 @@ function submitRemplacant() {
                     />
                 </div>
                 <div>
-                    <Label class="mb-1.5 block text-sm">Commande / Transfert</Label>
+                    <Label class="mb-1.5 block text-sm"
+                        >Commande / Transfert</Label
+                    >
                     <Dropdown
                         v-model="remplacantForm.commission_id"
                         :options="commissionOptions"
@@ -770,7 +765,9 @@ function submitRemplacant() {
                     </p>
                 </div>
                 <div>
-                    <Label class="mb-1.5 block text-sm">Type de bénéficiaire</Label>
+                    <Label class="mb-1.5 block text-sm"
+                        >Type de bénéficiaire</Label
+                    >
                     <Dropdown
                         v-model="remplacantForm.type_beneficiaire"
                         :options="[
@@ -804,7 +801,10 @@ function submitRemplacant() {
                         class="w-full"
                         @update:model-value="
                             (id: string) => {
-                                if (remplacantForm.type_beneficiaire === 'livreur') {
+                                if (
+                                    remplacantForm.type_beneficiaire ===
+                                    'livreur'
+                                ) {
                                     remplacantForm.livreur_id = id;
                                 } else {
                                     remplacantForm.proprietaire_id = id;

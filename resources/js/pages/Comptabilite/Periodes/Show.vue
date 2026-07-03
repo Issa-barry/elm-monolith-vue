@@ -457,10 +457,9 @@ function exportPdf() {
                         style="width: 120px"
                     >
                         <template #body="{ data }">
-                            <span
-                                class="text-muted-foreground tabular-nums"
-                                >{{ data.nb_commandes }}</span
-                            >
+                            <span class="text-muted-foreground tabular-nums">{{
+                                data.nb_commandes
+                            }}</span>
                         </template>
                     </Column>
 
@@ -471,10 +470,9 @@ function exportPdf() {
                         style="width: 110px"
                     >
                         <template #body="{ data }">
-                            <span
-                                class="text-muted-foreground tabular-nums"
-                                >{{ data.nb_membres }}</span
-                            >
+                            <span class="text-muted-foreground tabular-nums">{{
+                                data.nb_membres
+                            }}</span>
                         </template>
                     </Column>
 
@@ -502,9 +500,7 @@ function exportPdf() {
                                 :status="
                                     data.equilibre ? 'validee' : 'en_attente'
                                 "
-                                :label="
-                                    data.equilibre ? 'Validé' : 'À ajuster'
-                                "
+                                :label="data.equilibre ? 'Validé' : 'À ajuster'"
                             />
                         </template>
                     </Column>
