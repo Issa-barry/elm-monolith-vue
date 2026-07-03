@@ -37,6 +37,13 @@ class PaiementPeriodePolicy
             && $periode->peutEtreValidee();
     }
 
+    public function ajuster(User $user, PaiementPeriode $periode): bool
+    {
+        return $user->isAdmin()
+            && $user->organization_id === $periode->organization_id
+            && $periode->isCalculee();
+    }
+
     public function cloturer(User $user, PaiementPeriode $periode): bool
     {
         return $user->isAdmin()
