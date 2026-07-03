@@ -524,9 +524,9 @@ function logoutAndGoToLogin() {
             <!-- ── Étape 2 : OTP ──────────────────────────────────────────── -->
             <div v-else-if="step === 'otp'" class="grid gap-6">
                 <p class="text-sm text-muted-foreground">
-                    Un code de vérification a été envoyé au
+                    Un code de vérification a été envoyé à
                     <span class="font-medium text-foreground">{{
-                        fullPhone
+                        email
                     }}</span
                     >.
                 </p>
