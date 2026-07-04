@@ -438,7 +438,8 @@ class UserInvitationTest extends TestCase
         ])->assertOk()
             ->assertJson(['status' => 'not_found']);
 
-        $this->assertTrue(Cache::has('otp:'.md5('+224620000099')));
+        $context = $invitation->id.'|'.$invitation->email;
+        $this->assertTrue(Cache::has('otp:'.md5('+224620000099|'.$context)));
     }
 
     // ── AcceptInvitationController::verifyOtp ─────────────────────────────────
@@ -457,9 +458,9 @@ class UserInvitationTest extends TestCase
 
         $this->postJson(route('invitations.accept.otp', $token), [
             'telephone' => '+224620000010',
-            'code' => '00000', // wrong
+            'code' => '000000', // wrong
         ])->assertStatus(422)
-            ->assertJsonFragment(['error' => 'Code de vérification incorrect.']);
+            ->assertJsonFragment(['error' => 'Code incorrect ou expiré.']);
     }
 
     public function test_verify_otp_returns_verified_true_for_correct_code(): void
@@ -475,9 +476,52 @@ class UserInvitationTest extends TestCase
 
         $this->postJson(route('invitations.accept.otp', $token), [
             'telephone' => '+224620000011',
-            'code' => '12345', // dev fixed code
+            'code' => '123456', // dev fixed code
         ])->assertOk()
             ->assertJson(['verified' => true]);
+    }
+
+    public function test_verify_otp_locks_out_after_5_wrong_attempts(): void
+    {
+        $org = $this->makeOrg();
+        $site = $this->makeSite($org);
+        $invitation = $this->makeInvitation($site);
+        $token = $this->plainToken($invitation);
+
+        $this->postJson(route('invitations.accept.phone', $token), [
+            'telephone' => '+224620000012',
+        ]);
+
+        for ($i = 0; $i < 5; $i++) {
+            $this->postJson(route('invitations.accept.otp', $token), [
+                'telephone' => '+224620000012',
+                'code' => '000000',
+            ])->assertStatus(422);
+        }
+
+        // Le code est verrouillé : même le bon code est désormais refusé.
+        $this->postJson(route('invitations.accept.otp', $token), [
+            'telephone' => '+224620000012',
+            'code' => '123456',
+        ])->assertStatus(429)
+            ->assertJsonFragment(['error' => 'Trop de tentatives. Demandez un nouveau code.']);
+    }
+
+    public function test_check_phone_refuses_resend_before_cooldown(): void
+    {
+        $org = $this->makeOrg();
+        $site = $this->makeSite($org);
+        $invitation = $this->makeInvitation($site);
+        $token = $this->plainToken($invitation);
+
+        $this->postJson(route('invitations.accept.phone', $token), [
+            'telephone' => '+224620000013',
+        ])->assertOk();
+
+        $this->postJson(route('invitations.accept.phone', $token), [
+            'telephone' => '+224620000013',
+        ])->assertStatus(429)
+            ->assertJsonFragment(['error' => 'Trop de demandes de code. Veuillez réessayer plus tard.']);
     }
 
     // ── AcceptInvitationController::accept ────────────────────────────────────
@@ -562,7 +606,7 @@ class UserInvitationTest extends TestCase
         // Step 2: verify OTP
         $this->postJson(route('invitations.accept.otp', $token), [
             'telephone' => $phone,
-            'code' => '12345',
+            'code' => '123456',
         ]);
 
         // Step 3: accept

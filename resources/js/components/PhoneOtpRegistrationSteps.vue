@@ -182,10 +182,10 @@ function submitRegistration() {
                     type="text"
                     inputmode="numeric"
                     pattern="[0-9]*"
-                    maxlength="5"
+                    maxlength="6"
                     :tabindex="1"
                     autocomplete="one-time-code"
-                    placeholder="12345"
+                    placeholder="123456"
                 />
                 <InputError :message="otpError" />
             </div>
@@ -194,7 +194,7 @@ function submitRegistration() {
                 type="button"
                 class="w-full"
                 :tabindex="2"
-                :disabled="loading || otpCode.length !== 5"
+                :disabled="loading || otpCode.length !== 6"
                 @click="submitOtp"
             >
                 <Spinner v-if="loading" />

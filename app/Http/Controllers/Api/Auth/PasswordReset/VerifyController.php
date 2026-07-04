@@ -14,7 +14,7 @@ class VerifyController extends Controller
     {
         $request->validate([
             'telephone' => ['required', 'string'],
-            'code' => ['required', 'string', 'digits:5'],
+            'code' => ['required', 'string', 'digits:6'],
         ]);
 
         $phone = PhoneNormalizer::normalize($request->input('telephone', ''));
@@ -23,8 +23,12 @@ class VerifyController extends Controller
             return response()->json(['error' => 'Numéro de téléphone invalide.'], 422);
         }
 
+        if ($otp->tooManyAttempts($phone)) {
+            return response()->json(['error' => 'Trop de tentatives. Demandez un nouveau code.'], 429);
+        }
+
         if (! $otp->verify($phone, $request->input('code', ''))) {
-            return response()->json(['error' => 'Code de vérification incorrect.'], 422);
+            return response()->json(['error' => 'Code incorrect ou expiré.'], 422);
         }
 
         $otp->markVerified($phone);

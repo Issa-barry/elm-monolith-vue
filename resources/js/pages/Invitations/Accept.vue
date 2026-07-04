@@ -10,8 +10,6 @@ import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
     AlertCircle,
     CheckCircle,
-    Eye,
-    EyeOff,
     Home,
     LayoutDashboard,
     Lock,
@@ -19,6 +17,9 @@ import {
     LogOut,
     MailCheck,
 } from 'lucide-vue-next';
+import IconField from 'primevue/iconfield';
+import InputIcon from 'primevue/inputicon';
+import Password from 'primevue/password';
 import Select from 'primevue/select';
 import { computed, ref } from 'vue';
 
@@ -200,7 +201,9 @@ const step = ref<Step>('phone');
 const loading = ref(false);
 
 const lookupError = ref('');
-const otpCode = ref('');
+const otpDigits = ref<string[]>(['', '', '', '', '', '']);
+const otpCode = computed(() => otpDigits.value.join(''));
+const otpInputs = ref<(HTMLInputElement | null)[]>([]);
 const otpError = ref('');
 const formPrenom = ref('');
 const formNom = ref('');
@@ -215,8 +218,14 @@ const form = useForm({
     password_confirmation: '',
 });
 
-const showPassword = ref(false);
-const showPasswordConfirmation = ref(false);
+const isPasswordStepValid = computed(
+    () =>
+        form.password.length >= 8 &&
+        /[a-zA-Z]/.test(form.password) &&
+        /\d/.test(form.password) &&
+        form.password_confirmation.length > 0 &&
+        form.password === form.password_confirmation,
+);
 
 // ── Helpers API ───────────────────────────────────────────────────────────────
 
@@ -309,7 +318,7 @@ async function submitOtp() {
 
         step.value = 'identity';
     } catch (e: unknown) {
-        otpError.value = e instanceof Error ? e.message : 'Code incorrect.';
+        otpError.value = e instanceof Error ? e.message : 'Code incorrect ou expiré.';
     } finally {
         loading.value = false;
     }
@@ -317,8 +326,53 @@ async function submitOtp() {
 
 function backToPhone() {
     step.value = 'phone';
-    otpCode.value = '';
+    otpDigits.value = ['', '', '', '', '', ''];
     otpError.value = '';
+}
+
+function handleOtpInput(index: number, e: Event) {
+    const input = e.target as HTMLInputElement;
+    const raw = input.value.replace(/\D/g, '');
+
+    if (raw.length > 1) {
+        // Autofill SMS ou saisie rapide : répartit les chiffres à partir de cette case
+        raw.split('').forEach((d, i) => {
+            if (index + i < otpDigits.value.length) {
+                otpDigits.value[index + i] = d;
+            }
+        });
+        const lastIndex = Math.min(
+            index + raw.length - 1,
+            otpDigits.value.length - 1,
+        );
+        input.value = otpDigits.value[index];
+        otpInputs.value[lastIndex]?.focus();
+        return;
+    }
+
+    otpDigits.value[index] = raw;
+    input.value = raw;
+    if (raw && index < otpDigits.value.length - 1) {
+        otpInputs.value[index + 1]?.focus();
+    }
+}
+
+function handleOtpKeydown(index: number, e: KeyboardEvent) {
+    if (e.key === 'Backspace' && !otpDigits.value[index] && index > 0) {
+        otpInputs.value[index - 1]?.focus();
+    }
+}
+
+function handleOtpPaste(e: ClipboardEvent) {
+    const pasted = e.clipboardData?.getData('text').replace(/\D/g, '') ?? '';
+    if (!pasted) return;
+    e.preventDefault();
+
+    const digits = pasted.slice(0, otpDigits.value.length).split('');
+    digits.forEach((d, i) => {
+        otpDigits.value[i] = d;
+    });
+    otpInputs.value[Math.min(digits.length, otpDigits.value.length - 1)]?.focus();
 }
 
 // ── Étape 4 : soumission finale ───────────────────────────────────────────────
@@ -536,26 +590,39 @@ function logoutAndGoToLogin() {
                 </p>
 
                 <div class="grid gap-2">
-                    <Label for="otp">Code de vérification</Label>
-                    <Input
-                        id="otp"
-                        v-model="otpCode"
-                        type="text"
-                        inputmode="numeric"
-                        pattern="[0-9]*"
-                        maxlength="5"
-                        :tabindex="1"
-                        autocomplete="one-time-code"
-                        placeholder="12345"
-                    />
+                    <Label>Code de vérification</Label>
+                    <div class="flex justify-between gap-2">
+                        <input
+                            v-for="(digit, index) in otpDigits"
+                            :key="index"
+                            :ref="
+                                (el) =>
+                                    (otpInputs[index] = el as HTMLInputElement)
+                            "
+                            :value="digit"
+                            type="text"
+                            inputmode="numeric"
+                            pattern="[0-9]*"
+                            maxlength="1"
+                            :tabindex="index + 1"
+                            :autofocus="index === 0"
+                            :autocomplete="
+                                index === 0 ? 'one-time-code' : 'off'
+                            "
+                            class="h-14 w-12 rounded-md border border-input bg-transparent text-center text-xl font-semibold shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                            @input="handleOtpInput(index, $event)"
+                            @keydown="handleOtpKeydown(index, $event)"
+                            @paste="handleOtpPaste"
+                        />
+                    </div>
                     <InputError :message="otpError" />
                 </div>
 
                 <Button
                     type="button"
                     class="w-full"
-                    :tabindex="2"
-                    :disabled="loading || otpCode.length !== 5"
+                    :tabindex="6"
+                    :disabled="loading || otpCode.length !== 6"
                     @click="submitOtp"
                 >
                     <Spinner v-if="loading" />
@@ -565,7 +632,7 @@ function logoutAndGoToLogin() {
                 <button
                     type="button"
                     class="text-center text-sm text-muted-foreground underline underline-offset-4"
-                    :tabindex="3"
+                    :tabindex="7"
                     @click="backToPhone"
                 >
                     Modifier le numéro
@@ -669,38 +736,21 @@ function logoutAndGoToLogin() {
                     <Label for="password">
                         Mot de passe <span class="text-destructive">*</span>
                     </Label>
-                    <div class="relative">
-                        <Input
+                    <IconField class="w-full">
+                        <InputIcon class="pi pi-lock" />
+                        <Password
                             id="password"
                             v-model="form.password"
-                            :type="showPassword ? 'text' : 'password'"
-                            required
+                            placeholder="Mot de passe"
+                            toggle-mask
                             autofocus
                             :tabindex="1"
                             autocomplete="new-password"
-                            placeholder="Mot de passe"
-                            class="pr-10"
+                            class="w-full"
+                            :input-style="{ paddingLeft: '2.5rem' }"
+                            input-class="w-full"
                         />
-                        <button
-                            type="button"
-                            class="absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-                            tabindex="-1"
-                            @click="showPassword = !showPassword"
-                            :aria-label="
-                                showPassword
-                                    ? 'Masquer le mot de passe'
-                                    : 'Afficher le mot de passe'
-                            "
-                        >
-                            <component
-                                :is="showPassword ? EyeOff : Eye"
-                                class="h-4 w-4"
-                            />
-                        </button>
-                    </div>
-                    <p class="text-xs text-muted-foreground">
-                        8 caractères minimum, avec majuscule et chiffre.
-                    </p>
+                    </IconField>
                     <InputError
                         :message="
                             form.errors.password ??
@@ -716,37 +766,21 @@ function logoutAndGoToLogin() {
                         Confirmer le mot de passe
                         <span class="text-destructive">*</span>
                     </Label>
-                    <div class="relative">
-                        <Input
+                    <IconField class="w-full">
+                        <InputIcon class="pi pi-lock" />
+                        <Password
                             id="password_confirmation"
                             v-model="form.password_confirmation"
-                            :type="showPasswordConfirmation ? 'text' : 'password'"
-                            required
+                            placeholder="Confirmer le mot de passe"
+                            toggle-mask
+                            :feedback="false"
                             :tabindex="2"
                             autocomplete="new-password"
-                            placeholder="Confirmer le mot de passe"
-                            class="pr-10"
+                            class="w-full"
+                            :input-style="{ paddingLeft: '2.5rem' }"
+                            input-class="w-full"
                         />
-                        <button
-                            type="button"
-                            class="absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-                            tabindex="-1"
-                            @click="
-                                showPasswordConfirmation =
-                                    !showPasswordConfirmation
-                            "
-                            :aria-label="
-                                showPasswordConfirmation
-                                    ? 'Masquer le mot de passe'
-                                    : 'Afficher le mot de passe'
-                            "
-                        >
-                            <component
-                                :is="showPasswordConfirmation ? EyeOff : Eye"
-                                class="h-4 w-4"
-                            />
-                        </button>
-                    </div>
+                    </IconField>
                     <InputError :message="form.errors.password_confirmation" />
                 </div>
 
@@ -754,7 +788,7 @@ function logoutAndGoToLogin() {
                     type="button"
                     class="mt-2 w-full"
                     :tabindex="3"
-                    :disabled="form.processing"
+                    :disabled="form.processing || !isPasswordStepValid"
                     @click="submitAccept"
                 >
                     <Spinner v-if="form.processing" />

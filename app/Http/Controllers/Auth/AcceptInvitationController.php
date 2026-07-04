@@ -70,12 +70,14 @@ class AcceptInvitationController extends Controller
             return response()->json(['status' => 'user_exists']);
         }
 
-        if (! $otp->canResend($phone)) {
-            return response()->json(['error' => 'Veuillez patienter quelques secondes avant de redemander un code.'], 429);
+        $context = $this->otpContext($invitation);
+
+        if (! $otp->canSend($phone, $context)) {
+            return response()->json(['error' => 'Trop de demandes de code. Veuillez réessayer plus tard.'], 429);
         }
 
         $prefill = $service->phonePrefill($phone);
-        $code = $otp->generate($phone);
+        $code = $otp->generate($phone, $context);
 
         Mail::to($invitation->email)->send(new OtpInvitationMail($code));
 
@@ -99,7 +101,7 @@ class AcceptInvitationController extends Controller
 
         $request->validate([
             'telephone' => ['required', 'string'],
-            'code' => ['required', 'string', 'digits:5'],
+            'code' => ['required', 'string', 'digits:6'],
         ]);
 
         $phone = PhoneNormalizer::normalize($request->input('telephone', ''));
@@ -108,15 +110,17 @@ class AcceptInvitationController extends Controller
             return response()->json(['error' => 'Numéro de téléphone invalide.'], 422);
         }
 
-        if ($otp->tooManyAttempts($phone)) {
+        $context = $this->otpContext($invitation);
+
+        if ($otp->tooManyAttempts($phone, $context)) {
             return response()->json(['error' => 'Trop de tentatives. Demandez un nouveau code.'], 429);
         }
 
-        if (! $otp->verify($phone, $request->input('code', ''))) {
-            return response()->json(['error' => 'Code de vérification incorrect.'], 422);
+        if (! $otp->verify($phone, $request->input('code', ''), $context)) {
+            return response()->json(['error' => 'Code incorrect ou expiré.'], 422);
         }
 
-        $otp->markVerified($phone);
+        $otp->markVerified($phone, $context);
 
         return response()->json(['verified' => true]);
     }
@@ -166,7 +170,9 @@ class AcceptInvitationController extends Controller
             'password.confirmed' => 'La confirmation du mot de passe ne correspond pas.',
         ]);
 
-        if (! $otp->isVerified($data['telephone'])) {
+        $context = $this->otpContext($invitation);
+
+        if (! $otp->isVerified($data['telephone'], $context)) {
             throw ValidationException::withMessages([
                 'telephone' => 'Veuillez vérifier votre numéro de téléphone.',
             ]);
@@ -174,11 +180,20 @@ class AcceptInvitationController extends Controller
 
         $user = $service->accept($invitation, $data);
 
-        $otp->clear($data['telephone']);
+        $otp->clear($data['telephone'], $context);
 
         Auth::login($user);
 
         return redirect()->route('dashboard');
+    }
+
+    /**
+     * Lie l'OTP à cette invitation précise (id + email) : un même numéro de téléphone
+     * réinvité ne peut jamais réutiliser/hériter d'un code généré pour une autre invitation.
+     */
+    private function otpContext(UserInvitation $invitation): string
+    {
+        return $invitation->id.'|'.$invitation->email;
     }
 
     private function invitationErrorState(?UserInvitation $invitation): ?string
