@@ -2,15 +2,20 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AuditEvent;
+use App\Mail\AccountValidatedMail;
 use App\Models\Site;
 use App\Models\User;
+use App\Services\AuditLogService;
 use App\Services\MatriculeService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Spatie\Permission\Models\Role;
@@ -32,6 +37,15 @@ const USER_PAYS = [
 class UserController extends Controller
 {
     public const STAFF_ROLES = ['super_admin', 'admin_entreprise', 'manager', 'commerciale', 'comptable'];
+
+    /**
+     * Rôles pouvant être attribués via une invitation. Les rôles admin sont
+     * volontairement exclus : ils ne peuvent être attribués qu'après validation
+     * du compte, depuis la gestion utilisateur (voir update()).
+     */
+    public const INVITABLE_ROLES = ['manager', 'commerciale', 'comptable'];
+
+    public const ADMIN_ROLES = ['super_admin', 'admin_entreprise'];
 
     private function getRoleOptions(): Collection
     {
@@ -108,6 +122,7 @@ class UserController extends Controller
                         : null,
                     'matricule' => $u->matricule,
                     'is_active' => $u->is_active,
+                    'is_pending_validation' => $u->isPendingValidation(),
                     'roles' => $u->getRoleNames(),
                     'site' => $defaultSite ? "{$defaultSite->nom} ({$defaultSite->code})" : null,
                     'site_id' => $defaultSite?->id,
@@ -244,7 +259,7 @@ class UserController extends Controller
         ]);
     }
 
-    public function update(Request $request, User $user): RedirectResponse
+    public function update(Request $request, User $user, AuditLogService $auditLog): RedirectResponse
     {
         $this->authorize('update', $user);
 
@@ -275,6 +290,16 @@ class UserController extends Controller
             'password.confirmed' => 'La confirmation du mot de passe ne correspond pas.',
         ]);
 
+        // Un rôle admin ne peut être attribué qu'à un compte déjà validé : un compte
+        // en attente doit d'abord être validé avant toute élévation de privilèges.
+        if (in_array($data['role'], self::ADMIN_ROLES, true) && $user->isPendingValidation()) {
+            throw ValidationException::withMessages([
+                'role' => "Ce compte doit d'abord être validé avant de pouvoir lui attribuer un rôle administrateur.",
+            ]);
+        }
+
+        $previousRole = $user->getRoleNames()->first();
+
         $updateData = $this->buildUserFields($data, $user->is_active);
 
         if (! empty($data['password'])) {
@@ -284,12 +309,62 @@ class UserController extends Controller
         $user->update($updateData);
         $user->syncRoles([$data['role']]);
 
+        if ($previousRole !== $data['role']) {
+            $auditLog->record($user, AuditEvent::UPDATED, auth()->user(), ['role' => $previousRole], ['role' => $data['role']]);
+        }
+
         if (! empty($data['site_id'])) {
             $user->sites()->sync([$data['site_id'] => ['role' => 'employe', 'is_default' => true]]);
         }
 
         return redirect()->route('users.edit', $user)
             ->with('success', "{$user->name} a été mis à jour.");
+    }
+
+    /**
+     * PATCH /users/{user}/validate
+     * Valide un compte en attente : il devient actif et peut se connecter.
+     */
+    public function validateAccount(User $user, AuditLogService $auditLog): RedirectResponse
+    {
+        $this->authorize('update', $user);
+
+        abort_unless($user->isPendingValidation(), 422, "Ce compte n'est pas en attente de validation.");
+
+        $user->update([
+            'status' => User::STATUS_ACTIVE,
+            'is_active' => true,
+        ]);
+
+        $auditLog->record($user, AuditEvent::VALIDATED, auth()->user());
+
+        if ($user->email) {
+            Mail::to($user->email)->send(new AccountValidatedMail($user));
+        }
+
+        // Retourne vers la page d'origine (liste des utilisateurs ou onglet
+        // "Membres" d'un site) plutôt qu'une destination fixe.
+        return back()->with('success', "{$user->name} a été validé et peut désormais se connecter.");
+    }
+
+    /**
+     * PATCH /users/{user}/reject
+     * Refuse un compte en attente : il reste bloqué (inactif).
+     */
+    public function rejectAccount(User $user, AuditLogService $auditLog): RedirectResponse
+    {
+        $this->authorize('update', $user);
+
+        abort_unless($user->isPendingValidation(), 422, "Ce compte n'est pas en attente de validation.");
+
+        $user->update([
+            'status' => User::STATUS_INACTIVE,
+            'is_active' => false,
+        ]);
+
+        $auditLog->record($user, AuditEvent::REJECTED, auth()->user());
+
+        return back()->with('success', "{$user->name} a été refusé.");
     }
 
     public function updatePassword(Request $request, User $user): RedirectResponse

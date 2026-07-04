@@ -72,15 +72,21 @@ class FortifyServiceProvider extends ServiceProvider
                 return null;
             }
 
+            // Le statut du compte (en attente/désactivé) est un blocage plus fondamental
+            // que l'email non vérifié : même une fois l'email vérifié, l'utilisateur ne
+            // pourrait toujours pas se connecter. On le vérifie donc en premier pour
+            // toujours afficher le message le plus pertinent.
+            if (! $user->is_active) {
+                $message = $user->isPendingValidation()
+                    ? 'Votre compte a bien été créé. Il est en attente de validation par un administrateur.'
+                    : 'Votre compte a été désactivé. Veuillez contacter notre service client pour plus d\'informations.';
+
+                throw ValidationException::withMessages(['telephone' => [$message]]);
+            }
+
             if (! $user->hasVerifiedEmail() && ! $user->isSuperAdmin()) {
                 throw ValidationException::withMessages([
                     'telephone' => ['Veuillez vérifier votre adresse email pour activer votre compte. Consultez votre boîte de réception.'],
-                ]);
-            }
-
-            if (! $user->is_active) {
-                throw ValidationException::withMessages([
-                    'telephone' => ['Votre compte a été désactivé. Veuillez contacter notre service client pour plus d\'informations.'],
                 ]);
             }
 
@@ -155,6 +161,20 @@ class FortifyServiceProvider extends ServiceProvider
             $throttleKey = Str::transliterate(Str::lower($request->input('telephone', '')).'|'.$request->ip());
 
             return Limit::perMinute(5)->by($throttleKey);
+        });
+
+        // OTP (onboarding par invitation) : clé composite téléphone+IP, pour qu'un
+        // numéro ne puisse pas être bombardé/bruteforcé depuis plusieurs IP.
+        RateLimiter::for('otp-send', function (Request $request) {
+            $throttleKey = Str::transliterate(Str::lower($request->input('telephone', '')).'|'.$request->ip());
+
+            return Limit::perMinute(5)->by($throttleKey);
+        });
+
+        RateLimiter::for('otp-verify', function (Request $request) {
+            $throttleKey = Str::transliterate(Str::lower($request->input('telephone', '')).'|'.$request->ip());
+
+            return Limit::perMinute(10)->by($throttleKey);
         });
     }
 }

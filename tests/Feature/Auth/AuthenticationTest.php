@@ -188,6 +188,76 @@ class AuthenticationTest extends TestCase
         );
     }
 
+    public function test_pending_validation_user_cannot_login(): void
+    {
+        $user = User::factory()->withoutTwoFactor()->create([
+            'is_active' => false,
+            'status' => User::STATUS_PENDING_VALIDATION,
+        ]);
+
+        $this->post(route('login.store'), [
+            'telephone' => $user->telephone,
+            'password' => 'password',
+        ])->assertSessionHasErrors('telephone');
+
+        $this->assertGuest();
+    }
+
+    public function test_pending_validation_user_login_error_message_is_clear(): void
+    {
+        $user = User::factory()->withoutTwoFactor()->create([
+            'is_active' => false,
+            'status' => User::STATUS_PENDING_VALIDATION,
+        ]);
+
+        $this->post(route('login.store'), [
+            'telephone' => $user->telephone,
+            'password' => 'password',
+        ]);
+
+        $this->assertStringContainsString(
+            'en attente de validation',
+            session('errors')->first('telephone'),
+        );
+    }
+
+    public function test_pending_validation_message_takes_priority_over_unverified_email(): void
+    {
+        // Cas réel des comptes créés via invitation : email jamais vérifié en plus
+        // du statut pending_validation. Le message doit rester celui de la validation
+        // en attente, pas "email non vérifié" (blocage moins fondamental).
+        $user = User::factory()->withoutTwoFactor()->create([
+            'is_active' => false,
+            'status' => User::STATUS_PENDING_VALIDATION,
+            'email_verified_at' => null,
+        ]);
+
+        $response = $this->post(route('login.store'), [
+            'telephone' => $user->telephone,
+            'password' => 'password',
+        ]);
+
+        $response->assertSessionHasErrors('telephone');
+        $this->assertStringContainsString(
+            'en attente de validation',
+            session('errors')->first('telephone'),
+        );
+    }
+
+    public function test_pending_validation_user_cannot_access_dashboard(): void
+    {
+        $user = User::factory()->withoutTwoFactor()->create([
+            'is_active' => false,
+            'status' => User::STATUS_PENDING_VALIDATION,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertRedirect(route('login'));
+
+        $this->assertGuest();
+    }
+
     public function test_users_are_rate_limited(): void
     {
         $user = User::factory()->create();

@@ -51,6 +51,10 @@ class RegisterLookupController extends Controller
             }
         }
 
+        if (! $otp->canSend($phone)) {
+            return response()->json(['error' => 'Trop de demandes de code. Veuillez réessayer plus tard.'], 429);
+        }
+
         $otp->generate($phone);
 
         return response()->json([

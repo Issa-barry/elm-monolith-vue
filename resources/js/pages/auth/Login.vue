@@ -17,7 +17,7 @@ import AuthBase from '@/layouts/AuthLayout.vue';
 import { home, register } from '@/routes';
 import { store } from '@/routes/login';
 import { Form, Head, Link } from '@inertiajs/vue3';
-import { Eye, EyeOff, MailWarning, ShieldX } from 'lucide-vue-next';
+import { Clock, Eye, EyeOff, MailWarning, ShieldX } from 'lucide-vue-next';
 import Select from 'primevue/select';
 import { computed, ref, watch } from 'vue';
 
@@ -223,6 +223,31 @@ function handlePhoneKeydown(e: KeyboardEvent) {
                         </div>
                     </div>
 
+                    <!-- Compte en attente de validation -->
+                    <div
+                        v-if="
+                            errors.telephone?.includes(
+                                'en attente de validation',
+                            )
+                        "
+                        class="mb-5 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/40 dark:bg-amber-950/40"
+                    >
+                        <Clock class="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+                        <div>
+                            <p
+                                class="text-sm font-semibold text-amber-700 dark:text-amber-400"
+                            >
+                                Compte en attente de validation
+                            </p>
+                            <p
+                                class="mt-0.5 text-sm text-amber-600 dark:text-amber-300"
+                            >
+                                Votre compte a bien été créé. Il est en attente
+                                de validation par un administrateur.
+                            </p>
+                        </div>
+                    </div>
+
                     <!-- Champ téléphone caché (valeur complète) -->
                     <input type="hidden" name="telephone" :value="fullPhone" />
 
@@ -303,6 +328,9 @@ function handlePhoneKeydown(e: KeyboardEvent) {
                                     errors.telephone?.includes('bloqué') ||
                                     errors.telephone?.includes(
                                         'vérifier votre adresse email',
+                                    ) ||
+                                    errors.telephone?.includes(
+                                        'en attente de validation',
                                     )
                                         ? undefined
                                         : (phoneClientError ?? errors.telephone)

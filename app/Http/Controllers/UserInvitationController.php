@@ -21,12 +21,12 @@ class UserInvitationController extends Controller
 
         $data = $request->validate([
             'email' => 'required|email|max:255',
-            'role' => ['required', Rule::in(UserController::STAFF_ROLES)],
+            'role' => ['required', Rule::in(UserController::INVITABLE_ROLES)],
         ], [
             'email.required' => "L'adresse email est obligatoire.",
             'email.email' => "L'adresse email est invalide.",
             'role.required' => 'Le rôle est obligatoire.',
-            'role.in' => 'Rôle invalide.',
+            'role.in' => "Ce rôle ne peut pas être attribué par invitation. Les rôles administrateur ne peuvent être accordés qu'après validation du compte, depuis la gestion des utilisateurs.",
         ]);
 
         try {

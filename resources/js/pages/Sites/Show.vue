@@ -20,6 +20,7 @@ import {
     ArrowLeft,
     Building2,
     Car,
+    CheckCircle,
     ChevronRight,
     Info,
     MailOpen,
@@ -40,6 +41,7 @@ import IconField from 'primevue/iconfield';
 import InputIcon from 'primevue/inputicon';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
+import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref, watch } from 'vue';
 
@@ -90,6 +92,7 @@ interface Membre {
         | 'en_attente'
         | 'expire'
         | 'pending'
+        | 'pending_validation'
         | 'revoked'
         | 'expired'
         | 'accepted';
@@ -127,9 +130,26 @@ const props = defineProps<{
 
 const { can } = usePermissions();
 const toast = useToast();
+const confirm = useConfirm();
 const page = usePage();
 
-const activeTab = ref<'infos' | 'membres' | 'vehicules'>('infos');
+type SiteTab = 'infos' | 'membres' | 'vehicules';
+
+// Onglet initial lu depuis l'URL (?tab=membres) : permet de revenir directement
+// sur le bon onglet après une redirection serveur (ex: validation d'un membre).
+const initialTabParam = new URLSearchParams(window.location.search).get('tab');
+const initialTab: SiteTab =
+    initialTabParam === 'membres' || initialTabParam === 'vehicules'
+        ? initialTabParam
+        : 'infos';
+
+const activeTab = ref<SiteTab>(initialTab);
+
+watch(activeTab, (tab) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', tab);
+    window.history.replaceState({}, '', url);
+});
 
 const flashSuccess = computed(
     () => (page.props as any).flash?.success as string | undefined,
@@ -244,7 +264,9 @@ const filteredMembres = computed(() => {
             if (statutFilter.value === 'actif') return m.statut === 'actif';
             if (statutFilter.value === 'inactif') return m.statut === 'inactif';
             if (statutFilter.value === 'en_attente')
-                return m.statut === 'pending';
+                return (
+                    m.statut === 'pending' || m.statut === 'pending_validation'
+                );
             if (statutFilter.value === 'expire')
                 return m.statut === 'expired' || m.statut === 'revoked';
             return true;
@@ -263,6 +285,7 @@ function statutDotClass(statut: string) {
         case 'actif':
             return 'bg-emerald-500';
         case 'pending':
+        case 'pending_validation':
             return 'bg-amber-400';
         case 'expired':
         case 'revoked':
@@ -327,6 +350,59 @@ function revokeInvitation(invitationId: number) {
                 detail: "L'invitation a été révoquée.",
                 life: 3000,
             }),
+    });
+}
+
+function confirmValidateMember(m: Membre) {
+    confirm.require({
+        message: `Valider le compte de ${m.nom_complet} ? Il pourra alors se connecter.`,
+        header: 'Confirmer la validation',
+        icon: 'pi pi-check-circle',
+        rejectLabel: 'Annuler',
+        acceptLabel: 'Valider',
+        accept: () => {
+            router.patch(
+                `/backoffice/users/${m.id}/validate`,
+                {},
+                {
+                    preserveScroll: true,
+                    onSuccess: () =>
+                        toast.add({
+                            severity: 'success',
+                            summary: 'Compte validé',
+                            detail: `${m.nom_complet} peut désormais se connecter.`,
+                            life: 3000,
+                        }),
+                },
+            );
+        },
+    });
+}
+
+function confirmRejectMember(m: Membre) {
+    confirm.require({
+        message: `Refuser le compte de ${m.nom_complet} ? Il restera bloqué.`,
+        header: 'Confirmer le refus',
+        icon: 'pi pi-exclamation-triangle',
+        rejectLabel: 'Annuler',
+        acceptLabel: 'Refuser',
+        acceptClass: 'p-button-danger',
+        accept: () => {
+            router.patch(
+                `/backoffice/users/${m.id}/reject`,
+                {},
+                {
+                    preserveScroll: true,
+                    onSuccess: () =>
+                        toast.add({
+                            severity: 'success',
+                            summary: 'Compte refusé',
+                            detail: `${m.nom_complet} a été refusé.`,
+                            life: 3000,
+                        }),
+                },
+            );
+        },
     });
 }
 </script>
@@ -1055,9 +1131,13 @@ function revokeInvitation(invitationId: number) {
                                     <template #body="{ data }">
                                         <div
                                             v-if="
-                                                data.type === 'invitation' &&
-                                                (data.can_resend ||
-                                                    data.can_revoke)
+                                                (data.type === 'invitation' &&
+                                                    (data.can_resend ||
+                                                        data.can_revoke)) ||
+                                                (data.type === 'user' &&
+                                                    data.statut ===
+                                                        'pending_validation' &&
+                                                    can('users.update'))
                                             "
                                             class="flex justify-end"
                                         >
@@ -1077,6 +1157,41 @@ function revokeInvitation(invitationId: number) {
                                                     align="end"
                                                     class="w-44"
                                                 >
+                                                    <template
+                                                        v-if="
+                                                            data.type ===
+                                                                'user' &&
+                                                            data.statut ===
+                                                                'pending_validation'
+                                                        "
+                                                    >
+                                                        <DropdownMenuItem
+                                                            class="cursor-pointer text-emerald-600 focus:text-emerald-600"
+                                                            @click="
+                                                                confirmValidateMember(
+                                                                    data,
+                                                                )
+                                                            "
+                                                        >
+                                                            <CheckCircle
+                                                                class="h-4 w-4"
+                                                            />
+                                                            Valider
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem
+                                                            class="cursor-pointer text-destructive focus:text-destructive"
+                                                            @click="
+                                                                confirmRejectMember(
+                                                                    data,
+                                                                )
+                                                            "
+                                                        >
+                                                            <XCircle
+                                                                class="h-4 w-4"
+                                                            />
+                                                            Refuser
+                                                        </DropdownMenuItem>
+                                                    </template>
                                                     <DropdownMenuItem
                                                         v-if="data.can_resend"
                                                         class="cursor-pointer"

@@ -17,6 +17,17 @@ class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, HasRoles, HasUlids, Notifiable, TwoFactorAuthenticatable;
 
+    /**
+     * Statuts de cycle de vie du compte. Un compte créé via invitation démarre
+     * toujours en pending_validation, quel que soit le rôle : il ne devient
+     * "active" qu'après validation explicite par un admin (voir UserController).
+     */
+    public const STATUS_ACTIVE = 'active';
+
+    public const STATUS_PENDING_VALIDATION = 'pending_validation';
+
+    public const STATUS_INACTIVE = 'inactive';
+
     protected $fillable = [
         'prenom',
         'nom',
@@ -114,6 +125,11 @@ class User extends Authenticatable
     public function isAdmin(): bool
     {
         return $this->hasAnyRole(['super_admin', 'admin_entreprise']);
+    }
+
+    public function isPendingValidation(): bool
+    {
+        return $this->status === self::STATUS_PENDING_VALIDATION;
     }
 
     /**

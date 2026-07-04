@@ -175,7 +175,8 @@ export function usePhoneOtpForm() {
             });
             step.value = 'identity';
         } catch (e: unknown) {
-            otpError.value = e instanceof Error ? e.message : 'Code incorrect.';
+            otpError.value =
+                e instanceof Error ? e.message : 'Code incorrect ou expiré.';
         } finally {
             loading.value = false;
         }

@@ -152,6 +152,42 @@ class UserInvitationTest extends TestCase
         Mail::assertSentCount(1);
     }
 
+    public function test_store_cannot_invite_admin_entreprise_role(): void
+    {
+        Mail::fake();
+
+        $org = $this->makeOrg();
+        $site = $this->makeSite($org);
+        $admin = $this->makeAdmin($org, $site);
+
+        $this->actingAs($admin)
+            ->post(route('sites.invitations.store', $site), [
+                'email' => 'futur-admin@example.com',
+                'role' => 'admin_entreprise',
+            ])->assertSessionHasErrors('role');
+
+        $this->assertDatabaseMissing('user_invitations', ['email' => 'futur-admin@example.com']);
+        Mail::assertNothingSent();
+    }
+
+    public function test_store_cannot_invite_super_admin_role(): void
+    {
+        Mail::fake();
+
+        $org = $this->makeOrg();
+        $site = $this->makeSite($org);
+        $admin = $this->makeAdmin($org, $site);
+
+        $this->actingAs($admin)
+            ->post(route('sites.invitations.store', $site), [
+                'email' => 'futur-super-admin@example.com',
+                'role' => 'super_admin',
+            ])->assertSessionHasErrors('role');
+
+        $this->assertDatabaseMissing('user_invitations', ['email' => 'futur-super-admin@example.com']);
+        Mail::assertNothingSent();
+    }
+
     public function test_store_blocks_duplicate_pending_invitation(): void
     {
         Mail::fake();
@@ -438,7 +474,8 @@ class UserInvitationTest extends TestCase
         ])->assertOk()
             ->assertJson(['status' => 'not_found']);
 
-        $this->assertTrue(Cache::has('otp:'.md5('+224620000099')));
+        $context = $invitation->id.'|'.$invitation->email;
+        $this->assertTrue(Cache::has('otp:'.md5('+224620000099|'.$context)));
     }
 
     // ── AcceptInvitationController::verifyOtp ─────────────────────────────────
@@ -457,9 +494,9 @@ class UserInvitationTest extends TestCase
 
         $this->postJson(route('invitations.accept.otp', $token), [
             'telephone' => '+224620000010',
-            'code' => '00000', // wrong
+            'code' => '000000', // wrong
         ])->assertStatus(422)
-            ->assertJsonFragment(['error' => 'Code de vérification incorrect.']);
+            ->assertJsonFragment(['error' => 'Code incorrect.', 'reason' => 'invalid']);
     }
 
     public function test_verify_otp_returns_verified_true_for_correct_code(): void
@@ -475,9 +512,141 @@ class UserInvitationTest extends TestCase
 
         $this->postJson(route('invitations.accept.otp', $token), [
             'telephone' => '+224620000011',
-            'code' => '12345', // dev fixed code
+            'code' => '123456', // dev fixed code
         ])->assertOk()
             ->assertJson(['verified' => true]);
+    }
+
+    public function test_verify_otp_locks_out_after_5_wrong_attempts(): void
+    {
+        $org = $this->makeOrg();
+        $site = $this->makeSite($org);
+        $invitation = $this->makeInvitation($site);
+        $token = $this->plainToken($invitation);
+
+        $this->postJson(route('invitations.accept.phone', $token), [
+            'telephone' => '+224620000012',
+        ]);
+
+        for ($i = 0; $i < 5; $i++) {
+            $this->postJson(route('invitations.accept.otp', $token), [
+                'telephone' => '+224620000012',
+                'code' => '000000',
+            ])->assertStatus(422);
+        }
+
+        // Le code est verrouillé : même le bon code est désormais refusé.
+        $this->postJson(route('invitations.accept.otp', $token), [
+            'telephone' => '+224620000012',
+            'code' => '123456',
+        ])->assertStatus(429)
+            ->assertJsonFragment(['error' => 'Trop de tentatives. Demandez un nouveau code.', 'reason' => 'locked']);
+    }
+
+    public function test_verify_otp_returns_expired_when_code_has_expired(): void
+    {
+        $org = $this->makeOrg();
+        $site = $this->makeSite($org);
+        $invitation = $this->makeInvitation($site);
+        $token = $this->plainToken($invitation);
+
+        $this->postJson(route('invitations.accept.phone', $token), [
+            'telephone' => '+224620000014',
+        ]);
+
+        $this->travel(11)->minutes();
+
+        $this->postJson(route('invitations.accept.otp', $token), [
+            'telephone' => '+224620000014',
+            'code' => '123456',
+        ])->assertStatus(422)
+            ->assertJsonFragment(['error' => 'Votre code a expiré.', 'reason' => 'expired']);
+    }
+
+    public function test_check_phone_refuses_resend_before_cooldown(): void
+    {
+        $org = $this->makeOrg();
+        $site = $this->makeSite($org);
+        $invitation = $this->makeInvitation($site);
+        $token = $this->plainToken($invitation);
+
+        $this->postJson(route('invitations.accept.phone', $token), [
+            'telephone' => '+224620000013',
+        ])->assertOk();
+
+        $response = $this->postJson(route('invitations.accept.phone', $token), [
+            'telephone' => '+224620000013',
+        ]);
+
+        $response->assertStatus(429)
+            ->assertJsonFragment(['error' => 'Vous avez demandé trop de codes. Réessayez dans 1 minute.']);
+        $this->assertGreaterThan(0, $response->json('retry_after_seconds'));
+    }
+
+    // ── AcceptInvitationController::resendOtp ─────────────────────────────────
+
+    public function test_resend_otp_invalidates_old_code_and_sends_new_one(): void
+    {
+        $org = $this->makeOrg();
+        $site = $this->makeSite($org);
+        $invitation = $this->makeInvitation($site);
+        $token = $this->plainToken($invitation);
+        $phone = '+224620000015';
+        $context = $invitation->id.'|'.$invitation->email;
+
+        $this->postJson(route('invitations.accept.phone', $token), [
+            'telephone' => $phone,
+        ]);
+
+        // Consomme 3 tentatives infructueuses avant de redemander un code.
+        for ($i = 0; $i < 3; $i++) {
+            $this->postJson(route('invitations.accept.otp', $token), [
+                'telephone' => $phone,
+                'code' => '000000',
+            ]);
+        }
+        $this->assertSame(3, Cache::get('otp:attempts:'.md5($phone.'|'.$context)));
+
+        // Le cooldown de 30s bloque un renvoi immédiat.
+        $this->travelTo(now()->addSeconds(31));
+
+        $this->postJson(route('invitations.accept.otp.resend', $token), [
+            'telephone' => $phone,
+        ])->assertOk()
+            ->assertJson(['resent' => true, 'cooldown_seconds' => 30]);
+
+        // Tentatives réinitialisées, et le nouveau (même) code fixe fonctionne.
+        $this->assertNull(Cache::get('otp:attempts:'.md5($phone.'|'.$context)));
+
+        $this->postJson(route('invitations.accept.otp', $token), [
+            'telephone' => $phone,
+            'code' => '123456',
+        ])->assertOk()->assertJson(['verified' => true]);
+    }
+
+    public function test_resend_otp_refuses_before_cooldown(): void
+    {
+        $org = $this->makeOrg();
+        $site = $this->makeSite($org);
+        $invitation = $this->makeInvitation($site);
+        $token = $this->plainToken($invitation);
+        $phone = '+224620000016';
+
+        $this->postJson(route('invitations.accept.phone', $token), [
+            'telephone' => $phone,
+        ]);
+
+        $this->postJson(route('invitations.accept.otp.resend', $token), [
+            'telephone' => $phone,
+        ])->assertStatus(429)
+            ->assertJsonFragment(['error' => 'Vous avez demandé trop de codes. Réessayez dans 1 minute.']);
+    }
+
+    public function test_resend_otp_returns_422_for_invalid_invitation(): void
+    {
+        $this->postJson(route('invitations.accept.otp.resend', 'bad-token'), [
+            'telephone' => '+224620000017',
+        ])->assertStatus(422);
     }
 
     // ── AcceptInvitationController::accept ────────────────────────────────────
@@ -539,7 +708,7 @@ class UserInvitationTest extends TestCase
             ->assertJsonValidationErrors(['telephone', 'prenom', 'nom', 'password']);
     }
 
-    public function test_accept_creates_user_assigns_role_attaches_site_and_logs_in(): void
+    public function test_accept_creates_user_pending_validation_and_does_not_log_in(): void
     {
         Mail::fake();
 
@@ -562,7 +731,7 @@ class UserInvitationTest extends TestCase
         // Step 2: verify OTP
         $this->postJson(route('invitations.accept.otp', $token), [
             'telephone' => $phone,
-            'code' => '12345',
+            'code' => '123456',
         ]);
 
         // Step 3: accept
@@ -571,15 +740,27 @@ class UserInvitationTest extends TestCase
             'prenom' => 'Fatoumata',
             'nom' => 'DIALLO',
             'password' => 'Secure123',
+            'password_confirmation' => 'Secure123',
         ]);
 
-        $response->assertRedirect(route('dashboard'));
+        $response->assertRedirect(route('invitations.accept', [
+            'token' => $token,
+            'state' => 'pending_validation',
+        ]));
 
-        // User was created
+        // User was created, but pending validation — never auto-logged in
         $user = User::where('telephone', $phone)->first();
         $this->assertNotNull($user);
         $this->assertSame($invitation->email, $user->email);
         $this->assertSame($org->id, $user->organization_id);
+        $this->assertFalse($user->is_active);
+        $this->assertSame(User::STATUS_PENDING_VALIDATION, $user->status);
+        $this->assertGuest();
+
+        // Email considéré vérifié : avoir cliqué le lien d'invitation reçu à cette
+        // adresse en prouve déjà la possession (sinon, une fois validé par un admin,
+        // l'utilisateur resterait bloqué par le contrôle d'email non vérifié).
+        $this->assertNotNull($user->email_verified_at);
 
         // Role assigned
         $this->assertTrue($user->hasRole('manager'));
@@ -591,8 +772,5 @@ class UserInvitationTest extends TestCase
         $invitation->refresh();
         $this->assertNotNull($invitation->accepted_at);
         $this->assertTrue($invitation->isAccepted());
-
-        // User logged in
-        $this->assertAuthenticatedAs($user);
     }
 }

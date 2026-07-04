@@ -17,8 +17,11 @@ import {
     LogOut,
     MailCheck,
 } from 'lucide-vue-next';
+import IconField from 'primevue/iconfield';
+import InputIcon from 'primevue/inputicon';
+import Password from 'primevue/password';
 import Select from 'primevue/select';
-import { computed, ref } from 'vue';
+import { computed, onUnmounted, ref } from 'vue';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -36,6 +39,7 @@ const props = defineProps<{
     site_type_label?: string;
     site_nom?: string;
     error?: InvitationError;
+    pending_validation?: boolean;
 }>();
 
 const siteLabel = computed(() => {
@@ -51,17 +55,17 @@ const siteLabel = computed(() => {
 
 const roleLabel = computed(() => props.role ?? 'collaborateur');
 
-const pageTitle = computed(() =>
-    props.error
+const pageTitle = computed(() => {
+    if (props.pending_validation) return 'Bienvenue sur Eau la maman';
+    return props.error
         ? 'Invitation indisponible'
-        : `Rejoindre ${siteLabel.value || 'votre site'}`,
-);
+        : `Rejoindre ${siteLabel.value || 'votre site'}`;
+});
 
-const pageDescription = computed(() =>
-    props.error
-        ? ''
-        : `Créez votre compte pour rejoindre ${siteLabel.value || 'votre site'} en tant que ${roleLabel.value}.`,
-);
+const pageDescription = computed(() => {
+    if (props.pending_validation || props.error) return '';
+    return `Créez votre compte pour rejoindre ${siteLabel.value || 'votre site'} en tant que ${roleLabel.value}.`;
+});
 
 const errorContent = computed(() => {
     switch (props.error) {
@@ -198,8 +202,16 @@ const step = ref<Step>('phone');
 const loading = ref(false);
 
 const lookupError = ref('');
-const otpCode = ref('');
+const otpDigits = ref<string[]>(['', '', '', '', '', '']);
+const otpCode = computed(() => otpDigits.value.join(''));
+const otpInputs = ref<(HTMLInputElement | null)[]>([]);
 const otpError = ref('');
+
+const DEFAULT_RESEND_COOLDOWN = 30;
+const resendSecondsLeft = ref(0);
+const resendLoading = ref(false);
+const resendSuccessMessage = ref('');
+let resendTimer: ReturnType<typeof setInterval> | null = null;
 const formPrenom = ref('');
 const formNom = ref('');
 const isPrefilled = ref(false);
@@ -210,7 +222,17 @@ const form = useForm({
     prenom: '',
     nom: '',
     password: '',
+    password_confirmation: '',
 });
+
+const isPasswordStepValid = computed(
+    () =>
+        form.password.length >= 8 &&
+        /[a-zA-Z]/.test(form.password) &&
+        /\d/.test(form.password) &&
+        form.password_confirmation.length > 0 &&
+        form.password === form.password_confirmation,
+);
 
 // ── Helpers API ───────────────────────────────────────────────────────────────
 
@@ -218,6 +240,20 @@ function getCsrfToken(): string {
     return decodeURIComponent(
         document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] ?? '',
     );
+}
+
+interface ApiErrorPayload {
+    reason?: string;
+    retry_after_seconds?: number;
+}
+
+class ApiError extends Error {
+    constructor(
+        message: string,
+        public data: ApiErrorPayload,
+    ) {
+        super(message);
+    }
 }
 
 async function apiFetch<T>(
@@ -243,11 +279,35 @@ async function apiFetch<T>(
             json?.error ??
             json?.message ??
             'Une erreur est survenue.';
-        throw new Error(msg);
+        throw new ApiError(msg, {
+            reason: json?.reason,
+            retry_after_seconds: json?.retry_after_seconds,
+        });
     }
 
     return json as T;
 }
+
+// ── Renvoi de code : compte à rebours partagé ─────────────────────────────────
+
+function startResendCountdown(seconds: number) {
+    if (resendTimer) clearInterval(resendTimer);
+
+    resendSecondsLeft.value = Math.max(0, Math.round(seconds));
+    if (resendSecondsLeft.value === 0) return;
+
+    resendTimer = setInterval(() => {
+        resendSecondsLeft.value -= 1;
+        if (resendSecondsLeft.value <= 0) {
+            resendSecondsLeft.value = 0;
+            if (resendTimer) clearInterval(resendTimer);
+        }
+    }, 1000);
+}
+
+onUnmounted(() => {
+    if (resendTimer) clearInterval(resendTimer);
+});
 
 // ── Étape 1 : téléphone ───────────────────────────────────────────────────────
 
@@ -260,6 +320,7 @@ async function submitPhoneLookup() {
         const data = await apiFetch<{
             status: string;
             prefill?: { prenom: string; nom: string };
+            cooldown_seconds?: number;
         }>(`/invitations/accept/${props.token}/phone`, {
             telephone: fullPhone.value,
         });
@@ -280,6 +341,9 @@ async function submitPhoneLookup() {
             isPrefilled.value = false;
         }
 
+        otpError.value = '';
+        resendSuccessMessage.value = '';
+        startResendCountdown(data.cooldown_seconds ?? DEFAULT_RESEND_COOLDOWN);
         step.value = 'otp';
     } catch (e: unknown) {
         lookupError.value =
@@ -294,6 +358,7 @@ async function submitPhoneLookup() {
 async function submitOtp() {
     loading.value = true;
     otpError.value = '';
+    resendSuccessMessage.value = '';
 
     try {
         await apiFetch(`/invitations/accept/${props.token}/otp`, {
@@ -309,10 +374,87 @@ async function submitOtp() {
     }
 }
 
+async function resendCode() {
+    if (resendSecondsLeft.value > 0 || resendLoading.value) return;
+
+    resendLoading.value = true;
+    otpError.value = '';
+    resendSuccessMessage.value = '';
+
+    try {
+        const data = await apiFetch<{ cooldown_seconds: number }>(
+            `/invitations/accept/${props.token}/otp/resend`,
+            { telephone: fullPhone.value },
+        );
+
+        otpDigits.value = otpDigits.value.map(() => '');
+        resendSuccessMessage.value =
+            'Un nouveau code vient de vous être envoyé.';
+        startResendCountdown(data.cooldown_seconds ?? DEFAULT_RESEND_COOLDOWN);
+        otpInputs.value[0]?.focus();
+    } catch (e: unknown) {
+        otpError.value =
+            e instanceof Error ? e.message : 'Une erreur est survenue.';
+        if (e instanceof ApiError && e.data.retry_after_seconds) {
+            startResendCountdown(e.data.retry_after_seconds);
+        }
+    } finally {
+        resendLoading.value = false;
+    }
+}
+
 function backToPhone() {
     step.value = 'phone';
-    otpCode.value = '';
+    otpDigits.value = ['', '', '', '', '', ''];
     otpError.value = '';
+    resendSuccessMessage.value = '';
+}
+
+function handleOtpInput(index: number, e: Event) {
+    const input = e.target as HTMLInputElement;
+    const raw = input.value.replace(/\D/g, '');
+
+    if (raw.length > 1) {
+        // Autofill SMS ou saisie rapide : répartit les chiffres à partir de cette case
+        raw.split('').forEach((d, i) => {
+            if (index + i < otpDigits.value.length) {
+                otpDigits.value[index + i] = d;
+            }
+        });
+        const lastIndex = Math.min(
+            index + raw.length - 1,
+            otpDigits.value.length - 1,
+        );
+        input.value = otpDigits.value[index];
+        otpInputs.value[lastIndex]?.focus();
+        return;
+    }
+
+    otpDigits.value[index] = raw;
+    input.value = raw;
+    if (raw && index < otpDigits.value.length - 1) {
+        otpInputs.value[index + 1]?.focus();
+    }
+}
+
+function handleOtpKeydown(index: number, e: KeyboardEvent) {
+    if (e.key === 'Backspace' && !otpDigits.value[index] && index > 0) {
+        otpInputs.value[index - 1]?.focus();
+    }
+}
+
+function handleOtpPaste(e: ClipboardEvent) {
+    const pasted = e.clipboardData?.getData('text').replace(/\D/g, '') ?? '';
+    if (!pasted) return;
+    e.preventDefault();
+
+    const digits = pasted.slice(0, otpDigits.value.length).split('');
+    digits.forEach((d, i) => {
+        otpDigits.value[i] = d;
+    });
+    otpInputs.value[
+        Math.min(digits.length, otpDigits.value.length - 1)
+    ]?.focus();
 }
 
 // ── Étape 4 : soumission finale ───────────────────────────────────────────────
@@ -346,8 +488,44 @@ function logoutAndGoToLogin() {
     <AuthBase :title="pageTitle" :description="pageDescription">
         <Head title="Accepter l'invitation" />
 
+        <!-- ── Confirmation : compte créé, en attente de validation ────────── -->
+        <div v-if="pending_validation" class="space-y-6">
+            <div
+                class="rounded-xl border border-border bg-[radial-gradient(50%_120%_at_50%_0%,color-mix(in_srgb,var(--p-primary-500)_12%,transparent)_0%,rgba(255,255,255,0)_100%)] p-6 sm:p-8"
+            >
+                <div class="flex flex-col items-center gap-6 text-center">
+                    <div
+                        class="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400"
+                    >
+                        <CheckCircle class="h-6 w-6" />
+                    </div>
+
+                    <div class="space-y-2">
+                        <h2
+                            class="text-surface-900 dark:text-surface-0 text-2xl font-bold"
+                        >
+                            Compte créé avec succès
+                        </h2>
+                        <p
+                            class="text-sm leading-relaxed text-muted-foreground"
+                        >
+                            Votre compte est prêt. Il sera activé dès qu'un
+                            administrateur aura validé votre inscription.
+                        </p>
+                    </div>
+
+                    <Button :as-child="true" class="w-full">
+                        <Link :href="login()">
+                            <LogIn class="mr-2 h-4 w-4" />
+                            Retour à la connexion
+                        </Link>
+                    </Button>
+                </div>
+            </div>
+        </div>
+
         <!-- ── États d'erreur ──────────────────────────────────────────────── -->
-        <div v-if="error" class="space-y-6">
+        <div v-else-if="error" class="space-y-6">
             <div
                 class="rounded-xl border border-border bg-[radial-gradient(50%_120%_at_50%_0%,color-mix(in_srgb,var(--p-primary-500)_12%,transparent)_0%,rgba(255,255,255,0)_100%)] p-6 sm:p-8"
             >
@@ -530,26 +708,72 @@ function logoutAndGoToLogin() {
                 </p>
 
                 <div class="grid gap-2">
-                    <Label for="otp">Code de vérification</Label>
-                    <Input
-                        id="otp"
-                        v-model="otpCode"
-                        type="text"
-                        inputmode="numeric"
-                        pattern="[0-9]*"
-                        maxlength="5"
-                        :tabindex="1"
-                        autocomplete="one-time-code"
-                        placeholder="12345"
-                    />
+                    <Label>Code de vérification</Label>
+                    <div class="flex justify-between gap-2">
+                        <input
+                            v-for="(digit, index) in otpDigits"
+                            :key="index"
+                            :ref="
+                                (el) =>
+                                    (otpInputs[index] = el as HTMLInputElement)
+                            "
+                            :value="digit"
+                            type="text"
+                            inputmode="numeric"
+                            pattern="[0-9]*"
+                            maxlength="1"
+                            :tabindex="index + 1"
+                            :autofocus="index === 0"
+                            :autocomplete="
+                                index === 0 ? 'one-time-code' : 'off'
+                            "
+                            class="h-14 w-12 rounded-md border border-input bg-transparent text-center text-xl font-semibold shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                            @input="handleOtpInput(index, $event)"
+                            @keydown="handleOtpKeydown(index, $event)"
+                            @paste="handleOtpPaste"
+                        />
+                    </div>
                     <InputError :message="otpError" />
+                </div>
+
+                <div class="grid gap-1.5">
+                    <p v-if="!otpError" class="text-sm text-muted-foreground">
+                        Vous n'avez pas reçu le code ?
+                    </p>
+                    <p
+                        v-if="resendSuccessMessage"
+                        class="text-sm font-medium text-emerald-600 dark:text-emerald-400"
+                    >
+                        {{ resendSuccessMessage }}
+                    </p>
+                    <button
+                        type="button"
+                        class="w-fit text-sm font-medium text-primary underline underline-offset-4 transition-colors hover:text-primary/80 disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline"
+                        :disabled="resendSecondsLeft > 0 || resendLoading"
+                        @click="resendCode"
+                    >
+                        <span
+                            v-if="resendLoading"
+                            class="inline-flex items-center gap-1.5"
+                        >
+                            <Spinner class="h-3.5 w-3.5" />
+                            Envoi en cours…
+                        </span>
+                        <span v-else>
+                            {{
+                                resendSecondsLeft > 0
+                                    ? `Renvoyer un code (${resendSecondsLeft} s)`
+                                    : 'Renvoyer un code'
+                            }}
+                        </span>
+                    </button>
                 </div>
 
                 <Button
                     type="button"
                     class="w-full"
-                    :tabindex="2"
-                    :disabled="loading || otpCode.length !== 5"
+                    :tabindex="6"
+                    :disabled="loading || otpCode.length !== 6"
                     @click="submitOtp"
                 >
                     <Spinner v-if="loading" />
@@ -559,7 +783,7 @@ function logoutAndGoToLogin() {
                 <button
                     type="button"
                     class="text-center text-sm text-muted-foreground underline underline-offset-4"
-                    :tabindex="3"
+                    :tabindex="7"
                     @click="backToPhone"
                 >
                     Modifier le numéro
@@ -663,19 +887,21 @@ function logoutAndGoToLogin() {
                     <Label for="password">
                         Mot de passe <span class="text-destructive">*</span>
                     </Label>
-                    <Input
-                        id="password"
-                        v-model="form.password"
-                        type="password"
-                        required
-                        autofocus
-                        :tabindex="1"
-                        autocomplete="new-password"
-                        placeholder="Mot de passe"
-                    />
-                    <p class="text-xs text-muted-foreground">
-                        8 caractères minimum, avec majuscule et chiffre.
-                    </p>
+                    <IconField class="w-full">
+                        <InputIcon class="pi pi-lock" />
+                        <Password
+                            id="password"
+                            v-model="form.password"
+                            placeholder="Mot de passe"
+                            toggle-mask
+                            autofocus
+                            :tabindex="1"
+                            autocomplete="new-password"
+                            class="w-full"
+                            :input-style="{ paddingLeft: '2.5rem' }"
+                            input-class="w-full"
+                        />
+                    </IconField>
                     <InputError
                         :message="
                             form.errors.password ??
@@ -686,11 +912,34 @@ function logoutAndGoToLogin() {
                     />
                 </div>
 
+                <div class="grid gap-2">
+                    <Label for="password_confirmation">
+                        Confirmer le mot de passe
+                        <span class="text-destructive">*</span>
+                    </Label>
+                    <IconField class="w-full">
+                        <InputIcon class="pi pi-lock" />
+                        <Password
+                            id="password_confirmation"
+                            v-model="form.password_confirmation"
+                            placeholder="Confirmer le mot de passe"
+                            toggle-mask
+                            :feedback="false"
+                            :tabindex="2"
+                            autocomplete="new-password"
+                            class="w-full"
+                            :input-style="{ paddingLeft: '2.5rem' }"
+                            input-class="w-full"
+                        />
+                    </IconField>
+                    <InputError :message="form.errors.password_confirmation" />
+                </div>
+
                 <Button
                     type="button"
                     class="mt-2 w-full"
-                    :tabindex="2"
-                    :disabled="form.processing"
+                    :tabindex="3"
+                    :disabled="form.processing || !isPasswordStepValid"
                     @click="submitAccept"
                 >
                     <Spinner v-if="form.processing" />

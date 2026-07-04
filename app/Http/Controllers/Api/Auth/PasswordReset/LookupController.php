@@ -31,6 +31,10 @@ class LookupController extends Controller
             return response()->json(['error' => 'Aucun compte trouvé pour ce numéro de téléphone.'], 404);
         }
 
+        if (! $otp->canSend($phone)) {
+            return response()->json(['error' => 'Trop de demandes de code. Veuillez réessayer plus tard.'], 429);
+        }
+
         $code = $otp->generate($phone);
 
         Mail::to($user->email)->send(new OtpPasswordResetMail($code));
