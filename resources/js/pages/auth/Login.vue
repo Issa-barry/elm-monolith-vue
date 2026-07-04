@@ -242,8 +242,8 @@ function handlePhoneKeydown(e: KeyboardEvent) {
                             <p
                                 class="mt-0.5 text-sm text-amber-600 dark:text-amber-300"
                             >
-                                Votre compte a bien été créé. Il est en
-                                attente de validation par un administrateur.
+                                Votre compte a bien été créé. Il est en attente
+                                de validation par un administrateur.
                             </p>
                         </div>
                     </div>

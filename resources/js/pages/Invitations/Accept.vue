@@ -388,11 +388,13 @@ async function resendCode() {
         );
 
         otpDigits.value = otpDigits.value.map(() => '');
-        resendSuccessMessage.value = 'Un nouveau code vient de vous être envoyé.';
+        resendSuccessMessage.value =
+            'Un nouveau code vient de vous être envoyé.';
         startResendCountdown(data.cooldown_seconds ?? DEFAULT_RESEND_COOLDOWN);
         otpInputs.value[0]?.focus();
     } catch (e: unknown) {
-        otpError.value = e instanceof Error ? e.message : 'Une erreur est survenue.';
+        otpError.value =
+            e instanceof Error ? e.message : 'Une erreur est survenue.';
         if (e instanceof ApiError && e.data.retry_after_seconds) {
             startResendCountdown(e.data.retry_after_seconds);
         }
@@ -450,7 +452,9 @@ function handleOtpPaste(e: ClipboardEvent) {
     digits.forEach((d, i) => {
         otpDigits.value[i] = d;
     });
-    otpInputs.value[Math.min(digits.length, otpDigits.value.length - 1)]?.focus();
+    otpInputs.value[
+        Math.min(digits.length, otpDigits.value.length - 1)
+    ]?.focus();
 }
 
 // ── Étape 4 : soumission finale ───────────────────────────────────────────────
@@ -733,10 +737,7 @@ function logoutAndGoToLogin() {
                 </div>
 
                 <div class="grid gap-1.5">
-                    <p
-                        v-if="!otpError"
-                        class="text-sm text-muted-foreground"
-                    >
+                    <p v-if="!otpError" class="text-sm text-muted-foreground">
                         Vous n'avez pas reçu le code ?
                     </p>
                     <p

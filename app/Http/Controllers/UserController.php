@@ -342,8 +342,9 @@ class UserController extends Controller
             Mail::to($user->email)->send(new AccountValidatedMail($user));
         }
 
-        return redirect()->route('users.index')
-            ->with('success', "{$user->name} a été validé et peut désormais se connecter.");
+        // Retourne vers la page d'origine (liste des utilisateurs ou onglet
+        // "Membres" d'un site) plutôt qu'une destination fixe.
+        return back()->with('success', "{$user->name} a été validé et peut désormais se connecter.");
     }
 
     /**
@@ -363,8 +364,7 @@ class UserController extends Controller
 
         $auditLog->record($user, AuditEvent::REJECTED, auth()->user());
 
-        return redirect()->route('users.index')
-            ->with('success', "{$user->name} a été refusé.");
+        return back()->with('success', "{$user->name} a été refusé.");
     }
 
     public function updatePassword(Request $request, User $user): RedirectResponse

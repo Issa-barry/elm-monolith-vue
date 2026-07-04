@@ -133,7 +133,23 @@ const toast = useToast();
 const confirm = useConfirm();
 const page = usePage();
 
-const activeTab = ref<'infos' | 'membres' | 'vehicules'>('infos');
+type SiteTab = 'infos' | 'membres' | 'vehicules';
+
+// Onglet initial lu depuis l'URL (?tab=membres) : permet de revenir directement
+// sur le bon onglet après une redirection serveur (ex: validation d'un membre).
+const initialTabParam = new URLSearchParams(window.location.search).get('tab');
+const initialTab: SiteTab =
+    initialTabParam === 'membres' || initialTabParam === 'vehicules'
+        ? initialTabParam
+        : 'infos';
+
+const activeTab = ref<SiteTab>(initialTab);
+
+watch(activeTab, (tab) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', tab);
+    window.history.replaceState({}, '', url);
+});
 
 const flashSuccess = computed(
     () => (page.props as any).flash?.success as string | undefined,

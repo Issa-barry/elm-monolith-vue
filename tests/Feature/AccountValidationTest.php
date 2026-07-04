@@ -69,11 +69,25 @@ class AccountValidationTest extends TestCase
 
         $this->actingAs($admin)
             ->patch(route('users.validate', $target))
-            ->assertRedirect(route('users.index'));
+            ->assertStatus(302)
+            ->assertSessionHas('success');
 
         $target->refresh();
         $this->assertTrue($target->is_active);
         $this->assertSame(User::STATUS_ACTIVE, $target->status);
+    }
+
+    public function test_validate_redirects_back_to_originating_page(): void
+    {
+        $org = Organization::factory()->create();
+        $admin = $this->superAdmin($org);
+        $site = $this->createSite($org);
+        $target = $this->pendingUser($org);
+
+        $this->actingAs($admin)
+            ->from(route('sites.show', $site).'?tab=membres')
+            ->patch(route('users.validate', $target))
+            ->assertRedirect(route('sites.show', $site).'?tab=membres');
     }
 
     public function test_validated_user_can_login(): void
@@ -114,7 +128,8 @@ class AccountValidationTest extends TestCase
 
         $this->actingAs($admin)
             ->patch(route('users.reject', $target))
-            ->assertRedirect(route('users.index'));
+            ->assertStatus(302)
+            ->assertSessionHas('success');
 
         $target->refresh();
         $this->assertFalse($target->is_active);
