@@ -130,12 +130,18 @@ Route::prefix('backoffice')->group(function () {
         // Clients
         Route::resource('clients', ClientController::class);
 
+        // ── Module : PDV ──────────────────────────────────────────────────────────
+        // Module a part de Ventes : plusieurs variantes de PDV sont prevues, chacune
+        // devant pouvoir etre activee/desactivee independamment des Ventes.
+        Route::middleware('module:'.ModuleFeature::PDV)->group(function () {
+            Route::get('pdv', [PdvController::class, 'index'])->name('pdv.index');
+            Route::post('pdv/checkout', [PdvController::class, 'checkout'])->name('pdv.checkout');
+        });
+
         // ── Module : Ventes ───────────────────────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::VENTES)->group(function () {
             Route::get('ventes/check-solvabilite', [CommandeVenteController::class, 'checkSolvabilite'])->name('ventes.check-solvabilite');
             Route::resource('ventes', CommandeVenteController::class)->except([]);
-            Route::get('pdv', [PdvController::class, 'index'])->name('pdv.index');
-            Route::post('pdv/checkout', [PdvController::class, 'checkout'])->name('pdv.checkout');
             Route::patch('ventes/{commande_vente}/valider', [CommandeVenteController::class, 'valider'])->name('ventes.valider');
             Route::patch('ventes/{commande_vente}/annuler', [CommandeVenteController::class, 'annuler'])->name('ventes.annuler');
             Route::post('ventes/{commande_vente}/statut/avancer', [CommandeVenteStatutController::class, 'avancer'])->name('ventes.statut.avancer');
