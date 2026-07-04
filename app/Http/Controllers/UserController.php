@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AuditEvent;
+use App\Mail\AccountValidatedMail;
 use App\Models\Site;
 use App\Models\User;
 use App\Services\AuditLogService;
@@ -11,6 +12,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
@@ -335,6 +337,10 @@ class UserController extends Controller
         ]);
 
         $auditLog->record($user, AuditEvent::VALIDATED, auth()->user());
+
+        if ($user->email) {
+            Mail::to($user->email)->send(new AccountValidatedMail($user));
+        }
 
         return redirect()->route('users.index')
             ->with('success', "{$user->name} a été validé et peut désormais se connecter.");

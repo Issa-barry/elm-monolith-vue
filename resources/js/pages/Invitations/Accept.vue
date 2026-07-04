@@ -56,7 +56,7 @@ const siteLabel = computed(() => {
 const roleLabel = computed(() => props.role ?? 'collaborateur');
 
 const pageTitle = computed(() => {
-    if (props.pending_validation) return 'Compte créé';
+    if (props.pending_validation) return 'Bienvenue sur Eau la maman';
     return props.error
         ? 'Invitation indisponible'
         : `Rejoindre ${siteLabel.value || 'votre site'}`;
@@ -505,16 +505,15 @@ function logoutAndGoToLogin() {
                         <p
                             class="text-sm leading-relaxed text-muted-foreground"
                         >
-                            Votre compte a bien été créé. Il est en attente de
-                            validation par un administrateur. Vous recevrez un
-                            accès dès que votre compte sera validé.
+                            Votre compte est prêt. Il sera activé dès qu'un
+                            administrateur aura validé votre inscription.
                         </p>
                     </div>
 
-                    <Button :as-child="true" variant="outline" class="w-full">
-                        <Link :href="home()">
-                            <Home class="mr-2 h-4 w-4" />
-                            Retour à l'accueil
+                    <Button :as-child="true" class="w-full">
+                        <Link :href="login()">
+                            <LogIn class="mr-2 h-4 w-4" />
+                            Retour à la connexion
                         </Link>
                     </Button>
                 </div>
