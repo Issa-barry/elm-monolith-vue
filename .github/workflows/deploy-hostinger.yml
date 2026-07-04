@@ -60,6 +60,7 @@ jobs:
       - name: Prepare Laravel app for build
         run: |
           cp .env.example .env
+          sed -i "s#^APP_URL=.*#APP_URL=https://eau-la-maman.fr#" .env
           php artisan key:generate --ansi
 
       - name: Setup Node
