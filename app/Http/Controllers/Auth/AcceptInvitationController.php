@@ -27,6 +27,12 @@ class AcceptInvitationController extends Controller
      */
     public function show(Request $request, string $token, UserInvitationService $service): Response
     {
+        // État affiché juste après la création du compte : ce n'est pas une erreur,
+        // donc vérifié avant invitationErrorState() (qui verrait sinon "already_accepted").
+        if ((string) $request->query('state', '') === 'pending_validation') {
+            return Inertia::render('Invitations/Accept', ['pending_validation' => true]);
+        }
+
         $invitation = $service->findByToken($token);
 
         $error = $this->invitationErrorState($invitation)
@@ -70,15 +76,77 @@ class AcceptInvitationController extends Controller
             return response()->json(['status' => 'user_exists']);
         }
 
+        $context = $this->otpContext($invitation);
+
+        $wait = $otp->resendWaitSeconds($phone, $context);
+        if ($wait > 0) {
+            return $this->tooManyRequestsResponse($wait);
+        }
+
         $prefill = $service->phonePrefill($phone);
-        $code = $otp->generate($phone);
+        $code = $otp->generate($phone, $context);
 
         Mail::to($invitation->email)->send(new OtpInvitationMail($code));
 
         return response()->json([
             'status' => $prefill ? 'prefill_available' : 'not_found',
             'prefill' => $prefill,
+            'cooldown_seconds' => $otp->resendCooldownSeconds(),
         ]);
+    }
+
+    /**
+     * POST /invitations/accept/{token}/otp/resend
+     * Renvoie un nouveau code : invalide l'ancien, réinitialise les tentatives,
+     * envoie un nouvel email. Toujours disponible côté UI, mais soumis aux mêmes
+     * limites anti-spam (cooldown + plafonds horaire/journalier) que l'envoi initial.
+     */
+    public function resendOtp(Request $request, string $token, OtpService $otp, UserInvitationService $service): JsonResponse
+    {
+        $invitation = $service->findByToken($token);
+
+        if (! $invitation || ! $invitation->isPending()) {
+            return response()->json(['error' => 'Invitation invalide ou expirée.'], 422);
+        }
+
+        $request->validate(['telephone' => ['required', 'string']]);
+
+        $phone = PhoneNormalizer::normalize($request->input('telephone', ''));
+
+        if ($phone === null) {
+            return response()->json(['error' => 'Numéro de téléphone invalide.'], 422);
+        }
+
+        $context = $this->otpContext($invitation);
+
+        $wait = $otp->resendWaitSeconds($phone, $context);
+        if ($wait > 0) {
+            return $this->tooManyRequestsResponse($wait);
+        }
+
+        $code = $otp->generate($phone, $context);
+
+        Mail::to($invitation->email)->send(new OtpInvitationMail($code));
+
+        return response()->json([
+            'resent' => true,
+            'cooldown_seconds' => $otp->resendCooldownSeconds(),
+        ]);
+    }
+
+    /**
+     * Réponse 429 uniforme pour tout envoi/renvoi de code bloqué par une limite
+     * anti-spam, sans jamais préciser laquelle (cooldown, plafond horaire ou
+     * journalier) — seul le délai d'attente est communiqué au client.
+     */
+    private function tooManyRequestsResponse(int $waitSeconds): JsonResponse
+    {
+        $minutes = max(1, (int) ceil($waitSeconds / 60));
+
+        return response()->json([
+            'error' => "Vous avez demandé trop de codes. Réessayez dans {$minutes} minute".($minutes > 1 ? 's' : '').'.',
+            'retry_after_seconds' => $waitSeconds,
+        ], 429);
     }
 
     /**
@@ -95,7 +163,7 @@ class AcceptInvitationController extends Controller
 
         $request->validate([
             'telephone' => ['required', 'string'],
-            'code' => ['required', 'string', 'digits:5'],
+            'code' => ['required', 'string', 'digits:6'],
         ]);
 
         $phone = PhoneNormalizer::normalize($request->input('telephone', ''));
@@ -104,11 +172,30 @@ class AcceptInvitationController extends Controller
             return response()->json(['error' => 'Numéro de téléphone invalide.'], 422);
         }
 
-        if (! $otp->verify($phone, $request->input('code', ''))) {
-            return response()->json(['error' => 'Code de vérification incorrect.'], 422);
+        $context = $this->otpContext($invitation);
+
+        if ($otp->tooManyAttempts($phone, $context)) {
+            return response()->json([
+                'error' => 'Trop de tentatives. Demandez un nouveau code.',
+                'reason' => 'locked',
+            ], 429);
         }
 
-        $otp->markVerified($phone);
+        if (! $otp->hasActiveCode($phone, $context)) {
+            return response()->json([
+                'error' => 'Votre code a expiré.',
+                'reason' => 'expired',
+            ], 422);
+        }
+
+        if (! $otp->verify($phone, $request->input('code', ''), $context)) {
+            return response()->json([
+                'error' => 'Code incorrect.',
+                'reason' => 'invalid',
+            ], 422);
+        }
+
+        $otp->markVerified($phone, $context);
 
         return response()->json(['verified' => true]);
     }
@@ -148,28 +235,50 @@ class AcceptInvitationController extends Controller
             'code_pays' => ['nullable', 'string', 'max:5'],
             'prenom' => ['required', 'string', 'min:2', 'max:100'],
             'nom' => ['required', 'string', 'min:2', 'max:100'],
-            'password' => ['required', Password::min(8)->letters()->numbers()],
+            'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
         ], [
             'telephone.required' => 'Le numéro de téléphone est obligatoire.',
             'telephone.unique' => 'Ce numéro de téléphone est déjà utilisé.',
             'prenom.required' => 'Le prénom est obligatoire.',
             'nom.required' => 'Le nom est obligatoire.',
             'password.required' => 'Le mot de passe est obligatoire.',
+            'password.confirmed' => 'La confirmation du mot de passe ne correspond pas.',
         ]);
 
-        if (! $otp->isVerified($data['telephone'])) {
+        $context = $this->otpContext($invitation);
+
+        if (! $otp->isVerified($data['telephone'], $context)) {
             throw ValidationException::withMessages([
                 'telephone' => 'Veuillez vérifier votre numéro de téléphone.',
             ]);
         }
 
-        $user = $service->accept($invitation, $data);
+        $service->accept($invitation, $data);
 
-        $otp->clear($data['telephone']);
+        $otp->clear($data['telephone'], $context);
 
-        Auth::login($user);
+        // Le compte est créé en pending_validation : jamais de connexion automatique
+        // ni d'accès au dashboard tant qu'un admin ne l'a pas validé.
+        if ($request->expectsJson()) {
+            return response()->json([
+                'pending_validation' => true,
+                'message' => 'Votre compte a bien été créé. Il est en attente de validation par un administrateur.',
+            ]);
+        }
 
-        return redirect()->route('dashboard');
+        return redirect()->route('invitations.accept', [
+            'token' => $token,
+            'state' => 'pending_validation',
+        ]);
+    }
+
+    /**
+     * Lie l'OTP à cette invitation précise (id + email) : un même numéro de téléphone
+     * réinvité ne peut jamais réutiliser/hériter d'un code généré pour une autre invitation.
+     */
+    private function otpContext(UserInvitation $invitation): string
+    {
+        return $invitation->id.'|'.$invitation->email;
     }
 
     private function invitationErrorState(?UserInvitation $invitation): ?string

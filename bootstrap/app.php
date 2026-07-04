@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\RequireActiveLivreur;
@@ -36,6 +37,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'module' => RequireModuleEnabled::class,
             'require.site' => RequireSiteAssigned::class,
             'active.livreur' => RequireActiveLivreur::class,
+            'account.active' => EnsureAccountIsActive::class,
         ]);
 
         $middleware->redirectUsersTo(function (Request $request): string {

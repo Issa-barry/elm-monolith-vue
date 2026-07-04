@@ -68,6 +68,10 @@ class RegisterLookupController extends Controller
             }
         }
 
+        if (! $otp->canSend($phone)) {
+            return response()->json(['error' => 'Trop de demandes de code. Veuillez réessayer plus tard.'], 429);
+        }
+
         // 3. Générer l'OTP (stocké en session, pas encore envoyé par SMS en MVP)
         $otp->generate($phone);
 

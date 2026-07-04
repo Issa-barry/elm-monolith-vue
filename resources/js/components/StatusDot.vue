@@ -7,6 +7,7 @@ import { computed, type HTMLAttributes } from 'vue';
 const STATUS_COLOR_MAP: Record<string, string> = {
     // Vert — succès / terminé
     actif: 'bg-emerald-500',
+    active: 'bg-emerald-500',
     valide: 'bg-emerald-500',
     validee: 'bg-emerald-500',
     approuve: 'bg-emerald-500',
@@ -32,6 +33,7 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     creee: 'bg-zinc-400 dark:bg-zinc-500',
     a_charger: 'bg-zinc-400 dark:bg-zinc-500',
     inactif: 'bg-zinc-400 dark:bg-zinc-500',
+    inactive: 'bg-zinc-400 dark:bg-zinc-500',
 
     // Rouge — impayé / rejeté / annulé
     impaye: 'bg-red-500',
@@ -47,6 +49,7 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     partielle: 'bg-orange-500',
     partiellement_paye: 'bg-orange-500',
     en_attente: 'bg-orange-500',
+    pending_validation: 'bg-orange-500',
     soumis: 'bg-orange-500',
 };
 
