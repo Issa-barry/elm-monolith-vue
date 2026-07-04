@@ -110,9 +110,11 @@ const mainNavItems = computed((): NavItem[] => {
     if (canSee('ventes.read', 'ventes')) {
         const ventesSubItems = [
             { title: 'Commandes', href: '/backoffice/ventes' },
-            { title: 'PDV', href: '/backoffice/pdv' },
-            { title: 'Factures', href: '/backoffice/factures' },
         ];
+        if (moduleActive('pdv')) {
+            ventesSubItems.push({ title: 'PDV', href: '/backoffice/pdv' });
+        }
+        ventesSubItems.push({ title: 'Factures', href: '/backoffice/factures' });
         if (moduleActive('cashback')) {
             ventesSubItems.push({
                 title: 'Cashback',

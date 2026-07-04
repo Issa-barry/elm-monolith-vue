@@ -8,6 +8,8 @@ class ModuleFeature
 
     public const VENTES = 'module.ventes';
 
+    public const PDV = 'module.pdv';
+
     public const ACHATS = 'module.achats';
 
     public const PACKINGS = 'module.packings';
@@ -36,6 +38,7 @@ class ModuleFeature
 
     public const ALL = [
         self::VENTES,
+        self::PDV,
         self::ACHATS,
         self::PACKINGS,
         self::PRESTATAIRES,
@@ -72,6 +75,7 @@ class ModuleFeature
     {
         return [
             self::VENTES => 'Ventes',
+            self::PDV => 'Point de vente (PDV)',
             self::ACHATS => 'Achats',
             self::PACKINGS => 'Packings',
             self::PRESTATAIRES => 'Prestataires',
