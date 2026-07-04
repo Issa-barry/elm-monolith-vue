@@ -70,6 +70,10 @@ class AcceptInvitationController extends Controller
             return response()->json(['status' => 'user_exists']);
         }
 
+        if (! $otp->canResend($phone)) {
+            return response()->json(['error' => 'Veuillez patienter quelques secondes avant de redemander un code.'], 429);
+        }
+
         $prefill = $service->phonePrefill($phone);
         $code = $otp->generate($phone);
 
@@ -102,6 +106,10 @@ class AcceptInvitationController extends Controller
 
         if ($phone === null) {
             return response()->json(['error' => 'Numéro de téléphone invalide.'], 422);
+        }
+
+        if ($otp->tooManyAttempts($phone)) {
+            return response()->json(['error' => 'Trop de tentatives. Demandez un nouveau code.'], 429);
         }
 
         if (! $otp->verify($phone, $request->input('code', ''))) {
@@ -148,13 +156,14 @@ class AcceptInvitationController extends Controller
             'code_pays' => ['nullable', 'string', 'max:5'],
             'prenom' => ['required', 'string', 'min:2', 'max:100'],
             'nom' => ['required', 'string', 'min:2', 'max:100'],
-            'password' => ['required', Password::min(8)->letters()->numbers()],
+            'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
         ], [
             'telephone.required' => 'Le numéro de téléphone est obligatoire.',
             'telephone.unique' => 'Ce numéro de téléphone est déjà utilisé.',
             'prenom.required' => 'Le prénom est obligatoire.',
             'nom.required' => 'Le nom est obligatoire.',
             'password.required' => 'Le mot de passe est obligatoire.',
+            'password.confirmed' => 'La confirmation du mot de passe ne correspond pas.',
         ]);
 
         if (! $otp->isVerified($data['telephone'])) {

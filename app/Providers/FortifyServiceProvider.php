@@ -156,5 +156,19 @@ class FortifyServiceProvider extends ServiceProvider
 
             return Limit::perMinute(5)->by($throttleKey);
         });
+
+        // OTP (onboarding par invitation) : clé composite téléphone+IP, pour qu'un
+        // numéro ne puisse pas être bombardé/bruteforcé depuis plusieurs IP.
+        RateLimiter::for('otp-send', function (Request $request) {
+            $throttleKey = Str::transliterate(Str::lower($request->input('telephone', '')).'|'.$request->ip());
+
+            return Limit::perMinute(5)->by($throttleKey);
+        });
+
+        RateLimiter::for('otp-verify', function (Request $request) {
+            $throttleKey = Str::transliterate(Str::lower($request->input('telephone', '')).'|'.$request->ip());
+
+            return Limit::perMinute(10)->by($throttleKey);
+        });
     }
 }

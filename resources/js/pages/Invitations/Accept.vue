@@ -10,6 +10,8 @@ import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
     AlertCircle,
     CheckCircle,
+    Eye,
+    EyeOff,
     Home,
     LayoutDashboard,
     Lock,
@@ -210,7 +212,11 @@ const form = useForm({
     prenom: '',
     nom: '',
     password: '',
+    password_confirmation: '',
 });
+
+const showPassword = ref(false);
+const showPasswordConfirmation = ref(false);
 
 // ── Helpers API ───────────────────────────────────────────────────────────────
 
@@ -663,16 +669,35 @@ function logoutAndGoToLogin() {
                     <Label for="password">
                         Mot de passe <span class="text-destructive">*</span>
                     </Label>
-                    <Input
-                        id="password"
-                        v-model="form.password"
-                        type="password"
-                        required
-                        autofocus
-                        :tabindex="1"
-                        autocomplete="new-password"
-                        placeholder="Mot de passe"
-                    />
+                    <div class="relative">
+                        <Input
+                            id="password"
+                            v-model="form.password"
+                            :type="showPassword ? 'text' : 'password'"
+                            required
+                            autofocus
+                            :tabindex="1"
+                            autocomplete="new-password"
+                            placeholder="Mot de passe"
+                            class="pr-10"
+                        />
+                        <button
+                            type="button"
+                            class="absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                            tabindex="-1"
+                            @click="showPassword = !showPassword"
+                            :aria-label="
+                                showPassword
+                                    ? 'Masquer le mot de passe'
+                                    : 'Afficher le mot de passe'
+                            "
+                        >
+                            <component
+                                :is="showPassword ? EyeOff : Eye"
+                                class="h-4 w-4"
+                            />
+                        </button>
+                    </div>
                     <p class="text-xs text-muted-foreground">
                         8 caractères minimum, avec majuscule et chiffre.
                     </p>
@@ -686,10 +711,49 @@ function logoutAndGoToLogin() {
                     />
                 </div>
 
+                <div class="grid gap-2">
+                    <Label for="password_confirmation">
+                        Confirmer le mot de passe
+                        <span class="text-destructive">*</span>
+                    </Label>
+                    <div class="relative">
+                        <Input
+                            id="password_confirmation"
+                            v-model="form.password_confirmation"
+                            :type="showPasswordConfirmation ? 'text' : 'password'"
+                            required
+                            :tabindex="2"
+                            autocomplete="new-password"
+                            placeholder="Confirmer le mot de passe"
+                            class="pr-10"
+                        />
+                        <button
+                            type="button"
+                            class="absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                            tabindex="-1"
+                            @click="
+                                showPasswordConfirmation =
+                                    !showPasswordConfirmation
+                            "
+                            :aria-label="
+                                showPasswordConfirmation
+                                    ? 'Masquer le mot de passe'
+                                    : 'Afficher le mot de passe'
+                            "
+                        >
+                            <component
+                                :is="showPasswordConfirmation ? EyeOff : Eye"
+                                class="h-4 w-4"
+                            />
+                        </button>
+                    </div>
+                    <InputError :message="form.errors.password_confirmation" />
+                </div>
+
                 <Button
                     type="button"
                     class="mt-2 w-full"
-                    :tabindex="2"
+                    :tabindex="3"
                     :disabled="form.processing"
                     @click="submitAccept"
                 >

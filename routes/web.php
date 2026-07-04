@@ -84,10 +84,10 @@ Route::get('/invitations/accept/{token}', [AcceptInvitationController::class, 's
     ->middleware('throttle:20,1');
 Route::post('/invitations/accept/{token}/phone', [AcceptInvitationController::class, 'checkPhone'])
     ->name('invitations.accept.phone')
-    ->middleware('throttle:10,1');
+    ->middleware('throttle:otp-send');
 Route::post('/invitations/accept/{token}/otp', [AcceptInvitationController::class, 'verifyOtp'])
     ->name('invitations.accept.otp')
-    ->middleware('throttle:10,1');
+    ->middleware('throttle:otp-verify');
 Route::post('/invitations/accept/{token}', [AcceptInvitationController::class, 'accept'])
     ->name('invitations.accept.store')
     ->middleware('throttle:5,1');

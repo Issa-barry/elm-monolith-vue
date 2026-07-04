@@ -571,6 +571,7 @@ class UserInvitationTest extends TestCase
             'prenom' => 'Fatoumata',
             'nom' => 'DIALLO',
             'password' => 'Secure123',
+            'password_confirmation' => 'Secure123',
         ]);
 
         $response->assertRedirect(route('dashboard'));

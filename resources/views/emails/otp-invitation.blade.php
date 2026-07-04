@@ -8,9 +8,6 @@
   body { margin: 0; padding: 0; background: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
   .wrap { max-width: 480px; margin: 40px auto; padding: 0 16px; }
   .card { background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
-  .header { background: #2563eb; padding: 32px 24px 24px; text-align: center; }
-  .header-icon { font-size: 40px; margin-bottom: 12px; }
-  .header-title { color: #ffffff; font-size: 20px; font-weight: 700; margin: 0; }
   .body { padding: 32px 24px; }
   .intro { font-size: 15px; color: #475569; line-height: 1.6; margin: 0 0 24px; }
   .code-box { background: #eff6ff; border: 2px dashed #93c5fd; border-radius: 12px; padding: 24px; text-align: center; margin: 0 0 24px; }
@@ -24,10 +21,6 @@
 <body>
 <div class="wrap">
   <div class="card">
-    <div class="header">
-      <div class="header-icon">🔐</div>
-      <p class="header-title">Vérification de votre invitation</p>
-    </div>
     <div class="body">
       <p class="intro">
         Vous êtes sur le point de rejoindre votre espace.<br>
