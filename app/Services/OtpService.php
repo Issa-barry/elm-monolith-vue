@@ -76,7 +76,9 @@ class OtpService
         Cache::put($this->key($telephone, $context), $code, now()->addMinutes(self::TTL_MINUTES));
         Cache::forget($this->verifiedKey($telephone, $context));
         Cache::forget($this->attemptsKey($telephone, $context));
-        Cache::put($this->cooldownKey($telephone, $context), true, now()->addSeconds(self::RESEND_COOLDOWN_SECONDS));
+
+        $cooldownUntil = now()->addSeconds(self::RESEND_COOLDOWN_SECONDS);
+        Cache::put($this->cooldownKey($telephone, $context), $cooldownUntil->timestamp, $cooldownUntil);
 
         $this->incrementWindow($this->hourlyKey($telephone, $context), 3600);
         $this->incrementWindow($this->dailyKey($telephone, $context), 86400);
@@ -86,25 +88,46 @@ class OtpService
         return $code;
     }
 
+    /** Nombre de secondes d'attente avant de pouvoir redemander un code (0 = autorisé). */
+    public function resendCooldownSeconds(): int
+    {
+        return self::RESEND_COOLDOWN_SECONDS;
+    }
+
     /**
      * Indique si un nouveau code peut être demandé pour ce numéro : ni avant le
      * délai anti-spam (30s), ni au-delà des plafonds horaire/journalier.
      */
     public function canSend(string $telephone, ?string $context = null): bool
     {
-        if (Cache::has($this->cooldownKey($telephone, $context))) {
-            return false;
+        return $this->resendWaitSeconds($telephone, $context) === 0;
+    }
+
+    /**
+     * Secondes à attendre avant qu'un nouvel envoi soit autorisé (0 si immédiat).
+     * Retient le motif de blocage dont l'échéance est la plus lointaine parmi le
+     * délai anti-spam et les plafonds horaire/journalier : peu importe la cause
+     * exacte, on ne révèle que le temps d'attente au client (aucune fuite d'info).
+     */
+    public function resendWaitSeconds(string $telephone, ?string $context = null): int
+    {
+        $now = now()->timestamp;
+        $waits = [];
+
+        $cooldownUntil = Cache::get($this->cooldownKey($telephone, $context));
+        if (is_int($cooldownUntil)) {
+            $waits[] = $cooldownUntil - $now;
         }
 
         if ($this->windowCount($this->hourlyKey($telephone, $context)) >= self::MAX_SENDS_PER_HOUR) {
-            return false;
+            $waits[] = ($this->windowExpiresAt($this->hourlyKey($telephone, $context)) ?? $now) - $now;
         }
 
         if ($this->windowCount($this->dailyKey($telephone, $context)) >= self::MAX_SENDS_PER_DAY) {
-            return false;
+            $waits[] = ($this->windowExpiresAt($this->dailyKey($telephone, $context)) ?? $now) - $now;
         }
 
-        return true;
+        return $waits === [] ? 0 : max(0, max($waits));
     }
 
     /**
@@ -142,6 +165,16 @@ class OtpService
     public function tooManyAttempts(string $telephone, ?string $context = null): bool
     {
         return (int) Cache::get($this->attemptsKey($telephone, $context), 0) >= self::MAX_ATTEMPTS;
+    }
+
+    /**
+     * Indique si un code est encore actif en cache pour ce numéro (ni expiré par
+     * TTL naturel, ni jamais généré). Utilisé pour distinguer "code expiré" de
+     * "code incorrect" côté contrôleur.
+     */
+    public function hasActiveCode(string $telephone, ?string $context = null): bool
+    {
+        return Cache::has($this->key($telephone, $context));
     }
 
     private function recordFailedAttempt(string $telephone, ?string $context): void
@@ -212,6 +245,13 @@ class OtpService
         }
 
         return $data['count'];
+    }
+
+    private function windowExpiresAt(string $key): ?int
+    {
+        $data = Cache::get($key);
+
+        return is_array($data) ? $data['expires_at'] : null;
     }
 
     /** Masque un numéro de téléphone pour les journaux d'audit (ex: "+2246*****10"). */

@@ -26,6 +26,7 @@ import {
     Shield,
     Trash2,
     UserCircle,
+    XCircle,
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
@@ -43,6 +44,7 @@ interface StaffUser {
     code_phone_pays: string | null;
     matricule: string | null;
     is_active: boolean;
+    is_pending_validation: boolean;
     roles: string[];
     site: string | null;
     site_id: string | null;
@@ -115,10 +117,17 @@ function initials(name: string) {
 
 const totalUsers = computed(() => props.users.length);
 const activeUsers = computed(
-    () => props.users.filter((u) => u.is_active).length,
+    () =>
+        props.users.filter((u) => u.is_active && !u.is_pending_validation)
+            .length,
 );
 const inactiveUsers = computed(
-    () => props.users.filter((u) => !u.is_active).length,
+    () =>
+        props.users.filter((u) => !u.is_active && !u.is_pending_validation)
+            .length,
+);
+const pendingUsers = computed(
+    () => props.users.filter((u) => u.is_pending_validation).length,
 );
 
 const search = ref('');
@@ -140,6 +149,7 @@ const filterFields: FilterField[] = [
         options: [
             { value: 'tous', label: 'Tous' },
             { value: 'actif', label: 'Actif' },
+            { value: 'en_attente', label: 'En attente de validation' },
             { value: 'inactif', label: 'Inactif' },
         ],
     },
@@ -152,8 +162,14 @@ const filteredUsers = computed(() => {
             (u) => u.site_id && siteIds.value.includes(u.site_id),
         );
     }
-    if (statut.value !== 'tous') {
-        list = list.filter((u) => u.is_active === (statut.value === 'actif'));
+    if (statut.value === 'en_attente') {
+        list = list.filter((u) => u.is_pending_validation);
+    } else if (statut.value !== 'tous') {
+        list = list.filter(
+            (u) =>
+                !u.is_pending_validation &&
+                u.is_active === (statut.value === 'actif'),
+        );
     }
     const q = search.value.toLowerCase().trim();
     if (q) {
@@ -211,6 +227,57 @@ function confirmDelete(u: StaffUser) {
         },
     });
 }
+
+function confirmValidate(u: StaffUser) {
+    confirm.require({
+        message: `Valider le compte de ${u.nom_complet} ? Il pourra alors se connecter.`,
+        header: 'Confirmer la validation',
+        icon: 'pi pi-check-circle',
+        rejectLabel: 'Annuler',
+        acceptLabel: 'Valider',
+        accept: () => {
+            router.patch(
+                `/backoffice/users/${u.id}/validate`,
+                {},
+                {
+                    onSuccess: () =>
+                        toast.add({
+                            severity: 'success',
+                            summary: 'Compte validé',
+                            detail: `${u.nom_complet} peut désormais se connecter.`,
+                            life: 3000,
+                        }),
+                },
+            );
+        },
+    });
+}
+
+function confirmReject(u: StaffUser) {
+    confirm.require({
+        message: `Refuser le compte de ${u.nom_complet} ? Il restera bloqué.`,
+        header: 'Confirmer le refus',
+        icon: 'pi pi-exclamation-triangle',
+        rejectLabel: 'Annuler',
+        acceptLabel: 'Refuser',
+        acceptClass: 'p-button-danger',
+        accept: () => {
+            router.patch(
+                `/backoffice/users/${u.id}/reject`,
+                {},
+                {
+                    onSuccess: () =>
+                        toast.add({
+                            severity: 'success',
+                            summary: 'Compte refusé',
+                            detail: `${u.nom_complet} a été refusé.`,
+                            life: 3000,
+                        }),
+                },
+            );
+        },
+    });
+}
 </script>
 
 <template>
@@ -240,7 +307,7 @@ function confirmDelete(u: StaffUser) {
             </div>
 
             <!-- Stats -->
-            <div class="grid grid-cols-3 gap-4">
+            <div class="grid grid-cols-4 gap-4">
                 <div class="rounded-xl border bg-card p-5">
                     <p class="text-sm text-muted-foreground">
                         Total utilisateurs
@@ -253,6 +320,14 @@ function confirmDelete(u: StaffUser) {
                     </p>
                     <p class="mt-1 text-3xl font-bold text-emerald-500">
                         {{ activeUsers }}
+                    </p>
+                </div>
+                <div class="rounded-xl border bg-card p-5">
+                    <p class="text-sm text-muted-foreground">
+                        En attente de validation
+                    </p>
+                    <p class="mt-1 text-3xl font-bold text-orange-500">
+                        {{ pendingUsers }}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-5">
@@ -407,6 +482,13 @@ function confirmDelete(u: StaffUser) {
                     >
                         <template #body="{ data }">
                             <StatusDot
+                                v-if="data.is_pending_validation"
+                                label="En attente de validation"
+                                status="pending_validation"
+                                class="text-muted-foreground"
+                            />
+                            <StatusDot
+                                v-else
                                 :label="data.is_active ? 'Actif' : 'Inactif'"
                                 :dot-class="
                                     data.is_active
@@ -436,6 +518,29 @@ function confirmDelete(u: StaffUser) {
                                         align="end"
                                         class="w-44"
                                     >
+                                        <template
+                                            v-if="
+                                                data.is_pending_validation &&
+                                                can('users.update') &&
+                                                canActOn(data)
+                                            "
+                                        >
+                                            <DropdownMenuItem
+                                                class="cursor-pointer text-emerald-600 focus:text-emerald-600"
+                                                @click="confirmValidate(data)"
+                                            >
+                                                <CheckCircle class="h-4 w-4" />
+                                                Valider
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                class="cursor-pointer text-destructive focus:text-destructive"
+                                                @click="confirmReject(data)"
+                                            >
+                                                <XCircle class="h-4 w-4" />
+                                                Refuser
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                        </template>
                                         <DropdownMenuItem
                                             v-if="
                                                 can('users.update') &&

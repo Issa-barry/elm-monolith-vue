@@ -79,8 +79,8 @@ class SiteController extends Controller
             'email' => $u->email,
             'telephone' => $u->telephone,
             'role' => $u->getRoleNames()->first(),
-            'statut' => $u->is_active ? 'actif' : 'inactif',
-            'statut_label' => $u->is_active ? 'Actif' : 'Inactif',
+            'statut' => $u->isPendingValidation() ? 'pending_validation' : ($u->is_active ? 'actif' : 'inactif'),
+            'statut_label' => $u->isPendingValidation() ? 'En attente de validation' : ($u->is_active ? 'Actif' : 'Inactif'),
             'date' => $u->pivot->created_at?->format('d/m/Y'),
             'can_resend' => false,
             'can_revoke' => false,
@@ -106,7 +106,7 @@ class SiteController extends Controller
 
         $membres = $membresUsers->concat($membresInvitations)->values();
 
-        $rolesDisponibles = Role::whereIn('name', UserController::STAFF_ROLES)
+        $rolesDisponibles = Role::whereIn('name', UserController::INVITABLE_ROLES)
             ->get(['id', 'name'])
             ->map(fn ($r) => ['value' => $r->name, 'label' => $this->roleLabel($r->name)])
             ->values();

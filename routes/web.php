@@ -88,6 +88,9 @@ Route::post('/invitations/accept/{token}/phone', [AcceptInvitationController::cl
 Route::post('/invitations/accept/{token}/otp', [AcceptInvitationController::class, 'verifyOtp'])
     ->name('invitations.accept.otp')
     ->middleware('throttle:otp-verify');
+Route::post('/invitations/accept/{token}/otp/resend', [AcceptInvitationController::class, 'resendOtp'])
+    ->name('invitations.accept.otp.resend')
+    ->middleware('throttle:otp-send');
 Route::post('/invitations/accept/{token}', [AcceptInvitationController::class, 'accept'])
     ->name('invitations.accept.store')
     ->middleware('throttle:5,1');
@@ -115,10 +118,10 @@ Route::post('contact', [ContactController::class, 'store'])->name('contact.store
 // ── Espace staff (back-office) ──────────────────────────────────────────────
 Route::prefix('backoffice')->group(function () {
     Route::get('dashboard', [DashboardController::class, 'index'])
-        ->middleware(['auth', 'verified', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'require.site'])
+        ->middleware(['auth', 'account.active', 'verified', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'require.site'])
         ->name('dashboard');
 
-    Route::middleware(['auth', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'require.site'])->group(function () {
+    Route::middleware(['auth', 'account.active', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'require.site'])->group(function () {
 
         // Messages de contact
         Route::get('contact-messages/unread-count', [ContactController::class, 'unreadCount'])->name('contact-messages.unread-count');
@@ -237,6 +240,8 @@ Route::prefix('backoffice')->group(function () {
         Route::middleware('module:'.ModuleFeature::UTILISATEURS)->group(function () {
             Route::resource('users', UserController::class)->except(['show']);
             Route::put('users/{user}/password', [UserController::class, 'updatePassword'])->name('users.update-password');
+            Route::patch('users/{user}/validate', [UserController::class, 'validateAccount'])->name('users.validate');
+            Route::patch('users/{user}/reject', [UserController::class, 'rejectAccount'])->name('users.reject');
             Route::resource('roles', RoleController::class)->only(['index', 'edit', 'update']);
             Route::post('invitations/{invitation}/resend', [UserInvitationController::class, 'resend'])
                 ->name('invitations.resend');

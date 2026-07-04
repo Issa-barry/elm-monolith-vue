@@ -17,7 +17,7 @@
                     <tr>
                         <td align="center" style="padding:32px 40px 24px;">
                             <img
-                                src="{{ url('/images/logo-email-dark.svg') }}"
+                                src="{{ $message->embed(public_path('images/logo-email-dark.png')) }}"
                                 width="48"
                                 height="48"
                                 alt="{{ config('app.name') }}"
