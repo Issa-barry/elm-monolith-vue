@@ -342,6 +342,40 @@ class CommissionAjustementController extends Controller
         return back()->with('success', "{$count} commission(s) validée(s).");
     }
 
+    /**
+     * Valide en un clic toutes les commissions non encore validées de ce véhicule : le
+     * contrôleur approuve "ce véhicule pour cette quinzaine", pas bénéficiaire par
+     * bénéficiaire (cf. règle métier discutée : le cas normal ne doit pas obliger à valider
+     * livreur par livreur). Bloqué si l'enveloppe du véhicule n'est pas équilibrée — la
+     * validation individuelle (valider-lot) reste disponible pour les cas particuliers.
+     */
+    public function validerVehicule(PaiementPeriode $periode, string $vehicule): RedirectResponse
+    {
+        $this->authorize('ajuster', $periode);
+
+        $vehiculeId = $vehicule === 'sans-vehicule' ? null : $vehicule;
+        $groupesRaw = collect(CommissionAdjustmentService::groupesParVehicule($periode, $vehiculeId));
+
+        abort_if($groupesRaw->isEmpty(), 404);
+
+        $ecart = round((float) $groupesRaw->sum('ecart'), 2);
+        if (abs($ecart) > 0.01) {
+            return back()->with('error', "Impossible de valider : il reste {$ecart} GNF à répartir sur ce véhicule.");
+        }
+
+        $nomVehicule = $groupesRaw->first()['vehicule_nom'] ?? 'Sans véhicule';
+        $parts = $groupesRaw->flatMap(fn (array $g) => $g['parts']);
+        $count = CommissionAdjustmentService::validerLot($parts, auth()->user());
+
+        app(AuditLogService::class)->record($periode, AuditEvent::VALIDATED, auth()->user(), null, null, [
+            'module' => 'ajustements_commissions',
+            'nb_parts' => $count,
+            'description' => "Véhicule {$nomVehicule} validé en bloc ({$count} commission(s)) pour la période {$periode->reference}",
+        ]);
+
+        return back()->with('success', "Véhicule validé : {$count} commission(s) validée(s).");
+    }
+
     private function resolvePart(string $type, string $partId): CommissionPart|CommissionLogistiquePart
     {
         return match ($type) {
