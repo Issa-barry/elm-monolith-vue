@@ -130,7 +130,9 @@ function statutValidationLabel(statut: string): string {
 const controleVehicules = computed(() => {
     const total = props.vehicules.length;
     const valides = props.vehicules.filter(
-        (v) => v.statut_validation === 'validee' || v.statut_validation === 'payee',
+        (v) =>
+            v.statut_validation === 'validee' ||
+            v.statut_validation === 'payee',
     ).length;
     const aRevoir = props.vehicules.filter(
         (v) => v.statut_validation === 'a_reverifier',
@@ -621,7 +623,11 @@ function exportPdf() {
                         <template #body="{ data }">
                             <StatusDot
                                 :status="data.statut_validation"
-                                :label="statutValidationLabel(data.statut_validation)"
+                                :label="
+                                    statutValidationLabel(
+                                        data.statut_validation,
+                                    )
+                                "
                             />
                         </template>
                     </Column>
