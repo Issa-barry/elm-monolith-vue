@@ -163,51 +163,44 @@ const typeBadge = (type: string) =>
                 </p>
             </div>
 
-            <!-- Cycle en cours -->
-            <div class="rounded-xl border bg-card p-4">
+            <!-- Cycle en cours : résumé compact du dashboard, distinct de l'historique (tableau ci-dessous) -->
+            <div class="rounded-xl border bg-card px-4 py-3">
                 <div
-                    class="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm"
+                    class="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 text-xs text-muted-foreground"
                 >
-                    <p>
-                        <span class="text-muted-foreground"
-                            >Période en cours :</span
-                        >
-                        <span class="ml-1.5 font-semibold">{{
+                    <span
+                        >Cycle en cours :
+                        <span class="font-semibold text-foreground">{{
                             cycle.periode_courante_label
-                        }}</span>
-                    </p>
-                    <p>
-                        <span class="text-muted-foreground"
-                            >Période suivante :</span
-                        >
-                        <span class="ml-1.5 font-semibold">{{
+                        }}</span></span
+                    >
+                    <span
+                        >Suivant :
+                        <span class="font-medium text-foreground">{{
                             cycle.periode_suivante_label
-                        }}</span>
-                    </p>
+                        }}</span></span
+                    >
                 </div>
 
-                <div class="mt-4 grid gap-3 sm:grid-cols-3">
+                <div class="mt-2 flex flex-wrap items-center gap-x-5 gap-y-2">
                     <Link
                         v-for="entry in cycle.par_type"
                         :key="entry.type"
                         :href="`/backoffice/comptabilite/periodes/${entry.periode.id}`"
-                        class="flex flex-col gap-2 rounded-lg border bg-background p-3 transition-colors hover:bg-muted/40"
+                        class="flex items-center gap-2 text-sm transition-colors hover:text-foreground"
                     >
-                        <span
-                            class="text-xs font-medium text-muted-foreground"
-                            >{{ entry.type_label }}</span
-                        >
+                        <span class="font-medium">{{ entry.type_label }}</span>
                         <StatusDot
                             :status="entry.periode.statut"
                             :label="entry.periode.statut_label"
                         />
-                        <p
+                        <span
                             v-if="entry.periode.nb_fiches > 0"
                             class="text-xs text-muted-foreground"
                         >
                             {{ entry.periode.nb_fiches }} fiches ·
                             {{ fmt(entry.periode.total_net) }}
-                        </p>
+                        </span>
                     </Link>
                 </div>
             </div>

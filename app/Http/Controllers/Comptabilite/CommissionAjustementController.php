@@ -17,6 +17,7 @@ use App\Services\CommissionAdjustmentService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -193,6 +194,62 @@ class CommissionAjustementController extends Controller
         }
 
         return back()->with('success', 'Montant ajusté.');
+    }
+
+    /**
+     * Ajuste plusieurs bénéficiaires du véhicule/période en une seule action : le responsable
+     * équilibre l'écart en augmentant certains et en diminuant d'autres dans le même geste,
+     * plutôt que de rouvrir la popup un bénéficiaire à la fois. Chaque groupe est réparti sur
+     * ses parts comme `ajusterGroupe`, le tout dans une transaction unique (tout ou rien).
+     */
+    public function ajusterMultiple(Request $request, PaiementPeriode $periode): RedirectResponse
+    {
+        $this->authorize('ajuster', $periode);
+
+        $data = $request->validate([
+            'groups' => ['required', 'array', 'min:1'],
+            'groups.*.label' => ['nullable', 'string'],
+            'groups.*.parts' => ['required', 'array', 'min:1'],
+            'groups.*.parts.*.type' => ['required', Rule::in(['vente', 'logistique'])],
+            'groups.*.parts.*.id' => ['required', 'string'],
+            'groups.*.montant' => ['required', 'numeric', 'min:0'],
+            'motif' => ['required', Rule::in(array_column(MotifAjustementCommission::cases(), 'value'))],
+            'commentaire' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $motif = MotifAjustementCommission::from($data['motif']);
+
+        try {
+            DB::transaction(function () use ($data, $motif, $request) {
+                foreach ($data['groups'] as $group) {
+                    $parts = collect($group['parts'])->map(function (array $p) {
+                        $part = $this->resolvePart($p['type'], $p['id']);
+                        $this->authorizeSurPart($part);
+
+                        return $part;
+                    });
+
+                    try {
+                        CommissionAdjustmentService::ajusterMontantGroupe(
+                            $parts,
+                            (float) $group['montant'],
+                            $motif,
+                            $data['commentaire'] ?? null,
+                            $request->user(),
+                        );
+                    } catch (\LogicException $e) {
+                        $label = $group['label'] ?? null;
+                        throw new \LogicException($label ? "{$label} : {$e->getMessage()}" : $e->getMessage());
+                    }
+                }
+            });
+        } catch (\LogicException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $count = count($data['groups']);
+
+        return back()->with('success', "{$count} bénéficiaire(s) ajusté(s).");
     }
 
     /** Déclare un bénéficiaire absent sur toutes ses parts du véhicule/période (vue agrégée) : chaque montant est mis à 0. */

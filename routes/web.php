@@ -362,6 +362,7 @@ Route::prefix('backoffice')->group(function () {
             Route::post('periodes/{periode}/ajustements/remplacant', [CommissionAjustementController::class, 'remplacant'])->name('periodes.ajustements.remplacant');
             Route::post('periodes/{periode}/ajustements/valider-lot', [CommissionAjustementController::class, 'validerLot'])->name('periodes.ajustements.valider-lot');
             Route::post('periodes/{periode}/ajustements/ajuster-groupe', [CommissionAjustementController::class, 'ajusterGroupe'])->name('periodes.ajustements.ajuster-groupe');
+            Route::post('periodes/{periode}/ajustements/ajuster-multiple', [CommissionAjustementController::class, 'ajusterMultiple'])->name('periodes.ajustements.ajuster-multiple');
             Route::post('periodes/{periode}/ajustements/absence-groupe', [CommissionAjustementController::class, 'absenceGroupe'])->name('periodes.ajustements.absence-groupe');
             Route::patch('ajustements/{type}/{partId}', [CommissionAjustementController::class, 'ajuster'])->name('ajustements.ajuster');
             Route::post('ajustements/{type}/{partId}/absence', [CommissionAjustementController::class, 'absence'])->name('ajustements.absence');

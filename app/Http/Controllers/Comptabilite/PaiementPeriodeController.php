@@ -7,6 +7,7 @@ use App\Enums\StatutPeriodePaiement;
 use App\Enums\TypePeriodePaiement;
 use App\Http\Controllers\Controller;
 use App\Models\Organization;
+use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
 use App\Services\AuditLogService;
 use App\Services\CommissionAdjustmentService;
@@ -16,6 +17,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -46,6 +48,19 @@ class PaiementPeriodeController extends Controller
         $now = Carbon::now();
         $quinzaineCourante = PeriodePaiementService::quinzaineForDate($now);
         $dateSuivante = Carbon::parse($courantes->first()->date_fin)->addDay();
+
+        // Par défaut (aucun filtre choisi par l'utilisateur), on se place sur le cycle en
+        // cours plutôt que d'afficher tout l'historique : c'est ce que l'utilisateur vient
+        // consulter la plupart du temps, et les sélecteurs reflètent alors cet état.
+        if (empty($filters['annee'])) {
+            $filters['annee'] = (string) $now->year;
+        }
+        if (empty($filters['mois'])) {
+            $filters['mois'] = (string) $now->month;
+        }
+        if (empty($filters['quinzaine'])) {
+            $filters['quinzaine'] = $quinzaineCourante;
+        }
 
         $query = PaiementPeriode::forOrg($orgId)->with('site');
 
@@ -135,6 +150,18 @@ class PaiementPeriodeController extends Controller
 
         $periode->load('site', 'createur', 'validateur');
 
+        // Auto-calcul à l'ouverture de la page : si les fiches n'existent pas encore ou si les
+        // données source (commissions/dépenses/paie) ont changé depuis le dernier calcul, on
+        // (re)génère avant de construire la réponse, pour que l'écran affiche toujours des
+        // montants à jour sans action manuelle. Idempotent et sans doublon (cf.
+        // PeriodeCalculatorService::calculer()). Ne s'applique jamais à une période
+        // validée/clôturée : needsRecalcul() renvoie alors toujours false, ses montants
+        // restent figés tant qu'elle n'a pas été repassée en brouillon.
+        $recalcul = $this->calculator->calculerSiNecessaire($periode);
+        if ($recalcul['recalcule']) {
+            $periode->refresh();
+        }
+
         $allFiches = $periode->fiches()->get();
 
         $filters = $request->only(['vehicule', 'livreur', 'proprietaire', 'etat']);
@@ -143,7 +170,11 @@ class PaiementPeriodeController extends Controller
         // (aucun concept de véhicule pour les périodes salarié).
         $vehicules = [];
         if (in_array($periode->type, [TypePeriodePaiement::LIVREUR, TypePeriodePaiement::PROPRIETAIRE], true)) {
-            $vehicules = collect(CommissionAdjustmentService::vehiculesParPeriode($periode));
+            $vehicules = $this->avecMontantsPayes(
+                collect(CommissionAdjustmentService::vehiculesParPeriode($periode)),
+                $periode,
+                $allFiches,
+            );
 
             if (array_filter($filters)) {
                 $beneficiairesParVehicule = collect(CommissionAdjustmentService::groupesParCommission($periode))
@@ -181,6 +212,10 @@ class PaiementPeriodeController extends Controller
             'periode' => $this->transform($periode),
             'vehicules' => $vehicules,
             'filters' => $filters,
+            'recalcul' => [
+                'effectue' => $recalcul['recalcule'],
+                'nb_fiches' => $recalcul['nb_fiches'],
+            ],
             'stats' => [
                 'total_brut' => (float) $allFiches->sum('montant_brut'),
                 'total_net' => (float) $allFiches->sum('montant_net'),
@@ -195,6 +230,51 @@ class PaiementPeriodeController extends Controller
                 'ajuster' => auth()->user()->can('ajuster', $periode),
             ],
         ]);
+    }
+
+    /**
+     * Enrichit chaque véhicule avec le montant déjà payé et le reste à payer, en réutilisant
+     * les fiches déjà chargées pour la période (aucune requête supplémentaire). Le paiement
+     * vit au niveau du bénéficiaire (fiche), pas du véhicule : un livreur/propriétaire présent
+     * sur plusieurs véhicules de la quinzaine (rare) verra son montant compté sur chacun, comme
+     * pour nb_membres dans CommissionAdjustmentService::vehiculesParPeriode().
+     *
+     * @param  Collection<int, array>  $vehicules
+     * @param  Collection<int, PaiementFiche>  $allFiches
+     * @return Collection<int, array>
+     */
+    private function avecMontantsPayes(Collection $vehicules, PaiementPeriode $periode, Collection $allFiches): Collection
+    {
+        if ($vehicules->isEmpty()) {
+            return $vehicules;
+        }
+
+        $fichesParBeneficiaire = $allFiches->keyBy(fn ($f) => "{$f->beneficiaire_type}:{$f->beneficiaire_id}");
+
+        $beneficiairesParVehicule = collect(CommissionAdjustmentService::groupesParCommission($periode))
+            ->groupBy(fn (array $g) => $g['vehicule_id'] ?? '__sans_vehicule__')
+            ->map(fn ($groupes) => $groupes->flatMap(fn (array $g) => $g['parts'])
+                ->map(function ($p) {
+                    return match (true) {
+                        (bool) $p->livreur_id => "livreur:{$p->livreur_id}",
+                        (bool) $p->proprietaire_id => "proprietaire:{$p->proprietaire_id}",
+                        default => null,
+                    };
+                })
+                ->filter()
+                ->unique());
+
+        return $vehicules->map(function (array $v) use ($beneficiairesParVehicule, $fichesParBeneficiaire) {
+            $cle = $v['vehicule_id'] ?? '__sans_vehicule__';
+
+            $dejaPaye = $beneficiairesParVehicule->get($cle, collect())
+                ->sum(fn (string $ref) => (float) ($fichesParBeneficiaire->get($ref)?->montant_paye ?? 0));
+
+            $v['deja_paye'] = round($dejaPaye, 2);
+            $v['reste'] = max(0.0, round($v['ajuste'] - $v['deja_paye'], 2));
+
+            return $v;
+        });
     }
 
     public function calculer(PaiementPeriode $periode): RedirectResponse
