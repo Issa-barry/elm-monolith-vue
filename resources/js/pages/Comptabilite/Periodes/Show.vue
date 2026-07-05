@@ -53,6 +53,8 @@ interface VehiculeCard {
     ajuste: number;
     ecart: number;
     equilibre: boolean;
+    deja_paye: number;
+    reste: number;
 }
 
 const props = defineProps<{
@@ -149,6 +151,25 @@ const voirCommissionsUrl = computed(() => {
 function fmt(n: number) {
     return new Intl.NumberFormat('fr-FR').format(Math.round(n)) + ' GNF';
 }
+
+const titreMetier = computed(
+    () => `Paiement des ${props.periode.type_label.toLowerCase()}`,
+);
+
+const periodeFormatee = computed(() => {
+    const { date_debut, date_fin } = props.periode;
+    if (!date_debut || !date_fin) return null;
+
+    const debut = new Date(date_debut);
+    const fin = new Date(date_fin);
+    const jourDebut = debut.getDate() === 1 ? '1er' : debut.getDate();
+    const moisAnnee = fin.toLocaleDateString('fr-GN', {
+        month: 'long',
+        year: 'numeric',
+    });
+
+    return `${jourDebut} au ${fin.getDate()} ${moisAnnee}`;
+});
 
 function routeSegment(vehiculeId: string | null) {
     return vehiculeId ?? 'sans-vehicule';
@@ -292,8 +313,8 @@ function exportPdf() {
             <div class="flex items-start justify-between">
                 <div>
                     <div class="flex items-center gap-3">
-                        <h1 class="font-mono text-xl font-semibold">
-                            {{ periode.reference }}
+                        <h1 class="text-xl font-semibold">
+                            {{ titreMetier }}
                         </h1>
                         <StatusDot
                             :status="periode.statut"
@@ -301,11 +322,13 @@ function exportPdf() {
                         />
                     </div>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        {{ periode.type_label }} — {{ periode.date_debut }} au
-                        {{ periode.date_fin }}
+                        {{ periodeFormatee ?? '—' }}
                         <span v-if="periode.site">
                             — {{ periode.site.nom }}</span
                         >
+                    </p>
+                    <p class="mt-0.5 font-mono text-xs text-muted-foreground">
+                        Référence : {{ periode.reference }}
                     </p>
                     <p
                         v-if="periode.observations"
@@ -424,6 +447,8 @@ function exportPdf() {
             />
 
             <!-- Commissions par véhicule -->
+            <!-- data-key="vehicule_id" : point d'extension pour un futur détail par ligne
+                 (commandes/commissions composant le montant), via un DataTable expander. -->
             <div class="overflow-x-auto rounded-xl border bg-card">
                 <DataTable
                     :value="vehicules"
@@ -434,7 +459,7 @@ function exportPdf() {
                     removable-sort
                     class="text-sm"
                     :pt="{
-                        root: { class: 'w-full min-w-[900px]' },
+                        root: { class: 'w-full min-w-[1100px]' },
                         tbody: { class: 'divide-y' },
                         bodyRow: bodyRowPt,
                     }"
@@ -505,6 +530,38 @@ function exportPdf() {
                             <span class="font-semibold tabular-nums">{{
                                 fmt(data.theorique)
                             }}</span>
+                        </template>
+                    </Column>
+
+                    <Column
+                        field="deja_paye"
+                        header="Déjà payé"
+                        sortable
+                        style="width: 140px"
+                    >
+                        <template #body="{ data }">
+                            <span class="text-muted-foreground tabular-nums">{{
+                                fmt(data.deja_paye)
+                            }}</span>
+                        </template>
+                    </Column>
+
+                    <Column
+                        field="reste"
+                        header="Reste à payer"
+                        sortable
+                        style="width: 140px"
+                    >
+                        <template #body="{ data }">
+                            <span
+                                class="tabular-nums"
+                                :class="
+                                    data.reste > 0
+                                        ? 'font-medium text-amber-600 dark:text-amber-400'
+                                        : 'text-muted-foreground'
+                                "
+                                >{{ fmt(data.reste) }}</span
+                            >
                         </template>
                     </Column>
 

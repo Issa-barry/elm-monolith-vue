@@ -229,14 +229,19 @@ function toMontant(taux: number, total: number): number {
     return Math.round((taux / 100) * total);
 }
 
-const totalReparti = computed(() =>
-    Math.round(
-        ajusterMultiRows.value.reduce((sum, r) => sum + (r.montant || 0), 0) * 100,
-    ) / 100,
+const totalReparti = computed(
+    () =>
+        Math.round(
+            ajusterMultiRows.value.reduce(
+                (sum, r) => sum + (r.montant || 0),
+                0,
+            ) * 100,
+        ) / 100,
 );
 
 const ajusterMultiEcartGlobal = computed(
-    () => Math.round((props.vehicule.theorique - totalReparti.value) * 100) / 100,
+    () =>
+        Math.round((props.vehicule.theorique - totalReparti.value) * 100) / 100,
 );
 
 const repartitionValide = computed(
@@ -461,7 +466,11 @@ function submitRemplacant() {
                     </p>
                 </div>
                 <div class="flex items-center gap-2">
-                    <Button variant="outline" size="sm" @click="openAjusterMulti">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        @click="openAjusterMulti"
+                    >
                         <ArrowUpDown class="mr-1.5 h-4 w-4" />
                         Répartir
                     </Button>
@@ -723,7 +732,9 @@ function submitRemplacant() {
                             class="sticky top-0 bg-muted/50 text-xs text-muted-foreground"
                         >
                             <tr>
-                                <th class="px-4 py-3 text-left">Bénéficiaire</th>
+                                <th class="px-4 py-3 text-left">
+                                    Bénéficiaire
+                                </th>
                                 <th class="px-4 py-3 text-right">Théorique</th>
                                 <th class="px-4 py-3 text-right">Diminuer</th>
                                 <th class="px-4 py-3 text-right">Augmenter</th>
@@ -745,7 +756,7 @@ function submitRemplacant() {
                                     >
                                 </td>
                                 <td
-                                    class="px-4 py-3 text-right tabular-nums text-muted-foreground"
+                                    class="px-4 py-3 text-right text-muted-foreground tabular-nums"
                                 >
                                     {{ fmt(row.theorique) }}
                                 </td>
@@ -803,7 +814,10 @@ function submitRemplacant() {
                                               : 'text-muted-foreground'
                                     "
                                 >
-                                    {{ row.montant - row.theorique > 0 ? '+' : ''
+                                    {{
+                                        row.montant - row.theorique > 0
+                                            ? '+'
+                                            : ''
                                     }}{{ fmt(row.montant - row.theorique) }}
                                 </td>
                             </tr>
