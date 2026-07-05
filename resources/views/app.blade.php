@@ -8,13 +8,14 @@
         <script>
             (function() {
                 const appearance = '{{ $appearance ?? "light" }}';
+                window.__isDark = appearance === 'dark';
 
                 if (appearance === 'system') {
-                    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    window.__isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                }
 
-                    if (prefersDark) {
-                        document.documentElement.classList.add('dark');
-                    }
+                if (window.__isDark) {
+                    document.documentElement.classList.add('dark');
                 }
             })();
         </script>
@@ -33,8 +34,15 @@
         <title inertia>{{ config('app.name', 'EAU-LA-MAMAN') }}</title>
 
         <link rel="icon" href="/favicon.ico" sizes="any">
-        <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+        <link rel="icon" href="{{ ($appearance ?? 'light') === 'dark' ? '/favicon-dark.svg' : '/favicon.svg' }}" type="image/svg+xml">
         <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+
+        {{-- For 'system' appearance, the server can't know the OS preference; correct the favicon client-side --}}
+        <script>
+            if (window.__isDark && '{{ $appearance ?? "light" }}' === 'system') {
+                document.querySelector('link[rel="icon"][type="image/svg+xml"]').href = '/favicon-dark.svg';
+            }
+        </script>
 
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600" rel="stylesheet" />

@@ -649,6 +649,83 @@ class CommissionAjustementTest extends TestCase
         $this->assertSame(60000.0, (float) $partsA['Oumar']->refresh()->montant_a_payer);
     }
 
+    public function test_ajuster_multiple_augmente_et_diminue_plusieurs_beneficiaires_en_une_action(): void
+    {
+        // Le responsable équilibre l'écart en une seule popup : diminue Abdoulaye, augmente
+        // Oumar, dans le même envoi — au lieu de rouvrir l'ajustement un bénéficiaire à la fois.
+        $this->travelTo('2026-06-10 12:00:00');
+        $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id]);
+        ['parts' => $parts] = $this->makeCommissionAvecEquipe([
+            'Oumar' => 60000,
+            'Abdoulaye' => 45000,
+            'Kadiatou' => 15000,
+        ], $vehicule->id);
+        $periode = $this->makePeriode(StatutPeriodePaiement::BROUILLON->value);
+        $this->actingAs($this->user)->post(route('comptabilite.periodes.calculer', $periode));
+
+        $response = $this->actingAs($this->user)
+            ->post(route('comptabilite.periodes.ajustements.ajuster-multiple', $periode), [
+                'groups' => [
+                    [
+                        'label' => 'Abdoulaye',
+                        'parts' => [['type' => 'vente', 'id' => $parts['Abdoulaye']->id]],
+                        'montant' => 35000,
+                    ],
+                    [
+                        'label' => 'Oumar',
+                        'parts' => [['type' => 'vente', 'id' => $parts['Oumar']->id]],
+                        'montant' => 70000,
+                    ],
+                ],
+                'motif' => 'correction',
+                'commentaire' => 'Rééquilibrage de la quinzaine',
+            ]);
+
+        $response->assertRedirect();
+        $response->assertSessionHasNoErrors();
+
+        $this->assertSame(35000.0, (float) $parts['Abdoulaye']->refresh()->montant_actuel);
+        $this->assertSame(70000.0, (float) $parts['Oumar']->refresh()->montant_actuel);
+        $this->assertSame(15000.0, (float) $parts['Kadiatou']->refresh()->montant_a_payer, 'un bénéficiaire non inclus dans les groupes ne doit pas bouger');
+    }
+
+    public function test_ajuster_multiple_est_atomique_si_un_groupe_echoue(): void
+    {
+        // Si un bénéficiaire du lot est déjà entièrement versé pour un montant inférieur, la
+        // transaction doit annuler aussi les autres ajustements du même envoi (tout ou rien).
+        $this->travelTo('2026-06-10 12:00:00');
+        $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id]);
+        ['parts' => $parts] = $this->makeCommissionAvecEquipe([
+            'Oumar' => 60000,
+            'Abdoulaye' => 45000,
+        ], $vehicule->id);
+        $periode = $this->makePeriode(StatutPeriodePaiement::BROUILLON->value);
+        $this->actingAs($this->user)->post(route('comptabilite.periodes.calculer', $periode));
+
+        $parts['Abdoulaye']->update(['statut' => 'paye', 'montant_verse' => 45000]);
+
+        $response = $this->actingAs($this->user)
+            ->post(route('comptabilite.periodes.ajustements.ajuster-multiple', $periode), [
+                'groups' => [
+                    [
+                        'label' => 'Oumar',
+                        'parts' => [['type' => 'vente', 'id' => $parts['Oumar']->id]],
+                        'montant' => 90000,
+                    ],
+                    [
+                        'label' => 'Abdoulaye',
+                        'parts' => [['type' => 'vente', 'id' => $parts['Abdoulaye']->id]],
+                        'montant' => 0,
+                    ],
+                ],
+                'motif' => 'correction',
+            ]);
+
+        $response->assertRedirect();
+        $response->assertSessionHas('error');
+        $this->assertSame(60000.0, (float) $parts['Oumar']->refresh()->montant_a_payer, "l'ajustement d'Oumar doit être annulé car Abdoulaye a échoué");
+    }
+
     public function test_absence_groupe_met_toutes_les_parts_dun_beneficiaire_a_zero(): void
     {
         $this->travelTo('2026-06-10 12:00:00');

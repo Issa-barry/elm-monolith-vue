@@ -22,24 +22,34 @@ import { onMounted, ref } from 'vue';
 
 type Appearance = 'light' | 'dark' | 'system';
 
+const updateFavicon = (isDark: boolean) => {
+    const favicon = document.querySelector<HTMLLinkElement>(
+        'link[rel="icon"][type="image/svg+xml"]',
+    );
+
+    if (favicon) {
+        favicon.href = isDark ? '/favicon-dark.svg' : '/favicon.svg';
+    }
+};
+
 export function updateTheme(value: Appearance) {
     if (typeof window === 'undefined') {
         return;
     }
 
+    let isDark: boolean;
+
     if (value === 'system') {
         const mediaQueryList = window.matchMedia(
             '(prefers-color-scheme: dark)',
         );
-        const systemTheme = mediaQueryList.matches ? 'dark' : 'light';
-
-        document.documentElement.classList.toggle(
-            'dark',
-            systemTheme === 'dark',
-        );
+        isDark = mediaQueryList.matches;
     } else {
-        document.documentElement.classList.toggle('dark', value === 'dark');
+        isDark = value === 'dark';
     }
+
+    document.documentElement.classList.toggle('dark', isDark);
+    updateFavicon(isDark);
 }
 
 const setCookie = (name: string, value: string, days = 365) => {

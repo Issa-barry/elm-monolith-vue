@@ -27,8 +27,9 @@ class PeriodeCalculatorService
         }
 
         $nbFiches = 0;
+        $hash = $this->signatureSource($periode);
 
-        DB::transaction(function () use ($periode, &$nbFiches) {
+        DB::transaction(function () use ($periode, $hash, &$nbFiches) {
             // forceDelete() : PaiementFiche utilise SoftDeletes, mais un delete() classique
             // laisse la ligne physique en place et provoque une violation de la contrainte
             // d'unicité (periode_id, beneficiaire_type, beneficiaire_id) au réinsert suivant.
@@ -43,12 +44,116 @@ class PeriodeCalculatorService
                 TypePeriodePaiement::SALARIE => $this->calculerSalaries($periode),
             };
 
-            if ($nbFiches > 0) {
-                $periode->update(['statut' => StatutPeriodePaiement::CALCULEE]);
-            }
+            // Le hash/horodatage sont enregistrés même à 0 fiche : sans données source, on ne
+            // veut pas retenter le calcul à chaque ouverture de la page (cf. needsRecalcul()).
+            $periode->update([
+                'statut' => $nbFiches > 0 ? StatutPeriodePaiement::CALCULEE : $periode->statut,
+                'calcul_hash' => $hash,
+                'calculated_at' => now(),
+            ]);
         });
 
         return ['nb_fiches' => $nbFiches];
+    }
+
+    /**
+     * Calcule (ou recalcule) la période uniquement si nécessaire : fiches jamais générées, ou
+     * données source (commissions/dépenses/paie) modifiées depuis le dernier calcul. Pensée
+     * pour être appelée à chaque ouverture de la page détail sans jamais déclencher de recalcul
+     * superflu ni de doublons (le calcul lui-même est idempotent, cf. `calculer()`).
+     *
+     * @return array{recalcule: bool, nb_fiches: int}
+     */
+    public function calculerSiNecessaire(PaiementPeriode $periode): array
+    {
+        if (! $this->needsRecalcul($periode)) {
+            return ['recalcule' => false, 'nb_fiches' => $periode->fiches()->count()];
+        }
+
+        $result = $this->calculer($periode);
+
+        return ['recalcule' => true, 'nb_fiches' => $result['nb_fiches']];
+    }
+
+    /**
+     * Une période validée/clôturée n'est jamais recalculée automatiquement (les montants sont
+     * figés) : seul un recalcul manuel explicite pourrait le faire, et `calculer()` l'interdit
+     * de toute façon tant qu'elle n'a pas été repassée en brouillon.
+     */
+    public function needsRecalcul(PaiementPeriode $periode): bool
+    {
+        if (! $periode->peutEtreCalculee()) {
+            return false;
+        }
+
+        if ($periode->calculated_at === null) {
+            return true;
+        }
+
+        return $periode->calcul_hash !== $this->signatureSource($periode);
+    }
+
+    /**
+     * Empreinte légère des données source dont dépend le calcul de la période, sans jamais
+     * charger les lignes en mémoire. On combine un comptage/somme des montants réellement dus
+     * (COALESCE montant_actuel/montant_net) à la dernière modification : la somme seule
+     * suffirait à détecter un ajustement, mais `updated_at` couvre aussi les cas où un montant
+     * ajusté reviendrait par coïncidence à sa valeur théorique d'origine.
+     */
+    private function signatureSource(PaiementPeriode $periode): string
+    {
+        $orgId = $periode->organization_id;
+
+        if ($periode->type === TypePeriodePaiement::SALARIE) {
+            $paieLignes = PaieLigne::whereHas('periode', function ($q) use ($orgId, $periode) {
+                $q->where('organization_id', $orgId)
+                    ->whereYear('created_at', $periode->date_debut->year)
+                    ->whereMonth('created_at', $periode->date_debut->month);
+            })->selectRaw('COUNT(*) as n, SUM(net) as s, MAX(updated_at) as m')->first();
+
+            $paieVariables = PaieVariable::whereHas('ligne.periode', function ($q) use ($orgId, $periode) {
+                $q->where('organization_id', $orgId)
+                    ->whereYear('created_at', $periode->date_debut->year)
+                    ->whereMonth('created_at', $periode->date_debut->month);
+            })->selectRaw('COUNT(*) as n, SUM(montant) as s, MAX(updated_at) as m')->first();
+
+            return md5(json_encode([$paieLignes, $paieVariables]));
+        }
+
+        $type = $periode->type === TypePeriodePaiement::LIVREUR ? 'livreur' : 'proprietaire';
+
+        $commParts = CommissionPart::where('type_beneficiaire', $type)
+            ->whereNotNull("{$type}_id")
+            ->whereHas('commission.commande', function ($q) use ($periode, $orgId) {
+                $q->where('organization_id', $orgId)
+                    ->whereBetween('created_at', [$periode->date_debut->startOfDay(), $periode->date_fin->endOfDay()]);
+            })
+            ->selectRaw('COUNT(*) as n, SUM(COALESCE(montant_actuel, montant_net)) as s, MAX(updated_at) as m')->first();
+
+        $logParts = CommissionLogistiquePart::where('type_beneficiaire', $type)
+            ->whereNotNull("{$type}_id")
+            ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
+            ->whereBetween('earned_at', [$periode->date_debut, $periode->date_fin])
+            ->selectRaw('COUNT(*) as n, SUM(COALESCE(montant_actuel, montant_net)) as s, MAX(updated_at) as m')->first();
+
+        $depenses = Depense::where('organization_id', $orgId)
+            ->where('statut', StatutDepense::VALIDE)
+            ->where('beneficiaire_type', $type)
+            ->whereNotNull('beneficiaire_id')
+            ->whereBetween('date_depense', [$periode->date_debut, $periode->date_fin])
+            ->selectRaw('COUNT(*) as n, SUM(montant) as s, MAX(updated_at) as m')->first();
+
+        $depensesVehicule = null;
+        if ($periode->type === TypePeriodePaiement::PROPRIETAIRE) {
+            $depensesVehicule = Depense::where('organization_id', $orgId)
+                ->where('statut', StatutDepense::VALIDE)
+                ->where('beneficiaire_type', 'vehicule')
+                ->whereNotNull('beneficiaire_id')
+                ->whereBetween('date_depense', [$periode->date_debut, $periode->date_fin])
+                ->selectRaw('COUNT(*) as n, SUM(montant) as s, MAX(updated_at) as m')->first();
+        }
+
+        return md5(json_encode([$commParts, $logParts, $depenses, $depensesVehicule]));
     }
 
     private function calculerLivreurs(PaiementPeriode $periode): int

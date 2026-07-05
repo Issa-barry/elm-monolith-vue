@@ -27,6 +27,8 @@ class PaiementPeriode extends Model
         'created_by',
         'validated_by',
         'validated_at',
+        'calcul_hash',
+        'calculated_at',
     ];
 
     protected $appends = ['nb_fiches', 'total_net', 'total_paye', 'statut_label'];
@@ -39,6 +41,7 @@ class PaiementPeriode extends Model
             'date_debut' => 'date',
             'date_fin' => 'date',
             'validated_at' => 'datetime',
+            'calculated_at' => 'datetime',
         ];
     }
 
