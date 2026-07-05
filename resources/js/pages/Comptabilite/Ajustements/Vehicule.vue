@@ -11,11 +11,11 @@ import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     ArrowLeft,
+    ArrowUpDown,
     CheckCheck,
     Truck,
     UserMinus,
     UserPlus,
-    Wrench,
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
@@ -197,53 +197,140 @@ function validerBeneficiaire(row: BeneficiaireRow) {
     );
 }
 
-// ── Dialog : ajuster le montant (agrégé sur toutes les commandes du bénéficiaire) ──
+// ── Dialog : répartition finale des commissions (tous les bénéficiaires du véhicule sur ──
+// la période, en une seule action : montant ↔ % synchronisés, total toujours visible) ────
 
-const showAjusterDialog = ref(false);
-const ajusterTarget = ref<BeneficiaireRow | null>(null);
-const ajusterMontant = ref(0);
-const ajusterMotif = ref('correction');
-const ajusterCommentaire = ref('');
-const ajusterProcessing = ref(false);
-const ajusterError = ref<string | null>(null);
-
-function openAjuster(row: BeneficiaireRow) {
-    ajusterTarget.value = row;
-    ajusterMontant.value = row.ajuste;
-    ajusterMotif.value = 'correction';
-    ajusterCommentaire.value = '';
-    ajusterError.value = null;
-    showAjusterDialog.value = true;
+interface AjusterMultiRow {
+    cle: string;
+    beneficiaire_nom: string;
+    theorique: number;
+    original: number;
+    montant: number;
+    diminuer: number;
+    augmenter: number;
+    taux: number;
+    peut_etre_ajustee: boolean;
+    parts: PartRow[];
 }
 
-function submitAjuster() {
-    if (!ajusterTarget.value) return;
-    const parts = ajusterTarget.value.parts.map((p) => ({
-        type: p.type,
-        id: p.id,
-    }));
+const showAjusterMultiDialog = ref(false);
+const ajusterMultiRows = ref<AjusterMultiRow[]>([]);
+const ajusterMultiMotif = ref('correction');
+const ajusterMultiCommentaire = ref('');
+const ajusterMultiProcessing = ref(false);
+const ajusterMultiError = ref<string | null>(null);
 
-    ajusterProcessing.value = true;
-    ajusterError.value = null;
+function toTaux(montant: number, total: number): number {
+    if (!total || total <= 0) return 0;
+    return parseFloat(((montant / total) * 100).toFixed(2));
+}
+
+function toMontant(taux: number, total: number): number {
+    return Math.round((taux / 100) * total);
+}
+
+const totalReparti = computed(() =>
+    Math.round(
+        ajusterMultiRows.value.reduce((sum, r) => sum + (r.montant || 0), 0) * 100,
+    ) / 100,
+);
+
+const ajusterMultiEcartGlobal = computed(
+    () => Math.round((props.vehicule.theorique - totalReparti.value) * 100) / 100,
+);
+
+const repartitionValide = computed(
+    () => Math.abs(ajusterMultiEcartGlobal.value) < 0.01,
+);
+
+/** Recalcule montant final + % à partir de diminuer/augmenter (théorique − diminuer + augmenter). */
+function syncFromDelta(row: AjusterMultiRow) {
+    row.montant = row.theorique - row.diminuer + row.augmenter;
+    row.taux = toTaux(row.montant, props.vehicule.theorique);
+}
+
+function onDiminuerChange(row: AjusterMultiRow, val: number | null) {
+    row.diminuer = Math.max(0, val ?? 0);
+    row.augmenter = 0;
+    syncFromDelta(row);
+}
+
+function onAugmenterChange(row: AjusterMultiRow, val: number | null) {
+    row.augmenter = Math.max(0, val ?? 0);
+    row.diminuer = 0;
+    syncFromDelta(row);
+}
+
+function onTauxRowChange(row: AjusterMultiRow, val: number | null) {
+    row.taux = val ?? 0;
+    const nouveauMontant = toMontant(row.taux, props.vehicule.theorique);
+    const delta = nouveauMontant - row.theorique;
+    if (delta >= 0) {
+        row.augmenter = delta;
+        row.diminuer = 0;
+    } else {
+        row.diminuer = -delta;
+        row.augmenter = 0;
+    }
+    row.montant = nouveauMontant;
+}
+
+function openAjusterMulti() {
+    ajusterMultiRows.value = props.beneficiaires.map((b) => {
+        const delta = b.ajuste - b.theorique;
+        return {
+            cle: b.cle,
+            beneficiaire_nom: b.beneficiaire_nom,
+            theorique: b.theorique,
+            original: b.ajuste,
+            montant: b.ajuste,
+            diminuer: delta < 0 ? -delta : 0,
+            augmenter: delta > 0 ? delta : 0,
+            taux: toTaux(b.ajuste, props.vehicule.theorique),
+            peut_etre_ajustee: b.peut_etre_ajustee,
+            parts: b.parts,
+        };
+    });
+    ajusterMultiMotif.value = 'correction';
+    ajusterMultiCommentaire.value = '';
+    ajusterMultiError.value = null;
+    showAjusterMultiDialog.value = true;
+}
+
+function submitAjusterMulti() {
+    const groups = ajusterMultiRows.value
+        .filter((r) => r.peut_etre_ajustee && r.montant !== r.original)
+        .map((r) => ({
+            label: r.beneficiaire_nom,
+            parts: r.parts.map((p) => ({ type: p.type, id: p.id })),
+            montant: r.montant,
+        }));
+
+    if (groups.length === 0) {
+        showAjusterMultiDialog.value = false;
+        return;
+    }
+
+    ajusterMultiProcessing.value = true;
+    ajusterMultiError.value = null;
     router.post(
-        `${periodeUrl}/ajustements/ajuster-groupe`,
+        `${periodeUrl}/ajustements/ajuster-multiple`,
         {
-            parts,
-            montant: ajusterMontant.value,
-            motif: ajusterMotif.value,
-            commentaire: ajusterCommentaire.value,
+            groups,
+            motif: ajusterMultiMotif.value,
+            commentaire: ajusterMultiCommentaire.value,
         },
         {
             preserveScroll: true,
             onSuccess: () => {
-                showAjusterDialog.value = false;
-                flashToast('Montant ajusté.');
+                showAjusterMultiDialog.value = false;
+                flashToast('Montants ajustés.');
             },
             onError: (errors) => {
-                ajusterError.value = Object.values(errors)[0] as string;
+                ajusterMultiError.value = Object.values(errors)[0] as string;
             },
             onFinish: () => {
-                ajusterProcessing.value = false;
+                ajusterMultiProcessing.value = false;
             },
         },
     );
@@ -374,6 +461,10 @@ function submitRemplacant() {
                     </p>
                 </div>
                 <div class="flex items-center gap-2">
+                    <Button variant="outline" size="sm" @click="openAjusterMulti">
+                        <ArrowUpDown class="mr-1.5 h-4 w-4" />
+                        Répartir
+                    </Button>
                     <Button variant="outline" size="sm" @click="openRemplacant">
                         <UserPlus class="mr-1.5 h-4 w-4" />
                         Ajouter un remplaçant
@@ -574,17 +665,9 @@ function submitRemplacant() {
                         </template>
                     </Column>
 
-                    <Column header="" style="width: 130px">
+                    <Column header="" style="width: 100px">
                         <template #body="{ data }">
                             <div class="flex items-center justify-end gap-1.5">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    :disabled="!data.peut_etre_ajustee"
-                                    @click="openAjuster(data)"
-                                >
-                                    <Wrench class="h-3.5 w-3.5" />
-                                </Button>
                                 <Button
                                     variant="outline"
                                     size="sm"
@@ -614,37 +697,159 @@ function submitRemplacant() {
             </div>
         </div>
 
-        <!-- ── Dialog : ajuster le montant (agrégé) ──────────────────────────── -->
+        <!-- ── Dialog : répartition finale des commissions ───────────────────── -->
         <Dialog
-            v-model:visible="showAjusterDialog"
+            v-model:visible="showAjusterMultiDialog"
             modal
-            header="Ajuster le montant sur la période"
-            :style="{ width: '480px' }"
+            header="Répartition finale des commissions"
+            :style="{ width: 'min(1300px, 90vw)' }"
             :draggable="false"
         >
-            <div v-if="ajusterTarget" class="space-y-4 py-2">
-                <p class="text-sm text-muted-foreground">
-                    {{ ajusterTarget.beneficiaire_nom }} — Montant théorique de
-                    la période :
-                    <strong>{{ fmt(ajusterTarget.theorique) }}</strong>
-                </p>
-
-                <div>
-                    <Label class="mb-1.5 block text-sm"
-                        >Nouveau montant (GNF)</Label
+            <div class="space-y-5 py-2">
+                <div
+                    class="flex items-center justify-between rounded-lg border bg-muted/30 p-4"
+                >
+                    <span class="text-sm text-muted-foreground"
+                        >Gain total de la période</span
                     >
-                    <InputNumber
-                        v-model="ajusterMontant"
-                        :min="0"
-                        class="w-full"
-                        input-class="w-full"
-                    />
+                    <span class="text-xl font-bold tabular-nums">{{
+                        fmt(vehicule.theorique)
+                    }}</span>
+                </div>
+
+                <div class="max-h-[480px] overflow-y-auto rounded-lg border">
+                    <table class="w-full text-sm">
+                        <thead
+                            class="sticky top-0 bg-muted/50 text-xs text-muted-foreground"
+                        >
+                            <tr>
+                                <th class="px-4 py-3 text-left">Bénéficiaire</th>
+                                <th class="px-4 py-3 text-right">Théorique</th>
+                                <th class="px-4 py-3 text-right">Diminuer</th>
+                                <th class="px-4 py-3 text-right">Augmenter</th>
+                                <th class="px-4 py-3 text-right">Final</th>
+                                <th class="px-4 py-3 text-right">%</th>
+                                <th class="px-4 py-3 text-right">Écart</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            <tr v-for="row in ajusterMultiRows" :key="row.cle">
+                                <td class="px-4 py-3">
+                                    <span class="font-medium">{{
+                                        row.beneficiaire_nom
+                                    }}</span>
+                                    <span
+                                        v-if="!row.peut_etre_ajustee"
+                                        class="ml-1.5 text-xs text-muted-foreground"
+                                        >(déjà versé)</span
+                                    >
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-right tabular-nums text-muted-foreground"
+                                >
+                                    {{ fmt(row.theorique) }}
+                                </td>
+                                <td class="px-4 py-3 text-right">
+                                    <InputNumber
+                                        :model-value="row.diminuer"
+                                        :min="0"
+                                        :disabled="!row.peut_etre_ajustee"
+                                        class="w-32"
+                                        input-class="w-32 text-right"
+                                        @update:model-value="
+                                            onDiminuerChange(row, $event)
+                                        "
+                                    />
+                                </td>
+                                <td class="px-4 py-3 text-right">
+                                    <InputNumber
+                                        :model-value="row.augmenter"
+                                        :min="0"
+                                        :disabled="!row.peut_etre_ajustee"
+                                        class="w-32"
+                                        input-class="w-32 text-right"
+                                        @update:model-value="
+                                            onAugmenterChange(row, $event)
+                                        "
+                                    />
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-right font-semibold tabular-nums"
+                                >
+                                    {{ fmt(row.montant) }}
+                                </td>
+                                <td class="px-4 py-3 text-right">
+                                    <InputNumber
+                                        :model-value="row.taux"
+                                        :min="0"
+                                        :max="100"
+                                        :max-fraction-digits="2"
+                                        suffix=" %"
+                                        :disabled="!row.peut_etre_ajustee"
+                                        class="w-28"
+                                        input-class="w-28 text-right"
+                                        @update:model-value="
+                                            onTauxRowChange(row, $event)
+                                        "
+                                    />
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-right text-sm font-medium tabular-nums"
+                                    :class="
+                                        row.montant - row.theorique > 0
+                                            ? 'text-emerald-600 dark:text-emerald-400'
+                                            : row.montant - row.theorique < 0
+                                              ? 'text-red-600 dark:text-red-400'
+                                              : 'text-muted-foreground'
+                                    "
+                                >
+                                    {{ row.montant - row.theorique > 0 ? '+' : ''
+                                    }}{{ fmt(row.montant - row.theorique) }}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div
+                    class="flex items-center justify-between rounded-lg border p-3 text-sm"
+                    :class="
+                        repartitionValide
+                            ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/20'
+                            : 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/20'
+                    "
+                >
+                    <span>
+                        Total réparti :
+                        <strong class="tabular-nums"
+                            >{{ fmt(totalReparti) }} /
+                            {{ fmt(vehicule.theorique) }}</strong
+                        >
+                    </span>
+                    <span
+                        class="font-semibold tabular-nums"
+                        :class="
+                            repartitionValide
+                                ? 'text-emerald-600 dark:text-emerald-400'
+                                : 'text-red-600 dark:text-red-400'
+                        "
+                    >
+                        <template v-if="repartitionValide">✓ Complet</template>
+                        <template v-else-if="ajusterMultiEcartGlobal > 0"
+                            >Il manque
+                            {{ fmt(ajusterMultiEcartGlobal) }}</template
+                        >
+                        <template v-else
+                            >Vous dépassez de
+                            {{ fmt(-ajusterMultiEcartGlobal) }}</template
+                        >
+                    </span>
                 </div>
 
                 <div>
                     <Label class="mb-1.5 block text-sm">Motif</Label>
                     <Dropdown
-                        v-model="ajusterMotif"
+                        v-model="ajusterMultiMotif"
                         :options="motifs"
                         option-label="label"
                         option-value="value"
@@ -656,23 +861,25 @@ function submitRemplacant() {
                         >Commentaire (optionnel)</Label
                     >
                     <Textarea
-                        v-model="ajusterCommentaire"
+                        v-model="ajusterMultiCommentaire"
                         class="w-full"
                         rows="2"
                     />
                 </div>
-                <p v-if="ajusterError" class="text-xs text-destructive">
-                    {{ ajusterError }}
+                <p v-if="ajusterMultiError" class="text-xs text-destructive">
+                    {{ ajusterMultiError }}
                 </p>
             </div>
             <template #footer>
                 <Button
                     variant="outline"
-                    :disabled="ajusterProcessing"
-                    @click="showAjusterDialog = false"
+                    :disabled="ajusterMultiProcessing"
+                    @click="showAjusterMultiDialog = false"
                     >Annuler</Button
                 >
-                <Button :disabled="ajusterProcessing" @click="submitAjuster"
+                <Button
+                    :disabled="ajusterMultiProcessing || !repartitionValide"
+                    @click="submitAjusterMulti"
                     >Enregistrer</Button
                 >
             </template>

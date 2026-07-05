@@ -328,6 +328,225 @@ class PaiementPeriodeTest extends TestCase
         app(PeriodeCalculatorService::class)->calculer($periode);
     }
 
+    // ── auto-calcul à l'ouverture de la page détail ──────────────────────────────
+
+    public function test_ouverture_de_la_periode_genere_automatiquement_les_fiches(): void
+    {
+        $this->travelTo('2026-06-10 12:00:00');
+
+        $livreur = Livreur::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Diallo',
+            'prenom' => 'Mamadou',
+            'is_active' => true,
+        ]);
+
+        $commVente = CommissionVente::create([
+            'organization_id' => $this->org->id,
+            'commande_vente_id' => $this->makeCommande()->id,
+            'vehicule_id' => null,
+            'montant_commande' => 1000000,
+            'montant_commission_totale' => 300000,
+            'montant_verse' => 0,
+            'statut' => 'impaye',
+        ]);
+
+        CommissionPart::create([
+            'commission_vente_id' => $commVente->id,
+            'type_beneficiaire' => 'livreur',
+            'livreur_id' => $livreur->id,
+            'beneficiaire_nom' => $livreur->nom_complet,
+            'taux_commission' => 100,
+            'montant_brut' => 300000,
+            'frais_supplementaires' => 0,
+            'montant_net' => 300000,
+            'montant_verse' => 0,
+            'statut' => 'impaye',
+        ]);
+
+        $periode = $this->makePeriode();
+        $this->assertSame(0, PaiementFiche::where('periode_id', $periode->id)->count());
+
+        // Aucun clic sur "Générer les fiches" : la simple ouverture de la page détail doit
+        // déclencher le calcul toute seule.
+        $response = $this->actingAs($this->user)->get(route('comptabilite.periodes.show', $periode));
+        $response->assertStatus(200);
+
+        $this->assertDatabaseHas('paiement_fiches', [
+            'periode_id' => $periode->id,
+            'beneficiaire_type' => 'livreur',
+            'beneficiaire_id' => $livreur->id,
+        ]);
+
+        $periode->refresh();
+        $this->assertSame(StatutPeriodePaiement::CALCULEE->value, $periode->statut->value);
+        $this->assertNotNull($periode->calcul_hash);
+        $this->assertNotNull($periode->calculated_at);
+
+        $response->assertInertia(fn (Assert $page) => $page
+            ->where('recalcul.effectue', true)
+            ->where('recalcul.nb_fiches', 1)
+            ->where('stats.total_net', 300000)
+        );
+    }
+
+    public function test_deuxieme_ouverture_de_la_periode_ne_cree_pas_de_doublons(): void
+    {
+        $this->travelTo('2026-06-10 12:00:00');
+
+        $livreur = Livreur::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Diallo',
+            'prenom' => 'Mamadou',
+            'is_active' => true,
+        ]);
+
+        $commVente = CommissionVente::create([
+            'organization_id' => $this->org->id,
+            'commande_vente_id' => $this->makeCommande()->id,
+            'vehicule_id' => null,
+            'montant_commande' => 1000000,
+            'montant_commission_totale' => 300000,
+            'montant_verse' => 0,
+            'statut' => 'impaye',
+        ]);
+
+        CommissionPart::create([
+            'commission_vente_id' => $commVente->id,
+            'type_beneficiaire' => 'livreur',
+            'livreur_id' => $livreur->id,
+            'beneficiaire_nom' => $livreur->nom_complet,
+            'taux_commission' => 100,
+            'montant_brut' => 300000,
+            'frais_supplementaires' => 0,
+            'montant_net' => 300000,
+            'montant_verse' => 0,
+            'statut' => 'impaye',
+        ]);
+
+        $periode = $this->makePeriode();
+
+        $this->actingAs($this->user)->get(route('comptabilite.periodes.show', $periode));
+        $premierHash = $periode->refresh()->calcul_hash;
+
+        // Rien n'a changé côté données source : la deuxième ouverture ne doit ni recalculer,
+        // ni recréer de fiche en double.
+        $response = $this->actingAs($this->user)->get(route('comptabilite.periodes.show', $periode));
+
+        $response->assertInertia(fn (Assert $page) => $page->where('recalcul.effectue', false));
+        $this->assertSame(1, PaiementFiche::where('periode_id', $periode->id)->count());
+        $this->assertSame($premierHash, $periode->refresh()->calcul_hash);
+    }
+
+    public function test_recalcul_manuel_met_a_jour_les_fiches_apres_un_ajustement(): void
+    {
+        $this->travelTo('2026-06-10 12:00:00');
+
+        $livreur = Livreur::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Diallo',
+            'prenom' => 'Mamadou',
+            'is_active' => true,
+        ]);
+
+        $commVente = CommissionVente::create([
+            'organization_id' => $this->org->id,
+            'commande_vente_id' => $this->makeCommande()->id,
+            'vehicule_id' => null,
+            'montant_commande' => 1000000,
+            'montant_commission_totale' => 300000,
+            'montant_verse' => 0,
+            'statut' => 'impaye',
+        ]);
+
+        $part = CommissionPart::create([
+            'commission_vente_id' => $commVente->id,
+            'type_beneficiaire' => 'livreur',
+            'livreur_id' => $livreur->id,
+            'beneficiaire_nom' => $livreur->nom_complet,
+            'taux_commission' => 100,
+            'montant_brut' => 300000,
+            'frais_supplementaires' => 0,
+            'montant_net' => 300000,
+            'montant_verse' => 0,
+            'statut' => 'impaye',
+        ]);
+
+        $periode = $this->makePeriode();
+
+        // Première ouverture : auto-calcul.
+        $this->actingAs($this->user)->get(route('comptabilite.periodes.show', $periode));
+        $ficheAvant = PaiementFiche::where('periode_id', $periode->id)->first();
+        $this->assertSame(300000.0, (float) $ficheAvant->montant_net);
+
+        // Un ajustement change la donnée source après coup : la commission n'est plus au même
+        // montant que ce qui a servi à générer la fiche.
+        $this->actingAs($this->user)->patch(
+            route('comptabilite.ajustements.ajuster', ['type' => 'vente', 'partId' => $part->id]),
+            ['montant' => 200000, 'motif' => 'correction']
+        );
+
+        // Cette fois la ré-ouverture de la page doit détecter le changement et recalculer
+        // automatiquement, sans créer de deuxième fiche pour le même bénéficiaire.
+        $response = $this->actingAs($this->user)->get(route('comptabilite.periodes.show', $periode));
+        $response->assertInertia(fn (Assert $page) => $page->where('recalcul.effectue', true));
+
+        $this->assertSame(1, PaiementFiche::where('periode_id', $periode->id)->count());
+        $ficheApres = PaiementFiche::where('periode_id', $periode->id)->first();
+        $this->assertSame(200000.0, (float) $ficheApres->montant_net);
+    }
+
+    public function test_periode_cloturee_ne_recalcule_pas_automatiquement(): void
+    {
+        $this->travelTo('2026-06-10 12:00:00');
+
+        $livreur = Livreur::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Diallo',
+            'prenom' => 'Mamadou',
+            'is_active' => true,
+        ]);
+
+        $commVente = CommissionVente::create([
+            'organization_id' => $this->org->id,
+            'commande_vente_id' => $this->makeCommande()->id,
+            'vehicule_id' => null,
+            'montant_commande' => 1000000,
+            'montant_commission_totale' => 300000,
+            'montant_verse' => 0,
+            'statut' => 'impaye',
+        ]);
+
+        CommissionPart::create([
+            'commission_vente_id' => $commVente->id,
+            'type_beneficiaire' => 'livreur',
+            'livreur_id' => $livreur->id,
+            'beneficiaire_nom' => $livreur->nom_complet,
+            'taux_commission' => 100,
+            'montant_brut' => 300000,
+            'frais_supplementaires' => 0,
+            'montant_net' => 300000,
+            'montant_verse' => 0,
+            'statut' => 'impaye',
+        ]);
+
+        $periode = $this->makePeriode([
+            'statut' => StatutPeriodePaiement::CLOTUREE->value,
+        ]);
+
+        // Aucune fiche n'existe pour cette période clôturée : elle a été clôturée sans jamais
+        // avoir été calculée (scénario de test), ce qui doit rester le cas après ouverture.
+        $response = $this->actingAs($this->user)->get(route('comptabilite.periodes.show', $periode));
+        $response->assertStatus(200);
+
+        $response->assertInertia(fn (Assert $page) => $page->where('recalcul.effectue', false));
+        $this->assertSame(0, PaiementFiche::where('periode_id', $periode->id)->count());
+
+        $periode->refresh();
+        $this->assertSame(StatutPeriodePaiement::CLOTUREE->value, $periode->statut->value);
+        $this->assertNull($periode->calcul_hash);
+    }
+
     // ── valider ───────────────────────────────────────────────────────────────
 
     public function test_valider_periode_calculee(): void

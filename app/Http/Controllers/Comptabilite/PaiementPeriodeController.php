@@ -135,6 +135,18 @@ class PaiementPeriodeController extends Controller
 
         $periode->load('site', 'createur', 'validateur');
 
+        // Auto-calcul à l'ouverture de la page : si les fiches n'existent pas encore ou si les
+        // données source (commissions/dépenses/paie) ont changé depuis le dernier calcul, on
+        // (re)génère avant de construire la réponse, pour que l'écran affiche toujours des
+        // montants à jour sans action manuelle. Idempotent et sans doublon (cf.
+        // PeriodeCalculatorService::calculer()). Ne s'applique jamais à une période
+        // validée/clôturée : needsRecalcul() renvoie alors toujours false, ses montants
+        // restent figés tant qu'elle n'a pas été repassée en brouillon.
+        $recalcul = $this->calculator->calculerSiNecessaire($periode);
+        if ($recalcul['recalcule']) {
+            $periode->refresh();
+        }
+
         $allFiches = $periode->fiches()->get();
 
         $filters = $request->only(['vehicule', 'livreur', 'proprietaire', 'etat']);
@@ -181,6 +193,10 @@ class PaiementPeriodeController extends Controller
             'periode' => $this->transform($periode),
             'vehicules' => $vehicules,
             'filters' => $filters,
+            'recalcul' => [
+                'effectue' => $recalcul['recalcule'],
+                'nb_fiches' => $recalcul['nb_fiches'],
+            ],
             'stats' => [
                 'total_brut' => (float) $allFiches->sum('montant_brut'),
                 'total_net' => (float) $allFiches->sum('montant_net'),

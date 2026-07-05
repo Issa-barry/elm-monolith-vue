@@ -25,7 +25,7 @@ import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
 interface Periode {
     id: string;
@@ -59,6 +59,10 @@ const props = defineProps<{
     periode: Periode;
     vehicules: VehiculeCard[];
     filters: Record<string, string>;
+    recalcul: {
+        effectue: boolean;
+        nb_fiches: number;
+    };
     stats: {
         total_brut: number;
         total_net: number;
@@ -160,6 +164,7 @@ function doCalculer() {
         `/backoffice/comptabilite/periodes/${props.periode.id}/calculer`,
         {},
         {
+            preserveScroll: true,
             onSuccess: () => {
                 const flash = (page.props as any).flash;
                 if (flash?.warning) {
@@ -183,6 +188,20 @@ function doCalculer() {
         },
     );
 }
+
+// Les fiches sont générées/mises à jour automatiquement côté serveur à l'ouverture de la page
+// (cf. PeriodeCalculatorService::calculerSiNecessaire) : pas de clic requis. On informe juste
+// l'utilisateur quand ce recalcul silencieux a effectivement eu lieu.
+onMounted(() => {
+    if (props.recalcul.effectue && props.recalcul.nb_fiches > 0) {
+        toast.add({
+            severity: 'success',
+            summary: 'Fiches mises à jour',
+            detail: `${props.recalcul.nb_fiches} fiche(s) recalculée(s) automatiquement.`,
+            life: 4000,
+        });
+    }
+});
 
 function doValider() {
     confirm.require({
@@ -304,7 +323,7 @@ function exportPdf() {
                         @click="doCalculer"
                     >
                         <Calculator class="mr-1.5 h-4 w-4" />
-                        Générer / mettre à jour les fiches
+                        Forcer le recalcul
                     </Button>
                     <Button v-if="can.valider" size="sm" @click="doValider">
                         <CheckCircle class="mr-1.5 h-4 w-4" />
@@ -529,9 +548,7 @@ function exportPdf() {
                         <div
                             class="py-16 text-center text-sm text-muted-foreground"
                         >
-                            Aucune commission générée pour cette période.
-                            Cliquez sur "Générer les fiches" pour lancer le
-                            calcul.
+                            Aucune commission trouvée pour cette période.
                         </div>
                     </template>
                 </DataTable>
