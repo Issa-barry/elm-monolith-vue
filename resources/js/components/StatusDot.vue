@@ -32,6 +32,7 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     brouillon: 'bg-zinc-400 dark:bg-zinc-500',
     creee: 'bg-zinc-400 dark:bg-zinc-500',
     a_charger: 'bg-zinc-400 dark:bg-zinc-500',
+    a_verifier: 'bg-zinc-400 dark:bg-zinc-500',
     inactif: 'bg-zinc-400 dark:bg-zinc-500',
     inactive: 'bg-zinc-400 dark:bg-zinc-500',
 
@@ -49,6 +50,7 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     partielle: 'bg-orange-500',
     partiellement_paye: 'bg-orange-500',
     en_attente: 'bg-orange-500',
+    a_reverifier: 'bg-orange-500',
     pending_validation: 'bg-orange-500',
     soumis: 'bg-orange-500',
 };
