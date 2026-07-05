@@ -55,6 +55,7 @@ interface VehiculeCard {
     equilibre: boolean;
     deja_paye: number;
     reste: number;
+    statut_validation: 'a_verifier' | 'validee' | 'a_reverifier' | 'payee';
 }
 
 const props = defineProps<{
@@ -107,11 +108,38 @@ const filterFields: FilterField[] = [
         type: 'select',
         inline: true,
         options: [
-            { value: 'valide', label: 'Validé' },
-            { value: 'a_ajuster', label: 'À ajuster' },
+            { value: 'a_verifier', label: 'À vérifier' },
+            { value: 'validee', label: 'Validé' },
+            { value: 'a_reverifier', label: 'À revérifier' },
+            { value: 'payee', label: 'Payé' },
         ],
     },
 ];
+
+const STATUT_VALIDATION_LABELS: Record<string, string> = {
+    a_verifier: 'À vérifier',
+    validee: 'Validé',
+    a_reverifier: 'À revérifier',
+    payee: 'Payé',
+};
+
+function statutValidationLabel(statut: string): string {
+    return STATUT_VALIDATION_LABELS[statut] ?? statut;
+}
+
+const controleVehicules = computed(() => {
+    const total = props.vehicules.length;
+    const valides = props.vehicules.filter(
+        (v) =>
+            v.statut_validation === 'validee' ||
+            v.statut_validation === 'payee',
+    ).length;
+    const aRevoir = props.vehicules.filter(
+        (v) => v.statut_validation === 'a_reverifier',
+    ).length;
+
+    return { total, valides, aRevoir };
+});
 
 const { onRowClick, bodyRowPt } = useClickableTableRow<VehiculeCard>((v) =>
     props.can.ajuster ? ajustementUrl(v.vehicule_id) : null,
@@ -437,6 +465,27 @@ function exportPdf() {
                 </div>
             </div>
 
+            <!-- Contrôle des véhicules : dérivé de validated_at sur les commission_parts,
+                 pas d'un snapshot séparé (cf. CommissionAdjustmentService::vehiculesParPeriode) -->
+            <div
+                v-if="controleVehicules.total > 0"
+                class="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border bg-card px-4 py-2.5 text-sm"
+            >
+                <span>
+                    Contrôle des véhicules :
+                    <span class="font-semibold">{{
+                        controleVehicules.valides
+                    }}</span>
+                    / {{ controleVehicules.total }} validés
+                </span>
+                <span
+                    v-if="controleVehicules.aRevoir > 0"
+                    class="font-medium text-amber-600 dark:text-amber-400"
+                >
+                    {{ controleVehicules.aRevoir }} à revérifier
+                </span>
+            </div>
+
             <!-- Filtres -->
             <DataFilters
                 :url="`/backoffice/comptabilite/periodes/${periode.id}`"
@@ -566,17 +615,19 @@ function exportPdf() {
                     </Column>
 
                     <Column
-                        field="equilibre"
+                        field="statut_validation"
                         header="État"
                         sortable
                         style="width: 130px"
                     >
                         <template #body="{ data }">
                             <StatusDot
-                                :status="
-                                    data.equilibre ? 'validee' : 'en_attente'
+                                :status="data.statut_validation"
+                                :label="
+                                    statutValidationLabel(
+                                        data.statut_validation,
+                                    )
                                 "
-                                :label="data.equilibre ? 'Validé' : 'À ajuster'"
                             />
                         </template>
                     </Column>

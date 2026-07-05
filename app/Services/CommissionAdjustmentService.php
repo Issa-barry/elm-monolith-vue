@@ -118,7 +118,7 @@ class CommissionAdjustmentService
      * une autre commande du même véhicule (le métier raisonne "je traite le véhicule X
      * pour la quinzaine", pas commande par commande).
      *
-     * @return list<array{vehicule_id: ?string, vehicule_nom: string, vehicule_immat: ?string, nb_membres: int, nb_commandes: int, theorique: float, ajuste: float, ecart: float, equilibre: bool}>
+     * @return list<array{vehicule_id: ?string, vehicule_nom: string, vehicule_immat: ?string, nb_membres: int, nb_commandes: int, theorique: float, ajuste: float, ecart: float, equilibre: bool, statut_validation: string}>
      */
     public static function vehiculesParPeriode(PaiementPeriode $periode): array
     {
@@ -126,7 +126,8 @@ class CommissionAdjustmentService
             ->groupBy(fn (array $g) => $g['vehicule_id'] ?? '__sans_vehicule__')
             ->map(function (\Illuminate\Support\Collection $groupesDuVehicule) {
                 $premier = $groupesDuVehicule->first();
-                $beneficiaires = $groupesDuVehicule->flatMap(fn (array $g) => $g['parts'])
+                $parts = $groupesDuVehicule->flatMap(fn (array $g) => $g['parts']);
+                $beneficiaires = $parts
                     ->map(fn (CommissionPart|CommissionLogistiquePart $p) => $p->livreur_id ?? $p->proprietaire_id)
                     ->filter()
                     ->unique();
@@ -145,11 +146,40 @@ class CommissionAdjustmentService
                     'ajuste' => $ajuste,
                     'ecart' => $ecart,
                     'equilibre' => abs($ecart) <= 0.01,
+                    'statut_validation' => self::statutValidationPourParts($parts),
                 ];
             })
             ->sortBy('vehicule_nom')
             ->values()
             ->all();
+    }
+
+    /**
+     * Dérive le statut de contrôle d'un véhicule uniquement à partir de `validated_at`/`statut`
+     * déjà présents sur ses commission_parts — aucun snapshot séparé à maintenir. Une nouvelle
+     * commission arrive toujours non validée (cf. avecMontantsPayes côté controller) : dès
+     * qu'elle rejoint des parts déjà validées du même véhicule, le mélange fait automatiquement
+     * retomber le véhicule en "à_revérifier", sans action explicite à coder ailleurs.
+     *
+     * @param  \Illuminate\Support\Collection<int, CommissionPart|CommissionLogistiquePart>  $parts
+     */
+    private static function statutValidationPourParts(\Illuminate\Support\Collection $parts): string
+    {
+        if ($parts->isEmpty()) {
+            return 'a_verifier';
+        }
+
+        $total = $parts->count();
+        $payees = $parts->filter(fn (CommissionPart|CommissionLogistiquePart $p) => $p->isPaye())->count();
+        $validees = $parts->filter(fn (CommissionPart|CommissionLogistiquePart $p) => ! $p->isPaye() && $p->estValidee())->count();
+        $enAttente = $total - $payees - $validees;
+
+        return match (true) {
+            $payees === $total => 'payee',
+            $enAttente === 0 => 'validee',
+            $enAttente === $total => 'a_verifier',
+            default => 'a_reverifier',
+        };
     }
 
     /** Commandes/transferts d'un véhicule donné (ou "sans véhicule" si $vehiculeId est null). */
@@ -263,6 +293,12 @@ class CommissionAdjustmentService
             ]);
 
             $part->montant_actuel = $nouveauMontant;
+            // Un montant qui bouge après validation invalide cette validation : le contrôleur
+            // avait approuvé un montant précis, pas "ce véhicule" en général (cf. vehiculesParPeriode
+            // qui remonte alors ce véhicule en "à_revérifier").
+            if ($nouveauMontant !== $ancienMontant) {
+                $part->validated_at = null;
+            }
             $part->save();
         });
     }

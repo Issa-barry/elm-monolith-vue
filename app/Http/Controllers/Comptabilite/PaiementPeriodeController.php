@@ -189,7 +189,7 @@ class PaiementPeriodeController extends Controller
                         }
                     }
                     if (! empty($filters['etat'])) {
-                        if ($v['equilibre'] !== ($filters['etat'] === 'valide')) {
+                        if ($v['statut_validation'] !== $filters['etat']) {
                             return false;
                         }
                     }
