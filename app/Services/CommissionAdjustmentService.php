@@ -300,6 +300,10 @@ class CommissionAdjustmentService
                 $part->validated_at = null;
             }
             $part->save();
+
+            if ($nouveauMontant !== $ancienMontant) {
+                self::invaliderPeriodes($part);
+            }
         });
     }
 
@@ -392,6 +396,7 @@ class CommissionAdjustmentService
             ]);
 
             self::logCreationRemplacant($part, $montant, $data['commentaire'] ?? null, $user);
+            self::invaliderPeriodes($part);
 
             return $part;
         });
@@ -421,9 +426,34 @@ class CommissionAdjustmentService
             ]);
 
             self::logCreationRemplacant($part, $montant, $data['commentaire'] ?? null, $user);
+            self::invaliderPeriodes($part);
 
             return $part;
         });
+    }
+
+    /**
+     * Recalcule immédiatement la ou les périodes de l'org concernées par cette commission,
+     * pour ne jamais laisser une période déjà "Calculée" afficher des montants obsolètes après
+     * une création/un ajustement (cf. PeriodeCalculatorService::recalculerPeriodesConcernees).
+     * Sans effet sur une période déjà validée/clôturée, ou si aucune période n'existe encore.
+     */
+    private static function invaliderPeriodes(CommissionPart|CommissionLogistiquePart $part): void
+    {
+        if ($part instanceof CommissionLogistiquePart) {
+            $date = $part->earned_at;
+            $orgId = $part->commission?->organization_id;
+        } else {
+            $part->loadMissing('commission.commande');
+            $date = $part->commission?->commande?->created_at;
+            $orgId = $part->commission?->organization_id;
+        }
+
+        if (! $date || ! $orgId) {
+            return;
+        }
+
+        app(PeriodeCalculatorService::class)->recalculerPeriodesConcernees($orgId, $date);
     }
 
     private static function logCreationRemplacant(CommissionPart|CommissionLogistiquePart $part, float $montant, ?string $commentaire, User $user): void

@@ -474,6 +474,55 @@ class CommissionAjustementTest extends TestCase
         $this->assertNotNull($part2->refresh()->validated_at);
     }
 
+    public function test_valider_vehicule_valide_toutes_les_parts_si_ecart_nul(): void
+    {
+        $this->travelTo('2026-06-10 12:00:00');
+        $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id]);
+        ['parts' => $parts] = $this->makeCommissionAvecEquipe(
+            ['Oumar' => 60000, 'Abdoulaye' => 45000, 'Kadiatou' => 15000],
+            $vehicule->id,
+        );
+        $periode = $this->makePeriode(StatutPeriodePaiement::BROUILLON->value);
+        $this->actingAs($this->user)->post(route('comptabilite.periodes.calculer', $periode));
+
+        $this->actingAs($this->user)
+            ->post(route('comptabilite.periodes.ajustements.vehicule.valider', ['periode' => $periode, 'vehicule' => $vehicule->id]))
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        foreach ($parts as $part) {
+            $this->assertNotNull($part->refresh()->validated_at, "la part de {$part->beneficiaire_nom} doit être validée");
+        }
+    }
+
+    public function test_valider_vehicule_bloque_si_ecart_non_nul(): void
+    {
+        $this->travelTo('2026-06-10 12:00:00');
+        $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id]);
+        ['parts' => $parts] = $this->makeCommissionAvecEquipe(
+            ['Oumar' => 60000, 'Abdoulaye' => 45000, 'Kadiatou' => 15000],
+            $vehicule->id,
+        );
+        $periode = $this->makePeriode(StatutPeriodePaiement::BROUILLON->value);
+        $this->actingAs($this->user)->post(route('comptabilite.periodes.calculer', $periode));
+
+        // Abdoulaye absent, mis à 0, mais SANS redistribution : le véhicule n'est plus à l'équilibre.
+        $this->actingAs($this->user)->patch(
+            route('comptabilite.ajustements.ajuster', ['type' => 'vente', 'partId' => $parts['Abdoulaye']->id]),
+            ['montant' => 0, 'motif' => 'absence'],
+        );
+
+        $response = $this->actingAs($this->user)
+            ->post(route('comptabilite.periodes.ajustements.vehicule.valider', ['periode' => $periode, 'vehicule' => $vehicule->id]));
+
+        $response->assertRedirect();
+        $response->assertSessionHas('error');
+
+        foreach ($parts as $part) {
+            $this->assertNull($part->refresh()->validated_at, "aucune part ne doit être validée tant que l'écart n'est pas résorbé");
+        }
+    }
+
     // ── Le paiement doit refléter le montant ajusté, pas le montant théorique ──────
 
     public function test_calcul_de_fiche_utilise_le_montant_ajuste(): void

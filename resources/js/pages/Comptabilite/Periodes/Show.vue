@@ -367,15 +367,6 @@ function exportPdf() {
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <Button
-                        v-if="can.calculer"
-                        variant="outline"
-                        size="sm"
-                        @click="doCalculer"
-                    >
-                        <Calculator class="mr-1.5 h-4 w-4" />
-                        Forcer le recalcul
-                    </Button>
                     <Button v-if="can.valider" size="sm" @click="doValider">
                         <CheckCircle class="mr-1.5 h-4 w-4" />
                         Valider
@@ -396,6 +387,16 @@ function exportPdf() {
                     <Button variant="outline" size="sm" @click="exportExcel">
                         <Download class="mr-1.5 h-4 w-4" />
                         Excel
+                    </Button>
+                    <Button
+                        v-if="can.calculer"
+                        variant="ghost"
+                        size="icon"
+                        class="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        title="Recalcul manuel (technique) — la période se recalcule normalement toute seule dès qu'une commission ou un ajustement change"
+                        @click="doCalculer"
+                    >
+                        <Calculator class="h-4 w-4" />
                     </Button>
                     <Button
                         v-if="can.delete"

@@ -13,6 +13,7 @@ import {
     ArrowLeft,
     ArrowUpDown,
     CheckCheck,
+    ShieldCheck,
     Truck,
     UserMinus,
     UserPlus,
@@ -195,6 +196,35 @@ function validerBeneficiaire(row: BeneficiaireRow) {
             onSuccess: () => flashToast('Commission validée.'),
         },
     );
+}
+
+// ── Validation en un clic de tout le véhicule (action principale) ────────────
+// Ne nécessite pas de valider bénéficiaire par bénéficiaire dans le cas normal :
+// dès que le reste à répartir est à 0, tout le véhicule peut être validé d'un coup.
+
+const peutValiderVehicule = computed(
+    () => Math.abs(props.vehicule.ecart) < 0.01,
+);
+
+function validerVehicule() {
+    if (!peutValiderVehicule.value) return;
+
+    confirm.require({
+        message: `Valider toutes les commissions de ${props.vehicule.nom} (${fmt(props.vehicule.ajuste)}) ?`,
+        header: 'Confirmer la validation',
+        acceptLabel: 'Valider',
+        rejectLabel: 'Annuler',
+        accept: () => {
+            router.post(
+                `${baseUrl}/valider`,
+                {},
+                {
+                    preserveScroll: true,
+                    onSuccess: () => flashToast('Véhicule validé.'),
+                },
+            );
+        },
+    });
 }
 
 // ── Dialog : répartition finale des commissions (tous les bénéficiaires du véhicule sur ──
@@ -479,12 +509,28 @@ function submitRemplacant() {
                         Ajouter un remplaçant
                     </Button>
                     <Button
+                        v-if="selectedRows.length > 0"
+                        variant="outline"
                         size="sm"
-                        :disabled="selectedRows.length === 0"
                         @click="validerLot"
                     >
                         <CheckCheck class="mr-1.5 h-4 w-4" />
-                        Valider la sélection ({{ selectedRows.length }})
+                        Valider les lignes sélectionnées ({{
+                            selectedRows.length
+                        }})
+                    </Button>
+                    <Button
+                        size="sm"
+                        :disabled="!peutValiderVehicule"
+                        :title="
+                            !peutValiderVehicule
+                                ? 'Redistribuez le reste à répartir avant de valider le véhicule'
+                                : undefined
+                        "
+                        @click="validerVehicule"
+                    >
+                        <ShieldCheck class="mr-1.5 h-4 w-4" />
+                        Valider le véhicule
                     </Button>
                 </div>
             </div>

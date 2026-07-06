@@ -438,7 +438,7 @@ class PaiementPeriodeTest extends TestCase
         $this->assertSame($premierHash, $periode->refresh()->calcul_hash);
     }
 
-    public function test_recalcul_manuel_met_a_jour_les_fiches_apres_un_ajustement(): void
+    public function test_ajustement_met_a_jour_les_fiches_immediatement_sans_reouverture(): void
     {
         $this->travelTo('2026-06-10 12:00:00');
 
@@ -479,21 +479,21 @@ class PaiementPeriodeTest extends TestCase
         $ficheAvant = PaiementFiche::where('periode_id', $periode->id)->first();
         $this->assertSame(300000.0, (float) $ficheAvant->montant_net);
 
-        // Un ajustement change la donnée source après coup : la commission n'est plus au même
-        // montant que ce qui a servi à générer la fiche.
+        // Un ajustement change la donnée source : la fiche doit être mise à jour tout de suite,
+        // sans attendre qu'un utilisateur rouvre la page (cf. CommissionAdjustmentService::
+        // ajusterMontant -> PeriodeCalculatorService::recalculerPeriodesConcernees).
         $this->actingAs($this->user)->patch(
             route('comptabilite.ajustements.ajuster', ['type' => 'vente', 'partId' => $part->id]),
             ['montant' => 200000, 'motif' => 'correction']
         );
 
-        // Cette fois la ré-ouverture de la page doit détecter le changement et recalculer
-        // automatiquement, sans créer de deuxième fiche pour le même bénéficiaire.
-        $response = $this->actingAs($this->user)->get(route('comptabilite.periodes.show', $periode));
-        $response->assertInertia(fn (Assert $page) => $page->where('recalcul.effectue', true));
-
         $this->assertSame(1, PaiementFiche::where('periode_id', $periode->id)->count());
         $ficheApres = PaiementFiche::where('periode_id', $periode->id)->first();
         $this->assertSame(200000.0, (float) $ficheApres->montant_net);
+
+        // Ré-ouvrir la page ne doit déclencher aucun recalcul redondant : tout est déjà à jour.
+        $response = $this->actingAs($this->user)->get(route('comptabilite.periodes.show', $periode));
+        $response->assertInertia(fn (Assert $page) => $page->where('recalcul.effectue', false));
     }
 
     public function test_periode_cloturee_ne_recalcule_pas_automatiquement(): void
