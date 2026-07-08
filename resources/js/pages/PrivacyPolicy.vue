@@ -36,26 +36,30 @@ withDefaults(
                         </p>
                     </header>
 
-                    <div class="flex flex-col gap-10 leading-relaxed text-foreground/90">
+                    <div
+                        class="flex flex-col gap-10 leading-relaxed text-foreground/90"
+                    >
                         <section>
-                            <h2 class="mb-3 text-xl font-semibold text-foreground">
+                            <h2
+                                class="mb-3 text-xl font-semibold text-foreground"
+                            >
                                 1. Préambule
                             </h2>
                             <p>
                                 La présente Politique de confidentialité a pour
                                 objet d'informer les utilisateurs de
                                 l'application <strong>Eau la Maman</strong>
-                                sur les modalités de collecte, d'utilisation,
-                                de conservation et de protection de leurs
-                                données à caractère personnel.
+                                sur les modalités de collecte, d'utilisation, de
+                                conservation et de protection de leurs données à
+                                caractère personnel.
                             </p>
                             <p class="mt-3">
-                                Eau la Maman attache une importance
-                                particulière au respect de la vie privée de
-                                ses utilisateurs et s'engage à traiter les
-                                données personnelles conformément aux lois et
-                                réglementations applicables en matière de
-                                protection des données, notamment le
+                                Eau la Maman attache une importance particulière
+                                au respect de la vie privée de ses utilisateurs
+                                et s'engage à traiter les données personnelles
+                                conformément aux lois et réglementations
+                                applicables en matière de protection des
+                                données, notamment le
                                 <strong
                                     >Règlement Général sur la Protection des
                                     Données (RGPD)</strong
@@ -70,7 +74,9 @@ withDefaults(
                         </section>
 
                         <section>
-                            <h2 class="mb-3 text-xl font-semibold text-foreground">
+                            <h2
+                                class="mb-3 text-xl font-semibold text-foreground"
+                            >
                                 2. Responsable du traitement
                             </h2>
                             <p>
@@ -99,14 +105,15 @@ withDefaults(
                         </section>
 
                         <section>
-                            <h2 class="mb-3 text-xl font-semibold text-foreground">
+                            <h2
+                                class="mb-3 text-xl font-semibold text-foreground"
+                            >
                                 3. Données collectées
                             </h2>
                             <p>
-                                Dans le cadre de l'utilisation de
-                                l'application, Eau la Maman peut être amenée à
-                                collecter les catégories de données suivantes
-                                :
+                                Dans le cadre de l'utilisation de l'application,
+                                Eau la Maman peut être amenée à collecter les
+                                catégories de données suivantes :
                             </p>
 
                             <h3 class="mt-4 mb-2 font-semibold text-foreground">
@@ -163,7 +170,9 @@ withDefaults(
                         </section>
 
                         <section>
-                            <h2 class="mb-3 text-xl font-semibold text-foreground">
+                            <h2
+                                class="mb-3 text-xl font-semibold text-foreground"
+                            >
                                 4. Finalités du traitement
                             </h2>
                             <p>
@@ -172,8 +181,7 @@ withDefaults(
                             </p>
                             <ul class="mt-3 list-disc space-y-1 pl-5">
                                 <li>
-                                    création et gestion du compte utilisateur
-                                    ;
+                                    création et gestion du compte utilisateur ;
                                 </li>
                                 <li>
                                     traitement, préparation et suivi des
@@ -182,8 +190,8 @@ withDefaults(
                                 <li>organisation et suivi des livraisons ;</li>
                                 <li>assistance aux utilisateurs ;</li>
                                 <li>
-                                    amélioration continue des fonctionnalités
-                                    de l'application ;
+                                    amélioration continue des fonctionnalités de
+                                    l'application ;
                                 </li>
                                 <li>
                                     prévention des fraudes et sécurisation des
@@ -195,14 +203,15 @@ withDefaults(
                                 </li>
                             </ul>
                             <p class="mt-3">
-                                Les données ne sont jamais utilisées à des
-                                fins incompatibles avec les finalités
-                                ci-dessus.
+                                Les données ne sont jamais utilisées à des fins
+                                incompatibles avec les finalités ci-dessus.
                             </p>
                         </section>
 
                         <section>
-                            <h2 class="mb-3 text-xl font-semibold text-foreground">
+                            <h2
+                                class="mb-3 text-xl font-semibold text-foreground"
+                            >
                                 5. Base légale du traitement
                             </h2>
                             <p>
@@ -216,10 +225,9 @@ withDefaults(
                                 </li>
                                 <li>le respect des obligations légales ;</li>
                                 <li>
-                                    l'intérêt légitime d'Eau la Maman
-                                    consistant à assurer la sécurité, le bon
-                                    fonctionnement et l'amélioration de ses
-                                    services ;
+                                    l'intérêt légitime d'Eau la Maman consistant
+                                    à assurer la sécurité, le bon fonctionnement
+                                    et l'amélioration de ses services ;
                                 </li>
                                 <li>
                                     le consentement de l'utilisateur lorsque
@@ -229,28 +237,32 @@ withDefaults(
                         </section>
 
                         <section>
-                            <h2 class="mb-3 text-xl font-semibold text-foreground">
+                            <h2
+                                class="mb-3 text-xl font-semibold text-foreground"
+                            >
                                 6. Partage des données
                             </h2>
                             <p>
-                                Les données personnelles ne sont ni vendues,
-                                ni louées, ni cédées à des tiers à des fins
+                                Les données personnelles ne sont ni vendues, ni
+                                louées, ni cédées à des tiers à des fins
                                 commerciales.
                             </p>
                             <p class="mt-3">
-                                Les données peuvent uniquement être
-                                communiquées :
+                                Les données peuvent uniquement être communiquées
+                                :
                             </p>
                             <ul class="mt-3 list-disc space-y-1 pl-5">
-                                <li>aux employés et administrateurs habilités ;</li>
                                 <li>
-                                    aux livreurs intervenant dans le
-                                    traitement des commandes ;
+                                    aux employés et administrateurs habilités ;
+                                </li>
+                                <li>
+                                    aux livreurs intervenant dans le traitement
+                                    des commandes ;
                                 </li>
                                 <li>
                                     aux prestataires techniques indispensables
-                                    au fonctionnement des services
-                                    (hébergement, maintenance, sécurité) ;
+                                    au fonctionnement des services (hébergement,
+                                    maintenance, sécurité) ;
                                 </li>
                                 <li>
                                     aux autorités compétentes lorsque la loi
@@ -264,7 +276,9 @@ withDefaults(
                         </section>
 
                         <section>
-                            <h2 class="mb-3 text-xl font-semibold text-foreground">
+                            <h2
+                                class="mb-3 text-xl font-semibold text-foreground"
+                            >
                                 7. Conservation des données
                             </h2>
                             <p>
@@ -281,34 +295,41 @@ withDefaults(
                         </section>
 
                         <section>
-                            <h2 class="mb-3 text-xl font-semibold text-foreground">
+                            <h2
+                                class="mb-3 text-xl font-semibold text-foreground"
+                            >
                                 8. Sécurité des données
                             </h2>
                             <p>
-                                Eau la Maman met en œuvre des mesures
-                                techniques et organisationnelles appropriées
-                                afin de garantir un niveau de sécurité adapté
-                                aux risques, notamment :
+                                Eau la Maman met en œuvre des mesures techniques
+                                et organisationnelles appropriées afin de
+                                garantir un niveau de sécurité adapté aux
+                                risques, notamment :
                             </p>
                             <ul class="mt-3 list-disc space-y-1 pl-5">
-                                <li>authentification sécurisée des utilisateurs ;</li>
+                                <li>
+                                    authentification sécurisée des utilisateurs
+                                    ;
+                                </li>
                                 <li>contrôle des accès ;</li>
                                 <li>
-                                    chiffrement des communications lorsque
-                                    cela est applicable ;
+                                    chiffrement des communications lorsque cela
+                                    est applicable ;
                                 </li>
                                 <li>sauvegardes régulières ;</li>
                                 <li>surveillance des accès non autorisés.</li>
                             </ul>
                             <p class="mt-3">
                                 Malgré toutes les précautions mises en œuvre,
-                                aucun système informatique ne peut garantir
-                                une sécurité absolue.
+                                aucun système informatique ne peut garantir une
+                                sécurité absolue.
                             </p>
                         </section>
 
                         <section>
-                            <h2 class="mb-3 text-xl font-semibold text-foreground">
+                            <h2
+                                class="mb-3 text-xl font-semibold text-foreground"
+                            >
                                 9. Droits des utilisateurs
                             </h2>
                             <p>
@@ -328,13 +349,15 @@ withDefaults(
                                 </li>
                             </ul>
                             <p class="mt-3">
-                                Toute demande peut être adressée aux
-                                coordonnées indiquées à l'article 13.
+                                Toute demande peut être adressée aux coordonnées
+                                indiquées à l'article 13.
                             </p>
                         </section>
 
                         <section>
-                            <h2 class="mb-3 text-xl font-semibold text-foreground">
+                            <h2
+                                class="mb-3 text-xl font-semibold text-foreground"
+                            >
                                 10. Cookies et technologies similaires
                             </h2>
                             <p>
@@ -351,13 +374,15 @@ withDefaults(
                         </section>
 
                         <section>
-                            <h2 class="mb-3 text-xl font-semibold text-foreground">
+                            <h2
+                                class="mb-3 text-xl font-semibold text-foreground"
+                            >
                                 11. Services tiers
                             </h2>
                             <p>
                                 L'application peut s'appuyer sur certains
-                                services tiers nécessaires à son
-                                fonctionnement, notamment :
+                                services tiers nécessaires à son fonctionnement,
+                                notamment :
                             </p>
                             <ul class="mt-3 list-disc space-y-1 pl-5">
                                 <li>services d'hébergement ;</li>
@@ -373,29 +398,33 @@ withDefaults(
                         </section>
 
                         <section>
-                            <h2 class="mb-3 text-xl font-semibold text-foreground">
+                            <h2
+                                class="mb-3 text-xl font-semibold text-foreground"
+                            >
                                 12. Protection des mineurs
                             </h2>
                             <p>
-                                L'application n'est pas spécifiquement
-                                destinée aux enfants de moins de 13 ans.
+                                L'application n'est pas spécifiquement destinée
+                                aux enfants de moins de 13 ans.
                             </p>
                             <p class="mt-3">
                                 Si des données concernant un mineur étaient
-                                collectées par erreur, elles seraient
-                                supprimées dans les meilleurs délais après en
-                                avoir été informés.
+                                collectées par erreur, elles seraient supprimées
+                                dans les meilleurs délais après en avoir été
+                                informés.
                             </p>
                         </section>
 
                         <section>
-                            <h2 class="mb-3 text-xl font-semibold text-foreground">
+                            <h2
+                                class="mb-3 text-xl font-semibold text-foreground"
+                            >
                                 13. Contact
                             </h2>
                             <p>
                                 Pour toute question relative à la présente
-                                Politique de confidentialité ou à l'exercice
-                                de vos droits, vous pouvez contacter :
+                                Politique de confidentialité ou à l'exercice de
+                                vos droits, vous pouvez contacter :
                             </p>
                             <ul class="mt-3 list-none space-y-1">
                                 <li><strong>Eau la Maman</strong></li>
@@ -419,16 +448,18 @@ withDefaults(
                         </section>
 
                         <section>
-                            <h2 class="mb-3 text-xl font-semibold text-foreground">
+                            <h2
+                                class="mb-3 text-xl font-semibold text-foreground"
+                            >
                                 14. Modification de la politique de
                                 confidentialité
                             </h2>
                             <p>
-                                Eau la Maman se réserve le droit de modifier
-                                la présente Politique de confidentialité à
-                                tout moment afin de tenir compte des
-                                évolutions légales, réglementaires, techniques
-                                ou fonctionnelles.
+                                Eau la Maman se réserve le droit de modifier la
+                                présente Politique de confidentialité à tout
+                                moment afin de tenir compte des évolutions
+                                légales, réglementaires, techniques ou
+                                fonctionnelles.
                             </p>
                             <p class="mt-3">
                                 Toute modification prendra effet dès sa
