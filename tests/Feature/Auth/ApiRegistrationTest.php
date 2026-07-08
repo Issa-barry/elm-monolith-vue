@@ -216,13 +216,23 @@ class ApiRegistrationTest extends TestCase
             ->assertJsonValidationErrors('nom');
     }
 
-    public function test_register_requires_email(): void
+    public function test_register_allows_missing_email(): void
     {
         Mail::fake();
 
         $this->postJson(route('api.auth.register.store'), $this->validPayload(['email' => '']))
-            ->assertStatus(422)
-            ->assertJsonValidationErrors('email');
+            ->assertStatus(201)
+            ->assertJsonPath('user.status', UserStatus::ACTIVE->value)
+            ->assertJsonPath('user.is_active', true);
+
+        $this->assertDatabaseHas('users', [
+            'telephone' => '+224620000100',
+            'email' => null,
+            'status' => UserStatus::ACTIVE->value,
+            'is_active' => true,
+        ]);
+
+        Mail::assertNothingSent();
     }
 
     public function test_register_requires_valid_email(): void
