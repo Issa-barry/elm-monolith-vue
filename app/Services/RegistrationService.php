@@ -69,20 +69,21 @@ class RegistrationService
             ]);
         }
 
+        $hasEmail = filled($data->email);
         $token = Str::random(64);
 
-        $user = DB::transaction(function () use ($data, $phone, $token) {
+        $user = DB::transaction(function () use ($data, $phone, $token, $hasEmail) {
             $user = User::create([
                 'prenom' => self::formatPrenom($data->prenom),
                 'nom' => mb_strtoupper($data->nom),
-                'email' => $data->email ? mb_strtolower($data->email) : null,
+                'email' => $hasEmail ? mb_strtolower($data->email) : null,
                 'telephone' => $phone,
                 'password' => $data->password,
-                'status' => UserStatus::PENDING->value,
-                'is_active' => false,
+                'status' => $hasEmail ? UserStatus::PENDING->value : UserStatus::ACTIVE->value,
+                'is_active' => ! $hasEmail,
                 'email_verified_at' => null,
-                'email_verification_token' => $token,
-                'email_verification_expires_at' => now()->addHours(24),
+                'email_verification_token' => $hasEmail ? $token : null,
+                'email_verification_expires_at' => $hasEmail ? now()->addHours(24) : null,
             ]);
 
             Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);

@@ -16,7 +16,7 @@ class RegisterRequest extends FormRequest
             'prenom' => ['required', 'string', 'min:2', 'max:100'],
             'nom' => ['required', 'string', 'min:2', 'max:100'],
             'email' => [
-                'required',
+                'nullable',
                 'string',
                 'email',
                 'max:255',
@@ -39,7 +39,6 @@ class RegisterRequest extends FormRequest
             'prenom.min' => 'Le prénom doit contenir au moins :min caractères.',
             'nom.required' => 'Le nom est obligatoire.',
             'nom.min' => 'Le nom doit contenir au moins :min caractères.',
-            'email.required' => 'L\'adresse email est obligatoire.',
             'email.email' => 'L\'adresse email n\'est pas valide.',
             'email.unique' => 'Un compte existe déjà avec cette adresse email. Veuillez vous connecter.',
             'password.required' => 'Le mot de passe est obligatoire.',
