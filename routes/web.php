@@ -113,6 +113,18 @@ Route::get('/help', function () {
     ]);
 })->name('help');
 
+Route::get('/privacy-policy', function () {
+    return Inertia::render('PrivacyPolicy', [
+        'canRegister' => env('WEB_REGISTRATION_ENABLED', true) && ModuleService::isPublicActive(ModuleFeature::INSCRIPTION),
+    ]);
+})->name('privacy-policy');
+
+Route::get('/delete-account', function () {
+    return Inertia::render('DeleteAccount', [
+        'canRegister' => env('WEB_REGISTRATION_ENABLED', true) && ModuleService::isPublicActive(ModuleFeature::INSCRIPTION),
+    ]);
+})->name('delete-account');
+
 Route::post('contact', [ContactController::class, 'store'])->name('contact.store');
 
 // ── Espace staff (back-office) ──────────────────────────────────────────────
