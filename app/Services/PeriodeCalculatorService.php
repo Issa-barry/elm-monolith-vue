@@ -16,6 +16,7 @@ use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
 use App\Models\PaieVariable;
 use App\Models\Proprietaire;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class PeriodeCalculatorService
@@ -73,6 +74,23 @@ class PeriodeCalculatorService
         $result = $this->calculer($periode);
 
         return ['recalcule' => true, 'nb_fiches' => $result['nb_fiches']];
+    }
+
+    /**
+     * Point d'entrée appelé dès qu'une donnée impactante change (commission créée/ajustée,
+     * dépense validée...) : recalcule immédiatement toute période de l'org couvrant cette date,
+     * sans attendre qu'un utilisateur rouvre la page détail. Sans effet si aucune période
+     * n'existe encore sur cette fenêtre, et sans risque de doublon/surcoût : `calculerSiNecessaire`
+     * ne relance `calculer()` que si le hash source a réellement changé, et jamais sur une
+     * période validée/clôturée (cf. needsRecalcul).
+     */
+    public function recalculerPeriodesConcernees(string $organizationId, Carbon $date): void
+    {
+        PaiementPeriode::where('organization_id', $organizationId)
+            ->whereDate('date_debut', '<=', $date)
+            ->whereDate('date_fin', '>=', $date)
+            ->get()
+            ->each(fn (PaiementPeriode $periode) => $this->calculerSiNecessaire($periode));
     }
 
     /**

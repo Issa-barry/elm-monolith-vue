@@ -9,10 +9,14 @@ use App\Models\PaieLigne;
 use App\Models\PaiePeriode;
 use App\Services\JournalTresorerieService;
 use App\Services\PaieCalculService;
+use App\Services\PeriodeCalculatorService;
 
 class DepenseObserver
 {
-    public function __construct(private PaieCalculService $paieCalc) {}
+    public function __construct(
+        private PaieCalculService $paieCalc,
+        private PeriodeCalculatorService $periodeCalculator,
+    ) {}
 
     public function updated(Depense $depense): void
     {
@@ -29,9 +33,19 @@ class DepenseObserver
 
         match ($depense->beneficiaire_type) {
             'employe' => $this->syncPaieLigne($depense),
+            // Une dépense livreur/propriétaire/véhicule (dé)validée modifie le net à payer d'une
+            // période de paiement déjà calculée (cf. PeriodeCalculatorService::signatureSource) :
+            // on la recalcule immédiatement plutôt que de laisser des montants obsolètes affichés
+            // jusqu'à la prochaine ouverture de la page.
+            'livreur', 'proprietaire', 'vehicule' => $this->recalculerPeriodePaiement($depense),
             null => $this->syncJournalDepenseInterne($depense, $isValide),
             default => null,
         };
+    }
+
+    private function recalculerPeriodePaiement(Depense $depense): void
+    {
+        $this->periodeCalculator->recalculerPeriodesConcernees($depense->organization_id, $depense->date_depense);
     }
 
     private function syncPaieLigne(Depense $depense): void

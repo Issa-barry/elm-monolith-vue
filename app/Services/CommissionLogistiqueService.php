@@ -73,6 +73,10 @@ class CommissionLogistiqueService
                 self::creerParts($commission, $transfert, $montantTotal, $earnedAt);
             }
 
+            // Cf. CommissionGenerator::generateForCommandeIfMissing() : une période déjà
+            // "Calculée" ne doit pas rester silencieusement obsolète.
+            app(PeriodeCalculatorService::class)->recalculerPeriodesConcernees($transfert->organization_id, $earnedAt);
+
             return $commission->load('parts');
         });
     }

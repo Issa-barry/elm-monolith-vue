@@ -113,6 +113,18 @@ Route::get('/help', function () {
     ]);
 })->name('help');
 
+Route::get('/privacy-policy', function () {
+    return Inertia::render('PrivacyPolicy', [
+        'canRegister' => env('WEB_REGISTRATION_ENABLED', true) && ModuleService::isPublicActive(ModuleFeature::INSCRIPTION),
+    ]);
+})->name('privacy-policy');
+
+Route::get('/delete-account', function () {
+    return Inertia::render('DeleteAccount', [
+        'canRegister' => env('WEB_REGISTRATION_ENABLED', true) && ModuleService::isPublicActive(ModuleFeature::INSCRIPTION),
+    ]);
+})->name('delete-account');
+
 Route::post('contact', [ContactController::class, 'store'])->name('contact.store');
 
 // ── Espace staff (back-office) ──────────────────────────────────────────────
@@ -359,6 +371,7 @@ Route::prefix('backoffice')->group(function () {
 
             // ── Ajustement des commissions avant paiement ──────────────────────────
             Route::get('periodes/{periode}/ajustements/vehicules/{vehicule}', [CommissionAjustementController::class, 'vehicule'])->name('periodes.ajustements.vehicule');
+            Route::post('periodes/{periode}/ajustements/vehicules/{vehicule}/valider', [CommissionAjustementController::class, 'validerVehicule'])->name('periodes.ajustements.vehicule.valider');
             Route::post('periodes/{periode}/ajustements/remplacant', [CommissionAjustementController::class, 'remplacant'])->name('periodes.ajustements.remplacant');
             Route::post('periodes/{periode}/ajustements/valider-lot', [CommissionAjustementController::class, 'validerLot'])->name('periodes.ajustements.valider-lot');
             Route::post('periodes/{periode}/ajustements/ajuster-groupe', [CommissionAjustementController::class, 'ajusterGroupe'])->name('periodes.ajustements.ajuster-groupe');

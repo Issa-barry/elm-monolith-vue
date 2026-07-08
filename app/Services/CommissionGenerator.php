@@ -68,5 +68,10 @@ class CommissionGenerator
                 'statut' => $statutInitial->value,
             ]);
         }
+
+        // Une nouvelle commission sur une quinzaine déjà "Calculée" ne doit pas y rester
+        // silencieusement absente : on recalcule immédiatement plutôt que d'attendre la
+        // prochaine ouverture de la page période (cf. PeriodeCalculatorService).
+        app(PeriodeCalculatorService::class)->recalculerPeriodesConcernees($commande->organization_id, $commande->created_at);
     }
 }
