@@ -91,7 +91,7 @@
                 >
                     <img
                         class="h-full w-full object-cover"
-                        src="/images/landing/sachet.png"
+                        src="/images/landing/sachet.webp"
                         alt="Produit eau minerale en sachet"
                         width="1024"
                         height="1031"
@@ -189,7 +189,7 @@
                 >
                     <img
                         class="h-full w-full object-contain object-center"
-                        src="/images/landing/b2.png"
+                        src="/images/landing/b2.webp"
                         alt="Produit eau minerale en bouteille"
                         width="1024"
                         height="1031"

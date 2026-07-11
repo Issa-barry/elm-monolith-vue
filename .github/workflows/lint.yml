@@ -5,6 +5,7 @@ on:
     branches:
       - dev
       - pre-prod
+      - production
       - main
 
 permissions:

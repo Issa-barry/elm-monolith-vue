@@ -3,7 +3,7 @@ name: auto-release
 on:
   push:
     branches:
-      - main
+      - production
   workflow_dispatch:
 
 permissions:
@@ -11,7 +11,7 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: auto-release-main
+  group: auto-release-production
   cancel-in-progress: false
 
 jobs:
@@ -42,7 +42,7 @@ jobs:
               }
             );
 
-            const mergedPr = prs.find((pr) => pr.merged_at && pr.base?.ref === 'main');
+            const mergedPr = prs.find((pr) => pr.merged_at && pr.base?.ref === 'production');
             let bump = 'patch';
             let reason = 'default patch (no PR metadata found)';
             let prRef = '';
@@ -189,7 +189,7 @@ jobs:
         with:
           tag_name: ${{ steps.release_tag.outputs.tag }}
           name: Release ${{ steps.release_tag.outputs.tag }}
-          target_commitish: main
+          target_commitish: production
           generate_release_notes: true
           body: |
             Auto-generated release.

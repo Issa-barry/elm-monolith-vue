@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - pre-prod
+      - production
       - main
 
 jobs:
@@ -148,9 +149,11 @@ jobs:
           E2E_BASE_URL: http://127.0.0.1:8080
         run: npx playwright test --workers=1
 
-      # pre-prod → main : smoke tests only (fast gate before production)
+      # pre-prod → production : smoke tests only (fast gate before deploy)
+      # production → main : no E2E at all — main only receives an already-deployed,
+      # already-smoke-tested commit, PHPUnit (job `ci`) is enough here.
       - name: Run smoke E2E tests
-        if: github.base_ref == 'main'
+        if: github.base_ref == 'production'
         env:
           E2E_BASE_URL: http://127.0.0.1:8080
         run: npx playwright test tests/e2e/smoke.spec.ts --workers=1
