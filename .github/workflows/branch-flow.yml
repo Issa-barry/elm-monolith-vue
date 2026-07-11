@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - pre-prod
+      - production
       - main
 
 jobs:
@@ -28,8 +29,13 @@ jobs:
             exit 1
           fi
 
-          if [ "$BASE" = "main" ] && [ "$HEAD" != "pre-prod" ]; then
-            echo "Invalid flow: only 'pre-prod' can be merged into 'main'."
+          if [ "$BASE" = "production" ] && [ "$HEAD" != "pre-prod" ]; then
+            echo "Invalid flow: only 'pre-prod' can be merged into 'production'."
+            exit 1
+          fi
+
+          if [ "$BASE" = "main" ] && [ "$HEAD" != "production" ]; then
+            echo "Invalid flow: only 'production' can be merged into 'main'."
             exit 1
           fi
 
