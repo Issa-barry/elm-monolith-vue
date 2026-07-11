@@ -69,6 +69,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Fail-safe : le E2E complet tourne par défaut. Il n'est skippé que si TOUS
+      # les fichiers modifiés sont de la doc (README.md, docs/**, **/*.md). Dès
+      # qu'un seul fichier hors doc change (y compris .github/**), non_docs=true.
+      - name: Detect non-doc changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            non_docs:
+              - '!README.md'
+              - '!docs/**'
+              - '!**/*.md'
+
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
@@ -130,7 +143,7 @@ jobs:
       # d'un autre entre son POST et son GET, vidant la bannière de succès avant
       # que le test ne la lise. workers=1 élimine ce conflit de session.
       - name: Run full E2E tests
-        if: github.base_ref == 'pre-prod'
+        if: github.base_ref == 'pre-prod' && steps.filter.outputs.non_docs == 'true'
         env:
           E2E_BASE_URL: http://127.0.0.1:8080
         run: npx playwright test --workers=1
