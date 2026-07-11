@@ -1,0 +1,21 @@
+import{c as u}from"./createLucideIcon-BeFu8Dnc.js";import{P as E,c as T}from"./Primitive-UgF1wZw4.js";import{b as C}from"./useForwardPropsEmits-vya5alyn.js";import{a as j,f as I}from"./useForwardExpose-DeyeiBgC.js";import{d as p,i as f,o as m,w as h,D as _,T as g,U as M,g as l,J as R,p as D,K as U}from"./app-BJVmqiyI.js";var P=p({__name:"MenuLabel",props:{asChild:{type:Boolean,required:!1},as:{type:null,required:!1,default:"div"}},setup(e){const t=e;return(n,a)=>(m(),f(l(E),g(M(t)),{default:h(()=>[_(n.$slots,"default")]),_:3},16))}}),B=P,q=p({__name:"DropdownMenuLabel",props:{asChild:{type:Boolean,required:!1},as:{type:null,required:!1}},setup(e){const t=e;return j(),(n,a)=>(m(),f(l(B),g(M(t)),{default:h(()=>[_(n.$slots,"default")]),_:3},16))}}),A=q;/**
+ * @license lucide-vue-next v0.468.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const J=u("BellIcon",[["path",{d:"M10.268 21a2 2 0 0 0 3.464 0",key:"vwvbt9"}],["path",{d:"M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326",key:"11g9vi"}]]);/**
+ * @license lucide-vue-next v0.468.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const Q=u("ChevronDownIcon",[["path",{d:"m6 9 6 6 6-6",key:"qrunsl"}]]);/**
+ * @license lucide-vue-next v0.468.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const W=u("MoonIcon",[["path",{d:"M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z",key:"a7tn18"}]]);/**
+ * @license lucide-vue-next v0.468.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const X=u("SunIcon",[["circle",{cx:"12",cy:"12",r:"4",key:"4exip2"}],["path",{d:"M12 2v2",key:"tus03m"}],["path",{d:"M12 20v2",key:"1lh1kg"}],["path",{d:"m4.93 4.93 1.41 1.41",key:"149t6j"}],["path",{d:"m17.66 17.66 1.41 1.41",key:"ptbguv"}],["path",{d:"M2 12h2",key:"1t8f8n"}],["path",{d:"M20 12h2",key:"1q8mjw"}],["path",{d:"m6.34 17.66-1.41 1.41",key:"1m8zz5"}],["path",{d:"m19.07 4.93-1.41 1.41",key:"1shlcs"}]]),G=p({__name:"DropdownMenuLabel",props:{asChild:{type:Boolean},as:{},class:{},inset:{type:Boolean}},setup(e){const t=e,n=I(t,"class","inset"),a=C(n);return(c,d)=>(m(),f(l(A),R({"data-slot":"dropdown-menu-label","data-inset":e.inset?"":void 0},l(a),{class:l(T)("px-2 py-1.5 text-sm font-medium data-[inset]:pl-8",t.class)}),{default:h(()=>[_(c.$slots,"default")]),_:3},16,["data-inset","class"]))}}),S={q:"a",a:"q",z:"w",w:"z","&":"1",é:"2",'"':"3","'":"4","(":"5","-":"6",è:"7",_:"8",ç:"9",à:"0",M:":","!":"/",":":".",")":"-",",":"m"};function L(e){return e.split("").map(t=>S[t]??t).join("")}const x=/^[0-9a-hjkmnp-tv-z]{26}$/i;function k(e){return x.test(e)}function z(e){function t(n){try{const a=new URL(n);if(a.protocol==="http:"||a.protocol==="https:")return window.location.origin+a.pathname+a.search+a.hash}catch{}return null}return t(e)??t(L(e))}async function $(e){try{const t=await fetch(`/scan/user/${e}`,{headers:{Accept:"application/json"},credentials:"same-origin"});return t.ok?(await t.json()).url??null:null}catch{return null}}const N=/^(VT|TR)-/i;async function F(e){try{const t=await fetch(`/scan/livraison/${encodeURIComponent(e)}`,{headers:{Accept:"application/json"},credentials:"same-origin"});return t.ok?(await t.json()).url??null:null}catch{return null}}function H(){let e="",t=0,n=null;function a(){e="",t=0,n&&clearTimeout(n),n=null}function c(){n&&clearTimeout(n),n=setTimeout(a,500)}function d(r){const i=r.target;if(!(i.tagName==="INPUT"||i.tagName==="TEXTAREA"||i.tagName==="SELECT"||i.isContentEditable)){if(r.key==="Enter"){const o=e.trim(),b=Date.now()-t;if(o.length>=8&&b<500){r.preventDefault(),a();const y=z(o);if(y){window.location.href=y;return}const w=L(o),v=k(w)?w:k(o)?o:null;if(v){$(v).then(s=>{s&&(window.location.href=s)});return}if(N.test(o)){F(o).then(s=>{s&&(window.location.href=s)});return}}a();return}r.key.length===1&&(e.length===0&&(t=Date.now()),e+=r.key,c())}}D(()=>document.addEventListener("keydown",d)),U(()=>document.removeEventListener("keydown",d))}export{J as B,Q as C,W as M,X as S,G as _,H as u};
