@@ -146,6 +146,18 @@ class HandleInertiaRequests extends Middleware
             ->toArray();
     }
 
+    private function seoDefaults(): array
+    {
+        return [
+            'siteName' => config('seo.site_name'),
+            'baseUrl' => rtrim(config('app.url'), '/'),
+            'defaultImage' => config('seo.default_image'),
+            'locale' => config('seo.locale'),
+            'twitterSite' => config('seo.twitter_site'),
+            'organization' => config('seo.organization'),
+        ];
+    }
+
     private function userSites(Request $request): array
     {
         $user = $request->user();
@@ -223,6 +235,7 @@ class HandleInertiaRequests extends Middleware
             'propositions_a_traiter' => $this->propositionsATraiter($request),
             'module_flags' => $this->moduleFlags($request),
             'org_sites' => $this->orgSites($request),
+            'seoDefaults' => $this->seoDefaults(),
             'flash' => [
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),

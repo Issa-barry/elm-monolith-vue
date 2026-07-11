@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import LandingFooter from '@/components/landing/LandingFooter.vue';
 import LandingTopbar from '@/components/landing/LandingTopbar.vue';
-import { Head, useForm, usePage } from '@inertiajs/vue3';
+import SeoHead from '@/components/seo/SeoHead.vue';
+import { useForm, usePage } from '@inertiajs/vue3';
 import { CheckCircle } from 'lucide-vue-next';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
@@ -35,9 +36,11 @@ function submit() {
 </script>
 
 <template>
-    <Head>
-        <title>Contact</title>
-    </Head>
+    <SeoHead
+        title="Contact"
+        description="Contactez Eau la Maman à Conakry : livraison d'eau à domicile, devenir revendeur ou toute question sur nos produits en sachet et en bouteille."
+        local-business
+    />
     <div class="min-h-screen bg-background font-sans text-foreground">
         <LandingTopbar :can-register="canRegister" />
 

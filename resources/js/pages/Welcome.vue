@@ -3,7 +3,7 @@ import LandingFooter from '@/components/landing/LandingFooter.vue';
 import LandingHero from '@/components/landing/LandingHero.vue';
 import LandingSection from '@/components/landing/LandingSection.vue';
 import LandingTopbar from '@/components/landing/LandingTopbar.vue';
-import { Head } from '@inertiajs/vue3';
+import SeoHead from '@/components/seo/SeoHead.vue';
 
 withDefaults(
     defineProps<{
@@ -16,7 +16,11 @@ withDefaults(
 </script>
 
 <template>
-    <Head title="Welcome" />
+    <SeoHead
+        title="Eau minérale à Conakry"
+        description="Eau la Maman produit et distribue de l'eau minérale à Conakry : livraison à domicile, sachets et bouteilles, revendeurs en expansion en Guinée."
+        local-business
+    />
     <div class="min-h-screen bg-white font-sans text-slate-900">
         <LandingTopbar :can-register="canRegister" />
         <LandingHero />

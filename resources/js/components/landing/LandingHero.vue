@@ -52,6 +52,9 @@ import Button from 'primevue/button';
                 <img
                     src="/images/landing-water-illustration.svg"
                     alt="Illustration eau minerale et distribution"
+                    width="960"
+                    height="760"
+                    fetchpriority="high"
                     class="mx-auto w-full max-w-md lg:mr-0 lg:ml-auto lg:w-auto lg:max-w-xl"
                 />
             </div>
