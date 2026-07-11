@@ -1,2 +1,15 @@
 User-agent: *
-Disallow:
+Allow: /
+
+Disallow: /login
+Disallow: /register
+Allow: /register/livreur
+
+Disallow: /backoffice/
+Disallow: /client/
+Disallow: /api/
+Disallow: /scan/
+Disallow: /invitations/
+Disallow: /storage/
+
+Sitemap: https://eau-la-maman.fr/sitemap.xml

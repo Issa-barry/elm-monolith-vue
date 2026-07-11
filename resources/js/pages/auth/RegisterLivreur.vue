@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import PhoneOtpRegistrationSteps from '@/components/PhoneOtpRegistrationSteps.vue';
+import SeoHead from '@/components/seo/SeoHead.vue';
 import AuthBase from '@/layouts/AuthLayout.vue';
-import { Head } from '@inertiajs/vue3';
 import { Truck } from 'lucide-vue-next';
 </script>
 
@@ -10,7 +10,10 @@ import { Truck } from 'lucide-vue-next';
         title="Inscription livreur"
         description="Créez votre espace chauffeur / livreur"
     >
-        <Head title="Inscription livreur" />
+        <SeoHead
+            title="Devenir livreur"
+            description="Rejoignez Eau la Maman comme livreur à Conakry : inscription rapide, validation par notre équipe, livraisons d'eau minérale au quotidien."
+        />
         <PhoneOtpRegistrationSteps
             submit-url="/register/livreur"
             submit-label="Créer mon compte livreur"

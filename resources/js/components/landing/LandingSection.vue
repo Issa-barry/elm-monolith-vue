@@ -10,11 +10,11 @@
                     >
                         Sachet
                     </p>
-                    <h3
+                    <h2
                         class="mt-3 text-4xl font-bold text-slate-900 lg:text-5xl"
                     >
                         Eau minerale en sachet.
-                    </h3>
+                    </h2>
                     <p class="mt-4 text-base leading-7 text-slate-600">
                         Une eau minerale accessible, distribuee rapidement a
                         Matoto et alentours.
@@ -93,6 +93,9 @@
                         class="h-full w-full object-cover"
                         src="/images/landing/sachet.png"
                         alt="Produit eau minerale en sachet"
+                        width="1024"
+                        height="1031"
+                        loading="lazy"
                     />
                 </div>
             </div>
@@ -106,11 +109,11 @@
                     >
                         Bouteille
                     </p>
-                    <h3
+                    <h2
                         class="mt-3 text-4xl font-bold text-slate-900 lg:text-5xl"
                     >
                         Eau minerale en bouteille, bientot.
-                    </h3>
+                    </h2>
                     <p class="mt-4 text-base leading-7 text-slate-600">
                         Une nouvelle gamme pour maisons, bureaux et evenements.
                     </p>
@@ -188,6 +191,9 @@
                         class="h-full w-full object-contain object-center"
                         src="/images/landing/b2.png"
                         alt="Produit eau minerale en bouteille"
+                        width="1024"
+                        height="1031"
+                        loading="lazy"
                     />
                 </div>
             </div>

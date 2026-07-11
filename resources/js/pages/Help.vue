@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import LandingTopbar from '@/components/landing/LandingTopbar.vue';
-import { Head } from '@inertiajs/vue3';
+import SeoHead from '@/components/seo/SeoHead.vue';
 import IconField from 'primevue/iconfield';
 import InputIcon from 'primevue/inputicon';
 import InputText from 'primevue/inputtext';
@@ -16,7 +16,11 @@ withDefaults(
 </script>
 
 <template>
-    <Head title="Aide" />
+    <SeoHead
+        title="Aide"
+        description="Questions fréquentes sur les livraisons d'eau Eau la Maman à Conakry : zones desservies, délais, qualité de l'eau et devenir revendeur."
+        robots="noindex,follow"
+    />
 
     <div class="bg-surface-100 min-h-screen">
         <LandingTopbar :can-register="canRegister" />

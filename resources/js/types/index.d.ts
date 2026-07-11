@@ -1,5 +1,6 @@
 import { InertiaLinkProps } from '@inertiajs/vue3';
 import type { LucideIcon } from 'lucide-vue-next';
+import type { SeoDefaults } from './seo';
 
 // ── RBAC ─────────────────────────────────────────────────────────────────────
 export type Resource =
@@ -87,6 +88,7 @@ export type AppPageProps<
     stock_alertes: { ruptures: number; faibles: number; total: number };
     transferts_a_receptionner: number;
     module_flags: Partial<Record<ModuleFlagKey, boolean>>;
+    seoDefaults: SeoDefaults;
 };
 
 export interface Organization {

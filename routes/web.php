@@ -53,6 +53,7 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\ScanLivraisonController;
 use App\Http\Controllers\ScanUserController;
 use App\Http\Controllers\SiteController;
+use App\Http\Controllers\SitemapController;
 use App\Http\Controllers\TransfertLogistiqueController;
 use App\Http\Controllers\TransfertStatutController;
 use App\Http\Controllers\TypeVehiculeController;
@@ -126,6 +127,8 @@ Route::get('/delete-account', function () {
 })->name('delete-account');
 
 Route::post('contact', [ContactController::class, 'store'])->name('contact.store');
+
+Route::get('/sitemap.xml', SitemapController::class)->name('sitemap');
 
 // ── Espace staff (back-office) ──────────────────────────────────────────────
 Route::prefix('backoffice')->group(function () {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import LandingFooter from '@/components/landing/LandingFooter.vue';
 import LandingTopbar from '@/components/landing/LandingTopbar.vue';
-import { Head } from '@inertiajs/vue3';
+import SeoHead from '@/components/seo/SeoHead.vue';
 
 withDefaults(
     defineProps<{
@@ -14,12 +14,11 @@ withDefaults(
 </script>
 
 <template>
-    <Head title="Suppression de compte">
-        <meta
-            name="description"
-            content="Comment demander la suppression de votre compte Eau la Maman et des données personnelles associées : procédure, données supprimées, délai de traitement."
-        />
-    </Head>
+    <SeoHead
+        title="Suppression de compte"
+        description="Comment demander la suppression de votre compte Eau la Maman et des données personnelles associées : procédure, données supprimées, délai de traitement."
+        robots="noindex,follow"
+    />
 
     <div class="min-h-screen bg-background font-sans text-foreground">
         <LandingTopbar :can-register="canRegister" />

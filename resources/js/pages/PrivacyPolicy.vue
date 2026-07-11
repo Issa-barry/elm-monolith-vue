@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import LandingFooter from '@/components/landing/LandingFooter.vue';
 import LandingTopbar from '@/components/landing/LandingTopbar.vue';
-import { Head } from '@inertiajs/vue3';
+import SeoHead from '@/components/seo/SeoHead.vue';
 
 withDefaults(
     defineProps<{
@@ -14,12 +14,10 @@ withDefaults(
 </script>
 
 <template>
-    <Head title="Politique de confidentialité">
-        <meta
-            name="description"
-            content="Politique de confidentialité d'Eau la Maman : données collectées, finalités, partage, sécurité, conservation et droits des utilisateurs."
-        />
-    </Head>
+    <SeoHead
+        title="Politique de confidentialité"
+        description="Politique de confidentialité d'Eau la Maman : données collectées, finalités, partage, sécurité, conservation et droits des utilisateurs."
+    />
 
     <div class="min-h-screen bg-background font-sans text-foreground">
         <LandingTopbar :can-register="canRegister" />
