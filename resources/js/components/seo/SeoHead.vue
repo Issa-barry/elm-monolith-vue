@@ -35,12 +35,17 @@ const ogTitle = computed(() =>
 
 const currentPath = computed(() => props.path ?? page.url ?? '/');
 
-const canonicalUrl = computed(() =>
-    props.canonical ?? absoluteUrl(defaults.value.baseUrl, currentPath.value),
+const canonicalUrl = computed(
+    () =>
+        props.canonical ??
+        absoluteUrl(defaults.value.baseUrl, currentPath.value),
 );
 
 const ogImage = computed(() =>
-    absoluteUrl(defaults.value.baseUrl, props.image ?? defaults.value.defaultImage),
+    absoluteUrl(
+        defaults.value.baseUrl,
+        props.image ?? defaults.value.defaultImage,
+    ),
 );
 
 const jsonLd = computed(() => {
@@ -90,6 +95,7 @@ const jsonLd = computed(() => {
             :key="index"
             :is="'script'"
             type="application/ld+json"
-        >{{ JSON.stringify(block) }}</component>
+            >{{ JSON.stringify(block) }}</component
+        >
     </Head>
 </template>

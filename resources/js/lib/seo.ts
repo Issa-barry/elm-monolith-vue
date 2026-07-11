@@ -12,7 +12,9 @@ export function buildMetaTitle(title: string, siteName: string): string {
     return title === siteName ? title : `${title} | ${siteName}`;
 }
 
-export function buildOrganizationJsonLd(defaults: SeoDefaults): Record<string, unknown> {
+export function buildOrganizationJsonLd(
+    defaults: SeoDefaults,
+): Record<string, unknown> {
     const { organization, baseUrl } = defaults;
 
     return {
@@ -32,7 +34,9 @@ export function buildOrganizationJsonLd(defaults: SeoDefaults): Record<string, u
     };
 }
 
-export function buildWebsiteJsonLd(defaults: SeoDefaults): Record<string, unknown> {
+export function buildWebsiteJsonLd(
+    defaults: SeoDefaults,
+): Record<string, unknown> {
     return {
         '@context': 'https://schema.org',
         '@type': 'WebSite',
@@ -42,7 +46,9 @@ export function buildWebsiteJsonLd(defaults: SeoDefaults): Record<string, unknow
     };
 }
 
-export function buildLocalBusinessJsonLd(defaults: SeoDefaults): Record<string, unknown> {
+export function buildLocalBusinessJsonLd(
+    defaults: SeoDefaults,
+): Record<string, unknown> {
     const { organization, baseUrl } = defaults;
 
     return {
