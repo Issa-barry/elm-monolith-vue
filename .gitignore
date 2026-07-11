@@ -1,7 +1,8 @@
 /.phpunit.cache
 /bootstrap/ssr
 /node_modules
-/public/build
+# public/build is committed on this branch only: Hostinger's native Git
+# deploy for eau-la-maman.com does a plain `git pull`, no npm build step.
 /public/hot
 /public/storage
 /storage/*.key
