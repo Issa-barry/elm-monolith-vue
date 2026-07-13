@@ -84,6 +84,7 @@ class SiteController extends Controller
             'date' => $u->pivot->created_at?->format('d/m/Y'),
             'can_resend' => false,
             'can_revoke' => false,
+            'can_delete' => false,
         ])->values();
 
         // Invitations (pending/expired/revoked — skip accepted since they become users)
@@ -102,6 +103,7 @@ class SiteController extends Controller
                 'date' => $inv->created_at?->format('d/m/Y'),
                 'can_resend' => $canInvite && in_array($inv->statut, ['expired', 'revoked'], true),
                 'can_revoke' => $canInvite && $inv->statut === 'pending',
+                'can_delete' => $canInvite && in_array($inv->statut, ['expired', 'revoked'], true),
             ])->values();
 
         $membres = $membresUsers->concat($membresInvitations)->values();

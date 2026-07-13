@@ -268,6 +268,8 @@ Route::prefix('backoffice')->group(function () {
                 ->name('invitations.resend');
             Route::delete('invitations/{invitation}', [UserInvitationController::class, 'destroy'])
                 ->name('invitations.destroy');
+            Route::delete('invitations/{invitation}/force', [UserInvitationController::class, 'forceDestroy'])
+                ->name('invitations.force-destroy');
         });
 
         // ── Module : Cashback clients ─────────────────────────────────────────────

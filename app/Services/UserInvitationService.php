@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\AuditEvent;
+use App\Exceptions\InvitationException;
 use App\Http\Controllers\UserController;
 use App\Mail\UserInvitationMail;
 use App\Models\Client;
@@ -32,11 +33,11 @@ class UserInvitationService
         // si le contrôleur a déjà validé — les rôles admin ne s'attribuent jamais
         // par invitation, seulement après validation du compte (gestion utilisateur).
         if (in_array($role, UserController::ADMIN_ROLES, true)) {
-            throw new \RuntimeException('Ce rôle ne peut pas être attribué par invitation.');
+            throw new InvitationException('Ce rôle ne peut pas être attribué par invitation.');
         }
 
         if (User::where('email', $email)->where('organization_id', $site->organization_id)->exists()) {
-            throw new \RuntimeException('Cette adresse email est déjà associée à un compte utilisateur sur cette organisation.');
+            throw new InvitationException('Cette adresse email est déjà associée à un compte utilisateur sur cette organisation.');
         }
 
         $existing = UserInvitation::where('email', $email)
@@ -47,7 +48,7 @@ class UserInvitationService
             ->first();
 
         if ($existing) {
-            throw new \RuntimeException('Une invitation en attente existe déjà pour cet email sur ce site. Vous pouvez la renvoyer depuis la liste des membres.');
+            throw new InvitationException('Une invitation en attente existe déjà pour cet email sur ce site. Vous pouvez la renvoyer depuis la liste des membres.');
         }
 
         $token = Str::random(64);
@@ -62,13 +63,15 @@ class UserInvitationService
             'expires_at' => now()->addHours(24),
         ]);
 
-        Mail::to($email)->send(new UserInvitationMail($invitation, $token));
-
+        // L'audit trace la création de l'invitation elle-même : elle existe déjà en
+        // base à ce stade, indépendamment du succès de l'envoi de l'email ci-dessous.
         $this->auditLog->record($invitation, AuditEvent::CREATED, $inviter, null, [
             'email' => $email,
             'role' => $role,
             'site_id' => $site->id,
         ]);
+
+        $this->sendInvitationMail($invitation, $token);
 
         return $invitation;
     }
@@ -86,7 +89,27 @@ class UserInvitationService
             'revoked_at' => null,
         ]);
 
-        Mail::to($invitation->email)->send(new UserInvitationMail($invitation, $token));
+        $this->sendInvitationMail($invitation, $token);
+    }
+
+    /**
+     * Envoie l'email d'invitation. Une panne technique (SMTP, réseau...) ne doit
+     * jamais remonter son message brut à l'utilisateur métier — elle est journalisée
+     * (Sentry/logs) et convertie en InvitationException avec un message clair.
+     * L'invitation reste en base dans tous les cas : renvoyable depuis la liste.
+     */
+    private function sendInvitationMail(UserInvitation $invitation, string $token): void
+    {
+        try {
+            Mail::to($invitation->email)->send(new UserInvitationMail($invitation, $token));
+        } catch (\Throwable $e) {
+            report($e);
+
+            throw new InvitationException(
+                "L'invitation a été enregistrée mais l'email n'a pas pu être envoyé pour le moment. ".
+                'Vous pouvez réessayer l\'envoi depuis la liste des membres.'
+            );
+        }
     }
 
     /**
@@ -95,6 +118,25 @@ class UserInvitationService
     public function revoke(UserInvitation $invitation): void
     {
         $invitation->update(['revoked_at' => now()]);
+    }
+
+    /**
+     * Supprime définitivement une invitation déjà révoquée ou expirée. Une
+     * invitation encore en attente doit d'abord être révoquée (voir revoke())
+     * avant de pouvoir être supprimée — jamais l'inverse, pour éviter de
+     * perdre une invitation active sans passer par une confirmation explicite.
+     *
+     * @throws InvitationException si l'invitation est encore en attente ou déjà acceptée
+     */
+    public function delete(UserInvitation $invitation): void
+    {
+        if (! in_array($invitation->statut, ['revoked', 'expired'], true)) {
+            throw new InvitationException(
+                'Seule une invitation révoquée ou expirée peut être supprimée définitivement.'
+            );
+        }
+
+        $invitation->delete();
     }
 
     /**
