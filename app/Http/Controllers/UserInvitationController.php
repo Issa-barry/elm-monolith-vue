@@ -76,4 +76,21 @@ class UserInvitationController extends Controller
 
         return back()->with('success', 'Invitation révoquée.');
     }
+
+    /**
+     * DELETE /invitations/{invitation}/force
+     * Permanently delete an already revoked/expired invitation.
+     */
+    public function forceDestroy(UserInvitation $invitation, UserInvitationService $service): RedirectResponse
+    {
+        $this->authorize('delete', $invitation);
+
+        try {
+            $service->delete($invitation);
+        } catch (InvitationException $e) {
+            return back()->withErrors(['email' => $e->getMessage()]);
+        }
+
+        return back()->with('success', 'Invitation supprimée définitivement.');
+    }
 }

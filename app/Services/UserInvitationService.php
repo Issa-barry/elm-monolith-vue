@@ -121,6 +121,25 @@ class UserInvitationService
     }
 
     /**
+     * Supprime définitivement une invitation déjà révoquée ou expirée. Une
+     * invitation encore en attente doit d'abord être révoquée (voir revoke())
+     * avant de pouvoir être supprimée — jamais l'inverse, pour éviter de
+     * perdre une invitation active sans passer par une confirmation explicite.
+     *
+     * @throws InvitationException si l'invitation est encore en attente ou déjà acceptée
+     */
+    public function delete(UserInvitation $invitation): void
+    {
+        if (! in_array($invitation->statut, ['revoked', 'expired'], true)) {
+            throw new InvitationException(
+                'Seule une invitation révoquée ou expirée peut être supprimée définitivement.'
+            );
+        }
+
+        $invitation->delete();
+    }
+
+    /**
      * Find an invitation by its plain-text token (hashes internally).
      */
     public function findByToken(string $token): ?UserInvitation
