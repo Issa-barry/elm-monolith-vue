@@ -232,7 +232,14 @@ class RolesAndPermissionsSeeder extends Seeder
             ['name' => 'Eau la maman', 'is_active' => true]
         );
 
-        // ── 4. Comptes staff ──────────────────────────────────────────────────
+        // ── 4. Comptes staff de démonstration ─────────────────────────────────
+        // Jamais en production : ces comptes fictifs partagent un mot de passe
+        // connu (Staff@2025). Le seul compte réel de mise en prod est créé par
+        // SuperAdminSeeder (voir ProductionSeeder).
+        if (app()->environment('production')) {
+            return;
+        }
+
         $pays = [
             'FR' => ['France',  '+33'],
             'GN' => ['Guinée',  '+224'],
