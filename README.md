@@ -15,6 +15,9 @@ $PHP artisan optimize
 composer2 update
 
 /opt/alt/php84/usr/bin/php artisan up
+
+Pour premiere mep
+php artisan db:seed --class=ProductionSeeder --force
  
 test3
  
