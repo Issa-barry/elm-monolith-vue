@@ -30,6 +30,7 @@ import {
     Plus,
     RefreshCw,
     Shield,
+    Trash2,
     UserPlus,
     Users,
     XCircle,
@@ -100,6 +101,7 @@ interface Membre {
     date: string | null;
     can_resend: boolean;
     can_revoke: boolean;
+    can_delete: boolean;
 }
 
 interface RoleOption {
@@ -350,6 +352,29 @@ function revokeInvitation(invitationId: number) {
                 detail: "L'invitation a été révoquée.",
                 life: 3000,
             }),
+    });
+}
+
+function confirmDeleteInvitation(m: Membre) {
+    confirm.require({
+        message: `Supprimer définitivement l'invitation envoyée à ${m.email} ? Cette action est irréversible.`,
+        header: 'Confirmer la suppression',
+        icon: 'pi pi-exclamation-triangle',
+        rejectLabel: 'Annuler',
+        acceptLabel: 'Supprimer',
+        acceptClass: 'p-button-danger',
+        accept: () => {
+            router.delete(`/backoffice/invitations/${m.invitation_id}/force`, {
+                preserveScroll: true,
+                onSuccess: () =>
+                    toast.add({
+                        severity: 'success',
+                        summary: 'Supprimée',
+                        detail: "L'invitation a été supprimée définitivement.",
+                        life: 3000,
+                    }),
+            });
+        },
     });
 }
 
@@ -1225,6 +1250,27 @@ function confirmRejectMember(m: Membre) {
                                                             class="h-4 w-4"
                                                         />
                                                         Révoquer
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuSeparator
+                                                        v-if="
+                                                            (data.can_resend ||
+                                                                data.can_revoke) &&
+                                                            data.can_delete
+                                                        "
+                                                    />
+                                                    <DropdownMenuItem
+                                                        v-if="data.can_delete"
+                                                        class="cursor-pointer text-destructive focus:text-destructive"
+                                                        @click="
+                                                            confirmDeleteInvitation(
+                                                                data,
+                                                            )
+                                                        "
+                                                    >
+                                                        <Trash2
+                                                            class="h-4 w-4"
+                                                        />
+                                                        Supprimer définitivement
                                                     </DropdownMenuItem>
                                                 </DropdownMenuContent>
                                             </DropdownMenu>

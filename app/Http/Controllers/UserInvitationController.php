@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\InvitationException;
 use App\Models\Site;
 use App\Models\UserInvitation;
 use App\Services\UserInvitationService;
@@ -31,8 +32,12 @@ class UserInvitationController extends Controller
 
         try {
             $service->invite(auth()->user(), $site, $data['email'], $data['role']);
-        } catch (\RuntimeException $e) {
+        } catch (InvitationException $e) {
             return back()->withErrors(['email' => $e->getMessage()])->withInput();
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->withErrors(['email' => "L'invitation n'a pas pu être envoyée pour le moment. Réessayez plus tard."])->withInput();
         }
 
         return back()->with('success', 'Invitation envoyée avec succès.');
@@ -46,7 +51,15 @@ class UserInvitationController extends Controller
     {
         $this->authorize('resend', $invitation);
 
-        $service->resend($invitation);
+        try {
+            $service->resend($invitation);
+        } catch (InvitationException $e) {
+            return back()->withErrors(['email' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->withErrors(['email' => "L'invitation n'a pas pu être renvoyée pour le moment. Réessayez plus tard."]);
+        }
 
         return back()->with('success', 'Invitation renvoyée avec succès.');
     }
@@ -62,5 +75,22 @@ class UserInvitationController extends Controller
         $service->revoke($invitation);
 
         return back()->with('success', 'Invitation révoquée.');
+    }
+
+    /**
+     * DELETE /invitations/{invitation}/force
+     * Permanently delete an already revoked/expired invitation.
+     */
+    public function forceDestroy(UserInvitation $invitation, UserInvitationService $service): RedirectResponse
+    {
+        $this->authorize('delete', $invitation);
+
+        try {
+            $service->delete($invitation);
+        } catch (InvitationException $e) {
+            return back()->withErrors(['email' => $e->getMessage()]);
+        }
+
+        return back()->with('success', 'Invitation supprimée définitivement.');
     }
 }
