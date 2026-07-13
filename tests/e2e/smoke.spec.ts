@@ -23,6 +23,23 @@ test('login page renders', async ({ page }) => {
     });
 });
 
+test('clicking "Connexion" from the homepage reaches the login page', async ({
+    page,
+}) => {
+    // Clique le vrai bouton (router.visit(login()) côté client) plutôt que de
+    // naviguer directement vers /login : c'est le seul test qui exerce l'URL
+    // absolue générée par Wayfinder au build, celle qui peut être fausse si
+    // APP_URL n'est pas correcte au moment du build (cf. incident .com du
+    // 2026-07-11 où /login pointait vers 127.0.0.1:8000).
+    await page.context().clearCookies();
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Connexion' }).click();
+    await expect(page).toHaveURL(/\/login(?:\?.*)?$/, { timeout: 15_000 });
+    await expect(page.locator('input[name="password"]')).toBeVisible({
+        timeout: 15_000,
+    });
+});
+
 test('authenticated user reaches dashboard', async ({ page }) => {
     await login(page);
     await expect(page).not.toHaveURL(/\/login/);
