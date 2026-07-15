@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    // Secret partagé server-to-server pour les routes api/public/* (appelées par
+    // l'app vitrine, jamais par un navigateur — voir VerifyVitrineServiceToken).
+    'vitrine' => [
+        'token' => env('VITRINE_SERVICE_TOKEN'),
+    ],
+
 ];
