@@ -1,0 +1,282 @@
+name: deploy-hostinger-admin
+
+# Cible fello.eau-la-maman.com (back-office). Déclenchement manuel uniquement
+# pour l'instant, le temps de vérifier que le déploiement fonctionne — une
+# fois validé, aligner sur le même trigger que deploy-hostinger.yml
+# (workflow_run sur auto-release, branche production).
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: production-admin-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and Deploy to Hostinger (admin)
+    runs-on: ubuntu-latest
+    environment: production_elm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch tags
+        run: git fetch --force --tags
+
+      - name: Write VERSION and RELEASED_AT from latest git tag
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          latest_tag="$(git tag --list | grep -E '^(v)?[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1 || true)"
+
+          if [ -n "$latest_tag" ]; then
+            version="${latest_tag#v}"
+            echo "$version" > VERSION
+            echo "VERSION → $version"
+          else
+            echo "Aucun tag semver trouvé, le fichier VERSION existant est conservé."
+          fi
+
+          echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > RELEASED_AT
+          echo "RELEASED_AT → $(cat RELEASED_AT)"
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: composer:v2
+
+      - name: Install PHP dependencies
+        run: composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Prepare Laravel app for build
+        run: |
+          cp .env.example .env
+          sed -i "s#^APP_URL=.*#APP_URL=https://fello.eau-la-maman.com#" .env
+          php artisan key:generate --ansi
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Build frontend assets
+        run: npm run build
+
+      - name: Verify build artifacts
+        run: |
+          if [ ! -f public/build/manifest.json ]; then
+            echo "❌ Build failed: public/build/manifest.json not found"
+            exit 1
+          fi
+          echo "✅ Build artifacts verified"
+
+      - name: Prepare SSH private key
+        env:
+          HOSTINGER_SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_ADMIN_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s' "$HOSTINGER_SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/hostinger_key
+          chmod 600 ~/.ssh/hostinger_key
+          ssh-keygen -y -f ~/.ssh/hostinger_key > /dev/null
+
+      - name: Add Hostinger host key
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "${{ secrets.HOSTINGER_ADMIN_SSH_PORT }}" -H "${{ secrets.HOSTINGER_ADMIN_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Enable maintenance mode
+        env:
+          HOSTINGER_HOST: ${{ secrets.HOSTINGER_ADMIN_HOST }}
+          HOSTINGER_PORT: ${{ secrets.HOSTINGER_ADMIN_SSH_PORT }}
+          HOSTINGER_USER: ${{ secrets.HOSTINGER_ADMIN_SSH_USER }}
+          HOSTINGER_DEPLOY_PATH: ${{ secrets.HOSTINGER_ADMIN_DEPLOY_PATH }}
+        run: |
+          ssh -i ~/.ssh/hostinger_key \
+            -o StrictHostKeyChecking=yes \
+            -o BatchMode=yes \
+            -o ConnectTimeout=30 \
+            -o ServerAliveInterval=60 \
+            -o ServerAliveCountMax=10 \
+            -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" \
+            "cd '$HOSTINGER_DEPLOY_PATH' && php artisan down --render='errors.503' --retry=10 --refresh=30 || true"
+
+      - name: Sync files to server
+        run: |
+          rsync -az --delete \
+            --filter='P /.well-known/***' \
+            --filter='P /.user.ini' \
+            --filter='P /.htpasswd' \
+            --exclude '.git/' \
+            --exclude '.github/' \
+            --exclude 'node_modules/' \
+            --exclude 'vendor/' \
+            --exclude 'tests/' \
+            --exclude 'playwright-report/' \
+            --exclude 'test-results/' \
+            --exclude 'storage/' \
+            --exclude '.env' \
+            -e "ssh -i ~/.ssh/hostinger_key -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=30 -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -p ${{ secrets.HOSTINGER_ADMIN_SSH_PORT }}" \
+            ./ "${{ secrets.HOSTINGER_ADMIN_SSH_USER }}@${{ secrets.HOSTINGER_ADMIN_HOST }}:${{ secrets.HOSTINGER_ADMIN_DEPLOY_PATH }}/"
+
+      - name: Run remote Laravel commands
+        env:
+          HOSTINGER_HOST: ${{ secrets.HOSTINGER_ADMIN_HOST }}
+          HOSTINGER_PORT: ${{ secrets.HOSTINGER_ADMIN_SSH_PORT }}
+          HOSTINGER_USER: ${{ secrets.HOSTINGER_ADMIN_SSH_USER }}
+          HOSTINGER_DEPLOY_PATH: ${{ secrets.HOSTINGER_ADMIN_DEPLOY_PATH }}
+        run: |
+          ssh -i ~/.ssh/hostinger_key \
+            -o StrictHostKeyChecking=yes \
+            -o BatchMode=yes \
+            -o ConnectTimeout=30 \
+            -o ServerAliveInterval=60 \
+            -o ServerAliveCountMax=10 \
+            -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" "DEPLOY_PATH='$HOSTINGER_DEPLOY_PATH' bash --noprofile --norc -s" <<'EOF'
+          set -euo pipefail
+
+          cd "$DEPLOY_PATH"
+
+          if command -v composer2 >/dev/null 2>&1; then
+            COMPOSER_PATH="$(command -v composer2)"
+          else
+            COMPOSER_PATH="$(command -v composer)"
+          fi
+
+          PHP_BIN=""
+          PHP_CANDIDATES="
+          php8.4
+          php84
+          /usr/bin/php84
+          /usr/local/bin/php84
+          /usr/local/php84/bin/php
+          /opt/alt/php84/usr/bin/php
+          /opt/php84/bin/php
+          php
+          "
+
+          for candidate in $PHP_CANDIDATES; do
+            if command -v "$candidate" >/dev/null 2>&1 || [ -x "$candidate" ]; then
+              candidate_version="$("$candidate" -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;' 2>/dev/null || true)"
+              if [ "$candidate_version" = "8.4" ] || [ "$candidate_version" = "8.5" ] || [ "$candidate_version" = "8.6" ]; then
+                PHP_BIN="$candidate"
+                break
+              fi
+            fi
+          done
+
+          if [ -z "$PHP_BIN" ]; then
+            echo "No PHP 8.4+ binary found on server. Current default: $(php -v | head -n 1)"
+            echo "Detected php commands:"
+            command -v php || true
+            command -v php84 || true
+            command -v php8.4 || true
+            ls -1 /usr/bin/php* 2>/dev/null | head -n 20 || true
+            ls -1 /usr/local/bin/php* 2>/dev/null | head -n 20 || true
+            ls -1 /opt/alt/php*/usr/bin/php 2>/dev/null | head -n 20 || true
+            echo "Set Hostinger PHP/CLI to 8.4 or install a php8.4 binary."
+            exit 1
+          fi
+
+          "$PHP_BIN" "$COMPOSER_PATH" install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-progress
+          "$PHP_BIN" artisan migrate --force
+          "$PHP_BIN" artisan db:seed --class=RolesAndPermissionsSeeder --force
+          "$PHP_BIN" artisan optimize:clear
+          "$PHP_BIN" artisan optimize
+          STORAGE_SOURCE_PATH="$DEPLOY_PATH/storage/app/public"
+          STORAGE_LINK_PATH="$DEPLOY_PATH/public/storage"
+          mkdir -p "$STORAGE_SOURCE_PATH"
+
+          # Hostinger can disable PHP exec/symlink, so avoid relying only on `artisan storage:link`.
+          # Strategy:
+          # 1) prefer a real symlink (fast, canonical Laravel setup)
+          # 2) if symlink is not possible, mirror files into public/storage
+          if [ -L "$STORAGE_LINK_PATH" ]; then
+            echo "Storage link already exists: $STORAGE_LINK_PATH"
+          elif [ -d "$STORAGE_LINK_PATH" ]; then
+            echo "Storage path is a directory, sync files into it: $STORAGE_LINK_PATH"
+            if command -v rsync >/dev/null 2>&1; then
+              rsync -a --delete "$STORAGE_SOURCE_PATH"/ "$STORAGE_LINK_PATH"/
+            else
+              cp -a "$STORAGE_SOURCE_PATH"/. "$STORAGE_LINK_PATH"/
+            fi
+          elif [ -e "$STORAGE_LINK_PATH" ]; then
+            echo "Warning: $STORAGE_LINK_PATH exists and is not a directory/symlink. Skipping storage setup."
+          elif ln -s "$STORAGE_SOURCE_PATH" "$STORAGE_LINK_PATH" 2>/dev/null; then
+            echo "Created storage symlink: $STORAGE_LINK_PATH -> $STORAGE_SOURCE_PATH"
+          else
+            echo "Could not create symlink, fallback to directory sync."
+            mkdir -p "$STORAGE_LINK_PATH"
+            if command -v rsync >/dev/null 2>&1; then
+              rsync -a --delete "$STORAGE_SOURCE_PATH"/ "$STORAGE_LINK_PATH"/
+            else
+              cp -a "$STORAGE_SOURCE_PATH"/. "$STORAGE_LINK_PATH"/
+            fi
+          fi
+          # Supprime les fichiers legacy qui ne doivent plus exister
+          rm -f resources/views/welcome.blade.php
+          EOF
+
+      # Runs whether the deploy succeeded or failed — guarantees the app never
+      # stays in maintenance mode.  Three SSH attempts with 30 s back-off cover
+      # transient firewall blocks after a long deployment session.
+      - name: Take site out of maintenance mode
+        if: always()
+        env:
+          HOSTINGER_HOST: ${{ secrets.HOSTINGER_ADMIN_HOST }}
+          HOSTINGER_PORT: ${{ secrets.HOSTINGER_ADMIN_SSH_PORT }}
+          HOSTINGER_USER: ${{ secrets.HOSTINGER_ADMIN_SSH_USER }}
+          HOSTINGER_DEPLOY_PATH: ${{ secrets.HOSTINGER_ADMIN_DEPLOY_PATH }}
+        run: |
+          # Write the remote script to a temp file so each retry re-sends it cleanly
+          cat > /tmp/artisan_up.sh << 'REMOTESCRIPT'
+          set -euo pipefail
+          cd "${DEPLOY_PATH}"
+          PHP_BIN=""
+          for candidate in php8.4 php84 /usr/bin/php84 /usr/local/bin/php84 /usr/local/php84/bin/php /opt/alt/php84/usr/bin/php /opt/php84/bin/php php; do
+            if command -v "$candidate" >/dev/null 2>&1 || [ -x "$candidate" ]; then
+              ver="$("$candidate" -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;' 2>/dev/null || true)"
+              if [ "$ver" = "8.4" ] || [ "$ver" = "8.5" ] || [ "$ver" = "8.6" ]; then
+                PHP_BIN="$candidate"
+                break
+              fi
+            fi
+          done
+          if [ -z "$PHP_BIN" ]; then
+            echo "ERROR: no PHP 8.4+ binary found — site remains in maintenance mode"
+            exit 1
+          fi
+          "$PHP_BIN" artisan up
+          echo "✅ Site back online (PHP: $PHP_BIN)"
+          REMOTESCRIPT
+
+          succeeded=false
+          for attempt in 1 2 3; do
+            if ssh -i ~/.ssh/hostinger_key \
+                -o StrictHostKeyChecking=yes \
+                -o BatchMode=yes \
+                -o ConnectTimeout=30 \
+                -o ServerAliveInterval=60 \
+                -o ServerAliveCountMax=5 \
+                -p "$HOSTINGER_PORT" "$HOSTINGER_USER@$HOSTINGER_HOST" \
+                "DEPLOY_PATH='$HOSTINGER_DEPLOY_PATH' bash --noprofile --norc -s" \
+                < /tmp/artisan_up.sh; then
+              succeeded=true
+              echo "✅ Maintenance mode disabled (attempt $attempt/3)"
+              break
+            fi
+            echo "⚠️ attempt $attempt/3 failed — waiting 30 s…"
+            [ "$attempt" -lt 3 ] && sleep 30
+          done
+          if [ "$succeeded" = "false" ]; then
+            echo "❌ artisan up failed after 3 attempts — check the server"
+            exit 1
+          fi
