@@ -8,6 +8,9 @@ use App\Models\Depense;
 use App\Models\Organization;
 use App\Observers\DepenseObserver;
 use App\Observers\VenteObserver;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
@@ -54,5 +57,15 @@ class AppServiceProvider extends ServiceProvider
         foreach (ModuleFeature::ALL as $module) {
             Feature::define($module, fn (Organization $org) => ModuleFeature::defaultState($module));
         }
+
+        // api/public/* (contact, inscription livreur) : appelées server-to-server
+        // par l'app vitrine, donc toutes derrière une seule IP — un plafond par IP
+        // sert de garde-fou anti-DoS, pas de limite par utilisateur (les étapes OTP
+        // du même flux réutilisent déjà les limiteurs 'otp-send'/'otp-verify' de
+        // FortifyServiceProvider, composites téléphone+IP, ceux-là restent corrects
+        // même derrière un proxy partagé).
+        RateLimiter::for('public-write', function (Request $request) {
+            return Limit::perMinute(30)->by($request->ip());
+        });
     }
 }
