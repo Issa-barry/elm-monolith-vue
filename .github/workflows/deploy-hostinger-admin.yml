@@ -1,10 +1,15 @@
 name: deploy-hostinger-admin
 
-# Cible fello.eau-la-maman.com (back-office). Déclenchement manuel uniquement
-# pour l'instant, le temps de vérifier que le déploiement fonctionne — une
-# fois validé, aligner sur le même trigger que deploy-hostinger.yml
-# (workflow_run sur auto-release, branche production).
+# Cible fello.eau-la-maman.com (back-office). Même trigger que deploy-hostinger.yml :
+# se déclenche automatiquement dès qu'un merge sur production passe auto-release,
+# sans dépendre de main. workflow_dispatch reste disponible pour un lancement manuel.
 on:
+  workflow_run:
+    workflows: ["auto-release"]
+    types:
+      - completed
+    branches:
+      - production
   workflow_dispatch:
 
 concurrency:
@@ -16,10 +21,14 @@ jobs:
     name: Build and Deploy to Hostinger (admin)
     runs-on: ubuntu-latest
     environment: production_elm
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'production')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
 
       - name: Fetch tags
