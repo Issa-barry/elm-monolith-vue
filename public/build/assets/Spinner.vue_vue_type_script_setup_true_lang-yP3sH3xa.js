@@ -1,1 +1,0 @@
-import{c as o}from"./Primitive-C7Tz5tfH.js";import{L as r}from"./loader-circle-0g6hvPan.js";import{d as n,i as c,g as s,n as t,o as i}from"./app-tyyDmC2D.js";const u=n({__name:"Spinner",props:{class:{}},setup(a){const e=a;return(l,p)=>(i(),c(s(r),{role:"status","aria-label":"Loading",class:t(s(o)("size-4 animate-spin",e.class))},null,8,["class"]))}});export{u as _};

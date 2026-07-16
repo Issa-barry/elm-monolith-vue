@@ -36,6 +36,11 @@ use App\Http\Controllers\Api\Mobile\PushTokenController;
 use App\Http\Controllers\Api\Mobile\ScanCommandeController;
 use App\Http\Controllers\Api\Produits\ProduitController;
 use App\Http\Controllers\Api\Produits\ProduitHistoriqueController;
+use App\Http\Controllers\Api\Public\ContactController as PublicContactController;
+use App\Http\Controllers\Api\Public\LivreurRegistrationController as PublicLivreurRegistrationController;
+use App\Http\Controllers\Api\Public\ModuleFlagsController;
+use App\Http\Controllers\Api\Public\RegisterLookupController as PublicRegisterLookupController;
+use App\Http\Controllers\Api\Public\RegisterOtpController as PublicRegisterOtpController;
 use App\Http\Controllers\Api\Search\GlobalSearchController;
 use App\Models\Vehicule;
 use Illuminate\Support\Facades\Route;
@@ -93,6 +98,28 @@ Route::get('vehicules/{vehiculeId}/photo', function (string $vehiculeId) {
 
     return $disk->response($vehicule->photo_path);
 })->name('vehicule.photo');
+
+// ── Vitrine publique (server-to-server uniquement, voir VerifyVitrineServiceToken) ──
+Route::prefix('public')->name('api.public.')->middleware('vitrine.token')->group(function () {
+    Route::post('contact', PublicContactController::class)
+        ->middleware('throttle:public-write')
+        ->name('contact');
+
+    Route::post('register/lookup', PublicRegisterLookupController::class)
+        ->middleware('throttle:otp-send')
+        ->name('register.lookup');
+
+    Route::post('register/otp/verify', PublicRegisterOtpController::class)
+        ->middleware('throttle:otp-verify')
+        ->name('register.otp.verify');
+
+    Route::post('register/livreur', PublicLivreurRegistrationController::class)
+        ->middleware('throttle:public-write')
+        ->name('register.livreur');
+
+    Route::get('modules', ModuleFlagsController::class)
+        ->name('modules');
+});
 
 // ── Auth backoffice mobile (publique — avant le middleware Sanctum) ────────────
 Route::post('v1/backoffice/auth/login', BackofficeLoginController::class)
