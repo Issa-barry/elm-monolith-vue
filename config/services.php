@@ -37,8 +37,11 @@ return [
 
     // Secret partagé server-to-server pour les routes api/public/* (appelées par
     // l'app vitrine, jamais par un navigateur — voir VerifyVitrineServiceToken).
+    // 'url' sert uniquement à rediriger les anciens liens publics (ex: /register/livreur)
+    // vers leur nouvel emplacement côté vitrine — le monolithe n'appelle jamais la vitrine.
     'vitrine' => [
         'token' => env('VITRINE_SERVICE_TOKEN'),
+        'url' => env('VITRINE_APP_URL', 'https://eau-la-maman.com'),
     ],
 
 ];

@@ -14,17 +14,10 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
-use Inertia\Inertia;
-use Inertia\Response;
 use Spatie\Permission\Models\Role;
 
 class LivreurRegistrationController extends Controller
 {
-    public function create(): Response
-    {
-        return Inertia::render('auth/RegisterLivreur');
-    }
-
     public function store(Request $request, OtpService $otp): RedirectResponse
     {
         $validated = $request->validate([
