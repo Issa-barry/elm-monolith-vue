@@ -134,4 +134,14 @@ class LivreurRegistrationTest extends TestCase
 
         $this->assertFalse(app(OtpService::class)->isVerified('+224622111001'));
     }
+
+    // ── GET /register/livreur redirige vers la vitrine ────────────────────────
+
+    public function test_get_redirects_to_vitrine_registration_page(): void
+    {
+        config(['services.vitrine.url' => 'https://eau-la-maman.test']);
+
+        $this->get('/register/livreur')
+            ->assertRedirect('https://eau-la-maman.test/register/livreur');
+    }
 }

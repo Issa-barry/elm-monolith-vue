@@ -56,6 +56,13 @@ class AuthRedirects
             return ! str_starts_with($normalizedPath, '/client');
         }
 
-        return in_array($normalizedPath, ['/', '/contact', '/help'], true);
+        // /contact et /help n'existent plus côté back-office (portées par
+        // elm-vitrine désormais) — seule '/' reste une destination valide ici.
+        return $normalizedPath === '/';
+    }
+
+    public static function hasKnownRole(?User $user): bool
+    {
+        return (bool) $user?->hasAnyRole([...self::CLIENT_ROLES, ...self::STAFF_ROLES]);
     }
 }
