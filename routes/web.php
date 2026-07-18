@@ -63,7 +63,8 @@ use App\Http\Controllers\VehiculeController;
 use App\Http\Controllers\VersementCommissionController;
 use App\Http\Controllers\VersementCommissionLogistiqueController;
 use App\Http\Controllers\VersementController;
-use App\Services\ModuleService;
+use App\Support\AuthRedirects;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -96,37 +97,13 @@ Route::post('/invitations/accept/{token}', [AcceptInvitationController::class, '
     ->name('invitations.accept.store')
     ->middleware('throttle:5,1');
 
-Route::get('/', function () {
-    return Inertia::render('Welcome', [
-        'canRegister' => env('WEB_REGISTRATION_ENABLED', true) && ModuleService::isPublicActive(ModuleFeature::INSCRIPTION),
-    ]);
+Route::get('/', function (Request $request) {
+    if (! $request->user()) {
+        return redirect()->route('login');
+    }
+
+    return redirect(AuthRedirects::defaultPathForUser($request->user()));
 })->name('home');
-
-Route::get('/contact', function () {
-    return Inertia::render('Contact', [
-        'canRegister' => env('WEB_REGISTRATION_ENABLED', true) && ModuleService::isPublicActive(ModuleFeature::INSCRIPTION),
-    ]);
-})->name('contact');
-
-Route::get('/help', function () {
-    return Inertia::render('Help', [
-        'canRegister' => env('WEB_REGISTRATION_ENABLED', true) && ModuleService::isPublicActive(ModuleFeature::INSCRIPTION),
-    ]);
-})->name('help');
-
-Route::get('/privacy-policy', function () {
-    return Inertia::render('PrivacyPolicy', [
-        'canRegister' => env('WEB_REGISTRATION_ENABLED', true) && ModuleService::isPublicActive(ModuleFeature::INSCRIPTION),
-    ]);
-})->name('privacy-policy');
-
-Route::get('/delete-account', function () {
-    return Inertia::render('DeleteAccount', [
-        'canRegister' => env('WEB_REGISTRATION_ENABLED', true) && ModuleService::isPublicActive(ModuleFeature::INSCRIPTION),
-    ]);
-})->name('delete-account');
-
-Route::post('contact', [ContactController::class, 'store'])->name('contact.store');
 
 Route::get('/sitemap.xml', SitemapController::class)->name('sitemap');
 
