@@ -194,6 +194,22 @@ class ModelTest extends TestCase
         $this->assertEquals($org->id, $p->organization->id);
     }
 
+    // ── Proprietaire ──────────────────────────────────────────────────────────
+    // Régression : nom_complet manquait sur ce modèle (présent sur Livreur/Employe),
+    // ce qui faisait planter PeriodeCalculatorService::calculerProprietaires()
+    // (TypeError: creerFiche() attend une string, recevait null).
+
+    public function test_proprietaire_nom_complet_concatenates_prenom_and_nom(): void
+    {
+        $p = Proprietaire::create([
+            'organization_id' => $this->makeOrg()->id,
+            'nom' => 'DIALLO',
+            'prenom' => 'Mamadou',
+        ]);
+
+        $this->assertSame('Mamadou DIALLO', $p->nom_complet);
+    }
+
     // ── Produit ───────────────────────────────────────────────────────────────
 
     public function test_produit_is_archived_returns_true_when_archived(): void
