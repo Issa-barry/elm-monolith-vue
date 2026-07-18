@@ -22,13 +22,11 @@ return [
         'area_served' => ['Matoto', 'Dabompa', 'Kouria', 'Lambagny', 'Lansanaya'],
     ],
 
-    // Pages publiques indexables. Ajouter une page ici suffit pour qu'elle
-    // apparaisse dans le sitemap — pas besoin de toucher SitemapController.
+    // Pages publiques indexables. La vitrine (eau-la-maman.com, dépôt elm-vitrine)
+    // porte désormais tout le contenu marketing (/, /contact, /help, /privacy-policy,
+    // /delete-account) — seule /register/livreur reste ici tant qu'elle n'a pas
+    // été migrée côté vitrine.
     'sitemap' => [
-        ['path' => '/', 'priority' => '1.0', 'changefreq' => 'weekly'],
-        ['path' => '/contact', 'priority' => '0.6', 'changefreq' => 'monthly'],
         ['path' => '/register/livreur', 'priority' => '0.7', 'changefreq' => 'monthly'],
-        ['path' => '/privacy-policy', 'priority' => '0.2', 'changefreq' => 'yearly'],
-        // /help volontairement absent : noindex tant que la page n'a pas de vrai contenu (cf. Help.vue).
     ],
 ];
