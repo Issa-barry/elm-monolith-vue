@@ -3,7 +3,6 @@ Allow: /
 
 Disallow: /login
 Disallow: /register
-Allow: /register/livreur
 
 Disallow: /backoffice/
 Disallow: /client/

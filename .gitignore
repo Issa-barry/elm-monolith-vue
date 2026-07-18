@@ -1,8 +1,12 @@
 /.phpunit.cache
 /bootstrap/ssr
 /node_modules
-# public/build is committed on this branch only: Hostinger's native Git
-# deploy for eau-la-maman.com does a plain `git pull`, no npm build step.
+# public/build was committed on this branch for Hostinger's old native Git
+# deploy (eau-la-maman.com, plain `git pull`, no npm build step). That domain
+# is being retired in favor of elm-vitrine as its own independent Hostinger
+# site — fello.eau-la-maman.com's deploy-hostinger-admin.yml already builds
+# fresh assets in CI and never relied on the committed copy.
+/public/build
 /public/hot
 /public/storage
 /storage/*.key

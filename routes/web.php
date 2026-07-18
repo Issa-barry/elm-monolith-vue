@@ -65,6 +65,7 @@ use App\Http\Controllers\VersementCommissionLogistiqueController;
 use App\Http\Controllers\VersementController;
 use App\Support\AuthRedirects;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -74,11 +75,19 @@ Route::middleware('guest')->group(function () {
         ->name('register.lookup');
     Route::post('/register/otp/verify', RegisterOtpController::class)
         ->name('register.otp.verify');
-    Route::get('/register/livreur', [LivreurRegistrationController::class, 'create'])
-        ->name('livreur.register');
     Route::post('/register/livreur', [LivreurRegistrationController::class, 'store'])
         ->name('livreur.register.store');
 });
+
+// L'inscription livreur est désormais portée par elm-vitrine (Blade/Alpine,
+// appelle ce back-office en server-to-server via api/public/register/*).
+// On garde ce GET en simple redirection pour ne pas casser les anciens liens
+// (SMS, QR codes...) qui pointaient vers fello.eau-la-maman.com/register/livreur.
+// Les endpoints POST /register/lookup, /register/otp/verify et /register/livreur
+// restent actifs tant qu'une dépendance externe non confirmée n'est pas écartée.
+Route::get('/register/livreur', function () {
+    return redirect(rtrim(config('services.vitrine.url'), '/').'/register/livreur');
+})->name('livreur.register');
 
 // ── Onboarding via lien d'invitation ─────────────────────────────────────────
 Route::get('/invitations/accept/{token}', [AcceptInvitationController::class, 'show'])
@@ -98,11 +107,24 @@ Route::post('/invitations/accept/{token}', [AcceptInvitationController::class, '
     ->middleware('throttle:5,1');
 
 Route::get('/', function (Request $request) {
-    if (! $request->user()) {
+    $user = $request->user();
+
+    if (! $user) {
         return redirect()->route('login');
     }
 
-    return redirect(AuthRedirects::defaultPathForUser($request->user()));
+    if (! AuthRedirects::hasKnownRole($user)) {
+        // Authentifié mais sans rôle client/staff reconnu : AuthRedirects::defaultPathForUser
+        // retombe sur route('home') dans ce cas, ce qui bouclerait indéfiniment sur cette
+        // route depuis qu'elle ne rend plus la page marketing. On déconnecte proprement.
+        Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect()->route('login');
+    }
+
+    return redirect(AuthRedirects::defaultPathForUser($user));
 })->name('home');
 
 Route::get('/sitemap.xml', SitemapController::class)->name('sitemap');
