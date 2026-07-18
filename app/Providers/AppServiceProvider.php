@@ -10,6 +10,7 @@ use App\Observers\DepenseObserver;
 use App\Observers\VenteObserver;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
@@ -40,6 +41,13 @@ class AppServiceProvider extends ServiceProvider
         if (str_starts_with($appUrl, 'https://')) {
             URL::forceScheme('https');
         }
+
+        // Bloque migrate:fresh, migrate:refresh, db:wipe (et apparentés) en
+        // production — même avec --force. Contrairement à la simple confirmation
+        // interactive par défaut de Laravel (contournable via --force), ceci lève
+        // une exception à coup sûr. Ne dépend que de APP_ENV=production sur le
+        // serveur, indépendant de qui/quoi lance la commande (SSH manuel, script).
+        DB::prohibitDestructiveCommands($this->app->isProduction());
 
         Password::defaults(function () {
             return Password::min(8)

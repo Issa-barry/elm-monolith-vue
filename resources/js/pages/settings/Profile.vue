@@ -3,6 +3,7 @@ import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileCo
 import { edit } from '@/routes/profile';
 import { send } from '@/routes/verification';
 import { Form, Head, Link, usePage } from '@inertiajs/vue3';
+import { useToast } from 'primevue/usetoast';
 import { computed, ref, watch } from 'vue';
 
 import DeleteUser from '@/components/DeleteUser.vue';
@@ -30,6 +31,7 @@ const breadcrumbItems: BreadcrumbItem[] = [
     },
 ];
 
+const toast = useToast();
 const page = usePage();
 const authUser = computed(() => page.props.auth.user);
 const isSuperAdmin = computed(() =>
@@ -86,6 +88,13 @@ const roles = computed(() =>
                     v-bind="ProfileController.update.form()"
                     class="space-y-6"
                     v-slot="{ errors, processing, recentlySuccessful }"
+                    @success="
+                        toast.add({
+                            severity: 'success',
+                            summary: 'Profil mis à jour',
+                            life: 3000,
+                        })
+                    "
                 >
                     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div class="grid gap-2">

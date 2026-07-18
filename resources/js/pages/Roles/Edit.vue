@@ -17,6 +17,7 @@ import {
     Square,
     Users,
 } from 'lucide-vue-next';
+import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
 interface RoleData {
@@ -31,6 +32,8 @@ const props = defineProps<{
     resources: string[];
     actions: string[];
 }>();
+
+const toast = useToast();
 
 const roleConfig: Record<string, { label: string; color: string; bg: string }> =
     {
@@ -203,6 +206,11 @@ function save() {
                 setTimeout(() => {
                     flashSuccess.value = false;
                 }, 3000);
+                toast.add({
+                    severity: 'success',
+                    summary: 'Permissions mises à jour',
+                    life: 3000,
+                });
             },
             onFinish: () => {
                 saving.value = false;
