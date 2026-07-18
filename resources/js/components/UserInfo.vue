@@ -45,7 +45,7 @@ const subtitle = computed(() => {
 
 const siteLabel = computed(() => {
     const site = page.props.auth.default_site;
-    return site ? `Site : ${site.nom}` : 'Site : Non défini';
+    return site ? `${site.type_label} de ${site.nom}` : 'Aucun site affecté';
 });
 </script>
 
