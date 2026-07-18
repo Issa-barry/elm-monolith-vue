@@ -7,9 +7,11 @@ import { login } from './helpers';
 
 test.setTimeout(90_000);
 
-test('home page responds', async ({ page }) => {
+test('home page redirects unauthenticated users to login', async ({ page }) => {
+    await page.context().clearCookies();
     const response = await page.goto('/');
     expect(response?.ok()).toBeTruthy();
+    await expect(page).toHaveURL(/\/login(?:\?.*)?$/, { timeout: 15_000 });
     await expect(page.locator('body')).toBeVisible();
 });
 
@@ -23,17 +25,19 @@ test('login page renders', async ({ page }) => {
     });
 });
 
-test('clicking "Connexion" from the homepage reaches the login page', async ({
+test('login link on a guest page uses the correct APP_URL (regression guard)', async ({
     page,
 }) => {
-    // Clique le vrai bouton (router.visit(login()) côté client) plutôt que de
-    // naviguer directement vers /login : c'est le seul test qui exerce l'URL
-    // absolue générée par Wayfinder au build, celle qui peut être fausse si
-    // APP_URL n'est pas correcte au moment du build (cf. incident .com du
-    // 2026-07-11 où /login pointait vers 127.0.0.1:8000).
+    // Clique un vrai lien généré côté client (login() de Wayfinder) plutôt que
+    // de naviguer directement vers /login : ça exerce l'URL absolue générée au
+    // build, celle qui peut être fausse si APP_URL n'est pas correcte au
+    // moment du build (cf. incident .com du 2026-07-11 où /login pointait
+    // vers 127.0.0.1:8000). La page d'accueil publique a été retirée du
+    // back-office (contenu désormais porté par elm-vitrine) ; /forgot-password
+    // reste une page invité qui utilise le même helper login().
     await page.context().clearCookies();
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Connexion' }).click();
+    await page.goto('/forgot-password');
+    await page.getByRole('link', { name: /la connexion/i }).click();
     await expect(page).toHaveURL(/\/login(?:\?.*)?$/, { timeout: 15_000 });
     await expect(page.locator('input[name="password"]')).toBeVisible({
         timeout: 15_000,
