@@ -8,14 +8,22 @@ use App\Http\Controllers\Controller;
 use App\Models\PaiementFiche;
 use App\Models\PaiementFichePaiement;
 use App\Services\AuditLogService;
+use App\Services\PeriodePayabilityChecker;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use InvalidArgumentException;
 
 class PaiementFichePaiementController extends Controller
 {
     public function store(Request $request, PaiementFiche $fiche): RedirectResponse
     {
         $this->authorize('payer', $fiche);
+
+        try {
+            PeriodePayabilityChecker::assertPeriodePayable($fiche->periode);
+        } catch (InvalidArgumentException $e) {
+            abort(422, $e->getMessage());
+        }
 
         $restant = $fiche->montant_restant;
 
@@ -52,6 +60,12 @@ class PaiementFichePaiementController extends Controller
     {
         $fiche = $paiement->fiche;
         $this->authorize('payer', $fiche);
+
+        try {
+            PeriodePayabilityChecker::assertPeriodePayable($fiche->periode);
+        } catch (InvalidArgumentException $e) {
+            abort(422, $e->getMessage());
+        }
 
         $montantFmt = number_format((float) $paiement->montant, 0, ',', "\u{202F}");
         app(AuditLogService::class)->record($fiche, AuditEvent::PAYMENT_CANCELLED, auth()->user(), null, null, [

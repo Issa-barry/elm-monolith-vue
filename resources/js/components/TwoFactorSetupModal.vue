@@ -242,7 +242,8 @@ watch(
                                 isOpen = false;
                                 toast.add({
                                     severity: 'success',
-                                    summary: 'Authentification à deux facteurs activée',
+                                    summary:
+                                        'Authentification à deux facteurs activée',
                                     life: 3000,
                                 });
                             }

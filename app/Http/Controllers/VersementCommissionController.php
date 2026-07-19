@@ -6,6 +6,7 @@ use App\Enums\ModePaiement;
 use App\Models\CommissionPart;
 use App\Models\CommissionVente;
 use App\Models\VersementCommission;
+use App\Services\PeriodePayabilityChecker;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -29,6 +30,10 @@ class VersementCommissionController extends Controller
             422,
             'Le chargement doit être validé avant tout encaissement ou paiement.'
         );
+
+        if ($reason = PeriodePayabilityChecker::reasonPartNotPayable($part)) {
+            abort(422, $reason);
+        }
 
         // ── Frais véhicule : déduction automatique au 1er versement ─────────────
         $fraisAAppliquer = 0.0;

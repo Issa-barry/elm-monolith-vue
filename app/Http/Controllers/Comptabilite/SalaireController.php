@@ -160,12 +160,13 @@ class SalaireController extends Controller
 
     public function payerLigne(Request $request, string $ligneId): RedirectResponse
     {
-        abort_unless(auth()->user()->can('comptabilite.payer'), 403);
-
         $orgId = auth()->user()->organization_id;
 
-        $ligne = PaieLigne::whereHas('periode', fn ($q) => $q->where('organization_id', $orgId))
+        $ligne = PaieLigne::with('periode')
+            ->whereHas('periode', fn ($q) => $q->where('organization_id', $orgId))
             ->findOrFail($ligneId);
+
+        $this->authorize('pay', $ligne->periode);
 
         $data = $request->validate([
             'montant' => ['required', 'numeric', 'min:0.01'],

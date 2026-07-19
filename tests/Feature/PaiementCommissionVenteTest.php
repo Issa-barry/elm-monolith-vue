@@ -3,12 +3,17 @@
 namespace Tests\Feature;
 
 use App\Enums\StatutCommission;
+use App\Enums\StatutPeriodePaiement;
+use App\Enums\TypePeriodePaiement;
 use App\Models\CommissionVente;
 use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\PaiementCommissionVente;
+use App\Models\PaiementPeriode;
 use App\Models\Site;
 use App\Models\User;
+use App\Services\PeriodePaiementService;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -18,7 +23,15 @@ class PaiementCommissionVenteTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function creerContexte(): array
+    private function validerPeriode(Organization $org, TypePeriodePaiement $type, $date, StatutPeriodePaiement $statut): PaiementPeriode
+    {
+        $periode = app(PeriodePaiementService::class)->getOrCreatePeriod($org->id, $type, Carbon::parse($date));
+        $periode->update(['statut' => $statut]);
+
+        return $periode->fresh();
+    }
+
+    private function creerContexte(?StatutPeriodePaiement $statutPeriode = StatutPeriodePaiement::VALIDEE): array
     {
         $org = Organization::factory()->create();
 
@@ -56,6 +69,10 @@ class PaiementCommissionVenteTest extends TestCase
             'montant_verse' => 0,
             'statut' => StatutCommission::IMPAYE,
         ]);
+
+        if ($statutPeriode !== null) {
+            $this->validerPeriode($org, TypePeriodePaiement::LIVREUR, $commission->created_at, $statutPeriode);
+        }
 
         return compact('org', 'user', 'livreur', 'commission');
     }
@@ -109,5 +126,33 @@ class PaiementCommissionVenteTest extends TestCase
             route('commissions.beneficiaires.paiements.store', ['type' => 'livreur', 'beneficiaireId' => 'some-id']),
             ['montant' => 100, 'mode_paiement' => 'especes']
         )->assertStatus(403);
+    }
+
+    // ── Verrou par statut de période ──────────────────────────────────────────
+
+    public function test_paiement_commission_vente_refuse_si_periode_non_validee(): void
+    {
+        ['user' => $user, 'livreur' => $livreur] = $this->creerContexte(StatutPeriodePaiement::CALCULEE);
+
+        $response = $this->actingAs($user)->post(
+            route('commissions.beneficiaires.paiements.store', ['type' => 'livreur', 'beneficiaireId' => $livreur->id]),
+            ['montant' => 1000, 'mode_paiement' => 'especes']
+        );
+
+        $response->assertSessionHasErrors('montant');
+        $this->assertDatabaseCount('paiements_commissions_ventes', 0);
+    }
+
+    public function test_paiement_commission_vente_refuse_si_aucune_periode_calculee(): void
+    {
+        ['user' => $user, 'livreur' => $livreur] = $this->creerContexte(null);
+
+        $response = $this->actingAs($user)->post(
+            route('commissions.beneficiaires.paiements.store', ['type' => 'livreur', 'beneficiaireId' => $livreur->id]),
+            ['montant' => 1000, 'mode_paiement' => 'especes']
+        );
+
+        $response->assertSessionHasErrors('montant');
+        $this->assertDatabaseCount('paiements_commissions_ventes', 0);
     }
 }

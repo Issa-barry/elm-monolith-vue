@@ -3,17 +3,21 @@
 namespace Tests\Feature;
 
 use App\Enums\StatutCommission;
+use App\Enums\StatutPeriodePaiement;
+use App\Enums\TypePeriodePaiement;
 use App\Features\ModuleFeature;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
 use App\Models\Livreur;
 use App\Models\Organization;
+use App\Models\PaiementPeriode;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
 use App\Models\User;
 use App\Models\Vehicule;
 use App\Services\CommissionPaymentService;
 use App\Services\PeriodeComptableService;
+use App\Services\PeriodePaiementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -123,6 +127,18 @@ class CommissionPeriodeTest extends TestCase
         ]);
     }
 
+    private function validerPeriode(Organization $org, string $earnedAt): PaiementPeriode
+    {
+        $periode = app(PeriodePaiementService::class)->getOrCreatePeriod(
+            $org->id,
+            TypePeriodePaiement::LIVREUR,
+            Carbon::parse($earnedAt),
+        );
+        $periode->update(['statut' => StatutPeriodePaiement::VALIDEE]);
+
+        return $periode->fresh();
+    }
+
     // ── Tests classification période ─────────────────────────────────────────
 
     /** @test */
@@ -181,6 +197,7 @@ class CommissionPeriodeTest extends TestCase
 
         $part = $this->makePart($org, $livreur, '2026-04-26');
         $this->assertSame('2026-04-P2', $part->periode);
+        $this->validerPeriode($org, '2026-04-26');
 
         // Simuler un paiement le 02/05 (paiement en retard)
         $this->actingAs($user);
@@ -209,6 +226,7 @@ class CommissionPeriodeTest extends TestCase
 
         $part = $this->makePart($org, $livreur, '2026-04-14');
         $this->assertSame('2026-04-P1', $part->periode);
+        $this->validerPeriode($org, '2026-04-14');
 
         // Simuler un paiement anticipé le 10/04
         $this->actingAs($user);

@@ -3,10 +3,15 @@
 namespace Tests\Feature;
 
 use App\Enums\StatutCommission;
+use App\Enums\StatutPeriodePaiement;
+use App\Enums\TypePeriodePaiement;
 use App\Models\CommissionVente;
 use App\Models\Organization;
+use App\Models\PaiementPeriode;
 use App\Models\Site;
 use App\Models\User;
+use App\Services\PeriodePaiementService;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -38,8 +43,10 @@ class VersementCommissionTest extends TestCase
 
     /**
      * Crée une CommissionVente avec une part livreur (3 000) et une part propriétaire (2 000).
+     * Crée aussi (sauf si $statutPeriode est null) les PaiementPeriode livreur/propriétaire
+     * couvrant la date de la commission, dans le statut demandé.
      */
-    private function makeCommissionAvecParts(Organization $org): array
+    private function makeCommissionAvecParts(Organization $org, ?StatutPeriodePaiement $statutPeriode = StatutPeriodePaiement::VALIDEE): array
     {
         $commission = CommissionVente::factory()->create([
             'organization_id' => $org->id,
@@ -70,7 +77,20 @@ class VersementCommissionTest extends TestCase
             'statut' => StatutCommission::IMPAYE,
         ]);
 
+        if ($statutPeriode !== null) {
+            $this->validerPeriode($org, TypePeriodePaiement::LIVREUR, $commission->created_at, $statutPeriode);
+            $this->validerPeriode($org, TypePeriodePaiement::PROPRIETAIRE, $commission->created_at, $statutPeriode);
+        }
+
         return compact('commission', 'partLivreur', 'partProp');
+    }
+
+    private function validerPeriode(Organization $org, TypePeriodePaiement $type, $date, StatutPeriodePaiement $statut): PaiementPeriode
+    {
+        $periode = app(PeriodePaiementService::class)->getOrCreatePeriod($org->id, $type, Carbon::parse($date));
+        $periode->update(['statut' => $statut]);
+
+        return $periode->fresh();
     }
 
     // ── Store ──────────────────────────────────────────────────────────────────
@@ -221,5 +241,37 @@ class VersementCommissionTest extends TestCase
 
         $this->assertEquals(StatutCommission::IMPAYE, $part->fresh()->statut);
         $this->assertEquals(0.0, (float) $part->fresh()->montant_verse);
+    }
+
+    // ── Verrou par statut de période ──────────────────────────────────────────
+
+    public function test_versement_refuse_si_periode_non_validee(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->utilisateur($org);
+        ['commission' => $commission, 'partLivreur' => $part] = $this->makeCommissionAvecParts($org, StatutPeriodePaiement::CALCULEE);
+
+        $response = $this->actingAs($user)->post(
+            route('commissions.parts.versements.store', [$commission, $part]),
+            ['montant' => 1000, 'date_versement' => now()->toDateString(), 'mode_paiement' => 'especes']
+        );
+
+        $response->assertStatus(422);
+        $this->assertDatabaseCount('versements_commissions', 0);
+    }
+
+    public function test_versement_refuse_si_aucune_periode_calculee(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->utilisateur($org);
+        ['commission' => $commission, 'partLivreur' => $part] = $this->makeCommissionAvecParts($org, null);
+
+        $response = $this->actingAs($user)->post(
+            route('commissions.parts.versements.store', [$commission, $part]),
+            ['montant' => 1000, 'date_versement' => now()->toDateString(), 'mode_paiement' => 'especes']
+        );
+
+        $response->assertStatus(422);
+        $this->assertDatabaseCount('versements_commissions', 0);
     }
 }

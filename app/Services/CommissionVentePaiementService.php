@@ -43,6 +43,13 @@ class CommissionVentePaiementService
             );
         }
 
+        $touched = PeriodePayabilityChecker::touchedUntilAmount(
+            $parts,
+            $montant,
+            fn ($p) => max(0.0, (float) $p->montant_net - (float) $p->montant_verse)
+        );
+        PeriodePayabilityChecker::assertPartsPayable($touched);
+
         $beneficiaireNom = $parts->first()?->beneficiaire_nom ?? 'Inconnu';
 
         return DB::transaction(function () use (

@@ -105,7 +105,8 @@ onUnmounted(() => {
                             @success="
                                 toast.add({
                                     severity: 'success',
-                                    summary: 'Authentification à deux facteurs désactivée',
+                                    summary:
+                                        'Authentification à deux facteurs désactivée',
                                     life: 3000,
                                 })
                             "

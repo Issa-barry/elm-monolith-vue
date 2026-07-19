@@ -4,6 +4,8 @@ namespace Tests\Feature\Comptabilite;
 
 use App\Enums\BaseCalculLogistique;
 use App\Enums\StatutCommission;
+use App\Enums\StatutPeriodePaiement;
+use App\Enums\TypePeriodePaiement;
 use App\Features\ModuleFeature;
 use App\Models\CommandeVente;
 use App\Models\CommissionLogistique;
@@ -12,10 +14,13 @@ use App\Models\CommissionVente;
 use App\Models\Depense;
 use App\Models\Livreur;
 use App\Models\PaiementCommissionVente;
+use App\Models\PaiementPeriode;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
 use App\Models\Vehicule;
+use App\Services\PeriodePaiementService;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Pennant\Feature;
@@ -64,6 +69,18 @@ class CommissionDetailKpiTest extends TestCase
     private function makeProprietaire(): Proprietaire
     {
         return Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+    }
+
+    private function validerPeriode($earnedAt = null): PaiementPeriode
+    {
+        $periode = app(PeriodePaiementService::class)->getOrCreatePeriod(
+            $this->org->id,
+            TypePeriodePaiement::LIVREUR,
+            Carbon::parse($earnedAt),
+        );
+        $periode->update(['statut' => StatutPeriodePaiement::VALIDEE]);
+
+        return $periode->fresh();
     }
 
     private function makeTransfert(Site $source, Site $dest, Vehicule $vehicule): TransfertLogistique
@@ -190,6 +207,7 @@ class CommissionDetailKpiTest extends TestCase
         $transfert = $this->makeTransfert($siteA, $siteB, $vehicule);
         $commission = $this->makeCommissionLogistique($transfert);
         $part = $this->makePartLogistique($commission, $livreur, brut: 10000, frais: 0, verse: 0, statut: 'impaye');
+        $this->validerPeriode($part->earned_at);
 
         $this->actingAs($this->user)
             ->post("/backoffice/comptabilite/commissions/logistique/livreurs/{$livreur->id}/paiements", [

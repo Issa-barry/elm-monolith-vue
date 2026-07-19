@@ -2,7 +2,6 @@
 
 namespace App\Policies;
 
-use App\Enums\StatutPeriodePaie;
 use App\Models\PaiePeriode;
 use App\Models\User;
 
@@ -40,7 +39,7 @@ class PaiePolicy
     {
         return $user->can('rh-paie.pay')
             && $user->organization_id === $periode->organization_id
-            && in_array($periode->statut, [StatutPeriodePaie::VALIDE_RH, StatutPeriodePaie::PAYE], true);
+            && $periode->peutEtrePayee();
     }
 
     public function close(User $user, PaiePeriode $periode): bool

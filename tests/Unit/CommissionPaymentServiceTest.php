@@ -3,15 +3,20 @@
 namespace Tests\Unit;
 
 use App\Enums\StatutCommission;
+use App\Enums\StatutPeriodePaiement;
+use App\Enums\TypePeriodePaiement;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
 use App\Models\Livreur;
 use App\Models\Organization;
+use App\Models\PaiementPeriode;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
 use App\Models\User;
 use App\Models\Vehicule;
 use App\Services\CommissionPaymentService;
+use App\Services\PeriodePaiementService;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use InvalidArgumentException;
 use Spatie\Permission\Models\Role;
@@ -100,6 +105,8 @@ class CommissionPaymentServiceTest extends TestCase
             'montant_net' => 2000,
             'earned_at' => now()->subDays(10)->toDateString(),
         ]);
+        $this->makePeriode($org, $partAncienne->earned_at);
+        $this->makePeriode($org, $partRecente->earned_at);
 
         $this->actingAs($this->makeUser($org));
         CommissionPaymentService::payer($vehicule, 'livreur', $livreur->id, 1500, 'especes', now()->toDateString());
@@ -121,6 +128,9 @@ class CommissionPaymentServiceTest extends TestCase
         $part1 = $this->makePart($commission, $livreur, ['montant_net' => 1000, 'earned_at' => now()->subDays(20)->toDateString()]);
         $part2 = $this->makePart($commission, $livreur, ['montant_net' => 2000, 'earned_at' => now()->subDays(10)->toDateString()]);
         $part3 = $this->makePart($commission, $livreur, ['montant_net' => 500,  'earned_at' => now()->subDays(5)->toDateString()]);
+        $this->makePeriode($org, $part1->earned_at);
+        $this->makePeriode($org, $part2->earned_at);
+        $this->makePeriode($org, $part3->earned_at);
 
         $this->actingAs($this->makeUser($org));
         CommissionPaymentService::payer($vehicule, 'livreur', $livreur->id, 3500, 'especes', now()->toDateString());
@@ -128,6 +138,103 @@ class CommissionPaymentServiceTest extends TestCase
         $this->assertEquals(StatutCommission::PAYE, $part1->fresh()->statut);
         $this->assertEquals(StatutCommission::PAYE, $part2->fresh()->statut);
         $this->assertEquals(StatutCommission::PAYE, $part3->fresh()->statut);
+    }
+
+    // ── payer() : verrou par statut de période ────────────────────────────────
+
+    public function test_payer_refuse_si_periode_brouillon(): void
+    {
+        ['vehicule' => $vehicule, 'livreur' => $livreur] = $this->makeScenario(statutPeriode: StatutPeriodePaiement::BROUILLON);
+
+        $this->actingAs($this->makeUser($vehicule->organization));
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches("/n'est pas validée/i");
+
+        CommissionPaymentService::payer($vehicule, 'livreur', $livreur->id, 3000, 'especes', now()->toDateString());
+    }
+
+    public function test_payer_refuse_si_periode_calculee(): void
+    {
+        ['vehicule' => $vehicule, 'livreur' => $livreur] = $this->makeScenario(statutPeriode: StatutPeriodePaiement::CALCULEE);
+
+        $this->actingAs($this->makeUser($vehicule->organization));
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches("/n'est pas validée/i");
+
+        CommissionPaymentService::payer($vehicule, 'livreur', $livreur->id, 3000, 'especes', now()->toDateString());
+    }
+
+    public function test_payer_refuse_si_periode_cloturee(): void
+    {
+        ['vehicule' => $vehicule, 'livreur' => $livreur] = $this->makeScenario(statutPeriode: StatutPeriodePaiement::CLOTUREE);
+
+        $this->actingAs($this->makeUser($vehicule->organization));
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches("/n'est pas validée/i");
+
+        CommissionPaymentService::payer($vehicule, 'livreur', $livreur->id, 3000, 'especes', now()->toDateString());
+    }
+
+    public function test_payer_autorise_si_periode_validee(): void
+    {
+        ['vehicule' => $vehicule, 'livreur' => $livreur, 'part' => $part] = $this->makeScenario(statutPeriode: StatutPeriodePaiement::VALIDEE);
+
+        $this->actingAs($this->makeUser($vehicule->organization));
+        CommissionPaymentService::payer($vehicule, 'livreur', $livreur->id, 3000, 'especes', now()->toDateString());
+
+        $this->assertEquals(StatutCommission::PAYE, $part->fresh()->statut);
+    }
+
+    public function test_payer_refuse_si_aucune_periode_calculee(): void
+    {
+        $org = Organization::factory()->create();
+        $vehicule = Vehicule::factory()->create(['organization_id' => $org->id]);
+        $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
+        $commission = $this->makeCommission($org, $vehicule);
+        $this->makePart($commission, $livreur, ['montant_net' => 3000]);
+        // Aucune PaiementPeriode n'est créée : la date n'a jamais été calculée.
+
+        $this->actingAs($this->makeUser($org));
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches("/n'a pas encore été calculée/i");
+
+        CommissionPaymentService::payer($vehicule, 'livreur', $livreur->id, 3000, 'especes', now()->toDateString());
+    }
+
+    public function test_payer_refuse_integralement_si_le_paiement_deborde_sur_une_periode_non_validee(): void
+    {
+        $org = Organization::factory()->create();
+        $vehicule = Vehicule::factory()->create(['organization_id' => $org->id]);
+        $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
+        $commission = $this->makeCommission($org, $vehicule);
+
+        $partValidee = $this->makePart($commission, $livreur, [
+            'montant_net' => 1000,
+            'earned_at' => now()->subDays(20)->toDateString(),
+        ]);
+        $partNonValidee = $this->makePart($commission, $livreur, [
+            'montant_net' => 2000,
+            'earned_at' => now()->subDays(10)->toDateString(),
+        ]);
+        $this->makePeriode($org, $partValidee->earned_at, StatutPeriodePaiement::VALIDEE);
+        $this->makePeriode($org, $partNonValidee->earned_at, StatutPeriodePaiement::CALCULEE);
+
+        $this->actingAs($this->makeUser($org));
+
+        // Le paiement qui ne touche que la part de la période validée passe.
+        CommissionPaymentService::payer($vehicule, 'livreur', $livreur->id, 1000, 'especes', now()->toDateString());
+        $this->assertEquals(StatutCommission::PAYE, $partValidee->fresh()->statut);
+
+        // Un paiement qui déborde sur la part de la période non-validée est intégralement refusé.
+        try {
+            CommissionPaymentService::payer($vehicule, 'livreur', $livreur->id, 1500, 'especes', now()->toDateString());
+            $this->fail('InvalidArgumentException attendue.');
+        } catch (InvalidArgumentException $e) {
+            $this->assertMatchesRegularExpression("/n'est pas validée/i", $e->getMessage());
+        }
+
+        // Aucune écriture partielle sur la part non-validée.
+        $this->assertEquals(0.0, (float) $partNonValidee->fresh()->montant_verse);
     }
 
     // ── partsDisponibles ──────────────────────────────────────────────────────
@@ -201,7 +308,7 @@ class CommissionPaymentServiceTest extends TestCase
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private function makeScenario(float $montantNet = 3000): array
+    private function makeScenario(float $montantNet = 3000, StatutPeriodePaiement $statutPeriode = StatutPeriodePaiement::VALIDEE): array
     {
         $org = Organization::factory()->create();
         $vehicule = Vehicule::factory()->create(['organization_id' => $org->id]);
@@ -209,8 +316,22 @@ class CommissionPaymentServiceTest extends TestCase
         $commission = $this->makeCommission($org, $vehicule);
 
         $part = $this->makePart($commission, $livreur, ['montant_net' => $montantNet]);
+        $this->makePeriode($org, $part->earned_at, $statutPeriode);
 
         return compact('org', 'vehicule', 'livreur', 'commission', 'part');
+    }
+
+    /** Crée (ou récupère) la PaiementPeriode livreur couvrant $earnedAt, avec le statut voulu. */
+    private function makePeriode(Organization $org, $earnedAt, StatutPeriodePaiement $statut = StatutPeriodePaiement::VALIDEE): PaiementPeriode
+    {
+        $periode = app(PeriodePaiementService::class)->getOrCreatePeriod(
+            $org->id,
+            TypePeriodePaiement::LIVREUR,
+            Carbon::parse($earnedAt),
+        );
+        $periode->update(['statut' => $statut]);
+
+        return $periode->fresh();
     }
 
     private function makeCommission(Organization $org, Vehicule $vehicule): CommissionLogistique

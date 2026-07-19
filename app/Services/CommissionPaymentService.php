@@ -50,6 +50,9 @@ class CommissionPaymentService
             );
         }
 
+        $touched = PeriodePayabilityChecker::touchedUntilAmount($parts, $montant, fn ($p) => (float) $p->montant_restant);
+        PeriodePayabilityChecker::assertPartsPayable($touched);
+
         $beneficiaryNom = $parts->first()?->beneficiaire_nom ?? 'Inconnu';
 
         return DB::transaction(function () use (
@@ -197,6 +200,9 @@ class CommissionPaymentService
                 )
             );
         }
+
+        $touched = PeriodePayabilityChecker::touchedUntilAmount($parts, $montant, fn ($p) => (float) $p->montant_restant);
+        PeriodePayabilityChecker::assertPartsPayable($touched);
 
         $beneficiaryNom = $parts->first()?->beneficiaire_nom ?? 'Inconnu';
 
