@@ -42,6 +42,7 @@ const props = defineProps<{
     agences_disponibles: AgenceOption[];
     filters: CommissionGlobalFiltersValue;
     can_payer: boolean;
+    payable: boolean;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -90,7 +91,7 @@ const showPaiementDialog = ref(false);
                 :title="livreur.nom"
                 :telephone="livreur.telephone"
                 :active-filters-label="activeFiltersLabel"
-                :can-pay="can_payer && commission_summary.reste_a_payer > 0"
+                :can-pay="can_payer && payable"
                 :pay-label="`Payer ${formatGNF(commission_summary.reste_a_payer)}`"
                 @pay="showPaiementDialog = true"
             />

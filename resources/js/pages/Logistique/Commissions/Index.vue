@@ -27,6 +27,9 @@ interface LivreurRow {
     vehicules: string | null;
     impaye: number;
     paye: number;
+    statut_effectif: string | null;
+    statut_effectif_label: string | null;
+    payable: boolean;
 }
 
 interface Kpis {
@@ -155,20 +158,6 @@ function handlePaiementSubmit(payload: {
             },
         },
     );
-}
-
-// ── Statuts ────────────────────────────────────────────────────────────────────
-
-interface StatutBadge {
-    label: string;
-    dotClass: string;
-}
-
-function livreurStatuts(l: LivreurRow): StatutBadge[] {
-    const badges: StatutBadge[] = [];
-    if (l.impaye > 0) badges.push({ label: 'Impayé', dotClass: 'bg-red-500' });
-    if (l.paye > 0) badges.push({ label: 'Payé', dotClass: 'bg-emerald-500' });
-    return badges;
 }
 
 // ── Formatage ─────────────────────────────────────────────────────────────────
@@ -348,15 +337,12 @@ function formatPhone(tel: string | null): string {
                                 >
                             </td>
                             <td class="px-4 py-3">
-                                <div class="flex flex-col gap-1">
-                                    <StatusDot
-                                        v-for="s in livreurStatuts(l)"
-                                        :key="s.label"
-                                        :label="s.label"
-                                        :dot-class="s.dotClass"
-                                        class="text-xs text-muted-foreground"
-                                    />
-                                </div>
+                                <StatusDot
+                                    v-if="l.statut_effectif"
+                                    :status="l.statut_effectif"
+                                    :label="l.statut_effectif_label ?? ''"
+                                    class="text-xs text-muted-foreground"
+                                />
                             </td>
                             <td class="px-4 py-3 text-right tabular-nums">
                                 {{ formatGNF(l.impaye + l.paye) }}
@@ -395,7 +381,7 @@ function formatPhone(tel: string | null): string {
                                             </Link>
                                         </DropdownMenuItem>
                                         <template
-                                            v-if="can_payer && l.impaye > 0"
+                                            v-if="can_payer && l.payable"
                                         >
                                             <DropdownMenuSeparator />
                                             <DropdownMenuItem

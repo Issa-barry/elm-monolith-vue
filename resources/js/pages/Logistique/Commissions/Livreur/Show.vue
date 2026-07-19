@@ -70,6 +70,7 @@ const props = defineProps<{
     payments: PaymentRow[];
     modes_paiement: ModePaiement[];
     can_payer: boolean;
+    payable: boolean;
     periode_courante: string;
     periode_courante_label: string;
     selected_periode: string;
@@ -279,7 +280,7 @@ function formatMode(mode: string): string {
                         >
                     </Button>
                     <Button
-                        v-if="can_payer && kpis.impaye > 0"
+                        v-if="can_payer && payable"
                         size="sm"
                         class="h-8 px-3 text-xs"
                         @click="openPaiement"
@@ -337,7 +338,7 @@ function formatMode(mode: string): string {
                         >
                     </Button>
                     <Button
-                        v-if="can_payer && kpis.impaye > 0"
+                        v-if="can_payer && payable"
                         size="sm"
                         @click="openPaiement"
                     >

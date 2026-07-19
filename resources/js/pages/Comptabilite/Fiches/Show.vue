@@ -46,6 +46,9 @@ interface Fiche {
     montant_restant: number;
     statut: string;
     statut_label: string;
+    statut_effectif: string;
+    statut_effectif_label: string;
+    payable: boolean;
     mode_paiement: string | null;
     date_paiement: string | null;
     commentaires: string | null;
@@ -171,8 +174,8 @@ function exportPdf() {
                             {{ fiche.reference }}
                         </h1>
                         <StatusDot
-                            :status="fiche.statut"
-                            :label="fiche.statut_label"
+                            :status="fiche.statut_effectif"
+                            :label="fiche.statut_effectif_label"
                         />
                     </div>
                     <p class="mt-1 text-sm font-medium">
@@ -335,7 +338,7 @@ function exportPdf() {
 
             <!-- Formulaire paiement -->
             <div
-                v-if="can_payer && fiche.statut !== 'paye'"
+                v-if="can_payer && fiche.payable"
                 class="rounded-xl border bg-card p-5"
             >
                 <h2 class="mb-4 text-sm font-semibold">

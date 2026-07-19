@@ -49,6 +49,9 @@ interface LivreurRow {
     frais_depenses: number;
     impaye: number;
     paye: number;
+    statut_effectif: string | null;
+    statut_effectif_label: string | null;
+    payable: boolean;
 }
 
 interface Kpis {
@@ -182,12 +185,6 @@ function handlePaiementSubmit(payload: {
             },
         },
     );
-}
-
-function livreurStatuts(l: LivreurRow) {
-    if (l.impaye > 0) return [{ label: 'Impayé', dotClass: 'bg-red-500' }];
-    if (l.paye > 0) return [{ label: 'Payé', dotClass: 'bg-emerald-500' }];
-    return [];
 }
 
 function buildParams(): URLSearchParams {
@@ -504,15 +501,12 @@ function fmtTel(tel: string | null | undefined): string {
                                     {{ fmt(l.impaye) }}
                                 </td>
                                 <td class="px-5 py-3">
-                                    <div class="flex flex-col gap-1">
-                                        <StatusDot
-                                            v-for="s in livreurStatuts(l)"
-                                            :key="s.label"
-                                            :label="s.label"
-                                            :dot-class="s.dotClass"
-                                            class="text-xs text-muted-foreground"
-                                        />
-                                    </div>
+                                    <StatusDot
+                                        v-if="l.statut_effectif"
+                                        :status="l.statut_effectif"
+                                        :label="l.statut_effectif_label ?? ''"
+                                        class="text-xs text-muted-foreground"
+                                    />
                                 </td>
                                 <td class="px-4 py-3 text-right" @click.stop>
                                     <DropdownMenu>
@@ -544,7 +538,7 @@ function fmtTel(tel: string | null | undefined): string {
                                                 Historique
                                             </DropdownMenuItem>
                                             <template
-                                                v-if="can_payer && l.impaye > 0"
+                                                v-if="can_payer && l.payable"
                                             >
                                                 <DropdownMenuSeparator />
                                                 <DropdownMenuItem

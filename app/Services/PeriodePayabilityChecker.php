@@ -116,6 +116,37 @@ class PeriodePayabilityChecker
         return $touched;
     }
 
+    // ── Affichage : statut effectif + payabilité pour un badge front ──────────────
+
+    /**
+     * Dérive le statut à afficher (clé compatible `StatusDot`) et la payabilité
+     * d'une ligne bénéficiaire, à partir de sa période (déjà résolue par l'appelant,
+     * batché via `PeriodePaiementService::getPeriodsForDates()`) et de son statut de
+     * paiement brut (ex: `impaye`/`partiel`/`paye` ou `a_payer`/`partiellement_paye`/`paye`).
+     *
+     * @return array{status: string, label: string, payable: bool}
+     */
+    public static function statutAffichage(?PaiementPeriode $periode, string $statutPaiementValue, string $statutPaiementLabel): array
+    {
+        if ($statutPaiementValue === 'paye') {
+            return ['status' => 'paye', 'label' => $statutPaiementLabel, 'payable' => false];
+        }
+
+        if ($periode === null || $periode->isBrouillon()) {
+            return ['status' => 'brouillon', 'label' => 'En attente', 'payable' => false];
+        }
+
+        if ($periode->isCalculee()) {
+            return ['status' => 'calculee', 'label' => 'En attente de validation', 'payable' => false];
+        }
+
+        if ($periode->isCloturee()) {
+            return ['status' => 'cloturee', 'label' => 'Clôturée', 'payable' => false];
+        }
+
+        return ['status' => $statutPaiementValue, 'label' => $statutPaiementLabel, 'payable' => true];
+    }
+
     private static function messagePeriodeNonPayable(PaiementPeriode|PaiePeriode $periode): string
     {
         $label = $periode instanceof PaiementPeriode

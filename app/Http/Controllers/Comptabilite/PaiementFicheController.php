@@ -9,6 +9,7 @@ use App\Models\Organization;
 use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
 use App\Models\Site;
+use App\Services\PeriodePayabilityChecker;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -229,6 +230,12 @@ class PaiementFicheController extends Controller
 
     private function transform(PaiementFiche $f): array
     {
+        $statutEffectif = PeriodePayabilityChecker::statutAffichage(
+            $f->periode,
+            $f->statut?->value ?? '',
+            $f->statut?->label() ?? '',
+        );
+
         return [
             'id' => $f->id,
             'reference' => $f->reference,
@@ -244,6 +251,9 @@ class PaiementFicheController extends Controller
             'montant_restant' => $f->montant_restant,
             'statut' => $f->statut?->value,
             'statut_label' => $f->statut?->label(),
+            'statut_effectif' => $statutEffectif['status'],
+            'statut_effectif_label' => $statutEffectif['label'],
+            'payable' => $statutEffectif['payable'],
             'mode_paiement' => $f->mode_paiement,
             'date_paiement' => $f->date_paiement?->toDateString(),
         ];

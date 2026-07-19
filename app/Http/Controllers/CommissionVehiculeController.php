@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\StatutCommission;
+use App\Enums\TypePeriodePaiement;
 use App\Models\CommissionLogistiquePart;
 use App\Models\CommissionPayment;
 use App\Models\Livreur;
@@ -12,6 +13,9 @@ use App\Models\Vehicule;
 use App\Services\CommissionPaymentService;
 use App\Services\CommissionSearchService;
 use App\Services\PeriodeComptableService;
+use App\Services\PeriodePaiementService;
+use App\Services\PeriodePayabilityChecker;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -78,15 +82,39 @@ class CommissionVehiculeController extends Controller
                 ->implode(' ')
             );
 
+        $periodesParDate = app(PeriodePaiementService::class)->getPeriodsForDates(
+            $orgId,
+            TypePeriodePaiement::LIVREUR,
+            $rows->pluck('premiere_echeance')
+        );
+
         // Build complete list with all searchable fields
-        $livreurs = $rows->map(fn ($row) => [
-            'livreur_id' => $row->livreur_id,
-            'nom' => $row->beneficiaire_nom,
-            'telephone' => $telephones[$row->livreur_id] ?? null,
-            'vehicules' => $vehiculesParLivreur[$row->livreur_id] ?? null,
-            'impaye' => (float) $row->impaye,
-            'paye' => (float) $row->paye,
-        ]);
+        $livreurs = $rows->map(function ($row) use ($telephones, $vehiculesParLivreur, $periodesParDate) {
+            $impaye = (float) $row->impaye;
+            $paye = (float) $row->paye;
+
+            $statutEffectif = null;
+            if ($impaye > 0.009) {
+                $periode = $row->premiere_echeance
+                    ? $periodesParDate->get(PeriodePaiementService::debutKeyForDate(Carbon::parse($row->premiere_echeance)))
+                    : null;
+                $statutEffectif = PeriodePayabilityChecker::statutAffichage($periode, StatutCommission::IMPAYE->value, 'Impayé');
+            } elseif ($paye > 0.009) {
+                $statutEffectif = PeriodePayabilityChecker::statutAffichage(null, StatutCommission::PAYE->value, 'Payé');
+            }
+
+            return [
+                'livreur_id' => $row->livreur_id,
+                'nom' => $row->beneficiaire_nom,
+                'telephone' => $telephones[$row->livreur_id] ?? null,
+                'vehicules' => $vehiculesParLivreur[$row->livreur_id] ?? null,
+                'impaye' => $impaye,
+                'paye' => $paye,
+                'statut_effectif' => $statutEffectif['status'] ?? null,
+                'statut_effectif_label' => $statutEffectif['label'] ?? null,
+                'payable' => $statutEffectif['payable'] ?? false,
+            ];
+        });
 
         if ($filtreStatut !== '') {
             $livreurs = match ($filtreStatut) {
@@ -140,9 +168,17 @@ class CommissionVehiculeController extends Controller
         $livreurTelephone = Livreur::find($livreurId)?->telephone;
 
         // ── KPIs globaux ──────────────────────────────────────────────────────
-        $totalImpaye = (float) $allParts
-            ->filter(fn ($p) => in_array($p->statut, [StatutCommission::IMPAYE, StatutCommission::PARTIEL], true))
-            ->sum('montant_restant');
+        $impayeParts = $allParts->filter(fn ($p) => in_array($p->statut, [StatutCommission::IMPAYE, StatutCommission::PARTIEL], true));
+        $totalImpaye = (float) $impayeParts->sum('montant_restant');
+
+        $payable = false;
+        if ($totalImpaye > 0.009) {
+            $earliestUnpaidDate = $impayeParts->min('earned_at');
+            $periode = $earliestUnpaidDate
+                ? app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::LIVREUR, Carbon::parse($earliestUnpaidDate))
+                : null;
+            $payable = PeriodePayabilityChecker::statutAffichage($periode, StatutCommission::IMPAYE->value, 'Impayé')['payable'];
+        }
 
         $totalPaye = (float) $allParts
             ->filter(fn ($p) => $p->statut === StatutCommission::PAYE)
@@ -225,6 +261,7 @@ class CommissionVehiculeController extends Controller
                 'impaye' => $totalImpaye,
                 'paye' => $totalPaye,
             ],
+            'payable' => $payable,
             'parts' => $filteredParts->map(fn ($p) => [
                 'id' => $p->id,
                 'transfert_reference' => $p->commission?->transfert?->reference,

@@ -27,6 +27,9 @@ interface Fiche {
     montant_restant: number;
     statut: string;
     statut_label: string;
+    statut_effectif: string;
+    statut_effectif_label: string;
+    payable: boolean;
     mode_paiement: string | null;
     date_paiement: string | null;
 }
@@ -300,8 +303,8 @@ function exportExcel() {
                     <Column header="Statut" style="width: 140px">
                         <template #body="{ data }">
                             <StatusDot
-                                :status="data.statut"
-                                :label="data.statut_label"
+                                :status="data.statut_effectif"
+                                :label="data.statut_effectif_label"
                             />
                         </template>
                     </Column>

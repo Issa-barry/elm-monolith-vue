@@ -6,6 +6,7 @@ use App\Enums\AuditEvent;
 use App\Enums\ModePaiement;
 use App\Enums\StatutCommission;
 use App\Enums\StatutDepense;
+use App\Enums\TypePeriodePaiement;
 use App\Http\Controllers\Controller;
 use App\Models\CommissionPart;
 use App\Models\Depense;
@@ -17,6 +18,8 @@ use App\Models\Vehicule;
 use App\Services\AuditLogService;
 use App\Services\CommissionVentePaiementService;
 use App\Services\PeriodeComptableService;
+use App\Services\PeriodePaiementService;
+use App\Services\PeriodePayabilityChecker;
 use App\Services\SiteScopeService;
 use App\Support\Commission\CommissionDetailFilters;
 use App\Support\Commission\CommissionSummaryFormatter;
@@ -71,7 +74,9 @@ class CommissionProprietaireController extends Controller
                  MAX(proprietaires.telephone)     AS telephone,
                  SUM(cp.montant_brut)             AS total_brut_cumule,
                  SUM(cp.montant_verse)            AS total_verse,
-                 COUNT(DISTINCT cp.commission_vente_id) AS nb_commandes'
+                 COUNT(DISTINCT cp.commission_vente_id) AS nb_commandes,
+                 MIN(CASE WHEN cp.statut IN (?,?) THEN cv.created_at END) AS premiere_echeance',
+                [StatutCommission::IMPAYE->value, StatutCommission::PARTIEL->value]
             )
             ->groupBy('cp.proprietaire_id');
 
@@ -133,7 +138,14 @@ class CommissionProprietaireController extends Controller
             }
         }
 
-        $beneficiaires = $rows->map(function ($row) use ($fraisParProprio) {
+        $periodesParDate = app(PeriodePaiementService::class)->getPeriodsForDates(
+            $orgId,
+            TypePeriodePaiement::PROPRIETAIRE,
+            $rows->pluck('premiere_echeance')
+        );
+        $labelsParStatut = ['impaye' => 'Impayé', 'partiel' => 'Partiel', 'paye' => 'Payé'];
+
+        $beneficiaires = $rows->map(function ($row) use ($fraisParProprio, $periodesParDate, $labelsParStatut) {
             $totalBrut = (float) $row->total_brut_cumule;
             $totalFrais = $fraisParProprio[(string) $row->beneficiaire_id] ?? 0.0;
             $totalNet = max(0.0, $totalBrut - $totalFrais);
@@ -146,6 +158,16 @@ class CommissionProprietaireController extends Controller
                 default => StatutCommission::IMPAYE->value,
             };
 
+            $periode = null;
+            if ($statutGlobal !== StatutCommission::PAYE->value && $row->premiere_echeance) {
+                $periode = $periodesParDate->get(PeriodePaiementService::debutKeyForDate(Carbon::parse($row->premiere_echeance)));
+            }
+            $statutEffectif = PeriodePayabilityChecker::statutAffichage(
+                $periode,
+                $statutGlobal,
+                $labelsParStatut[$statutGlobal] ?? $statutGlobal,
+            );
+
             return [
                 'beneficiaire_id' => (string) $row->beneficiaire_id,
                 'beneficiaire_nom' => $row->beneficiaire_nom ?? '—',
@@ -157,6 +179,9 @@ class CommissionProprietaireController extends Controller
                 'solde_restant' => $solde,
                 'nb_commandes' => (int) $row->nb_commandes,
                 'statut_global' => $statutGlobal,
+                'statut_effectif' => $statutEffectif['status'],
+                'statut_effectif_label' => $statutEffectif['label'],
+                'payable' => $statutEffectif['payable'],
             ];
         });
 
@@ -384,6 +409,20 @@ class CommissionProprietaireController extends Controller
         $activeParts = $filteredParts->filter(fn ($p) => $p->statut !== StatutCommission::CREEE);
         $solde = max(0.0, (float) $activeParts->sum('montant_brut') - $totalFraisDepenses - (float) $activeParts->sum('montant_verse'));
 
+        $payable = false;
+        if ($solde > 0.009) {
+            $earliestUnpaidDate = $activeParts
+                ->filter(fn ($p) => in_array($p->statut, [StatutCommission::IMPAYE, StatutCommission::PARTIEL], true))
+                ->map(fn ($p) => $p->commission?->created_at)
+                ->filter()
+                ->sort()
+                ->first();
+            $periode = $earliestUnpaidDate
+                ? app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::PROPRIETAIRE, Carbon::instance($earliestUnpaidDate))
+                : null;
+            $payable = PeriodePayabilityChecker::statutAffichage($periode, StatutCommission::IMPAYE->value, 'Impayé')['payable'];
+        }
+
         $historiqueCommandes = $filteredParts
             ->groupBy('commission_vente_id')
             ->map(function ($partsGroup) {
@@ -487,6 +526,7 @@ class CommissionProprietaireController extends Controller
             'periode_courante' => $periodeCourante,
             'selected_periode' => $periodeFilter,
             'periodes_disponibles' => $periodesDisponibles,
+            'payable' => $payable,
             'filters' => [
                 'periode' => $periodeFilter,
                 'vehicule_ids' => $vehiculeIds,

@@ -109,8 +109,11 @@ class CommissionPaymentService
                 'livreur_id,
                  MAX(beneficiaire_nom) AS beneficiaire_nom,
                  SUM(CASE WHEN statut IN (?,?) THEN CASE WHEN montant_net - montant_verse > 0 THEN montant_net - montant_verse ELSE 0 END ELSE 0 END) AS impaye,
-                 SUM(montant_verse) AS paye',
+                 SUM(montant_verse) AS paye,
+                 MIN(CASE WHEN statut IN (?,?) THEN earned_at END) AS premiere_echeance',
                 [
+                    StatutCommission::IMPAYE->value,
+                    StatutCommission::PARTIEL->value,
                     StatutCommission::IMPAYE->value,
                     StatutCommission::PARTIEL->value,
                 ]
@@ -288,8 +291,11 @@ class CommissionPaymentService
                  COALESCE(livreur_id, proprietaire_id) AS beneficiary_id,
                  beneficiaire_nom,
                  SUM(CASE WHEN statut IN (?,?) THEN CASE WHEN montant_net - montant_verse > 0 THEN montant_net - montant_verse ELSE 0 END ELSE 0 END) AS impaye,
-                 SUM(montant_verse) AS paye',
+                 SUM(montant_verse) AS paye,
+                 MIN(CASE WHEN statut IN (?,?) THEN earned_at END) AS premiere_echeance',
                 [
+                    StatutCommission::IMPAYE->value,
+                    StatutCommission::PARTIEL->value,
                     StatutCommission::IMPAYE->value,
                     StatutCommission::PARTIEL->value,
                 ]
@@ -311,6 +317,7 @@ class CommissionPaymentService
                 'nom' => $row->beneficiaire_nom,
                 'impaye' => (float) $row->impaye,
                 'paye' => (float) $row->paye,
+                'premiere_echeance' => $row->premiere_echeance,
             ];
         }
 

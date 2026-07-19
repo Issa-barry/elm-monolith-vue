@@ -46,6 +46,9 @@ interface BeneficiaireRow {
     solde_restant: number;
     nb_commandes: number;
     statut_global: string;
+    statut_effectif: string;
+    statut_effectif_label: string;
+    payable: boolean;
 }
 
 interface PeriodeOption {
@@ -126,20 +129,6 @@ const currentFilters = computed(() => ({
     statut: props.filtre_statut ?? '',
     periode: props.selected_periode ?? '',
 }));
-
-function statutDotClass(s: string) {
-    return (
-        {
-            impaye: 'bg-red-500',
-            partiel: 'bg-amber-500',
-            paye: 'bg-emerald-500',
-        }[s] ?? 'bg-zinc-400 dark:bg-zinc-500'
-    );
-}
-
-function statutLabel(s: string) {
-    return { impaye: 'Impayé', partiel: 'Partiel', paye: 'Payé' }[s] ?? s;
-}
 
 // Dialog paiement
 const showPaiementDialog = ref(false);
@@ -466,10 +455,8 @@ function fmtTel(tel: string | null | undefined): string {
                                 </td>
                                 <td class="px-5 py-3">
                                     <StatusDot
-                                        :label="statutLabel(b.statut_global)"
-                                        :dot-class="
-                                            statutDotClass(b.statut_global)
-                                        "
+                                        :status="b.statut_effectif"
+                                        :label="b.statut_effectif_label"
                                     />
                                 </td>
                                 <td class="px-4 py-3 text-right" @click.stop>
@@ -502,10 +489,7 @@ function fmtTel(tel: string | null | undefined): string {
                                                 Historique
                                             </DropdownMenuItem>
                                             <template
-                                                v-if="
-                                                    can_payer &&
-                                                    b.solde_restant > 0
-                                                "
+                                                v-if="can_payer && b.payable"
                                             >
                                                 <DropdownMenuSeparator />
                                                 <DropdownMenuItem

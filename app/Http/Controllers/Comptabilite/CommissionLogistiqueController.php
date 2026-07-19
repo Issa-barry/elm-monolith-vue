@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Comptabilite;
 use App\Enums\AuditEvent;
 use App\Enums\StatutCommission;
 use App\Enums\StatutDepense;
+use App\Enums\TypePeriodePaiement;
 use App\Http\Controllers\Controller;
 use App\Models\CommissionLogistiquePart;
 use App\Models\CommissionPayment;
@@ -16,10 +17,13 @@ use App\Services\AuditLogService;
 use App\Services\CommissionPaymentService;
 use App\Services\CommissionSearchService;
 use App\Services\PeriodeComptableService;
+use App\Services\PeriodePaiementService;
+use App\Services\PeriodePayabilityChecker;
 use App\Services\SiteScopeService;
 use App\Support\Commission\CommissionDetailFilters;
 use App\Support\Commission\CommissionSummaryFormatter;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
@@ -150,9 +154,26 @@ class CommissionLogistiqueController extends Controller
             ->filter()->unique()->sort()->implode(', ')
         );
 
-        $livreurs = $rows->map(function ($row) use ($telephones, $vehiculesParLivreur, $agencesParLivreur, $fraisDepensesParLivreur) {
+        $periodesParDate = app(PeriodePaiementService::class)->getPeriodsForDates(
+            $orgId,
+            TypePeriodePaiement::LIVREUR,
+            $rows->pluck('premiere_echeance')
+        );
+
+        $livreurs = $rows->map(function ($row) use ($telephones, $vehiculesParLivreur, $agencesParLivreur, $fraisDepensesParLivreur, $periodesParDate) {
             $frais = $fraisDepensesParLivreur[(string) $row->livreur_id] ?? 0.0;
             $impaye = max(0.0, (float) $row->impaye - $frais);
+            $paye = (float) $row->paye;
+
+            $statutEffectif = null;
+            if ($impaye > 0.009) {
+                $periode = $row->premiere_echeance
+                    ? $periodesParDate->get(PeriodePaiementService::debutKeyForDate(Carbon::parse($row->premiere_echeance)))
+                    : null;
+                $statutEffectif = PeriodePayabilityChecker::statutAffichage($periode, StatutCommission::IMPAYE->value, 'Impayé');
+            } elseif ($paye > 0.009) {
+                $statutEffectif = PeriodePayabilityChecker::statutAffichage(null, StatutCommission::PAYE->value, 'Payé');
+            }
 
             return [
                 'livreur_id' => $row->livreur_id,
@@ -162,7 +183,10 @@ class CommissionLogistiqueController extends Controller
                 'agence' => $agencesParLivreur[$row->livreur_id] ?? null,
                 'frais_depenses' => $frais,
                 'impaye' => $impaye,
-                'paye' => (float) $row->paye,
+                'paye' => $paye,
+                'statut_effectif' => $statutEffectif['status'] ?? null,
+                'statut_effectif_label' => $statutEffectif['label'] ?? null,
+                'payable' => $statutEffectif['payable'] ?? false,
             ];
         });
 
@@ -257,9 +281,17 @@ class CommissionLogistiqueController extends Controller
         $totalNet = (float) $filteredParts->sum('montant_net');
         $totalVerse = (float) $filteredParts->sum('montant_verse');
 
-        $totalImpaye = (float) $filteredParts
-            ->filter(fn ($p) => in_array($p->statut, [StatutCommission::IMPAYE, StatutCommission::PARTIEL], true))
-            ->sum('montant_restant');
+        $impayeParts = $filteredParts->filter(fn ($p) => in_array($p->statut, [StatutCommission::IMPAYE, StatutCommission::PARTIEL], true));
+        $totalImpaye = (float) $impayeParts->sum('montant_restant');
+
+        $payable = false;
+        if ($totalImpaye > 0.009) {
+            $earliestUnpaidDate = $impayeParts->min('earned_at');
+            $periode = $earliestUnpaidDate
+                ? app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::LIVREUR, Carbon::parse($earliestUnpaidDate))
+                : null;
+            $payable = PeriodePayabilityChecker::statutAffichage($periode, StatutCommission::IMPAYE->value, 'Impayé')['payable'];
+        }
 
         $periodeStats = null;
 
@@ -360,6 +392,7 @@ class CommissionLogistiqueController extends Controller
                 $totalVerse,
                 $totalImpaye,
             ),
+            'payable' => $payable,
             'commission_details' => $filteredParts->map(function ($p) {
                 $transfert = $p->commission?->transfert;
                 $vehicule = $transfert?->vehicule;
