@@ -1,4 +1,5 @@
 ﻿<script setup lang="ts">
+import PeriodeStatusBanner from '@/components/commission/PeriodeStatusBanner.vue';
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -14,22 +15,24 @@ import {
 } from '@/components/ui/dropdown-menu';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
+import type {
+    PeriodeAffichee,
+    StatutCommissionResolu,
+} from '@/types/commission-status';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { HandCoins, MoreHorizontal, Truck, User } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface LivreurRow {
+interface LivreurRow extends StatutCommissionResolu {
     livreur_id: number;
     nom: string;
     telephone: string | null;
     vehicules: string | null;
     impaye: number;
     paye: number;
-    statut_effectif: string | null;
-    statut_effectif_label: string | null;
-    payable: boolean;
+    remaining_amount: number;
 }
 
 interface Kpis {
@@ -58,6 +61,7 @@ const props = defineProps<{
     filtre_site: string;
     selected_periode: string;
     periodes_disponibles: PeriodeOption[];
+    periode_affichee: PeriodeAffichee | null;
     sites: SiteOption[];
     can_payer: boolean;
 }>();
@@ -197,6 +201,8 @@ function formatPhone(tel: string | null): string {
                     </p>
                 </div>
             </div>
+
+            <PeriodeStatusBanner :periode="periode_affichee" />
 
             <!-- ── KPIs ──────────────────────────────────────────────────────── -->
             <div class="grid grid-cols-3 gap-3">
@@ -338,9 +344,8 @@ function formatPhone(tel: string | null): string {
                             </td>
                             <td class="px-4 py-3">
                                 <StatusDot
-                                    v-if="l.statut_effectif"
-                                    :status="l.statut_effectif"
-                                    :label="l.statut_effectif_label ?? ''"
+                                    :status="l.display_status"
+                                    :label="l.display_label"
                                     class="text-xs text-muted-foreground"
                                 />
                             </td>
@@ -380,9 +385,7 @@ function formatPhone(tel: string | null): string {
                                                 Détail
                                             </Link>
                                         </DropdownMenuItem>
-                                        <template
-                                            v-if="can_payer && l.payable"
-                                        >
+                                        <template v-if="can_payer && l.can_pay">
                                             <DropdownMenuSeparator />
                                             <DropdownMenuItem
                                                 class="cursor-pointer"

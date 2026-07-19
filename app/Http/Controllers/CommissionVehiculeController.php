@@ -10,11 +10,12 @@ use App\Models\Livreur;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
 use App\Models\Vehicule;
+use App\Services\CommissionAdjustmentService;
 use App\Services\CommissionPaymentService;
 use App\Services\CommissionSearchService;
+use App\Services\CommissionStatusResolver;
 use App\Services\PeriodeComptableService;
 use App\Services\PeriodePaiementService;
-use App\Services\PeriodePayabilityChecker;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -88,20 +89,23 @@ class CommissionVehiculeController extends Controller
             $rows->pluck('premiere_echeance')
         );
 
+        $teamStatusParPeriode = $periodesParDate->mapWithKeys(
+            fn ($periode) => [$periode->id => CommissionAdjustmentService::statutValidationParBeneficiaire($periode)]
+        );
+
         // Build complete list with all searchable fields
-        $livreurs = $rows->map(function ($row) use ($telephones, $vehiculesParLivreur, $periodesParDate) {
+        $livreurs = $rows->map(function ($row) use ($telephones, $vehiculesParLivreur, $periodesParDate, $teamStatusParPeriode) {
             $impaye = (float) $row->impaye;
             $paye = (float) $row->paye;
 
-            $statutEffectif = null;
-            if ($impaye > 0.009) {
-                $periode = $row->premiere_echeance
-                    ? $periodesParDate->get(PeriodePaiementService::debutKeyForDate(Carbon::parse($row->premiere_echeance)))
-                    : null;
-                $statutEffectif = PeriodePayabilityChecker::statutAffichage($periode, StatutCommission::IMPAYE->value, 'Impayé');
-            } elseif ($paye > 0.009) {
-                $statutEffectif = PeriodePayabilityChecker::statutAffichage(null, StatutCommission::PAYE->value, 'Payé');
-            }
+            $periode = $row->premiere_echeance
+                ? $periodesParDate->get(PeriodePaiementService::debutKeyForDate(Carbon::parse($row->premiere_echeance)))
+                : null;
+            $teamStatus = $periode ? ($teamStatusParPeriode[$periode->id]["livreur:{$row->livreur_id}"] ?? null) : null;
+
+            $paymentValue = $paye > 0.009 && $impaye <= 0.009 ? StatutCommission::PAYE->value : StatutCommission::IMPAYE->value;
+            $paymentLabel = $paymentValue === StatutCommission::PAYE->value ? 'Payé' : 'Impayé';
+            $resolved = CommissionStatusResolver::resolve($periode, $teamStatus, $paymentValue, $paymentLabel);
 
             return [
                 'livreur_id' => $row->livreur_id,
@@ -110,9 +114,8 @@ class CommissionVehiculeController extends Controller
                 'vehicules' => $vehiculesParLivreur[$row->livreur_id] ?? null,
                 'impaye' => $impaye,
                 'paye' => $paye,
-                'statut_effectif' => $statutEffectif['status'] ?? null,
-                'statut_effectif_label' => $statutEffectif['label'] ?? null,
-                'payable' => $statutEffectif['payable'] ?? false,
+                'remaining_amount' => $impaye,
+                ...$resolved,
             ];
         });
 
@@ -138,6 +141,11 @@ class CommissionVehiculeController extends Controller
             ->orderBy('nom')
             ->get(['id', 'nom']);
 
+        $dateAffichee = $filtrePeriode !== ''
+            ? PeriodeComptableService::dateRangeForCode($filtrePeriode)[0]
+            : now();
+        $periodeAffichee = app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::LIVREUR, $dateAffichee);
+
         return Inertia::render('Logistique/Commissions/Index', [
             'livreurs' => $list,
             'kpis' => $kpis,
@@ -146,6 +154,12 @@ class CommissionVehiculeController extends Controller
             'filtre_site' => $filtreSite,
             'selected_periode' => $filtrePeriode,
             'periodes_disponibles' => $periodesDisponibles,
+            'periode_affichee' => $periodeAffichee ? [
+                'id' => $periodeAffichee->id,
+                'reference' => $periodeAffichee->reference,
+                'statut' => $periodeAffichee->statut->value,
+                'statut_label' => $periodeAffichee->statut_label,
+            ] : null,
             'sites' => $sites->map(fn ($s) => ['value' => $s->id, 'label' => $s->nom])->values(),
             'statuts' => StatutCommission::options(),
             'can_payer' => auth()->user()->can('logistique.commission.verser'),
@@ -171,14 +185,23 @@ class CommissionVehiculeController extends Controller
         $impayeParts = $allParts->filter(fn ($p) => in_array($p->statut, [StatutCommission::IMPAYE, StatutCommission::PARTIEL], true));
         $totalImpaye = (float) $impayeParts->sum('montant_restant');
 
-        $payable = false;
         if ($totalImpaye > 0.009) {
             $earliestUnpaidDate = $impayeParts->min('earned_at');
-            $periode = $earliestUnpaidDate
+            $periodeResolue = $earliestUnpaidDate
                 ? app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::LIVREUR, Carbon::parse($earliestUnpaidDate))
                 : null;
-            $payable = PeriodePayabilityChecker::statutAffichage($periode, StatutCommission::IMPAYE->value, 'Impayé')['payable'];
+        } else {
+            $periodeResolue = app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::LIVREUR, now());
         }
+
+        $teamStatus = $periodeResolue
+            ? (CommissionAdjustmentService::statutValidationParBeneficiaire($periodeResolue)["livreur:{$livreurId}"] ?? null)
+            : null;
+
+        $paymentValue = $totalImpaye > 0.009 ? StatutCommission::IMPAYE->value : StatutCommission::PAYE->value;
+        $paymentLabel = $totalImpaye > 0.009 ? 'Impayé' : 'Payé';
+        $statutCommission = CommissionStatusResolver::resolve($periodeResolue, $teamStatus, $paymentValue, $paymentLabel);
+        $payable = $statutCommission['can_pay'];
 
         $totalPaye = (float) $allParts
             ->filter(fn ($p) => $p->statut === StatutCommission::PAYE)
@@ -262,6 +285,13 @@ class CommissionVehiculeController extends Controller
                 'paye' => $totalPaye,
             ],
             'payable' => $payable,
+            'statut_commission' => $statutCommission,
+            'periode_affichee' => $periodeResolue ? [
+                'id' => $periodeResolue->id,
+                'reference' => $periodeResolue->reference,
+                'statut' => $periodeResolue->statut->value,
+                'statut_label' => $periodeResolue->statut_label,
+            ] : null,
             'parts' => $filteredParts->map(fn ($p) => [
                 'id' => $p->id,
                 'transfert_reference' => $p->commission?->transfert?->reference,

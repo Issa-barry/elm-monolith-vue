@@ -17,6 +17,8 @@ use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
 use App\Models\Vehicule;
+use App\Services\CommissionAdjustmentService;
+use App\Services\PeriodeCalculatorService;
 use App\Services\PeriodePaiementService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -25,9 +27,10 @@ use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 /**
- * Vérifie que le badge de statut ("Impayé"/"En attente"/"En attente de validation")
- * et la payabilité exposés aux 4 catégories reflètent le statut de la PaiementPeriode
- * associée, et pas seulement le montant restant dû (voir PeriodePayabilityChecker).
+ * Vérifie que le badge de statut (`display_status`/`display_label`) et la payabilité
+ * (`can_pay`) exposés aux 4 catégories reflètent à la fois le statut de la
+ * `PaiementPeriode` et celui de la validation d'équipe — jamais seulement le montant
+ * restant dû (voir `CommissionStatusResolver`).
  */
 class CommissionStatutEffectifTest extends TestCase
 {
@@ -102,9 +105,10 @@ class CommissionStatutEffectifTest extends TestCase
         $this->actingAs($this->user)
             ->get('/backoffice/comptabilite/commissions/logistique')
             ->assertInertia(fn ($page) => $page
-                ->where('livreurs.0.statut_effectif', 'calculee')
-                ->where('livreurs.0.statut_effectif_label', 'En attente de validation')
-                ->where('livreurs.0.payable', false)
+                ->where('livreurs.0.commission_status', 'en_attente_validation')
+                ->where('livreurs.0.display_status', 'en_attente')
+                ->where('livreurs.0.display_label', 'En attente de validation')
+                ->where('livreurs.0.can_pay', false)
             );
     }
 
@@ -116,8 +120,27 @@ class CommissionStatutEffectifTest extends TestCase
         $this->actingAs($this->user)
             ->get('/backoffice/comptabilite/commissions/logistique')
             ->assertInertia(fn ($page) => $page
-                ->where('livreurs.0.statut_effectif', 'impaye')
-                ->where('livreurs.0.payable', true)
+                ->where('livreurs.0.commission_status', 'validee')
+                ->where('livreurs.0.display_status', 'impaye')
+                ->where('livreurs.0.can_pay', true)
+            );
+    }
+
+    public function test_logistique_index_montre_repartition_validee_si_equipe_prete_mais_periode_pas_encore(): void
+    {
+        $part = $this->makeLogistiquePart(now()->subDays(5)->toDateString());
+        $periode = $this->validerPeriode(TypePeriodePaiement::LIVREUR, $part->earned_at, StatutPeriodePaiement::BROUILLON);
+
+        app(PeriodeCalculatorService::class)->calculer($periode);
+        CommissionAdjustmentService::validerPart($part->fresh(), $this->user);
+
+        $this->actingAs($this->user)
+            ->get('/backoffice/comptabilite/commissions/logistique')
+            ->assertInertia(fn ($page) => $page
+                ->where('livreurs.0.commission_status', 'en_attente_validation')
+                ->where('livreurs.0.team_validation_status', 'validee')
+                ->where('livreurs.0.display_status', 'repartition_validee')
+                ->where('livreurs.0.can_pay', false)
             );
     }
 
@@ -158,8 +181,8 @@ class CommissionStatutEffectifTest extends TestCase
         $this->actingAs($this->user)
             ->get('/backoffice/comptabilite/commissions/vente')
             ->assertInertia(fn ($page) => $page
-                ->where('beneficiaires.0.statut_effectif', 'calculee')
-                ->where('beneficiaires.0.payable', false)
+                ->where('beneficiaires.0.display_status', 'en_attente')
+                ->where('beneficiaires.0.can_pay', false)
             );
     }
 
@@ -171,8 +194,8 @@ class CommissionStatutEffectifTest extends TestCase
         $this->actingAs($this->user)
             ->get('/backoffice/comptabilite/commissions/vente')
             ->assertInertia(fn ($page) => $page
-                ->where('beneficiaires.0.statut_effectif', 'impaye')
-                ->where('beneficiaires.0.payable', true)
+                ->where('beneficiaires.0.display_status', 'impaye')
+                ->where('beneficiaires.0.can_pay', true)
             );
     }
 
@@ -186,8 +209,8 @@ class CommissionStatutEffectifTest extends TestCase
         $this->actingAs($this->user)
             ->get('/backoffice/comptabilite/commissions/proprietaires')
             ->assertInertia(fn ($page) => $page
-                ->where('beneficiaires.0.statut_effectif', 'calculee')
-                ->where('beneficiaires.0.payable', false)
+                ->where('beneficiaires.0.display_status', 'en_attente')
+                ->where('beneficiaires.0.can_pay', false)
             );
     }
 
@@ -199,8 +222,8 @@ class CommissionStatutEffectifTest extends TestCase
         $this->actingAs($this->user)
             ->get('/backoffice/comptabilite/commissions/proprietaires')
             ->assertInertia(fn ($page) => $page
-                ->where('beneficiaires.0.statut_effectif', 'impaye')
-                ->where('beneficiaires.0.payable', true)
+                ->where('beneficiaires.0.display_status', 'impaye')
+                ->where('beneficiaires.0.can_pay', true)
             );
     }
 
@@ -252,9 +275,9 @@ class CommissionStatutEffectifTest extends TestCase
         $this->actingAs($this->user)
             ->get('/backoffice/comptabilite/fiches/livreurs')
             ->assertInertia(fn ($page) => $page
-                ->where('fiches.data.0.statut_effectif', 'calculee')
-                ->where('fiches.data.0.statut_effectif_label', 'En attente de validation')
-                ->where('fiches.data.0.payable', false)
+                ->where('fiches.data.0.display_status', 'en_attente')
+                ->where('fiches.data.0.display_label', 'En attente de validation')
+                ->where('fiches.data.0.can_pay', false)
             );
     }
 
@@ -265,8 +288,20 @@ class CommissionStatutEffectifTest extends TestCase
         $this->actingAs($this->user)
             ->get("/backoffice/comptabilite/fiches/{$fiche->id}")
             ->assertInertia(fn ($page) => $page
-                ->where('fiche.statut_effectif', 'a_payer')
-                ->where('fiche.payable', true)
+                ->where('fiche.display_status', 'a_payer')
+                ->where('fiche.can_pay', true)
+            );
+    }
+
+    public function test_fiches_show_refuse_paiement_si_periode_cloturee_avec_reste(): void
+    {
+        $fiche = $this->makeFiche(StatutPeriodePaiement::CLOTUREE);
+
+        $this->actingAs($this->user)
+            ->get("/backoffice/comptabilite/fiches/{$fiche->id}")
+            ->assertInertia(fn ($page) => $page
+                ->where('fiche.display_status', 'cloturee')
+                ->where('fiche.can_pay', false)
             );
     }
 }

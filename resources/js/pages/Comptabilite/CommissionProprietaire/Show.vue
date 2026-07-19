@@ -8,6 +8,7 @@ import CommissionHistoryTable from '@/components/commission/CommissionHistoryTab
 import CommissionPaymentDialog from '@/components/commission/CommissionPaymentDialog.vue';
 import CommissionPaymentsTable from '@/components/commission/CommissionPaymentsTable.vue';
 import CommissionSummaryCards from '@/components/commission/CommissionSummaryCards.vue';
+import PeriodeStatusBanner from '@/components/commission/PeriodeStatusBanner.vue';
 import { useCommissionActiveFiltersSummary } from '@/composables/useCommissionActiveFiltersSummary';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatGNF } from '@/lib/utils';
@@ -24,6 +25,7 @@ import type {
     ModePaiementOption,
     PeriodeOption,
 } from '@/types/commission';
+import type { PeriodeAffichee } from '@/types/commission-status';
 import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
 
@@ -37,6 +39,7 @@ const props = defineProps<{
     periode_courante: string;
     selected_periode: string;
     periodes_disponibles: PeriodeOption[];
+    periode_affichee: PeriodeAffichee | null;
     vehicules_disponibles: CommissionVehiculeInfo[];
     agences_disponibles: AgenceOption[];
     filters: CommissionGlobalFiltersValue;
@@ -94,6 +97,8 @@ const showPaiementDialog = ref(false);
                 :pay-label="`Payer ${formatGNF(commission_summary.reste_a_payer)}`"
                 @pay="showPaiementDialog = true"
             />
+
+            <PeriodeStatusBanner :periode="periode_affichee" />
 
             <CommissionSummaryCards
                 :summary="commission_summary"

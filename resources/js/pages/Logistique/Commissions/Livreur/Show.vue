@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import PeriodeStatusBanner from '@/components/commission/PeriodeStatusBanner.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
+import type { PeriodeAffichee } from '@/types/commission-status';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
@@ -71,6 +73,7 @@ const props = defineProps<{
     modes_paiement: ModePaiement[];
     can_payer: boolean;
     payable: boolean;
+    periode_affichee: PeriodeAffichee | null;
     periode_courante: string;
     periode_courante_label: string;
     selected_periode: string;
@@ -347,6 +350,8 @@ function formatMode(mode: string): string {
                     </Button>
                 </div>
             </div>
+
+            <PeriodeStatusBanner :periode="periode_affichee" />
 
             <!-- ── KPIs ───────────────────────────────────────────────────────── -->
             <div class="grid grid-cols-3 gap-3">

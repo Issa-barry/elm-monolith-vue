@@ -6,13 +6,14 @@ import StatusDot from '@/components/StatusDot.vue';
 import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
+import type { StatutCommissionResolu } from '@/types/commission-status';
 import { Head, Link } from '@inertiajs/vue3';
 import { Download, ReceiptText } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import { computed } from 'vue';
 
-interface Fiche {
+interface Fiche extends StatutCommissionResolu {
     id: string;
     reference: string;
     beneficiaire_nom: string;
@@ -25,11 +26,9 @@ interface Fiche {
     montant_net: number;
     montant_paye: number;
     montant_restant: number;
+    remaining_amount: number;
     statut: string;
     statut_label: string;
-    statut_effectif: string;
-    statut_effectif_label: string;
-    payable: boolean;
     mode_paiement: string | null;
     date_paiement: string | null;
 }
@@ -303,8 +302,8 @@ function exportExcel() {
                     <Column header="Statut" style="width: 140px">
                         <template #body="{ data }">
                             <StatusDot
-                                :status="data.statut_effectif"
-                                :label="data.statut_effectif_label"
+                                :status="data.display_status"
+                                :label="data.display_label"
                             />
                         </template>
                     </Column>
