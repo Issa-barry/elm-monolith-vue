@@ -59,6 +59,7 @@ class GainsController extends Controller
             ->selectRaw('
                 SUM(commission_parts.montant_brut)  AS total_brut,
                 SUM(commission_parts.montant_net)   AS total_net,
+                SUM(COALESCE(commission_parts.montant_actuel, commission_parts.montant_net)) AS total_a_payer,
                 SUM(commission_parts.montant_verse) AS total_verse,
                 COUNT(DISTINCT cv.id)               AS nb_commandes
             ')
@@ -71,8 +72,9 @@ class GainsController extends Controller
                 'immatriculation' => $row->immatriculation,
                 'total_brut' => (float) $row->total_brut,
                 'total_net' => (float) $row->total_net,
+                'total_a_payer' => (float) $row->total_a_payer,
                 'total_verse' => (float) $row->total_verse,
-                'total_restant' => max(0.0, (float) $row->total_net - (float) $row->total_verse),
+                'total_restant' => max(0.0, (float) $row->total_a_payer - (float) $row->total_verse),
                 'nb_commandes' => (int) $row->nb_commandes,
             ])
             ->values();
@@ -80,6 +82,7 @@ class GainsController extends Controller
         return response()->json([
             'total_brut' => (float) $parVehicule->sum('total_brut'),
             'total_net' => (float) $parVehicule->sum('total_net'),
+            'total_a_payer' => (float) $parVehicule->sum('total_a_payer'),
             'total_verse' => (float) $parVehicule->sum('total_verse'),
             'total_restant' => (float) $parVehicule->sum('total_restant'),
             'nb_commandes' => (int) $parVehicule->sum('nb_commandes'),
@@ -92,6 +95,7 @@ class GainsController extends Controller
         return [
             'total_brut' => 0.0,
             'total_net' => 0.0,
+            'total_a_payer' => 0.0,
             'total_verse' => 0.0,
             'total_restant' => 0.0,
             'nb_commandes' => 0,

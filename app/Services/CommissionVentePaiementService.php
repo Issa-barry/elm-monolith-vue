@@ -46,7 +46,7 @@ class CommissionVentePaiementService
         $touched = PeriodePayabilityChecker::touchedUntilAmount(
             $parts,
             $montant,
-            fn ($p) => max(0.0, (float) $p->montant_net - (float) $p->montant_verse)
+            fn ($p) => (float) $p->montant_restant
         );
         PeriodePayabilityChecker::assertPartsPayable($touched);
 
@@ -77,7 +77,7 @@ class CommissionVentePaiementService
                     break;
                 }
 
-                $partRestant = max(0.0, (float) $part->montant_net - (float) $part->montant_verse);
+                $partRestant = (float) $part->montant_restant;
                 if ($partRestant <= 0) {
                     continue;
                 }
@@ -116,7 +116,7 @@ class CommissionVentePaiementService
             ->whereHas('commission', fn ($q) => $q->where('organization_id', $organizationId))
             ->where('commission_parts.type_beneficiaire', $type)
             ->whereNotIn('commission_parts.statut', [StatutCommission::CREEE->value, StatutCommission::ANNULEE->value])
-            ->whereRaw('commission_parts.montant_verse < commission_parts.montant_net')
+            ->whereRaw('commission_parts.montant_verse < COALESCE(commission_parts.montant_actuel, commission_parts.montant_net)')
             ->orderBy('cv_fifo.created_at')
             ->orderBy('commission_parts.id')
             ->select('commission_parts.*');
@@ -148,7 +148,7 @@ class CommissionVentePaiementService
     ): float {
         $parts ??= self::partsDisponibles($organizationId, $type, $beneficiaireId);
 
-        $totalParts = (float) $parts->sum(fn ($p) => max(0.0, (float) $p->montant_net - (float) $p->montant_verse));
+        $totalParts = (float) $parts->sum(fn ($p) => (float) $p->montant_restant);
 
         $fraisDepenses = $type === 'livreur'
             ? CommissionVenteCalculatorService::fraisDepenseLivreur($organizationId, $beneficiaireId)

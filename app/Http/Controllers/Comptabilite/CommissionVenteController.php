@@ -87,7 +87,7 @@ class CommissionVenteController extends Controller
                  MAX(livreurs.telephone)          AS telephone,
                  SUM(cp.montant_brut)             AS total_brut_cumule,
                  SUM(cp.frais_supplementaires)    AS total_frais,
-                 SUM(cp.montant_net)              AS total_net_cumule,
+                 SUM(COALESCE(cp.montant_actuel, cp.montant_net)) AS total_a_payer_cumule,
                  SUM(cp.montant_verse)            AS total_verse,
                  COUNT(DISTINCT cp.commission_vente_id) AS nb_commandes,
                  MIN(CASE WHEN cp.statut IN (?,?) THEN cv.created_at END) AS premiere_echeance',
@@ -100,7 +100,7 @@ class CommissionVenteController extends Controller
             $query->whereBetween('cv.created_at', [$debut, $fin]);
         }
 
-        $rows = $query->orderByRaw('SUM(cp.montant_net) - SUM(cp.montant_verse) DESC')->get();
+        $rows = $query->orderByRaw('SUM(COALESCE(cp.montant_actuel, cp.montant_net)) - SUM(cp.montant_verse) DESC')->get();
 
         $allLivreurIds = $rows->pluck('beneficiaire_id')->filter()->unique()->values()->toArray();
 
@@ -165,6 +165,7 @@ class CommissionVenteController extends Controller
             $resume = CommissionVenteCalculatorService::calculerResume(
                 (float) $row->total_brut_cumule,
                 (float) $row->total_frais,
+                (float) $row->total_a_payer_cumule,
                 $fraisDepenses,
                 (float) $row->total_verse,
             );
@@ -339,6 +340,7 @@ class CommissionVenteController extends Controller
         $resume = CommissionVenteCalculatorService::calculerResume(
             (float) $filteredParts->sum('montant_brut'),
             (float) $filteredParts->sum('frais_supplementaires'),
+            (float) $filteredParts->sum('montant_a_payer'),
             $fraisDepenses,
             (float) $filteredParts->sum('montant_verse'),
         );
@@ -372,7 +374,7 @@ class CommissionVenteController extends Controller
 
         $periodeStats = null;
         if ($periodeFilter !== '' && $filteredParts->isNotEmpty()) {
-            $netPeriode = (float) $filteredParts->sum('montant_net');
+            $netPeriode = (float) $filteredParts->sum('montant_a_payer');
             $versePeriode = (float) $filteredParts->sum('montant_verse');
             $restePeriode = max(0.0, $netPeriode - $versePeriode);
             $periodeStats = [
@@ -393,7 +395,7 @@ class CommissionVenteController extends Controller
                     ? PeriodeComptableService::codeForLivreur(Carbon::instance($commission->created_at))
                     : null;
 
-                $montantNet = (float) $partsGroup->sum('montant_net');
+                $montantAPayer = (float) $partsGroup->sum('montant_a_payer');
                 $montantVerse = (float) $partsGroup->sum('montant_verse');
 
                 return [
@@ -408,9 +410,9 @@ class CommissionVenteController extends Controller
                     ] : null,
                     'montant_brut' => (float) $partsGroup->sum('montant_brut'),
                     'frais' => (float) $partsGroup->sum('frais_supplementaires'),
-                    'montant' => $montantNet,
+                    'montant' => $montantAPayer,
                     'paye' => $montantVerse,
-                    'reste' => max(0.0, $montantNet - $montantVerse),
+                    'reste' => max(0.0, $montantAPayer - $montantVerse),
                     'statut' => $first->statut_label,
                     'statut_dot_class' => $first->statut_dot_class,
                     'periode' => $periodeCode,
@@ -682,6 +684,7 @@ class CommissionVenteController extends Controller
             $resume = CommissionVenteCalculatorService::calculerResume(
                 (float) $livParts->sum('montant_brut'),
                 (float) $livParts->sum('frais_supplementaires'),
+                (float) $livParts->sum('montant_a_payer'),
                 $fraisDepenses,
                 (float) $livParts->sum('montant_verse'),
             );

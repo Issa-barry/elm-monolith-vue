@@ -293,7 +293,7 @@ class CommissionLogistiqueController extends Controller
 
         $totalBrut = (float) $filteredParts->sum('montant_brut');
         $totalFrais = (float) $filteredParts->sum('frais_supplementaires');
-        $totalNet = (float) $filteredParts->sum('montant_net');
+        $totalNet = (float) $filteredParts->sum('montant_a_payer');
         $totalVerse = (float) $filteredParts->sum('montant_verse');
 
         $impayeParts = $filteredParts->filter(fn ($p) => in_array($p->statut, [StatutCommission::IMPAYE, StatutCommission::PARTIEL], true));
@@ -321,7 +321,7 @@ class CommissionLogistiqueController extends Controller
         $periodeStats = null;
 
         if ($selectedPeriode !== '' && $filteredParts->isNotEmpty()) {
-            $totalCommissionPeriode = (float) $filteredParts->sum('montant_net');
+            $totalCommissionPeriode = (float) $filteredParts->sum('montant_a_payer');
             $totalVersePeriode = (float) $filteredParts
                 ->flatMap(fn ($p) => $p->paymentItems)
                 ->sum('amount_allocated');
@@ -438,7 +438,7 @@ class CommissionLogistiqueController extends Controller
                         'nom' => $vehicule->nom_vehicule,
                         'immatriculation' => $vehicule->immatriculation,
                     ] : null,
-                    'montant' => (float) $p->montant_net,
+                    'montant' => (float) $p->montant_a_payer,
                     'paye' => (float) $p->montant_verse,
                     'reste' => (float) $p->montant_restant,
                     'date' => $p->earned_at?->format(self::DATE_FORMAT),
@@ -614,7 +614,7 @@ class CommissionLogistiqueController extends Controller
             $first = $livParts->first();
             $totalBrut = (float) $livParts->sum('montant_brut');
             $totalFrais = (float) $livParts->sum('frais_supplementaires');
-            $totalNet = (float) $livParts->sum('montant_net');
+            $totalNet = (float) $livParts->sum('montant_a_payer');
             $totalVerse = (float) $livParts->sum('montant_verse');
             $solde = max(0.0, $totalNet - $totalVerse);
 

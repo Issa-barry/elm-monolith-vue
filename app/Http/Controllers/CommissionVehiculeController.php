@@ -205,7 +205,7 @@ class CommissionVehiculeController extends Controller
 
         $totalPaye = (float) $allParts
             ->filter(fn ($p) => $p->statut === StatutCommission::PAYE)
-            ->sum('montant_net');
+            ->sum('montant_a_payer');
 
         // ── Périodes disponibles ───────────────────────────────────────────────
         $earliestPart = $allParts->whereNotNull('periode')->sortBy('earned_at')->first();
@@ -223,7 +223,7 @@ class CommissionVehiculeController extends Controller
         $periodeStats = null;
 
         if ($selectedPeriode !== '' && $filteredParts->isNotEmpty()) {
-            $totalCommissionPeriode = (float) $filteredParts->sum('montant_net');
+            $totalCommissionPeriode = (float) $filteredParts->sum('montant_a_payer');
             $totalVersePeriode = (float) $filteredParts
                 ->flatMap(fn ($p) => $p->paymentItems)
                 ->sum('amount_allocated');
@@ -296,6 +296,7 @@ class CommissionVehiculeController extends Controller
                 'id' => $p->id,
                 'transfert_reference' => $p->commission?->transfert?->reference,
                 'montant_net' => (float) $p->montant_net,
+                'montant_a_payer' => $p->montant_a_payer,
                 'earned_at' => $p->earned_at?->format(self::DATE_FORMAT),
                 'periode' => $p->periode,
                 'periode_label' => $p->periode ? PeriodeComptableService::labelForCode($p->periode) : null,
@@ -399,6 +400,7 @@ class CommissionVehiculeController extends Controller
                 'montant_brut' => (float) $p->montant_brut,
                 'frais_supplementaires' => (float) $p->frais_supplementaires,
                 'montant_net' => (float) $p->montant_net,
+                'montant_a_payer' => $p->montant_a_payer,
                 'montant_verse' => (float) $p->montant_verse,
                 'montant_restant' => (float) $p->montant_restant,
                 'earned_at' => $p->earned_at?->format(self::DATE_FORMAT),

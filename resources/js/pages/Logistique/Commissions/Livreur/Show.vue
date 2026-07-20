@@ -25,6 +25,7 @@ interface PartRow {
     id: number;
     transfert_reference: string | null;
     montant_net: number;
+    montant_a_payer: number;
     earned_at: string | null;
     periode: string | null;
     periode_label: string | null;
@@ -147,7 +148,7 @@ const partsGrouped = computed<PeriodeGroup[]>(() => {
         }
         const g = map.get(key)!;
         g.parts.push(part);
-        g.total_net += part.montant_net;
+        g.total_net += part.montant_a_payer;
     }
     for (const g of map.values()) {
         const s = groupStatut(g.parts);
@@ -545,7 +546,7 @@ function formatMode(mode: string): string {
                                 Commission nette :
                                 <span
                                     class="ml-1 font-semibold text-foreground tabular-nums"
-                                    >{{ formatGNF(part.montant_net) }}</span
+                                    >{{ formatGNF(part.montant_a_payer) }}</span
                                 >
                             </div>
                         </div>
@@ -573,7 +574,10 @@ function formatMode(mode: string): string {
                         >
                         <span class="text-sm font-bold tabular-nums">{{
                             formatGNF(
-                                parts.reduce((s, p) => s + p.montant_net, 0),
+                                parts.reduce(
+                                    (s, p) => s + p.montant_a_payer,
+                                    0,
+                                ),
                             )
                         }}</span>
                     </div>
@@ -657,7 +661,7 @@ function formatMode(mode: string): string {
                                     <td
                                         class="px-4 py-3 text-right font-semibold tabular-nums"
                                     >
-                                        {{ formatGNF(part.montant_net) }}
+                                        {{ formatGNF(part.montant_a_payer) }}
                                     </td>
                                 </tr>
                                 <!-- Sous-total (vue toutes périodes uniquement) -->
@@ -691,7 +695,7 @@ function formatMode(mode: string): string {
                                     {{
                                         formatGNF(
                                             parts.reduce(
-                                                (s, p) => s + p.montant_net,
+                                                (s, p) => s + p.montant_a_payer,
                                                 0,
                                             ),
                                         )

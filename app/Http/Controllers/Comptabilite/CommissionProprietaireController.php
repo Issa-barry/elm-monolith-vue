@@ -74,6 +74,7 @@ class CommissionProprietaireController extends Controller
                  MAX(cp.beneficiaire_nom)         AS beneficiaire_nom,
                  MAX(proprietaires.telephone)     AS telephone,
                  SUM(cp.montant_brut)             AS total_brut_cumule,
+                 SUM(COALESCE(cp.montant_actuel, cp.montant_net)) AS total_a_payer_cumule,
                  SUM(cp.montant_verse)            AS total_verse,
                  COUNT(DISTINCT cp.commission_vente_id) AS nb_commandes,
                  MIN(CASE WHEN cp.statut IN (?,?) THEN cv.created_at END) AS premiere_echeance',
@@ -86,7 +87,7 @@ class CommissionProprietaireController extends Controller
             $query->whereBetween('cv.created_at', [$debut, $fin]);
         }
 
-        $rows = $query->orderByRaw('SUM(cp.montant_brut) - SUM(cp.montant_verse) DESC')->get();
+        $rows = $query->orderByRaw('SUM(COALESCE(cp.montant_actuel, cp.montant_net)) - SUM(cp.montant_verse) DESC')->get();
 
         $proprioIds = $rows->pluck('beneficiaire_id')->filter()->unique()->values();
         $fraisParProprio = [];
@@ -151,8 +152,9 @@ class CommissionProprietaireController extends Controller
 
         $beneficiaires = $rows->map(function ($row) use ($fraisParProprio, $periodesParDate, $labelsParStatut, $teamStatusParPeriode) {
             $totalBrut = (float) $row->total_brut_cumule;
+            $totalAPayer = (float) $row->total_a_payer_cumule;
             $totalFrais = $fraisParProprio[(string) $row->beneficiaire_id] ?? 0.0;
-            $totalNet = max(0.0, $totalBrut - $totalFrais);
+            $totalNet = max(0.0, $totalAPayer - $totalFrais);
             $totalVerse = (float) $row->total_verse;
             $solde = max(0.0, $totalNet - $totalVerse);
 
@@ -419,11 +421,12 @@ class CommissionProprietaireController extends Controller
         });
 
         $totalBrut = (float) $filteredParts->sum('montant_brut');
-        $totalNet = max(0.0, $totalBrut - $totalFraisDepenses);
+        $totalAPayer = (float) $filteredParts->sum('montant_a_payer');
+        $totalNet = max(0.0, $totalAPayer - $totalFraisDepenses);
         $totalVerse = (float) $filteredParts->sum('montant_verse');
 
         $activeParts = $filteredParts->filter(fn ($p) => $p->statut !== StatutCommission::CREEE);
-        $solde = max(0.0, (float) $activeParts->sum('montant_brut') - $totalFraisDepenses - (float) $activeParts->sum('montant_verse'));
+        $solde = max(0.0, (float) $activeParts->sum('montant_a_payer') - $totalFraisDepenses - (float) $activeParts->sum('montant_verse'));
 
         if ($solde > 0.009) {
             $earliestUnpaidDate = $activeParts
@@ -457,7 +460,7 @@ class CommissionProprietaireController extends Controller
                     ? PeriodeComptableService::codeForProprietaire(Carbon::instance($commission->created_at))
                     : null;
 
-                $montantNet = (float) $partsGroup->sum('montant_net');
+                $montantAPayer = (float) $partsGroup->sum('montant_a_payer');
                 $montantVerse = (float) $partsGroup->sum('montant_verse');
 
                 return [
@@ -471,9 +474,9 @@ class CommissionProprietaireController extends Controller
                         'immatriculation' => $commission->vehicule->immatriculation,
                     ] : null,
                     'montant_brut' => (float) $partsGroup->sum('montant_brut'),
-                    'montant' => $montantNet,
+                    'montant' => $montantAPayer,
                     'paye' => $montantVerse,
-                    'reste' => max(0.0, $montantNet - $montantVerse),
+                    'reste' => max(0.0, $montantAPayer - $montantVerse),
                     'statut' => $first->statut_label,
                     'statut_dot_class' => $first->statut_dot_class,
                     'periode' => $periodeCode,
@@ -763,8 +766,9 @@ class CommissionProprietaireController extends Controller
         $rows = $parts->groupBy('proprietaire_id')->map(function (Collection $propParts, string $proprioId) use ($fraisParProprio, $motifsParProprio, $filtrePeriode) {
             $first = $propParts->first();
             $totalBrut = (float) $propParts->sum('montant_brut');
+            $totalAPayer = (float) $propParts->sum('montant_a_payer');
             $totalFrais = $fraisParProprio[$proprioId] ?? 0.0;
-            $totalNet = max(0.0, $totalBrut - $totalFrais);
+            $totalNet = max(0.0, $totalAPayer - $totalFrais);
             $totalVerse = (float) $propParts->sum('montant_verse');
             $solde = max(0.0, $totalNet - $totalVerse);
 

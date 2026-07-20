@@ -621,7 +621,7 @@ class ClientDashboardController extends Controller
     private function calculateEarnings(Collection $partsVentes, Collection $partsLogistiques, float $fraisDepensesTotal = 0.0): array
     {
         $totalEarned = round(
-            (float) $partsVentes->sum('montant_net') + (float) $partsLogistiques->sum('montant_net'),
+            (float) $partsVentes->sum('montant_a_payer') + (float) $partsLogistiques->sum('montant_a_payer'),
             2
         );
         $totalPaid = round(
@@ -671,7 +671,7 @@ class ClientDashboardController extends Controller
                     'balance' => 0.0,
                 ];
             }
-            $stats[$vehicule->id]['total_earned'] += (float) $part->montant_net;
+            $stats[$vehicule->id]['total_earned'] += $part->montant_a_payer;
             $stats[$vehicule->id]['total_paid'] += (float) $part->montant_verse;
         }
 
@@ -691,7 +691,7 @@ class ClientDashboardController extends Controller
                     'balance' => 0.0,
                 ];
             }
-            $stats[$vehicule->id]['total_earned'] += (float) $part->montant_net;
+            $stats[$vehicule->id]['total_earned'] += $part->montant_a_payer;
             $stats[$vehicule->id]['total_paid'] += (float) $part->montant_verse;
         }
 
@@ -823,8 +823,9 @@ class ClientDashboardController extends Controller
                 'date_sort' => $date?->timestamp ?? 0,
                 'frais' => (float) $part->frais_supplementaires,
                 'montant_net' => (float) $part->montant_net,
+                'montant_a_payer' => $part->montant_a_payer,
                 'montant_verse' => (float) $part->montant_verse,
-                'montant_restant' => max(0, (float) $part->montant_net - (float) $part->montant_verse),
+                'montant_restant' => (float) $part->montant_restant,
                 'statut' => $part->statut?->value ?? (string) $part->getRawOriginal('statut'),
                 'statut_label' => $part->statut_label,
             ];
@@ -846,8 +847,9 @@ class ClientDashboardController extends Controller
                 'date_sort' => $date?->timestamp ?? 0,
                 'frais' => (float) $part->frais_supplementaires,
                 'montant_net' => (float) $part->montant_net,
+                'montant_a_payer' => $part->montant_a_payer,
                 'montant_verse' => (float) $part->montant_verse,
-                'montant_restant' => max(0, (float) $part->montant_net - (float) $part->montant_verse),
+                'montant_restant' => (float) $part->montant_restant,
                 'statut' => $part->statut?->value ?? (string) $part->getRawOriginal('statut'),
                 'statut_label' => $part->statut_label,
             ];
