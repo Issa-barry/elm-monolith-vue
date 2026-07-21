@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import PeriodeStatusBanner from '@/components/commission/PeriodeStatusBanner.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
+import type { StatutCommissionResolu } from '@/types/commission-status';
 import { Head, router } from '@inertiajs/vue3';
 import { FileDown, Minus, Plus } from 'lucide-vue-next';
 import Dropdown from 'primevue/dropdown';
@@ -27,7 +29,7 @@ interface HistoriquePaiement {
     createur: string | null;
 }
 
-interface Fiche {
+interface Fiche extends StatutCommissionResolu {
     id: string;
     reference: string;
     beneficiaire_type: string;
@@ -44,6 +46,7 @@ interface Fiche {
     montant_net: number;
     montant_paye: number;
     montant_restant: number;
+    remaining_amount: number;
     statut: string;
     statut_label: string;
     mode_paiement: string | null;
@@ -171,8 +174,8 @@ function exportPdf() {
                             {{ fiche.reference }}
                         </h1>
                         <StatusDot
-                            :status="fiche.statut"
-                            :label="fiche.statut_label"
+                            :status="fiche.display_status"
+                            :label="fiche.display_label"
                         />
                     </div>
                     <p class="mt-1 text-sm font-medium">
@@ -201,6 +204,16 @@ function exportPdf() {
                     Imprimer PDF
                 </button>
             </div>
+
+            <PeriodeStatusBanner
+                v-if="fiche.periode"
+                :periode="{
+                    id: fiche.periode.id,
+                    reference: fiche.periode.reference,
+                    statut: fiche.periode_status ?? '',
+                    statut_label: fiche.periode_status_label ?? '',
+                }"
+            />
 
             <!-- Montants résumé -->
             <div class="grid grid-cols-3 gap-3">
@@ -335,7 +348,7 @@ function exportPdf() {
 
             <!-- Formulaire paiement -->
             <div
-                v-if="can_payer && fiche.statut !== 'paye'"
+                v-if="can_payer && fiche.can_pay"
                 class="rounded-xl border bg-card p-5"
             >
                 <h2 class="mb-4 text-sm font-semibold">

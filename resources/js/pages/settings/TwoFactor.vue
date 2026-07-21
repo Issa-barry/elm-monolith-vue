@@ -11,6 +11,7 @@ import { disable, enable, show } from '@/routes/two-factor';
 import { BreadcrumbItem } from '@/types';
 import { Form, Head } from '@inertiajs/vue3';
 import { ShieldBan, ShieldCheck } from 'lucide-vue-next';
+import { useToast } from 'primevue/usetoast';
 import { onUnmounted, ref } from 'vue';
 
 interface Props {
@@ -30,6 +31,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
+const toast = useToast();
 const { hasSetupData, clearTwoFactorAuthData } = useTwoFactorAuth();
 const showSetupModal = ref<boolean>(false);
 
@@ -97,7 +99,18 @@ onUnmounted(() => {
                     <TwoFactorRecoveryCodes />
 
                     <div class="relative inline">
-                        <Form v-bind="disable.form()" #default="{ processing }">
+                        <Form
+                            v-bind="disable.form()"
+                            #default="{ processing }"
+                            @success="
+                                toast.add({
+                                    severity: 'success',
+                                    summary:
+                                        'Authentification à deux facteurs désactivée',
+                                    life: 3000,
+                                })
+                            "
+                        >
                             <Button
                                 variant="destructive"
                                 type="submit"

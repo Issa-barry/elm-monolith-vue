@@ -31,6 +31,15 @@ class Proprietaire extends Model
         'is_active',
     ];
 
+    // ── Accessor ──────────────────────────────────────────────────────────────
+
+    public function getNomCompletAttribute(): string
+    {
+        return trim("{$this->prenom} {$this->nom}");
+    }
+
+    // ── Relations ─────────────────────────────────────────────────────────────
+
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);

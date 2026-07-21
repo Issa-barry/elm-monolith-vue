@@ -44,4 +44,9 @@ class PaiePeriode extends Model
 
         return $mois[$this->mois].' '.$this->annee;
     }
+
+    public function peutEtrePayee(): bool
+    {
+        return in_array($this->statut, [StatutPeriodePaie::VALIDE_RH, StatutPeriodePaie::PAYE], true);
+    }
 }

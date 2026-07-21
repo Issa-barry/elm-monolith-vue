@@ -96,7 +96,7 @@ class CommissionVente extends Model
      */
     public function recalculStatutGlobal(): bool
     {
-        if ($this->statut === StatutCommission::CREEE) {
+        if (in_array($this->statut, [StatutCommission::CREEE, StatutCommission::ANNULEE], true)) {
             return false;
         }
 

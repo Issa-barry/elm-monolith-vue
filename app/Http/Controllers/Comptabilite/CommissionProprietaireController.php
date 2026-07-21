@@ -6,6 +6,7 @@ use App\Enums\AuditEvent;
 use App\Enums\ModePaiement;
 use App\Enums\StatutCommission;
 use App\Enums\StatutDepense;
+use App\Enums\TypePeriodePaiement;
 use App\Http\Controllers\Controller;
 use App\Models\CommissionPart;
 use App\Models\Depense;
@@ -15,8 +16,11 @@ use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\Vehicule;
 use App\Services\AuditLogService;
+use App\Services\CommissionAdjustmentService;
+use App\Services\CommissionStatusResolver;
 use App\Services\CommissionVentePaiementService;
 use App\Services\PeriodeComptableService;
+use App\Services\PeriodePaiementService;
 use App\Services\SiteScopeService;
 use App\Support\Commission\CommissionDetailFilters;
 use App\Support\Commission\CommissionSummaryFormatter;
@@ -70,8 +74,11 @@ class CommissionProprietaireController extends Controller
                  MAX(cp.beneficiaire_nom)         AS beneficiaire_nom,
                  MAX(proprietaires.telephone)     AS telephone,
                  SUM(cp.montant_brut)             AS total_brut_cumule,
+                 SUM(COALESCE(cp.montant_actuel, cp.montant_net)) AS total_a_payer_cumule,
                  SUM(cp.montant_verse)            AS total_verse,
-                 COUNT(DISTINCT cp.commission_vente_id) AS nb_commandes'
+                 COUNT(DISTINCT cp.commission_vente_id) AS nb_commandes,
+                 MIN(CASE WHEN cp.statut IN (?,?) THEN cv.created_at END) AS premiere_echeance',
+                [StatutCommission::IMPAYE->value, StatutCommission::PARTIEL->value]
             )
             ->groupBy('cp.proprietaire_id');
 
@@ -80,7 +87,7 @@ class CommissionProprietaireController extends Controller
             $query->whereBetween('cv.created_at', [$debut, $fin]);
         }
 
-        $rows = $query->orderByRaw('SUM(cp.montant_brut) - SUM(cp.montant_verse) DESC')->get();
+        $rows = $query->orderByRaw('SUM(COALESCE(cp.montant_actuel, cp.montant_net)) - SUM(cp.montant_verse) DESC')->get();
 
         $proprioIds = $rows->pluck('beneficiaire_id')->filter()->unique()->values();
         $fraisParProprio = [];
@@ -133,10 +140,21 @@ class CommissionProprietaireController extends Controller
             }
         }
 
-        $beneficiaires = $rows->map(function ($row) use ($fraisParProprio) {
+        $periodesParDate = app(PeriodePaiementService::class)->getPeriodsForDates(
+            $orgId,
+            TypePeriodePaiement::PROPRIETAIRE,
+            $rows->pluck('premiere_echeance')
+        );
+        $labelsParStatut = ['impaye' => 'Impayé', 'partiel' => 'Partiel', 'paye' => 'Payé', 'annulee' => 'Annulée'];
+        $teamStatusParPeriode = $periodesParDate->mapWithKeys(
+            fn ($periode) => [$periode->id => CommissionAdjustmentService::statutValidationParBeneficiaire($periode)]
+        );
+
+        $beneficiaires = $rows->map(function ($row) use ($fraisParProprio, $periodesParDate, $labelsParStatut, $teamStatusParPeriode) {
             $totalBrut = (float) $row->total_brut_cumule;
+            $totalAPayer = (float) $row->total_a_payer_cumule;
             $totalFrais = $fraisParProprio[(string) $row->beneficiaire_id] ?? 0.0;
-            $totalNet = max(0.0, $totalBrut - $totalFrais);
+            $totalNet = max(0.0, $totalAPayer - $totalFrais);
             $totalVerse = (float) $row->total_verse;
             $solde = max(0.0, $totalNet - $totalVerse);
 
@@ -145,6 +163,18 @@ class CommissionProprietaireController extends Controller
                 $totalVerse > 0 => StatutCommission::PARTIEL->value,
                 default => StatutCommission::IMPAYE->value,
             };
+
+            $periode = $row->premiere_echeance
+                ? $periodesParDate->get(PeriodePaiementService::debutKeyForDate(Carbon::parse($row->premiere_echeance)))
+                : null;
+            $teamStatus = $periode ? ($teamStatusParPeriode[$periode->id]["proprietaire:{$row->beneficiaire_id}"] ?? null) : null;
+
+            $resolved = CommissionStatusResolver::resolve(
+                $periode,
+                $teamStatus,
+                $statutGlobal,
+                $labelsParStatut[$statutGlobal] ?? $statutGlobal,
+            );
 
             return [
                 'beneficiaire_id' => (string) $row->beneficiaire_id,
@@ -155,8 +185,10 @@ class CommissionProprietaireController extends Controller
                 'total_net_cumule' => $totalNet,
                 'total_verse' => $totalVerse,
                 'solde_restant' => $solde,
+                'remaining_amount' => $solde,
                 'nb_commandes' => (int) $row->nb_commandes,
                 'statut_global' => $statutGlobal,
+                ...$resolved,
             ];
         });
 
@@ -250,6 +282,11 @@ class CommissionProprietaireController extends Controller
 
         $periodeCourante = PeriodeComptableService::periodeCouranteProprietaire();
 
+        $dateAffichee = $filtrePeriode !== ''
+            ? PeriodeComptableService::dateRangeForCode($filtrePeriode)[0]
+            : now();
+        $periodeAffichee = app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::PROPRIETAIRE, $dateAffichee);
+
         return Inertia::render('Comptabilite/CommissionProprietaire/Index', [
             'beneficiaires' => $list,
             'kpis' => $kpis,
@@ -260,6 +297,12 @@ class CommissionProprietaireController extends Controller
             'selected_periode' => $filtrePeriode,
             'periodes_disponibles' => $periodesDisponibles,
             'periode_courante' => $periodeCourante,
+            'periode_affichee' => $periodeAffichee ? [
+                'id' => $periodeAffichee->id,
+                'reference' => $periodeAffichee->reference,
+                'statut' => $periodeAffichee->statut->value,
+                'statut_label' => $periodeAffichee->statut_label,
+            ] : null,
             'sites' => $sites,
             'can_payer' => auth()->user()->can('comptabilite.payer'),
         ]);
@@ -378,11 +421,35 @@ class CommissionProprietaireController extends Controller
         });
 
         $totalBrut = (float) $filteredParts->sum('montant_brut');
-        $totalNet = max(0.0, $totalBrut - $totalFraisDepenses);
+        $totalAPayer = (float) $filteredParts->sum('montant_a_payer');
+        $totalNet = max(0.0, $totalAPayer - $totalFraisDepenses);
         $totalVerse = (float) $filteredParts->sum('montant_verse');
 
         $activeParts = $filteredParts->filter(fn ($p) => $p->statut !== StatutCommission::CREEE);
-        $solde = max(0.0, (float) $activeParts->sum('montant_brut') - $totalFraisDepenses - (float) $activeParts->sum('montant_verse'));
+        $solde = max(0.0, (float) $activeParts->sum('montant_a_payer') - $totalFraisDepenses - (float) $activeParts->sum('montant_verse'));
+
+        if ($solde > 0.009) {
+            $earliestUnpaidDate = $activeParts
+                ->filter(fn ($p) => in_array($p->statut, [StatutCommission::IMPAYE, StatutCommission::PARTIEL], true))
+                ->map(fn ($p) => $p->commission?->created_at)
+                ->filter()
+                ->sort()
+                ->first();
+            $periodeResolue = $earliestUnpaidDate
+                ? app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::PROPRIETAIRE, Carbon::instance($earliestUnpaidDate))
+                : null;
+        } else {
+            $periodeResolue = app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::PROPRIETAIRE, now());
+        }
+
+        $teamStatus = $periodeResolue
+            ? (CommissionAdjustmentService::statutValidationParBeneficiaire($periodeResolue)["proprietaire:{$proprietaireId}"] ?? null)
+            : null;
+
+        $paymentValue = $solde > 0.009 ? StatutCommission::IMPAYE->value : StatutCommission::PAYE->value;
+        $paymentLabel = $solde > 0.009 ? 'Impayé' : 'Payé';
+        $statutCommission = CommissionStatusResolver::resolve($periodeResolue, $teamStatus, $paymentValue, $paymentLabel);
+        $payable = $statutCommission['can_pay'];
 
         $historiqueCommandes = $filteredParts
             ->groupBy('commission_vente_id')
@@ -393,7 +460,7 @@ class CommissionProprietaireController extends Controller
                     ? PeriodeComptableService::codeForProprietaire(Carbon::instance($commission->created_at))
                     : null;
 
-                $montantNet = (float) $partsGroup->sum('montant_net');
+                $montantAPayer = (float) $partsGroup->sum('montant_a_payer');
                 $montantVerse = (float) $partsGroup->sum('montant_verse');
 
                 return [
@@ -407,9 +474,9 @@ class CommissionProprietaireController extends Controller
                         'immatriculation' => $commission->vehicule->immatriculation,
                     ] : null,
                     'montant_brut' => (float) $partsGroup->sum('montant_brut'),
-                    'montant' => $montantNet,
+                    'montant' => $montantAPayer,
                     'paye' => $montantVerse,
-                    'reste' => max(0.0, $montantNet - $montantVerse),
+                    'reste' => max(0.0, $montantAPayer - $montantVerse),
                     'statut' => $first->statut_label,
                     'statut_dot_class' => $first->statut_dot_class,
                     'periode' => $periodeCode,
@@ -487,6 +554,14 @@ class CommissionProprietaireController extends Controller
             'periode_courante' => $periodeCourante,
             'selected_periode' => $periodeFilter,
             'periodes_disponibles' => $periodesDisponibles,
+            'payable' => $payable,
+            'statut_commission' => $statutCommission,
+            'periode_affichee' => $periodeResolue ? [
+                'id' => $periodeResolue->id,
+                'reference' => $periodeResolue->reference,
+                'statut' => $periodeResolue->statut->value,
+                'statut_label' => $periodeResolue->statut_label,
+            ] : null,
             'filters' => [
                 'periode' => $periodeFilter,
                 'vehicule_ids' => $vehiculeIds,
@@ -691,8 +766,9 @@ class CommissionProprietaireController extends Controller
         $rows = $parts->groupBy('proprietaire_id')->map(function (Collection $propParts, string $proprioId) use ($fraisParProprio, $motifsParProprio, $filtrePeriode) {
             $first = $propParts->first();
             $totalBrut = (float) $propParts->sum('montant_brut');
+            $totalAPayer = (float) $propParts->sum('montant_a_payer');
             $totalFrais = $fraisParProprio[$proprioId] ?? 0.0;
-            $totalNet = max(0.0, $totalBrut - $totalFrais);
+            $totalNet = max(0.0, $totalAPayer - $totalFrais);
             $totalVerse = (float) $propParts->sum('montant_verse');
             $solde = max(0.0, $totalNet - $totalVerse);
 

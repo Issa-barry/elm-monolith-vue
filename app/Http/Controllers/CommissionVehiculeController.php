@@ -3,15 +3,20 @@
 namespace App\Http\Controllers;
 
 use App\Enums\StatutCommission;
+use App\Enums\TypePeriodePaiement;
 use App\Models\CommissionLogistiquePart;
 use App\Models\CommissionPayment;
 use App\Models\Livreur;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
 use App\Models\Vehicule;
+use App\Services\CommissionAdjustmentService;
 use App\Services\CommissionPaymentService;
 use App\Services\CommissionSearchService;
+use App\Services\CommissionStatusResolver;
 use App\Services\PeriodeComptableService;
+use App\Services\PeriodePaiementService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -78,15 +83,41 @@ class CommissionVehiculeController extends Controller
                 ->implode(' ')
             );
 
+        $periodesParDate = app(PeriodePaiementService::class)->getPeriodsForDates(
+            $orgId,
+            TypePeriodePaiement::LIVREUR,
+            $rows->pluck('premiere_echeance')
+        );
+
+        $teamStatusParPeriode = $periodesParDate->mapWithKeys(
+            fn ($periode) => [$periode->id => CommissionAdjustmentService::statutValidationParBeneficiaire($periode)]
+        );
+
         // Build complete list with all searchable fields
-        $livreurs = $rows->map(fn ($row) => [
-            'livreur_id' => $row->livreur_id,
-            'nom' => $row->beneficiaire_nom,
-            'telephone' => $telephones[$row->livreur_id] ?? null,
-            'vehicules' => $vehiculesParLivreur[$row->livreur_id] ?? null,
-            'impaye' => (float) $row->impaye,
-            'paye' => (float) $row->paye,
-        ]);
+        $livreurs = $rows->map(function ($row) use ($telephones, $vehiculesParLivreur, $periodesParDate, $teamStatusParPeriode) {
+            $impaye = (float) $row->impaye;
+            $paye = (float) $row->paye;
+
+            $periode = $row->premiere_echeance
+                ? $periodesParDate->get(PeriodePaiementService::debutKeyForDate(Carbon::parse($row->premiere_echeance)))
+                : null;
+            $teamStatus = $periode ? ($teamStatusParPeriode[$periode->id]["livreur:{$row->livreur_id}"] ?? null) : null;
+
+            $paymentValue = $paye > 0.009 && $impaye <= 0.009 ? StatutCommission::PAYE->value : StatutCommission::IMPAYE->value;
+            $paymentLabel = $paymentValue === StatutCommission::PAYE->value ? 'Payé' : 'Impayé';
+            $resolved = CommissionStatusResolver::resolve($periode, $teamStatus, $paymentValue, $paymentLabel);
+
+            return [
+                'livreur_id' => $row->livreur_id,
+                'nom' => $row->beneficiaire_nom,
+                'telephone' => $telephones[$row->livreur_id] ?? null,
+                'vehicules' => $vehiculesParLivreur[$row->livreur_id] ?? null,
+                'impaye' => $impaye,
+                'paye' => $paye,
+                'remaining_amount' => $impaye,
+                ...$resolved,
+            ];
+        });
 
         if ($filtreStatut !== '') {
             $livreurs = match ($filtreStatut) {
@@ -110,6 +141,11 @@ class CommissionVehiculeController extends Controller
             ->orderBy('nom')
             ->get(['id', 'nom']);
 
+        $dateAffichee = $filtrePeriode !== ''
+            ? PeriodeComptableService::dateRangeForCode($filtrePeriode)[0]
+            : now();
+        $periodeAffichee = app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::LIVREUR, $dateAffichee);
+
         return Inertia::render('Logistique/Commissions/Index', [
             'livreurs' => $list,
             'kpis' => $kpis,
@@ -118,6 +154,12 @@ class CommissionVehiculeController extends Controller
             'filtre_site' => $filtreSite,
             'selected_periode' => $filtrePeriode,
             'periodes_disponibles' => $periodesDisponibles,
+            'periode_affichee' => $periodeAffichee ? [
+                'id' => $periodeAffichee->id,
+                'reference' => $periodeAffichee->reference,
+                'statut' => $periodeAffichee->statut->value,
+                'statut_label' => $periodeAffichee->statut_label,
+            ] : null,
             'sites' => $sites->map(fn ($s) => ['value' => $s->id, 'label' => $s->nom])->values(),
             'statuts' => StatutCommission::options(),
             'can_payer' => auth()->user()->can('logistique.commission.verser'),
@@ -140,13 +182,30 @@ class CommissionVehiculeController extends Controller
         $livreurTelephone = Livreur::find($livreurId)?->telephone;
 
         // ── KPIs globaux ──────────────────────────────────────────────────────
-        $totalImpaye = (float) $allParts
-            ->filter(fn ($p) => in_array($p->statut, [StatutCommission::IMPAYE, StatutCommission::PARTIEL], true))
-            ->sum('montant_restant');
+        $impayeParts = $allParts->filter(fn ($p) => in_array($p->statut, [StatutCommission::IMPAYE, StatutCommission::PARTIEL], true));
+        $totalImpaye = (float) $impayeParts->sum('montant_restant');
+
+        if ($totalImpaye > 0.009) {
+            $earliestUnpaidDate = $impayeParts->min('earned_at');
+            $periodeResolue = $earliestUnpaidDate
+                ? app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::LIVREUR, Carbon::parse($earliestUnpaidDate))
+                : null;
+        } else {
+            $periodeResolue = app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::LIVREUR, now());
+        }
+
+        $teamStatus = $periodeResolue
+            ? (CommissionAdjustmentService::statutValidationParBeneficiaire($periodeResolue)["livreur:{$livreurId}"] ?? null)
+            : null;
+
+        $paymentValue = $totalImpaye > 0.009 ? StatutCommission::IMPAYE->value : StatutCommission::PAYE->value;
+        $paymentLabel = $totalImpaye > 0.009 ? 'Impayé' : 'Payé';
+        $statutCommission = CommissionStatusResolver::resolve($periodeResolue, $teamStatus, $paymentValue, $paymentLabel);
+        $payable = $statutCommission['can_pay'];
 
         $totalPaye = (float) $allParts
             ->filter(fn ($p) => $p->statut === StatutCommission::PAYE)
-            ->sum('montant_net');
+            ->sum('montant_a_payer');
 
         // ── Périodes disponibles ───────────────────────────────────────────────
         $earliestPart = $allParts->whereNotNull('periode')->sortBy('earned_at')->first();
@@ -164,7 +223,7 @@ class CommissionVehiculeController extends Controller
         $periodeStats = null;
 
         if ($selectedPeriode !== '' && $filteredParts->isNotEmpty()) {
-            $totalCommissionPeriode = (float) $filteredParts->sum('montant_net');
+            $totalCommissionPeriode = (float) $filteredParts->sum('montant_a_payer');
             $totalVersePeriode = (float) $filteredParts
                 ->flatMap(fn ($p) => $p->paymentItems)
                 ->sum('amount_allocated');
@@ -225,10 +284,19 @@ class CommissionVehiculeController extends Controller
                 'impaye' => $totalImpaye,
                 'paye' => $totalPaye,
             ],
+            'payable' => $payable,
+            'statut_commission' => $statutCommission,
+            'periode_affichee' => $periodeResolue ? [
+                'id' => $periodeResolue->id,
+                'reference' => $periodeResolue->reference,
+                'statut' => $periodeResolue->statut->value,
+                'statut_label' => $periodeResolue->statut_label,
+            ] : null,
             'parts' => $filteredParts->map(fn ($p) => [
                 'id' => $p->id,
                 'transfert_reference' => $p->commission?->transfert?->reference,
                 'montant_net' => (float) $p->montant_net,
+                'montant_a_payer' => $p->montant_a_payer,
                 'earned_at' => $p->earned_at?->format(self::DATE_FORMAT),
                 'periode' => $p->periode,
                 'periode_label' => $p->periode ? PeriodeComptableService::labelForCode($p->periode) : null,
@@ -332,6 +400,7 @@ class CommissionVehiculeController extends Controller
                 'montant_brut' => (float) $p->montant_brut,
                 'frais_supplementaires' => (float) $p->frais_supplementaires,
                 'montant_net' => (float) $p->montant_net,
+                'montant_a_payer' => $p->montant_a_payer,
                 'montant_verse' => (float) $p->montant_verse,
                 'montant_restant' => (float) $p->montant_restant,
                 'earned_at' => $p->earned_at?->format(self::DATE_FORMAT),

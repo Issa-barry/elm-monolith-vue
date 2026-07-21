@@ -27,6 +27,7 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     livraison_en_cours: 'bg-blue-500',
     transit: 'bg-blue-500',
     calculee: 'bg-blue-500',
+    repartition_validee: 'bg-blue-500',
 
     // Gris — brouillon / créé / pas commencé
     brouillon: 'bg-zinc-400 dark:bg-zinc-500',

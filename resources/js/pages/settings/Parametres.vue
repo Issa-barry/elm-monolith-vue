@@ -9,6 +9,7 @@ import { edit } from '@/routes/parametres';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/vue3';
 import { Download, Settings } from 'lucide-vue-next';
+import { useToast } from 'primevue/usetoast';
 import { computed } from 'vue';
 
 interface Parametre {
@@ -22,6 +23,8 @@ interface Parametre {
 }
 
 const props = defineProps<{ parametres: Parametre[] }>();
+
+const toast = useToast();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Paramètres', href: '/settings/profile' },
@@ -102,6 +105,13 @@ function submit(p: Parametre) {
     const form = getForm(p);
     form.put(`/settings/parametres/${p.id}`, {
         preserveScroll: true,
+        onSuccess: () => {
+            toast.add({
+                severity: 'success',
+                summary: 'Paramètre mis à jour',
+                life: 3000,
+            });
+        },
     });
 }
 

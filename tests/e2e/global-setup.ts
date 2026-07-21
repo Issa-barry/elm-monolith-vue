@@ -30,10 +30,22 @@ export default async function globalSetup(config: FullConfig) {
         await context.storageState({ path: path.join(authDir, 'user.json') });
 
         // elm-2 (80 packs): Aissatou 11 200 GNF + Thierno 4 800 GNF — laissés impayés
-        const ref001 = await createTransfertAndGenerateCommission(page, /elm-2/i);
+        const ref001 = await createTransfertAndGenerateCommission(
+            page,
+            /elm-2/i,
+        );
 
         // elm-1 (120 packs): Boubacar 24 000 GNF — sera entièrement payé ci-dessous
-        const ref002 = await createTransfertAndGenerateCommission(page, /elm-1/i);
+        const ref002 = await createTransfertAndGenerateCommission(
+            page,
+            /elm-1/i,
+        );
+
+        // Le paiement (direct ou via fiche) est verrouillé tant que la PaiementPeriode
+        // couvrant la commission n'est pas VALIDEE (PeriodePayabilityChecker) — il faut
+        // valider tous les véhicules de la période courante avant de pouvoir payer qui
+        // que ce soit, sinon aucun bouton "Payer" n'apparaît nulle part dans l'UI.
+        await validerPeriodeLivreurCourante(page);
 
         // Payer Boubacar intégralement → déclenche cloturerAutomatiquement() sur elm-1
         await payFullCommission(page, /Boubacar\s+KONAT/i);
@@ -60,7 +72,9 @@ async function createTransfertAndGenerateCommission(
     vehicleName: RegExp,
 ): Promise<string> {
     await page.goto('/backoffice/logistique/creer');
-    await page.locator('#logistique-form').waitFor({ state: 'visible', timeout: 20_000 });
+    await page
+        .locator('#logistique-form')
+        .waitFor({ state: 'visible', timeout: 20_000 });
 
     const form = page.locator('#logistique-form');
 
@@ -68,7 +82,11 @@ async function createTransfertAndGenerateCommission(
         .locator('[data-testid="site-source-field"]')
         .getByRole('combobox');
     if ((await siteSourceCombobox.count()) > 0) {
-        await selectOptionFromCombobox(page, siteSourceCombobox, /lansanaya|lambagny|dabompa/i);
+        await selectOptionFromCombobox(
+            page,
+            siteSourceCombobox,
+            /lansanaya|lambagny|dabompa/i,
+        );
     }
 
     const siteDestCombobox = form
@@ -93,21 +111,29 @@ async function createTransfertAndGenerateCommission(
     const refText = (await refElement.textContent()) ?? '';
     const refMatch = refText.match(/TR-[A-Z0-9-]+/i);
     if (!refMatch) {
-        throw new Error(`Cannot extract transfert reference from page text: "${refText}"`);
+        throw new Error(
+            `Cannot extract transfert reference from page text: "${refText}"`,
+        );
     }
     const reference = refMatch[0].toUpperCase();
 
     // ── Brouillon → Chargement ────────────────────────────────────────────────
-    const btnDemarrer = page.getByRole('button', { name: /démarrer le chargement/i });
+    const btnDemarrer = page.getByRole('button', {
+        name: /démarrer le chargement/i,
+    });
     await btnDemarrer.waitFor({ state: 'visible', timeout: 15_000 });
     await btnDemarrer.click();
 
     // ── Chargement → Transit (via dialog) ────────────────────────────────────
-    const btnValiderChargement = page.getByRole('button', { name: /valider le chargement/i });
+    const btnValiderChargement = page.getByRole('button', {
+        name: /valider le chargement/i,
+    });
     await btnValiderChargement.waitFor({ state: 'visible', timeout: 20_000 });
     await btnValiderChargement.click();
 
-    const btnLivraison = page.getByRole('button', { name: /valider et partir en livraison/i });
+    const btnLivraison = page.getByRole('button', {
+        name: /valider et partir en livraison/i,
+    });
     await btnLivraison.waitFor({ state: 'visible', timeout: 10_000 });
     await btnLivraison.click();
 
@@ -130,17 +156,23 @@ async function createTransfertAndGenerateCommission(
     await btnValiderReception.click();
 
     // ── Réception → Commission générée ────────────────────────────────────────
-    const btnGenerer = page.getByRole('button', { name: /générer commission/i });
+    const btnGenerer = page.getByRole('button', {
+        name: /générer commission/i,
+    });
     await btnGenerer.waitFor({ state: 'visible', timeout: 20_000 });
     await btnGenerer.click();
 
     // Étape 1 (review) : confirmer la réception
-    const btnOuiGenerer = page.getByRole('button', { name: /oui, générer la commission/i });
+    const btnOuiGenerer = page.getByRole('button', {
+        name: /oui, générer la commission/i,
+    });
     await btnOuiGenerer.waitFor({ state: 'visible', timeout: 10_000 });
     await btnOuiGenerer.click();
 
     // Étape 2 (montant) : montant_par_pack pré-rempli à 200 GNF — confirmer directement
-    const btnConfirmer = page.getByRole('button', { name: /confirmer et générer/i });
+    const btnConfirmer = page.getByRole('button', {
+        name: /confirmer et générer/i,
+    });
     await btnConfirmer.waitFor({ state: 'visible', timeout: 10_000 });
     await btnConfirmer.click();
 
@@ -151,11 +183,86 @@ async function createTransfertAndGenerateCommission(
 }
 
 /**
+ * Confirme une action passant par le ConfirmDialog PrimeVue partagé (validation
+ * véhicule / validation période) : contrairement au Dialog "classique" utilisé
+ * ailleurs dans ce fichier (paiement, réception — role="dialog"), le composant
+ * PrimeVue ConfirmDialog rend sa racine avec role="alertdialog" (vérifié dans
+ * node_modules/primevue/confirmdialog/index.mjs). Le bouton d'acceptation porte
+ * le même libellé que le bouton qui l'a ouvert ("Valider"), d'où le scope
+ * explicite sur le dernier `[role="alertdialog"]` ouvert.
+ */
+async function confirmDialog(
+    page: Page,
+    buttonLabel: RegExp | string,
+): Promise<void> {
+    const dialog = page.locator('[role="alertdialog"]').last();
+    await dialog.waitFor({ state: 'visible', timeout: 10_000 });
+    const acceptButton = dialog
+        .getByRole('button', { name: buttonLabel })
+        .last();
+    await acceptButton.waitFor({ state: 'visible', timeout: 5_000 });
+    await acceptButton.click();
+    await dialog.waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+}
+
+/**
+ * Valide la période de paiement "Livreurs" en cours (commune aux commissions elm-1
+ * et elm-2 générées ci-dessus) : condition préalable obligatoire pour que le moindre
+ * bouton "Payer" soit visible dans l'UI (PeriodePayabilityChecker impose une période
+ * VALIDEE). Valider une période exige d'abord que chaque véhicule qui y a des
+ * commissions soit lui-même validé (écart théorique/ajusté nul — toujours vrai ici,
+ * aucun ajustement n'étant appliqué dans ce setup).
+ */
+async function validerPeriodeLivreurCourante(page: Page): Promise<void> {
+    await page.goto('/backoffice/comptabilite/periodes');
+    const livreurLink = page.getByRole('link', { name: /livreurs/i }).first();
+    await livreurLink.waitFor({ state: 'visible', timeout: 15_000 });
+    await livreurLink.click();
+    await page.waitForURL(/\/comptabilite\/periodes\/[a-z0-9]+$/, {
+        timeout: 20_000,
+    });
+    const periodeUrl = page.url();
+
+    const ajusterLink = page.getByRole('link', { name: /ajuster/i });
+    const nbVehicules = await ajusterLink.count();
+
+    for (let i = 0; i < nbVehicules; i++) {
+        await page.goto(periodeUrl);
+        await page
+            .getByRole('link', { name: /ajuster/i })
+            .nth(i)
+            .click();
+        await page.waitForURL(/\/ajustements\/vehicules\//, {
+            timeout: 20_000,
+        });
+
+        const validerVehiculeBtn = page.getByRole('button', {
+            name: /valider le véhicule/i,
+        });
+        await validerVehiculeBtn.waitFor({ state: 'visible', timeout: 15_000 });
+        await validerVehiculeBtn.click();
+        await confirmDialog(page, 'Valider');
+    }
+
+    await page.goto(periodeUrl);
+    const validerPeriodeBtn = page.getByRole('button', {
+        name: 'Valider',
+        exact: true,
+    });
+    await validerPeriodeBtn.waitFor({ state: 'visible', timeout: 15_000 });
+    await validerPeriodeBtn.click();
+    await confirmDialog(page, 'Valider');
+}
+
+/**
  * Navigue vers /logistique/commissions et paie intégralement la commission
  * du livreur correspondant au regex (le dialog est pré-rempli avec le solde
  * total — pas besoin de saisir un montant).
  */
-async function payFullCommission(page: Page, livreurRegex: RegExp): Promise<void> {
+async function payFullCommission(
+    page: Page,
+    livreurRegex: RegExp,
+): Promise<void> {
     await page.goto('/backoffice/logistique/commissions');
 
     const row = page.locator('tbody tr', { hasText: livreurRegex }).first();
@@ -169,7 +276,9 @@ async function payFullCommission(page: Page, livreurRegex: RegExp): Promise<void
     const dialog = page.locator('[role="dialog"]').first();
     await dialog.waitFor({ state: 'visible', timeout: 10_000 });
 
-    const confirmerBtn = dialog.getByRole('button', { name: /confirmer le paiement/i });
+    const confirmerBtn = dialog.getByRole('button', {
+        name: /confirmer le paiement/i,
+    });
     await confirmerBtn.waitFor({ state: 'visible', timeout: 5_000 });
     await confirmerBtn.click();
 

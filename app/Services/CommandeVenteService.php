@@ -354,7 +354,26 @@ class CommandeVenteService
                     $commande->facture->update(['statut_facture' => StatutFactureVente::ANNULEE]);
                 }
             }
+
+            self::annulerCommissionsAssociees($commande);
         });
+    }
+
+    /**
+     * Annuler une commande annule ses commissions non encore soldées : une part déjà
+     * payée n'est jamais reprise (historique de paiement conservé tel quel).
+     */
+    private static function annulerCommissionsAssociees(CommandeVente $commande): void
+    {
+        foreach ($commande->commissions as $commission) {
+            $commission->parts()
+                ->whereNotIn('statut', [StatutCommission::PAYE->value, StatutCommission::ANNULEE->value])
+                ->update(['statut' => StatutCommission::ANNULEE->value]);
+
+            if ($commission->statut !== StatutCommission::PAYE) {
+                $commission->update(['statut' => StatutCommission::ANNULEE->value]);
+            }
+        }
     }
 
     // ── Pré-conditions ────────────────────────────────────────────────────────

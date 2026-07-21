@@ -43,6 +43,13 @@ class CommissionVentePaiementService
             );
         }
 
+        $touched = PeriodePayabilityChecker::touchedUntilAmount(
+            $parts,
+            $montant,
+            fn ($p) => (float) $p->montant_restant
+        );
+        PeriodePayabilityChecker::assertPartsPayable($touched);
+
         $beneficiaireNom = $parts->first()?->beneficiaire_nom ?? 'Inconnu';
 
         return DB::transaction(function () use (
@@ -70,7 +77,7 @@ class CommissionVentePaiementService
                     break;
                 }
 
-                $partRestant = max(0.0, (float) $part->montant_net - (float) $part->montant_verse);
+                $partRestant = (float) $part->montant_restant;
                 if ($partRestant <= 0) {
                     continue;
                 }
@@ -108,8 +115,8 @@ class CommissionVentePaiementService
             ->join('commissions_ventes AS cv_fifo', 'cv_fifo.id', '=', 'commission_parts.commission_vente_id')
             ->whereHas('commission', fn ($q) => $q->where('organization_id', $organizationId))
             ->where('commission_parts.type_beneficiaire', $type)
-            ->where('commission_parts.statut', '!=', StatutCommission::CREEE->value)
-            ->whereRaw('commission_parts.montant_verse < commission_parts.montant_net')
+            ->whereNotIn('commission_parts.statut', [StatutCommission::CREEE->value, StatutCommission::ANNULEE->value])
+            ->whereRaw('commission_parts.montant_verse < COALESCE(commission_parts.montant_actuel, commission_parts.montant_net)')
             ->orderBy('cv_fifo.created_at')
             ->orderBy('commission_parts.id')
             ->select('commission_parts.*');
@@ -141,7 +148,7 @@ class CommissionVentePaiementService
     ): float {
         $parts ??= self::partsDisponibles($organizationId, $type, $beneficiaireId);
 
-        $totalParts = (float) $parts->sum(fn ($p) => max(0.0, (float) $p->montant_net - (float) $p->montant_verse));
+        $totalParts = (float) $parts->sum(fn ($p) => (float) $p->montant_restant);
 
         $fraisDepenses = $type === 'livreur'
             ? CommissionVenteCalculatorService::fraisDepenseLivreur($organizationId, $beneficiaireId)
