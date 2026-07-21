@@ -184,15 +184,18 @@ async function createTransfertAndGenerateCommission(
 
 /**
  * Confirme une action passant par le ConfirmDialog PrimeVue partagé (validation
- * véhicule / validation période) : le dialog de confirmation rend son bouton
- * d'acceptation avec le même libellé que le bouton qui l'a ouvert ("Valider"),
- * d'où le scope explicite sur le dernier `[role="dialog"]` ouvert.
+ * véhicule / validation période) : contrairement au Dialog "classique" utilisé
+ * ailleurs dans ce fichier (paiement, réception — role="dialog"), le composant
+ * PrimeVue ConfirmDialog rend sa racine avec role="alertdialog" (vérifié dans
+ * node_modules/primevue/confirmdialog/index.mjs). Le bouton d'acceptation porte
+ * le même libellé que le bouton qui l'a ouvert ("Valider"), d'où le scope
+ * explicite sur le dernier `[role="alertdialog"]` ouvert.
  */
 async function confirmDialog(
     page: Page,
     buttonLabel: RegExp | string,
 ): Promise<void> {
-    const dialog = page.locator('[role="dialog"]').last();
+    const dialog = page.locator('[role="alertdialog"]').last();
     await dialog.waitFor({ state: 'visible', timeout: 10_000 });
     const acceptButton = dialog
         .getByRole('button', { name: buttonLabel })
