@@ -203,6 +203,13 @@ class CommissionPaymentServiceTest extends TestCase
 
     public function test_payer_refuse_integralement_si_le_paiement_deborde_sur_une_periode_non_validee(): void
     {
+        // Dates fixes dans deux quinzaines distinctes du même mois (P1 : 1-15, P2 : 16-fin) —
+        // deux offsets relatifs à now() (ex: subDays(20)/subDays(10)) peuvent accidentellement
+        // retomber dans la même quinzaine selon le jour d'exécution du test, ce qui fait que
+        // les deux makePeriode() ci-dessous pointent vers la même PaiementPeriode : le second
+        // appel écrase alors silencieusement le statut VALIDEE du premier.
+        $this->travelTo('2026-06-20 12:00:00');
+
         $org = Organization::factory()->create();
         $vehicule = Vehicule::factory()->create(['organization_id' => $org->id]);
         $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
@@ -210,11 +217,11 @@ class CommissionPaymentServiceTest extends TestCase
 
         $partValidee = $this->makePart($commission, $livreur, [
             'montant_net' => 1000,
-            'earned_at' => now()->subDays(20)->toDateString(),
+            'earned_at' => '2026-06-05',
         ]);
         $partNonValidee = $this->makePart($commission, $livreur, [
             'montant_net' => 2000,
-            'earned_at' => now()->subDays(10)->toDateString(),
+            'earned_at' => '2026-06-20',
         ]);
         $this->makePeriode($org, $partValidee->earned_at, StatutPeriodePaiement::VALIDEE);
         $this->makePeriode($org, $partNonValidee->earned_at, StatutPeriodePaiement::CALCULEE);
