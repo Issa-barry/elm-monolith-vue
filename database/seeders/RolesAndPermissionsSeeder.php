@@ -25,7 +25,7 @@ class RolesAndPermissionsSeeder extends Seeder
         // Finances
         'depenses', 'comptabilite', 'journal-financier',
         // RH
-        'rh-employes', 'rh-contrats', 'rh-paie',
+        'rh-employes', 'rh-contrats', 'rh-paie', 'pieces-identite',
         // Administration
         'users',
         // Paramètres
@@ -55,6 +55,10 @@ class RolesAndPermissionsSeeder extends Seeder
         Permission::firstOrCreate(['name' => 'rh-paie.validate']);
         Permission::firstOrCreate(['name' => 'rh-paie.pay']);
         Permission::firstOrCreate(['name' => 'rh-paie.close']);
+        // — Pièces d'identité (workflow de vérification) —
+        Permission::firstOrCreate(['name' => 'pieces-identite.download']);
+        Permission::firstOrCreate(['name' => 'pieces-identite.valider']);
+        Permission::firstOrCreate(['name' => 'pieces-identite.rejeter']);
         Permission::firstOrCreate(['name' => 'comptabilite.payer']);
         // — Dépenses (workflow) —
         Permission::firstOrCreate(['name' => 'depenses.soumettre']);
@@ -134,6 +138,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'rh-contrats.create',       'rh-contrats.read',       'rh-contrats.update',       'rh-contrats.delete',
             'rh-paie.create',           'rh-paie.read',           'rh-paie.update',           'rh-paie.delete',
             'rh-paie.validate',         'rh-paie.pay',            'rh-paie.close',
+            'pieces-identite.create',   'pieces-identite.read',   'pieces-identite.update',   'pieces-identite.delete',
+            'pieces-identite.download', 'pieces-identite.valider', 'pieces-identite.rejeter',
             // Administration
             'users.create',             'users.read',             'users.update',
             // Paramètres
@@ -185,6 +191,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'rh-contrats.create',       'rh-contrats.read',       'rh-contrats.update',
             'rh-paie.create',           'rh-paie.read',           'rh-paie.update',
             'rh-paie.validate',         'rh-paie.pay',
+            'pieces-identite.create',   'pieces-identite.read',   'pieces-identite.update',
+            'pieces-identite.download',
             // Administration
             'users.read',
             // Paramètres
