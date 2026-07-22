@@ -44,6 +44,7 @@ use App\Http\Controllers\PaiementCommissionVenteController;
 use App\Http\Controllers\PaiePaiementController;
 use App\Http\Controllers\PaieVariableController;
 use App\Http\Controllers\PdvController;
+use App\Http\Controllers\PieceIdentiteController;
 use App\Http\Controllers\PrestataireController;
 use App\Http\Controllers\ProduitController;
 use App\Http\Controllers\PropositionVehiculeController;
@@ -296,6 +297,20 @@ Route::prefix('backoffice')->group(function () {
         Route::middleware('module:'.ModuleFeature::RH)->group(function () {
             Route::resource('employes', EmployeController::class);
             Route::resource('contrats', ContratController::class)->except(['show']);
+
+            // Pièces d'identité (salariés uniquement pour le moment)
+            Route::post('employes/{employe}/pieces-identite', [PieceIdentiteController::class, 'store'])
+                ->name('pieces-identite.store');
+            Route::put('pieces-identite/{pieceIdentite}', [PieceIdentiteController::class, 'update'])
+                ->name('pieces-identite.update');
+            Route::get('pieces-identite/{pieceIdentite}/fichiers/{face}', [PieceIdentiteController::class, 'showFile'])
+                ->name('pieces-identite.fichier');
+            Route::post('pieces-identite/{pieceIdentite}/valider', [PieceIdentiteController::class, 'valider'])
+                ->name('pieces-identite.valider');
+            Route::post('pieces-identite/{pieceIdentite}/rejeter', [PieceIdentiteController::class, 'rejeter'])
+                ->name('pieces-identite.rejeter');
+            Route::delete('pieces-identite/{pieceIdentite}', [PieceIdentiteController::class, 'destroy'])
+                ->name('pieces-identite.destroy');
 
             // Paie (legacy — lecture seule, gestion déplacée dans Comptabilité > Salaires)
             Route::get('paie', [PaieController::class, 'index'])->name('paie.index');
