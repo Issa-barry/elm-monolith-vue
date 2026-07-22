@@ -15,7 +15,7 @@ class RolesAndPermissionsSeeder extends Seeder
 {
     private const RESOURCES = [
         // Personnes
-        'clients', 'prestataires', 'livreurs', 'proprietaires',
+        'clients', 'prestataires', 'livreurs', 'proprietaires', 'pieces-identite',
         // Véhicules & logistique terrain
         'vehicules', 'type-vehicules', 'equipes-livraison', 'sites',
         // Commerce
@@ -25,7 +25,7 @@ class RolesAndPermissionsSeeder extends Seeder
         // Finances
         'depenses', 'comptabilite', 'journal-financier',
         // RH
-        'rh-employes', 'rh-contrats', 'rh-paie', 'pieces-identite',
+        'rh-employes', 'rh-contrats', 'rh-paie',
         // Administration
         'users',
         // Paramètres
@@ -55,7 +55,7 @@ class RolesAndPermissionsSeeder extends Seeder
         Permission::firstOrCreate(['name' => 'rh-paie.validate']);
         Permission::firstOrCreate(['name' => 'rh-paie.pay']);
         Permission::firstOrCreate(['name' => 'rh-paie.close']);
-        // — Pièces d'identité (workflow de vérification) —
+        // — Pièces d'identité (workflow de vérification — actuellement sur Proprietaire) —
         Permission::firstOrCreate(['name' => 'pieces-identite.download']);
         Permission::firstOrCreate(['name' => 'pieces-identite.valider']);
         Permission::firstOrCreate(['name' => 'pieces-identite.rejeter']);
@@ -102,6 +102,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'prestataires.create',      'prestataires.read',      'prestataires.update',      'prestataires.delete',
             'livreurs.create',          'livreurs.read',          'livreurs.update',          'livreurs.delete',
             'proprietaires.create',     'proprietaires.read',     'proprietaires.update',     'proprietaires.delete',
+            'pieces-identite.create',   'pieces-identite.read',   'pieces-identite.update',   'pieces-identite.delete',
+            'pieces-identite.download', 'pieces-identite.valider', 'pieces-identite.rejeter',
             // Véhicules
             'vehicules.create',         'vehicules.read',         'vehicules.update',         'vehicules.delete',
             'type-vehicules.create',    'type-vehicules.read',    'type-vehicules.update',    'type-vehicules.delete',
@@ -138,8 +140,6 @@ class RolesAndPermissionsSeeder extends Seeder
             'rh-contrats.create',       'rh-contrats.read',       'rh-contrats.update',       'rh-contrats.delete',
             'rh-paie.create',           'rh-paie.read',           'rh-paie.update',           'rh-paie.delete',
             'rh-paie.validate',         'rh-paie.pay',            'rh-paie.close',
-            'pieces-identite.create',   'pieces-identite.read',   'pieces-identite.update',   'pieces-identite.delete',
-            'pieces-identite.download', 'pieces-identite.valider', 'pieces-identite.rejeter',
             // Administration
             'users.create',             'users.read',             'users.update',
             // Paramètres
@@ -157,6 +157,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'prestataires.create',      'prestataires.read',      'prestataires.update',
             'livreurs.create',          'livreurs.read',          'livreurs.update',
             'proprietaires.read',
+            'pieces-identite.read',     'pieces-identite.download',
             // Véhicules
             'vehicules.create',         'vehicules.read',         'vehicules.update',
             'type-vehicules.create',    'type-vehicules.read',    'type-vehicules.update',
@@ -191,8 +192,6 @@ class RolesAndPermissionsSeeder extends Seeder
             'rh-contrats.create',       'rh-contrats.read',       'rh-contrats.update',
             'rh-paie.create',           'rh-paie.read',           'rh-paie.update',
             'rh-paie.validate',         'rh-paie.pay',
-            'pieces-identite.create',   'pieces-identite.read',   'pieces-identite.update',
-            'pieces-identite.download',
             // Administration
             'users.read',
             // Paramètres

@@ -5,9 +5,9 @@ namespace Tests\Feature;
 use App\Enums\StatutVerificationPieceIdentite;
 use App\Enums\TypePieceIdentite;
 use App\Models\Client;
-use App\Models\Employe;
 use App\Models\Organization;
 use App\Models\PieceIdentite;
+use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -28,7 +28,7 @@ class PieceIdentiteTest extends TestCase
 
     private Site $site;
 
-    private Employe $employe;
+    private Proprietaire $proprietaire;
 
     protected function setUp(): void
     {
@@ -42,7 +42,7 @@ class PieceIdentiteTest extends TestCase
             'pieces-identite.create', 'pieces-identite.read', 'pieces-identite.update',
             'pieces-identite.delete', 'pieces-identite.download', 'pieces-identite.valider', 'pieces-identite.rejeter',
         ], $this->site);
-        $this->employe = Employe::factory()->create(['organization_id' => $this->org->id]);
+        $this->proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
     }
 
     private function makeUserInOrg(Organization $org, array $permissions, ?Site $site = null): User
@@ -76,28 +76,36 @@ class PieceIdentiteTest extends TestCase
 
     // ── store ─────────────────────────────────────────────────────────────────
 
-    public function test_store_creates_piece_for_employe(): void
+    public function test_store_creates_piece_for_proprietaire(): void
     {
         $this->actingAs($this->user)
-            ->post(route('pieces-identite.store', $this->employe), $this->validPayload())
-            ->assertRedirect(route('employes.edit', $this->employe));
+            ->post(route('pieces-identite.store', $this->proprietaire), $this->validPayload())
+            ->assertRedirect(route('proprietaires.show', $this->proprietaire));
 
         $this->assertDatabaseHas('pieces_identite', [
-            'identifiable_type' => 'employe',
-            'identifiable_id' => $this->employe->id,
+            'identifiable_type' => 'proprietaire',
+            'identifiable_id' => $this->proprietaire->id,
             'type_piece' => 'cni',
             'statut_verification' => 'en_attente',
             'est_active' => true,
         ]);
     }
 
-    public function test_store_copies_organization_id_from_employe(): void
+    public function test_store_generates_ulid(): void
     {
-        $this->actingAs($this->user)
-            ->post(route('pieces-identite.store', $this->employe), $this->validPayload());
+        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->proprietaire), $this->validPayload());
 
         $piece = PieceIdentite::firstOrFail();
-        $this->assertSame($this->employe->organization_id, $piece->organization_id);
+        $this->assertMatchesRegularExpression('/^[0-9a-hjkmnp-tv-zA-HJKMNP-TV-Z]{26}$/', $piece->id);
+    }
+
+    public function test_store_copies_organization_id_from_proprietaire(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('pieces-identite.store', $this->proprietaire), $this->validPayload());
+
+        $piece = PieceIdentite::firstOrFail();
+        $this->assertSame($this->proprietaire->organization_id, $piece->organization_id);
     }
 
     public function test_store_ignores_client_supplied_organization_id(): void
@@ -105,19 +113,40 @@ class PieceIdentiteTest extends TestCase
         $otherOrg = Organization::factory()->create();
 
         $this->actingAs($this->user)
-            ->post(route('pieces-identite.store', $this->employe), $this->validPayload([
+            ->post(route('pieces-identite.store', $this->proprietaire), $this->validPayload([
                 'organization_id' => $otherOrg->id,
             ]));
 
         $piece = PieceIdentite::firstOrFail();
-        $this->assertSame($this->employe->organization_id, $piece->organization_id);
+        $this->assertSame($this->proprietaire->organization_id, $piece->organization_id);
         $this->assertNotSame($otherOrg->id, $piece->organization_id);
+    }
+
+    public function test_store_requires_recto(): void
+    {
+        $payload = $this->validPayload();
+        unset($payload['recto']);
+
+        $this->actingAs($this->user)
+            ->post(route('pieces-identite.store', $this->proprietaire), $payload)
+            ->assertSessionHasErrors('recto');
+    }
+
+    public function test_store_allows_missing_verso(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('pieces-identite.store', $this->proprietaire), $this->validPayload())
+            ->assertSessionDoesntHaveErrors('verso');
+
+        $piece = PieceIdentite::firstOrFail();
+        $this->assertNull($piece->verso_path);
+        $this->assertNotNull($piece->recto_path);
     }
 
     public function test_store_rejects_invalid_file_type(): void
     {
         $this->actingAs($this->user)
-            ->post(route('pieces-identite.store', $this->employe), $this->validPayload([
+            ->post(route('pieces-identite.store', $this->proprietaire), $this->validPayload([
                 'recto' => UploadedFile::fake()->create('recto.exe', 100),
             ]))
             ->assertSessionHasErrors('recto');
@@ -126,7 +155,7 @@ class PieceIdentiteTest extends TestCase
     public function test_store_rejects_file_over_max_size(): void
     {
         $this->actingAs($this->user)
-            ->post(route('pieces-identite.store', $this->employe), $this->validPayload([
+            ->post(route('pieces-identite.store', $this->proprietaire), $this->validPayload([
                 'recto' => UploadedFile::fake()->create('recto.pdf', 5121, 'application/pdf'),
             ]))
             ->assertSessionHasErrors('recto');
@@ -134,26 +163,26 @@ class PieceIdentiteTest extends TestCase
 
     public function test_store_deactivates_previous_piece_of_same_type(): void
     {
-        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->employe), $this->validPayload());
+        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->proprietaire), $this->validPayload());
         $first = PieceIdentite::firstOrFail();
 
-        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->employe), $this->validPayload());
+        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->proprietaire), $this->validPayload());
 
         $this->assertFalse($first->fresh()->est_active);
         $this->assertSame(2, PieceIdentite::count());
     }
 
-    public function test_store_returns_403_for_employe_of_other_organization(): void
+    public function test_store_returns_403_for_proprietaire_of_other_organization(): void
     {
         $otherOrg = Organization::factory()->create();
-        $otherEmploye = Employe::factory()->create(['organization_id' => $otherOrg->id]);
+        $otherProprietaire = Proprietaire::factory()->create(['organization_id' => $otherOrg->id]);
 
         $this->actingAs($this->user)
-            ->post(route('pieces-identite.store', $otherEmploye), $this->validPayload())
+            ->post(route('pieces-identite.store', $otherProprietaire), $this->validPayload())
             ->assertStatus(403);
     }
 
-    public function test_cannot_attach_piece_to_entity_other_than_employe(): void
+    public function test_cannot_attach_piece_to_entity_other_than_proprietaire(): void
     {
         $client = Client::factory()->create(['organization_id' => $this->org->id]);
 
@@ -172,7 +201,7 @@ class PieceIdentiteTest extends TestCase
 
     public function test_download_allowed_with_permission(): void
     {
-        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->employe), $this->validPayload());
+        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->proprietaire), $this->validPayload());
         $piece = PieceIdentite::firstOrFail();
 
         $this->actingAs($this->user)
@@ -182,7 +211,7 @@ class PieceIdentiteTest extends TestCase
 
     public function test_download_forbidden_without_permission(): void
     {
-        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->employe), $this->validPayload());
+        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->proprietaire), $this->validPayload());
         $piece = PieceIdentite::firstOrFail();
 
         $userSansDroit = $this->makeUserInOrg($this->org, ['pieces-identite.read']);
@@ -194,7 +223,7 @@ class PieceIdentiteTest extends TestCase
 
     public function test_download_forbidden_for_piece_of_other_organization(): void
     {
-        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->employe), $this->validPayload());
+        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->proprietaire), $this->validPayload());
         $piece = PieceIdentite::firstOrFail();
 
         $otherOrg = Organization::factory()->create();
@@ -209,7 +238,7 @@ class PieceIdentiteTest extends TestCase
 
     public function test_update_replaces_recto_and_deletes_old_file(): void
     {
-        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->employe), $this->validPayload());
+        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->proprietaire), $this->validPayload());
         $piece = PieceIdentite::firstOrFail();
         $oldPath = $piece->recto_path;
 
@@ -221,7 +250,7 @@ class PieceIdentiteTest extends TestCase
                 'numero' => $piece->numero,
                 'recto' => UploadedFile::fake()->image('nouveau-recto.jpg'),
             ])
-            ->assertRedirect(route('employes.edit', $this->employe));
+            ->assertRedirect(route('proprietaires.show', $this->proprietaire));
 
         $piece->refresh();
         $this->assertNotSame($oldPath, $piece->recto_path);
@@ -231,7 +260,7 @@ class PieceIdentiteTest extends TestCase
 
     public function test_update_resets_status_to_en_attente(): void
     {
-        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->employe), $this->validPayload());
+        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->proprietaire), $this->validPayload());
         $piece = PieceIdentite::firstOrFail();
 
         $this->actingAs($this->user)->post(route('pieces-identite.valider', $piece));
@@ -252,7 +281,7 @@ class PieceIdentiteTest extends TestCase
 
     public function test_valider_sets_statut_and_verifier(): void
     {
-        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->employe), $this->validPayload());
+        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->proprietaire), $this->validPayload());
         $piece = PieceIdentite::firstOrFail();
 
         $this->actingAs($this->user)
@@ -267,7 +296,7 @@ class PieceIdentiteTest extends TestCase
 
     public function test_rejeter_requires_motif(): void
     {
-        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->employe), $this->validPayload());
+        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->proprietaire), $this->validPayload());
         $piece = PieceIdentite::firstOrFail();
 
         $this->actingAs($this->user)
@@ -277,7 +306,7 @@ class PieceIdentiteTest extends TestCase
 
     public function test_rejeter_sets_statut_and_motif(): void
     {
-        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->employe), $this->validPayload());
+        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->proprietaire), $this->validPayload());
         $piece = PieceIdentite::firstOrFail();
 
         $this->actingAs($this->user)
@@ -289,17 +318,48 @@ class PieceIdentiteTest extends TestCase
         $this->assertSame('Photo illisible', $fresh->motif_rejet);
     }
 
+    // ── pièce active unique par type ─────────────────────────────────────────
+
+    public function test_only_one_active_piece_per_type(): void
+    {
+        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->proprietaire), $this->validPayload());
+        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->proprietaire), $this->validPayload([
+            'type_piece' => TypePieceIdentite::PASSEPORT->value,
+        ]));
+
+        $this->assertSame(2, PieceIdentite::where('est_active', true)->count());
+
+        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->proprietaire), $this->validPayload());
+
+        $this->assertSame(2, PieceIdentite::where('est_active', true)->count());
+        $this->assertSame(3, PieceIdentite::count());
+    }
+
+    // ── expiration ────────────────────────────────────────────────────────────
+
+    public function test_expired_piece_is_not_considered_valid(): void
+    {
+        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->proprietaire), $this->validPayload([
+            'date_expiration' => now()->subDay()->toDateString(),
+        ]));
+        $piece = PieceIdentite::firstOrFail();
+        $this->actingAs($this->user)->post(route('pieces-identite.valider', $piece));
+
+        $this->assertTrue($piece->fresh()->isExpiree());
+        $this->assertFalse($this->proprietaire->fresh()->hasValidIdentityDocument());
+    }
+
     // ── suppression ───────────────────────────────────────────────────────────
 
     public function test_destroy_soft_deletes_and_keeps_files(): void
     {
-        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->employe), $this->validPayload());
+        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->proprietaire), $this->validPayload());
         $piece = PieceIdentite::firstOrFail();
         $path = $piece->recto_path;
 
         $this->actingAs($this->user)
             ->delete(route('pieces-identite.destroy', $piece))
-            ->assertRedirect(route('employes.edit', $this->employe));
+            ->assertRedirect(route('proprietaires.show', $this->proprietaire));
 
         $this->assertSoftDeleted('pieces_identite', ['id' => $piece->id]);
         Storage::disk('pieces_identite')->assertExists($path);
@@ -307,31 +367,33 @@ class PieceIdentiteTest extends TestCase
 
     public function test_force_delete_removes_files_from_disk(): void
     {
-        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->employe), $this->validPayload([
+        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->proprietaire), $this->validPayload([
             'verso' => UploadedFile::fake()->image('verso.jpg'),
         ]));
         $piece = PieceIdentite::firstOrFail();
         $rectoPath = $piece->recto_path;
         $versoPath = $piece->verso_path;
+        $directory = dirname($rectoPath);
 
         $piece->forceDelete();
 
         Storage::disk('pieces_identite')->assertMissing($rectoPath);
         Storage::disk('pieces_identite')->assertMissing($versoPath);
+        $this->assertFalse(Storage::disk('pieces_identite')->exists($directory));
     }
 
     // ── hasValidIdentityDocument ─────────────────────────────────────────────
 
-    public function test_employe_has_valid_identity_document_only_when_validated_and_not_expired(): void
+    public function test_proprietaire_has_valid_identity_document_only_when_validated_and_not_expired(): void
     {
-        $this->assertFalse($this->employe->hasValidIdentityDocument());
+        $this->assertFalse($this->proprietaire->hasValidIdentityDocument());
 
-        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->employe), $this->validPayload());
-        $this->assertFalse($this->employe->hasValidIdentityDocument());
+        $this->actingAs($this->user)->post(route('pieces-identite.store', $this->proprietaire), $this->validPayload());
+        $this->assertFalse($this->proprietaire->hasValidIdentityDocument());
 
         $piece = PieceIdentite::firstOrFail();
         $this->actingAs($this->user)->post(route('pieces-identite.valider', $piece));
 
-        $this->assertTrue($this->employe->hasValidIdentityDocument());
+        $this->assertTrue($this->proprietaire->hasValidIdentityDocument());
     }
 }

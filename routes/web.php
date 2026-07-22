@@ -223,6 +223,21 @@ Route::prefix('backoffice')->group(function () {
             Route::patch('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'updateFrais'])->name('vehicules.frais.update');
             Route::delete('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'destroyFrais'])->name('vehicules.frais.destroy');
             Route::resource('proprietaires', ProprietaireController::class);
+
+            // Pièces d'identité (propriétaires uniquement pour le moment)
+            Route::post('proprietaires/{proprietaire}/pieces-identite', [PieceIdentiteController::class, 'store'])
+                ->name('pieces-identite.store');
+            Route::put('pieces-identite/{pieceIdentite}', [PieceIdentiteController::class, 'update'])
+                ->name('pieces-identite.update');
+            Route::get('pieces-identite/{pieceIdentite}/fichiers/{face}', [PieceIdentiteController::class, 'showFile'])
+                ->name('pieces-identite.fichier');
+            Route::post('pieces-identite/{pieceIdentite}/valider', [PieceIdentiteController::class, 'valider'])
+                ->name('pieces-identite.valider');
+            Route::post('pieces-identite/{pieceIdentite}/rejeter', [PieceIdentiteController::class, 'rejeter'])
+                ->name('pieces-identite.rejeter');
+            Route::delete('pieces-identite/{pieceIdentite}', [PieceIdentiteController::class, 'destroy'])
+                ->name('pieces-identite.destroy');
+
             // Livreurs : gestion centralisée depuis les Équipes (lecture seule + API modale)
             Route::get('livreurs', [LivreurController::class, 'index'])->name('livreurs.index');
             Route::post('livreurs', [LivreurController::class, 'store'])->name('livreurs.store');
@@ -297,20 +312,6 @@ Route::prefix('backoffice')->group(function () {
         Route::middleware('module:'.ModuleFeature::RH)->group(function () {
             Route::resource('employes', EmployeController::class);
             Route::resource('contrats', ContratController::class)->except(['show']);
-
-            // Pièces d'identité (salariés uniquement pour le moment)
-            Route::post('employes/{employe}/pieces-identite', [PieceIdentiteController::class, 'store'])
-                ->name('pieces-identite.store');
-            Route::put('pieces-identite/{pieceIdentite}', [PieceIdentiteController::class, 'update'])
-                ->name('pieces-identite.update');
-            Route::get('pieces-identite/{pieceIdentite}/fichiers/{face}', [PieceIdentiteController::class, 'showFile'])
-                ->name('pieces-identite.fichier');
-            Route::post('pieces-identite/{pieceIdentite}/valider', [PieceIdentiteController::class, 'valider'])
-                ->name('pieces-identite.valider');
-            Route::post('pieces-identite/{pieceIdentite}/rejeter', [PieceIdentiteController::class, 'rejeter'])
-                ->name('pieces-identite.rejeter');
-            Route::delete('pieces-identite/{pieceIdentite}', [PieceIdentiteController::class, 'destroy'])
-                ->name('pieces-identite.destroy');
 
             // Paie (legacy — lecture seule, gestion déplacée dans Comptabilité > Salaires)
             Route::get('paie', [PaieController::class, 'index'])->name('paie.index');

@@ -42,9 +42,11 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     impayee: 'bg-red-500',
     a_payer: 'bg-red-500',
     rejete: 'bg-red-500',
+    rejetee: 'bg-red-500',
     annule: 'bg-red-500',
     annulee: 'bg-red-500',
     ko: 'bg-red-500',
+    expiree: 'bg-red-500',
 
     // Orange — partiel / en attente / soumis
     partiel: 'bg-orange-500',
@@ -54,6 +56,7 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     a_reverifier: 'bg-orange-500',
     pending_validation: 'bg-orange-500',
     soumis: 'bg-orange-500',
+    expire_bientot: 'bg-amber-500',
 };
 
 const DEFAULT_DOT_CLASS = 'bg-zinc-400 dark:bg-zinc-500';

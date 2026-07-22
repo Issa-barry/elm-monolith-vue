@@ -4,7 +4,6 @@ namespace App\Models;
 
 use App\Enums\StatutContrat;
 use App\Enums\StatutEmploye;
-use App\Enums\StatutVerificationPieceIdentite;
 use App\Enums\TypeEmploye;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -12,7 +11,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Employe extends Model
@@ -64,22 +62,5 @@ class Employe extends Model
         return $this->hasOne(Contrat::class)
             ->where('statut_contrat', StatutContrat::ACTIF->value)
             ->latest();
-    }
-
-    public function piecesIdentite(): MorphMany
-    {
-        return $this->morphMany(PieceIdentite::class, 'identifiable');
-    }
-
-    public function hasValidIdentityDocument(): bool
-    {
-        return $this->piecesIdentite()
-            ->actives()
-            ->where('statut_verification', StatutVerificationPieceIdentite::VALIDEE->value)
-            ->where(function ($q) {
-                $q->whereNull('date_expiration')
-                    ->orWhere('date_expiration', '>=', now()->toDateString());
-            })
-            ->exists();
     }
 }

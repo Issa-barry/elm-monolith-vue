@@ -57,24 +57,44 @@ class PieceIdentite extends Model
         ];
     }
 
-    // Seul Employe peut être rattaché pour le moment (voir AppServiceProvider::enforceMorphMap).
-    // Garde-fou modèle en plus du contrôleur : empêche tout code (seeder, tinker, futur import)
-    // de rattacher une pièce à une autre entité tant que le périmètre n'est pas élargi.
+    // Entités pouvant porter une pièce d'identité — extensible : ajouter une classe
+    // ici + son alias dans AppServiceProvider::morphMap() suffit pour ouvrir le
+    // périmètre à une nouvelle personne physique (Client, Employe...), sans toucher
+    // à la table, au modèle ou au reste du pipeline.
+    private const ALLOWED_IDENTIFIABLE_TYPES = [
+        Proprietaire::class,
+    ];
+
+    // Garde-fou modèle en plus du contrôleur/policy : empêche tout code (seeder,
+    // tinker, futur import) de rattacher une pièce à une entité hors périmètre.
     protected static function booted(): void
     {
         static::saving(function (PieceIdentite $piece) {
-            if ($piece->identifiable_type && $piece->identifiable_type !== (new Employe)->getMorphClass()) {
+            if ($piece->identifiable_type && ! in_array($piece->identifiable_type, self::allowedMorphAliases(), true)) {
                 throw new \InvalidArgumentException(
-                    "Une pièce d'identité ne peut être rattachée qu'à un Employe pour le moment."
+                    "Une pièce d'identité ne peut être rattachée qu'aux entités autorisées (".implode(', ', self::ALLOWED_IDENTIFIABLE_TYPES).')'
                 );
             }
         });
 
         static::forceDeleted(function (PieceIdentite $piece) {
             $storage = app(PieceIdentiteStorageService::class);
-            $storage->delete($piece->recto_path);
-            $storage->delete($piece->verso_path);
+            $directory = null;
+            if ($piece->recto_path) {
+                $directory = dirname($piece->recto_path);
+                $storage->delete($piece->recto_path);
+            }
+            if ($piece->verso_path) {
+                $directory ??= dirname($piece->verso_path);
+                $storage->delete($piece->verso_path);
+            }
+            $storage->deleteDirectoryIfEmpty($directory);
         });
+    }
+
+    private static function allowedMorphAliases(): array
+    {
+        return array_map(fn (string $class) => (new $class)->getMorphClass(), self::ALLOWED_IDENTIFIABLE_TYPES);
     }
 
     public function identifiable(): MorphTo
@@ -112,9 +132,38 @@ class PieceIdentite extends Model
         return $this->date_expiration !== null && $this->date_expiration->isPast();
     }
 
+    public function isExpireBientot(int $joursSeuil = 30): bool
+    {
+        return $this->date_expiration !== null
+            && ! $this->isExpiree()
+            && $this->date_expiration->lte(now()->addDays($joursSeuil));
+    }
+
     public function isValidee(): bool
     {
         return $this->statut_verification === StatutVerificationPieceIdentite::VALIDEE;
+    }
+
+    /**
+     * Statut à afficher côté UI : surclasse le statut de vérification brut par
+     * "expiree"/"expire_bientot" quand pertinent (une pièce validée mais expirée
+     * ne doit jamais s'afficher comme valide).
+     */
+    public function getStatutAffichageAttribute(): string
+    {
+        if ($this->statut_verification === StatutVerificationPieceIdentite::REJETEE) {
+            return 'rejetee';
+        }
+
+        if ($this->isExpiree()) {
+            return 'expiree';
+        }
+
+        if ($this->isValidee() && $this->isExpireBientot()) {
+            return 'expire_bientot';
+        }
+
+        return $this->statut_verification->value;
     }
 
     public function getNumeroMasqueAttribute(): ?string
