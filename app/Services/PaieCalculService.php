@@ -214,6 +214,9 @@ class PaieCalculService
             throw new \InvalidArgumentException("Le montant dépasse le reste à payer ({$totalDisponible} GNF).");
         }
 
+        $touched = PeriodePayabilityChecker::touchedUntilAmount($lignes, $montant, fn ($l) => (float) $l->reste_a_payer);
+        PeriodePayabilityChecker::assertLignesPayables($touched);
+
         $restant = $montant;
         foreach ($lignes as $ligne) {
             if ($restant <= 0.01) {

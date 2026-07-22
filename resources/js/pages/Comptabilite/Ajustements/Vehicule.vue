@@ -12,7 +12,6 @@ import {
     AlertTriangle,
     ArrowLeft,
     ArrowUpDown,
-    CheckCheck,
     ShieldCheck,
     Truck,
     UserMinus,
@@ -148,57 +147,7 @@ const filterFields: FilterField[] = [
     },
 ];
 
-// ── Sélection multiple ────────────────────────────────────────────────────────
-
-const selectedRows = ref<BeneficiaireRow[]>([]);
-
-function validerLot() {
-    if (selectedRows.value.length === 0) return;
-    const parts = selectedRows.value.flatMap((row) =>
-        row.parts
-            .filter((p) => !p.est_validee)
-            .map((p) => ({ type: p.type, id: p.id })),
-    );
-    if (parts.length === 0) return;
-
-    confirm.require({
-        message: `Valider ${selectedRows.value.length} bénéficiaire(s) sélectionné(s) ?`,
-        header: 'Confirmer la validation',
-        acceptLabel: 'Valider',
-        rejectLabel: 'Annuler',
-        accept: () => {
-            router.post(
-                `${periodeUrl}/ajustements/valider-lot`,
-                { parts },
-                {
-                    preserveScroll: true,
-                    onSuccess: () => {
-                        selectedRows.value = [];
-                        flashToast('Commissions validées.');
-                    },
-                },
-            );
-        },
-    });
-}
-
-function validerBeneficiaire(row: BeneficiaireRow) {
-    const parts = row.parts
-        .filter((p) => !p.est_validee)
-        .map((p) => ({ type: p.type, id: p.id }));
-    if (parts.length === 0) return;
-
-    router.post(
-        `${periodeUrl}/ajustements/valider-lot`,
-        { parts },
-        {
-            preserveScroll: true,
-            onSuccess: () => flashToast('Commission validée.'),
-        },
-    );
-}
-
-// ── Validation en un clic de tout le véhicule (action principale) ────────────
+// ── Validation en un clic de tout le véhicule (seule action de validation) ───
 // Ne nécessite pas de valider bénéficiaire par bénéficiaire dans le cas normal :
 // dès que le reste à répartir est à 0, tout le véhicule peut être validé d'un coup.
 
@@ -509,17 +458,6 @@ function submitRemplacant() {
                         Ajouter un remplaçant
                     </Button>
                     <Button
-                        v-if="selectedRows.length > 0"
-                        variant="outline"
-                        size="sm"
-                        @click="validerLot"
-                    >
-                        <CheckCheck class="mr-1.5 h-4 w-4" />
-                        Valider les lignes sélectionnées ({{
-                            selectedRows.length
-                        }})
-                    </Button>
-                    <Button
                         size="sm"
                         :disabled="!peutValiderVehicule"
                         :title="
@@ -610,25 +548,6 @@ function submitRemplacant() {
                         tbody: { class: 'divide-y' },
                     }"
                 >
-                    <Column style="width: 2.5rem">
-                        <template #body="{ data }">
-                            <input
-                                type="checkbox"
-                                :checked="selectedRows.includes(data)"
-                                :disabled="data.est_validee"
-                                class="cursor-pointer"
-                                @change="
-                                    () => {
-                                        if (data.est_validee) return;
-                                        const idx = selectedRows.indexOf(data);
-                                        if (idx === -1) selectedRows.push(data);
-                                        else selectedRows.splice(idx, 1);
-                                    }
-                                "
-                            />
-                        </template>
-                    </Column>
-
                     <Column
                         field="beneficiaire_nom"
                         header="Bénéficiaire"
@@ -730,13 +649,6 @@ function submitRemplacant() {
                                     @click="openAbsence(data)"
                                 >
                                     <UserMinus class="h-3.5 w-3.5" />
-                                </Button>
-                                <Button
-                                    size="sm"
-                                    :disabled="data.est_validee"
-                                    @click="validerBeneficiaire(data)"
-                                >
-                                    <CheckCheck class="h-3.5 w-3.5" />
                                 </Button>
                             </div>
                         </template>

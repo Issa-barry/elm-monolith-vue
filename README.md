@@ -4,6 +4,9 @@ PHP artisan migrate:fresh --seed
 PHP artisan optimize:clear
 PHP artisan optimize
 
+php artisan migrate:fresh --seed
+php artisan optimize:clear
+php artisan optimize
  
 # magic 
 cd ~/domains/eau-la-maman.fr/public_html

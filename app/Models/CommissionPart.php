@@ -95,7 +95,7 @@ class CommissionPart extends Model
 
     public function getMontantRestantAttribute(): float
     {
-        return max(0.0, (float) $this->montant_net - (float) $this->montant_verse);
+        return max(0.0, $this->montant_a_payer - (float) $this->montant_verse);
     }
 
     /** Montant réellement dû : ajusté par un responsable, sinon montant théorique net. */
@@ -154,12 +154,12 @@ class CommissionPart extends Model
         $verseAncien = (float) $this->versements()->sum('montant');
         $verseNouveau = (float) $this->paiementItems()->sum('amount_allocated');
         $verse = $verseAncien + $verseNouveau;
-        $net = (float) $this->montant_net;
+        $aPayer = $this->montant_a_payer;
 
         $this->montant_verse = $verse;
 
         $this->statut = match (true) {
-            $net > 0 && $verse >= $net => StatutCommission::PAYE,
+            $aPayer > 0 && $verse >= $aPayer => StatutCommission::PAYE,
             $verse > 0 => StatutCommission::PARTIEL,
             default => StatutCommission::IMPAYE,
         };

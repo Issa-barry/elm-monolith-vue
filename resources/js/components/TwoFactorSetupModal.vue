@@ -20,6 +20,7 @@ import { confirm } from '@/routes/two-factor';
 import { Form } from '@inertiajs/vue3';
 import { useClipboard } from '@vueuse/core';
 import { Check, Copy, ScanLine } from 'lucide-vue-next';
+import { useToast } from 'primevue/usetoast';
 import { computed, nextTick, ref, useTemplateRef, watch } from 'vue';
 
 interface Props {
@@ -30,6 +31,7 @@ interface Props {
 const props = defineProps<Props>();
 const isOpen = defineModel<boolean>('isOpen');
 
+const toast = useToast();
 const { copy, copied } = useClipboard();
 const { qrCodeSvg, manualSetupKey, clearSetupData, fetchSetupData, errors } =
     useTwoFactorAuth();
@@ -235,7 +237,17 @@ watch(
                         v-bind="confirm.form()"
                         reset-on-error
                         @finish="code = []"
-                        @success="isOpen = false"
+                        @success="
+                            () => {
+                                isOpen = false;
+                                toast.add({
+                                    severity: 'success',
+                                    summary:
+                                        'Authentification à deux facteurs activée',
+                                    life: 3000,
+                                });
+                            }
+                        "
                         v-slot="{ errors, processing }"
                     >
                         <input type="hidden" name="code" :value="codeValue" />

@@ -34,7 +34,7 @@ class PaiementPeriodeTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->initOrgAndUser(['comptabilite.read', 'comptabilite.manage']);
+        $this->initOrgAndUser(['comptabilite.read', 'comptabilite.manage', 'comptabilite.payer']);
         Feature::for($this->org)->activate(ModuleFeature::COMPTABILITE);
     }
 
@@ -738,6 +738,112 @@ class PaiementPeriodeTest extends TestCase
             ->has('vehicules', 1)
             ->where('vehicules.0.vehicule_id', $vehiculeB->id)
         );
+    }
+
+    // ── clôturer ──────────────────────────────────────────────────────────────
+
+    public function test_cloture_refusee_si_reste_a_payer(): void
+    {
+        $this->travelTo('2026-06-10 12:00:00');
+
+        $livreur = Livreur::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Diallo',
+            'prenom' => 'Mamadou',
+            'is_active' => true,
+        ]);
+
+        $commVente = CommissionVente::create([
+            'organization_id' => $this->org->id,
+            'commande_vente_id' => $this->makeCommande()->id,
+            'vehicule_id' => null,
+            'montant_commande' => 1000000,
+            'montant_commission_totale' => 300000,
+            'montant_verse' => 0,
+            'statut' => 'impaye',
+        ]);
+
+        CommissionPart::create([
+            'commission_vente_id' => $commVente->id,
+            'type_beneficiaire' => 'livreur',
+            'livreur_id' => $livreur->id,
+            'beneficiaire_nom' => $livreur->nom_complet,
+            'taux_commission' => 100,
+            'montant_brut' => 300000,
+            'frais_supplementaires' => 0,
+            'montant_net' => 300000,
+            'montant_verse' => 0,
+            'statut' => 'impaye',
+        ]);
+
+        $periode = $this->makePeriode();
+        $this->actingAs($this->user)->post(route('comptabilite.periodes.calculer', $periode));
+        $periode->update(['statut' => StatutPeriodePaiement::VALIDEE->value]);
+
+        // Aucun paiement enregistré : la fiche a un reste à payer non nul.
+        $this->actingAs($this->user)
+            ->post(route('comptabilite.periodes.cloturer', $periode))
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('paiement_periodes', [
+            'id' => $periode->id,
+            'statut' => StatutPeriodePaiement::VALIDEE->value,
+        ]);
+    }
+
+    public function test_cloture_autorisee_si_solde(): void
+    {
+        $this->travelTo('2026-06-10 12:00:00');
+
+        $livreur = Livreur::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Diallo',
+            'prenom' => 'Mamadou',
+            'is_active' => true,
+        ]);
+
+        $commVente = CommissionVente::create([
+            'organization_id' => $this->org->id,
+            'commande_vente_id' => $this->makeCommande()->id,
+            'vehicule_id' => null,
+            'montant_commande' => 1000000,
+            'montant_commission_totale' => 300000,
+            'montant_verse' => 0,
+            'statut' => 'impaye',
+        ]);
+
+        CommissionPart::create([
+            'commission_vente_id' => $commVente->id,
+            'type_beneficiaire' => 'livreur',
+            'livreur_id' => $livreur->id,
+            'beneficiaire_nom' => $livreur->nom_complet,
+            'taux_commission' => 100,
+            'montant_brut' => 300000,
+            'frais_supplementaires' => 0,
+            'montant_net' => 300000,
+            'montant_verse' => 0,
+            'statut' => 'impaye',
+        ]);
+
+        $periode = $this->makePeriode();
+        $this->actingAs($this->user)->post(route('comptabilite.periodes.calculer', $periode));
+        $periode->update(['statut' => StatutPeriodePaiement::VALIDEE->value]);
+
+        $fiche = PaiementFiche::where('periode_id', $periode->id)->firstOrFail();
+        $this->actingAs($this->user)->post(route('comptabilite.fiches.paiements.store', $fiche), [
+            'montant' => 300000,
+            'mode_paiement' => 'especes',
+            'date_paiement' => '2026-06-15',
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('comptabilite.periodes.cloturer', $periode))
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('paiement_periodes', [
+            'id' => $periode->id,
+            'statut' => StatutPeriodePaiement::CLOTUREE->value,
+        ]);
     }
 
     // ── helper ────────────────────────────────────────────────────────────────

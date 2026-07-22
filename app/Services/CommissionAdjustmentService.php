@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\MotifAjustementCommission;
 use App\Enums\OrigineCommissionPart;
 use App\Enums\StatutCommission;
+use App\Enums\StatutValidationEquipe;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
 use App\Models\CommissionPart;
@@ -146,7 +147,7 @@ class CommissionAdjustmentService
                     'ajuste' => $ajuste,
                     'ecart' => $ecart,
                     'equilibre' => abs($ecart) <= 0.01,
-                    'statut_validation' => self::statutValidationPourParts($parts),
+                    'statut_validation' => self::statutValidationPourParts($parts)->value,
                 ];
             })
             ->sortBy('vehicule_nom')
@@ -163,10 +164,10 @@ class CommissionAdjustmentService
      *
      * @param  \Illuminate\Support\Collection<int, CommissionPart|CommissionLogistiquePart>  $parts
      */
-    private static function statutValidationPourParts(\Illuminate\Support\Collection $parts): string
+    public static function statutValidationPourParts(\Illuminate\Support\Collection $parts): StatutValidationEquipe
     {
         if ($parts->isEmpty()) {
-            return 'a_verifier';
+            return StatutValidationEquipe::A_VERIFIER;
         }
 
         $total = $parts->count();
@@ -175,11 +176,61 @@ class CommissionAdjustmentService
         $enAttente = $total - $payees - $validees;
 
         return match (true) {
-            $payees === $total => 'payee',
-            $enAttente === 0 => 'validee',
-            $enAttente === $total => 'a_verifier',
-            default => 'a_reverifier',
+            $payees === $total => StatutValidationEquipe::PAYEE,
+            $enAttente === 0 => StatutValidationEquipe::VALIDEE,
+            $enAttente === $total => StatutValidationEquipe::A_VERIFIER,
+            default => StatutValidationEquipe::A_REVERIFIER,
         };
+    }
+
+    /**
+     * Rang de "sévérité" d'un statut de validation équipe — plus bas = plus bloquant.
+     * Sert à retenir le pire statut quand un bénéficiaire est réparti sur plusieurs véhicules.
+     */
+    private static function rangValidation(StatutValidationEquipe $statut): int
+    {
+        return match ($statut) {
+            StatutValidationEquipe::A_VERIFIER => 0,
+            StatutValidationEquipe::A_REVERIFIER => 1,
+            StatutValidationEquipe::VALIDEE => 2,
+            StatutValidationEquipe::PAYEE => 3,
+        };
+    }
+
+    /**
+     * Statut de validation "équipe" par bénéficiaire (vente + logistique confondues) pour une
+     * période donnée — le pire statut parmi les véhicules sur lesquels ce bénéficiaire a des
+     * parts. Utilisé par les écrans de liste de commission pour afficher, ligne par ligne,
+     * "En attente de validation" tant que sa répartition n'est pas confirmée.
+     *
+     * @return array<string, StatutValidationEquipe> indexé par "{type}:{id}" (ex: "livreur:01...")
+     */
+    public static function statutValidationParBeneficiaire(PaiementPeriode $periode): array
+    {
+        $groupesParVehicule = collect(self::groupesParCommission($periode))
+            ->groupBy(fn (array $g) => $g['vehicule_id'] ?? '__sans_vehicule__');
+
+        $result = [];
+
+        foreach ($groupesParVehicule as $groupesDuVehicule) {
+            $parts = $groupesDuVehicule->flatMap(fn (array $g) => $g['parts']);
+            $statutVehicule = self::statutValidationPourParts($parts);
+
+            foreach ($parts as $part) {
+                $type = $part->livreur_id ? 'livreur' : ($part->proprietaire_id ? 'proprietaire' : null);
+                $id = $part->livreur_id ?? $part->proprietaire_id;
+                if ($type === null || $id === null) {
+                    continue;
+                }
+
+                $cle = "{$type}:{$id}";
+                if (! isset($result[$cle]) || self::rangValidation($statutVehicule) < self::rangValidation($result[$cle])) {
+                    $result[$cle] = $statutVehicule;
+                }
+            }
+        }
+
+        return $result;
     }
 
     /** Commandes/transferts d'un véhicule donné (ou "sans véhicule" si $vehiculeId est null). */

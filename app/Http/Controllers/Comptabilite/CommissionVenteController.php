@@ -6,6 +6,7 @@ use App\Enums\AuditEvent;
 use App\Enums\ModePaiement;
 use App\Enums\StatutCommission;
 use App\Enums\StatutDepense;
+use App\Enums\TypePeriodePaiement;
 use App\Http\Controllers\Controller;
 use App\Models\CommissionPart;
 use App\Models\Depense;
@@ -14,9 +15,12 @@ use App\Models\Organization;
 use App\Models\PaiementCommissionVente;
 use App\Models\Site;
 use App\Services\AuditLogService;
+use App\Services\CommissionAdjustmentService;
+use App\Services\CommissionStatusResolver;
 use App\Services\CommissionVenteCalculatorService;
 use App\Services\CommissionVentePaiementService;
 use App\Services\PeriodeComptableService;
+use App\Services\PeriodePaiementService;
 use App\Services\SiteScopeService;
 use App\Support\Commission\CommissionDetailFilters;
 use App\Support\Commission\CommissionSummaryFormatter;
@@ -74,7 +78,7 @@ class CommissionVenteController extends Controller
             ->where('cv.organization_id', $orgId)
             ->where('cp.type_beneficiaire', 'livreur')
             ->whereNotNull('cp.livreur_id')
-            ->where('cp.statut', '!=', StatutCommission::CREEE->value)
+            ->whereNotIn('cp.statut', [StatutCommission::CREEE->value, StatutCommission::ANNULEE->value])
             ->leftJoin('livreurs', 'livreurs.id', '=', 'cp.livreur_id')
             ->select(['cp.livreur_id AS beneficiaire_id'])
             ->selectRaw(
@@ -83,9 +87,11 @@ class CommissionVenteController extends Controller
                  MAX(livreurs.telephone)          AS telephone,
                  SUM(cp.montant_brut)             AS total_brut_cumule,
                  SUM(cp.frais_supplementaires)    AS total_frais,
-                 SUM(cp.montant_net)              AS total_net_cumule,
+                 SUM(COALESCE(cp.montant_actuel, cp.montant_net)) AS total_a_payer_cumule,
                  SUM(cp.montant_verse)            AS total_verse,
-                 COUNT(DISTINCT cp.commission_vente_id) AS nb_commandes'
+                 COUNT(DISTINCT cp.commission_vente_id) AS nb_commandes,
+                 MIN(CASE WHEN cp.statut IN (?,?) THEN cv.created_at END) AS premiere_echeance',
+                [StatutCommission::IMPAYE->value, StatutCommission::PARTIEL->value]
             )
             ->groupBy('cp.livreur_id');
 
@@ -94,7 +100,7 @@ class CommissionVenteController extends Controller
             $query->whereBetween('cv.created_at', [$debut, $fin]);
         }
 
-        $rows = $query->orderByRaw('SUM(cp.montant_net) - SUM(cp.montant_verse) DESC')->get();
+        $rows = $query->orderByRaw('SUM(COALESCE(cp.montant_actuel, cp.montant_net)) - SUM(cp.montant_verse) DESC')->get();
 
         $allLivreurIds = $rows->pluck('beneficiaire_id')->filter()->unique()->values()->toArray();
 
@@ -143,14 +149,37 @@ class CommissionVenteController extends Controller
             ->values()
         );
 
-        $beneficiaires = $rows->map(function ($row) use ($agencesParLivreur, $vehiculesParLivreur, $fraisDepensesParLivreur) {
+        $periodesParDate = app(PeriodePaiementService::class)->getPeriodsForDates(
+            $orgId,
+            TypePeriodePaiement::LIVREUR,
+            $rows->pluck('premiere_echeance')
+        );
+        $labelsParStatut = ['impaye' => 'Impayé', 'partiel' => 'Partiel', 'paye' => 'Payé', 'annulee' => 'Annulée'];
+        $teamStatusParPeriode = $periodesParDate->mapWithKeys(
+            fn ($periode) => [$periode->id => CommissionAdjustmentService::statutValidationParBeneficiaire($periode)]
+        );
+
+        $beneficiaires = $rows->map(function ($row) use ($agencesParLivreur, $vehiculesParLivreur, $fraisDepensesParLivreur, $periodesParDate, $labelsParStatut, $teamStatusParPeriode) {
             $livreurId = (string) $row->beneficiaire_id;
             $fraisDepenses = $fraisDepensesParLivreur[$livreurId] ?? 0.0;
             $resume = CommissionVenteCalculatorService::calculerResume(
                 (float) $row->total_brut_cumule,
                 (float) $row->total_frais,
+                (float) $row->total_a_payer_cumule,
                 $fraisDepenses,
                 (float) $row->total_verse,
+            );
+
+            $periode = $row->premiere_echeance
+                ? $periodesParDate->get(PeriodePaiementService::debutKeyForDate(Carbon::parse($row->premiere_echeance)))
+                : null;
+            $teamStatus = $periode ? ($teamStatusParPeriode[$periode->id]["livreur:{$livreurId}"] ?? null) : null;
+
+            $resolved = CommissionStatusResolver::resolve(
+                $periode,
+                $teamStatus,
+                $resume['statut'],
+                $labelsParStatut[$resume['statut']] ?? $resume['statut'],
             );
 
             return [
@@ -164,8 +193,10 @@ class CommissionVenteController extends Controller
                 'total_net_cumule' => $resume['net'],
                 'total_verse' => $resume['verse'],
                 'solde_restant' => $resume['reste'],
+                'remaining_amount' => $resume['reste'],
                 'nb_commandes' => (int) $row->nb_commandes,
                 'statut_global' => $resume['statut'],
+                ...$resolved,
             ];
         });
 
@@ -210,6 +241,11 @@ class CommissionVenteController extends Controller
 
         $periodeCourante = PeriodeComptableService::periodeCouranteLivreur();
 
+        $dateAffichee = $filtrePeriode !== ''
+            ? PeriodeComptableService::dateRangeForCode($filtrePeriode)[0]
+            : now();
+        $periodeAffichee = app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::LIVREUR, $dateAffichee);
+
         return Inertia::render('Comptabilite/CommissionVente/Index', [
             'beneficiaires' => $list,
             'kpis' => $kpis,
@@ -219,6 +255,12 @@ class CommissionVenteController extends Controller
             'selected_periode' => $filtrePeriode,
             'periodes_disponibles' => $periodesDisponibles,
             'periode_courante' => $periodeCourante,
+            'periode_affichee' => $periodeAffichee ? [
+                'id' => $periodeAffichee->id,
+                'reference' => $periodeAffichee->reference,
+                'statut' => $periodeAffichee->statut->value,
+                'statut_label' => $periodeAffichee->statut_label,
+            ] : null,
             'sites' => $sites,
             'can_payer' => auth()->user()->can('comptabilite.payer'),
         ]);
@@ -298,13 +340,41 @@ class CommissionVenteController extends Controller
         $resume = CommissionVenteCalculatorService::calculerResume(
             (float) $filteredParts->sum('montant_brut'),
             (float) $filteredParts->sum('frais_supplementaires'),
+            (float) $filteredParts->sum('montant_a_payer'),
             $fraisDepenses,
             (float) $filteredParts->sum('montant_verse'),
         );
 
+        if ($resume['statut'] !== StatutCommission::PAYE->value) {
+            $earliestUnpaidDate = $filteredParts
+                ->filter(fn ($p) => in_array($p->statut, [StatutCommission::IMPAYE, StatutCommission::PARTIEL], true))
+                ->map(fn ($p) => $p->commission?->created_at)
+                ->filter()
+                ->sort()
+                ->first();
+            $periodeResolue = $earliestUnpaidDate
+                ? app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::LIVREUR, Carbon::instance($earliestUnpaidDate))
+                : null;
+        } else {
+            $periodeResolue = app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::LIVREUR, now());
+        }
+
+        $teamStatus = $periodeResolue
+            ? (CommissionAdjustmentService::statutValidationParBeneficiaire($periodeResolue)["livreur:{$livreurId}"] ?? null)
+            : null;
+
+        $labelsParStatut = ['impaye' => 'Impayé', 'partiel' => 'Partiel', 'paye' => 'Payé', 'annulee' => 'Annulée'];
+        $statutCommission = CommissionStatusResolver::resolve(
+            $periodeResolue,
+            $teamStatus,
+            $resume['statut'],
+            $labelsParStatut[$resume['statut']] ?? $resume['statut'],
+        );
+        $payable = $statutCommission['can_pay'];
+
         $periodeStats = null;
         if ($periodeFilter !== '' && $filteredParts->isNotEmpty()) {
-            $netPeriode = (float) $filteredParts->sum('montant_net');
+            $netPeriode = (float) $filteredParts->sum('montant_a_payer');
             $versePeriode = (float) $filteredParts->sum('montant_verse');
             $restePeriode = max(0.0, $netPeriode - $versePeriode);
             $periodeStats = [
@@ -325,7 +395,7 @@ class CommissionVenteController extends Controller
                     ? PeriodeComptableService::codeForLivreur(Carbon::instance($commission->created_at))
                     : null;
 
-                $montantNet = (float) $partsGroup->sum('montant_net');
+                $montantAPayer = (float) $partsGroup->sum('montant_a_payer');
                 $montantVerse = (float) $partsGroup->sum('montant_verse');
 
                 return [
@@ -340,9 +410,9 @@ class CommissionVenteController extends Controller
                     ] : null,
                     'montant_brut' => (float) $partsGroup->sum('montant_brut'),
                     'frais' => (float) $partsGroup->sum('frais_supplementaires'),
-                    'montant' => $montantNet,
+                    'montant' => $montantAPayer,
                     'paye' => $montantVerse,
-                    'reste' => max(0.0, $montantNet - $montantVerse),
+                    'reste' => max(0.0, $montantAPayer - $montantVerse),
                     'statut' => $first->statut_label,
                     'statut_dot_class' => $first->statut_dot_class,
                     'periode' => $periodeCode,
@@ -432,6 +502,14 @@ class CommissionVenteController extends Controller
             'selected_periode' => $periodeFilter,
             'periodes_disponibles' => $periodesDisponibles,
             'periode_stats' => $periodeStats,
+            'payable' => $payable,
+            'statut_commission' => $statutCommission,
+            'periode_affichee' => $periodeResolue ? [
+                'id' => $periodeResolue->id,
+                'reference' => $periodeResolue->reference,
+                'statut' => $periodeResolue->statut->value,
+                'statut_label' => $periodeResolue->statut_label,
+            ] : null,
             'filters' => [
                 'periode' => $periodeFilter,
                 'vehicule_ids' => $vehiculeIds,
@@ -606,6 +684,7 @@ class CommissionVenteController extends Controller
             $resume = CommissionVenteCalculatorService::calculerResume(
                 (float) $livParts->sum('montant_brut'),
                 (float) $livParts->sum('frais_supplementaires'),
+                (float) $livParts->sum('montant_a_payer'),
                 $fraisDepenses,
                 (float) $livParts->sum('montant_verse'),
             );

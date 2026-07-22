@@ -179,7 +179,7 @@ class ProprietaireController extends Controller
                 'id' => $proprietaire->id,
                 'nom' => $proprietaire->nom,
                 'prenom' => $proprietaire->prenom,
-                'nom_complet' => trim($proprietaire->prenom.' '.$proprietaire->nom),
+                'nom_complet' => $proprietaire->nom_complet,
                 'email' => $proprietaire->email,
                 'telephone' => $proprietaire->telephone,
                 'code_phone_pays' => $proprietaire->code_phone_pays,

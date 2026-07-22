@@ -1,6 +1,7 @@
 ﻿<script setup lang="ts">
 import AuditDrawer from '@/components/AuditDrawer.vue';
 import ClickableTableRow from '@/components/ClickableTableRow.vue';
+import PeriodeStatusBanner from '@/components/commission/PeriodeStatusBanner.vue';
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -16,6 +17,10 @@ import {
 } from '@/components/ui/dropdown-menu';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
+import type {
+    PeriodeAffichee,
+    StatutCommissionResolu,
+} from '@/types/commission-status';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     Download,
@@ -40,7 +45,7 @@ interface VehiculeInfo {
     proprietaire_code_phone_pays: string | null;
 }
 
-interface LivreurRow {
+interface LivreurRow extends StatutCommissionResolu {
     livreur_id: string;
     nom: string;
     telephone: string | null;
@@ -49,6 +54,7 @@ interface LivreurRow {
     frais_depenses: number;
     impaye: number;
     paye: number;
+    remaining_amount: number;
 }
 
 interface Kpis {
@@ -70,6 +76,7 @@ const props = defineProps<{
     filtre_site_ids: string[];
     selected_periode: string;
     periodes_disponibles: PeriodeOption[];
+    periode_affichee: PeriodeAffichee | null;
     sites: { id: string; nom: string }[];
     can_payer: boolean;
 }>();
@@ -184,12 +191,6 @@ function handlePaiementSubmit(payload: {
     );
 }
 
-function livreurStatuts(l: LivreurRow) {
-    if (l.impaye > 0) return [{ label: 'Impayé', dotClass: 'bg-red-500' }];
-    if (l.paye > 0) return [{ label: 'Payé', dotClass: 'bg-emerald-500' }];
-    return [];
-}
-
 function buildParams(): URLSearchParams {
     const params = new URLSearchParams();
     if (props.selected_periode) params.set('periode', props.selected_periode);
@@ -272,6 +273,8 @@ function fmtTel(tel: string | null | undefined): string {
                     </button>
                 </div>
             </div>
+
+            <PeriodeStatusBanner :periode="periode_affichee" />
 
             <!-- KPIs -->
             <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
@@ -504,15 +507,11 @@ function fmtTel(tel: string | null | undefined): string {
                                     {{ fmt(l.impaye) }}
                                 </td>
                                 <td class="px-5 py-3">
-                                    <div class="flex flex-col gap-1">
-                                        <StatusDot
-                                            v-for="s in livreurStatuts(l)"
-                                            :key="s.label"
-                                            :label="s.label"
-                                            :dot-class="s.dotClass"
-                                            class="text-xs text-muted-foreground"
-                                        />
-                                    </div>
+                                    <StatusDot
+                                        :status="l.display_status"
+                                        :label="l.display_label"
+                                        class="text-xs text-muted-foreground"
+                                    />
                                 </td>
                                 <td class="px-4 py-3 text-right" @click.stop>
                                     <DropdownMenu>
@@ -544,7 +543,7 @@ function fmtTel(tel: string | null | undefined): string {
                                                 Historique
                                             </DropdownMenuItem>
                                             <template
-                                                v-if="can_payer && l.impaye > 0"
+                                                v-if="can_payer && l.can_pay"
                                             >
                                                 <DropdownMenuSeparator />
                                                 <DropdownMenuItem
