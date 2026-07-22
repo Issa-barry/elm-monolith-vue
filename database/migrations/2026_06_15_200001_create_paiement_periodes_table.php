@@ -17,6 +17,8 @@ return new class extends Migration
             $table->date('date_debut');
             $table->date('date_fin');
             $table->string('statut', 20)->default('brouillon');
+            $table->string('calcul_hash', 32)->nullable();
+            $table->timestamp('calculated_at')->nullable();
             $table->text('observations')->nullable();
             $table->foreignUlid('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->foreignUlid('validated_by')->nullable()->constrained('users')->nullOnDelete();

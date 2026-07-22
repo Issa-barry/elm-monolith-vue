@@ -14,9 +14,9 @@ return new class extends Migration
             $table->string('code', 50);
             $table->string('libelle', 100);
             $table->string('description')->nullable();
-            $table->boolean('requires_vehicle')->default(false);
-            $table->boolean('requires_comment')->default(false);
-            $table->boolean('applique_aux_employes')->default(false);
+            $table->string('categorie', 20)->default('interne');
+            $table->boolean('commentaire_obligatoire')->default(false);
+            $table->boolean('justificatif_obligatoire')->default(false);
             $table->string('type_paie')->nullable();
             $table->boolean('is_active')->default(true);
             $table->timestamps();
@@ -24,6 +24,7 @@ return new class extends Migration
 
             $table->unique(['organization_id', 'code']);
             $table->index(['organization_id', 'is_active']);
+            $table->index(['organization_id', 'categorie', 'is_active'], 'dt_org_cat_active_idx');
         });
     }
 

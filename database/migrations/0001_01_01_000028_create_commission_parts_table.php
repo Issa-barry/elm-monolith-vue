@@ -23,10 +23,15 @@ return new class extends Migration
             $table->decimal('frais_supplementaires', 15, 2)->default(0);
             $table->string('type_frais', 20)->nullable();
             $table->string('commentaire_frais', 150)->nullable();
+            $table->decimal('montant_actuel', 15, 2)->nullable();
+            $table->string('origine', 20)->default('theorique');
+            $table->foreignUlid('validated_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->timestamp('validated_at')->nullable();
             $table->string('statut', 20)->default('en_attente');
             $table->timestamps();
 
             $table->index(['commission_vente_id', 'type_beneficiaire']);
+            $table->index(['commission_vente_id', 'validated_at'], 'comm_parts_id_validated_idx');
         });
     }
 
