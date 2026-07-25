@@ -16,13 +16,17 @@ class PieceIdentiteStorageService
      * Ne convertit jamais le fichier (PDF/JPG/PNG conservés tels quels — ce sont des
      * documents officiels, contrairement aux photos de véhicules gérées par ImageService).
      *
+     * $entiteSegment est le segment de dossier propre à l'entité rattachée (ex: "proprietaires",
+     * plus tard "employes"...) — garde l'arborescence lisible même si plusieurs types
+     * d'entités partagent la même table pieces_identite.
+     *
      * @return array{path: string, nom_original: string, mime_type: string, taille: int}
      */
-    public function store(UploadedFile $file, string $organizationId, string $employeId, string $pieceId, string $face): array
+    public function store(UploadedFile $file, string $organizationId, string $entiteSegment, string $identifiableId, string $pieceId, string $face): array
     {
         $extension = $file->getClientOriginalExtension() ?: $file->extension() ?: 'bin';
         $filename = $face.'-'.Str::uuid().'.'.$extension;
-        $directory = "{$organizationId}/employes/{$employeId}/{$pieceId}";
+        $directory = "{$organizationId}/{$entiteSegment}/{$identifiableId}/{$pieceId}";
 
         $path = $file->storeAs($directory, $filename, self::DISK);
 
@@ -42,6 +46,23 @@ class PieceIdentiteStorageService
     {
         if ($path) {
             Storage::disk(self::DISK)->delete($path);
+        }
+    }
+
+    /**
+     * Supprime le dossier {piece_id} s'il ne contient plus aucun fichier
+     * (appelé après forceDelete, une fois recto/verso supprimés).
+     */
+    public function deleteDirectoryIfEmpty(?string $directory): void
+    {
+        if (! $directory) {
+            return;
+        }
+
+        $disk = Storage::disk(self::DISK);
+
+        if ($disk->exists($directory) && count($disk->allFiles($directory)) === 0) {
+            $disk->deleteDirectory($directory);
         }
     }
 

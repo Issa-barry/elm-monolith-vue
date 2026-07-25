@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ImportFlotteController;
 use App\Http\Controllers\Settings\DepenseParametrageController;
 use App\Http\Controllers\Settings\DepenseTypeController;
 use App\Http\Controllers\Settings\ModuleController;
@@ -55,5 +56,15 @@ Route::middleware('auth')->group(function () {
         Route::put('/{depense_type}', [DepenseTypeController::class, 'update'])->name('update');
         Route::patch('/{depense_type}/toggle', [DepenseTypeController::class, 'toggle'])->name('toggle');
         Route::delete('/{depense_type}', [DepenseTypeController::class, 'destroy'])->name('destroy');
+    });
+
+    Route::prefix('settings/imports-flotte')->name('imports-flotte.')->group(function () {
+        Route::get('/', [ImportFlotteController::class, 'index'])->name('index');
+        Route::get('/nouveau', [ImportFlotteController::class, 'create'])->name('create');
+        Route::post('/', [ImportFlotteController::class, 'store'])->name('store');
+        Route::get('/modele', [ImportFlotteController::class, 'template'])->name('template');
+        Route::get('/{importFlotte}', [ImportFlotteController::class, 'show'])->name('show');
+        Route::post('/{importFlotte}/confirmer', [ImportFlotteController::class, 'confirm'])->name('confirm');
+        Route::post('/{importFlotte}/relancer', [ImportFlotteController::class, 'retry'])->name('retry');
     });
 });

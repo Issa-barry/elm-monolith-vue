@@ -11,9 +11,9 @@ class StorePieceIdentiteRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        $employe = $this->route('employe');
+        $proprietaire = $this->route('proprietaire');
 
-        return (bool) $employe && $this->user()->can('create', [PieceIdentite::class, $employe]);
+        return (bool) $proprietaire && $this->user()->can('create', [PieceIdentite::class, $proprietaire]);
     }
 
     public function rules(): array
