@@ -84,6 +84,10 @@ class ImportFlotteExecutor
         }
 
         // ── Véhicule ─────────────────────────────────────────────────────────
+        // Inactif à la création, comme VehiculeController::store() — un véhicule
+        // ne devient actif que lorsqu'une équipe à la répartition valide lui est
+        // attribuée (jamais le cas ici : l'équipe créée par l'import est toujours
+        // un brouillon à 0 %, cf. ImportFlotteParser).
         if ($vData['existe']) {
             $vehiculeId = $vData['id'];
         } else {
@@ -96,13 +100,18 @@ class ImportFlotteExecutor
                 'site_id' => $vData['site_id'],
                 'proprietaire_id' => $vData['categorie'] === 'externe' ? $proprietaireId : null,
                 'pris_en_charge_par_usine' => $vData['pris_en_charge_par_usine'],
-                'is_active' => true,
+                'is_active' => false,
             ]);
             $vehiculeId = $vehicule->id;
             $compteurs['vehicules_crees']++;
         }
 
         // ── Équipe ───────────────────────────────────────────────────────────
+        // Créée inactive : commission/montants à 0 (brouillon, cf.
+        // ImportFlotteParser), donc pas encore une équipe fonctionnelle. Elle
+        // (et le véhicule) ne deviennent actifs que lorsque l'admin finalise la
+        // répartition dans Équipes de livraison (EquipeLivraisonController::update()
+        // active alors les deux, comme pour toute équipe créée manuellement).
         $eData = $groupe['equipe'];
         if ($eData['existe']) {
             $equipeId = $eData['id'];
@@ -117,7 +126,7 @@ class ImportFlotteExecutor
                 'organization_id' => $orgId,
                 'vehicule_id' => $vehiculeId,
                 'proprietaire_id' => $vData['categorie'] === 'externe' ? $proprietaireId : null,
-                'is_active' => true,
+                'is_active' => false,
                 'commission_unitaire_par_pack' => $commission,
                 'montant_par_pack_proprietaire' => $vData['categorie'] === 'externe' ? $montantProp : null,
                 'taux_commission_proprietaire' => $tauxProp,
@@ -125,7 +134,10 @@ class ImportFlotteExecutor
             $equipeId = $equipe->id;
             $compteurs['equipes_creees']++;
 
-            Vehicule::whereKey($vehiculeId)->update(['is_active' => true]);
+            // Le véhicule reste (ou redevient) inactif tant que cette équipe
+            // brouillon n'est pas finalisée — y compris s'il existait déjà et
+            // était actif (il n'avait alors pas encore d'équipe).
+            Vehicule::whereKey($vehiculeId)->update(['is_active' => false]);
         }
 
         // ── Livreurs ─────────────────────────────────────────────────────────

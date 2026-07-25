@@ -241,12 +241,35 @@ class ImportFlotteTest extends TestCase
         $this->assertSame('0.00', $equipe->commission_unitaire_par_pack);
         $this->assertSame('0.00', $equipe->montant_par_pack_proprietaire);
 
+        // Inactifs tant que la répartition n'est pas finalisée — même règle que
+        // pour une création manuelle (VehiculeController::store()).
+        $this->assertFalse($equipe->is_active);
+        $this->assertFalse($vehicule->fresh()->is_active);
+
         $membre = $equipe->membres()->firstOrFail();
         $this->assertSame('chauffeur', $membre->role);
         $this->assertSame('0.00', $membre->montant_par_pack);
 
         $livreur = Livreur::where('organization_id', $this->org->id)->where('telephone', '+224623000001')->firstOrFail();
         $this->assertSame($livreur->id, $membre->livreur_id);
+    }
+
+    public function test_confirm_deactivates_already_active_vehicule_when_creating_draft_equipe(): void
+    {
+        // Véhicule déjà existant, actif, sans équipe (cas réel : créé manuellement
+        // avant d'avoir une équipe assignée).
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'immatriculation' => 'RC-1234-A',
+            'categorie' => 'externe',
+            'type_vehicule_id' => $this->type->id,
+            'is_active' => true,
+        ]);
+
+        $import = $this->importerVehiculeEtChauffeur();
+        $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
+
+        $this->assertFalse($vehicule->fresh()->is_active);
     }
 
     public function test_confirm_with_two_livreurs_creates_both_members(): void
