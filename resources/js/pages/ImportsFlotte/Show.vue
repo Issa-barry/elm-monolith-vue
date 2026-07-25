@@ -88,16 +88,26 @@ const aperçu = computed(() => {
 
     for (const g of groupesValides.value) {
         if (g.vehicule) {
-            g.vehicule.existe ? vehicules.existants++ : vehicules.creer++;
+            if (g.vehicule.existe) {
+                vehicules.existants++;
+            } else {
+                vehicules.creer++;
+            }
         }
         if (g.equipe && !g.equipe.existe) equipes++;
         if (g.proprietaire) {
-            g.proprietaire.existe
-                ? proprietaires.existants++
-                : proprietaires.creer++;
+            if (g.proprietaire.existe) {
+                proprietaires.existants++;
+            } else {
+                proprietaires.creer++;
+            }
         }
         for (const l of g.livreurs ?? []) {
-            l.existe ? livreurs.existants++ : livreurs.creer++;
+            if (l.existe) {
+                livreurs.existants++;
+            } else {
+                livreurs.creer++;
+            }
         }
     }
 
