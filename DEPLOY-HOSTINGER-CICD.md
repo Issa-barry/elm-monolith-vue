@@ -62,52 +62,13 @@ Dans GitHub: `Settings` -> `Secrets and variables` -> `Actions` -> `New reposito
 
 GitHub -> `Actions` -> `deploy-hostinger` -> `Run workflow`.
 
-## Traitement des jobs en file d'attente (Cron)
+## Import flotte (Parametres -> Import en masse)
 
-Hostinger Business Web Hosting est un hebergement mutualise : pas de
-Supervisor/systemd pour faire tourner un worker (`php artisan queue:work`) en
-permanence. La queue (`QUEUE_CONNECTION=database`, deja dans `.env.example`)
-doit donc etre videe par une tache Cron plutot qu'un processus persistant.
-Necessaire notamment pour l'import flotte (Parametres -> Import en masse),
-dont la confirmation dispatche `ProcessImportFlotteJob`.
-
-### Commande Cron exacte
-
-Dans hPanel : `Sites web -> Gerer -> Avance -> Taches Cron -> Ajouter une tache personnalisee`.
-
-```bash
-/usr/bin/php /home/uXXXXXXXX/domains/fello.eau-la-maman.com/public_html/artisan queue:work database --stop-when-empty --tries=3 --timeout=300
-```
-
-Adapter le chemin PHP et le dossier de deploiement au compte reel.
-`--stop-when-empty` est essentiel : le processus traite les jobs en attente
-puis s'arrete proprement (pas de worker qui reste actif).
-
-### Frequence recommandee
-
-Toutes les minutes. Si l'interface Hostinger ne propose pas cette granularite,
-utiliser la frequence minimale disponible (generalement 5 minutes) — l'import
-reste en statut `en_cours` jusqu'au prochain passage du Cron.
-
-### Tables jobs / failed_jobs
-
-Deja creees par la migration `0001_01_01_000002_create_jobs_tables.php`
-(`jobs`, `job_batches`, `failed_jobs` en une seule migration, convention
-Laravel 11). Rien a generer : `php artisan migrate` suffit, comme le reste du
-pipeline CD le fait deja.
-
-### Consulter les jobs echoues
-
-```bash
-php artisan queue:failed
-```
-
-Chaque ligne correspond a un job qui a epuise ses 3 tentatives. Le message
-d'erreur complet est aussi deja visible cote applicatif : la fiche de l'import
-(`Parametres -> Import en masse -> Historique`) passe au statut "Echoue" avec
-le message d'erreur affiche directement.
-
-### Relancer un import echoue
+Traitement synchrone (pas de file d'attente) : la confirmation cree
+propretaires/vehicules/livreurs/equipes directement dans le cycle de la
+requete HTTP. Plafonne a 500 lignes au total (`ImportFlotteParser::MAX_LIGNES`)
+pour rester rapide — au-dela, l'utilisateur doit scinder son fichier en
+plusieurs imports.
 
 Un import echoue peut etre relance sans risque directement depuis sa fiche
 (bouton "Relancer l'import") : `ImportFlotteExecutor` s'execute dans une
@@ -115,3 +76,12 @@ transaction globale, donc un echec ne laisse jamais de creation partielle en
 base — relancer revient a rejouer la confirmation a partir du meme fichier
 deja stocke, sans double creation possible (les entites deja existantes sont
 detectees et reutilisees, pas recreees).
+
+Si le volume devait un jour depasser ce plafond, la migration naturelle est le
+*job batching* Laravel (`Bus::batch()`, table `job_batches` deja presente
+depuis `0001_01_01_000002_create_jobs_tables.php`) plutot qu'un simple job en
+file d'attente — cela donnerait une vraie progression consultable
+(`processedJobs()`/`totalJobs()`), utile pour un traitement qui prend plus de
+quelques secondes. A ce moment-la seulement, il faudra egalement mettre en
+place une tache Cron Hostinger (`queue:work --stop-when-empty`), un worker
+permanent n'etant pas disponible sur cet hebergement mutualise.

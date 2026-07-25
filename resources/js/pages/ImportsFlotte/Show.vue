@@ -70,10 +70,14 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const groupesValides = computed(
-    () => props.record.rapport?.groupes.filter((g) => g.statut === 'valide') ?? [],
+    () =>
+        props.record.rapport?.groupes.filter((g) => g.statut === 'valide') ??
+        [],
 );
 const groupesErreur = computed(
-    () => props.record.rapport?.groupes.filter((g) => g.statut === 'erreur') ?? [],
+    () =>
+        props.record.rapport?.groupes.filter((g) => g.statut === 'erreur') ??
+        [],
 );
 
 const aperçu = computed(() => {
@@ -184,8 +188,7 @@ onBeforeUnmount(() => {
                             {{ aperçu.proprietaires.creer }}
                         </p>
                         <p class="text-xs text-muted-foreground">
-                            {{ aperçu.proprietaires.existants }} déjà
-                            existants
+                            {{ aperçu.proprietaires.existants }} déjà existants
                         </p>
                     </div>
                     <div class="rounded-xl border bg-card p-4">
@@ -229,10 +232,12 @@ onBeforeUnmount(() => {
                 >
                     <div class="flex items-center gap-2">
                         <AlertTriangle class="h-4 w-4 text-red-600" />
-                        <h2 class="text-sm font-semibold text-red-700 dark:text-red-400">
+                        <h2
+                            class="text-sm font-semibold text-red-700 dark:text-red-400"
+                        >
                             {{ groupesErreur.length }} groupe(s) en erreur —
-                            aucun import ne sera effectué tant qu'elles ne
-                            sont pas corrigées
+                            aucun import ne sera effectué tant qu'elles ne sont
+                            pas corrigées
                         </h2>
                     </div>
                     <div class="mt-4 space-y-3">
@@ -242,7 +247,9 @@ onBeforeUnmount(() => {
                             class="rounded-lg border border-red-200 bg-background p-3 text-sm dark:border-red-900/40"
                         >
                             <p class="font-medium">
-                                {{ g.immatriculation ?? 'Sans immatriculation' }}
+                                {{
+                                    g.immatriculation ?? 'Sans immatriculation'
+                                }}
                                 <span class="text-xs text-muted-foreground"
                                     >({{ formatLignes(g) }})</span
                                 >
@@ -308,15 +315,14 @@ onBeforeUnmount(() => {
             </div>
 
             <!-- Terminé -->
-            <div
-                v-else-if="record.statut === 'termine'"
-                class="space-y-4"
-            >
+            <div v-else-if="record.statut === 'termine'" class="space-y-4">
                 <div
                     class="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900/40 dark:bg-emerald-950/20"
                 >
                     <CheckCircle2 class="h-5 w-5 text-emerald-600" />
-                    <p class="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+                    <p
+                        class="text-sm font-medium text-emerald-700 dark:text-emerald-400"
+                    >
                         Import terminé avec succès.
                     </p>
                 </div>
@@ -362,7 +368,9 @@ onBeforeUnmount(() => {
                     class="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900/40 dark:bg-red-950/20"
                 >
                     <AlertTriangle class="h-5 w-5 text-red-600" />
-                    <p class="text-sm font-medium text-red-700 dark:text-red-400">
+                    <p
+                        class="text-sm font-medium text-red-700 dark:text-red-400"
+                    >
                         L'import a échoué — aucune donnée n'a été enregistrée.
                     </p>
                 </div>
@@ -388,7 +396,9 @@ onBeforeUnmount(() => {
                             class="rounded-lg border p-3 text-sm"
                         >
                             <p class="font-medium">
-                                {{ g.immatriculation ?? 'Sans immatriculation' }}
+                                {{
+                                    g.immatriculation ?? 'Sans immatriculation'
+                                }}
                                 <span class="text-xs text-muted-foreground"
                                     >({{ formatLignes(g) }})</span
                                 >

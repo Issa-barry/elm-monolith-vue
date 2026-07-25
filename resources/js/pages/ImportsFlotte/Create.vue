@@ -69,15 +69,15 @@ function submit() {
                     1. Télécharger le modèle
                 </h2>
                 <p class="mt-2 text-sm text-muted-foreground">
-                    Le modèle contient deux feuilles : <strong>vehicules</strong>
+                    Le modèle contient deux feuilles :
+                    <strong>vehicules</strong>
                     (une ligne par véhicule + son propriétaire) et
                     <strong>livreurs</strong> (une ligne par livreur, reliée au
                     véhicule par l'immatriculation). Pas besoin de répéter les
                     infos du véhicule pour chaque livreur — seule
                     l'immatriculation est à reporter sur chaque ligne de la
                     feuille livreurs. La commission et la répartition par
-                    livreur se configurent après coup dans Équipes de
-                    livraison.
+                    livreur se configurent après coup dans Équipes de livraison.
                 </p>
                 <a
                     href="/settings/imports-flotte/modele"
@@ -109,9 +109,7 @@ function submit() {
                             class="flex w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-8 text-center hover:bg-muted/40"
                             @click="fileInput?.click()"
                         >
-                            <Upload
-                                class="h-8 w-8 text-muted-foreground/60"
-                            />
+                            <Upload class="h-8 w-8 text-muted-foreground/60" />
                             <span class="text-sm font-medium">{{
                                 fileName ?? 'Cliquez pour choisir un fichier'
                             }}</span>

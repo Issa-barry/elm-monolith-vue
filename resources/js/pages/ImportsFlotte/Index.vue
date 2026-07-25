@@ -41,8 +41,7 @@ function ouvrir(id: string) {
                         Historique des imports
                     </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        Propriétaires, véhicules et livreurs importés en
-                        masse.
+                        Propriétaires, véhicules et livreurs importés en masse.
                     </p>
                 </div>
                 <div class="flex gap-2">
@@ -78,7 +77,9 @@ function ouvrir(id: string) {
                             <th class="px-4 py-3 font-medium">Fichier</th>
                             <th class="px-4 py-3 font-medium">Statut</th>
                             <th class="px-4 py-3 font-medium">Groupes</th>
-                            <th class="px-4 py-3 font-medium">Véhicules créés</th>
+                            <th class="px-4 py-3 font-medium">
+                                Véhicules créés
+                            </th>
                             <th class="px-4 py-3 font-medium">Utilisateur</th>
                             <th class="px-4 py-3 font-medium">Date</th>
                         </tr>

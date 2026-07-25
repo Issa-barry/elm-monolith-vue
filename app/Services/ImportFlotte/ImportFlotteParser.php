@@ -38,14 +38,15 @@ class ImportFlotteParser
     use PhoneHandlerTrait;
 
     /**
-     * Garde-fou mémoire : les deux feuilles sont lues entièrement en collection
-     * (pas de lecture par chunks, incompatible avec le rapprochement véhicule ↔
-     * livreurs qui doit voir toutes les lignes des deux feuilles). Volumétrie
-     * réelle du projet : quelques dizaines à centaines de lignes par import,
-     * jamais des milliers — ce plafond est une protection, pas une limite
-     * normale d'usage.
+     * Garde-fou : le traitement est synchrone (dans le cycle de la requête HTTP,
+     * pas de file d'attente), donc un fichier trop volumineux ferait attendre
+     * l'utilisateur inutilement longtemps. Les deux feuilles sont lues
+     * entièrement en collection (pas de lecture par chunks, incompatible avec
+     * le rapprochement véhicule ↔ livreurs qui doit voir toutes les lignes des
+     * deux feuilles). Volumétrie réelle du projet : quelques dizaines à
+     * centaines de lignes par import — 500 laisse une bonne marge.
      */
-    private const MAX_LIGNES = 2000;
+    private const MAX_LIGNES = 500;
 
     public function analyser(string $absolutePath, string $organizationId): array
     {

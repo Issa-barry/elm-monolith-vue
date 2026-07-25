@@ -4,8 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Enums\StatutImportFlotte;
 use App\Http\Requests\StoreImportFlotteRequest;
-use App\Jobs\ProcessImportFlotteJob;
 use App\Models\ImportFlotte;
+use App\Services\ImportFlotte\ImportFlotteExecutor;
 use App\Services\ImportFlotte\ImportFlotteParser;
 use App\Services\ImportFlotte\ImportFlotteTemplateExport;
 use Illuminate\Http\RedirectResponse;
@@ -14,6 +14,7 @@ use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 use Maatwebsite\Excel\Facades\Excel;
+use Throwable;
 
 class ImportFlotteController extends Controller
 {
@@ -74,7 +75,13 @@ class ImportFlotteController extends Controller
         ]);
     }
 
-    public function confirm(ImportFlotte $importFlotte): RedirectResponse
+    /**
+     * Traitement synchrone (pas de file d'attente) : le volume réel de ces
+     * imports (dizaines à centaines de lignes, plafonné par
+     * ImportFlotteParser::MAX_LIGNES) reste rapide dans le cycle de la requête
+     * HTTP elle-même — inutile d'ajouter la complexité d'un worker/cron pour ça.
+     */
+    public function confirm(ImportFlotte $importFlotte, ImportFlotteExecutor $executor): RedirectResponse
     {
         $this->authorize('view', $importFlotte);
 
@@ -85,14 +92,14 @@ class ImportFlotteController extends Controller
         $misAJour = ImportFlotte::where('id', $importFlotte->id)
             ->where('statut', StatutImportFlotte::ANALYSE->value)
             ->where('nb_groupes_erreur', 0)
-            ->update(['statut' => StatutImportFlotte::EN_COURS->value]);
+            ->update(['statut' => StatutImportFlotte::EN_COURS->value, 'demarre_le' => now()]);
 
         abort_unless($misAJour === 1, 422, "Cet import n'est pas prêt à être confirmé (déjà confirmé, ou groupes en erreur).");
 
-        ProcessImportFlotteJob::dispatch($importFlotte->id);
+        $this->traiter($importFlotte->fresh(), $executor);
 
         return redirect()->route('imports-flotte.show', $importFlotte)
-            ->with('success', "Import lancé. Le traitement s'exécute en arrière-plan.");
+            ->with('success', 'Import terminé.');
     }
 
     /**
@@ -101,20 +108,20 @@ class ImportFlotteController extends Controller
      * en base — relancer équivaut à une nouvelle confirmation à partir du
      * fichier déjà stocké.
      */
-    public function retry(ImportFlotte $importFlotte): RedirectResponse
+    public function retry(ImportFlotte $importFlotte, ImportFlotteExecutor $executor): RedirectResponse
     {
         $this->authorize('view', $importFlotte);
 
         $misAJour = ImportFlotte::where('id', $importFlotte->id)
             ->where('statut', StatutImportFlotte::ECHOUE->value)
-            ->update(['statut' => StatutImportFlotte::EN_COURS->value]);
+            ->update(['statut' => StatutImportFlotte::EN_COURS->value, 'demarre_le' => now()]);
 
         abort_unless($misAJour === 1, 422, "Cet import n'est pas en échec.");
 
-        ProcessImportFlotteJob::dispatch($importFlotte->id);
+        $this->traiter($importFlotte->fresh(), $executor);
 
         return redirect()->route('imports-flotte.show', $importFlotte)
-            ->with('success', 'Nouvelle tentative lancée.');
+            ->with('success', 'Nouvelle tentative terminée.');
     }
 
     public function template()
@@ -140,6 +147,48 @@ class ImportFlotteController extends Controller
             'nb_groupes_erreur' => $nbErreur,
             'analyse_le' => now(),
         ]);
+    }
+
+    private function traiter(ImportFlotte $import, ImportFlotteExecutor $executor): void
+    {
+        try {
+            $resultat = $executor->executer($import);
+        } catch (Throwable $e) {
+            report($e);
+
+            $import->update([
+                'statut' => StatutImportFlotte::ECHOUE->value,
+                'rapport' => ['erreur_fatale' => $e->getMessage()],
+                'termine_le' => now(),
+            ]);
+
+            return;
+        }
+
+        $groupes = $resultat['rapport']['groupes'];
+        $nbErreur = count(array_filter($groupes, fn ($g) => $g['statut'] === 'erreur'));
+
+        if ($resultat['succes']) {
+            $import->update([
+                'statut' => StatutImportFlotte::TERMINE->value,
+                'rapport' => $resultat['rapport'],
+                'nb_groupes_valides' => count($groupes),
+                'nb_groupes_erreur' => 0,
+                'nb_proprietaires_crees' => $resultat['compteurs']['proprietaires_crees'],
+                'nb_vehicules_crees' => $resultat['compteurs']['vehicules_crees'],
+                'nb_livreurs_crees' => $resultat['compteurs']['livreurs_crees'],
+                'nb_equipes_creees' => $resultat['compteurs']['equipes_creees'],
+                'termine_le' => now(),
+            ]);
+        } else {
+            $import->update([
+                'statut' => StatutImportFlotte::ECHOUE->value,
+                'rapport' => $resultat['rapport'],
+                'nb_groupes_valides' => count($groupes) - $nbErreur,
+                'nb_groupes_erreur' => $nbErreur,
+                'termine_le' => now(),
+            ]);
+        }
     }
 
     private function toRow(ImportFlotte $i): array

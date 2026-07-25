@@ -2,7 +2,14 @@
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { useForm } from '@inertiajs/vue3';
-import { IdCard, Pencil, Plus, ShieldCheck, ShieldX, Trash2 } from 'lucide-vue-next';
+import {
+    IdCard,
+    Pencil,
+    Plus,
+    ShieldCheck,
+    ShieldX,
+    Trash2,
+} from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import Select from 'primevue/select';
 import { ref } from 'vue';
@@ -155,11 +162,14 @@ function openRejetDialog(piece: PieceIdentiteRow) {
 
 function submitRejet() {
     if (!rejetTargetId.value) return;
-    rejetForm.post(`/backoffice/pieces-identite/${rejetTargetId.value}/rejeter`, {
-        onSuccess: () => {
-            rejetDialogVisible.value = false;
+    rejetForm.post(
+        `/backoffice/pieces-identite/${rejetTargetId.value}/rejeter`,
+        {
+            onSuccess: () => {
+                rejetDialogVisible.value = false;
+            },
         },
-    });
+    );
 }
 
 // ── Suppression ───────────────────────────────────────────────────────────────
@@ -188,7 +198,9 @@ function supprimer(piece: PieceIdentiteRow) {
                     Pièce d'identité
                 </h2>
                 <p class="mt-1 text-sm text-muted-foreground">
-                    {{ pieces.length }} pièce{{ pieces.length > 1 ? 's' : '' }}
+                    {{ pieces.length }} pièce{{
+                        pieces.length > 1 ? 's' : ''
+                    }}
                     enregistrée{{ pieces.length > 1 ? 's' : '' }}
                 </p>
             </div>
@@ -255,7 +267,9 @@ function supprimer(piece: PieceIdentiteRow) {
                         </p>
                         <div class="flex gap-3 pt-1">
                             <a
-                                v-if="piece.has_recto && permissions.can_download"
+                                v-if="
+                                    piece.has_recto && permissions.can_download
+                                "
                                 :href="fichierUrl(piece.id, 'recto')"
                                 target="_blank"
                                 rel="noopener"
@@ -263,7 +277,9 @@ function supprimer(piece: PieceIdentiteRow) {
                                 >Voir le recto</a
                             >
                             <a
-                                v-if="piece.has_verso && permissions.can_download"
+                                v-if="
+                                    piece.has_verso && permissions.can_download
+                                "
                                 :href="fichierUrl(piece.id, 'verso')"
                                 target="_blank"
                                 rel="noopener"
@@ -328,9 +344,7 @@ function supprimer(piece: PieceIdentiteRow) {
         <Dialog
             v-model:visible="formDialogVisible"
             modal
-            :header="
-                editingPiece ? 'Modifier la pièce' : 'Ajouter une pièce'
-            "
+            :header="editingPiece ? 'Modifier la pièce' : 'Ajouter une pièce'"
             :style="{ width: '32rem' }"
         >
             <form class="space-y-4" @submit.prevent="submitForm">
@@ -466,7 +480,11 @@ function supprimer(piece: PieceIdentiteRow) {
                     @click="formDialogVisible = false"
                     >Annuler</Button
                 >
-                <Button size="sm" :disabled="form.processing" @click="submitForm">
+                <Button
+                    size="sm"
+                    :disabled="form.processing"
+                    @click="submitForm"
+                >
                     Enregistrer
                 </Button>
             </template>
@@ -481,7 +499,8 @@ function supprimer(piece: PieceIdentiteRow) {
         >
             <form class="space-y-3" @submit.prevent="submitRejet">
                 <label class="block text-sm font-medium"
-                    >Motif du rejet <span class="text-destructive">*</span></label
+                    >Motif du rejet
+                    <span class="text-destructive">*</span></label
                 >
                 <textarea
                     v-model="rejetForm.motif_rejet"
