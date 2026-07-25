@@ -9,7 +9,7 @@ php artisan optimize:clear
 php artisan optimize
  
 # magic 
-cd ~/domains/eau-la-maman.fr/public_html
+cd ~/domains/xxxxx/public_html
 export PHP=/opt/alt/php84/usr/bin/php
 $PHP artisan migrate:fresh --seed
 $PHP artisan optimize:clear

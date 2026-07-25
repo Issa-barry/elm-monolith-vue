@@ -13,6 +13,7 @@ import {
     Car,
     CircleHelp,
     ExternalLink,
+    IdCard,
     Pencil,
     Plus,
     Receipt,
@@ -20,9 +21,43 @@ import {
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import { computed, ref } from 'vue';
+import PieceIdentiteSection from './partials/PieceIdentiteSection.vue';
+
+interface TypeOption {
+    value: string;
+    label: string;
+}
+
+interface PieceIdentiteRow {
+    id: string;
+    type_piece: string;
+    type_piece_label: string;
+    numero_masque: string | null;
+    pays_delivrance: string | null;
+    date_delivrance: string | null;
+    date_expiration: string | null;
+    statut_verification: string;
+    statut_verification_label: string;
+    statut_affichage: string;
+    est_active: boolean;
+    motif_rejet: string | null;
+    verifiee_le: string | null;
+    has_recto: boolean;
+    has_verso: boolean;
+    created_at: string | null;
+}
+
+interface PieceIdentitePermissions {
+    can_create: boolean;
+    can_update: boolean;
+    can_delete: boolean;
+    can_download: boolean;
+    can_valider: boolean;
+    can_rejeter: boolean;
+}
 
 interface ProprietaireData {
-    id: number;
+    id: string;
     nom: string;
     prenom: string;
     nom_complet: string;
@@ -35,6 +70,7 @@ interface ProprietaireData {
     adresse: string | null;
     is_active: boolean;
     vehicules_count: number;
+    has_valid_identity_document: boolean;
 }
 
 interface EquipeMembre {
@@ -74,13 +110,16 @@ const props = defineProps<{
     proprietaire: ProprietaireData;
     vehicules: VehiculeRow[];
     depenses: DepenseRow[];
+    pieces_identite: PieceIdentiteRow[];
+    piece_identite_permissions: PieceIdentitePermissions;
+    type_piece_options: TypeOption[];
     can_create_vehicule: boolean;
 }>();
 
 const { can } = usePermissions();
-const activeTab = ref<'informations' | 'vehicules' | 'depenses'>(
-    'informations',
-);
+const activeTab = ref<
+    'informations' | 'vehicules' | 'depenses' | 'piece_identite'
+>('informations');
 
 const statutLabel: Record<string, string> = {
     brouillon: 'Brouillon',
@@ -259,6 +298,34 @@ function closeLightbox() {
                             "
                         >
                             {{ depenses.length }}
+                        </span>
+                    </button>
+                    <button
+                        type="button"
+                        data-testid="owner-piece-identite-tab"
+                        class="mt-2 flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+                        :class="
+                            activeTab === 'piece_identite'
+                                ? 'bg-primary text-primary-foreground'
+                                : 'text-muted-foreground hover:bg-muted'
+                        "
+                        @click="activeTab = 'piece_identite'"
+                    >
+                        <span class="inline-flex items-center gap-2">
+                            <IdCard class="h-4 w-4" />
+                            Pièce d'identité
+                        </span>
+                        <span
+                            class="inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px]"
+                            :class="
+                                activeTab === 'piece_identite'
+                                    ? 'bg-white/20 text-primary-foreground'
+                                    : proprietaire.has_valid_identity_document
+                                      ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-400'
+                                      : 'bg-muted text-muted-foreground'
+                            "
+                        >
+                            {{ pieces_identite.length }}
                         </span>
                     </button>
                 </aside>
@@ -545,7 +612,10 @@ function closeLightbox() {
                 </div>
 
                 <!-- Dépenses tab -->
-                <div v-else class="rounded-xl border bg-card p-5 sm:p-6">
+                <div
+                    v-else-if="activeTab === 'depenses'"
+                    class="rounded-xl border bg-card p-5 sm:p-6"
+                >
                     <div
                         class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
                     >
@@ -614,6 +684,15 @@ function closeLightbox() {
                         </div>
                     </div>
                 </div>
+
+                <!-- Pièce d'identité tab -->
+                <PieceIdentiteSection
+                    v-else
+                    :proprietaire-id="proprietaire.id"
+                    :pieces="pieces_identite"
+                    :permissions="piece_identite_permissions"
+                    :type-piece-options="type_piece_options"
+                />
             </div>
         </div>
         <ImageLightbox

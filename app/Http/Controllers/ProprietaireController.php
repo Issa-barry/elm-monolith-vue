@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\TypePieceIdentite;
 use App\Models\Depense;
+use App\Models\PieceIdentite;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
 use App\Traits\PhoneHandlerTrait;
@@ -189,11 +191,54 @@ class ProprietaireController extends Controller
                 'adresse' => $proprietaire->adresse,
                 'is_active' => $proprietaire->is_active,
                 'vehicules_count' => $vehicules->count(),
+                'has_valid_identity_document' => $proprietaire->hasValidIdentityDocument(),
             ],
             'vehicules' => $vehicules,
             'depenses' => $depenses,
+            'pieces_identite' => $this->piecesIdentiteRows($proprietaire),
+            'piece_identite_permissions' => [
+                'can_create' => auth()->user()->can('pieces-identite.create'),
+                'can_update' => auth()->user()->can('pieces-identite.update'),
+                'can_delete' => auth()->user()->can('pieces-identite.delete'),
+                'can_download' => auth()->user()->can('pieces-identite.download'),
+                'can_valider' => auth()->user()->can('pieces-identite.valider'),
+                'can_rejeter' => auth()->user()->can('pieces-identite.rejeter'),
+            ],
+            'type_piece_options' => TypePieceIdentite::options(),
             'can_create_vehicule' => auth()->user()->can('vehicules.create'),
         ]);
+    }
+
+    /**
+     * Jamais recto_path/verso_path ni numero brut envoyés au frontend — seulement
+     * l'indication qu'un fichier existe (le composant Vue passe par la route
+     * sécurisée pieces-identite.fichier pour le consulter).
+     */
+    private function piecesIdentiteRows(Proprietaire $proprietaire): array
+    {
+        return $proprietaire->piecesIdentite()
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(fn (PieceIdentite $p) => [
+                'id' => $p->id,
+                'type_piece' => $p->type_piece->value,
+                'type_piece_label' => $p->type_piece->label(),
+                'numero_masque' => $p->numero_masque,
+                'pays_delivrance' => $p->pays_delivrance,
+                'date_delivrance' => $p->date_delivrance?->format('d/m/Y'),
+                'date_expiration' => $p->date_expiration?->format('d/m/Y'),
+                'statut_verification' => $p->statut_verification->value,
+                'statut_verification_label' => $p->statut_verification->label(),
+                'statut_affichage' => $p->statut_affichage,
+                'est_active' => $p->est_active,
+                'motif_rejet' => $p->motif_rejet,
+                'verifiee_le' => $p->verifiee_le?->format('d/m/Y H:i'),
+                'has_recto' => (bool) $p->recto_path,
+                'has_verso' => (bool) $p->verso_path,
+                'created_at' => $p->created_at?->format('d/m/Y H:i'),
+            ])
+            ->values()
+            ->all();
     }
 
     public function update(Request $request, Proprietaire $proprietaire): RedirectResponse

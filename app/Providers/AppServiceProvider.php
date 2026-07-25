@@ -5,8 +5,8 @@ namespace App\Providers;
 use App\Features\ModuleFeature;
 use App\Models\CommandeVente;
 use App\Models\Depense;
-use App\Models\Employe;
 use App\Models\Organization;
+use App\Models\Proprietaire;
 use App\Observers\DepenseObserver;
 use App\Observers\VenteObserver;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -64,14 +64,14 @@ class AppServiceProvider extends ServiceProvider
         // Morph map des relations polymorphiques — alias stables en base plutôt que
         // des noms de classe complets (indépendant des renommages de namespace).
         // À compléter (jamais retirer une entrée existante) quand une nouvelle
-        // entité "identifiable" est ajoutée (ex: pieces_identite sur Client, Livreur...).
+        // entité "identifiable" est ajoutée (ex: pieces_identite sur Client, Employe...).
         // Non-enforcing (morphMap, pas enforceMorphMap) : plusieurs relations
         // polymorphes existantes (User via Spatie Permission model_has_roles,
         // AuditLog::auditable, MouvementStock::source...) stockent encore le nom
         // de classe complet et ne sont pas dans cette map — les forcer casserait
         // ces relations non liées à cette fonctionnalité.
         Relation::morphMap([
-            'employe' => Employe::class,
+            'proprietaire' => Proprietaire::class,
         ]);
 
         // Feature flags Pennant - modules metier.
