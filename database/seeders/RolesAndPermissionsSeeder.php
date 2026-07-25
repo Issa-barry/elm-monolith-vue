@@ -55,6 +55,9 @@ class RolesAndPermissionsSeeder extends Seeder
         Permission::firstOrCreate(['name' => 'rh-paie.validate']);
         Permission::firstOrCreate(['name' => 'rh-paie.pay']);
         Permission::firstOrCreate(['name' => 'rh-paie.close']);
+        // — Import flotte (propriétaires + véhicules + livreurs) —
+        Permission::firstOrCreate(['name' => 'imports-flotte.create']);
+        Permission::firstOrCreate(['name' => 'imports-flotte.read']);
         // — Pièces d'identité (workflow de vérification — actuellement sur Proprietaire) —
         Permission::firstOrCreate(['name' => 'pieces-identite.download']);
         Permission::firstOrCreate(['name' => 'pieces-identite.valider']);
@@ -104,6 +107,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'proprietaires.create',     'proprietaires.read',     'proprietaires.update',     'proprietaires.delete',
             'pieces-identite.create',   'pieces-identite.read',   'pieces-identite.update',   'pieces-identite.delete',
             'pieces-identite.download', 'pieces-identite.valider', 'pieces-identite.rejeter',
+            'imports-flotte.create',    'imports-flotte.read',
             // Véhicules
             'vehicules.create',         'vehicules.read',         'vehicules.update',         'vehicules.delete',
             'type-vehicules.create',    'type-vehicules.read',    'type-vehicules.update',    'type-vehicules.delete',

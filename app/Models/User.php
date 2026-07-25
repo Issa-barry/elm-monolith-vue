@@ -139,8 +139,8 @@ class User extends Authenticatable
     public function permissionsMap(): array
     {
         $resources = [
-            'clients', 'prestataires', 'livreurs', 'proprietaires',
-            'vehicules', 'equipes-livraison', 'sites',
+            'clients', 'prestataires', 'livreurs', 'proprietaires', 'pieces-identite',
+            'vehicules', 'type-vehicules', 'equipes-livraison', 'sites',
             'produits', 'packings', 'ventes', 'achats', 'factures', 'commissions', 'cashback', 'pdv',
             'logistique', 'transferts', 'receptions',
             'depenses', 'comptabilite', 'journal-financier',
@@ -168,6 +168,8 @@ class User extends Authenticatable
             'factures.encaisser', 'factures.annuler',
             'commissions.payer', 'commissions.cloturer', 'commissions.exporter',
             'logistique.valider_chargement', 'logistique.valider_reception', 'logistique.cloturer',
+            'pieces-identite.download', 'pieces-identite.valider', 'pieces-identite.rejeter',
+            'imports-flotte.create', 'imports-flotte.read',
         ];
         foreach ($standalone as $perm) {
             $map[$perm] = $this->isSuperAdmin() || $this->can($perm);
