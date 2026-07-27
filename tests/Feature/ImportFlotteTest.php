@@ -196,12 +196,13 @@ class ImportFlotteTest extends TestCase
         $this->assertSame(1, $import->nb_groupes_erreur);
     }
 
-    public function test_analyse_flags_error_when_vehicule_has_no_livreur(): void
+    public function test_analyse_accepts_new_vehicule_without_any_livreur(): void
     {
         $import = $this->importer([$this->ligneVehiculeExterne()], []);
 
-        $this->assertSame(1, $import->nb_groupes_erreur);
-        $this->assertStringContainsString('Aucun livreur', $import->rapport['groupes'][0]['erreurs'][0]);
+        $this->assertSame('analyse', $import->statut->value);
+        $this->assertSame(1, $import->nb_groupes_valides);
+        $this->assertSame(0, $import->nb_groupes_erreur);
     }
 
     public function test_analyse_flags_error_when_livreur_references_unknown_vehicule(): void
@@ -270,6 +271,57 @@ class ImportFlotteTest extends TestCase
         $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
 
         $this->assertFalse($vehicule->fresh()->is_active);
+    }
+
+    public function test_confirm_creates_vehicule_and_draft_equipe_without_any_livreur(): void
+    {
+        $import = $this->importer([$this->ligneVehiculeExterne()], []);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $import->refresh();
+        $this->assertSame('termine', $import->statut->value);
+        $this->assertSame(1, $import->nb_proprietaires_crees);
+        $this->assertSame(1, $import->nb_vehicules_crees);
+        $this->assertSame(0, $import->nb_livreurs_crees);
+        $this->assertSame(1, $import->nb_equipes_creees);
+
+        $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
+        $equipe = EquipeLivraison::where('vehicule_id', $vehicule->id)->firstOrFail();
+        $this->assertSame(0, $equipe->membres()->count());
+        $this->assertFalse($equipe->is_active);
+        $this->assertFalse($vehicule->fresh()->is_active);
+    }
+
+    public function test_analyse_accepts_existing_vehicule_without_any_livreur_and_keeps_its_members(): void
+    {
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'immatriculation' => 'RC-1234-A',
+            'categorie' => 'externe',
+            'type_vehicule_id' => $this->type->id,
+        ]);
+        $equipe = EquipeLivraison::create([
+            'organization_id' => $this->org->id,
+            'vehicule_id' => $vehicule->id,
+            'commission_unitaire_par_pack' => 5000,
+        ]);
+        $chauffeur = Livreur::factory()->create(['organization_id' => $this->org->id, 'telephone' => '+224623000001']);
+        $equipe->membres()->create(['livreur_id' => $chauffeur->id, 'role' => 'chauffeur', 'montant_par_pack' => 3000]);
+
+        $import = $this->importer([$this->ligneVehiculeExterne()], []);
+        $this->assertSame(0, $import->nb_groupes_erreur);
+
+        $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
+        $import->refresh();
+
+        $this->assertSame('termine', $import->statut->value);
+        $this->assertSame(0, $import->nb_vehicules_crees);
+        $this->assertSame(0, $import->nb_equipes_creees);
+        $this->assertSame(1, $equipe->membres()->count());
+        $this->assertSame('5000.00', $equipe->fresh()->commission_unitaire_par_pack);
     }
 
     public function test_confirm_with_two_livreurs_creates_both_members(): void
