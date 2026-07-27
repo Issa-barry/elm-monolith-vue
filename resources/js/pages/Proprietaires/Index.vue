@@ -50,6 +50,7 @@ interface Proprietaire {
     id: number;
     nom: string;
     prenom: string;
+    surnom: string | null;
     nom_complet: string;
     email: string | null;
     telephone: string | null;
@@ -118,6 +119,7 @@ const filteredProprietaires = computed(() => {
     return list.filter(
         (p) =>
             p.nom_complet.toLowerCase().includes(q) ||
+            (p.surnom ?? '').toLowerCase().includes(q) ||
             (p.email ?? '').toLowerCase().includes(q) ||
             (p.adresse ?? '').toLowerCase().includes(q) ||
             (p.ville ?? '').toLowerCase().includes(q) ||
@@ -131,6 +133,7 @@ const mobileFiltered = computed(() => {
     return props.proprietaires.filter(
         (p) =>
             p.nom_complet.toLowerCase().includes(q) ||
+            (p.surnom ?? '').toLowerCase().includes(q) ||
             (p.email ?? '').toLowerCase().includes(q) ||
             (p.adresse ?? '').toLowerCase().includes(q) ||
             (p.ville ?? '').toLowerCase().includes(q),
@@ -256,6 +259,12 @@ function confirmDelete(p: Proprietaire) {
                             >
                                 {{ p.nom_complet }}
                             </Link>
+                            <span
+                                v-if="p.surnom"
+                                class="font-normal text-muted-foreground"
+                            >
+                                « {{ p.surnom }} »
+                            </span>
                         </div>
                         <div
                             v-if="p.email"
@@ -467,6 +476,12 @@ function confirmDelete(p: Proprietaire) {
                                     >
                                         {{ data.nom_complet }}
                                     </Link>
+                                    <span
+                                        v-if="data.surnom"
+                                        class="ml-1 text-sm font-normal text-muted-foreground"
+                                    >
+                                        « {{ data.surnom }} »
+                                    </span>
                                     <div
                                         v-if="data.email"
                                         class="text-xs text-muted-foreground"
