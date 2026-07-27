@@ -17,6 +17,7 @@ function flagUrl(code: string) {
 interface FormData {
     nom: string;
     prenom: string;
+    surnom: string | null;
     email: string | null;
     telephone: string | null;
     adresse: string | null;
@@ -157,6 +158,27 @@ function onTelephoneInput(value: string | null | undefined) {
                     />
                     <p v-if="errors.nom" class="mt-1 text-xs text-destructive">
                         {{ errors.nom }}
+                    </p>
+                </div>
+                <div class="sm:col-span-2">
+                    <Label for="surnom" class="mb-1.5 block">Surnom</Label>
+                    <InputText
+                        id="surnom"
+                        :model-value="form.surnom ?? ''"
+                        @update:model-value="
+                            $emit('update:form', {
+                                ...form,
+                                surnom: $event || null,
+                            })
+                        "
+                        class="w-full"
+                        :class="{ 'p-invalid': errors.surnom }"
+                    />
+                    <p
+                        v-if="errors.surnom"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.surnom }}
                     </p>
                 </div>
             </div>

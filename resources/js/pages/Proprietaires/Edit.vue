@@ -11,6 +11,7 @@ interface ProprietaireData {
     id: number;
     nom: string;
     prenom: string;
+    surnom: string | null;
     email: string | null;
     telephone: string | null;
     adresse: string | null;
@@ -39,6 +40,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     nom: props.proprietaire.nom,
     prenom: props.proprietaire.prenom,
+    surnom: props.proprietaire.surnom,
     email: props.proprietaire.email,
     telephone: props.proprietaire.telephone,
     adresse: props.proprietaire.adresse,
@@ -55,6 +57,7 @@ watch(
         form.defaults({
             nom: p.nom,
             prenom: p.prenom,
+            surnom: p.surnom,
             email: p.email,
             telephone: p.telephone,
             adresse: p.adresse,

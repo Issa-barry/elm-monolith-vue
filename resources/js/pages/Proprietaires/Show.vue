@@ -60,6 +60,7 @@ interface ProprietaireData {
     id: string;
     nom: string;
     prenom: string;
+    surnom: string | null;
     nom_complet: string;
     email: string | null;
     telephone: string | null;
@@ -357,6 +358,15 @@ function closeLightbox() {
                             </p>
                             <p class="mt-1 text-sm font-medium">
                                 {{ proprietaire.nom_complet }}
+                            </p>
+                        </div>
+                        <div
+                            v-if="proprietaire.surnom"
+                            class="rounded-lg border bg-background p-4"
+                        >
+                            <p class="text-xs text-muted-foreground">Surnom</p>
+                            <p class="mt-1 text-sm font-medium">
+                                {{ proprietaire.surnom }}
                             </p>
                         </div>
                         <div class="rounded-lg border bg-background p-4">
