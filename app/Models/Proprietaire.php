@@ -23,6 +23,7 @@ class Proprietaire extends Model
         'user_id',
         'nom',
         'prenom',
+        'surnom',
         'email',
         'telephone',
         'adresse',
