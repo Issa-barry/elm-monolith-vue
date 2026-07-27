@@ -64,7 +64,8 @@ const STATUT_CONFIG: Record<string, StatutConfig> = {
     },
     validee: {
         title: 'Prête au paiement',
-        description: 'La période est validée. Les paiements peuvent être effectués.',
+        description:
+            'La période est validée. Les paiements peuvent être effectués.',
         nextAction: 'Effectuer les paiements restants.',
         icon: HandCoins,
         accentClass: 'text-emerald-600 dark:text-emerald-400',
