@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\ModeTarification;
 use App\Enums\ProduitStatut;
 use App\Enums\StatutCommandeVente;
 use App\Models\CommandeVente;
@@ -27,7 +28,8 @@ class PdvCheckoutService
         }
 
         return DB::transaction(function () use ($data, $user, $siteId) {
-            [$lignesData, $total] = $this->buildLignes($data['lignes'], $user->organization_id);
+            $mode = $this->resolveModeTarification($data['vehicule_id'] ?? null);
+            [$lignesData, $total] = $this->buildLignes($data['lignes'], $user->organization_id, $mode);
 
             $commande = CommandeVente::create([
                 'organization_id' => $user->organization_id,
@@ -35,6 +37,7 @@ class PdvCheckoutService
                 'vehicule_id' => $data['vehicule_id'] ?? null,
                 'client_id' => $data['client_id'] ?? null,
                 'total_commande' => $total,
+                'mode_tarification_snapshot' => $mode->value,
                 'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
                 'validated_at' => now(),
                 'created_by' => $user->id,
@@ -72,6 +75,17 @@ class PdvCheckoutService
         }
     }
 
+    private function resolveModeTarification(?string $vehiculeId): ModeTarification
+    {
+        if (! $vehiculeId) {
+            return ModeTarification::PRIX_VENTE;
+        }
+
+        $vehicule = Vehicule::query()->select(['id', 'pris_en_charge_par_usine'])->find($vehiculeId);
+
+        return ModeTarification::fromPrisEnChargeParUsine($vehicule?->pris_en_charge_par_usine ?? true);
+    }
+
     private function validateCapacite(array $data): void
     {
         $vehicule = Vehicule::select(['id', 'capacite_packs'])->find($data['vehicule_id']);
@@ -94,7 +108,7 @@ class PdvCheckoutService
      * Vérifie le stock, décrémente atomiquement et construit les lignes.
      * lockForUpdate() garantit l'atomicité contre les ventes concurrentes.
      */
-    private function buildLignes(array $lignes, string|int $orgId): array
+    private function buildLignes(array $lignes, string|int $orgId, ModeTarification $mode): array
     {
         $produitIds = collect($lignes)->pluck('produit_id')->unique()->values()->all();
 
@@ -130,12 +144,13 @@ class PdvCheckoutService
             }
 
             $prixVente = (int) $produit->prix_vente;
-            $totalLigne = $qte * $prixVente;
+            $prixUsine = (int) $produit->prix_usine;
+            $totalLigne = $qte * ($mode === ModeTarification::PRIX_VENTE ? $prixVente : $prixUsine);
 
             $lignesData[] = [
                 'produit_id' => $produit->id,
                 'quantite_demandee' => $qte,
-                'prix_usine_snapshot' => (int) $produit->prix_usine,
+                'prix_usine_snapshot' => $prixUsine,
                 'prix_vente_snapshot' => $prixVente,
                 'total_ligne' => $totalLigne,
             ];

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AuditEvent;
+use App\Enums\ModeTarification;
 use App\Enums\MotifAnnulation;
 use App\Enums\ProduitStatut;
 use App\Enums\ProduitType;
@@ -359,7 +360,8 @@ class CommandeVenteController extends Controller
         $this->ensureQuantiteMatchesVehiculeCapacity($data);
         $this->enforcePrixVentePolicy($data, null);
 
-        [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes']);
+        $mode = $this->resolveModeTarification($data['vehicule_id'] ?? null);
+        [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $mode);
 
         $commande = CommandeVente::create([
             'organization_id' => $orgId,
@@ -367,6 +369,7 @@ class CommandeVenteController extends Controller
             'vehicule_id' => $data['vehicule_id'] ?? null,
             'client_id' => $data['client_id'] ?? null,
             'total_commande' => $totalCommande,
+            'mode_tarification_snapshot' => $mode->value,
             'created_by' => auth()->id(),
         ]);
 
@@ -461,6 +464,8 @@ class CommandeVenteController extends Controller
                 'statut_label' => $commande->statut_label,
                 'statut_color' => $commande->statut?->color(),
                 'total_commande' => (float) $commande->total_commande,
+                'mode_tarification_snapshot' => $commande->mode_tarification_snapshot?->value,
+                'mode_tarification_label' => $commande->mode_tarification_snapshot?->label(),
                 'vehicule_nom' => $commande->vehicule?->nom_vehicule,
                 'vehicule_detail' => $vehicule ? [
                     'nom' => $vehicule->nom_vehicule,
@@ -599,12 +604,14 @@ class CommandeVenteController extends Controller
         $vente->load(['lignes.produit', 'vehicule', 'client']);
         $oldSnapshot = $this->commandeSnapshot($vente);
 
-        [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes']);
+        $mode = $this->resolveModeTarification($data['vehicule_id'] ?? null);
+        [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $mode);
 
         $vente->update([
             'vehicule_id' => $data['vehicule_id'] ?? null,
             'client_id' => $data['client_id'] ?? null,
             'total_commande' => $totalCommande,
+            'mode_tarification_snapshot' => $mode->value,
         ]);
 
         $vente->lignes()->delete();
@@ -934,7 +941,25 @@ class CommandeVenteController extends Controller
             ->toArray();
     }
 
-    private function buildLignesDataAndTotal(array $lignes): array
+    /**
+     * Détermine, à partir du véhicule assigné, quel prix sert de base au montant
+     * à encaisser par l'usine : le véhicule interne est toujours "pris en charge"
+     * (cf. VehiculeController), une commande sans véhicule (vente directe client)
+     * n'a pas de logistique tierce à distinguer — dans les deux cas c'est le
+     * plein prix de vente qui s'applique.
+     */
+    private function resolveModeTarification(?string $vehiculeId): ModeTarification
+    {
+        if (! $vehiculeId) {
+            return ModeTarification::PRIX_VENTE;
+        }
+
+        $vehicule = Vehicule::query()->select(['id', 'pris_en_charge_par_usine'])->find($vehiculeId);
+
+        return ModeTarification::fromPrisEnChargeParUsine($vehicule?->pris_en_charge_par_usine ?? true);
+    }
+
+    private function buildLignesDataAndTotal(array $lignes, ModeTarification $mode): array
     {
         $lignesData = [];
         $totalCommande = 0;
@@ -943,12 +968,13 @@ class CommandeVenteController extends Controller
             $produit = Produit::findOrFail($ligne['produit_id']);
             $qte = (int) $ligne['qte'];
             $prixVente = (float) $ligne['prix_vente'];
-            $totalLigne = $qte * $prixVente;
+            $prixUsine = (float) $produit->prix_usine;
+            $totalLigne = $qte * ($mode === ModeTarification::PRIX_VENTE ? $prixVente : $prixUsine);
 
             $lignesData[] = [
                 'produit_id' => $produit->id,
                 'quantite_demandee' => $qte,
-                'prix_usine_snapshot' => (float) $produit->prix_usine,
+                'prix_usine_snapshot' => $prixUsine,
                 'prix_vente_snapshot' => $prixVente,
                 'total_ligne' => $totalLigne,
             ];
@@ -967,6 +993,7 @@ class CommandeVenteController extends Controller
             'client_id' => $commande->client_id,
             'client_nom' => $commande->client ? trim($commande->client->prenom.' '.$commande->client->nom) : null,
             'total_commande' => (float) $commande->total_commande,
+            'mode_tarification_snapshot' => $commande->mode_tarification_snapshot?->value,
             'statut' => $commande->statut?->value,
             'lignes' => $commande->lignes->map(fn ($l) => [
                 'produit_id' => $l->produit_id,
@@ -1033,6 +1060,7 @@ class CommandeVenteController extends Controller
                 'nom_vehicule' => $v->nom_vehicule,
                 'immatriculation' => $v->immatriculation,
                 'capacite_packs' => $v->capacite_packs !== null ? (int) $v->capacite_packs : null,
+                'pris_en_charge_par_usine' => (bool) $v->pris_en_charge_par_usine,
                 'livreur_nom' => ($l = $v->equipe?->livreurs->first())
                     ? trim($l->prenom.' '.$l->nom)
                     : null,

@@ -134,6 +134,8 @@ interface CommandeData {
     statut_label: string;
     statut_color: string;
     total_commande: number;
+    mode_tarification_snapshot: string | null;
+    mode_tarification_label: string | null;
     vehicule_nom: string | null;
     vehicule_detail: VehiculeDetail | null;
     livreur_nom: string | null;
@@ -1029,6 +1031,16 @@ function connectorIsActive(idx: number): boolean {
                             </p>
                             <p class="mt-0.5 text-xl font-bold tabular-nums">
                                 {{ formatGNF(commande.total_commande) }}
+                            </p>
+                            <p
+                                v-if="
+                                    commande.mode_tarification_snapshot ===
+                                    'prix_usine'
+                                "
+                                class="mt-0.5 text-xs text-amber-600 dark:text-amber-400"
+                            >
+                                Calculé au prix usine — véhicule non pris en
+                                charge par l'usine
                             </p>
                         </div>
                     </div>
