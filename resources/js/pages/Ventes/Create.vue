@@ -203,6 +203,34 @@ function vehiculeLabel(v: VehiculeOption): string {
     return `${v.nom_vehicule} — ${v.immatriculation}`;
 }
 
+// ── Libellés de prix — explicites (prix vente vs prix usine) ──────────────────
+// Le prix unitaire AFFICHÉ doit être celui réellement utilisé dans le calcul
+// du total (prix_usine si le véhicule n'est pas pris en charge par l'usine),
+// sinon libellé et valeur se contredisent.
+const prixUnitLabel = computed(() =>
+    modeTarification.value === 'prix_usine'
+        ? 'Prix usine (unit.)'
+        : 'Prix vente (unit.)',
+);
+const unitPriceEditable = computed(
+    () => canUpdateUnitPrice.value && modeTarification.value !== 'prix_usine',
+);
+function ligneUnitPrice(ligne: LigneForm): number {
+    return modeTarification.value === 'prix_usine'
+        ? produitPrixUsine(ligne.produit_id)
+        : ligne.prix_vente;
+}
+const totalColumnLabel = computed(() =>
+    modeTarification.value === 'prix_usine'
+        ? 'Total (prix usine)'
+        : 'Total (prix vente)',
+);
+const totalCommandeLabel = computed(() =>
+    modeTarification.value === 'prix_usine'
+        ? 'Total commande (prix usine)'
+        : 'Total commande (prix vente)',
+);
+
 // ── AutoComplete : Client ─────────────────────────────────────────────────────
 const clientSelected = ref<ClientOption | null>(null);
 const clientSuggests = ref<ClientOption[]>([]);
@@ -1215,11 +1243,15 @@ function confirmerEtCreer() {
                     </p>
 
                     <p
-                        v-if="!canUpdateUnitPrice"
+                        v-if="!unitPriceEditable"
                         class="mb-3 flex items-center gap-1 text-xs text-muted-foreground"
                     >
                         <Lock class="h-3.5 w-3.5" />
-                        Prix unitaire verrouille pour votre profil.
+                        {{
+                            modeTarification === 'prix_usine'
+                                ? 'Prix usine fixé par le produit — non modifiable.'
+                                : 'Prix unitaire verrouille pour votre profil.'
+                        }}
                     </p>
 
                     <p
@@ -1319,9 +1351,9 @@ function confirmerEtCreer() {
                                         <span
                                             class="inline-flex items-center justify-end gap-1"
                                         >
-                                            Prix unit.
+                                            {{ prixUnitLabel }}
                                             <Lock
-                                                v-if="!canUpdateUnitPrice"
+                                                v-if="!unitPriceEditable"
                                                 class="h-3.5 w-3.5"
                                             />
                                         </span>
@@ -1330,7 +1362,7 @@ function confirmerEtCreer() {
                                         class="px-4 py-2.5 text-right font-medium text-muted-foreground"
                                         style="width: 160px"
                                     >
-                                        Total
+                                        {{ totalColumnLabel }}
                                     </th>
                                     <th
                                         class="px-4 py-2.5"
@@ -1399,12 +1431,12 @@ function confirmerEtCreer() {
                                     </td>
                                     <td class="px-4 py-3">
                                         <InputNumber
-                                            :model-value="ligne.prix_vente"
+                                            :model-value="ligneUnitPrice(ligne)"
                                             @update:model-value="
                                                 onPrixChange(index, $event)
                                             "
                                             :min="0"
-                                            :disabled="!canUpdateUnitPrice"
+                                            :disabled="!unitPriceEditable"
                                             :use-grouping="false"
                                             suffix=" GNF"
                                             class="w-full"
@@ -1505,20 +1537,20 @@ function confirmerEtCreer() {
                                         <span
                                             class="inline-flex items-center gap-1"
                                         >
-                                            Prix unit. (GNF)
+                                            {{ prixUnitLabel }} (GNF)
                                             <Lock
-                                                v-if="!canUpdateUnitPrice"
+                                                v-if="!unitPriceEditable"
                                                 class="h-3.5 w-3.5"
                                             />
                                         </span>
                                     </p>
                                     <InputNumber
-                                        :model-value="ligne.prix_vente"
+                                        :model-value="ligneUnitPrice(ligne)"
                                         @update:model-value="
                                             onPrixChange(index, $event)
                                         "
                                         :min="0"
-                                        :disabled="!canUpdateUnitPrice"
+                                        :disabled="!unitPriceEditable"
                                         :use-grouping="false"
                                         class="w-full"
                                         input-class="w-full"
@@ -1534,7 +1566,7 @@ function confirmerEtCreer() {
                                     <p
                                         class="text-[11px] text-muted-foreground"
                                     >
-                                        Total ligne
+                                        {{ totalColumnLabel }}
                                     </p>
                                     <p
                                         class="text-sm font-semibold tabular-nums"
@@ -1576,7 +1608,7 @@ function confirmerEtCreer() {
                             <p
                                 class="text-xs tracking-wider text-muted-foreground uppercase"
                             >
-                                Total commande
+                                {{ totalCommandeLabel }}
                             </p>
                             <p class="text-2xl font-bold tabular-nums">
                                 {{ formatGNF(totalGeneral) }}
@@ -1718,12 +1750,12 @@ function confirmerEtCreer() {
                             <th
                                 class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
                             >
-                                Prix unit.
+                                {{ prixUnitLabel }}
                             </th>
                             <th
                                 class="px-5 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
                             >
-                                Total
+                                {{ totalColumnLabel }}
                             </th>
                         </tr>
                     </thead>
@@ -1742,7 +1774,7 @@ function confirmerEtCreer() {
                             <td
                                 class="px-4 py-3 text-right text-muted-foreground tabular-nums"
                             >
-                                {{ formatGNF(ligne.prix_vente) }}
+                                {{ formatGNF(ligneUnitPrice(ligne)) }}
                             </td>
                             <td
                                 class="px-5 py-3 text-right font-semibold tabular-nums"
@@ -1770,7 +1802,7 @@ function confirmerEtCreer() {
                             <td
                                 class="px-4 py-3 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
                             >
-                                Total
+                                {{ totalCommandeLabel }}
                             </td>
                             <td
                                 class="px-5 py-3 text-right text-xl font-bold tabular-nums"

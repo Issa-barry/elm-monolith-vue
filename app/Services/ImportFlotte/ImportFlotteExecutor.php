@@ -44,9 +44,14 @@ class ImportFlotteExecutor
             'equipes_creees' => 0,
         ];
 
-        DB::transaction(function () use ($analyse, $import, &$compteurs) {
+        // Un même propriétaire (même téléphone) peut apparaître sur plusieurs
+        // groupes (plusieurs véhicules) : mémorisé ici pour ne le créer qu'une
+        // fois — voir executerGroupe().
+        $proprietairesParTelephone = [];
+
+        DB::transaction(function () use ($analyse, $import, &$compteurs, &$proprietairesParTelephone) {
             foreach ($analyse['groupes'] as $groupe) {
-                $this->executerGroupe($groupe, $import->organization_id, $compteurs);
+                $this->executerGroupe($groupe, $import->organization_id, $compteurs, $proprietairesParTelephone);
             }
         });
 
@@ -57,16 +62,22 @@ class ImportFlotteExecutor
         ];
     }
 
-    private function executerGroupe(array $groupe, string $orgId, array &$compteurs): void
+    private function executerGroupe(array $groupe, string $orgId, array &$compteurs, array &$proprietairesParTelephone): void
     {
         $vData = $groupe['vehicule'];
 
         // ── Propriétaire ─────────────────────────────────────────────────────
+        // Un même propriétaire peut posséder plusieurs véhicules du fichier :
+        // $proprietairesParTelephone évite de le recréer pour chaque groupe
+        // (l'analyse marque chaque ligne comme "nouvelle" indépendamment, tant
+        // que rien n'est encore en base).
         $proprietaireId = null;
         if ($groupe['proprietaire']) {
             $p = $groupe['proprietaire'];
             if ($p['existe']) {
                 $proprietaireId = $p['id'];
+            } elseif (isset($proprietairesParTelephone[$p['telephone']])) {
+                $proprietaireId = $proprietairesParTelephone[$p['telephone']];
             } else {
                 $proprietaire = Proprietaire::create([
                     'organization_id' => $orgId,
@@ -79,6 +90,7 @@ class ImportFlotteExecutor
                     'is_active' => true,
                 ]);
                 $proprietaireId = $proprietaire->id;
+                $proprietairesParTelephone[$p['telephone']] = $proprietaireId;
                 $compteurs['proprietaires_crees']++;
             }
         }
@@ -112,35 +124,49 @@ class ImportFlotteExecutor
         // (et le véhicule) ne deviennent actifs que lorsque l'admin finalise la
         // répartition dans Équipes de livraison (EquipeLivraisonController::update()
         // active alors les deux, comme pour toute équipe créée manuellement).
+        //
+        // $groupe['equipe'] === null signifie "aucune équipe pour ce groupe" :
+        // nouveau véhicule sans aucun livreur dans le fichier. On ne crée
+        // jamais d'équipe vide — voir ImportFlotteParser.
         $eData = $groupe['equipe'];
-        if ($eData['existe']) {
-            $equipeId = $eData['id'];
-        } else {
-            $commission = (float) $eData['commission_unitaire_par_pack'];
-            $montantProp = $vData['categorie'] === 'externe' ? (float) $eData['montant_par_pack_proprietaire'] : 0.0;
-            $tauxProp = $vData['categorie'] === 'externe' && $commission > 0
-                ? round($montantProp / $commission * 100, 2)
-                : 0.0;
+        $equipeId = null;
 
-            $equipe = EquipeLivraison::create([
-                'organization_id' => $orgId,
-                'vehicule_id' => $vehiculeId,
-                'proprietaire_id' => $vData['categorie'] === 'externe' ? $proprietaireId : null,
-                'is_active' => false,
-                'commission_unitaire_par_pack' => $commission,
-                'montant_par_pack_proprietaire' => $vData['categorie'] === 'externe' ? $montantProp : null,
-                'taux_commission_proprietaire' => $tauxProp,
-            ]);
-            $equipeId = $equipe->id;
-            $compteurs['equipes_creees']++;
+        if ($eData) {
+            if ($eData['existe']) {
+                $equipeId = $eData['id'];
+            } else {
+                $commission = (float) $eData['commission_unitaire_par_pack'];
+                $montantProp = $vData['categorie'] === 'externe' ? (float) $eData['montant_par_pack_proprietaire'] : 0.0;
+                $tauxProp = $vData['categorie'] === 'externe' && $commission > 0
+                    ? round($montantProp / $commission * 100, 2)
+                    : 0.0;
 
-            // Le véhicule reste (ou redevient) inactif tant que cette équipe
-            // brouillon n'est pas finalisée — y compris s'il existait déjà et
-            // était actif (il n'avait alors pas encore d'équipe).
-            Vehicule::whereKey($vehiculeId)->update(['is_active' => false]);
+                $equipe = EquipeLivraison::create([
+                    'organization_id' => $orgId,
+                    'vehicule_id' => $vehiculeId,
+                    'proprietaire_id' => $vData['categorie'] === 'externe' ? $proprietaireId : null,
+                    'is_active' => false,
+                    'commission_unitaire_par_pack' => $commission,
+                    'montant_par_pack_proprietaire' => $vData['categorie'] === 'externe' ? $montantProp : null,
+                    'taux_commission_proprietaire' => $tauxProp,
+                ]);
+                $equipeId = $equipe->id;
+                $compteurs['equipes_creees']++;
+
+                // Le véhicule reste (ou redevient) inactif tant que cette équipe
+                // brouillon n'est pas finalisée — y compris s'il existait déjà et
+                // était actif (il n'avait alors pas encore d'équipe).
+                Vehicule::whereKey($vehiculeId)->update(['is_active' => false]);
+            }
         }
 
         // ── Livreurs ─────────────────────────────────────────────────────────
+        // Rien à faire si le groupe n'a pas d'équipe (donc pas de livreur, cf.
+        // ImportFlotteParser : 'equipe' n'est null que quand 'livreurs' est vide).
+        if ($equipeId === null) {
+            return;
+        }
+
         $ordreDepart = EquipeLivreur::where('equipe_id', $equipeId)->max('ordre');
         $ordre = $ordreDepart !== null ? $ordreDepart + 1 : 0;
 
