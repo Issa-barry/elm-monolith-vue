@@ -221,7 +221,7 @@ class CommandeVenteModeTarificationTest extends TestCase
 
     // ── validerChargement : recalcul sur quantité réellement chargée ─────────
 
-    public function test_validerChargement_recalcule_le_total_au_prix_usine_sur_quantite_chargee(): void
+    public function test_valider_chargement_recalcule_le_total_au_prix_usine_sur_quantite_chargee(): void
     {
         $produit = $this->makeProduit(prixVente: 5000, prixUsine: 3500);
         $vehicule = $this->makeVehicule(prisEnChargeParUsine: false, capacite: 100);

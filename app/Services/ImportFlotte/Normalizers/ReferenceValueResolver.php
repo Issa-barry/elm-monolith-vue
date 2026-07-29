@@ -17,10 +17,10 @@ class ReferenceValueResolver
     /**
      * @param  iterable<object>  $candidates
      * @param  callable(object): string|array<callable(object): string>  $labels  Un ou plusieurs
-     *         champs texte considérés comme équivalents (ex : nom OU code d'un site).
+     *                                                                            champs texte considérés comme équivalents (ex : nom OU code d'un site).
      * @param  array<callable(object): string>  $extraKeys  Clés de recherche numériques
-     *         supplémentaires (ex : code site sans zéros initiaux), acceptées
-     *         seulement si elles produisent, elles aussi, une correspondance unique.
+     *                                                      supplémentaires (ex : code site sans zéros initiaux), acceptées
+     *                                                      seulement si elles produisent, elles aussi, une correspondance unique.
      */
     public static function matchExact(string $raw, iterable $candidates, callable|array $labels, array $extraKeys = []): ?object
     {
