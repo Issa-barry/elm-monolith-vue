@@ -518,11 +518,7 @@ const totalColumnLabel = computed(() =>
         ? 'Total (prix usine)'
         : 'Total (prix vente)',
 );
-const totalCommandeLabel = computed(() =>
-    props.commande.mode_tarification_snapshot === 'prix_usine'
-        ? 'Total commande (prix usine)'
-        : 'Total commande (prix vente)',
-);
+const totalCommandeLabel = 'Total commande';
 
 // ── Ticket impression ─────────────────────────────────────────────────────────
 const page = usePage();

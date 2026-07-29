@@ -36,7 +36,11 @@ class VehiculeController extends Controller
             'type_vehicule_id' => $v->type_vehicule_id,
             'type_label' => $v->type_label,
             'categorie' => $v->categorie,
-            'capacite_packs' => $v->capacite_packs,
+            // Capacité propre au véhicule si définie (override), sinon celle
+            // par défaut de son type — c'est cette dernière qui est utilisée
+            // en pratique tant qu'aucune capacité spécifique n'a été saisie
+            // (import flotte notamment : capacite_packs n'est jamais renseigné).
+            'capacite_packs' => $v->capacite_packs ?? $v->typeVehicule?->capacite_defaut,
             'site_id' => $v->site_id,
             'site_nom' => $v->relationLoaded('site') ? $v->site?->nom : null,
             'proprietaire_id' => $v->proprietaire_id,

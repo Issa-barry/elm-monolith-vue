@@ -225,11 +225,7 @@ const totalColumnLabel = computed(() =>
         ? 'Total (prix usine)'
         : 'Total (prix vente)',
 );
-const totalCommandeLabel = computed(() =>
-    modeTarification.value === 'prix_usine'
-        ? 'Total commande (prix usine)'
-        : 'Total commande (prix vente)',
-);
+const totalCommandeLabel = 'Total commande';
 
 // ── AutoComplete : Client ─────────────────────────────────────────────────────
 const clientSelected = ref<ClientOption | null>(null);

@@ -115,13 +115,59 @@ class ImportFlotteParser
         // voir resoudreProprietaire().
         $telephonesProprietairesVus = [];
 
+        // Une même immatriculation ne doit apparaître qu'une seule fois dans
+        // la feuille "vehicules" (contrairement au propriétaire, un véhicule
+        // n'a normalement qu'une ligne). Sans ce contrôle, deux lignes
+        // dupliquées passeraient toutes deux l'analyse ("valide") puis
+        // provoqueraient une violation de contrainte d'unicité en base au
+        // moment de la confirmation — plantage tardif et peu clair au lieu
+        // d'une erreur d'analyse explicite.
+        $occurrencesParImmat = $lignesVehicules
+            ->map(fn ($ligne) => $this->normaliserImmatriculation((string) ($ligne['vehicule_immatriculation'] ?? '')))
+            ->filter(fn ($immat) => $immat !== '')
+            ->countBy();
+
+        // Un même livreur (même téléphone canonique) ne peut pas être rattaché
+        // à deux véhicules différents dans le même fichier — contrairement au
+        // propriétaire, un livreur n'appartient qu'à une seule équipe (règle
+        // déjà appliquée pour les livreurs déjà en base, cf. $dejaAffecte dans
+        // resoudreLivreurs()). Sans ce contrôle, un livreur pas encore en base
+        // et présent sur deux lignes "livreurs" de véhicules différents
+        // passerait l'analyse puis violerait la contrainte d'unicité
+        // (telephone, organization_id) de la table livreurs à la confirmation.
+        $immatsParTelephoneLivreur = $lignesLivreurs
+            ->map(function ($ligne) {
+                $phone = (new PhoneNormalizer)->normalize(trim((string) ($ligne['livreur_telephone'] ?? '')), 'GN');
+                $immat = $this->normaliserImmatriculation((string) ($ligne['vehicule_immatriculation'] ?? ''));
+
+                return $phone['telephone'] && $immat !== '' ? [$phone['telephone'], $immat] : null;
+            })
+            ->filter()
+            ->groupBy(fn ($paire) => $paire[0])
+            ->map(fn ($paires) => $paires->pluck(1)->unique()->values())
+            ->filter(fn ($immats) => $immats->count() > 1);
+
         foreach ($lignesVehicules as $index => $ligneVehicule) {
             $immat = $this->normaliserImmatriculation((string) ($ligneVehicule['vehicule_immatriculation'] ?? ''));
             $immatsTraitees[$immat] = true;
 
             $lignesLivreursGroupe = ($livreursParImmat->get($immat) ?? collect())->all();
 
-            $groupes[] = $this->analyserGroupe($immat, $index + 2, $ligneVehicule, $lignesLivreursGroupe, $organizationId, $telephonesProprietairesVus);
+            if ($immat !== '' && ($occurrencesParImmat[$immat] ?? 0) > 1) {
+                $groupes[] = [
+                    'immatriculation' => $immat,
+                    'ligne_vehicule' => $index + 2,
+                    'lignes_livreurs' => array_column($lignesLivreursGroupe, 'numero_ligne'),
+                    'statut' => 'erreur',
+                    'erreurs' => ["Immatriculation \"{$immat}\" présente sur {$occurrencesParImmat[$immat]} lignes de la feuille \"vehicules\" — une seule ligne par véhicule est autorisée."],
+                    'normalisations' => [],
+                    'avertissements' => [],
+                ];
+
+                continue;
+            }
+
+            $groupes[] = $this->analyserGroupe($immat, $index + 2, $ligneVehicule, $lignesLivreursGroupe, $organizationId, $telephonesProprietairesVus, $immatsParTelephoneLivreur);
         }
 
         // Lignes de la feuille "livreurs" dont l'immatriculation n'existe dans
@@ -187,7 +233,7 @@ class ImportFlotteParser
         return null;
     }
 
-    private function analyserGroupe(string $immatriculation, int $numeroLigneVehicule, Collection $ligneVehicule, array $lignesLivreursGroupe, string $orgId, array &$telephonesProprietairesVus): array
+    private function analyserGroupe(string $immatriculation, int $numeroLigneVehicule, Collection $ligneVehicule, array $lignesLivreursGroupe, string $orgId, array &$telephonesProprietairesVus, Collection $immatsParTelephoneLivreur): array
     {
         $numerosLignesLivreurs = array_column($lignesLivreursGroupe, 'numero_ligne');
         $erreurs = [];
@@ -299,7 +345,7 @@ class ImportFlotteParser
         // créé sans aucun livreur, auquel cas aucune équipe n'est créée du tout
         // (voir construction de 'equipe' plus bas). Un véhicule existant sans
         // ligne livreur ne touche pas non plus à ses membres actuels.
-        [$livreurs, $erreursLivreurs, $normalisationsLivreurs] = $this->resoudreLivreurs($lignesLivreursGroupe, $orgId, $equipeExistante);
+        [$livreurs, $erreursLivreurs, $normalisationsLivreurs] = $this->resoudreLivreurs($lignesLivreursGroupe, $orgId, $equipeExistante, $immatriculation, $immatsParTelephoneLivreur);
         $erreurs = array_merge($erreurs, $erreursLivreurs);
         $normalisations = array_merge($normalisations, $normalisationsLivreurs);
 
@@ -415,7 +461,7 @@ class ImportFlotteParser
     /**
      * @return array{0: array, 1: string[], 2: string[]}
      */
-    private function resoudreLivreurs(array $lignesGroupe, string $orgId, ?EquipeLivraison $equipeExistante): array
+    private function resoudreLivreurs(array $lignesGroupe, string $orgId, ?EquipeLivraison $equipeExistante, string $immatriculationGroupe, Collection $immatsParTelephoneLivreur): array
     {
         $livreurs = [];
         $erreurs = [];
@@ -451,6 +497,15 @@ class ImportFlotteParser
             $telephone = $phone['telephone'];
             if ($telephone !== $telephoneBrut) {
                 $normalisations[] = "\"{$telephoneBrut}\" → \"{$telephone}\"";
+            }
+
+            if ($immatsParTelephoneLivreur->has($telephone)) {
+                $autresImmats = $immatsParTelephoneLivreur->get($telephone)
+                    ->reject(fn ($immat) => $immat === $immatriculationGroupe)
+                    ->implode(', ');
+                $erreurs[] = "Ligne {$numero} : le livreur {$telephone} est rattaché à plusieurs véhicules différents dans ce fichier ({$immatriculationGroupe}, {$autresImmats}) — un livreur ne peut appartenir qu'à une seule équipe.";
+
+                continue;
             }
 
             if (! in_array($role, ['chauffeur', 'convoyeur'], true)) {

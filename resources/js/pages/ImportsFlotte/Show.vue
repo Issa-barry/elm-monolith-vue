@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
@@ -415,7 +416,12 @@ onBeforeUnmount(() => {
                     class="w-full"
                     @click="confirmer"
                 >
-                    Confirmer l'import
+                    <Spinner v-if="confirmForm.processing" class="mr-2" />
+                    {{
+                        confirmForm.processing
+                            ? 'Création en cours, veuillez patienter…'
+                            : "Confirmer l'import"
+                    }}
                 </Button>
             </template>
 
@@ -544,7 +550,12 @@ onBeforeUnmount(() => {
                     class="w-full"
                     @click="relancer"
                 >
-                    Relancer l'import
+                    <Spinner v-if="retryForm.processing" class="mr-2" />
+                    {{
+                        retryForm.processing
+                            ? 'Création en cours, veuillez patienter…'
+                            : "Relancer l'import"
+                    }}
                 </Button>
             </div>
         </div>

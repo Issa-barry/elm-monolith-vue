@@ -213,6 +213,62 @@ class ImportFlotteTest extends TestCase
         $this->assertStringContainsString('Aucun véhicule', $import->rapport['groupes'][0]['erreurs'][0]);
     }
 
+    public function test_analyse_flags_error_for_duplicate_immatriculation_in_vehicules_sheet(): void
+    {
+        // Cas réel : la même immatriculation apparaît deux fois dans la
+        // feuille "vehicules" (erreur de saisie). Sans ce contrôle, les deux
+        // lignes passeraient l'analyse puis feraient planter la confirmation
+        // sur la contrainte d'unicité en base.
+        $import = $this->importer(
+            [
+                $this->ligneVehiculeExterne(['proprietaire_telephone' => '622000001']),
+                $this->ligneVehiculeExterne(['proprietaire_telephone' => '622000002']),
+            ],
+            []
+        );
+
+        $this->assertSame(0, $import->nb_groupes_valides);
+        $this->assertSame(2, $import->nb_groupes_erreur);
+        $this->assertStringContainsString('RC-1234-A', $import->rapport['groupes'][0]['erreurs'][0]);
+        $this->assertStringContainsString('une seule ligne par véhicule', $import->rapport['groupes'][0]['erreurs'][0]);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertStatus(422);
+
+        $this->assertSame(0, Vehicule::where('organization_id', $this->org->id)->count());
+    }
+
+    public function test_analyse_flags_error_for_livreur_attached_to_two_different_vehicules(): void
+    {
+        // Un livreur pas encore en base, rattaché à deux véhicules différents
+        // dans le même fichier : sans contrôle, les deux lignes passeraient
+        // l'analyse puis feraient planter la confirmation sur la contrainte
+        // d'unicité (telephone, organization_id) de la table livreurs.
+        $import = $this->importer(
+            [
+                $this->ligneVehiculeExterne(['vehicule_immatriculation' => 'RC-1111-A', 'proprietaire_telephone' => '622000001']),
+                $this->ligneVehiculeExterne(['vehicule_immatriculation' => 'RC-2222-B', 'proprietaire_telephone' => '622000002']),
+            ],
+            [
+                $this->ligneLivreurChauffeur(['vehicule_immatriculation' => 'RC-1111-A']),
+                $this->ligneLivreurChauffeur(['vehicule_immatriculation' => 'RC-2222-B']),
+            ]
+        );
+
+        $this->assertSame(0, $import->nb_groupes_valides);
+        $this->assertSame(2, $import->nb_groupes_erreur);
+        $erreur = collect($import->rapport['groupes'])->flatMap(fn ($g) => $g['erreurs'])->first();
+        $this->assertStringContainsString('+224623000001', $erreur);
+        $this->assertStringContainsString('plusieurs véhicules différents', $erreur);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertStatus(422);
+
+        $this->assertSame(0, Livreur::where('organization_id', $this->org->id)->count());
+    }
+
     // ── confirmation / création ──────────────────────────────────────────────
 
     public function test_confirm_creates_proprietaire_vehicule_equipe_and_livreur_as_draft(): void
