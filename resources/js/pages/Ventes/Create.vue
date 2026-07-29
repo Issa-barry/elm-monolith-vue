@@ -10,6 +10,7 @@ import { Head, Link, useForm } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     ExternalLink,
+    Info,
     Lock,
     Phone,
     Plus,
@@ -20,7 +21,10 @@ import AutoComplete from 'primevue/autocomplete';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
+import Tooltip from 'primevue/tooltip';
 import { computed, onMounted, ref } from 'vue';
+
+const vTooltip = Tooltip;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface FactureDetail {
@@ -203,15 +207,13 @@ function vehiculeLabel(v: VehiculeOption): string {
     return `${v.nom_vehicule} — ${v.immatriculation}`;
 }
 
-// ── Libellés de prix — explicites (prix vente vs prix usine) ──────────────────
-// Le prix unitaire AFFICHÉ doit être celui réellement utilisé dans le calcul
-// du total (prix_usine si le véhicule n'est pas pris en charge par l'usine),
-// sinon libellé et valeur se contredisent.
-const prixUnitLabel = computed(() =>
-    modeTarification.value === 'prix_usine'
-        ? 'Prix usine (unit.)'
-        : 'Prix vente (unit.)',
-);
+// ── Prix affiché — la règle (prix vente vs prix usine) est expliquée une
+// seule fois via le bandeau "Prix appliqué", donc les libellés de colonne
+// restent génériques. La valeur AFFICHÉE reste celle réellement utilisée
+// dans le calcul du total, sinon valeur affichée et total se contredisent.
+const prixUnitLabel = 'Prix unit.';
+const totalColumnLabel = 'Total';
+const totalCommandeLabel = 'Total commande';
 const unitPriceEditable = computed(
     () => canUpdateUnitPrice.value && modeTarification.value !== 'prix_usine',
 );
@@ -220,12 +222,6 @@ function ligneUnitPrice(ligne: LigneForm): number {
         ? produitPrixUsine(ligne.produit_id)
         : ligne.prix_vente;
 }
-const totalColumnLabel = computed(() =>
-    modeTarification.value === 'prix_usine'
-        ? 'Total (prix usine)'
-        : 'Total (prix vente)',
-);
-const totalCommandeLabel = 'Total commande';
 
 // ── AutoComplete : Client ─────────────────────────────────────────────────────
 const clientSelected = ref<ClientOption | null>(null);
@@ -611,28 +607,16 @@ function confirmerEtCreer() {
                             </div>
 
                             <!-- ✅ Aucun impayé -->
-                            <div
+                            <p
                                 v-else-if="
                                     vehiculeSolvabilite &&
                                     !vehiculeSolvabilite.has_debt
                                 "
-                                class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-950/30"
+                                class="mt-2 flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400"
                             >
-                                <div class="flex items-start gap-2.5">
-                                    <span
-                                        class="mt-0.5 text-base text-emerald-600 dark:text-emerald-400"
-                                        >✓</span
-                                    >
-                                    <div>
-                                        <p
-                                            class="text-sm font-semibold text-emerald-800 dark:text-emerald-300"
-                                        >
-                                            Ce véhicule est à jour de ses
-                                            paiements.
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
+                                <span>✓</span>
+                                Véhicule à jour
+                            </p>
 
                             <!-- ⚠ Dettes (dans les limites) -->
                             <div
@@ -957,25 +941,16 @@ function confirmerEtCreer() {
                             </div>
 
                             <!-- ✅ Aucun impayé -->
-                            <div
+                            <p
                                 v-else-if="
                                     clientSolvabilite &&
                                     !clientSolvabilite.has_debt
                                 "
-                                class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-950/30"
+                                class="mt-2 flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400"
                             >
-                                <div class="flex items-center gap-2.5">
-                                    <span
-                                        class="text-base text-emerald-600 dark:text-emerald-400"
-                                        >✓</span
-                                    >
-                                    <p
-                                        class="text-sm font-semibold text-emerald-800 dark:text-emerald-300"
-                                    >
-                                        Ce client est à jour de ses paiements.
-                                    </p>
-                                </div>
-                            </div>
+                                <span>✓</span>
+                                Client à jour
+                            </p>
 
                             <!-- ⚠ Dettes (dans les limites) -->
                             <div
@@ -1239,79 +1214,90 @@ function confirmerEtCreer() {
                     </p>
 
                     <p
-                        v-if="!unitPriceEditable"
+                        v-if="!canUpdateUnitPrice"
                         class="mb-3 flex items-center gap-1 text-xs text-muted-foreground"
                     >
                         <Lock class="h-3.5 w-3.5" />
-                        {{
-                            modeTarification === 'prix_usine'
-                                ? 'Prix usine fixé par le produit — non modifiable.'
-                                : 'Prix unitaire verrouille pour votre profil.'
-                        }}
+                        Prix unitaire verrouille pour votre profil.
                     </p>
 
-                    <p
-                        v-if="form.vehicule_id !== null"
-                        class="mb-3 text-xs"
-                        :class="
-                            capaciteVehiculeConforme
-                                ? quantiteTotale === capaciteVehiculeSelectionne
-                                    ? 'text-emerald-600 dark:text-emerald-400'
-                                    : 'text-amber-600 dark:text-amber-400'
-                                : 'text-destructive'
-                        "
-                    >
-                        Capacité véhicule:
-                        {{
-                            capaciteVehiculeSelectionne === null
-                                ? 'non définie'
-                                : `${capaciteVehiculeSelectionne} packs`
-                        }}
-                        · Quantité saisie: {{ quantiteTotale }} packs
-                        <template v-if="capaciteVehiculeSelectionne !== null">
-                            <span
-                                v-if="
-                                    quantiteTotale ===
-                                    capaciteVehiculeSelectionne
-                                "
-                            >
-                                — capacité atteinte ✓</span
-                            >
-                            <span
-                                v-else-if="
-                                    quantiteTotale < capaciteVehiculeSelectionne
-                                "
-                            >
-                                —
-                                {{
-                                    capaciteVehiculeSelectionne - quantiteTotale
-                                }}
-                                pack(s) manquant(s){{
-                                    !autoriser_saisie_dessous_qte_max
-                                        ? ' — chargement complet requis'
-                                        : ''
-                                }}</span
-                            >
-                            <span v-else>
-                                —
-                                {{
-                                    quantiteTotale - capaciteVehiculeSelectionne
-                                }}
-                                pack(s) en trop</span
-                            >
-                        </template>
-                    </p>
-
-                    <!-- Mode de tarification : véhicule non pris en charge par l'usine -->
+                    <!-- Règle de tarification + capacité — affichées une seule fois -->
                     <div
-                        v-if="modeTarification === 'prix_usine'"
-                        class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+                        v-if="
+                            modeTarification === 'prix_usine' ||
+                            form.vehicule_id !== null
+                        "
+                        class="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs"
                     >
-                        Véhicule non pris en charge par l'usine — le montant à
-                        encaisser est calculé au <strong>prix usine</strong>
-                        (et non au prix de vente affiché ci-dessous). La marge
-                        reste à l'exploitant, aucune commission usine ne sera
-                        générée.
+                        <span
+                            v-if="modeTarification === 'prix_usine'"
+                            class="inline-flex items-center gap-1 font-medium text-amber-600 dark:text-amber-400"
+                        >
+                            Prix appliqué : Prix usine
+                            <Info
+                                v-tooltip.top="
+                                    'L\'usine encaisse uniquement le prix usine. Aucune commission usine n\'est générée.'
+                                "
+                                class="h-3.5 w-3.5 cursor-help"
+                            />
+                        </span>
+                        <span
+                            v-if="form.vehicule_id !== null"
+                            :class="
+                                capaciteVehiculeSelectionne === null
+                                    ? 'text-muted-foreground'
+                                    : capaciteVehiculeConforme
+                                      ? quantiteTotale ===
+                                        capaciteVehiculeSelectionne
+                                          ? 'text-emerald-600 dark:text-emerald-400'
+                                          : 'text-amber-600 dark:text-amber-400'
+                                      : 'text-destructive'
+                            "
+                        >
+                            Capacité :
+                            {{ quantiteTotale }}
+                            /
+                            {{
+                                capaciteVehiculeSelectionne === null
+                                    ? '—'
+                                    : capaciteVehiculeSelectionne
+                            }}
+                            packs
+                            <template
+                                v-if="capaciteVehiculeSelectionne !== null"
+                            >
+                                <span
+                                    v-if="
+                                        quantiteTotale ===
+                                        capaciteVehiculeSelectionne
+                                    "
+                                    >✓</span
+                                >
+                                <span
+                                    v-else-if="
+                                        quantiteTotale <
+                                        capaciteVehiculeSelectionne
+                                    "
+                                >
+                                    ({{
+                                        capaciteVehiculeSelectionne -
+                                        quantiteTotale
+                                    }}
+                                    manquant(s){{
+                                        !autoriser_saisie_dessous_qte_max
+                                            ? ' — chargement complet requis'
+                                            : ''
+                                    }})</span
+                                >
+                                <span v-else>
+                                    (+{{
+                                        quantiteTotale -
+                                        capaciteVehiculeSelectionne
+                                    }}
+                                    en trop)</span
+                                >
+                            </template>
+                        </span>
                     </div>
 
                     <!-- ── Tableau desktop ── -->
