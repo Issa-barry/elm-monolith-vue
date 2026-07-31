@@ -22,6 +22,13 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
  * reliée au véhicule par vehicule_immatriculation — ce qui évite de répéter les
  * infos véhicule/propriétaire à chaque livreur).
  *
+ * La feuille "livreurs" est facultative : un véhicule (nouveau ou existant)
+ * peut être importé sans aucun livreur rattaché. Une équipe brouillon est
+ * quand même créée pour un nouveau véhicule (potentiellement sans membre), à
+ * compléter plus tard depuis le back-office ou un import ultérieur ; un
+ * véhicule existant sans ligne "livreurs" ne touche jamais à ses membres déjà
+ * en place.
+ *
  * La commission et la répartition par membre (montant_par_pack) ne sont PAS
  * saisies dans le fichier : l'équipe est créée avec commission=0 et montants=0
  * ("brouillon"), à finaliser ensuite dans Équipes de livraison (qui applique
@@ -244,14 +251,12 @@ class ImportFlotteParser
             : null;
 
         // ── Livreurs ─────────────────────────────────────────────────────────
+        // La feuille "livreurs" est facultative : un nouveau véhicule peut être
+        // créé sans aucun membre (équipe brouillon vide, complétée plus tard
+        // depuis le back-office ou un import ultérieur). Un véhicule existant
+        // sans ligne livreur ne touche pas non plus à ses membres actuels.
         [$livreurs, $erreursLivreurs] = $this->resoudreLivreurs($lignesLivreursGroupe, $orgId, $equipeExistante);
         $erreurs = array_merge($erreurs, $erreursLivreurs);
-
-        // Un véhicule/équipe encore à créer doit avoir au moins un livreur à
-        // rattacher (une équipe ne peut pas être créée sans membre).
-        if (empty($erreurs) && empty($livreurs) && ! $equipeExistante) {
-            $erreurs[] = 'Aucun livreur rattaché à ce véhicule dans la feuille "livreurs".';
-        }
 
         if (! empty($erreurs)) {
             return [
