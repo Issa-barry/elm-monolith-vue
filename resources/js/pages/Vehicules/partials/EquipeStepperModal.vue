@@ -354,7 +354,7 @@ function roleOrdinal(role: string, numero: number): string {
  * Libellé "Membre" affiché partout côté Eau La Maman : jamais construit à
  * partir de prenom/nom (identité civile non utilisée sur ce projet — voir
  * EquipeLivraisonController). "Chauffeur-1" seul si nom_complet est vide,
- * "Chauffeur-1 — Petit Moussa" s'il est renseigné.
+ * "Chauffeur-1 — Mamadou SY" s'il est renseigné.
  */
 function membreLabel(role: string, numero: number, nomComplet: string): string {
     const ordinal = roleOrdinal(role, numero);
@@ -593,7 +593,7 @@ const hasStep1Errors = computed(() =>
                                 <InputText
                                     v-model="m.nom_complet"
                                     class="w-full"
-                                    placeholder="Ex : Petit Moussa, Chauffeur 1…"
+                                    placeholder="Ex : Mamadou SY "
                                     :data-testid="`nom-complet-${i}`"
                                     @input="markChanged"
                                 />
