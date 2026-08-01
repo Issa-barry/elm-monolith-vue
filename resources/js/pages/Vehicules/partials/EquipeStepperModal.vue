@@ -39,8 +39,9 @@ interface VehiculeInfo {
 
 interface MembreExistant {
     livreur_id: string | null;
-    nom: string;
-    prenom: string;
+    // Identité civile jamais utilisée côté Eau La Maman — seul un nom complet
+    // ou surnom facultatif est saisi/affiché (voir Livreur::$fillable côté back).
+    nom_complet: string | null;
     telephone: string;
     role: string;
     montant_par_pack: number;
@@ -61,12 +62,11 @@ interface EquipeExistante {
 interface MembreLigne {
     livreur_id: string | null;
     role: string;
-    prenom: string;
-    nom: string;
+    nom_complet: string; // facultatif — surnom ou désignation opérationnelle
     telephone: string; // 9 chiffres locaux
     montant_par_pack: number;
     ordre: number;
-    _errors: Partial<Record<'role' | 'prenom' | 'nom' | 'telephone', string>>;
+    _errors: Partial<Record<'role' | 'telephone', string>>;
 }
 
 interface LignePartage {
@@ -150,8 +150,7 @@ watch(
             membres.value = props.equipe.membres.map((m) => ({
                 livreur_id: m.livreur_id,
                 role: m.role,
-                prenom: m.prenom,
-                nom: m.nom,
+                nom_complet: m.nom_complet ?? '',
                 telephone: m.telephone.startsWith(GUINEA_PREFIX)
                     ? m.telephone.slice(GUINEA_PREFIX.length)
                     : m.telephone.replace(/\D/g, '').slice(-9),
@@ -166,8 +165,7 @@ watch(
                 {
                     livreur_id: null,
                     role: '',
-                    prenom: '',
-                    nom: '',
+                    nom_complet: '',
                     telephone: '',
                     montant_par_pack: 0,
                     ordre: 0,
@@ -187,8 +185,7 @@ function addLigne() {
     membres.value.push({
         livreur_id: null,
         role: '',
-        prenom: '',
-        nom: '',
+        nom_complet: '',
         telephone: '',
         montant_par_pack: 0,
         ordre: membres.value.length,
@@ -241,14 +238,6 @@ function validateStep1(): boolean {
             m._errors.role = 'Rôle requis';
             valid = false;
         }
-        if (!m.prenom.trim()) {
-            m._errors.prenom = 'Prénom requis';
-            valid = false;
-        }
-        if (!m.nom.trim()) {
-            m._errors.nom = 'Nom requis';
-            valid = false;
-        }
         if (!m.telephone || !/^\d{9}$/.test(m.telephone)) {
             m._errors.telephone = '9 chiffres requis';
             valid = false;
@@ -298,13 +287,9 @@ function buildLignes() {
     const roleCounts: Record<string, number> = {};
     membres.value.forEach((m, i) => {
         roleCounts[m.role] = (roleCounts[m.role] ?? 0) + 1;
-        const rl =
-            m.role === 'chauffeur'
-                ? `Chauffeur ${roleCounts[m.role]}`
-                : `Convoyeur ${roleCounts[m.role]}`;
         newLignes.push({
             id: `membre-${i}`,
-            label: `${rl} — ${m.prenom} ${m.nom}`,
+            label: membreLabel(m.role, roleCounts[m.role], m.nom_complet),
             montant: m.montant_par_pack,
             taux: toTaux(m.montant_par_pack, comm),
         });
@@ -360,11 +345,27 @@ function goToStep3() {
 
 // ── Étape 3 : Récapitulatif ─────────────────────────────────────────────────
 
+/** "Chauffeur-1" / "Convoyeur-2" — désignation opérationnelle par défaut. */
+function roleOrdinal(role: string, numero: number): string {
+    return role === 'chauffeur' ? `Chauffeur-${numero}` : `Convoyeur-${numero}`;
+}
+
+/**
+ * Libellé "Membre" affiché partout côté Eau La Maman : jamais construit à
+ * partir de prenom/nom (identité civile non utilisée sur ce projet — voir
+ * EquipeLivraisonController). "Chauffeur-1" seul si nom_complet est vide,
+ * "Chauffeur-1 — Petit Moussa" s'il est renseigné.
+ */
+function membreLabel(role: string, numero: number, nomComplet: string): string {
+    const ordinal = roleOrdinal(role, numero);
+    return nomComplet.trim() ? `${ordinal} — ${nomComplet.trim()}` : ordinal;
+}
+
 function roleLabel(role: string, index: number): string {
     const count = membres.value
         .slice(0, index + 1)
         .filter((m) => m.role === role).length;
-    return role === 'chauffeur' ? `Chauffeur ${count}` : `Convoyeur ${count}`;
+    return roleOrdinal(role, count);
 }
 
 function formatGNF(val: number): string {
@@ -391,8 +392,7 @@ function buildPayload() {
             : null,
         membres: membres.value.map((m, i) => ({
             livreur_id: m.livreur_id ?? null,
-            nom: m.nom,
-            prenom: m.prenom,
+            nom_complet: m.nom_complet.trim() || null,
             telephone: `${GUINEA_PREFIX}${m.telephone}`,
             role: m.role,
             montant_par_pack: m.montant_par_pack,
@@ -555,8 +555,7 @@ const hasStep1Errors = computed(() =>
                             class="border-b bg-muted/40 text-left text-xs font-medium text-muted-foreground"
                         >
                             <th class="w-36 px-3 py-2.5">Rôle *</th>
-                            <th class="px-3 py-2.5">Prénom *</th>
-                            <th class="px-3 py-2.5">Nom *</th>
+                            <th class="px-3 py-2.5">Nom complet ou surnom</th>
                             <th class="w-52 px-3 py-2.5">Téléphone *</th>
                             <th class="w-10 px-3 py-2.5"></th>
                         </tr>
@@ -589,40 +588,15 @@ const hasStep1Errors = computed(() =>
                                 </p>
                             </td>
 
-                            <!-- Prénom -->
+                            <!-- Nom complet ou surnom (facultatif) -->
                             <td class="px-3 py-2">
                                 <InputText
-                                    v-model="m.prenom"
+                                    v-model="m.nom_complet"
                                     class="w-full"
-                                    :class="{ 'p-invalid': m._errors.prenom }"
-                                    placeholder="Prénom"
-                                    :data-testid="`prenom-${i}`"
+                                    placeholder="Ex : Petit Moussa, Chauffeur 1…"
+                                    :data-testid="`nom-complet-${i}`"
                                     @input="markChanged"
                                 />
-                                <p
-                                    v-if="m._errors.prenom"
-                                    class="mt-1 text-xs text-destructive"
-                                >
-                                    {{ m._errors.prenom }}
-                                </p>
-                            </td>
-
-                            <!-- Nom -->
-                            <td class="px-3 py-2">
-                                <InputText
-                                    v-model="m.nom"
-                                    class="w-full"
-                                    :class="{ 'p-invalid': m._errors.nom }"
-                                    placeholder="Nom"
-                                    :data-testid="`nom-${i}`"
-                                    @input="markChanged"
-                                />
-                                <p
-                                    v-if="m._errors.nom"
-                                    class="mt-1 text-xs text-destructive"
-                                >
-                                    {{ m._errors.nom }}
-                                </p>
                             </td>
 
                             <!-- Téléphone -->
@@ -905,7 +879,6 @@ const hasStep1Errors = computed(() =>
                         >
                             <th class="px-4 py-2 font-medium">Membre</th>
                             <th class="px-4 py-2 font-medium">Téléphone</th>
-                            <th class="px-4 py-2 font-medium">Rôle</th>
                             <th class="px-4 py-2 text-right font-medium">
                                 Part
                             </th>
@@ -914,17 +887,16 @@ const hasStep1Errors = computed(() =>
                     <tbody class="divide-y">
                         <tr v-for="(m, i) in membres" :key="i">
                             <td class="px-4 py-2.5 font-medium">
-                                {{ m.prenom }} {{ m.nom }}
+                                {{
+                                    m.nom_complet.trim()
+                                        ? `${roleLabel(m.role, i)} — ${m.nom_complet.trim()}`
+                                        : roleLabel(m.role, i)
+                                }}
                             </td>
                             <td
                                 class="px-4 py-2.5 font-mono text-xs text-muted-foreground"
                             >
                                 {{ formatPhone(m.telephone) }}
-                            </td>
-                            <td
-                                class="px-4 py-2.5 text-muted-foreground capitalize"
-                            >
-                                {{ roleLabel(m.role, i) }}
                             </td>
                             <td
                                 class="px-4 py-2.5 text-right font-mono text-xs"

@@ -21,12 +21,12 @@ class LivreurController extends Controller
 
         $livreurs = Livreur::with(['equipes.vehicule:id,nom_vehicule'])
             ->where('organization_id', auth()->user()->organization_id)
-            ->orderByRaw('is_active DESC, nom')
+            ->orderByRaw('is_active DESC, nom_complet')
             ->get()
             ->map(fn (Livreur $l) => [
                 'id' => $l->id,
-                'nom' => $l->nom,
-                'prenom' => $l->prenom,
+                // Identité civile (nom/prenom) jamais exposée côté Eau La
+                // Maman — seul nom_complet (facultatif) est affiché.
                 'nom_complet' => $l->nom_complet,
                 'telephone' => $l->telephone,
                 'is_active' => $l->is_active,
@@ -52,15 +52,12 @@ class LivreurController extends Controller
         abort_if(! $orgId, 403, "Votre compte n'est associé à aucune organisation.");
 
         $data = $request->validate([
-            'nom' => 'required|string|max:255',
-            'prenom' => 'required|string|max:255',
+            'nom_complet' => 'nullable|string|max:150',
             'telephone' => [
                 'required', 'string', 'max:30',
                 Rule::unique('livreurs', 'telephone')->where('organization_id', $orgId),
             ],
         ], [
-            'nom.required' => 'Le nom est obligatoire.',
-            'prenom.required' => 'Le prénom est obligatoire.',
             'telephone.required' => 'Le numéro de téléphone est obligatoire.',
             'telephone.unique' => 'Ce numéro de téléphone est déjà utilisé dans votre organisation.',
         ]);
@@ -71,8 +68,7 @@ class LivreurController extends Controller
             'id' => $livreur->id,
             'value' => $livreur->id,
             'label' => $livreur->nom_complet,
-            'nom' => $livreur->nom,
-            'prenom' => $livreur->prenom,
+            'nom_complet' => $livreur->nom_complet,
             'telephone' => $livreur->telephone,
             'is_active' => true,
         ], 201);
@@ -117,8 +113,6 @@ class LivreurController extends Controller
         return Inertia::render('Livreurs/Show', [
             'livreur' => [
                 'id' => $livreur->id,
-                'nom' => $livreur->nom,
-                'prenom' => $livreur->prenom,
                 'nom_complet' => $livreur->nom_complet,
                 'telephone' => $livreur->telephone,
                 'is_active' => $livreur->is_active,

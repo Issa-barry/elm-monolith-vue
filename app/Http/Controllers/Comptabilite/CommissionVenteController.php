@@ -139,7 +139,9 @@ class CommissionVenteController extends Controller
                 'nom' => $v->nom_vehicule,
                 'immatriculation' => $v->immatriculation,
                 'type' => $v->typeVehicule?->nom,
-                'capacite_packs' => $v->capacite_packs,
+                // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
+                // on retombe sur la capacité par défaut du type (cf. VehiculeController).
+                'capacite_packs' => $v->capacite_packs ?? $v->typeVehicule?->capacite_defaut,
                 'proprietaire_nom' => $v->proprietaire
                     ? trim($v->proprietaire->prenom.' '.$v->proprietaire->nom)
                     : null,
@@ -273,7 +275,7 @@ class CommissionVenteController extends Controller
         $orgId = auth()->user()->organization_id;
 
         $livreur = Livreur::find($livreurId);
-        $nom = $livreur ? trim("{$livreur->prenom} {$livreur->nom}") : '—';
+        $nom = $livreur ? $livreur->libelleAffichage() : '—';
 
         $allParts = CommissionPart::with(['commission.commande.site', 'commission.vehicule'])
             ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
@@ -553,7 +555,7 @@ class CommissionVenteController extends Controller
                 'module' => 'commissions_vente',
                 'montant' => $data['montant'],
                 'mode_paiement' => $data['mode_paiement'],
-                'description' => "Paiement de {$montantFmt} GNF effectué pour ".trim("{$livreur->prenom} {$livreur->nom}"),
+                'description' => "Paiement de {$montantFmt} GNF effectué pour ".$livreur->libelleAffichage(),
             ]);
         }
 

@@ -11,6 +11,7 @@ use App\Models\Parametre;
 use App\Models\Produit;
 use App\Models\Proprietaire;
 use App\Models\Site;
+use App\Models\TypeVehicule;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -322,13 +323,21 @@ class CommandeVenteTest extends TestCase
             ->assertSessionHasErrors('lignes');
     }
 
-    public function test_store_fails_when_vehicule_has_no_capacity_defined(): void
+    public function test_store_falls_back_to_type_capacity_when_vehicule_capacite_packs_is_null(): void
     {
+        // Véhicule importé via Import Flotte : capacite_packs n'est jamais renseigné
+        // sur le véhicule lui-même, seule la capacité par défaut du type s'applique
+        // (cf. VehiculeController::index / show, même comportement attendu ici).
         ['produit' => $produit] = $this->makeContext($this->org);
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $typeVehicule = TypeVehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'capacite_defaut' => 5,
+        ]);
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
+            'type_vehicule_id' => $typeVehicule->id,
             'capacite_packs' => null,
         ]);
 
@@ -336,12 +345,12 @@ class CommandeVenteTest extends TestCase
             ->post(route('ventes.store'), [
                 'vehicule_id' => $vehicule->id,
                 'lignes' => [
-                    ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 2000],
+                    ['produit_id' => $produit->id, 'qte' => 5, 'prix_vente' => 2000],
                 ],
             ])
-            ->assertSessionHasErrors('vehicule_id');
+            ->assertSessionDoesntHaveErrors();
 
-        $this->assertDatabaseMissing('commandes_ventes', ['vehicule_id' => $vehicule->id]);
+        $this->assertDatabaseHas('commandes_ventes', ['vehicule_id' => $vehicule->id]);
     }
 
     // ── qte éditable / capacité véhicule par défaut ───────────────────────────
@@ -573,13 +582,20 @@ class CommandeVenteTest extends TestCase
             ->assertSessionHasErrors('lignes');
     }
 
-    public function test_update_fails_when_vehicule_has_no_capacity_defined(): void
+    public function test_update_falls_back_to_type_capacity_when_vehicule_capacite_packs_is_null(): void
     {
+        // Véhicule importé via Import Flotte : capacite_packs n'est jamais renseigné
+        // sur le véhicule lui-même, seule la capacité par défaut du type s'applique.
         ['produit' => $produit] = $this->makeContext($this->org);
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $typeVehicule = TypeVehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'capacite_defaut' => 5,
+        ]);
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
+            'type_vehicule_id' => $typeVehicule->id,
             'capacite_packs' => null,
         ]);
 
@@ -595,10 +611,10 @@ class CommandeVenteTest extends TestCase
             ->put(route('ventes.update', $commande), [
                 'vehicule_id' => $vehicule->id,
                 'lignes' => [
-                    ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 2000],
+                    ['produit_id' => $produit->id, 'qte' => 5, 'prix_vente' => 2000],
                 ],
             ])
-            ->assertSessionHasErrors('vehicule_id');
+            ->assertSessionDoesntHaveErrors();
     }
 
     // ── update : paramètre autoriser_saisie_dessous_qte_max ──────────────────

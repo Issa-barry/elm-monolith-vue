@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\ModeTarification;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutCommission;
 use App\Enums\StatutFactureVente;
@@ -275,7 +276,10 @@ class CommandeVenteService
             ]));
 
             if (array_key_exists('quantite_chargee', $update) && $update['quantite_chargee'] !== null) {
-                $update['total_ligne'] = $update['quantite_chargee'] * (float) $ligne->prix_vente_snapshot;
+                $prixUnitaire = $commande->mode_tarification_snapshot === ModeTarification::PRIX_USINE
+                    ? (float) $ligne->prix_usine_snapshot
+                    : (float) $ligne->prix_vente_snapshot;
+                $update['total_ligne'] = $update['quantite_chargee'] * $prixUnitaire;
             }
 
             if (! empty($update)) {

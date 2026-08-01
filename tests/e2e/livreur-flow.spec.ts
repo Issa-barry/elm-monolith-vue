@@ -14,8 +14,7 @@ test.setTimeout(180_000);
 type HttpMethod = 'POST' | 'PATCH' | 'DELETE';
 
 interface LivreurCreatePayload {
-    prenom: string;
-    nom: string;
+    nom_complet?: string;
     telephone: string;
 }
 
@@ -94,20 +93,18 @@ async function deleteLivreurViaApi(page: Page, livreurId: string): Promise<void>
 
 test('create livreur with all fields -> verify in list', async ({ page }) => {
     const uid = `${Date.now()}`.slice(-6);
-    const prenom = `${PREFIX}${uid}`;
-    const nom = `Flow${uid}`;
+    const nomComplet = `${PREFIX}${uid} Flow${uid}`;
     const tel = `6${randomDigits(8)}`;
 
     await login(page);
     const livreurId = await createLivreurViaApi(page, {
-        prenom,
-        nom,
+        nom_complet: nomComplet,
         telephone: tel,
     });
 
     await page.goto('/backoffice/livreurs');
     try {
-        const row = await findRowByName(page, prenom);
+        const row = await findRowByName(page, nomComplet);
         await expect(row).toBeVisible();
         await expect(row).toContainText(/actif/i);
     } finally {
@@ -117,14 +114,12 @@ test('create livreur with all fields -> verify in list', async ({ page }) => {
 
 test('toggle livreur status via API -> data persists in list', async ({ page }) => {
     const uid = `${Date.now()}`.slice(-6);
-    const prenom = `${PREFIX}${uid}`;
-    const nom = `Edit${uid}`;
+    const nomComplet = `${PREFIX}${uid} Edit${uid}`;
     const tel = `6${randomDigits(8)}`;
 
     await login(page);
     const livreurId = await createLivreurViaApi(page, {
-        prenom,
-        nom,
+        nom_complet: nomComplet,
         telephone: tel,
     });
 
@@ -133,12 +128,12 @@ test('toggle livreur status via API -> data persists in list', async ({ page }) 
         expect(isActive).toBe(false);
 
         await page.goto('/backoffice/livreurs');
-        const updatedRow = await findRowByName(page, prenom);
+        const updatedRow = await findRowByName(page, nomComplet);
         await expect(updatedRow).toBeVisible();
         await expect(updatedRow).toContainText(/inactif/i);
 
         await page.reload();
-        const persistedRow = await findRowByName(page, prenom);
+        const persistedRow = await findRowByName(page, nomComplet);
         await expect(persistedRow).toContainText(/inactif/i);
     } finally {
         await deleteLivreurViaApi(page, livreurId);
@@ -147,32 +142,30 @@ test('toggle livreur status via API -> data persists in list', async ({ page }) 
 
 test('delete livreur via API -> removed from list', async ({ page }) => {
     const uid = `${Date.now()}`.slice(-6);
-    const prenom = `${PREFIX}${uid}`;
-    const nom = `Del${uid}`;
+    const nomComplet = `${PREFIX}${uid} Del${uid}`;
     const tel = `6${randomDigits(8)}`;
 
     await login(page);
     const livreurId = await createLivreurViaApi(page, {
-        prenom,
-        nom,
+        nom_complet: nomComplet,
         telephone: tel,
     });
 
     await page.goto('/backoffice/livreurs');
-    const createdRow = await findRowByName(page, prenom);
+    const createdRow = await findRowByName(page, nomComplet);
     await expect(createdRow).toBeVisible();
 
     await deleteLivreurViaApi(page, livreurId);
 
     await page.goto('/backoffice/livreurs');
     const search = getVisibleSearchInput(page);
-    await search.fill(prenom);
+    await search.fill(nomComplet);
     await search.press('Enter');
     await page.waitForLoadState('networkidle');
 
     await expect(
         page.locator('tbody tr', {
-            hasText: new RegExp(escapeRegExp(prenom), 'i'),
+            hasText: new RegExp(escapeRegExp(nomComplet), 'i'),
         }),
     ).toHaveCount(0);
 });
@@ -183,8 +176,6 @@ test('create livreur without required fields -> returns validation errors', asyn
     await login(page);
 
     const response = await sendLivreurRequest(page, 'POST', '/backoffice/livreurs', {
-        prenom: '',
-        nom: '',
         telephone: '',
     });
 
@@ -192,8 +183,6 @@ test('create livreur without required fields -> returns validation errors', asyn
     const body = await response.json();
 
     expect(body.errors).toBeTruthy();
-    expect(body.errors.nom).toBeTruthy();
-    expect(body.errors.prenom).toBeTruthy();
     expect(body.errors.telephone).toBeTruthy();
 });
 

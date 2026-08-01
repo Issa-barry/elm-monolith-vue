@@ -39,7 +39,9 @@ class VehiculesController extends Controller
                 'nom' => $v->nom_vehicule,
                 'immatriculation' => $v->immatriculation,
                 'type' => $v->type_label,
-                'capacite' => $v->capacite_packs,
+                // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
+                // on retombe sur la capacité par défaut du type (cf. VehiculeController).
+                'capacite' => $v->capacite_packs ?? $v->typeVehicule?->capacite_defaut,
                 'is_active' => (bool) $v->is_active,
                 'photo_url' => $v->photo_path
                                     ? request()->getSchemeAndHttpHost().'/api/vehicules/'.$v->id.'/photo'

@@ -25,6 +25,7 @@ interface VehiculeOption {
     nom_vehicule: string;
     immatriculation: string;
     capacite_packs: number | null;
+    pris_en_charge_par_usine: boolean;
     livreur_nom: string | null;
 }
 
@@ -81,6 +82,22 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 // ── Form ──────────────────────────────────────────────────────────────────────
+function produitPrixUsineFrom(
+    produits: ProduitOption[],
+    produitId: number | null,
+): number {
+    if (produitId === null) return 0;
+    return produits.find((p) => p.id === produitId)?.prix_usine ?? 0;
+}
+
+const initialVehicule = props.vehicules.find(
+    (v) => v.id === props.commande.vehicule_id,
+);
+const initialModeTarification: 'prix_vente' | 'prix_usine' =
+    initialVehicule && !initialVehicule.pris_en_charge_par_usine
+        ? 'prix_usine'
+        : 'prix_vente';
+
 const form = useForm({
     vehicule_id: props.commande.vehicule_id as number | null,
     client_id: props.commande.client_id as number | null,
@@ -88,7 +105,10 @@ const form = useForm({
         produit_id: l.produit_id,
         qte: l.qte,
         prix_vente: l.prix_vente,
-        total: l.prix_vente * l.qte,
+        total:
+            initialModeTarification === 'prix_usine'
+                ? produitPrixUsineFrom(props.produits, l.produit_id) * l.qte
+                : l.prix_vente * l.qte,
     })) as LigneForm[],
 });
 
@@ -113,11 +133,13 @@ function searchVehicule(event: { query: string }) {
 function onVehiculeSelect(v: VehiculeOption | null) {
     form.vehicule_id = v?.id ?? null;
     applyVehiculeCapacityOnSingleLine(v);
+    recomputeAllTotals();
 }
 
 function onVehiculeClear() {
     form.vehicule_id = null;
     vehiculeSelected.value = null;
+    recomputeAllTotals();
 }
 
 function applyVehiculeCapacityOnSingleLine(vehicule: VehiculeOption | null) {
@@ -130,7 +152,52 @@ function applyVehiculeCapacityOnSingleLine(vehicule: VehiculeOption | null) {
     }
 
     form.lignes[0].qte = vehicule.capacite_packs;
-    form.lignes[0].total = form.lignes[0].prix_vente * form.lignes[0].qte;
+    form.lignes[0].total = computeLigneTotal(form.lignes[0]);
+}
+
+// ── Mode de tarification (montant à encaisser par l'usine) ────────────────────
+// Cf. Ventes/Create.vue — miroir d'affichage, la source de vérité est
+// CommandeVenteController::resolveModeTarification côté serveur.
+const modeTarification = computed<'prix_vente' | 'prix_usine'>(() => {
+    if (form.vehicule_id === null) return 'prix_vente';
+    const v = props.vehicules.find((veh) => veh.id === form.vehicule_id);
+    return v && !v.pris_en_charge_par_usine ? 'prix_usine' : 'prix_vente';
+});
+
+// ── Libellés de prix — explicites (prix vente vs prix usine) ──────────────────
+// Le prix unitaire AFFICHÉ doit être celui réellement utilisé dans le calcul
+// du total (prix_usine si le véhicule n'est pas pris en charge par l'usine),
+// sinon libellé et valeur se contredisent.
+const prixUnitLabel = computed(() =>
+    modeTarification.value === 'prix_usine'
+        ? 'Prix usine (unit.)'
+        : 'Prix vente (unit.)',
+);
+const unitPriceEditable = computed(
+    () => canUpdateUnitPrice.value && modeTarification.value !== 'prix_usine',
+);
+function ligneUnitPrice(ligne: LigneForm): number {
+    return modeTarification.value === 'prix_usine'
+        ? produitPrixUsineFrom(props.produits, ligne.produit_id)
+        : ligne.prix_vente;
+}
+const totalColumnLabel = computed(() =>
+    modeTarification.value === 'prix_usine'
+        ? 'Total (prix usine)'
+        : 'Total (prix vente)',
+);
+const totalCommandeLabel = 'Total commande';
+
+function computeLigneTotal(ligne: LigneForm): number {
+    return modeTarification.value === 'prix_usine'
+        ? produitPrixUsineFrom(props.produits, ligne.produit_id) * ligne.qte
+        : ligne.prix_vente * ligne.qte;
+}
+
+function recomputeAllTotals() {
+    form.lignes.forEach((l) => {
+        l.total = computeLigneTotal(l);
+    });
 }
 
 function vehiculeLabel(v: VehiculeOption): string {
@@ -196,9 +263,9 @@ function onProduitChange(index: number, produitId: number | null) {
     );
     if (existingIndex !== -1) {
         form.lignes[existingIndex].qte += 1;
-        form.lignes[existingIndex].total =
-            form.lignes[existingIndex].prix_vente *
-            form.lignes[existingIndex].qte;
+        form.lignes[existingIndex].total = computeLigneTotal(
+            form.lignes[existingIndex],
+        );
         form.lignes.splice(index, 1);
         return;
     }
@@ -213,13 +280,13 @@ function onProduitChange(index: number, produitId: number | null) {
             ? (capaciteVehiculeSelectionne.value ?? ligne.qte)
             : ligne.qte;
     ligne.qte = Math.max(1, qteParDefaut);
-    ligne.total = ligne.prix_vente * ligne.qte;
+    ligne.total = computeLigneTotal(ligne);
 }
 
 function onQteChange(index: number, qte: number | null) {
     const ligne = form.lignes[index];
     ligne.qte = Math.max(1, qte ?? 1);
-    ligne.total = ligne.prix_vente * ligne.qte;
+    ligne.total = computeLigneTotal(ligne);
 }
 
 function onPrixChange(index: number, prix: number | null) {
@@ -229,7 +296,7 @@ function onPrixChange(index: number, prix: number | null) {
 
     const ligne = form.lignes[index];
     ligne.prix_vente = prix ?? 0;
-    ligne.total = ligne.prix_vente * ligne.qte;
+    ligne.total = computeLigneTotal(ligne);
 }
 
 function addLigne() {
@@ -512,11 +579,15 @@ function submit() {
                     </p>
 
                     <p
-                        v-if="!canUpdateUnitPrice"
+                        v-if="!unitPriceEditable"
                         class="mb-3 flex items-center gap-1 text-xs text-muted-foreground"
                     >
                         <Lock class="h-3.5 w-3.5" />
-                        Prix unitaire verrouille pour votre profil.
+                        {{
+                            modeTarification === 'prix_usine'
+                                ? 'Prix usine fixé par le produit — non modifiable.'
+                                : 'Prix unitaire verrouille pour votre profil.'
+                        }}
                     </p>
 
                     <p
@@ -570,6 +641,18 @@ function submit() {
                         </template>
                     </p>
 
+                    <!-- Mode de tarification : véhicule non pris en charge par l'usine -->
+                    <div
+                        v-if="modeTarification === 'prix_usine'"
+                        class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+                    >
+                        Véhicule non pris en charge par l'usine — le montant à
+                        encaisser est calculé au <strong>prix usine</strong>
+                        (et non au prix de vente affiché ci-dessous). La marge
+                        reste à l'exploitant, aucune commission usine ne sera
+                        générée.
+                    </div>
+
                     <!-- ── Tableau desktop ── -->
                     <div
                         class="hidden overflow-hidden rounded-lg border sm:block"
@@ -595,9 +678,9 @@ function submit() {
                                         <span
                                             class="inline-flex items-center justify-end gap-1"
                                         >
-                                            Prix unit.
+                                            {{ prixUnitLabel }}
                                             <Lock
-                                                v-if="!canUpdateUnitPrice"
+                                                v-if="!unitPriceEditable"
                                                 class="h-3.5 w-3.5"
                                             />
                                         </span>
@@ -606,7 +689,7 @@ function submit() {
                                         class="px-4 py-2.5 text-right font-medium text-muted-foreground"
                                         style="width: 160px"
                                     >
-                                        Total
+                                        {{ totalColumnLabel }}
                                     </th>
                                     <th
                                         class="px-4 py-2.5"
@@ -667,12 +750,12 @@ function submit() {
                                     </td>
                                     <td class="px-4 py-3">
                                         <InputNumber
-                                            :model-value="ligne.prix_vente"
+                                            :model-value="ligneUnitPrice(ligne)"
                                             @update:model-value="
                                                 onPrixChange(index, $event)
                                             "
                                             :min="0"
-                                            :disabled="!canUpdateUnitPrice"
+                                            :disabled="!unitPriceEditable"
                                             :use-grouping="false"
                                             suffix=" GNF"
                                             class="w-full"
@@ -755,20 +838,20 @@ function submit() {
                                         <span
                                             class="inline-flex items-center gap-1"
                                         >
-                                            Prix unit. (GNF)
+                                            {{ prixUnitLabel }} (GNF)
                                             <Lock
-                                                v-if="!canUpdateUnitPrice"
+                                                v-if="!unitPriceEditable"
                                                 class="h-3.5 w-3.5"
                                             />
                                         </span>
                                     </p>
                                     <InputNumber
-                                        :model-value="ligne.prix_vente"
+                                        :model-value="ligneUnitPrice(ligne)"
                                         @update:model-value="
                                             onPrixChange(index, $event)
                                         "
                                         :min="0"
-                                        :disabled="!canUpdateUnitPrice"
+                                        :disabled="!unitPriceEditable"
                                         :use-grouping="false"
                                         class="w-full"
                                         input-class="w-full"
@@ -783,7 +866,7 @@ function submit() {
                                     <p
                                         class="text-[11px] text-muted-foreground"
                                     >
-                                        Total ligne
+                                        {{ totalColumnLabel }}
                                     </p>
                                     <p
                                         class="text-sm font-semibold tabular-nums"
@@ -824,7 +907,7 @@ function submit() {
                             <p
                                 class="text-xs tracking-wider text-muted-foreground uppercase"
                             >
-                                Total commande
+                                {{ totalCommandeLabel }}
                             </p>
                             <p class="text-2xl font-bold tabular-nums">
                                 {{ formatGNF(totalGeneral) }}

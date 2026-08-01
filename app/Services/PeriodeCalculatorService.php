@@ -257,7 +257,7 @@ class PeriodeCalculatorService
                 continue;
             }
 
-            $this->creerFiche($periode, 'livreur', $livreurId, $livreur->nom_complet, null, $lignes);
+            $this->creerFiche($periode, 'livreur', $livreurId, $livreur->libelleAffichage(), null, $lignes);
             $count++;
         }
 

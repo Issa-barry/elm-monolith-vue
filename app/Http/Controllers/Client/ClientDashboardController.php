@@ -315,7 +315,9 @@ class ClientDashboardController extends Controller
                 'immatriculation' => $vehicule->immatriculation,
                 'type_label' => $vehicule->type_label,
                 'is_active' => (bool) $vehicule->is_active,
-                'capacite_packs' => $vehicule->capacite_packs,
+                // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
+                // on retombe sur la capacité par défaut du type (cf. VehiculeController).
+                'capacite_packs' => $vehicule->capacite_packs ?? $vehicule->typeVehicule?->capacite_defaut,
                 'photo_url' => $vehicule->photo_url,
             ])
             ->values()
@@ -328,7 +330,7 @@ class ClientDashboardController extends Controller
                 'immatriculation' => $vehicule->immatriculation,
                 'type_label' => $vehicule->type_label,
                 'is_active' => (bool) $vehicule->is_active,
-                'capacite_packs' => $vehicule->capacite_packs,
+                'capacite_packs' => $vehicule->capacite_packs ?? $vehicule->typeVehicule?->capacite_defaut,
                 'photo_url' => $vehicule->photo_url,
             ])
             ->values()
@@ -483,6 +485,7 @@ class ClientDashboardController extends Controller
         }
 
         return Vehicule::query()
+            ->with('typeVehicule')
             ->where('organization_id', $organizationId)
             ->where(function ($query) use ($proprietaire, $livreur) {
                 if ($proprietaire !== null) {
@@ -506,6 +509,7 @@ class ClientDashboardController extends Controller
         }
 
         return Vehicule::query()
+            ->with('typeVehicule')
             ->where('organization_id', $organizationId)
             ->where('proprietaire_id', $proprietaire->id)
             ->orderBy('nom_vehicule')

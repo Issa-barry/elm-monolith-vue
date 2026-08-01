@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AuditEvent;
+use App\Enums\ModeTarification;
 use App\Enums\MotifAnnulation;
 use App\Enums\ProduitStatut;
 use App\Enums\ProduitType;
@@ -236,8 +237,12 @@ class CommandeVenteController extends Controller
         }
 
         if ($livreur) {
+            // nom/prenom conservés en recherche pour compatibilité (autres
+            // usages éventuels), mais nom_complet est le champ réellement
+            // saisi/affiché côté Eau La Maman.
             $query->whereHas('vehicule.equipe.livreurs', function ($q) use ($livreur) {
-                $q->where('livreurs.nom', 'like', "%{$livreur}%")
+                $q->where('livreurs.nom_complet', 'like', "%{$livreur}%")
+                    ->orWhere('livreurs.nom', 'like', "%{$livreur}%")
                     ->orWhere('livreurs.prenom', 'like', "%{$livreur}%")
                     ->orWhere('livreurs.telephone', 'like', "%{$livreur}%");
             });
@@ -359,7 +364,8 @@ class CommandeVenteController extends Controller
         $this->ensureQuantiteMatchesVehiculeCapacity($data);
         $this->enforcePrixVentePolicy($data, null);
 
-        [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes']);
+        $mode = $this->resolveModeTarification($data['vehicule_id'] ?? null);
+        [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $mode);
 
         $commande = CommandeVente::create([
             'organization_id' => $orgId,
@@ -367,6 +373,7 @@ class CommandeVenteController extends Controller
             'vehicule_id' => $data['vehicule_id'] ?? null,
             'client_id' => $data['client_id'] ?? null,
             'total_commande' => $totalCommande,
+            'mode_tarification_snapshot' => $mode->value,
             'created_by' => auth()->id(),
         ]);
 
@@ -461,19 +468,21 @@ class CommandeVenteController extends Controller
                 'statut_label' => $commande->statut_label,
                 'statut_color' => $commande->statut?->color(),
                 'total_commande' => (float) $commande->total_commande,
+                'mode_tarification_snapshot' => $commande->mode_tarification_snapshot?->value,
+                'mode_tarification_label' => $commande->mode_tarification_snapshot?->label(),
                 'vehicule_nom' => $commande->vehicule?->nom_vehicule,
                 'vehicule_detail' => $vehicule ? [
                     'nom' => $vehicule->nom_vehicule,
                     'immatriculation' => $vehicule->immatriculation,
                     'type' => $vehicule->typeVehicule?->nom,
-                    'capacite_packs' => $vehicule->capacite_packs,
+                    'capacite_packs' => $vehicule->capacite_packs ?? $vehicule->typeVehicule?->capacite_defaut,
                     'proprietaire_nom' => $vehicule->proprietaire
                         ? trim($vehicule->proprietaire->prenom.' '.$vehicule->proprietaire->nom)
                         : null,
                     'proprietaire_telephone' => $vehicule->proprietaire?->telephone,
                     'proprietaire_code_phone_pays' => $vehicule->proprietaire?->code_phone_pays,
                 ] : null,
-                'livreur_nom' => $chauffeur ? trim($chauffeur->prenom.' '.$chauffeur->nom) : null,
+                'livreur_nom' => $chauffeur?->libelleAffichage(),
                 'livreur_telephone' => $chauffeur?->telephone,
                 'equipe_detail' => $equipe ? [
                     'nom' => $vehicule->nom_vehicule,
@@ -481,11 +490,11 @@ class CommandeVenteController extends Controller
                         ? (float) $equipe->taux_commission_proprietaire
                         : null,
                     'chauffeur' => $chauffeur ? [
-                        'nom' => trim($chauffeur->prenom.' '.$chauffeur->nom),
+                        'nom' => $chauffeur->libelleAffichage(),
                         'telephone' => $chauffeur->telephone,
                     ] : null,
                     'convoyeurs' => $convoyeurs->map(fn ($l) => [
-                        'nom' => trim($l->prenom.' '.$l->nom),
+                        'nom' => $l->libelleAffichage(),
                         'telephone' => $l->telephone,
                     ])->values(),
                 ] : null,
@@ -599,12 +608,14 @@ class CommandeVenteController extends Controller
         $vente->load(['lignes.produit', 'vehicule', 'client']);
         $oldSnapshot = $this->commandeSnapshot($vente);
 
-        [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes']);
+        $mode = $this->resolveModeTarification($data['vehicule_id'] ?? null);
+        [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $mode);
 
         $vente->update([
             'vehicule_id' => $data['vehicule_id'] ?? null,
             'client_id' => $data['client_id'] ?? null,
             'total_commande' => $totalCommande,
+            'mode_tarification_snapshot' => $mode->value,
         ]);
 
         $vente->lignes()->delete();
@@ -855,19 +866,26 @@ class CommandeVenteController extends Controller
             return;
         }
 
-        $vehicule = Vehicule::query()->select(['id', 'capacite_packs'])->find($data['vehicule_id']);
+        $vehicule = Vehicule::query()
+            ->select(['id', 'capacite_packs', 'type_vehicule_id'])
+            ->with('typeVehicule')
+            ->find($data['vehicule_id']);
         if (! $vehicule) {
             return;
         }
 
-        if ($vehicule->capacite_packs === null) {
+        // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
+        // on retombe sur la capacité par défaut du type (cf. VehiculeController).
+        $capaciteVehicule = $vehicule->capacite_packs ?? $vehicule->typeVehicule?->capacite_defaut;
+
+        if ($capaciteVehicule === null) {
             throw ValidationException::withMessages([
                 'vehicule_id' => 'Le véhicule sélectionné n\'a pas de capacité définie.',
             ]);
         }
 
         $qteTotale = collect($data['lignes'] ?? [])->sum(fn (array $ligne): int => (int) ($ligne['qte'] ?? 0));
-        $capacite = (int) $vehicule->capacite_packs;
+        $capacite = (int) $capaciteVehicule;
 
         if ($qteTotale > $capacite && ! auth()->user()->can('ventes.qte.update')) {
             throw ValidationException::withMessages([
@@ -934,7 +952,25 @@ class CommandeVenteController extends Controller
             ->toArray();
     }
 
-    private function buildLignesDataAndTotal(array $lignes): array
+    /**
+     * Détermine, à partir du véhicule assigné, quel prix sert de base au montant
+     * à encaisser par l'usine : le véhicule interne est toujours "pris en charge"
+     * (cf. VehiculeController), une commande sans véhicule (vente directe client)
+     * n'a pas de logistique tierce à distinguer — dans les deux cas c'est le
+     * plein prix de vente qui s'applique.
+     */
+    private function resolveModeTarification(?string $vehiculeId): ModeTarification
+    {
+        if (! $vehiculeId) {
+            return ModeTarification::PRIX_VENTE;
+        }
+
+        $vehicule = Vehicule::query()->select(['id', 'pris_en_charge_par_usine'])->find($vehiculeId);
+
+        return ModeTarification::fromPrisEnChargeParUsine($vehicule?->pris_en_charge_par_usine ?? true);
+    }
+
+    private function buildLignesDataAndTotal(array $lignes, ModeTarification $mode): array
     {
         $lignesData = [];
         $totalCommande = 0;
@@ -943,12 +979,13 @@ class CommandeVenteController extends Controller
             $produit = Produit::findOrFail($ligne['produit_id']);
             $qte = (int) $ligne['qte'];
             $prixVente = (float) $ligne['prix_vente'];
-            $totalLigne = $qte * $prixVente;
+            $prixUsine = (float) $produit->prix_usine;
+            $totalLigne = $qte * ($mode === ModeTarification::PRIX_VENTE ? $prixVente : $prixUsine);
 
             $lignesData[] = [
                 'produit_id' => $produit->id,
                 'quantite_demandee' => $qte,
-                'prix_usine_snapshot' => (float) $produit->prix_usine,
+                'prix_usine_snapshot' => $prixUsine,
                 'prix_vente_snapshot' => $prixVente,
                 'total_ligne' => $totalLigne,
             ];
@@ -967,6 +1004,7 @@ class CommandeVenteController extends Controller
             'client_id' => $commande->client_id,
             'client_nom' => $commande->client ? trim($commande->client->prenom.' '.$commande->client->nom) : null,
             'total_commande' => (float) $commande->total_commande,
+            'mode_tarification_snapshot' => $commande->mode_tarification_snapshot?->value,
             'statut' => $commande->statut?->value,
             'lignes' => $commande->lignes->map(fn ($l) => [
                 'produit_id' => $l->produit_id,
@@ -1020,6 +1058,7 @@ class CommandeVenteController extends Controller
     private function vehiculesActifs(string $orgId): Collection
     {
         return Vehicule::with([
+            'typeVehicule',
             'equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'chauffeur'),
             'equipe.membres.livreur',
         ])
@@ -1032,10 +1071,13 @@ class CommandeVenteController extends Controller
                 'id' => $v->id,
                 'nom_vehicule' => $v->nom_vehicule,
                 'immatriculation' => $v->immatriculation,
-                'capacite_packs' => $v->capacite_packs !== null ? (int) $v->capacite_packs : null,
-                'livreur_nom' => ($l = $v->equipe?->livreurs->first())
-                    ? trim($l->prenom.' '.$l->nom)
+                // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
+                // on retombe sur la capacité par défaut du type (cf. VehiculeController).
+                'capacite_packs' => ($c = $v->capacite_packs ?? $v->typeVehicule?->capacite_defaut) !== null
+                    ? (int) $c
                     : null,
+                'pris_en_charge_par_usine' => (bool) $v->pris_en_charge_par_usine,
+                'livreur_nom' => $v->equipe?->livreurs->first()?->libelleAffichage(),
                 'livreur_telephone' => $v->equipe?->membres
                     ->firstWhere('role', 'chauffeur')
                     ?->livreur?->telephone,

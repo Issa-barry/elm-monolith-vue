@@ -16,8 +16,12 @@ class Livreur extends Model
     protected $fillable = [
         'organization_id',
         'user_id',
+        // Identité civile : conservée pour d'autres projets/usages éventuels,
+        // jamais affichée ni demandée dans l'interface Eau La Maman (voir
+        // EquipeLivraisonController). L'UI n'utilise que nom_complet.
         'nom',
         'prenom',
+        'nom_complet',
         'telephone',
         'is_active',
     ];
@@ -28,9 +32,19 @@ class Livreur extends Model
 
     // ── Accessor ──────────────────────────────────────────────────────────────
 
-    public function getNomCompletAttribute(): string
+    /**
+     * Libellé garanti non vide pour les usages internes qui ne tolèrent pas
+     * de null (colonnes NOT NULL type beneficiaire_nom, descriptions d'audit,
+     * snapshots) : nom_complet en priorité (seul champ saisi/affiché côté
+     * Eau La Maman), puis repli sur prenom/nom pour compatibilité avec les
+     * anciennes données, puis téléphone, puis un libellé neutre.
+     */
+    public function libelleAffichage(): string
     {
-        return trim("{$this->prenom} {$this->nom}");
+        return $this->nom_complet
+            ?: trim("{$this->prenom} {$this->nom}")
+            ?: $this->telephone
+            ?: 'Livreur';
     }
 
     // ── Relations ─────────────────────────────────────────────────────────────

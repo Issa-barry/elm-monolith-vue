@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\ModeTarification;
 use App\Enums\StatutCommission;
 use App\Models\CommandeVente;
 use App\Models\CommissionPart;
@@ -19,6 +20,13 @@ class CommissionGenerator
         ]);
 
         if (! $commande->vehicule_id || ! $commande->vehicule) {
+            return;
+        }
+
+        // Véhicule non pris en charge par l'usine : l'usine n'encaisse que son
+        // prix usine (cf. ModeTarification), il n'y a donc aucune marge à
+        // commissionner — la différence reste directement à l'exploitant externe.
+        if ($commande->mode_tarification_snapshot === ModeTarification::PRIX_USINE) {
             return;
         }
 

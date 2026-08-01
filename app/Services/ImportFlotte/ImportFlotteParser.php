@@ -9,9 +9,12 @@ use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TypeVehicule;
 use App\Models\Vehicule;
+use App\Services\ImportFlotte\Normalizers\CountryNormalizer;
+use App\Services\ImportFlotte\Normalizers\ImportTextNormalizer;
+use App\Services\ImportFlotte\Normalizers\PhoneNormalizer;
+use App\Services\ImportFlotte\Normalizers\ReferenceValueResolver;
 use App\Traits\PhoneHandlerTrait;
 use Illuminate\Support\Collection;
-use Illuminate\Validation\ValidationException;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
@@ -23,11 +26,13 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
  * infos véhicule/propriétaire à chaque livreur).
  *
  * La feuille "livreurs" est facultative : un véhicule (nouveau ou existant)
- * peut être importé sans aucun livreur rattaché. Une équipe brouillon est
- * quand même créée pour un nouveau véhicule (potentiellement sans membre), à
- * compléter plus tard depuis le back-office ou un import ultérieur ; un
- * véhicule existant sans ligne "livreurs" ne touche jamais à ses membres déjà
- * en place.
+ * peut être importé sans aucun livreur rattaché. Dans ce cas, aucune équipe
+ * n'est créée pour lui — la création du véhicule et celle de son équipe sont
+ * dissociées : un nouveau véhicule sans livreur reste sans équipe tant qu'un
+ * import ultérieur (ou une action manuelle depuis le back-office) ne lui en
+ * rattache pas ; un véhicule existant sans ligne "livreurs" ne touche jamais
+ * à son équipe ni à ses membres déjà en place (absence de ligne = "ne rien
+ * changer", jamais "vider l'équipe").
  *
  * La commission et la répartition par membre (montant_par_pack) ne sont PAS
  * saisies dans le fichier : l'équipe est créée avec commission=0 et montants=0
@@ -72,6 +77,8 @@ class ImportFlotteParser
                     'lignes_livreurs' => [],
                     'statut' => 'erreur',
                     'erreurs' => ['Fichier vide, ou feuilles "vehicules"/"livreurs" introuvables.'],
+                    'normalisations' => [],
+                    'avertissements' => [],
                 ]],
             ];
         }
@@ -89,6 +96,8 @@ class ImportFlotteParser
                         $nbLignesTotal,
                         self::MAX_LIGNES
                     )],
+                    'normalisations' => [],
+                    'avertissements' => [],
                 ]],
             ];
         }
@@ -100,6 +109,43 @@ class ImportFlotteParser
 
         $groupes = [];
         $immatsTraitees = [];
+        // Un même propriétaire (même téléphone canonique) peut apparaître sur
+        // plusieurs lignes "vehicules" (plusieurs véhicules). Suivi à travers
+        // tout le fichier pour ne le proposer en création qu'une seule fois —
+        // voir resoudreProprietaire().
+        $telephonesProprietairesVus = [];
+
+        // Une même immatriculation ne doit apparaître qu'une seule fois dans
+        // la feuille "vehicules" (contrairement au propriétaire, un véhicule
+        // n'a normalement qu'une ligne). Sans ce contrôle, deux lignes
+        // dupliquées passeraient toutes deux l'analyse ("valide") puis
+        // provoqueraient une violation de contrainte d'unicité en base au
+        // moment de la confirmation — plantage tardif et peu clair au lieu
+        // d'une erreur d'analyse explicite.
+        $occurrencesParImmat = $lignesVehicules
+            ->map(fn ($ligne) => $this->normaliserImmatriculation((string) ($ligne['vehicule_immatriculation'] ?? '')))
+            ->filter(fn ($immat) => $immat !== '')
+            ->countBy();
+
+        // Un même livreur (même téléphone canonique) ne peut pas être rattaché
+        // à deux véhicules différents dans le même fichier — contrairement au
+        // propriétaire, un livreur n'appartient qu'à une seule équipe (règle
+        // déjà appliquée pour les livreurs déjà en base, cf. $dejaAffecte dans
+        // resoudreLivreurs()). Sans ce contrôle, un livreur pas encore en base
+        // et présent sur deux lignes "livreurs" de véhicules différents
+        // passerait l'analyse puis violerait la contrainte d'unicité
+        // (telephone, organization_id) de la table livreurs à la confirmation.
+        $immatsParTelephoneLivreur = $lignesLivreurs
+            ->map(function ($ligne) {
+                $phone = (new PhoneNormalizer)->normalize(trim((string) ($ligne['livreur_telephone'] ?? '')), 'GN');
+                $immat = $this->normaliserImmatriculation((string) ($ligne['vehicule_immatriculation'] ?? ''));
+
+                return $phone['telephone'] && $immat !== '' ? [$phone['telephone'], $immat] : null;
+            })
+            ->filter()
+            ->groupBy(fn ($paire) => $paire[0])
+            ->map(fn ($paires) => $paires->pluck(1)->unique()->values())
+            ->filter(fn ($immats) => $immats->count() > 1);
 
         foreach ($lignesVehicules as $index => $ligneVehicule) {
             $immat = $this->normaliserImmatriculation((string) ($ligneVehicule['vehicule_immatriculation'] ?? ''));
@@ -107,7 +153,21 @@ class ImportFlotteParser
 
             $lignesLivreursGroupe = ($livreursParImmat->get($immat) ?? collect())->all();
 
-            $groupes[] = $this->analyserGroupe($immat, $index + 2, $ligneVehicule, $lignesLivreursGroupe, $organizationId);
+            if ($immat !== '' && ($occurrencesParImmat[$immat] ?? 0) > 1) {
+                $groupes[] = [
+                    'immatriculation' => $immat,
+                    'ligne_vehicule' => $index + 2,
+                    'lignes_livreurs' => array_column($lignesLivreursGroupe, 'numero_ligne'),
+                    'statut' => 'erreur',
+                    'erreurs' => ["Immatriculation \"{$immat}\" présente sur {$occurrencesParImmat[$immat]} lignes de la feuille \"vehicules\" — une seule ligne par véhicule est autorisée."],
+                    'normalisations' => [],
+                    'avertissements' => [],
+                ];
+
+                continue;
+            }
+
+            $groupes[] = $this->analyserGroupe($immat, $index + 2, $ligneVehicule, $lignesLivreursGroupe, $organizationId, $telephonesProprietairesVus, $immatsParTelephoneLivreur);
         }
 
         // Lignes de la feuille "livreurs" dont l'immatriculation n'existe dans
@@ -125,6 +185,8 @@ class ImportFlotteParser
                 'erreurs' => [$immat !== ''
                     ? "Aucun véhicule avec l'immatriculation \"{$immat}\" dans la feuille \"vehicules\"."
                     : 'Immatriculation manquante sur une ligne de la feuille "livreurs".'],
+                'normalisations' => [],
+                'avertissements' => [],
             ];
         }
 
@@ -171,10 +233,12 @@ class ImportFlotteParser
         return null;
     }
 
-    private function analyserGroupe(string $immatriculation, int $numeroLigneVehicule, Collection $ligneVehicule, array $lignesLivreursGroupe, string $orgId): array
+    private function analyserGroupe(string $immatriculation, int $numeroLigneVehicule, Collection $ligneVehicule, array $lignesLivreursGroupe, string $orgId, array &$telephonesProprietairesVus, Collection $immatsParTelephoneLivreur): array
     {
         $numerosLignesLivreurs = array_column($lignesLivreursGroupe, 'numero_ligne');
         $erreurs = [];
+        $normalisations = [];
+        $avertissements = [];
 
         if ($immatriculation === '') {
             return [
@@ -183,13 +247,16 @@ class ImportFlotteParser
                 'lignes_livreurs' => $numerosLignesLivreurs,
                 'statut' => 'erreur',
                 'erreurs' => ['Immatriculation manquante.'],
+                'normalisations' => [],
+                'avertissements' => [],
             ];
         }
 
         // ── Véhicule ─────────────────────────────────────────────────────────
         $nomVehicule = trim((string) ($ligneVehicule['vehicule_nom'] ?? ''));
         $typeNomSaisi = trim((string) ($ligneVehicule['vehicule_type'] ?? ''));
-        $categorie = strtolower(trim((string) ($ligneVehicule['vehicule_categorie'] ?? '')));
+        $categorieSaisie = trim((string) ($ligneVehicule['vehicule_categorie'] ?? ''));
+        $categorie = ImportTextNormalizer::normalize($categorieSaisie);
         $siteNomSaisi = trim((string) ($ligneVehicule['vehicule_site'] ?? ''));
         $prisEnChargeParUsine = $this->toBool($ligneVehicule['vehicule_pris_en_charge_par_usine'] ?? null) ?? false;
 
@@ -198,16 +265,28 @@ class ImportFlotteParser
         }
         if (! in_array($categorie, ['interne', 'externe'], true)) {
             $erreurs[] = 'Catégorie véhicule invalide (attendu : interne ou externe).';
+        } elseif ($categorieSaisie !== $categorie) {
+            $normalisations[] = "\"{$categorieSaisie}\" → \"{$categorie}\"";
         }
 
-        $type = $typeNomSaisi !== ''
-            ? TypeVehicule::where('organization_id', $orgId)->whereNull('deleted_at')
-                ->whereRaw('LOWER(nom) = ?', [mb_strtolower($typeNomSaisi)])->first()
-            : null;
+        $type = null;
         if ($typeNomSaisi === '') {
             $erreurs[] = 'Type de véhicule manquant.';
-        } elseif (! $type) {
-            $erreurs[] = "Type de véhicule introuvable : \"{$typeNomSaisi}\".";
+        } else {
+            $typesDisponibles = TypeVehicule::where('organization_id', $orgId)->whereNull('deleted_at')->get();
+            $type = ReferenceValueResolver::matchExact($typeNomSaisi, $typesDisponibles, fn ($t) => $t->nom);
+
+            if ($type && $type->nom !== $typeNomSaisi) {
+                $normalisations[] = "\"{$typeNomSaisi}\" → \"{$type->nom}\"";
+            } elseif (! $type) {
+                $suggestion = ReferenceValueResolver::suggestClosest($typeNomSaisi, $typesDisponibles, fn ($t) => $t->nom);
+                if ($suggestion) {
+                    $avertissements[] = "\"{$typeNomSaisi}\" semble correspondre à \"{$suggestion}\".";
+                    $erreurs[] = "Type de véhicule introuvable : \"{$typeNomSaisi}\". Valeur proche trouvée : \"{$suggestion}\". Corrigez le fichier ou confirmez la correspondance.";
+                } else {
+                    $erreurs[] = "Type de véhicule introuvable : \"{$typeNomSaisi}\".";
+                }
+            }
         }
 
         $site = null;
@@ -215,13 +294,24 @@ class ImportFlotteParser
             if ($siteNomSaisi === '') {
                 $erreurs[] = 'Site obligatoire pour un véhicule interne.';
             } else {
-                $site = Site::where('organization_id', $orgId)->whereNull('deleted_at')
-                    ->where(fn ($q) => $q
-                        ->whereRaw('LOWER(nom) = ?', [mb_strtolower($siteNomSaisi)])
-                        ->orWhereRaw('LOWER(code) = ?', [mb_strtolower($siteNomSaisi)]))
-                    ->first();
-                if (! $site) {
-                    $erreurs[] = "Site introuvable : \"{$siteNomSaisi}\".";
+                $sitesDisponibles = Site::where('organization_id', $orgId)->whereNull('deleted_at')->get();
+                $site = ReferenceValueResolver::matchExact(
+                    $siteNomSaisi,
+                    $sitesDisponibles,
+                    [fn ($s) => $s->nom, fn ($s) => $s->code],
+                    [fn ($s) => $s->code]
+                );
+
+                if ($site && $site->nom !== $siteNomSaisi && $site->code !== $siteNomSaisi) {
+                    $normalisations[] = "\"{$siteNomSaisi}\" → \"{$site->nom}\"";
+                } elseif (! $site) {
+                    $suggestion = ReferenceValueResolver::suggestClosest($siteNomSaisi, $sitesDisponibles, fn ($s) => $s->nom);
+                    if ($suggestion) {
+                        $avertissements[] = "\"{$siteNomSaisi}\" semble correspondre à \"{$suggestion}\".";
+                        $erreurs[] = "Site introuvable : \"{$siteNomSaisi}\". Valeur proche trouvée : \"{$suggestion}\". Corrigez le fichier ou confirmez la correspondance.";
+                    } else {
+                        $erreurs[] = "Site introuvable : \"{$siteNomSaisi}\".";
+                    }
                 }
             }
         }
@@ -238,7 +328,7 @@ class ImportFlotteParser
         // ── Propriétaire (uniquement si externe) ────────────────────────────
         $proprietaireResolu = null;
         if ($categorie === 'externe') {
-            $proprietaireResolu = $this->resoudreProprietaire($ligneVehicule, $orgId, $erreurs);
+            $proprietaireResolu = $this->resoudreProprietaire($ligneVehicule, $orgId, $erreurs, $normalisations, $telephonesProprietairesVus);
         }
 
         // ── Équipe : commission et montant propriétaire non saisis dans le fichier.
@@ -252,11 +342,12 @@ class ImportFlotteParser
 
         // ── Livreurs ─────────────────────────────────────────────────────────
         // La feuille "livreurs" est facultative : un nouveau véhicule peut être
-        // créé sans aucun membre (équipe brouillon vide, complétée plus tard
-        // depuis le back-office ou un import ultérieur). Un véhicule existant
-        // sans ligne livreur ne touche pas non plus à ses membres actuels.
-        [$livreurs, $erreursLivreurs] = $this->resoudreLivreurs($lignesLivreursGroupe, $orgId, $equipeExistante);
+        // créé sans aucun livreur, auquel cas aucune équipe n'est créée du tout
+        // (voir construction de 'equipe' plus bas). Un véhicule existant sans
+        // ligne livreur ne touche pas non plus à ses membres actuels.
+        [$livreurs, $erreursLivreurs, $normalisationsLivreurs] = $this->resoudreLivreurs($lignesLivreursGroupe, $orgId, $equipeExistante, $immatriculation, $immatsParTelephoneLivreur);
         $erreurs = array_merge($erreurs, $erreursLivreurs);
+        $normalisations = array_merge($normalisations, $normalisationsLivreurs);
 
         if (! empty($erreurs)) {
             return [
@@ -265,6 +356,8 @@ class ImportFlotteParser
                 'lignes_livreurs' => $numerosLignesLivreurs,
                 'statut' => 'erreur',
                 'erreurs' => $erreurs,
+                'normalisations' => $normalisations,
+                'avertissements' => $avertissements,
             ];
         }
 
@@ -274,6 +367,8 @@ class ImportFlotteParser
             'lignes_livreurs' => $numerosLignesLivreurs,
             'statut' => 'valide',
             'erreurs' => [],
+            'normalisations' => $normalisations,
+            'avertissements' => $avertissements,
             'vehicule' => [
                 'existe' => (bool) $vehiculeExistant,
                 'id' => $vehiculeExistant?->id,
@@ -283,23 +378,28 @@ class ImportFlotteParser
                 'site_id' => $site?->id,
                 'pris_en_charge_par_usine' => $prisEnChargeParUsine,
             ],
-            'equipe' => [
+            // Pas d'équipe du tout (ni existante, ni à créer) pour un nouveau
+            // véhicule sans aucun livreur dans le fichier : la création du
+            // véhicule et celle de son équipe sont dissociées — voir docblock
+            // de la classe. `null` ici, distinct de `existe: false`, signifie
+            // "aucune équipe ne sera créée pour ce groupe".
+            'equipe' => ($equipeExistante || count($livreurs) > 0) ? [
                 'existe' => (bool) $equipeExistante,
                 'id' => $equipeExistante?->id,
                 'commission_unitaire_par_pack' => $commission,
                 'montant_par_pack_proprietaire' => $montantProprietaire,
-            ],
+            ] : null,
             'proprietaire' => $proprietaireResolu,
             'livreurs' => $livreurs,
         ];
     }
 
-    private function resoudreProprietaire(Collection $ligne, string $orgId, array &$erreurs): ?array
+    private function resoudreProprietaire(Collection $ligne, string $orgId, array &$erreurs, array &$normalisations, array &$telephonesProprietairesVus): ?array
     {
         $nom = trim((string) ($ligne['proprietaire_nom'] ?? ''));
         $prenom = trim((string) ($ligne['proprietaire_prenom'] ?? ''));
         $telephoneBrut = trim((string) ($ligne['proprietaire_telephone'] ?? ''));
-        $codePays = strtoupper(trim((string) ($ligne['proprietaire_pays'] ?? '')));
+        $paysBrut = trim((string) ($ligne['proprietaire_pays'] ?? ''));
 
         if ($nom === '' || $prenom === '' || $telephoneBrut === '') {
             $erreurs[] = 'Propriétaire incomplet (nom, prénom et téléphone obligatoires pour un véhicule externe).';
@@ -307,23 +407,28 @@ class ImportFlotteParser
             return null;
         }
 
-        if ($codePays === '' || ! isset(static::supportedPays()[$codePays])) {
-            $erreurs[] = "Code pays du propriétaire invalide ou manquant : \"{$codePays}\".";
+        $codePays = $paysBrut !== '' ? CountryNormalizer::resolve($paysBrut) : null;
+        if (! $codePays) {
+            $erreurs[] = "Pays introuvable : \"{$paysBrut}\". Utilisez un nom de pays ou un code ISO valide.";
 
             return null;
+        }
+        if ($codePays !== $paysBrut) {
+            $normalisations[] = "\"{$paysBrut}\" → \"{$codePays}\"";
+        }
+
+        $phone = (new PhoneNormalizer)->normalize($telephoneBrut, $codePays);
+        if ($phone['erreur']) {
+            $erreurs[] = "Téléphone du propriétaire invalide : {$phone['erreur']}";
+
+            return null;
+        }
+        if ($phone['telephone'] !== $telephoneBrut) {
+            $normalisations[] = "\"{$telephoneBrut}\" → \"{$phone['telephone']}\"";
         }
 
         $data = $this->resolveCountryData(['code_pays' => $codePays]);
-        $data['telephone'] = $telephoneBrut;
-
-        try {
-            $this->validateLocalPhoneLength($data);
-        } catch (ValidationException $e) {
-            $erreurs[] = "Téléphone du propriétaire invalide : {$e->getMessage()}";
-
-            return null;
-        }
-
+        $data['telephone'] = $phone['telephone'];
         $data = $this->normalizePersonData(array_merge($data, ['nom' => $nom, 'prenom' => $prenom]));
 
         $existant = Proprietaire::where('organization_id', $orgId)
@@ -331,8 +436,18 @@ class ImportFlotteParser
             ->whereNull('deleted_at')
             ->first();
 
+        // Un même propriétaire peut posséder plusieurs véhicules : plusieurs
+        // lignes "vehicules" du fichier partagent alors le même téléphone.
+        // Sans ce suivi, chaque ligne se croirait "nouvelle" (rien en base
+        // avant confirmation) et créerait un doublon en base à l'exécution.
+        $doublonFichier = ! $existant && isset($telephonesProprietairesVus[$data['telephone']]);
+        if (! $existant) {
+            $telephonesProprietairesVus[$data['telephone']] = true;
+        }
+
         return [
             'existe' => (bool) $existant,
+            'doublon_fichier' => $doublonFichier,
             'id' => $existant?->id,
             'nom' => $data['nom'],
             'prenom' => $data['prenom'],
@@ -344,12 +459,13 @@ class ImportFlotteParser
     }
 
     /**
-     * @return array{0: array, 1: string[]}
+     * @return array{0: array, 1: string[], 2: string[]}
      */
-    private function resoudreLivreurs(array $lignesGroupe, string $orgId, ?EquipeLivraison $equipeExistante): array
+    private function resoudreLivreurs(array $lignesGroupe, string $orgId, ?EquipeLivraison $equipeExistante, string $immatriculationGroupe, Collection $immatsParTelephoneLivreur): array
     {
         $livreurs = [];
         $erreurs = [];
+        $normalisations = [];
         $telephonesVus = [];
 
         $membresExistants = $equipeExistante
@@ -360,20 +476,43 @@ class ImportFlotteParser
             $ligne = $ligneInfo['donnees'];
             $numero = $ligneInfo['numero_ligne'];
 
-            $nom = trim((string) ($ligne['livreur_nom'] ?? ''));
-            $prenom = trim((string) ($ligne['livreur_prenom'] ?? ''));
+            // Colonne principale (facultative — seul le téléphone est
+            // obligatoire, cf. Livreur::$fillable). Compatibilité conservée
+            // avec l'ancien format à deux colonnes (livreur_nom/livreur_prenom)
+            // pour d'anciens fichiers, mais plus jamais affichée/documentée
+            // dans le template Eau La Maman — voir ImportFlotteLivreursSheetExport.
+            $nomComplet = trim((string) ($ligne['livreur_nom_complet'] ?? ''));
+            if ($nomComplet === '') {
+                $nomLegacy = trim((string) ($ligne['livreur_nom'] ?? ''));
+                $prenomLegacy = trim((string) ($ligne['livreur_prenom'] ?? ''));
+                $nomComplet = trim("{$prenomLegacy} {$nomLegacy}");
+            }
             $telephoneBrut = trim((string) ($ligne['livreur_telephone'] ?? ''));
-            $role = strtolower(trim((string) ($ligne['livreur_role'] ?? '')));
+            $roleSaisi = trim((string) ($ligne['livreur_role'] ?? ''));
+            $role = ImportTextNormalizer::normalize($roleSaisi);
 
-            if ($nom === '' || $prenom === '' || $telephoneBrut === '') {
-                $erreurs[] = "Ligne {$numero} : livreur incomplet (nom, prénom, téléphone obligatoires).";
+            if ($telephoneBrut === '') {
+                $erreurs[] = "Ligne {$numero} : livreur incomplet (téléphone obligatoire).";
 
                 continue;
             }
 
-            $telephone = $this->normaliserTelephoneLivreur($telephoneBrut);
-            if (! preg_match('/^\+224\d{9}$/', $telephone)) {
+            $phone = (new PhoneNormalizer)->normalize($telephoneBrut, 'GN');
+            if ($phone['erreur']) {
                 $erreurs[] = "Ligne {$numero} : téléphone livreur invalide (format guinéen +224XXXXXXXXX attendu).";
+
+                continue;
+            }
+            $telephone = $phone['telephone'];
+            if ($telephone !== $telephoneBrut) {
+                $normalisations[] = "\"{$telephoneBrut}\" → \"{$telephone}\"";
+            }
+
+            if ($immatsParTelephoneLivreur->has($telephone)) {
+                $autresImmats = $immatsParTelephoneLivreur->get($telephone)
+                    ->reject(fn ($immat) => $immat === $immatriculationGroupe)
+                    ->implode(', ');
+                $erreurs[] = "Ligne {$numero} : le livreur {$telephone} est rattaché à plusieurs véhicules différents dans ce fichier ({$immatriculationGroupe}, {$autresImmats}) — un livreur ne peut appartenir qu'à une seule équipe.";
 
                 continue;
             }
@@ -382,6 +521,9 @@ class ImportFlotteParser
                 $erreurs[] = "Ligne {$numero} : rôle invalide (attendu : chauffeur ou convoyeur).";
 
                 continue;
+            }
+            if ($roleSaisi !== $role) {
+                $normalisations[] = "\"{$roleSaisi}\" → \"{$role}\"";
             }
 
             if (isset($telephonesVus[$telephone])) {
@@ -417,8 +559,9 @@ class ImportFlotteParser
             $livreurs[] = [
                 'existe' => (bool) $livreurExistant,
                 'id' => $livreurExistant?->id,
-                'nom' => mb_strtoupper($nom, 'UTF-8'),
-                'prenom' => mb_convert_case(mb_strtolower($prenom, 'UTF-8'), MB_CASE_TITLE, 'UTF-8'),
+                // Facultatif, conservé tel quel (jamais découpé/reformaté :
+                // peut être un surnom comme "Petit Moussa" ou "Chauffeur 1").
+                'nom_complet' => $nomComplet !== '' ? $nomComplet : null,
                 'telephone' => $telephone,
                 'role' => $role,
                 // Non saisi dans le fichier — répartition à finaliser dans Équipes de livraison.
@@ -426,7 +569,7 @@ class ImportFlotteParser
             ];
         }
 
-        return [$livreurs, $erreurs];
+        return [$livreurs, $erreurs, $normalisations];
     }
 
     private function normaliserImmatriculation(string $valeur): string
@@ -434,27 +577,15 @@ class ImportFlotteParser
         return mb_strtoupper(trim($valeur), 'UTF-8');
     }
 
-    private function normaliserTelephoneLivreur(string $brut): string
-    {
-        $digits = preg_replace('/\D+/', '', $brut) ?? '';
-
-        if (str_starts_with($digits, '224') && strlen($digits) > 9) {
-            $digits = substr($digits, 3);
-        }
-        $digits = preg_replace('/^0/', '', $digits) ?? $digits;
-
-        return '+224'.$digits;
-    }
-
     private function toBool(mixed $valeur): ?bool
     {
         if ($valeur === null || $valeur === '') {
             return null;
         }
-        $v = mb_strtolower(trim((string) $valeur), 'UTF-8');
+        $v = ImportTextNormalizer::normalize((string) $valeur);
 
         return match ($v) {
-            'oui', 'true', '1', 'vrai', 'yes' => true,
+            'oui', 'true', '1', 'vrai', 'yes', 'x' => true,
             'non', 'false', '0', 'faux', 'no' => false,
             default => null,
         };

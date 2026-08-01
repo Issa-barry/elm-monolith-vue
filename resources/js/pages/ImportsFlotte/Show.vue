@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
@@ -16,8 +17,7 @@ import { computed, onBeforeUnmount, onMounted } from 'vue';
 interface GroupeLivreur {
     existe: boolean;
     id: string | null;
-    nom: string;
-    prenom: string;
+    nom_complet: string | null;
     telephone: string;
     role: string;
     montant_par_pack: number;
@@ -29,9 +29,19 @@ interface Groupe {
     lignes_livreurs: number[];
     statut: 'valide' | 'erreur';
     erreurs: string[];
+    normalisations?: string[];
+    avertissements?: string[];
     vehicule?: { existe: boolean; nom_vehicule: string; categorie: string };
-    proprietaire?: { existe: boolean; nom: string; prenom: string } | null;
-    equipe?: { existe: boolean };
+    proprietaire?: {
+        existe: boolean;
+        doublon_fichier?: boolean;
+        nom: string;
+        prenom: string;
+    } | null;
+    // `null` (ou absent) = aucune équipe ne sera créée pour ce groupe (nouveau
+    // véhicule sans aucun livreur dans le fichier) — distinct de `existe: false`,
+    // qui signifie qu'une équipe SERA créée (le groupe a au moins un livreur).
+    equipe?: { existe: boolean } | null;
     livreurs?: GroupeLivreur[];
 }
 
@@ -98,7 +108,10 @@ const aperçu = computed(() => {
         if (g.proprietaire) {
             if (g.proprietaire.existe) {
                 proprietaires.existants++;
-            } else {
+            } else if (!g.proprietaire.doublon_fichier) {
+                // Un même propriétaire peut apparaître sur plusieurs lignes du
+                // fichier (plusieurs véhicules) : ne compter sa création qu'une
+                // seule fois, comme ImportFlotteExecutor à la confirmation.
                 proprietaires.creer++;
             }
         }
@@ -154,7 +167,7 @@ onBeforeUnmount(() => {
     <Head :title="`Import flotte - ${record.fichier_original}`" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto w-full max-w-4xl space-y-6 p-4 sm:p-6">
+        <div class="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
             <div class="flex items-center justify-between gap-2">
                 <div>
                     <h1 class="text-lg font-semibold">
@@ -271,6 +284,14 @@ onBeforeUnmount(() => {
                                     {{ e }}
                                 </li>
                             </ul>
+                            <ul
+                                v-if="g.avertissements?.length"
+                                class="mt-1 list-inside list-disc text-xs text-amber-600 dark:text-amber-500"
+                            >
+                                <li v-for="(a, j) in g.avertissements" :key="j">
+                                    {{ a }}
+                                </li>
+                            </ul>
                         </div>
                     </div>
                 </div>
@@ -281,25 +302,111 @@ onBeforeUnmount(() => {
                     >
                         Groupes valides ({{ groupesValides.length }})
                     </h2>
-                    <div class="mt-3 divide-y">
-                        <div
-                            v-for="(g, i) in groupesValides"
-                            :key="i"
-                            class="flex items-center justify-between gap-4 py-2 text-sm"
-                        >
-                            <span class="font-medium">{{
-                                g.immatriculation
-                            }}</span>
-                            <span class="text-muted-foreground">
-                                {{ g.livreurs?.length ?? 0 }} livreur(s)
-                                <span v-if="g.vehicule?.existe">
-                                    · véhicule existant</span
+                    <div class="mt-3 overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr
+                                    class="border-b text-left text-xs text-muted-foreground"
                                 >
-                                <span v-if="g.equipe?.existe">
-                                    · équipe existante</span
+                                    <th class="py-2 pr-3 font-medium">
+                                        Immatriculation
+                                    </th>
+                                    <th class="py-2 pr-3 font-medium">
+                                        Véhicule
+                                    </th>
+                                    <th class="py-2 pr-3 font-medium">
+                                        Propriétaire
+                                    </th>
+                                    <th class="py-2 pr-3 font-medium">
+                                        Équipe
+                                    </th>
+                                    <th class="py-2 pr-3 font-medium">
+                                        Livreurs
+                                    </th>
+                                    <th class="py-2 font-medium">
+                                        Normalisations
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y">
+                                <tr
+                                    v-for="(g, i) in groupesValides"
+                                    :key="i"
+                                    class="align-top"
                                 >
-                            </span>
-                        </div>
+                                    <td
+                                        class="py-2 pr-3 font-medium whitespace-nowrap"
+                                    >
+                                        {{ g.immatriculation }}
+                                    </td>
+                                    <td
+                                        class="py-2 pr-3 whitespace-nowrap text-muted-foreground"
+                                    >
+                                        {{ g.vehicule?.nom_vehicule }}
+                                        <span
+                                            v-if="g.vehicule?.existe"
+                                            class="text-xs"
+                                            >(existant)</span
+                                        >
+                                    </td>
+                                    <td
+                                        class="py-2 pr-3 whitespace-nowrap text-muted-foreground"
+                                    >
+                                        <template v-if="g.proprietaire">
+                                            {{ g.proprietaire.prenom }}
+                                            {{ g.proprietaire.nom }}
+                                            <span
+                                                v-if="g.proprietaire.existe"
+                                                class="text-xs"
+                                                >(existant)</span
+                                            >
+                                            <span
+                                                v-else-if="
+                                                    g.proprietaire
+                                                        .doublon_fichier
+                                                "
+                                                class="text-xs"
+                                                >(même propriétaire, autre
+                                                ligne)</span
+                                            >
+                                        </template>
+                                        <span v-else>—</span>
+                                    </td>
+                                    <td
+                                        class="py-2 pr-3 whitespace-nowrap text-muted-foreground"
+                                    >
+                                        <span v-if="g.equipe?.existe"
+                                            >Existante</span
+                                        >
+                                        <span v-else-if="g.equipe"
+                                            >À créer</span
+                                        >
+                                        <span v-else>À constituer</span>
+                                    </td>
+                                    <td class="py-2 pr-3 text-muted-foreground">
+                                        {{ g.livreurs?.length ?? 0 }}
+                                    </td>
+                                    <td
+                                        class="py-2 text-xs text-muted-foreground"
+                                    >
+                                        <ul
+                                            v-if="g.normalisations?.length"
+                                            class="list-inside list-disc"
+                                        >
+                                            <li
+                                                v-for="(
+                                                    n, j
+                                                ) in g.normalisations"
+                                                :key="j"
+                                            >
+                                                {{ n }}
+                                            </li>
+                                        </ul>
+                                        <span v-else>—</span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
 
@@ -308,7 +415,12 @@ onBeforeUnmount(() => {
                     class="w-full"
                     @click="confirmer"
                 >
-                    Confirmer l'import
+                    <Spinner v-if="confirmForm.processing" class="mr-2" />
+                    {{
+                        confirmForm.processing
+                            ? 'Création en cours, veuillez patienter…'
+                            : "Confirmer l'import"
+                    }}
                 </Button>
             </template>
 
@@ -420,6 +532,14 @@ onBeforeUnmount(() => {
                                     {{ e }}
                                 </li>
                             </ul>
+                            <ul
+                                v-if="g.avertissements?.length"
+                                class="mt-1 list-inside list-disc text-xs text-amber-600 dark:text-amber-500"
+                            >
+                                <li v-for="(a, j) in g.avertissements" :key="j">
+                                    {{ a }}
+                                </li>
+                            </ul>
                         </div>
                     </div>
                 </div>
@@ -429,7 +549,12 @@ onBeforeUnmount(() => {
                     class="w-full"
                     @click="relancer"
                 >
-                    Relancer l'import
+                    <Spinner v-if="retryForm.processing" class="mr-2" />
+                    {{
+                        retryForm.processing
+                            ? 'Création en cours, veuillez patienter…'
+                            : "Relancer l'import"
+                    }}
                 </Button>
             </div>
         </div>

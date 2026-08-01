@@ -59,9 +59,11 @@ test('default types appear in list', async ({ page }) => {
     await page.goto('/backoffice/type-vehicules');
     await expect(page).toHaveURL(/\/type-vehicules$/);
 
-    // All default types (Camion, Minibus 200/270, Tricycle moto) should appear
-    await expect(page.getByText('Camion')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText('Minibus 200')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText('Minibus 270')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText('Tricycle moto')).toBeVisible({ timeout: 10_000 });
+    // Types par défaut du seeder (TypeVehiculesSeeder::TYPES) — noms exacts :
+    // un match partiel comme "Camion" résout à la fois "CAMION-1500" et
+    // "CAMIONETTE-450" (violation du mode strict de Playwright).
+    await expect(page.getByRole('cell', { name: 'CAMION-1500', exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('cell', { name: 'Minibus-200', exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('cell', { name: 'Minibus-270', exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('cell', { name: 'Tricycle-70', exact: true })).toBeVisible({ timeout: 10_000 });
 });
