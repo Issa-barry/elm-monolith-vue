@@ -71,12 +71,15 @@ class ImportFlotteTest extends TestCase
 
     private function ligneVehiculeExterne(array $overrides = []): array
     {
+        // vehicule_site est obligatoire quelle que soit la catégorie : un
+        // véhicule externe est aussi rattaché à un site (celui pour lequel il
+        // opère) — 'Matoto' correspond au site créé dans setUp().
         return array_replace([
             'vehicule_immatriculation' => 'RC-1234-A',
             'vehicule_nom' => 'Camion 1',
             'vehicule_type' => 'Tricycle',
             'vehicule_categorie' => 'externe',
-            'vehicule_site' => '',
+            'vehicule_site' => 'Matoto',
             'vehicule_pris_en_charge_par_usine' => 'oui',
             'proprietaire_nom' => 'Diallo',
             'proprietaire_prenom' => 'Mamadou',

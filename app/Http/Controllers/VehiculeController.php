@@ -7,6 +7,7 @@ use App\Models\EquipeLivreur;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TypeVehicule;
+use App\Models\User;
 use App\Models\Vehicule;
 use App\Models\VehiculeFrais;
 use App\Services\ImageService;
@@ -138,42 +139,41 @@ class VehiculeController extends Controller
         $this->authorize('create', Vehicule::class);
 
         $user = auth()->user();
+        $orgId = $user->organization_id;
         $initialProprietaireId = null;
-        $initialSiteId = null;
-        $currentSiteName = '';
 
         if ($request->filled('proprietaire_id')) {
             $initialProprietaireId = Proprietaire::query()
-                ->where('organization_id', $user->organization_id)
+                ->where('organization_id', $orgId)
                 ->where('is_active', true)
                 ->whereKey($request->string('proprietaire_id')->toString())
                 ->value('id');
         }
 
-        if ($request->filled('site_id')) {
-            $contextSite = Site::query()
-                ->where('organization_id', $user->organization_id)
-                ->whereKey($request->string('site_id')->toString())
-                ->first();
-            if ($contextSite) {
-                $initialSiteId = $contextSite->id;
-                $currentSiteName = $contextSite->nom;
-            }
-        }
+        $canChangeSite = $user->isAdmin();
+        $defaultSiteId = $this->defaultSiteId();
 
-        if (! $currentSiteName) {
-            $currentSiteName = ($user->sites()->wherePivot('is_default', true)->first()
-                ?? $user->sites()->first())?->nom
-                ?? $user->organization?->nom
-                ?? '';
+        // Un admin arrivant depuis une page de site (ex: ?site_id=... depuis
+        // Sites/Show) voit ce site pré-sélectionné au lieu de son propre site
+        // par défaut. Un non-admin ne peut de toute façon choisir que son site
+        // (verrouillé côté formulaire), donc ce contexte ne s'applique pas à lui.
+        if ($canChangeSite && $request->filled('site_id')) {
+            $contextSiteId = Site::query()
+                ->where('organization_id', $orgId)
+                ->whereKey($request->string('site_id')->toString())
+                ->value('id');
+            if ($contextSiteId) {
+                $defaultSiteId = $contextSiteId;
+            }
         }
 
         return Inertia::render('Vehicules/Create', [
             'proprietaires' => $this->proprietairesOptions(),
             'types' => $this->typesOptions(),
             'initial_proprietaire_id' => $initialProprietaireId,
-            'initial_site_id' => $initialSiteId,
-            'currentSiteName' => $currentSiteName,
+            'sites' => $this->sitesOptions($user, $orgId),
+            'default_site_id' => $defaultSiteId,
+            'can_change_site' => $canChangeSite,
         ]);
     }
 
@@ -181,7 +181,8 @@ class VehiculeController extends Controller
     {
         $this->authorize('create', Vehicule::class);
 
-        $orgId = auth()->user()->organization_id;
+        $user = auth()->user();
+        $orgId = $user->organization_id;
         abort_if(! $orgId, 403, "Votre compte n'est associé à aucune organisation.");
 
         $data = $request->validate([
@@ -196,10 +197,9 @@ class VehiculeController extends Controller
             ],
             'categorie' => ['required', 'in:interne,externe'],
             'capacite_packs' => 'nullable|integer|min:1|max:99999',
+            // Chaque véhicule (interne ou externe) est rattaché à un site.
             'site_id' => [
-                Rule::requiredIf(fn () => $request->input('categorie') === 'interne'),
-                'nullable',
-                'string',
+                'required', 'string',
                 Rule::exists('sites', 'id')->where('organization_id', $orgId),
             ],
             'proprietaire_id' => [
@@ -213,17 +213,23 @@ class VehiculeController extends Controller
             'is_active' => 'boolean',
         ], $this->messages());
 
+        // Non-admin : ne peut créer que sur son(ses) propre(s) site(s) — un
+        // admin peut choisir n'importe quel site de l'organisation.
+        if (! $user->isAdmin()) {
+            $allowedSiteIds = $user->sites()->pluck('sites.id')->all();
+            abort_unless(
+                in_array($data['site_id'], $allowedSiteIds, true),
+                403,
+                'Vous ne pouvez créer un véhicule que pour votre site.'
+            );
+        }
+
         $data = $this->normalizeStrings($data);
 
         // Interne : pas de propriétaire externe, prise en charge obligatoire
         if ($data['categorie'] === 'interne') {
             $data['proprietaire_id'] = null;
             $data['pris_en_charge_par_usine'] = true;
-        }
-
-        // Externe : pas de site
-        if ($data['categorie'] === 'externe') {
-            $data['site_id'] = null;
         }
 
         if ($request->hasFile('photo')) {
@@ -395,16 +401,15 @@ class VehiculeController extends Controller
         $this->authorize('update', $vehicule);
 
         $user = auth()->user();
+        $orgId = $user->organization_id;
         $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'equipe.membres.livreur']);
 
         return Inertia::render('Vehicules/Edit', [
             'vehicule' => $this->vehiculeData($vehicule),
             'proprietaires' => $this->proprietairesOptions(),
             'types' => $this->typesOptions(),
-            'currentSiteName' => ($user->sites()->wherePivot('is_default', true)->first()
-                ?? $user->sites()->first())?->nom
-                ?? $user->organization?->nom
-                ?? '',
+            'sites' => $this->sitesOptions($user, $orgId),
+            'can_change_site' => $user->isAdmin(),
         ]);
     }
 
@@ -412,7 +417,8 @@ class VehiculeController extends Controller
     {
         $this->authorize('update', $vehicule);
 
-        $orgId = auth()->user()->organization_id;
+        $user = auth()->user();
+        $orgId = $user->organization_id;
 
         $data = $request->validate([
             'nom_vehicule' => 'required|string|max:100',
@@ -428,6 +434,11 @@ class VehiculeController extends Controller
             ],
             'categorie' => ['required', 'in:interne,externe'],
             'capacite_packs' => 'nullable|integer|min:1|max:99999',
+            // Chaque véhicule (interne ou externe) est rattaché à un site.
+            'site_id' => [
+                'required', 'string',
+                Rule::exists('sites', 'id')->where('organization_id', $orgId),
+            ],
             'proprietaire_id' => [
                 Rule::requiredIf(fn () => $request->input('categorie') === 'externe'),
                 'nullable',
@@ -438,6 +449,17 @@ class VehiculeController extends Controller
             'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
             'is_active' => 'boolean',
         ], $this->messages());
+
+        // Non-admin : ne peut affecter le véhicule qu'à son(ses) propre(s)
+        // site(s) — un admin peut choisir n'importe quel site de l'organisation.
+        if (! $user->isAdmin()) {
+            $allowedSiteIds = $user->sites()->pluck('sites.id')->all();
+            abort_unless(
+                in_array($data['site_id'], $allowedSiteIds, true),
+                403,
+                'Vous ne pouvez pas choisir ce site.'
+            );
+        }
 
         $data = $this->normalizeStrings($data);
 
@@ -513,6 +535,31 @@ class VehiculeController extends Controller
             ->toArray();
     }
 
+    /**
+     * Sites sélectionnables pour le formulaire véhicule : un admin voit tous
+     * les sites de l'organisation (peut créer/affecter pour n'importe lequel),
+     * un non-admin ne voit que le ou les sites auxquels il est rattaché — voir
+     * self::store()/self::update() pour l'application côté serveur de cette règle.
+     *
+     * @return array<int, array{id: string, nom: string}>
+     */
+    private function sitesOptions(User $user, string $orgId): array
+    {
+        $sites = $user->isAdmin()
+            ? Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom'])
+            : $user->sites()->where('sites.organization_id', $orgId)->orderBy('sites.nom')->get(['sites.id', 'sites.nom']);
+
+        return $sites->map(fn (Site $s) => ['id' => $s->id, 'nom' => $s->nom])->values()->all();
+    }
+
+    private function defaultSiteId(): ?string
+    {
+        return auth()->user()->sites()
+            ->wherePivot('is_default', true)
+            ->select('sites.id')
+            ->first()?->id;
+    }
+
     private function normalizeStrings(array $data): array
     {
         if (! empty($data['nom_vehicule'])) {
@@ -535,7 +582,7 @@ class VehiculeController extends Controller
             'type_vehicule_id.exists' => 'Type de véhicule invalide.',
             'categorie.required' => 'La catégorie est obligatoire.',
             'categorie.in' => 'Catégorie invalide (interne ou externe).',
-            'site_id.required' => 'Le site est obligatoire pour un véhicule interne.',
+            'site_id.required' => 'Le site est obligatoire.',
             'site_id.exists' => 'Le site sélectionné est introuvable.',
             'proprietaire_id.required' => 'Le propriétaire est obligatoire pour un véhicule externe.',
             'proprietaire_id.exists' => 'Le propriétaire sélectionné est introuvable.',

@@ -22,6 +22,11 @@ interface TypeOption {
     capacite_defaut: number;
 }
 
+interface SiteOption {
+    id: string;
+    nom: string;
+}
+
 const CATEGORIES = [
     { value: 'interne', label: 'Interne (appartient au site)' },
     { value: 'externe', label: 'Externe (propriétaire privé)' },
@@ -33,7 +38,7 @@ interface FormData {
     type_vehicule_id: string | null;
     categorie: string | null;
     capacite_packs: number | null;
-    site_id?: string | null;
+    site_id: string | null;
     proprietaire_id: number | string | null;
     pris_en_charge_par_usine: boolean | null;
     photo: File | null;
@@ -47,7 +52,8 @@ const props = defineProps<{
     proprietaires: Option[];
     types: TypeOption[];
     photoUrl?: string | null;
-    currentSiteName: string;
+    sites: SiteOption[];
+    canChangeSite: boolean;
     showStatusField?: boolean;
     lockedCategorie?: boolean;
 }>();
@@ -99,6 +105,11 @@ function removePhoto() {
 
 const isExterne = computed(() => props.form.categorie === 'externe');
 
+const currentSiteName = computed(
+    () =>
+        props.sites.find((s) => s.id === props.form.site_id)?.nom ?? '—',
+);
+
 const selectedType = computed(() =>
     props.types.find((t) => t.value === props.form.type_vehicule_id),
 );
@@ -146,6 +157,7 @@ const canSubmit = computed(
         !props.processing &&
         !!props.form.categorie &&
         (props.form.categorie === 'interne' || !!props.form.proprietaire_id) &&
+        !!props.form.site_id &&
         props.form.nom_vehicule.trim().length > 0 &&
         props.form.immatriculation.trim().length > 0 &&
         !!props.form.type_vehicule_id &&
@@ -164,14 +176,14 @@ function handleSubmit() {
         class="flex flex-col gap-4 sm:gap-6"
         @submit.prevent="handleSubmit"
     >
-        <!-- Catégorie & Propriétaire -->
+        <!-- Catégorie, Site & Propriétaire -->
         <div class="order-1 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
                 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
             >
                 Appartenance
             </h3>
-            <div class="grid gap-5 sm:grid-cols-2">
+            <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 <!-- Catégorie -->
                 <div>
                     <Label for="categorie" class="mb-1.5 block">
@@ -213,7 +225,52 @@ function handleSubmit() {
                     </template>
                 </div>
 
-                <!-- Propriétaire : externe = sélecteur, interne = texte readonly -->
+                <!-- Site : tout véhicule (interne ou externe) est rattaché à
+                     un site. Verrouillé pour un non-admin (son propre site) ;
+                     un admin peut choisir n'importe quel site de l'organisation. -->
+                <div>
+                    <Label for="site_id" class="mb-1.5 flex items-center gap-1">
+                        Site
+                        <span class="text-destructive">*</span>
+                    </Label>
+                    <template v-if="canChangeSite">
+                        <Dropdown
+                            input-id="site_id"
+                            :model-value="form.site_id"
+                            @update:model-value="
+                                $emit('update:form', {
+                                    ...form,
+                                    site_id: $event,
+                                })
+                            "
+                            :options="sites"
+                            option-label="nom"
+                            option-value="id"
+                            placeholder="Sélectionner…"
+                            class="w-full"
+                            :class="{ 'p-invalid': errors.site_id }"
+                        />
+                        <p
+                            v-if="errors.site_id"
+                            class="mt-1 text-xs text-destructive"
+                        >
+                            {{ errors.site_id }}
+                        </p>
+                    </template>
+                    <template v-else>
+                        <div
+                            class="flex h-10 items-center gap-2 rounded-md border border-input bg-muted/60 px-3 text-sm text-muted-foreground"
+                        >
+                            <Building2 class="h-4 w-4 shrink-0" />
+                            <span class="truncate">{{ currentSiteName }}</span>
+                        </div>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            Votre site (non modifiable).
+                        </p>
+                    </template>
+                </div>
+
+                <!-- Propriétaire : uniquement pour un véhicule externe -->
                 <div>
                     <Label class="mb-1.5 block">
                         Propriétaire
@@ -278,17 +335,13 @@ function handleSubmit() {
                         </p>
                     </template>
 
-                    <!-- Interne : site courant en lecture seule -->
+                    <!-- Interne : pas de propriétaire externe -->
                     <template v-else-if="form.categorie === 'interne'">
                         <div
-                            class="flex h-10 items-center gap-2 rounded-md border border-input bg-muted/60 px-3 text-sm text-muted-foreground"
+                            class="flex h-10 items-center rounded-md border border-dashed bg-muted/30 px-3 text-sm text-muted-foreground"
                         >
-                            <Building2 class="h-4 w-4 shrink-0" />
-                            <span class="truncate">{{ currentSiteName }}</span>
+                            Non requis (véhicule interne)
                         </div>
-                        <p class="mt-1 text-xs text-muted-foreground">
-                            Appartient au site courant.
-                        </p>
                     </template>
 
                     <!-- Pas encore de catégorie sélectionnée -->
