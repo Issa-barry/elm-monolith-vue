@@ -671,13 +671,15 @@ const hasStep1Errors = computed(() =>
                     <span class="text-destructive">*</span>
                 </Label>
                 <InputNumber
-                    v-model="commission"
+                    :model-value="commission || null"
+                    placeholder="0"
                     input-id="step-commission"
                     :min="1"
                     :max-fraction-digits="0"
                     suffix=" GNF"
                     class="w-full"
                     :input-style="{ textAlign: 'right', width: '100%' }"
+                    @update:model-value="commission = $event ?? 0"
                 />
                 <p class="mt-1 text-xs text-muted-foreground">
                     Montant total à répartir entre tous les bénéficiaires.
@@ -736,7 +738,8 @@ const hasStep1Errors = computed(() =>
                             </td>
                             <td class="px-3 py-2">
                                 <InputNumber
-                                    :model-value="ligne.montant"
+                                    :model-value="ligne.montant || null"
+                                    placeholder="0"
                                     :min="0"
                                     :max="commission"
                                     :max-fraction-digits="0"
@@ -752,7 +755,8 @@ const hasStep1Errors = computed(() =>
                             </td>
                             <td class="px-3 py-2">
                                 <InputNumber
-                                    :model-value="ligne.taux"
+                                    :model-value="ligne.taux || null"
+                                    placeholder="0 %"
                                     :min="0"
                                     :max="100"
                                     :max-fraction-digits="2"
