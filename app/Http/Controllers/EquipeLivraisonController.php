@@ -83,8 +83,10 @@ class EquipeLivraisonController extends Controller
         $this->validateUniquePhones($data['membres']);
         $this->validateMembresExclusivite($data['membres'], $orgId);
 
+        $nomVehicule = $vehiculeSelectionne?->nom_vehicule ?? '';
+
         $equipe = null;
-        DB::transaction(function () use ($data, $orgId, $commission, $montantProp, $isExterne, &$equipe) {
+        DB::transaction(function () use ($data, $orgId, $commission, $montantProp, $isExterne, $nomVehicule, &$equipe) {
             $tauxProp = $commission > 0 ? round($montantProp / $commission * 100, 2) : 0.0;
 
             $equipe = EquipeLivraison::create([
@@ -99,8 +101,10 @@ class EquipeLivraisonController extends Controller
 
             Vehicule::whereKey($data['vehicule_id'])->update(['is_active' => true]);
 
+            $designations = $this->designationsParDefaut($data['membres'], $nomVehicule);
+
             foreach ($data['membres'] as $index => $m) {
-                $livreur = $this->resolveOrCreateLivreur($m, $orgId);
+                $livreur = $this->resolveOrCreateLivreur($m, $orgId, $designations[$index]);
                 $montant = (float) $m['montant_par_pack'];
                 $taux = $commission > 0 ? round($montant / $commission * 100, 2) : 0.0;
 
@@ -182,8 +186,9 @@ class EquipeLivraisonController extends Controller
         $this->validateMembresExclusivite($data['membres'], $orgId, $equipes_livraison->id);
 
         $oldVehiculeId = $equipes_livraison->vehicule_id;
+        $nomVehicule = $vehiculeSelectionne?->nom_vehicule ?? '';
 
-        DB::transaction(function () use ($data, $orgId, $commission, $montantProp, $isExterne, $equipes_livraison, $oldVehiculeId) {
+        DB::transaction(function () use ($data, $orgId, $commission, $montantProp, $isExterne, $equipes_livraison, $oldVehiculeId, $nomVehicule) {
             $tauxProp = $commission > 0 ? round($montantProp / $commission * 100, 2) : 0.0;
 
             $equipes_livraison->update([
@@ -202,8 +207,10 @@ class EquipeLivraisonController extends Controller
 
             $equipes_livraison->membres()->delete();
 
+            $designations = $this->designationsParDefaut($data['membres'], $nomVehicule);
+
             foreach ($data['membres'] as $index => $m) {
-                $livreur = $this->resolveOrCreateLivreur($m, $orgId);
+                $livreur = $this->resolveOrCreateLivreur($m, $orgId, $designations[$index]);
                 $montant = (float) $m['montant_par_pack'];
                 $taux = $commission > 0 ? round($montant / $commission * 100, 2) : 0.0;
 
@@ -380,11 +387,15 @@ class EquipeLivraisonController extends Controller
      * les demande jamais dans son interface, donc le payload ne les envoie
      * jamais — les valeurs éventuellement déjà en base (autre usage/projet) ne
      * doivent pas être écrasées par leur absence dans la requête.
+     *
+     * $designationParDefaut (ex: "Chauffeur-1 Baba Ousou") remplace nom_complet
+     * quand le champ est laissé vide dans le formulaire — jamais de nom_complet
+     * vide en base, cf. Livreur::designationParDefaut().
      */
-    private function resolveOrCreateLivreur(array $m, string $orgId): Livreur
+    private function resolveOrCreateLivreur(array $m, string $orgId, string $designationParDefaut): Livreur
     {
         $nomComplet = isset($m['nom_complet']) ? trim((string) $m['nom_complet']) : '';
-        $nomComplet = $nomComplet !== '' ? $nomComplet : null;
+        $nomComplet = $nomComplet !== '' ? $nomComplet : $designationParDefaut;
 
         if (! empty($m['livreur_id'])) {
             $livreur = Livreur::where('id', $m['livreur_id'])
@@ -403,6 +414,25 @@ class EquipeLivraisonController extends Controller
             ['telephone' => $m['telephone'], 'organization_id' => $orgId],
             ['nom_complet' => $nomComplet, 'organization_id' => $orgId, 'is_active' => true]
         );
+    }
+
+    /**
+     * Désignations "Chauffeur-1 {véhicule}"/"Convoyeur-2 {véhicule}" pour les
+     * membres sans nom_complet saisi, indexées par position dans $membres —
+     * jamais de nom_complet vide en base (cf. Livreur::designationParDefaut()).
+     *
+     * @param  array<int, array{role: string}>  $membres
+     * @return array<int, string>
+     */
+    private function designationsParDefaut(array $membres, string $nomVehicule): array
+    {
+        $roleCounts = [];
+
+        return array_map(function (array $m) use (&$roleCounts, $nomVehicule) {
+            $roleCounts[$m['role']] = ($roleCounts[$m['role']] ?? 0) + 1;
+
+            return Livreur::designationParDefaut($m['role'], $roleCounts[$m['role']], $nomVehicule);
+        }, $membres);
     }
 
     /**

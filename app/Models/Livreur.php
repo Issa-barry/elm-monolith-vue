@@ -47,6 +47,20 @@ class Livreur extends Model
             ?: 'Livreur';
     }
 
+    /**
+     * Désignation par défaut affectée à la création (import flotte, création
+     * d'équipe) quand ni nom_complet ni prenom/nom ne sont saisis — on ne
+     * laisse jamais nom_complet vide : "Chauffeur-1 Baba Ousou". $numero est
+     * la position du membre parmi les autres du même rôle dans cette équipe
+     * (cohérent avec EquipeStepperModal::membreLabel() côté frontend).
+     */
+    public static function designationParDefaut(string $role, int $numero, string $nomVehicule): string
+    {
+        $label = $role === 'chauffeur' ? 'Chauffeur' : 'Convoyeur';
+
+        return trim("{$label}-{$numero} {$nomVehicule}");
+    }
+
     // ── Relations ─────────────────────────────────────────────────────────────
 
     public function organization(): BelongsTo
