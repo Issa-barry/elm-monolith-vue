@@ -354,7 +354,7 @@ function roleOrdinal(role: string, numero: number): string {
  * Libellé "Membre" affiché partout côté Eau La Maman : jamais construit à
  * partir de prenom/nom (identité civile non utilisée sur ce projet — voir
  * EquipeLivraisonController). "Chauffeur-1" seul si nom_complet est vide,
- * "Chauffeur-1 — Petit Moussa" s'il est renseigné.
+ * "Chauffeur-1 — Mamadou SY" s'il est renseigné.
  */
 function membreLabel(role: string, numero: number, nomComplet: string): string {
     const ordinal = roleOrdinal(role, numero);
@@ -593,7 +593,7 @@ const hasStep1Errors = computed(() =>
                                 <InputText
                                     v-model="m.nom_complet"
                                     class="w-full"
-                                    placeholder="Ex : Petit Moussa, Chauffeur 1…"
+                                    placeholder="Ex : Mamadou SY "
                                     :data-testid="`nom-complet-${i}`"
                                     @input="markChanged"
                                 />
@@ -671,13 +671,15 @@ const hasStep1Errors = computed(() =>
                     <span class="text-destructive">*</span>
                 </Label>
                 <InputNumber
-                    v-model="commission"
+                    :model-value="commission || null"
+                    placeholder="0"
                     input-id="step-commission"
                     :min="1"
                     :max-fraction-digits="0"
                     suffix=" GNF"
                     class="w-full"
                     :input-style="{ textAlign: 'right', width: '100%' }"
+                    @update:model-value="commission = $event ?? 0"
                 />
                 <p class="mt-1 text-xs text-muted-foreground">
                     Montant total à répartir entre tous les bénéficiaires.
@@ -736,7 +738,8 @@ const hasStep1Errors = computed(() =>
                             </td>
                             <td class="px-3 py-2">
                                 <InputNumber
-                                    :model-value="ligne.montant"
+                                    :model-value="ligne.montant || null"
+                                    placeholder="0"
                                     :min="0"
                                     :max="commission"
                                     :max-fraction-digits="0"
@@ -752,7 +755,8 @@ const hasStep1Errors = computed(() =>
                             </td>
                             <td class="px-3 py-2">
                                 <InputNumber
-                                    :model-value="ligne.taux"
+                                    :model-value="ligne.taux || null"
+                                    placeholder="0 %"
                                     :min="0"
                                     :max="100"
                                     :max-fraction-digits="2"

@@ -8,10 +8,16 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import type { StatutCommissionResolu } from '@/types/commission-status';
 import { Head, Link } from '@inertiajs/vue3';
-import { Download, ReceiptText } from 'lucide-vue-next';
+import { Download, ReceiptText, Truck } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import { computed } from 'vue';
+
+interface VehiculeInfo {
+    id: string;
+    nom: string;
+    immatriculation: string | null;
+}
 
 interface Fiche extends StatutCommissionResolu {
     id: string;
@@ -31,6 +37,7 @@ interface Fiche extends StatutCommissionResolu {
     statut_label: string;
     mode_paiement: string | null;
     date_paiement: string | null;
+    vehicules: VehiculeInfo[];
 }
 
 interface Option {
@@ -268,6 +275,39 @@ function exportExcel() {
                             >
                                 {{ data.beneficiaire_nom }}
                             </Link>
+                        </template>
+                    </Column>
+
+                    <Column
+                        v-if="type !== 'salarie'"
+                        header="Véhicule(s)"
+                        style="min-width: 160px"
+                    >
+                        <template #body="{ data }">
+                            <div
+                                v-if="data.vehicules.length"
+                                class="flex items-start gap-1.5 text-sm text-muted-foreground"
+                            >
+                                <Truck class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                <div>
+                                    <div
+                                        v-for="v in data.vehicules"
+                                        :key="v.id"
+                                    >
+                                        <span class="font-medium">{{
+                                            v.nom
+                                        }}</span>
+                                        <span
+                                            v-if="v.immatriculation"
+                                            class="block text-xs text-muted-foreground/80"
+                                            >{{ v.immatriculation }}</span
+                                        >
+                                    </div>
+                                </div>
+                            </div>
+                            <span v-else class="text-xs text-muted-foreground"
+                                >—</span
+                            >
                         </template>
                     </Column>
 

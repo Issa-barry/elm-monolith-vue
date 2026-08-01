@@ -311,6 +311,51 @@ class ImportFlotteTest extends TestCase
         $this->assertSame($livreur->id, $membre->livreur_id);
     }
 
+    public function test_confirm_creates_livreur_sans_nom_avec_designation_par_defaut(): void
+    {
+        // Ni livreur_nom_complet ni livreur_nom/livreur_prenom renseignés : jamais
+        // de nom_complet vide en base, repli sur "Chauffeur-1 {véhicule}".
+        $import = $this->importerVehiculeEtChauffeur([], [
+            'livreur_nom' => '', 'livreur_prenom' => '',
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $livreur = Livreur::where('organization_id', $this->org->id)->where('telephone', '+224623000001')->firstOrFail();
+        $this->assertSame('Chauffeur-1 Camion 1', $livreur->nom_complet);
+    }
+
+    public function test_confirm_numbers_designation_par_defaut_par_role(): void
+    {
+        // Deux convoyeurs sans nom sur le même véhicule → numérotés par position,
+        // pas tous "Convoyeur-1".
+        $import = $this->importer(
+            [$this->ligneVehiculeExterne()],
+            [
+                $this->ligneLivreurChauffeur(),
+                $this->ligneLivreurChauffeur([
+                    'livreur_nom' => '', 'livreur_prenom' => '',
+                    'livreur_telephone' => '623000002', 'livreur_role' => 'convoyeur',
+                ]),
+                $this->ligneLivreurChauffeur([
+                    'livreur_nom' => '', 'livreur_prenom' => '',
+                    'livreur_telephone' => '623000003', 'livreur_role' => 'convoyeur',
+                ]),
+            ]
+        );
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $premier = Livreur::where('organization_id', $this->org->id)->where('telephone', '+224623000002')->firstOrFail();
+        $second = Livreur::where('organization_id', $this->org->id)->where('telephone', '+224623000003')->firstOrFail();
+        $this->assertSame('Convoyeur-1 Camion 1', $premier->nom_complet);
+        $this->assertSame('Convoyeur-2 Camion 1', $second->nom_complet);
+    }
+
     public function test_confirm_deactivates_already_active_vehicule_when_creating_draft_equipe(): void
     {
         // Véhicule déjà existant, actif, sans équipe (cas réel : créé manuellement

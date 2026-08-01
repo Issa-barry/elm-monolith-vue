@@ -106,6 +106,14 @@ function submit() {
                     feuille livreurs. La commission et la répartition par
                     livreur se configurent après coup dans Équipes de livraison.
                 </p>
+                <p class="mt-2 text-sm text-muted-foreground">
+                    Le nom d'un livreur est facultatif (seul le téléphone est
+                    obligatoire) et peut être renseigné soit en un seul champ
+                    (<strong>livreur_nom_complet</strong>), soit en deux champs
+                    séparés (<strong>livreur_nom</strong> +
+                    <strong>livreur_prenom</strong>) — utilisez celui qui vous
+                    convient, sans dupliquer l'information.
+                </p>
                 <a
                     href="/settings/imports-flotte/modele"
                     class="mt-4 inline-flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"

@@ -134,7 +134,9 @@ class EquipeLivraisonTest extends TestCase
 
     public function test_store_creates_membre_sans_aucun_nom(): void
     {
-        // nom_complet est facultatif — seuls téléphone et rôle sont obligatoires.
+        // nom_complet est facultatif dans le formulaire (seuls téléphone et rôle
+        // sont obligatoires), mais jamais laissé vide en base : repli sur la
+        // désignation par défaut "Chauffeur-1 {véhicule}" — cf. Livreur::designationParDefaut().
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $vehicule = $this->makeVehicule();
 
@@ -151,7 +153,48 @@ class EquipeLivraisonTest extends TestCase
 
         $this->assertDatabaseHas('livreurs', [
             'telephone' => '+224620000001',
-            'nom_complet' => null,
+            'nom_complet' => "Chauffeur-1 {$vehicule->nom_vehicule}",
+        ]);
+    }
+
+    public function test_store_numbers_designation_par_defaut_par_role(): void
+    {
+        // Deux convoyeurs sans nom sur la même équipe → numérotés par position,
+        // pas tous "Convoyeur-1" — cf. Livreur::designationParDefaut().
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule();
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'vehicule_id' => $vehicule->id,
+                'membres' => [
+                    [
+                        'livreur_id' => null,
+                        'nom_complet' => 'Mamadou Diallo',
+                        'telephone' => '+224620000001', 'role' => 'chauffeur',
+                        'montant_par_pack' => 15, 'ordre' => 0,
+                    ],
+                    [
+                        'livreur_id' => null,
+                        'telephone' => '+224620000002', 'role' => 'convoyeur',
+                        'montant_par_pack' => 8, 'ordre' => 1,
+                    ],
+                    [
+                        'livreur_id' => null,
+                        'telephone' => '+224620000003', 'role' => 'convoyeur',
+                        'montant_par_pack' => 7, 'ordre' => 2,
+                    ],
+                ],
+            ]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $this->assertDatabaseHas('livreurs', [
+            'telephone' => '+224620000002',
+            'nom_complet' => "Convoyeur-1 {$vehicule->nom_vehicule}",
+        ]);
+        $this->assertDatabaseHas('livreurs', [
+            'telephone' => '+224620000003',
+            'nom_complet' => "Convoyeur-2 {$vehicule->nom_vehicule}",
         ]);
     }
 

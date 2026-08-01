@@ -10,6 +10,12 @@ import Dropdown from 'primevue/dropdown';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
+interface LigneVehicule {
+    id: string;
+    nom: string;
+    immatriculation: string | null;
+}
+
 interface Ligne {
     id: string;
     type_ligne: string;
@@ -18,6 +24,7 @@ interface Ligne {
     montant: number;
     is_gain: boolean;
     is_deduction: boolean;
+    vehicule: LigneVehicule | null;
 }
 
 interface HistoriquePaiement {
@@ -266,6 +273,18 @@ function exportPdf() {
                                 <p class="text-sm">{{ ligne.libelle }}</p>
                                 <p class="text-xs text-muted-foreground">
                                     {{ ligne.type_label }}
+                                    <template v-if="ligne.vehicule">
+                                        — {{ ligne.vehicule.nom
+                                        }}<span
+                                            v-if="
+                                                ligne.vehicule.immatriculation
+                                            "
+                                        >
+                                            ({{
+                                                ligne.vehicule.immatriculation
+                                            }})</span
+                                        >
+                                    </template>
                                 </p>
                             </div>
                         </div>
@@ -299,6 +318,18 @@ function exportPdf() {
                                 <p class="text-sm">{{ ligne.libelle }}</p>
                                 <p class="text-xs text-muted-foreground">
                                     {{ ligne.type_label }}
+                                    <template v-if="ligne.vehicule">
+                                        — {{ ligne.vehicule.nom
+                                        }}<span
+                                            v-if="
+                                                ligne.vehicule.immatriculation
+                                            "
+                                        >
+                                            ({{
+                                                ligne.vehicule.immatriculation
+                                            }})</span
+                                        >
+                                    </template>
                                 </p>
                             </div>
                         </div>

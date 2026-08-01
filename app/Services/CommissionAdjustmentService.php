@@ -11,6 +11,7 @@ use App\Models\CommissionLogistiquePart;
 use App\Models\CommissionPart;
 use App\Models\CommissionPartAdjustment;
 use App\Models\CommissionVente;
+use App\Models\EquipeLivraison;
 use App\Models\PaiementFicheLigne;
 use App\Models\PaiementPeriode;
 use App\Models\User;
@@ -270,9 +271,11 @@ class CommissionAdjustmentService
                 'reference' => $g['reference'],
             ]));
 
+        $designationsParLivreur = self::designationsEquipeParVehicule($vehiculeId);
+
         return $lignes
             ->groupBy(fn (array $l) => $l['part']->type_beneficiaire.':'.($l['part']->livreur_id ?? $l['part']->proprietaire_id ?? $l['part']->beneficiaire_nom))
-            ->map(function (\Illuminate\Support\Collection $lignesDuBeneficiaire, string $cle) {
+            ->map(function (\Illuminate\Support\Collection $lignesDuBeneficiaire, string $cle) use ($designationsParLivreur) {
                 $premierPart = $lignesDuBeneficiaire->first()['part'];
                 $theorique = round((float) $lignesDuBeneficiaire->sum(fn (array $l) => (float) $l['part']->montant_net), 2);
                 $ajuste = round((float) $lignesDuBeneficiaire->sum(fn (array $l) => $l['part']->montant_a_payer), 2);
@@ -280,7 +283,8 @@ class CommissionAdjustmentService
                 return [
                     'cle' => $cle,
                     'type_beneficiaire' => $premierPart->type_beneficiaire,
-                    'beneficiaire_nom' => $premierPart->beneficiaire_nom,
+                    'beneficiaire_nom' => self::beneficiaireNomAffiche($premierPart, $designationsParLivreur),
+                    'beneficiaire_telephone' => $premierPart->livreur?->telephone ?? $premierPart->proprietaire?->telephone,
                     'theorique' => $theorique,
                     'ajuste' => $ajuste,
                     'ecart' => round($ajuste - $theorique, 2),
@@ -292,6 +296,61 @@ class CommissionAdjustmentService
             ->sortBy('beneficiaire_nom')
             ->values()
             ->all();
+    }
+
+    /**
+     * Libellé "Bénéficiaire" affiché sur l'écran d'ajustement — jamais le
+     * numéro de téléphone brut : quand le livreur n'a ni nom_complet ni
+     * prenom/nom, Livreur::libelleAffichage() retombe sur le téléphone, donc
+     * on substitue ici la désignation d'équipe courante (Chauffeur-1,
+     * Convoyeur-2…), cohérente avec EquipeStepperModal::membreLabel(). Le
+     * téléphone reste affiché séparément côté Vue (Ajustements/Vehicule.vue).
+     *
+     * @param  array<string, string>  $designationsParLivreur  indexé par livreur_id
+     */
+    private static function beneficiaireNomAffiche(CommissionPart|CommissionLogistiquePart $part, array $designationsParLivreur): string
+    {
+        if ($part->type_beneficiaire !== 'livreur' || $part->livreur_id === null) {
+            return $part->beneficiaire_nom;
+        }
+
+        $livreur = $part->livreur;
+        $aUnNomSaisi = $livreur && ($livreur->nom_complet || trim("{$livreur->prenom} {$livreur->nom}") !== '');
+
+        return $aUnNomSaisi ? $part->beneficiaire_nom : ($designationsParLivreur[$part->livreur_id] ?? $part->beneficiaire_nom);
+    }
+
+    /**
+     * Désignations "Chauffeur-1"/"Convoyeur-2" de l'équipe courante d'un
+     * véhicule, indexées par livreur_id — reflète la composition ACTUELLE de
+     * l'équipe (pas celle au moment où la commission a été générée), au même
+     * titre que l'écran de configuration d'équipe.
+     *
+     * @return array<string, string>
+     */
+    private static function designationsEquipeParVehicule(?string $vehiculeId): array
+    {
+        if ($vehiculeId === null) {
+            return [];
+        }
+
+        $equipe = EquipeLivraison::where('vehicule_id', $vehiculeId)->first();
+        if (! $equipe) {
+            return [];
+        }
+
+        $roleCounts = [];
+        $designations = [];
+        foreach ($equipe->membres as $membre) {
+            if ($membre->livreur_id === null) {
+                continue;
+            }
+            $roleCounts[$membre->role] = ($roleCounts[$membre->role] ?? 0) + 1;
+            $label = $membre->role === 'chauffeur' ? 'Chauffeur' : 'Convoyeur';
+            $designations[$membre->livreur_id] = "{$label}-{$roleCounts[$membre->role]}";
+        }
+
+        return $designations;
     }
 
     /**
