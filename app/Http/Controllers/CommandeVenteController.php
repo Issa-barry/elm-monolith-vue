@@ -482,7 +482,7 @@ class CommandeVenteController extends Controller
                     'proprietaire_telephone' => $vehicule->proprietaire?->telephone,
                     'proprietaire_code_phone_pays' => $vehicule->proprietaire?->code_phone_pays,
                 ] : null,
-                'livreur_nom' => $chauffeur ? ($chauffeur->nom_complet ?? $chauffeur->telephone) : null,
+                'livreur_nom' => $chauffeur?->libelleAffichage(),
                 'livreur_telephone' => $chauffeur?->telephone,
                 'equipe_detail' => $equipe ? [
                     'nom' => $vehicule->nom_vehicule,
@@ -490,11 +490,11 @@ class CommandeVenteController extends Controller
                         ? (float) $equipe->taux_commission_proprietaire
                         : null,
                     'chauffeur' => $chauffeur ? [
-                        'nom' => $chauffeur->nom_complet ?? $chauffeur->telephone,
+                        'nom' => $chauffeur->libelleAffichage(),
                         'telephone' => $chauffeur->telephone,
                     ] : null,
                     'convoyeurs' => $convoyeurs->map(fn ($l) => [
-                        'nom' => $l->nom_complet ?? $l->telephone,
+                        'nom' => $l->libelleAffichage(),
                         'telephone' => $l->telephone,
                     ])->values(),
                 ] : null,
@@ -1077,9 +1077,7 @@ class CommandeVenteController extends Controller
                     ? (int) $c
                     : null,
                 'pris_en_charge_par_usine' => (bool) $v->pris_en_charge_par_usine,
-                'livreur_nom' => ($l = $v->equipe?->livreurs->first())
-                    ? ($l->nom_complet ?? $l->telephone)
-                    : null,
+                'livreur_nom' => $v->equipe?->livreurs->first()?->libelleAffichage(),
                 'livreur_telephone' => $v->equipe?->membres
                     ->firstWhere('role', 'chauffeur')
                     ?->livreur?->telephone,

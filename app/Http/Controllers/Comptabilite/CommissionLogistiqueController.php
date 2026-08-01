@@ -505,7 +505,7 @@ class CommissionLogistiqueController extends Controller
                 'module' => 'commissions_logistique',
                 'montant' => $data['montant'],
                 'mode_paiement' => $data['mode_paiement'],
-                'description' => "Paiement de {$montantFmt} GNF effectué pour ".($livreur->nom_complet ?? $livreur->telephone),
+                'description' => "Paiement de {$montantFmt} GNF effectué pour ".$livreur->libelleAffichage(),
             ]);
         }
 

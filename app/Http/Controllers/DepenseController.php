@@ -325,7 +325,7 @@ class DepenseController extends Controller
     {
         $l = Livreur::where('organization_id', $orgId)
             ->with(['equipes:id,nom'])
-            ->find($id, ['id', 'nom_complet', 'telephone']);
+            ->find($id, ['id', 'nom', 'prenom', 'nom_complet', 'telephone']);
 
         if (! $l) {
             return null;
@@ -333,7 +333,7 @@ class DepenseController extends Controller
 
         return [
             'type' => 'livreur',
-            'nom' => $l->nom_complet ?? $l->telephone,
+            'nom' => $l->libelleAffichage(),
             'telephone' => $l->telephone ?? '—',
             'equipe' => $l->equipes->pluck('nom')->implode(', ') ?: '—',
             'site' => '—',
@@ -1005,8 +1005,9 @@ class DepenseController extends Controller
                 $fields = match ($type) {
                     'employe' => ['id', 'nom', 'prenom', 'telephone'],
                     // Identité civile jamais utilisée côté Eau La Maman pour les
-                    // livreurs — voir Livreur::$fillable.
-                    'livreur' => ['id', 'nom_complet', 'telephone'],
+                    // livreurs — voir Livreur::$fillable. nom/prenom restent
+                    // sélectionnés pour le repli de Livreur::libelleAffichage().
+                    'livreur' => ['id', 'nom', 'prenom', 'nom_complet', 'telephone'],
                     'proprietaire' => ['id', 'nom', 'prenom', 'telephone'],
                     default => ['id', 'nom', 'prenom'],
                 };
@@ -1020,7 +1021,7 @@ class DepenseController extends Controller
 
                 foreach ($models as $model) {
                     $labelCache["{$type}:{$model->id}"] = $type === 'livreur'
-                        ? ($model->nom_complet ?? $model->telephone)
+                        ? $model->libelleAffichage()
                         : trim("{$model->prenom} {$model->nom}");
                     $labelCache["tel:{$type}:{$model->id}"] = $model->telephone ?? null;
                 }
@@ -1139,10 +1140,10 @@ class DepenseController extends Controller
         return Livreur::where('organization_id', $orgId)
             ->where('is_active', true)
             ->orderBy('nom_complet')
-            ->get(['id', 'nom_complet', 'telephone'])
+            ->get(['id', 'nom', 'prenom', 'nom_complet', 'telephone'])
             ->map(fn ($l) => [
                 'id' => $l->id,
-                'nom_complet' => $l->nom_complet ?? $l->telephone,
+                'nom_complet' => $l->libelleAffichage(),
             ]);
     }
 

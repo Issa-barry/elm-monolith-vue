@@ -163,7 +163,7 @@ class CommissionLogistiqueService
                 $taux = (float) ($membre->taux_commission ?? 0);
                 $brut = round($montantTotal * $taux / 100, 2);
                 $nomLivreur = $membre->livreur
-                    ? ($membre->livreur->nom_complet ?? $membre->livreur->telephone)
+                    ? $membre->livreur->libelleAffichage()
                     : "Livreur #{$membre->livreur_id}";
 
                 CommissionLogistiquePart::create([

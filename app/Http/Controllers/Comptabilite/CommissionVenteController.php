@@ -275,7 +275,7 @@ class CommissionVenteController extends Controller
         $orgId = auth()->user()->organization_id;
 
         $livreur = Livreur::find($livreurId);
-        $nom = $livreur ? ($livreur->nom_complet ?? $livreur->telephone) : '—';
+        $nom = $livreur ? $livreur->libelleAffichage() : '—';
 
         $allParts = CommissionPart::with(['commission.commande.site', 'commission.vehicule'])
             ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
@@ -555,7 +555,7 @@ class CommissionVenteController extends Controller
                 'module' => 'commissions_vente',
                 'montant' => $data['montant'],
                 'mode_paiement' => $data['mode_paiement'],
-                'description' => "Paiement de {$montantFmt} GNF effectué pour ".($livreur->nom_complet ?? $livreur->telephone),
+                'description' => "Paiement de {$montantFmt} GNF effectué pour ".$livreur->libelleAffichage(),
             ]);
         }
 

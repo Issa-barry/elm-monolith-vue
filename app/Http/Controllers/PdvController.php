@@ -60,7 +60,7 @@ class PdvController extends Controller
                     'nom_vehicule' => $v->nom_vehicule,
                     'immatriculation' => $v->immatriculation,
                     'capacite_packs' => $capacite !== null ? (int) $capacite : null,
-                    'livreur_nom' => $livreur ? ($livreur->nom_complet ?? $livreur->telephone) : null,
+                    'livreur_nom' => $livreur?->libelleAffichage(),
                     'livreur_telephone' => $livreur?->telephone ?? null,
                 ];
             })->values();

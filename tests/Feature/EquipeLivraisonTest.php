@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\EquipeLivraison;
+use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
@@ -197,7 +198,7 @@ class EquipeLivraisonTest extends TestCase
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule->id]))
             ->assertRedirectContains('/backoffice/vehicules/');
 
-        $livreur = \App\Models\Livreur::where('telephone', '+224620000001')->firstOrFail();
+        $livreur = Livreur::where('telephone', '+224620000001')->firstOrFail();
         $livreur->update(['nom' => 'BARRY', 'prenom' => 'Issa']);
 
         $equipe = EquipeLivraison::where('organization_id', $this->org->id)->first();

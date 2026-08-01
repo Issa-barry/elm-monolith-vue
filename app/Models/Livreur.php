@@ -30,6 +30,23 @@ class Livreur extends Model
         'is_active' => 'boolean',
     ];
 
+    // ── Accessor ──────────────────────────────────────────────────────────────
+
+    /**
+     * Libellé garanti non vide pour les usages internes qui ne tolèrent pas
+     * de null (colonnes NOT NULL type beneficiaire_nom, descriptions d'audit,
+     * snapshots) : nom_complet en priorité (seul champ saisi/affiché côté
+     * Eau La Maman), puis repli sur prenom/nom pour compatibilité avec les
+     * anciennes données, puis téléphone, puis un libellé neutre.
+     */
+    public function libelleAffichage(): string
+    {
+        return $this->nom_complet
+            ?: trim("{$this->prenom} {$this->nom}")
+            ?: $this->telephone
+            ?: 'Livreur';
+    }
+
     // ── Relations ─────────────────────────────────────────────────────────────
 
     public function organization(): BelongsTo

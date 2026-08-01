@@ -105,7 +105,7 @@ class CommissionCalculator
                 'type_beneficiaire' => 'livreur',
                 'livreur_id' => $livreur?->id,
                 'proprietaire_id' => null,
-                'beneficiaire_nom' => $livreur ? ($livreur->nom_complet ?? $livreur->telephone) : "Livreur #{$membre->livreur_id}",
+                'beneficiaire_nom' => $livreur ? $livreur->libelleAffichage() : "Livreur #{$membre->livreur_id}",
                 'role' => $membre->role ?? null,
                 'taux_commission' => $taux,
                 'montant_brut' => $brut,
