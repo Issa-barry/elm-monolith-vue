@@ -19,7 +19,11 @@ return new class extends Migration
             $table->string('nom', 100)->nullable();
             $table->string('prenom', 100)->nullable();
             $table->string('nom_complet', 150)->nullable();
-            $table->string('telephone', 30);
+            // Nullable en base (comme avant) : de nombreuses fixtures de tests
+            // et flux internes créent un Livreur sans téléphone connu. Le
+            // téléphone reste obligatoire au niveau applicatif partout où c'est
+            // pertinent (EquipeLivraisonController, ImportFlotteParser, LivreurController).
+            $table->string('telephone', 30)->nullable();
             $table->boolean('is_active')->default(true);
             $table->timestamps();
             $table->softDeletes();
