@@ -2,6 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\EquipeLivraison;
+use App\Models\EquipeLivreur;
+use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\Proprietaire;
 use App\Models\Site;
@@ -523,6 +526,48 @@ class VehiculeTest extends TestCase
                 ->component('Vehicules/Show')
                 ->where('vehicule.proprietaire_id', null)
                 ->where('vehicule.proprietaire_nom', null)
+            );
+    }
+
+    public function test_show_expose_livreur_nom_sans_doublon_de_designation(): void
+    {
+        // nom_complet est désormais toujours renseigné à la création d'un
+        // livreur (repli sur "Chauffeur-1 {véhicule}" si aucun nom saisi —
+        // cf. Livreur::designationParDefaut()) : le libellé "equipe_membres"
+        // ne doit pas re-préfixer un ordinal par-dessus, sous peine de
+        // doublon ("Chauffeur-1 — Chauffeur-1 ADAMA").
+        $vehicule = $this->makeVehicule($this->org);
+        $vehicule->update(['nom_vehicule' => 'ADAMA']);
+
+        $equipe = EquipeLivraison::create([
+            'organization_id' => $this->org->id,
+            'vehicule_id' => $vehicule->id,
+            'proprietaire_id' => $vehicule->proprietaire_id,
+            'is_active' => true,
+            'commission_unitaire_par_pack' => 100,
+        ]);
+
+        $livreur = Livreur::create([
+            'organization_id' => $this->org->id,
+            'nom_complet' => 'Chauffeur-1 ADAMA',
+            'telephone' => '+224623000001',
+            'is_active' => true,
+        ]);
+
+        EquipeLivreur::create([
+            'equipe_id' => $equipe->id,
+            'livreur_id' => $livreur->id,
+            'role' => 'chauffeur',
+            'montant_par_pack' => 0,
+            'taux_commission' => 0,
+            'ordre' => 0,
+        ]);
+
+        $this->actingAs($this->user)
+            ->get(route('vehicules.show', $vehicule))
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Vehicules/Show')
+                ->where('vehicule.equipe_membres.0.livreur_nom', 'Chauffeur-1 ADAMA')
             );
     }
 

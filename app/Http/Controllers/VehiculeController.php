@@ -56,9 +56,9 @@ class VehiculeController extends Controller
                 ? $this->membreLabel($membres->first())
                 : null,
             // Jamais de prenom/nom affiché côté Eau La Maman : le libellé
-            // "Chauffeur-1 — Petit Moussa" (ou "Chauffeur-1" si nom_complet
-            // est vide) est déjà composé ici pour ne pas dupliquer cette
-            // logique côté frontend — voir self::membreLabel().
+            // (nom_complet, ou "Chauffeur-1" en filet de sécurité pour les
+            // données historiques sans nom_complet) est déjà composé ici pour
+            // ne pas dupliquer cette logique côté frontend — voir self::membreLabel().
             'equipe_membres' => $this->membresAvecLabel($membres)->map(fn ($m) => [
                 'livreur_nom' => $m['label'],
                 'telephone' => $m['membre']->livreur?->telephone ?? null,
@@ -84,9 +84,14 @@ class VehiculeController extends Controller
     }
 
     /**
-     * Libellé "Chauffeur-1 — Petit Moussa" (ou "Chauffeur-1" si nom_complet
-     * est vide) pour chaque membre — jamais construit depuis prenom/nom,
-     * qui ne sont jamais affichés côté Eau La Maman.
+     * Libellé = nom_complet du livreur — jamais construit depuis prenom/nom,
+     * qui ne sont jamais affichés côté Eau La Maman. nom_complet est désormais
+     * toujours renseigné à la création d'un livreur (repli automatique sur une
+     * désignation "Chauffeur-1 {véhicule}", cf. Livreur::designationParDefaut()),
+     * donc PAS de préfixe "Chauffeur-1 — " ajouté ici : ça doublonnerait ce que
+     * nom_complet porte déjà. Le calcul d'ordinal ne sert plus que de filet de
+     * sécurité pour les données historiques créées avant ce repli automatique
+     * (nom_complet encore vide en base).
      *
      * @return Collection<int, array{membre: EquipeLivreur, label: string}>
      */
@@ -95,14 +100,16 @@ class VehiculeController extends Controller
         $roleCounts = [];
 
         return $membres->map(function (EquipeLivreur $m) use (&$roleCounts) {
-            $roleCounts[$m->role] = ($roleCounts[$m->role] ?? 0) + 1;
-            $ordinal = ($m->role === 'chauffeur' ? 'Chauffeur-' : 'Convoyeur-').$roleCounts[$m->role];
             $nomComplet = trim((string) ($m->livreur?->nom_complet ?? ''));
 
-            return [
-                'membre' => $m,
-                'label' => $nomComplet !== '' ? "{$ordinal} — {$nomComplet}" : $ordinal,
-            ];
+            if ($nomComplet !== '') {
+                return ['membre' => $m, 'label' => $nomComplet];
+            }
+
+            $roleCounts[$m->role] = ($roleCounts[$m->role] ?? 0) + 1;
+            $ordinal = ($m->role === 'chauffeur' ? 'Chauffeur-' : 'Convoyeur-').$roleCounts[$m->role];
+
+            return ['membre' => $m, 'label' => $ordinal];
         });
     }
 

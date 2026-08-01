@@ -6,6 +6,7 @@ import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import {
@@ -52,6 +53,7 @@ interface BeneficiaireRow {
     cle: string;
     type_beneficiaire: string;
     beneficiaire_nom: string;
+    beneficiaire_telephone: string | null;
     theorique: number;
     ajuste: number;
     ecart: number;
@@ -555,9 +557,20 @@ function submitRemplacant() {
                         style="min-width: 200px"
                     >
                         <template #body="{ data }">
-                            <span class="font-medium">{{
-                                data.beneficiaire_nom
-                            }}</span>
+                            <div>
+                                <span class="font-medium">{{
+                                    data.beneficiaire_nom
+                                }}</span>
+                                <span
+                                    v-if="data.beneficiaire_telephone"
+                                    class="block text-xs text-muted-foreground"
+                                    >{{
+                                        formatPhoneDisplay(
+                                            data.beneficiaire_telephone,
+                                        )
+                                    }}</span
+                                >
+                            </div>
                         </template>
                     </Column>
 

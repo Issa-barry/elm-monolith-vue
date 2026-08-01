@@ -64,6 +64,7 @@ class CommissionAjustementController extends Controller
                 'cle' => $b['cle'],
                 'type_beneficiaire' => $b['type_beneficiaire'],
                 'beneficiaire_nom' => $b['beneficiaire_nom'],
+                'beneficiaire_telephone' => $b['beneficiaire_telephone'],
                 'theorique' => $b['theorique'],
                 'ajuste' => $b['ajuste'],
                 'ecart' => $b['ecart'],

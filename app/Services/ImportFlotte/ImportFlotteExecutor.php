@@ -170,15 +170,27 @@ class ImportFlotteExecutor
         $ordreDepart = EquipeLivreur::where('equipe_id', $equipeId)->max('ordre');
         $ordre = $ordreDepart !== null ? $ordreDepart + 1 : 0;
 
+        // Position par rôle parmi les membres de l'équipe (existants inclus),
+        // pour numéroter la désignation par défaut des nouveaux livreurs sans
+        // nom (ex: "Chauffeur-2 Baba Ousou") — cf. Livreur::designationParDefaut().
+        $roleCounts = $eData['existe']
+            ? EquipeLivreur::where('equipe_id', $equipeId)->get()->countBy('role')->all()
+            : [];
+
         foreach ($groupe['livreurs'] as $l) {
+            $roleCounts[$l['role']] = ($roleCounts[$l['role']] ?? 0) + 1;
+
             if ($l['existe']) {
                 $livreurId = $l['id'];
             } else {
+                // Identité civile jamais demandée dans ce projet — voir
+                // ImportFlotteParser / Livreur::$fillable. Jamais de nom_complet
+                // vide en base : repli sur la désignation par défaut.
+                $nomComplet = $l['nom_complet'] ?? Livreur::designationParDefaut($l['role'], $roleCounts[$l['role']], $vData['nom_vehicule']);
+
                 $livreur = Livreur::create([
                     'organization_id' => $orgId,
-                    // Identité civile jamais demandée dans ce projet — voir
-                    // ImportFlotteParser / Livreur::$fillable.
-                    'nom_complet' => $l['nom_complet'],
+                    'nom_complet' => $nomComplet,
                     'telephone' => $l['telephone'],
                     'is_active' => true,
                 ]);
