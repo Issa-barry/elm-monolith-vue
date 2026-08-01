@@ -8,7 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\JournalTresorerie;
 use App\Models\PaiementPeriode;
 use App\Models\Site;
-use Carbon\Carbon;
+use App\Services\PeriodePaiementService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -21,7 +21,7 @@ class JournalTresorerieController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $filters = $request->only(['sens', 'categorie', 'date_from', 'date_to', 'search']);
+        $filters = $request->only(['sens', 'categorie', 'annee', 'mois', 'quinzaine', 'search']);
         $isAdmin = $user->isAdmin();
         $filtreSiteIds = $isAdmin ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
 
@@ -40,11 +40,19 @@ class JournalTresorerieController extends Controller
         if (! empty($filters['categorie'])) {
             $query->where('categorie', $filters['categorie']);
         }
-        if (! empty($filters['date_from'])) {
-            $query->whereDate('date_operation', '>=', Carbon::parse($filters['date_from']));
+        if (! empty($filters['annee'])) {
+            $annee = (int) $filters['annee'];
+            $query->whereBetween('date_operation', ["{$annee}-01-01", "{$annee}-12-31"]);
         }
-        if (! empty($filters['date_to'])) {
-            $query->whereDate('date_operation', '<=', Carbon::parse($filters['date_to']));
+        if (! empty($filters['mois'])) {
+            $query->whereMonth('date_operation', (int) $filters['mois']);
+        }
+        if (! empty($filters['quinzaine']) && in_array($filters['quinzaine'], [PeriodePaiementService::P1, PeriodePaiementService::P2], true)) {
+            if ($filters['quinzaine'] === PeriodePaiementService::P1) {
+                $query->whereDay('date_operation', '<=', 15);
+            } else {
+                $query->whereDay('date_operation', '>', 15);
+            }
         }
 
         $totalEntrees = (float) (clone $query)->where('sens', SensJournal::ENTREE->value)->sum('montant');

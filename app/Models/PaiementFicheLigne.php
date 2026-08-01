@@ -6,6 +6,7 @@ use App\Enums\TypeLignePaiement;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 class PaiementFicheLigne extends Model
 {
@@ -32,6 +33,16 @@ class PaiementFicheLigne extends Model
     public function fiche(): BelongsTo
     {
         return $this->belongsTo(PaiementFiche::class, 'fiche_id');
+    }
+
+    /**
+     * Origine de la ligne (CommissionPart, CommissionLogistiquePart, Depense,
+     * PaieLigne, PaieVariable — cf. PeriodeCalculatorService). Sert notamment
+     * à retrouver le véhicule à l'origine d'un gain/déduction (PaiementFicheController).
+     */
+    public function source(): MorphTo
+    {
+        return $this->morphTo();
     }
 
     public function isGain(): bool
