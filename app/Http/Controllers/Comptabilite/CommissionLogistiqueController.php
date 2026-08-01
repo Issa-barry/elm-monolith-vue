@@ -140,7 +140,9 @@ class CommissionLogistiqueController extends Controller
                 'nom' => $v->nom_vehicule,
                 'immatriculation' => $v->immatriculation,
                 'type' => $v->typeVehicule?->nom,
-                'capacite_packs' => $v->capacite_packs,
+                // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
+                // on retombe sur la capacité par défaut du type (cf. VehiculeController).
+                'capacite_packs' => $v->capacite_packs ?? $v->typeVehicule?->capacite_defaut,
                 'proprietaire_nom' => $v->proprietaire
                     ? trim($v->proprietaire->prenom.' '.$v->proprietaire->nom)
                     : null,
@@ -503,7 +505,7 @@ class CommissionLogistiqueController extends Controller
                 'module' => 'commissions_logistique',
                 'montant' => $data['montant'],
                 'mode_paiement' => $data['mode_paiement'],
-                'description' => "Paiement de {$montantFmt} GNF effectué pour ".trim("{$livreur->prenom} {$livreur->nom}"),
+                'description' => "Paiement de {$montantFmt} GNF effectué pour ".$livreur->libelleAffichage(),
             ]);
         }
 

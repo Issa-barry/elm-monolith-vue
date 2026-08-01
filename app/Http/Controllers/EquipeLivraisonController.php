@@ -21,7 +21,7 @@ class EquipeLivraisonController extends Controller
     {
         $this->authorize('viewAny', EquipeLivraison::class);
 
-        $equipes = EquipeLivraison::with('membres.livreur', 'proprietaire', 'vehicule')
+        $equipes = EquipeLivraison::with('membres.livreur', 'proprietaire', 'vehicule.typeVehicule')
             ->where('organization_id', auth()->user()->organization_id)
             ->get()
             ->sortBy(fn (EquipeLivraison $e) => $e->vehicule?->nom_vehicule)
@@ -61,8 +61,9 @@ class EquipeLivraisonController extends Controller
             ],
             'membres' => 'required|array|min:1',
             'membres.*.livreur_id' => 'nullable|string',
-            'membres.*.nom' => 'required|string|max:255',
-            'membres.*.prenom' => 'required|string|max:255',
+            // Nom civil (nom/prenom) jamais demandé côté Eau La Maman : seul un
+            // nom complet ou surnom facultatif est saisi — voir Livreur::$fillable.
+            'membres.*.nom_complet' => 'nullable|string|max:150',
             'membres.*.telephone' => ['required', 'string', 'regex:/^\+224\d{9}$/'],
             'membres.*.role' => ['required', Rule::in(['chauffeur', 'convoyeur'])],
             'membres.*.montant_par_pack' => 'required|numeric|min:0',
@@ -158,8 +159,9 @@ class EquipeLivraisonController extends Controller
             ],
             'membres' => 'required|array|min:1',
             'membres.*.livreur_id' => 'nullable|string',
-            'membres.*.nom' => 'required|string|max:255',
-            'membres.*.prenom' => 'required|string|max:255',
+            // Nom civil (nom/prenom) jamais demandé côté Eau La Maman : seul un
+            // nom complet ou surnom facultatif est saisi — voir Livreur::$fillable.
+            'membres.*.nom_complet' => 'nullable|string|max:150',
             'membres.*.telephone' => ['required', 'string', 'regex:/^\+224\d{9}$/'],
             'membres.*.role' => ['required', Rule::in(['chauffeur', 'convoyeur'])],
             'membres.*.montant_par_pack' => 'required|numeric|min:0',
@@ -261,8 +263,7 @@ class EquipeLivraisonController extends Controller
 
             return [
                 'livreur_id' => $m->livreur_id,
-                'nom' => $m->livreur?->nom ?? '',
-                'prenom' => $m->livreur?->prenom ?? '',
+                'nom_complet' => $m->livreur?->nom_complet,
                 'telephone' => $m->livreur?->telephone ?? '',
                 'role' => $role,
                 'montant_par_pack' => $montant,
@@ -280,15 +281,22 @@ class EquipeLivraisonController extends Controller
             'vehicule_nom' => $e->vehicule?->nom_vehicule,
             'vehicule_type_label' => $e->vehicule?->type_label,
             'vehicule_categorie' => $e->vehicule?->categorie,
-            'vehicule_capacite_packs' => $e->vehicule?->capacite_packs,
+            // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
+            // on retombe sur la capacité par défaut du type (cf. VehiculeController).
+            'vehicule_capacite_packs' => $e->vehicule?->capacite_packs ?? $e->vehicule?->typeVehicule?->capacite_defaut,
             'proprietaire_id' => $e->proprietaire_id,
             'proprietaire_nom' => $e->proprietaire ? trim("{$e->proprietaire->prenom} {$e->proprietaire->nom}") : null,
             'proprietaire_telephone' => $e->proprietaire?->telephone,
             'commission_unitaire_par_pack' => $commission,
             'montant_par_pack_proprietaire' => $e->montant_par_pack_proprietaire !== null ? (float) $e->montant_par_pack_proprietaire : null,
             'taux_commission_proprietaire' => $e->taux_commission_proprietaire !== null ? (float) $e->taux_commission_proprietaire : null,
+            // "Chauffeur-1" si nom_complet est vide, jamais nul tant qu'un
+            // chauffeur existe — sinon la colonne "Chauffeur" des tableaux
+            // afficherait à tort "aucun chauffeur".
             'premier_chauffeur_nom' => $premierChauffeur
-                ? trim(($premierChauffeur->livreur?->prenom ?? '').' '.($premierChauffeur->livreur?->nom ?? ''))
+                ? (trim((string) ($premierChauffeur->livreur?->nom_complet ?? '')) !== ''
+                    ? trim($premierChauffeur->livreur->nom_complet)
+                    : 'Chauffeur-1')
                 : null,
             'premier_chauffeur_telephone' => $premierChauffeur?->livreur?->telephone,
             'nb_membres' => $membres->count(),
@@ -367,11 +375,16 @@ class EquipeLivraisonController extends Controller
 
     /**
      * Retrouve un livreur existant (par livreur_id ou par téléphone+org) ou en crée un nouveau.
+     *
+     * Ne touche jamais aux colonnes nom/prenom (identité civile) : ce projet ne
+     * les demande jamais dans son interface, donc le payload ne les envoie
+     * jamais — les valeurs éventuellement déjà en base (autre usage/projet) ne
+     * doivent pas être écrasées par leur absence dans la requête.
      */
     private function resolveOrCreateLivreur(array $m, string $orgId): Livreur
     {
-        $nom = $this->normalizeNom($m['nom']);
-        $prenom = $this->normalizePrenom($m['prenom']);
+        $nomComplet = isset($m['nom_complet']) ? trim((string) $m['nom_complet']) : '';
+        $nomComplet = $nomComplet !== '' ? $nomComplet : null;
 
         if (! empty($m['livreur_id'])) {
             $livreur = Livreur::where('id', $m['livreur_id'])
@@ -379,8 +392,7 @@ class EquipeLivraisonController extends Controller
                 ->firstOrFail();
 
             $livreur->update([
-                'nom' => $nom,
-                'prenom' => $prenom,
+                'nom_complet' => $nomComplet,
                 'telephone' => $m['telephone'],
             ]);
 
@@ -389,20 +401,8 @@ class EquipeLivraisonController extends Controller
 
         return Livreur::firstOrCreate(
             ['telephone' => $m['telephone'], 'organization_id' => $orgId],
-            ['nom' => $nom, 'prenom' => $prenom, 'organization_id' => $orgId, 'is_active' => true]
+            ['nom_complet' => $nomComplet, 'organization_id' => $orgId, 'is_active' => true]
         );
-    }
-
-    /** Nom de famille → MAJUSCULES (ex : "diallo" → "DIALLO"). */
-    private function normalizeNom(string $nom): string
-    {
-        return mb_strtoupper(trim($nom), 'UTF-8');
-    }
-
-    /** Prénom → Title Case (ex : "moussa sow" → "Moussa Sow"). */
-    private function normalizePrenom(string $prenom): string
-    {
-        return mb_convert_case(mb_strtolower(trim($prenom), 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
     }
 
     /**
@@ -482,8 +482,7 @@ class EquipeLivraisonController extends Controller
             'montant_par_pack_proprietaire.min' => 'Le montant propriétaire ne peut pas être négatif.',
             'membres.required' => "L'équipe doit avoir au moins un membre.",
             'membres.min' => "L'équipe doit avoir au moins un membre.",
-            'membres.*.nom.required' => 'Le nom du livreur est obligatoire.',
-            'membres.*.prenom.required' => 'Le prénom du livreur est obligatoire.',
+            'membres.*.nom_complet.max' => 'Le nom complet ou surnom ne doit pas dépasser 150 caractères.',
             'membres.*.telephone.required' => 'Le téléphone du livreur est obligatoire.',
             'membres.*.telephone.regex' => 'Le téléphone doit être au format guinéen (+224 suivi de 9 chiffres).',
             'membres.*.role.required' => 'Le rôle est obligatoire.',

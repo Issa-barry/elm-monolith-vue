@@ -156,9 +156,13 @@ class ImportFlotteController extends Controller
         } catch (Throwable $e) {
             report($e);
 
+            // Message générique côté utilisateur : le détail technique (ex.
+            // message SQL brut avec noms de colonnes/valeurs) ne doit pas
+            // fuiter dans l'interface — il reste consultable dans les logs
+            // serveur via report() ci-dessus.
             $import->update([
                 'statut' => StatutImportFlotte::ECHOUE->value,
-                'rapport' => ['erreur_fatale' => $e->getMessage()],
+                'rapport' => ['erreur_fatale' => "Une erreur inattendue est survenue pendant l'import. Aucune donnée n'a été enregistrée. Contactez le support si le problème persiste."],
                 'termine_le' => now(),
             ]);
 

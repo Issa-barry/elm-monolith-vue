@@ -64,6 +64,27 @@ class VehiculeTest extends TestCase
             ->assertStatus(403);
     }
 
+    public function test_index_falls_back_to_type_default_capacity_when_vehicule_has_none(): void
+    {
+        // cas réel : véhicules créés par l'import flotte, qui ne saisit jamais
+        // de capacité propre au véhicule (voir ImportFlotteExecutor).
+        $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'capacite_defaut' => 270]);
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'type_vehicule_id' => $type->id,
+            'proprietaire_id' => $proprietaire->id,
+            'categorie' => 'externe',
+            'capacite_packs' => null,
+        ]);
+
+        $this->actingAs($this->user)
+            ->get(route('vehicules.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('vehicules.0.capacite_packs', 270)
+            );
+    }
+
     // ── create ────────────────────────────────────────────────────────────────
 
     public function test_create_returns_200_for_authorized_user(): void

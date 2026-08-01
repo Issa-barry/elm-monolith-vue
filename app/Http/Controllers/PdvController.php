@@ -39,7 +39,10 @@ class PdvController extends Controller
                 'image' => $p->image_url ?? null,
             ])->values();
 
-        $vehicules = Vehicule::with(['equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'chauffeur')])
+        $vehicules = Vehicule::with([
+            'typeVehicule',
+            'equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'chauffeur'),
+        ])
             ->where('organization_id', $orgId)
             ->where('is_active', true)
             ->where('categorie', 'externe')
@@ -48,12 +51,16 @@ class PdvController extends Controller
             ->map(function (Vehicule $v) {
                 $livreur = $v->equipe?->livreurs->first();
 
+                // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
+                // on retombe sur la capacité par défaut du type (cf. VehiculeController).
+                $capacite = $v->capacite_packs ?? $v->typeVehicule?->capacite_defaut;
+
                 return [
                     'id' => $v->id,
                     'nom_vehicule' => $v->nom_vehicule,
                     'immatriculation' => $v->immatriculation,
-                    'capacite_packs' => $v->capacite_packs !== null ? (int) $v->capacite_packs : null,
-                    'livreur_nom' => $livreur ? trim($livreur->prenom.' '.$livreur->nom) : null,
+                    'capacite_packs' => $capacite !== null ? (int) $capacite : null,
+                    'livreur_nom' => $livreur?->libelleAffichage(),
                     'livreur_telephone' => $livreur?->telephone ?? null,
                 ];
             })->values();

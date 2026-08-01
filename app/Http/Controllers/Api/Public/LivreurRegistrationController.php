@@ -69,14 +69,22 @@ class LivreurRegistrationController extends Controller
                 ? Livreur::where('telephone', $phone)->where('organization_id', $org->id)->whereNull('user_id')->first()
                 : null;
 
+            $nomComplet = trim(self::formatPrenom($validated['prenom']).' '.mb_strtoupper($validated['nom']));
+
             if ($existing) {
-                $existing->update(['user_id' => $user->id]);
+                $existing->update([
+                    'user_id' => $user->id,
+                    // Renseigne le nom d'affichage si absent — sans écraser
+                    // un surnom éventuellement déjà saisi côté équipe.
+                    'nom_complet' => $existing->nom_complet ?? $nomComplet,
+                ]);
             } else {
                 Livreur::create([
                     'organization_id' => $org?->id,
                     'user_id' => $user->id,
                     'nom' => mb_strtoupper($validated['nom']),
                     'prenom' => self::formatPrenom($validated['prenom']),
+                    'nom_complet' => $nomComplet,
                     'telephone' => $phone,
                     'is_active' => false,
                 ]);

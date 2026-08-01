@@ -134,6 +134,8 @@ interface CommandeData {
     statut_label: string;
     statut_color: string;
     total_commande: number;
+    mode_tarification_snapshot: string | null;
+    mode_tarification_label: string | null;
     vehicule_nom: string | null;
     vehicule_detail: VehiculeDetail | null;
     livreur_nom: string | null;
@@ -496,6 +498,27 @@ function submitEncaisser() {
 const showChargeeCol = computed(
     () => !props.commande.is_brouillon && !props.commande.is_a_charger,
 );
+
+// ── Libellés de prix — explicites (prix vente vs prix usine) ──────────────────
+// Le prix unitaire AFFICHÉ doit être celui réellement utilisé dans le calcul
+// du total (prix_usine si le véhicule n'était pas pris en charge par l'usine),
+// sinon libellé et valeur se contredisent.
+const prixUnitLabel = computed(() =>
+    props.commande.mode_tarification_snapshot === 'prix_usine'
+        ? 'Prix usine (unit.)'
+        : 'Prix vente (unit.)',
+);
+function ligneUnitPrice(ligne: LigneCommande): number {
+    return props.commande.mode_tarification_snapshot === 'prix_usine'
+        ? ligne.prix_usine_snapshot
+        : ligne.prix_vente_snapshot;
+}
+const totalColumnLabel = computed(() =>
+    props.commande.mode_tarification_snapshot === 'prix_usine'
+        ? 'Total (prix usine)'
+        : 'Total (prix vente)',
+);
+const totalCommandeLabel = 'Total commande';
 
 // ── Ticket impression ─────────────────────────────────────────────────────────
 const page = usePage();
@@ -1025,10 +1048,20 @@ function connectorIsActive(idx: number): boolean {
                         </div>
                         <div>
                             <p class="text-xs text-muted-foreground">
-                                Total commande
+                                {{ totalCommandeLabel }}
                             </p>
                             <p class="mt-0.5 text-xl font-bold tabular-nums">
                                 {{ formatGNF(commande.total_commande) }}
+                            </p>
+                            <p
+                                v-if="
+                                    commande.mode_tarification_snapshot ===
+                                    'prix_usine'
+                                "
+                                class="mt-0.5 text-xs text-amber-600 dark:text-amber-400"
+                            >
+                                Calculé au prix usine — véhicule non pris en
+                                charge par l'usine
                             </p>
                         </div>
                     </div>
@@ -1097,13 +1130,13 @@ function connectorIsActive(idx: number): boolean {
                                         class="px-4 py-2.5 text-right font-medium text-muted-foreground"
                                         style="width: 150px"
                                     >
-                                        Prix unit.
+                                        {{ prixUnitLabel }}
                                     </th>
                                     <th
                                         class="px-4 py-2.5 text-right font-medium text-muted-foreground"
                                         style="width: 150px"
                                     >
-                                        Total
+                                        {{ totalColumnLabel }}
                                     </th>
                                 </tr>
                             </thead>
@@ -1160,9 +1193,7 @@ function connectorIsActive(idx: number): boolean {
                                     <td
                                         class="px-4 py-3 text-right text-muted-foreground tabular-nums"
                                     >
-                                        {{
-                                            formatGNF(ligne.prix_vente_snapshot)
-                                        }}
+                                        {{ formatGNF(ligneUnitPrice(ligne)) }}
                                     </td>
                                     <td
                                         class="px-4 py-3 text-right font-semibold tabular-nums"
@@ -1177,7 +1208,7 @@ function connectorIsActive(idx: number): boolean {
                                         :colspan="showChargeeCol ? 6 : 3"
                                         class="px-4 py-3 text-right text-sm font-semibold text-muted-foreground"
                                     >
-                                        Total
+                                        {{ totalColumnLabel }}
                                     </td>
                                     <td
                                         class="px-4 py-3 text-right text-lg font-bold tabular-nums"

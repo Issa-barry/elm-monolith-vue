@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Depense;
+use App\Models\EquipeLivreur;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TypeVehicule;
@@ -11,6 +12,7 @@ use App\Models\VehiculeFrais;
 use App\Services\ImageService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -36,7 +38,11 @@ class VehiculeController extends Controller
             'type_vehicule_id' => $v->type_vehicule_id,
             'type_label' => $v->type_label,
             'categorie' => $v->categorie,
-            'capacite_packs' => $v->capacite_packs,
+            // Capacité propre au véhicule si définie (override), sinon celle
+            // par défaut de son type — c'est cette dernière qui est utilisée
+            // en pratique tant qu'aucune capacité spécifique n'a été saisie
+            // (import flotte notamment : capacite_packs n'est jamais renseigné).
+            'capacite_packs' => $v->capacite_packs ?? $v->typeVehicule?->capacite_defaut,
             'site_id' => $v->site_id,
             'site_nom' => $v->relationLoaded('site') ? $v->site?->nom : null,
             'proprietaire_id' => $v->proprietaire_id,
@@ -46,15 +52,19 @@ class VehiculeController extends Controller
             'agence_nom' => $agence?->nom,
             'equipe_id' => $equipe?->id,
             'equipe_nom' => $equipe ? $v->nom_vehicule : null,
-            'livreur_principal_nom' => $membres->first()?->livreur
-                ? trim($membres->first()->livreur->prenom.' '.$membres->first()->livreur->nom)
+            'livreur_principal_nom' => $membres->first()
+                ? $this->membreLabel($membres->first())
                 : null,
-            'equipe_membres' => $membres->map(fn ($m) => [
-                'livreur_nom' => $m->livreur ? trim($m->livreur->prenom.' '.$m->livreur->nom) : null,
-                'telephone' => $m->livreur?->telephone ?? null,
-                'role' => $m->role,
-                'taux_commission' => (float) $m->taux_commission,
-                'montant_par_pack' => (int) $m->montant_par_pack,
+            // Jamais de prenom/nom affiché côté Eau La Maman : le libellé
+            // "Chauffeur-1 — Petit Moussa" (ou "Chauffeur-1" si nom_complet
+            // est vide) est déjà composé ici pour ne pas dupliquer cette
+            // logique côté frontend — voir self::membreLabel().
+            'equipe_membres' => $this->membresAvecLabel($membres)->map(fn ($m) => [
+                'livreur_nom' => $m['label'],
+                'telephone' => $m['membre']->livreur?->telephone ?? null,
+                'role' => $m['membre']->role,
+                'taux_commission' => (float) $m['membre']->taux_commission,
+                'montant_par_pack' => (int) $m['membre']->montant_par_pack,
             ])->values()->all(),
             'frais' => $v->relationLoaded('frais')
                 ? $v->frais->map(fn (VehiculeFrais $f) => [
@@ -71,6 +81,34 @@ class VehiculeController extends Controller
             'photo_url' => $v->photo_url,
             'is_active' => $v->is_active,
         ];
+    }
+
+    /**
+     * Libellé "Chauffeur-1 — Petit Moussa" (ou "Chauffeur-1" si nom_complet
+     * est vide) pour chaque membre — jamais construit depuis prenom/nom,
+     * qui ne sont jamais affichés côté Eau La Maman.
+     *
+     * @return Collection<int, array{membre: EquipeLivreur, label: string}>
+     */
+    private function membresAvecLabel(Collection $membres): Collection
+    {
+        $roleCounts = [];
+
+        return $membres->map(function (EquipeLivreur $m) use (&$roleCounts) {
+            $roleCounts[$m->role] = ($roleCounts[$m->role] ?? 0) + 1;
+            $ordinal = ($m->role === 'chauffeur' ? 'Chauffeur-' : 'Convoyeur-').$roleCounts[$m->role];
+            $nomComplet = trim((string) ($m->livreur?->nom_complet ?? ''));
+
+            return [
+                'membre' => $m,
+                'label' => $nomComplet !== '' ? "{$ordinal} — {$nomComplet}" : $ordinal,
+            ];
+        });
+    }
+
+    private function membreLabel(EquipeLivreur $m): string
+    {
+        return $this->membresAvecLabel(collect([$m]))->first()['label'];
     }
 
     public function index(): Response
@@ -224,8 +262,7 @@ class VehiculeController extends Controller
 
                 return [
                     'livreur_id' => $m->livreur_id,
-                    'nom' => $m->livreur?->nom ?? '',
-                    'prenom' => $m->livreur?->prenom ?? '',
+                    'nom_complet' => $m->livreur?->nom_complet,
                     'telephone' => $m->livreur?->telephone ?? '',
                     'role' => $role,
                     'montant_par_pack' => (float) $m->montant_par_pack,

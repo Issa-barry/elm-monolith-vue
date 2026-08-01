@@ -45,7 +45,14 @@ class LivreursSeeder extends Seeder
         foreach ($livreurs as $data) {
             Livreur::firstOrCreate(
                 ['telephone' => $data['telephone'], 'organization_id' => $org->id],
-                [...$data, 'organization_id' => $org->id, 'is_active' => true]
+                [
+                    ...$data,
+                    // Identité civile jamais utilisée côté Eau La Maman —
+                    // nom_complet est le seul champ affiché (voir Livreur::$fillable).
+                    'nom_complet' => "{$data['prenom']} {$data['nom']}",
+                    'organization_id' => $org->id,
+                    'is_active' => true,
+                ]
             );
         }
     }

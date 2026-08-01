@@ -170,16 +170,15 @@ test('créer une équipe depuis la fiche véhicule avec stepper', async ({
         page.getByTestId('role-dropdown-0'),
         /chauffeur/i,
     );
-    await page.getByTestId('prenom-0').fill('Mamadou');
-    await page.getByTestId('nom-0').fill('Diallo');
+    await page.getByTestId('nom-complet-0').fill('Mamadou Diallo');
     const phone0 = page.getByTestId('telephone-0');
     await phone0.click();
     await phone0.fill('620111222');
 
     // +224 affiché dans la ligne inline
     await expect(dialog.getByText('+224').first()).toBeVisible();
-    // Prénom visible dans le tableau
-    await expect(page.getByTestId('prenom-0')).toHaveValue('Mamadou');
+    // Nom complet visible dans le tableau
+    await expect(page.getByTestId('nom-complet-0')).toHaveValue('Mamadou Diallo');
 
     // Passer à l'étape 2
     await dialog.getByRole('button', { name: /suivant/i }).click();
@@ -316,17 +315,17 @@ test('étape 1 inline : supprimer une ligne sans sous-modal', async ({
     // La ligne 0 est auto-ajoutée — ajouter une seule ligne supplémentaire
     await dialog.getByRole('button', { name: /ajouter un membre/i }).click();
 
-    // 2 champs prénom visibles
-    await expect(page.getByTestId('prenom-0')).toBeVisible();
-    await expect(page.getByTestId('prenom-1')).toBeVisible();
+    // 2 champs nom complet visibles
+    await expect(page.getByTestId('nom-complet-0')).toBeVisible();
+    await expect(page.getByTestId('nom-complet-1')).toBeVisible();
 
     // Supprimer la première ligne (bouton poubelle dans la ligne 0)
     const rows = dialog.locator('tbody tr');
     await rows.first().locator('button').click();
 
     // Il ne reste plus qu'une ligne
-    await expect(page.getByTestId('prenom-0')).toBeVisible();
-    await expect(page.getByTestId('prenom-1')).not.toBeVisible();
+    await expect(page.getByTestId('nom-complet-0')).toBeVisible();
+    await expect(page.getByTestId('nom-complet-1')).not.toBeVisible();
 });
 
 test('fermeture avec modifications : affiche confirmation, "Continuer" garde le modal ouvert', async ({

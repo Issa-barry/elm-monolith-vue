@@ -44,6 +44,7 @@ class CommissionAjustementTest extends TestCase
             'organization_id' => $this->org->id,
             'nom' => $nom,
             'prenom' => 'Mamadou',
+            'nom_complet' => "Mamadou {$nom}",
             'is_active' => true,
         ]);
     }

@@ -9,10 +9,16 @@ class LivreurFactory extends Factory
 {
     public function definition(): array
     {
+        $nom = fake()->lastName();
+        $prenom = fake()->firstName();
+
         return [
             'organization_id' => Organization::factory(),
-            'nom' => fake()->lastName(),
-            'prenom' => fake()->firstName(),
+            // Identité civile jamais utilisée côté Eau La Maman — conservée ici
+            // pour compatibilité, nom_complet est le seul champ affiché.
+            'nom' => $nom,
+            'prenom' => $prenom,
+            'nom_complet' => "{$prenom} {$nom}",
             'telephone' => '+224'.fake()->unique()->numerify('#########'),
             'is_active' => true,
         ];

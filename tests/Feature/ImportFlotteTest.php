@@ -213,6 +213,62 @@ class ImportFlotteTest extends TestCase
         $this->assertStringContainsString('Aucun véhicule', $import->rapport['groupes'][0]['erreurs'][0]);
     }
 
+    public function test_analyse_flags_error_for_duplicate_immatriculation_in_vehicules_sheet(): void
+    {
+        // Cas réel : la même immatriculation apparaît deux fois dans la
+        // feuille "vehicules" (erreur de saisie). Sans ce contrôle, les deux
+        // lignes passeraient l'analyse puis feraient planter la confirmation
+        // sur la contrainte d'unicité en base.
+        $import = $this->importer(
+            [
+                $this->ligneVehiculeExterne(['proprietaire_telephone' => '622000001']),
+                $this->ligneVehiculeExterne(['proprietaire_telephone' => '622000002']),
+            ],
+            []
+        );
+
+        $this->assertSame(0, $import->nb_groupes_valides);
+        $this->assertSame(2, $import->nb_groupes_erreur);
+        $this->assertStringContainsString('RC-1234-A', $import->rapport['groupes'][0]['erreurs'][0]);
+        $this->assertStringContainsString('une seule ligne par véhicule', $import->rapport['groupes'][0]['erreurs'][0]);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertStatus(422);
+
+        $this->assertSame(0, Vehicule::where('organization_id', $this->org->id)->count());
+    }
+
+    public function test_analyse_flags_error_for_livreur_attached_to_two_different_vehicules(): void
+    {
+        // Un livreur pas encore en base, rattaché à deux véhicules différents
+        // dans le même fichier : sans contrôle, les deux lignes passeraient
+        // l'analyse puis feraient planter la confirmation sur la contrainte
+        // d'unicité (telephone, organization_id) de la table livreurs.
+        $import = $this->importer(
+            [
+                $this->ligneVehiculeExterne(['vehicule_immatriculation' => 'RC-1111-A', 'proprietaire_telephone' => '622000001']),
+                $this->ligneVehiculeExterne(['vehicule_immatriculation' => 'RC-2222-B', 'proprietaire_telephone' => '622000002']),
+            ],
+            [
+                $this->ligneLivreurChauffeur(['vehicule_immatriculation' => 'RC-1111-A']),
+                $this->ligneLivreurChauffeur(['vehicule_immatriculation' => 'RC-2222-B']),
+            ]
+        );
+
+        $this->assertSame(0, $import->nb_groupes_valides);
+        $this->assertSame(2, $import->nb_groupes_erreur);
+        $erreur = collect($import->rapport['groupes'])->flatMap(fn ($g) => $g['erreurs'])->first();
+        $this->assertStringContainsString('+224623000001', $erreur);
+        $this->assertStringContainsString('plusieurs véhicules différents', $erreur);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertStatus(422);
+
+        $this->assertSame(0, Livreur::where('organization_id', $this->org->id)->count());
+    }
+
     // ── confirmation / création ──────────────────────────────────────────────
 
     public function test_confirm_creates_proprietaire_vehicule_equipe_and_livreur_as_draft(): void
@@ -273,9 +329,13 @@ class ImportFlotteTest extends TestCase
         $this->assertFalse($vehicule->fresh()->is_active);
     }
 
-    public function test_confirm_creates_vehicule_and_draft_equipe_without_any_livreur(): void
+    public function test_confirm_creates_vehicule_without_equipe_when_no_livreur(): void
     {
+        // La création du véhicule et celle de son équipe sont dissociées :
+        // sans aucun livreur dans le fichier, aucune équipe (même brouillon)
+        // ne doit être créée.
         $import = $this->importer([$this->ligneVehiculeExterne()], []);
+        $this->assertNull($import->rapport['groupes'][0]['equipe']);
 
         $this->actingAs($this->user)
             ->post(route('imports-flotte.confirm', $import))
@@ -286,13 +346,85 @@ class ImportFlotteTest extends TestCase
         $this->assertSame(1, $import->nb_proprietaires_crees);
         $this->assertSame(1, $import->nb_vehicules_crees);
         $this->assertSame(0, $import->nb_livreurs_crees);
-        $this->assertSame(1, $import->nb_equipes_creees);
+        $this->assertSame(0, $import->nb_equipes_creees);
 
         $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
-        $equipe = EquipeLivraison::where('vehicule_id', $vehicule->id)->firstOrFail();
-        $this->assertSame(0, $equipe->membres()->count());
-        $this->assertFalse($equipe->is_active);
+        $this->assertSame(0, EquipeLivraison::where('vehicule_id', $vehicule->id)->count());
         $this->assertFalse($vehicule->fresh()->is_active);
+    }
+
+    public function test_confirm_creates_several_vehicules_without_livreur_and_no_empty_equipe(): void
+    {
+        $import = $this->importer(
+            [
+                $this->ligneVehiculeExterne(['vehicule_immatriculation' => 'RC-1111-A', 'proprietaire_telephone' => '622000001']),
+                $this->ligneVehiculeExterne(['vehicule_immatriculation' => 'RC-2222-B', 'proprietaire_telephone' => '622000002']),
+            ],
+            []
+        );
+
+        $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
+        $import->refresh();
+
+        $this->assertSame('termine', $import->statut->value);
+        $this->assertSame(2, $import->nb_vehicules_crees);
+        $this->assertSame(0, $import->nb_equipes_creees);
+        $this->assertSame(0, EquipeLivraison::where('organization_id', $this->org->id)->count());
+    }
+
+    public function test_confirm_does_not_create_equipe_for_existing_vehicule_without_equipe_or_livreur(): void
+    {
+        // Véhicule déjà existant, sans équipe, et le fichier ne contient aucune
+        // ligne "livreurs" pour lui : ne rien créer (cf. cas 3 — absence de
+        // ligne livreur = "ne pas modifier les affectations", jamais "en créer une").
+        Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'immatriculation' => 'RC-1234-A',
+            'categorie' => 'externe',
+            'type_vehicule_id' => $this->type->id,
+        ]);
+
+        $import = $this->importer([$this->ligneVehiculeExterne()], []);
+        $this->assertNull($import->rapport['groupes'][0]['equipe']);
+
+        $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
+        $import->refresh();
+
+        $this->assertSame('termine', $import->statut->value);
+        $this->assertSame(0, $import->nb_vehicules_crees);
+        $this->assertSame(0, $import->nb_equipes_creees);
+        $this->assertSame(0, EquipeLivraison::where('organization_id', $this->org->id)->count());
+    }
+
+    public function test_analyse_counts_equipe_only_for_groups_with_at_least_one_livreur(): void
+    {
+        // Fichier mixte : 2 véhicules sans livreur + 1 véhicule avec un chauffeur.
+        // Seul ce dernier groupe compte comme "équipe à créer".
+        $import = $this->importer(
+            [
+                $this->ligneVehiculeExterne(['vehicule_immatriculation' => 'RC-1111-A', 'proprietaire_telephone' => '622000001']),
+                $this->ligneVehiculeExterne(['vehicule_immatriculation' => 'RC-2222-B', 'proprietaire_telephone' => '622000002']),
+                $this->ligneVehiculeExterne(['vehicule_immatriculation' => 'RC-3333-C', 'proprietaire_telephone' => '622000003']),
+            ],
+            [$this->ligneLivreurChauffeur(['vehicule_immatriculation' => 'RC-3333-C'])]
+        );
+
+        $this->assertSame(3, $import->nb_groupes_valides);
+        $this->assertNull($import->rapport['groupes'][0]['equipe']);
+        $this->assertNull($import->rapport['groupes'][1]['equipe']);
+        $this->assertNotNull($import->rapport['groupes'][2]['equipe']);
+
+        $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
+        $import->refresh();
+
+        $this->assertSame('termine', $import->statut->value);
+        $this->assertSame(3, $import->nb_vehicules_crees);
+        $this->assertSame(1, $import->nb_livreurs_crees);
+        $this->assertSame(1, $import->nb_equipes_creees);
+        $this->assertSame(1, EquipeLivraison::where('organization_id', $this->org->id)->count());
+
+        // Aucune équipe sans membre n'est créée.
+        $this->assertSame(0, EquipeLivraison::where('organization_id', $this->org->id)->doesntHave('membres')->count());
     }
 
     public function test_analyse_accepts_existing_vehicule_without_any_livreur_and_keeps_its_members(): void
@@ -349,6 +481,39 @@ class ImportFlotteTest extends TestCase
 
         $equipe = EquipeLivraison::firstOrFail();
         $this->assertSame(2, $equipe->membres()->count());
+    }
+
+    public function test_confirm_creates_a_single_proprietaire_shared_by_several_vehicules_in_the_same_file(): void
+    {
+        // Un même propriétaire peut posséder plusieurs véhicules : deux lignes
+        // "vehicules" du fichier partagent le même téléphone propriétaire, sans
+        // qu'aucun des deux ne soit encore en base avant l'import.
+        $import = $this->importer(
+            [
+                $this->ligneVehiculeExterne(['vehicule_immatriculation' => 'RC-1111-A']),
+                $this->ligneVehiculeExterne(['vehicule_immatriculation' => 'RC-2222-B']),
+            ],
+            []
+        );
+
+        $this->assertSame(2, $import->nb_groupes_valides);
+        $this->assertTrue($import->rapport['groupes'][0]['proprietaire']['existe'] === false);
+        $this->assertFalse($import->rapport['groupes'][0]['proprietaire']['doublon_fichier']);
+        $this->assertTrue($import->rapport['groupes'][1]['proprietaire']['doublon_fichier']);
+
+        $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
+        $import->refresh();
+
+        $this->assertSame('termine', $import->statut->value);
+        $this->assertSame(1, $import->nb_proprietaires_crees, 'un seul propriétaire doit être créé pour les deux véhicules');
+        $this->assertSame(2, $import->nb_vehicules_crees);
+        $this->assertSame(1, Proprietaire::where('organization_id', $this->org->id)->count());
+
+        $proprietaire = Proprietaire::where('organization_id', $this->org->id)->where('telephone', '+224622000001')->firstOrFail();
+        $vehiculeA = Vehicule::where('immatriculation', 'RC-1111-A')->firstOrFail();
+        $vehiculeB = Vehicule::where('immatriculation', 'RC-2222-B')->firstOrFail();
+        $this->assertSame($proprietaire->id, $vehiculeA->proprietaire_id);
+        $this->assertSame($proprietaire->id, $vehiculeB->proprietaire_id);
     }
 
     public function test_confirm_reuses_existing_proprietaire_by_phone(): void
@@ -534,5 +699,198 @@ class ImportFlotteTest extends TestCase
         $this->actingAs($this->user)
             ->get(route('imports-flotte.show', $import))
             ->assertStatus(403);
+    }
+
+    // ── normalisation tolérante ───────────────────────────────────────────────
+
+    public function test_analyse_accepts_country_name_uppercase_with_accent(): void
+    {
+        $import = $this->importerVehiculeEtChauffeur(['proprietaire_pays' => 'GUINÉE']);
+
+        $this->assertSame(0, $import->nb_groupes_erreur);
+    }
+
+    public function test_analyse_accepts_country_name_without_accent(): void
+    {
+        $import = $this->importerVehiculeEtChauffeur(['proprietaire_pays' => 'guinee']);
+
+        $this->assertSame(0, $import->nb_groupes_erreur);
+    }
+
+    public function test_analyse_accepts_iso_country_code_case_insensitive(): void
+    {
+        $import = $this->importerVehiculeEtChauffeur(['proprietaire_pays' => 'gn']);
+
+        $this->assertSame(0, $import->nb_groupes_erreur);
+    }
+
+    public function test_analyse_accepts_foreign_country_name(): void
+    {
+        $import = $this->importerVehiculeEtChauffeur([
+            'proprietaire_pays' => 'BELGIQUE',
+            'proprietaire_telephone' => '470123456',
+        ]);
+
+        $this->assertSame(0, $import->nb_groupes_erreur);
+
+        $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
+
+        $this->assertTrue(
+            Proprietaire::where('organization_id', $this->org->id)->where('telephone', '+32470123456')->exists()
+        );
+    }
+
+    public function test_analyse_rejects_unknown_country_with_explicit_message(): void
+    {
+        $import = $this->importerVehiculeEtChauffeur(['proprietaire_pays' => 'Narnia']);
+
+        $this->assertSame(1, $import->nb_groupes_erreur);
+        $this->assertStringContainsString('Pays introuvable : "Narnia"', $import->rapport['groupes'][0]['erreurs'][0]);
+    }
+
+    public function test_confirm_normalizes_phone_without_country_code(): void
+    {
+        $import = $this->importerVehiculeEtChauffeur(['proprietaire_telephone' => '622000001']);
+        $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
+
+        $this->assertTrue(Proprietaire::where('telephone', '+224622000001')->exists());
+    }
+
+    public function test_confirm_normalizes_phone_with_leading_zero(): void
+    {
+        $import = $this->importerVehiculeEtChauffeur(['proprietaire_telephone' => '0622000001']);
+        $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
+
+        $this->assertTrue(Proprietaire::where('telephone', '+224622000001')->exists());
+    }
+
+    public function test_confirm_normalizes_phone_with_224_prefix(): void
+    {
+        $import = $this->importerVehiculeEtChauffeur(['proprietaire_telephone' => '224622000001']);
+        $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
+
+        $this->assertTrue(Proprietaire::where('telephone', '+224622000001')->exists());
+    }
+
+    public function test_confirm_normalizes_phone_with_plus_224_prefix(): void
+    {
+        $import = $this->importerVehiculeEtChauffeur(['proprietaire_telephone' => '+224622000001']);
+        $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
+
+        $this->assertTrue(Proprietaire::where('telephone', '+224622000001')->exists());
+    }
+
+    public function test_confirm_normalizes_phone_with_00224_prefix(): void
+    {
+        $import = $this->importerVehiculeEtChauffeur(['proprietaire_telephone' => '00224622000001']);
+        $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
+
+        $this->assertTrue(Proprietaire::where('telephone', '+224622000001')->exists());
+    }
+
+    public function test_confirm_normalizes_phone_with_spaces_and_dashes(): void
+    {
+        $import = $this->importerVehiculeEtChauffeur(['proprietaire_telephone' => '622-00-00-01']);
+        $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
+
+        $this->assertTrue(Proprietaire::where('telephone', '+224622000001')->exists());
+    }
+
+    public function test_analyse_accepts_vehicule_type_with_different_case(): void
+    {
+        $import = $this->importerVehiculeEtChauffeur(['vehicule_type' => 'TRICYCLE']);
+
+        $this->assertSame(0, $import->nb_groupes_erreur);
+    }
+
+    public function test_analyse_accepts_vehicule_type_with_spaces_around_dash(): void
+    {
+        TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'nom' => 'Tricycle-70']);
+
+        $import = $this->importerVehiculeEtChauffeur(['vehicule_type' => 'Tricycle - 70']);
+
+        $this->assertSame(0, $import->nb_groupes_erreur);
+    }
+
+    public function test_analyse_blocks_close_typo_on_vehicule_type_but_suggests_it(): void
+    {
+        TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'nom' => 'Tricycle-70']);
+
+        $import = $this->importerVehiculeEtChauffeur(['vehicule_type' => 'Ticyle-70']);
+
+        $this->assertSame(1, $import->nb_groupes_erreur);
+        $this->assertStringContainsString('Tricycle-70', $import->rapport['groupes'][0]['erreurs'][0]);
+    }
+
+    public function test_analyse_blocks_ambiguous_vehicule_type_without_guessing(): void
+    {
+        TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'nom' => 'Tricycle-70']);
+        TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'nom' => 'Tricycle-90']);
+
+        $import = $this->importerVehiculeEtChauffeur(['vehicule_type' => 'Tricycle-80']);
+
+        $this->assertSame(1, $import->nb_groupes_erreur);
+    }
+
+    public function test_analyse_preserves_raw_value_in_error_message(): void
+    {
+        $import = $this->importerVehiculeEtChauffeur(['vehicule_type' => 'Camion XZ']);
+
+        $this->assertStringContainsString('"Camion XZ"', $import->rapport['groupes'][0]['erreurs'][0]);
+    }
+
+    public function test_analyse_accepts_site_with_different_case(): void
+    {
+        $import = $this->importer(
+            [$this->ligneVehiculeExterne([
+                'vehicule_categorie' => 'interne',
+                'vehicule_site' => 'MATOTO',
+                'proprietaire_nom' => '', 'proprietaire_prenom' => '', 'proprietaire_telephone' => '', 'proprietaire_pays' => '',
+            ])],
+            [$this->ligneLivreurChauffeur()]
+        );
+
+        $this->assertSame(0, $import->nb_groupes_erreur);
+    }
+
+    public function test_analyse_accepts_site_code_without_leading_zero(): void
+    {
+        // Site créé dans setUp() : premier site de l'organisation, code auto "001".
+        $import = $this->importer(
+            [$this->ligneVehiculeExterne([
+                'vehicule_categorie' => 'interne',
+                'vehicule_site' => '1',
+                'proprietaire_nom' => '', 'proprietaire_prenom' => '', 'proprietaire_telephone' => '', 'proprietaire_pays' => '',
+            ])],
+            [$this->ligneLivreurChauffeur()]
+        );
+
+        $this->assertSame(0, $import->nb_groupes_erreur);
+    }
+
+    public function test_analyse_accepts_various_true_boolean_spellings(): void
+    {
+        foreach (['Oui', 'OUI', '1', 'true', 'x'] as $valeur) {
+            $import = $this->importerVehiculeEtChauffeur(['vehicule_pris_en_charge_par_usine' => $valeur]);
+            $this->assertSame(0, $import->nb_groupes_erreur, "valeur testée : {$valeur}");
+        }
+    }
+
+    public function test_analyse_accepts_various_false_boolean_spellings(): void
+    {
+        foreach (['Non', 'NON', '0', 'false'] as $valeur) {
+            $import = $this->importerVehiculeEtChauffeur(['vehicule_pris_en_charge_par_usine' => $valeur]);
+            $this->assertSame(0, $import->nb_groupes_erreur, "valeur testée : {$valeur}");
+        }
+    }
+
+    public function test_analyse_still_accepts_an_already_valid_file(): void
+    {
+        // Non-régression : un fichier déjà au format canonique ne doit générer
+        // aucune erreur nouvelle après l'ajout de la normalisation.
+        $import = $this->importerVehiculeEtChauffeur();
+
+        $this->assertSame(0, $import->nb_groupes_erreur);
+        $this->assertSame(1, $import->nb_groupes_valides);
     }
 }

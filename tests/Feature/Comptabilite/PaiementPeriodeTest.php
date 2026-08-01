@@ -148,6 +148,7 @@ class PaiementPeriodeTest extends TestCase
             'organization_id' => $this->org->id,
             'nom' => 'Diallo',
             'prenom' => 'Mamadou',
+            'nom_complet' => 'Mamadou Diallo',
             'is_active' => true,
         ]);
 
@@ -202,6 +203,7 @@ class PaiementPeriodeTest extends TestCase
             'organization_id' => $this->org->id,
             'nom' => 'Diallo',
             'prenom' => 'Mamadou',
+            'nom_complet' => 'Mamadou Diallo',
             'is_active' => true,
         ]);
 
@@ -255,6 +257,7 @@ class PaiementPeriodeTest extends TestCase
             'organization_id' => $this->org->id,
             'nom' => 'Barry',
             'prenom' => 'Ibrahima',
+            'nom_complet' => 'Ibrahima Barry',
             'is_active' => true,
         ]);
 
@@ -338,6 +341,7 @@ class PaiementPeriodeTest extends TestCase
             'organization_id' => $this->org->id,
             'nom' => 'Diallo',
             'prenom' => 'Mamadou',
+            'nom_complet' => 'Mamadou Diallo',
             'is_active' => true,
         ]);
 
@@ -398,6 +402,7 @@ class PaiementPeriodeTest extends TestCase
             'organization_id' => $this->org->id,
             'nom' => 'Diallo',
             'prenom' => 'Mamadou',
+            'nom_complet' => 'Mamadou Diallo',
             'is_active' => true,
         ]);
 
@@ -446,6 +451,7 @@ class PaiementPeriodeTest extends TestCase
             'organization_id' => $this->org->id,
             'nom' => 'Diallo',
             'prenom' => 'Mamadou',
+            'nom_complet' => 'Mamadou Diallo',
             'is_active' => true,
         ]);
 
@@ -504,6 +510,7 @@ class PaiementPeriodeTest extends TestCase
             'organization_id' => $this->org->id,
             'nom' => 'Diallo',
             'prenom' => 'Mamadou',
+            'nom_complet' => 'Mamadou Diallo',
             'is_active' => true,
         ]);
 
@@ -587,6 +594,7 @@ class PaiementPeriodeTest extends TestCase
             'organization_id' => $this->org->id,
             'nom' => 'Diallo',
             'prenom' => 'Mamadou',
+            'nom_complet' => 'Mamadou Diallo',
             'is_active' => true,
         ]);
 
@@ -641,6 +649,7 @@ class PaiementPeriodeTest extends TestCase
             'organization_id' => $this->org->id,
             'nom' => 'Diallo',
             'prenom' => 'Mamadou',
+            'nom_complet' => 'Mamadou Diallo',
             'is_active' => true,
         ]);
 
@@ -695,6 +704,7 @@ class PaiementPeriodeTest extends TestCase
                 'organization_id' => $this->org->id,
                 'nom' => $nom,
                 'prenom' => 'Test',
+                'nom_complet' => "Test {$nom}",
                 'is_active' => true,
             ]);
 
@@ -750,6 +760,7 @@ class PaiementPeriodeTest extends TestCase
             'organization_id' => $this->org->id,
             'nom' => 'Diallo',
             'prenom' => 'Mamadou',
+            'nom_complet' => 'Mamadou Diallo',
             'is_active' => true,
         ]);
 
@@ -799,6 +810,7 @@ class PaiementPeriodeTest extends TestCase
             'organization_id' => $this->org->id,
             'nom' => 'Diallo',
             'prenom' => 'Mamadou',
+            'nom_complet' => 'Mamadou Diallo',
             'is_active' => true,
         ]);
 
