@@ -163,7 +163,11 @@ function submit() {
             </div>
         </div>
 
-        <Toast :group="UPLOAD_TOAST_GROUP" position="bottom-right" class="w-auto!">
+        <Toast
+            :group="UPLOAD_TOAST_GROUP"
+            position="bottom-right"
+            class="w-auto!"
+        >
             <template #container="{ message, closeCallback }">
                 <div
                     class="flex w-80 flex-col gap-3 rounded-xl border bg-card p-4 shadow-lg"
