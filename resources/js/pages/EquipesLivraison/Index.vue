@@ -25,8 +25,9 @@ import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
 interface Membre {
-    nom: string;
-    prenom: string;
+    // Identité civile jamais utilisée côté Eau La Maman — voir
+    // EquipeLivraisonController. nom_complet est facultatif (surnom possible).
+    nom_complet: string | null;
     telephone: string;
     role: string;
 }
@@ -145,8 +146,7 @@ const equipesFiltrees = computed(() => {
                 (e.vehicule_immatriculation ?? '').toLowerCase().includes(q);
             const livreurMatch = e.membres.some(
                 (m) =>
-                    m.nom.toLowerCase().includes(q) ||
-                    m.prenom.toLowerCase().includes(q) ||
+                    (m.nom_complet ?? '').toLowerCase().includes(q) ||
                     m.telephone.includes(q),
             );
             if (!vehiculeMatch && !livreurMatch) return false;

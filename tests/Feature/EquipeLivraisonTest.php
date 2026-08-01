@@ -37,8 +37,7 @@ class EquipeLivraisonTest extends TestCase
             'membres' => [
                 [
                     'livreur_id' => null,
-                    'nom' => 'Diallo',
-                    'prenom' => 'Mamadou',
+                    'nom_complet' => 'Mamadou Diallo',
                     'telephone' => '+224620000001',
                     'role' => 'chauffeur',
                     'montant_par_pack' => 30,
@@ -105,6 +104,122 @@ class EquipeLivraisonTest extends TestCase
         ]);
     }
 
+    // ── nom_complet facultatif ───────────────────────────────────────────────
+
+    public function test_store_creates_membre_avec_uniquement_un_surnom(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule();
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'vehicule_id' => $vehicule->id,
+                'membres' => [[
+                    'livreur_id' => null,
+                    'nom_complet' => 'Chauffeur 1',
+                    'telephone' => '+224620000001', 'role' => 'chauffeur',
+                    'montant_par_pack' => 30, 'ordre' => 0,
+                ]],
+            ]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $this->assertDatabaseHas('livreurs', [
+            'telephone' => '+224620000001',
+            'nom_complet' => 'Chauffeur 1',
+            'nom' => null,
+            'prenom' => null,
+        ]);
+    }
+
+    public function test_store_creates_membre_sans_aucun_nom(): void
+    {
+        // nom_complet est facultatif — seuls téléphone et rôle sont obligatoires.
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule();
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'vehicule_id' => $vehicule->id,
+                'membres' => [[
+                    'livreur_id' => null,
+                    'telephone' => '+224620000001', 'role' => 'chauffeur',
+                    'montant_par_pack' => 30, 'ordre' => 0,
+                ]],
+            ]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $this->assertDatabaseHas('livreurs', [
+            'telephone' => '+224620000001',
+            'nom_complet' => null,
+        ]);
+    }
+
+    public function test_store_creates_plusieurs_membres_avec_des_surnoms_differents(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule();
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'vehicule_id' => $vehicule->id,
+                'commission_unitaire_par_pack' => 100,
+                'montant_par_pack_proprietaire' => 40,
+                'membres' => [
+                    [
+                        'livreur_id' => null,
+                        'nom_complet' => 'Petit Moussa',
+                        'telephone' => '+224620000001', 'role' => 'chauffeur',
+                        'montant_par_pack' => 30, 'ordre' => 0,
+                    ],
+                    [
+                        'livreur_id' => null,
+                        'nom_complet' => 'Doudou',
+                        'telephone' => '+224620000002', 'role' => 'convoyeur',
+                        'montant_par_pack' => 30, 'ordre' => 1,
+                    ],
+                ],
+            ]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $this->assertDatabaseHas('livreurs', ['telephone' => '+224620000001', 'nom_complet' => 'Petit Moussa']);
+        $this->assertDatabaseHas('livreurs', ['telephone' => '+224620000002', 'nom_complet' => 'Doudou']);
+    }
+
+    public function test_update_ne_touche_jamais_nom_et_prenom_du_livreur_existant(): void
+    {
+        // Un livreur peut avoir nom/prenom renseignés par un autre moyen (ex :
+        // auto-inscription) — l'équipe (qui n'envoie jamais nom/prenom) ne doit
+        // jamais les écraser.
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule();
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule->id]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $livreur = \App\Models\Livreur::where('telephone', '+224620000001')->firstOrFail();
+        $livreur->update(['nom' => 'BARRY', 'prenom' => 'Issa']);
+
+        $equipe = EquipeLivraison::where('organization_id', $this->org->id)->first();
+
+        $this->actingAs($this->user)
+            ->patch(route('equipes-livraison.update', $equipe), $this->validPayload($proprietaire->id, [
+                'vehicule_id' => $vehicule->id,
+                'membres' => [[
+                    'livreur_id' => $livreur->id,
+                    'nom_complet' => 'Nouveau Surnom',
+                    'telephone' => '+224620000001', 'role' => 'chauffeur',
+                    'montant_par_pack' => 30, 'ordre' => 0,
+                ]],
+            ]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $livreur->refresh();
+        $this->assertSame('BARRY', $livreur->nom);
+        $this->assertSame('Issa', $livreur->prenom);
+        $this->assertSame('Nouveau Surnom', $livreur->nom_complet);
+    }
+
     public function test_store_echoue_si_telephone_contient_lettres(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
@@ -113,7 +228,7 @@ class EquipeLivraisonTest extends TestCase
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
                 'membres' => [[
                     'livreur_id' => null,
-                    'nom' => 'Diallo', 'prenom' => 'Mamadou',
+                    'nom_complet' => 'Mamadou Diallo',
                     'telephone' => '+224abc123456', 'role' => 'chauffeur',
                     'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
@@ -130,7 +245,7 @@ class EquipeLivraisonTest extends TestCase
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
                 'membres' => [[
                     'livreur_id' => null,
-                    'nom' => 'Diallo', 'prenom' => 'Mamadou',
+                    'nom_complet' => 'Mamadou Diallo',
                     'telephone' => '+22462012345', 'role' => 'chauffeur',
                     'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
@@ -162,7 +277,7 @@ class EquipeLivraisonTest extends TestCase
                 'montant_par_pack_proprietaire' => null,
                 'membres' => [[
                     'livreur_id' => null,
-                    'nom' => 'Diallo', 'prenom' => 'Mamadou',
+                    'nom_complet' => 'Mamadou Diallo',
                     'telephone' => '+224620000001', 'role' => 'chauffeur',
                     'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
@@ -198,7 +313,7 @@ class EquipeLivraisonTest extends TestCase
                 'montant_par_pack_proprietaire' => 75.50,
                 'membres' => [[
                     'livreur_id' => null,
-                    'nom' => 'Diallo', 'prenom' => 'Mamadou',
+                    'nom_complet' => 'Mamadou Diallo',
                     'telephone' => '+224620000001', 'role' => 'chauffeur',
                     'montant_par_pack' => 24.50, 'ordre' => 0,
                 ]],
@@ -226,7 +341,7 @@ class EquipeLivraisonTest extends TestCase
                 'montant_par_pack_proprietaire' => 80,
                 'membres' => [[
                     'livreur_id' => null,
-                    'nom' => 'Diallo', 'prenom' => 'Mamadou',
+                    'nom_complet' => 'Mamadou Diallo',
                     'telephone' => '+224620000001', 'role' => 'chauffeur',
                     'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
@@ -260,7 +375,7 @@ class EquipeLivraisonTest extends TestCase
                 'montant_par_pack_proprietaire' => 60,
                 'membres' => [[
                     'livreur_id' => null,
-                    'nom' => 'Diallo', 'prenom' => 'Mamadou',
+                    'nom_complet' => 'Mamadou Diallo',
                     'telephone' => '+224620000001', 'role' => 'chauffeur',
                     'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
@@ -294,7 +409,7 @@ class EquipeLivraisonTest extends TestCase
                 'vehicule_id' => $vehicule->id,
                 'membres' => [[
                     'livreur_id' => null,
-                    'nom' => 'Barry', 'prenom' => 'Ibrahima',
+                    'nom_complet' => 'Ibrahima Barry',
                     'telephone' => '+224620000002', 'role' => 'chauffeur',
                     'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
@@ -324,7 +439,7 @@ class EquipeLivraisonTest extends TestCase
                 'vehicule_id' => $vehicule1->id,
                 'membres' => [[
                     'livreur_id' => null,
-                    'nom' => 'Diallo', 'prenom' => 'Mamadou',
+                    'nom_complet' => 'Mamadou Diallo',
                     'telephone' => '+224620000002', 'role' => 'chauffeur',
                     'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
@@ -349,7 +464,7 @@ class EquipeLivraisonTest extends TestCase
                 'nom' => 'Équipe Deux',
                 'membres' => [[
                     'livreur_id' => null,
-                    'nom' => 'Diallo', 'prenom' => 'Mamadou',
+                    'nom_complet' => 'Mamadou Diallo',
                     'telephone' => '+224620000001',
                     'role' => 'chauffeur',
                     'montant_par_pack' => 30, 'ordre' => 0,
@@ -393,7 +508,7 @@ class EquipeLivraisonTest extends TestCase
                 'nom' => 'Équipe Deux',
                 'membres' => [[
                     'livreur_id' => null,
-                    'nom' => 'Barry', 'prenom' => 'Ibrahima',
+                    'nom_complet' => 'Ibrahima Barry',
                     'telephone' => '+224620000002', 'role' => 'chauffeur',
                     'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
@@ -410,7 +525,7 @@ class EquipeLivraisonTest extends TestCase
                 'nom' => 'Équipe Deux',
                 'membres' => [[
                     'livreur_id' => null,
-                    'nom' => 'Diallo', 'prenom' => 'Mamadou',
+                    'nom_complet' => 'Mamadou Diallo',
                     'telephone' => '+224620000001',
                     'role' => 'chauffeur',
                     'montant_par_pack' => 30, 'ordre' => 0,
@@ -436,7 +551,7 @@ class EquipeLivraisonTest extends TestCase
                 'montant_par_pack_proprietaire' => 55,
                 'membres' => [[
                     'livreur_id' => null,
-                    'nom' => 'Diallo', 'prenom' => 'Mamadou',
+                    'nom_complet' => 'Mamadou Diallo',
                     'telephone' => '+224620000001', 'role' => 'chauffeur',
                     'montant_par_pack' => 45, 'ordre' => 0,
                 ]],

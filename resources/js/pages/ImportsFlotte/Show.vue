@@ -17,8 +17,7 @@ import { computed, onBeforeUnmount, onMounted } from 'vue';
 interface GroupeLivreur {
     existe: boolean;
     id: string | null;
-    nom: string;
-    prenom: string;
+    nom_complet: string | null;
     telephone: string;
     role: string;
     montant_par_pack: number;
@@ -379,12 +378,12 @@ onBeforeUnmount(() => {
                                         <span v-if="g.equipe?.existe"
                                             >Existante</span
                                         >
-                                        <span v-else-if="g.equipe">À créer</span>
+                                        <span v-else-if="g.equipe"
+                                            >À créer</span
+                                        >
                                         <span v-else>À constituer</span>
                                     </td>
-                                    <td
-                                        class="py-2 pr-3 text-muted-foreground"
-                                    >
+                                    <td class="py-2 pr-3 text-muted-foreground">
                                         {{ g.livreurs?.length ?? 0 }}
                                     </td>
                                     <td

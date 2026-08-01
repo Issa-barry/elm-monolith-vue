@@ -143,7 +143,9 @@ class ProprietaireController extends Controller
                     'immatriculation' => $vehicule->immatriculation,
                     'photo_url' => $vehicule->photo_url,
                     'type_label' => $vehicule->type_label,
-                    'capacite_packs' => $vehicule->capacite_packs,
+                    // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
+                    // on retombe sur la capacité par défaut du type (cf. VehiculeController).
+                    'capacite_packs' => $vehicule->capacite_packs ?? $vehicule->typeVehicule?->capacite_defaut,
                     'categorie' => $vehicule->categorie,
                     'is_active' => $vehicule->is_active,
                     'equipe_detail' => $equipe ? [

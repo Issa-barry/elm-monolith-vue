@@ -88,14 +88,20 @@ class PdvCheckoutService
 
     private function validateCapacite(array $data): void
     {
-        $vehicule = Vehicule::select(['id', 'capacite_packs'])->find($data['vehicule_id']);
+        $vehicule = Vehicule::select(['id', 'capacite_packs', 'type_vehicule_id'])
+            ->with('typeVehicule')
+            ->find($data['vehicule_id']);
 
-        if (! $vehicule || $vehicule->capacite_packs === null) {
+        // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
+        // on retombe sur la capacité par défaut du type (cf. VehiculeController).
+        $capaciteVehicule = $vehicule?->capacite_packs ?? $vehicule?->typeVehicule?->capacite_defaut;
+
+        if (! $vehicule || $capaciteVehicule === null) {
             return;
         }
 
         $qteTotale = collect($data['lignes'])->sum(fn ($l) => (int) ($l['quantite'] ?? 0));
-        $capacite = (int) $vehicule->capacite_packs;
+        $capacite = (int) $capaciteVehicule;
 
         if ($qteTotale > $capacite) {
             throw ValidationException::withMessages([

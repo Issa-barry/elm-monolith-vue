@@ -176,8 +176,9 @@ class ImportFlotteExecutor
             } else {
                 $livreur = Livreur::create([
                     'organization_id' => $orgId,
-                    'nom' => $l['nom'],
-                    'prenom' => $l['prenom'],
+                    // Identité civile jamais demandée dans ce projet — voir
+                    // ImportFlotteParser / Livreur::$fillable.
+                    'nom_complet' => $l['nom_complet'],
                     'telephone' => $l['telephone'],
                     'is_active' => true,
                 ]);

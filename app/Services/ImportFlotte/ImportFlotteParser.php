@@ -476,14 +476,23 @@ class ImportFlotteParser
             $ligne = $ligneInfo['donnees'];
             $numero = $ligneInfo['numero_ligne'];
 
-            $nom = trim((string) ($ligne['livreur_nom'] ?? ''));
-            $prenom = trim((string) ($ligne['livreur_prenom'] ?? ''));
+            // Colonne principale (facultative — seul le téléphone est
+            // obligatoire, cf. Livreur::$fillable). Compatibilité conservée
+            // avec l'ancien format à deux colonnes (livreur_nom/livreur_prenom)
+            // pour d'anciens fichiers, mais plus jamais affichée/documentée
+            // dans le template Eau La Maman — voir ImportFlotteLivreursSheetExport.
+            $nomComplet = trim((string) ($ligne['livreur_nom_complet'] ?? ''));
+            if ($nomComplet === '') {
+                $nomLegacy = trim((string) ($ligne['livreur_nom'] ?? ''));
+                $prenomLegacy = trim((string) ($ligne['livreur_prenom'] ?? ''));
+                $nomComplet = trim("{$prenomLegacy} {$nomLegacy}");
+            }
             $telephoneBrut = trim((string) ($ligne['livreur_telephone'] ?? ''));
             $roleSaisi = trim((string) ($ligne['livreur_role'] ?? ''));
             $role = ImportTextNormalizer::normalize($roleSaisi);
 
-            if ($nom === '' || $prenom === '' || $telephoneBrut === '') {
-                $erreurs[] = "Ligne {$numero} : livreur incomplet (nom, prénom, téléphone obligatoires).";
+            if ($telephoneBrut === '') {
+                $erreurs[] = "Ligne {$numero} : livreur incomplet (téléphone obligatoire).";
 
                 continue;
             }
@@ -550,8 +559,9 @@ class ImportFlotteParser
             $livreurs[] = [
                 'existe' => (bool) $livreurExistant,
                 'id' => $livreurExistant?->id,
-                'nom' => mb_strtoupper($nom, 'UTF-8'),
-                'prenom' => mb_convert_case(mb_strtolower($prenom, 'UTF-8'), MB_CASE_TITLE, 'UTF-8'),
+                // Facultatif, conservé tel quel (jamais découpé/reformaté :
+                // peut être un surnom comme "Petit Moussa" ou "Chauffeur 1").
+                'nom_complet' => $nomComplet !== '' ? $nomComplet : null,
                 'telephone' => $telephone,
                 'role' => $role,
                 // Non saisi dans le fichier — répartition à finaliser dans Équipes de livraison.

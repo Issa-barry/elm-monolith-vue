@@ -51,6 +51,7 @@ class LivreurComptesSeeder extends Seeder
                 [
                     'prenom' => $data['prenom'],
                     'nom' => $data['nom'],
+                    'nom_complet' => "{$data['prenom']} {$data['nom']}",
                     'telephone' => $data['telephone'],
                     'organization_id' => $org->id,
                     'is_active' => true,
@@ -85,6 +86,7 @@ class LivreurComptesSeeder extends Seeder
                     'user_id' => $user->id,
                     'prenom' => $data['prenom'],
                     'nom' => $data['nom'],
+                    'nom_complet' => "{$data['prenom']} {$data['nom']}",
                     'telephone' => $data['telephone'],
                     'organization_id' => $org->id,
                     'is_active' => false,
@@ -109,6 +111,7 @@ class LivreurComptesSeeder extends Seeder
             [
                 'prenom' => $dual['prenom'],
                 'nom' => $dual['nom'],
+                'nom_complet' => "{$dual['prenom']} {$dual['nom']}",
                 'telephone' => $dual['telephone'],
                 'organization_id' => $org->id,
                 'is_active' => true,

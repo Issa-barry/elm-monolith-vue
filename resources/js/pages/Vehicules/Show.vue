@@ -43,14 +43,14 @@ interface DepenseRow {
 
 interface MembreEquipeDetail {
     livreur_id: string | null;
-    nom: string;
-    prenom: string;
+    // Identité civile jamais utilisée côté Eau La Maman — voir
+    // EquipeStepperModal.vue et EquipeLivraisonController.
+    nom_complet: string | null;
     telephone: string;
     role: string;
     montant_par_pack: number;
     taux_commission: number;
     ordre: number;
-    numero: number;
 }
 
 interface EquipeData {

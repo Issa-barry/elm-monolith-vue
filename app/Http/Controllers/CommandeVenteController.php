@@ -237,8 +237,12 @@ class CommandeVenteController extends Controller
         }
 
         if ($livreur) {
+            // nom/prenom conservés en recherche pour compatibilité (autres
+            // usages éventuels), mais nom_complet est le champ réellement
+            // saisi/affiché côté Eau La Maman.
             $query->whereHas('vehicule.equipe.livreurs', function ($q) use ($livreur) {
-                $q->where('livreurs.nom', 'like', "%{$livreur}%")
+                $q->where('livreurs.nom_complet', 'like', "%{$livreur}%")
+                    ->orWhere('livreurs.nom', 'like', "%{$livreur}%")
                     ->orWhere('livreurs.prenom', 'like', "%{$livreur}%")
                     ->orWhere('livreurs.telephone', 'like', "%{$livreur}%");
             });
@@ -471,14 +475,14 @@ class CommandeVenteController extends Controller
                     'nom' => $vehicule->nom_vehicule,
                     'immatriculation' => $vehicule->immatriculation,
                     'type' => $vehicule->typeVehicule?->nom,
-                    'capacite_packs' => $vehicule->capacite_packs,
+                    'capacite_packs' => $vehicule->capacite_packs ?? $vehicule->typeVehicule?->capacite_defaut,
                     'proprietaire_nom' => $vehicule->proprietaire
                         ? trim($vehicule->proprietaire->prenom.' '.$vehicule->proprietaire->nom)
                         : null,
                     'proprietaire_telephone' => $vehicule->proprietaire?->telephone,
                     'proprietaire_code_phone_pays' => $vehicule->proprietaire?->code_phone_pays,
                 ] : null,
-                'livreur_nom' => $chauffeur ? trim($chauffeur->prenom.' '.$chauffeur->nom) : null,
+                'livreur_nom' => $chauffeur ? ($chauffeur->nom_complet ?? $chauffeur->telephone) : null,
                 'livreur_telephone' => $chauffeur?->telephone,
                 'equipe_detail' => $equipe ? [
                     'nom' => $vehicule->nom_vehicule,
@@ -486,11 +490,11 @@ class CommandeVenteController extends Controller
                         ? (float) $equipe->taux_commission_proprietaire
                         : null,
                     'chauffeur' => $chauffeur ? [
-                        'nom' => trim($chauffeur->prenom.' '.$chauffeur->nom),
+                        'nom' => $chauffeur->nom_complet ?? $chauffeur->telephone,
                         'telephone' => $chauffeur->telephone,
                     ] : null,
                     'convoyeurs' => $convoyeurs->map(fn ($l) => [
-                        'nom' => trim($l->prenom.' '.$l->nom),
+                        'nom' => $l->nom_complet ?? $l->telephone,
                         'telephone' => $l->telephone,
                     ])->values(),
                 ] : null,
@@ -862,19 +866,26 @@ class CommandeVenteController extends Controller
             return;
         }
 
-        $vehicule = Vehicule::query()->select(['id', 'capacite_packs'])->find($data['vehicule_id']);
+        $vehicule = Vehicule::query()
+            ->select(['id', 'capacite_packs', 'type_vehicule_id'])
+            ->with('typeVehicule')
+            ->find($data['vehicule_id']);
         if (! $vehicule) {
             return;
         }
 
-        if ($vehicule->capacite_packs === null) {
+        // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
+        // on retombe sur la capacité par défaut du type (cf. VehiculeController).
+        $capaciteVehicule = $vehicule->capacite_packs ?? $vehicule->typeVehicule?->capacite_defaut;
+
+        if ($capaciteVehicule === null) {
             throw ValidationException::withMessages([
                 'vehicule_id' => 'Le véhicule sélectionné n\'a pas de capacité définie.',
             ]);
         }
 
         $qteTotale = collect($data['lignes'] ?? [])->sum(fn (array $ligne): int => (int) ($ligne['qte'] ?? 0));
-        $capacite = (int) $vehicule->capacite_packs;
+        $capacite = (int) $capaciteVehicule;
 
         if ($qteTotale > $capacite && ! auth()->user()->can('ventes.qte.update')) {
             throw ValidationException::withMessages([
@@ -1047,6 +1058,7 @@ class CommandeVenteController extends Controller
     private function vehiculesActifs(string $orgId): Collection
     {
         return Vehicule::with([
+            'typeVehicule',
             'equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'chauffeur'),
             'equipe.membres.livreur',
         ])
@@ -1059,10 +1071,14 @@ class CommandeVenteController extends Controller
                 'id' => $v->id,
                 'nom_vehicule' => $v->nom_vehicule,
                 'immatriculation' => $v->immatriculation,
-                'capacite_packs' => $v->capacite_packs !== null ? (int) $v->capacite_packs : null,
+                // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
+                // on retombe sur la capacité par défaut du type (cf. VehiculeController).
+                'capacite_packs' => ($c = $v->capacite_packs ?? $v->typeVehicule?->capacite_defaut) !== null
+                    ? (int) $c
+                    : null,
                 'pris_en_charge_par_usine' => (bool) $v->pris_en_charge_par_usine,
                 'livreur_nom' => ($l = $v->equipe?->livreurs->first())
-                    ? trim($l->prenom.' '.$l->nom)
+                    ? ($l->nom_complet ?? $l->telephone)
                     : null,
                 'livreur_telephone' => $v->equipe?->membres
                     ->firstWhere('role', 'chauffeur')

@@ -218,8 +218,8 @@ class TransfertLogistiqueController extends Controller
             'vehicules' => Vehicule::where('organization_id', $orgId)
                 ->where('is_active', true)
                 ->where('categorie', 'interne')
-                ->with('equipe:id,vehicule_id')
-                ->select('id', 'nom_vehicule', 'immatriculation', 'capacite_packs')
+                ->with(['equipe:id,vehicule_id', 'typeVehicule'])
+                ->select('id', 'nom_vehicule', 'immatriculation', 'capacite_packs', 'type_vehicule_id')
                 ->get()
                 ->map(fn ($v) => [
                     'id' => $v->id,
@@ -227,7 +227,9 @@ class TransfertLogistiqueController extends Controller
                     'immatriculation' => $v->immatriculation,
                     'equipe_livraison_id' => $v->equipe?->id,
                     'equipe_nom' => $v->equipe ? $v->nom_vehicule : null,
-                    'capacite_packs' => $v->capacite_packs,
+                    // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
+                    // on retombe sur la capacité par défaut du type (cf. VehiculeController).
+                    'capacite_packs' => $v->capacite_packs ?? $v->typeVehicule?->capacite_defaut,
                 ]),
             'equipes' => EquipeLivraison::with('vehicule:id,nom_vehicule')
                 ->where('organization_id', $orgId)
@@ -426,8 +428,8 @@ class TransfertLogistiqueController extends Controller
             'sites' => Site::where('organization_id', $orgId)->select('id', 'nom')->orderBy('nom')->get(),
             'vehicules' => Vehicule::where('organization_id', $orgId)->where('is_active', true)
                 ->where('categorie', 'interne')
-                ->with('equipe:id,vehicule_id')
-                ->select('id', 'nom_vehicule', 'immatriculation', 'capacite_packs')
+                ->with(['equipe:id,vehicule_id', 'typeVehicule'])
+                ->select('id', 'nom_vehicule', 'immatriculation', 'capacite_packs', 'type_vehicule_id')
                 ->get()
                 ->map(fn ($v) => [
                     'id' => $v->id,
@@ -435,7 +437,9 @@ class TransfertLogistiqueController extends Controller
                     'immatriculation' => $v->immatriculation,
                     'equipe_livraison_id' => $v->equipe?->id,
                     'equipe_nom' => $v->equipe ? $v->nom_vehicule : null,
-                    'capacite_packs' => $v->capacite_packs,
+                    // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
+                    // on retombe sur la capacité par défaut du type (cf. VehiculeController).
+                    'capacite_packs' => $v->capacite_packs ?? $v->typeVehicule?->capacite_defaut,
                 ]),
             'equipes' => EquipeLivraison::with('vehicule:id,nom_vehicule')
                 ->where('organization_id', $orgId)

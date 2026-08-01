@@ -16,8 +16,12 @@ class Livreur extends Model
     protected $fillable = [
         'organization_id',
         'user_id',
+        // Identité civile : conservée pour d'autres projets/usages éventuels,
+        // jamais affichée ni demandée dans l'interface Eau La Maman (voir
+        // EquipeLivraisonController). L'UI n'utilise que nom_complet.
         'nom',
         'prenom',
+        'nom_complet',
         'telephone',
         'is_active',
     ];
@@ -25,13 +29,6 @@ class Livreur extends Model
     protected $casts = [
         'is_active' => 'boolean',
     ];
-
-    // ── Accessor ──────────────────────────────────────────────────────────────
-
-    public function getNomCompletAttribute(): string
-    {
-        return trim("{$this->prenom} {$this->nom}");
-    }
 
     // ── Relations ─────────────────────────────────────────────────────────────
 

@@ -325,7 +325,7 @@ class DepenseController extends Controller
     {
         $l = Livreur::where('organization_id', $orgId)
             ->with(['equipes:id,nom'])
-            ->find($id, ['id', 'nom', 'prenom', 'telephone']);
+            ->find($id, ['id', 'nom_complet', 'telephone']);
 
         if (! $l) {
             return null;
@@ -333,7 +333,7 @@ class DepenseController extends Controller
 
         return [
             'type' => 'livreur',
-            'nom' => trim("{$l->prenom} {$l->nom}"),
+            'nom' => $l->nom_complet ?? $l->telephone,
             'telephone' => $l->telephone ?? '—',
             'equipe' => $l->equipes->pluck('nom')->implode(', ') ?: '—',
             'site' => '—',
@@ -1004,7 +1004,9 @@ class DepenseController extends Controller
             } else {
                 $fields = match ($type) {
                     'employe' => ['id', 'nom', 'prenom', 'telephone'],
-                    'livreur' => ['id', 'nom', 'prenom', 'telephone'],
+                    // Identité civile jamais utilisée côté Eau La Maman pour les
+                    // livreurs — voir Livreur::$fillable.
+                    'livreur' => ['id', 'nom_complet', 'telephone'],
                     'proprietaire' => ['id', 'nom', 'prenom', 'telephone'],
                     default => ['id', 'nom', 'prenom'],
                 };
@@ -1017,7 +1019,9 @@ class DepenseController extends Controller
                 };
 
                 foreach ($models as $model) {
-                    $labelCache["{$type}:{$model->id}"] = trim("{$model->prenom} {$model->nom}");
+                    $labelCache["{$type}:{$model->id}"] = $type === 'livreur'
+                        ? ($model->nom_complet ?? $model->telephone)
+                        : trim("{$model->prenom} {$model->nom}");
                     $labelCache["tel:{$type}:{$model->id}"] = $model->telephone ?? null;
                 }
             }
@@ -1065,7 +1069,7 @@ class DepenseController extends Controller
 
         return match ($type) {
             'employe' => optional(Employe::find($id))->nom_complet,
-            'livreur' => optional(Livreur::find($id))->nom_complet,
+            'livreur' => ($l = Livreur::find($id)) ? ($l->nom_complet ?? $l->telephone) : null,
             'proprietaire' => trim(optional(Proprietaire::find($id))?->prenom.' '.optional(Proprietaire::find($id))?->nom),
             'vehicule' => optional(Vehicule::find($id))->nom_vehicule,
             default => null,
@@ -1134,11 +1138,11 @@ class DepenseController extends Controller
     {
         return Livreur::where('organization_id', $orgId)
             ->where('is_active', true)
-            ->orderBy('nom')
-            ->get(['id', 'nom', 'prenom'])
+            ->orderBy('nom_complet')
+            ->get(['id', 'nom_complet', 'telephone'])
             ->map(fn ($l) => [
                 'id' => $l->id,
-                'nom_complet' => trim("{$l->prenom} {$l->nom}"),
+                'nom_complet' => $l->nom_complet ?? $l->telephone,
             ]);
     }
 

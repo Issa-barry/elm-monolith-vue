@@ -17,8 +17,7 @@ class ImportFlotteLivreursSheetExport implements FromArray, WithHeadings, WithTi
     {
         return [
             'vehicule_immatriculation',
-            'livreur_nom',
-            'livreur_prenom',
+            'livreur_nom_complet',
             'livreur_telephone',
             'livreur_role',
         ];
@@ -30,9 +29,12 @@ class ImportFlotteLivreursSheetExport implements FromArray, WithHeadings, WithTi
         // feuille "vehicules" (répéter l'immatriculation pour chaque livreur
         // d'un même véhicule, sans dupliquer le reste). Le montant par pack de
         // chaque livreur se configure après coup dans Équipes de livraison.
+        // livreur_nom_complet est facultatif : un livreur identifié uniquement
+        // par un surnom ou une désignation opérationnelle (ex: "Chauffeur 1")
+        // est accepté, seul le téléphone est obligatoire.
         return [
-            ['RC-1234-A', 'Camara', 'Ibrahima', '623000001', 'chauffeur'],
-            ['RC-1234-A', 'Soumah', 'Fatoumata', '623000002', 'convoyeur'],
+            ['RC-1234-A', 'Ibrahima Camara', '623000001', 'chauffeur'],
+            ['RC-1234-A', '', '623000002', 'convoyeur'],
         ];
     }
 }
