@@ -43,6 +43,7 @@ const props = defineProps<{
     types: TypeOption[];
     sites: SiteOption[];
     can_change_site: boolean;
+    default_proprietaire_id: string | null;
 }>();
 const page = usePage();
 const flashSuccess = computed(
@@ -63,7 +64,11 @@ const form = useForm({
     categorie: props.vehicule.categorie,
     capacite_packs: props.vehicule.capacite_packs,
     site_id: props.vehicule.site_id,
-    proprietaire_id: props.vehicule.proprietaire_id,
+    proprietaire_id:
+        props.vehicule.proprietaire_id ??
+        (props.vehicule.categorie === 'interne'
+            ? props.default_proprietaire_id
+            : null),
     pris_en_charge_par_usine: props.vehicule.pris_en_charge_par_usine,
     photo: null as File | null,
     is_active: props.vehicule.is_active,
@@ -73,7 +78,7 @@ const canSubmit = computed(() => {
     return (
         !form.processing &&
         !!form.categorie &&
-        (form.categorie === 'interne' || !!form.proprietaire_id) &&
+        !!form.proprietaire_id &&
         !!form.site_id &&
         form.nom_vehicule.trim().length > 0 &&
         form.immatriculation.trim().length > 0 &&
@@ -153,6 +158,7 @@ function submit() {
                 :sites="sites"
                 :can-change-site="can_change_site"
                 :show-status-field="!!vehicule.equipe_id"
+                :default-proprietaire-id="default_proprietaire_id"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />

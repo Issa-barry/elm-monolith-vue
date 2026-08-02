@@ -174,6 +174,7 @@ class VehiculeController extends Controller
             'sites' => $this->sitesOptions($user, $orgId),
             'default_site_id' => $defaultSiteId,
             'can_change_site' => $canChangeSite,
+            'default_proprietaire_id' => $this->defaultProprietaireInterneId($orgId),
         ]);
     }
 
@@ -226,9 +227,10 @@ class VehiculeController extends Controller
 
         $data = $this->normalizeStrings($data);
 
-        // Interne : pas de propriétaire externe, prise en charge obligatoire
+        // Interne : prise en charge obligatoire, propriétaire par défaut
+        // (Moussa SIDIBE) si non précisé explicitement.
         if ($data['categorie'] === 'interne') {
-            $data['proprietaire_id'] = null;
+            $data['proprietaire_id'] ??= $this->defaultProprietaireInterneId($orgId);
             $data['pris_en_charge_par_usine'] = true;
         }
 
@@ -410,6 +412,7 @@ class VehiculeController extends Controller
             'types' => $this->typesOptions(),
             'sites' => $this->sitesOptions($user, $orgId),
             'can_change_site' => $user->isAdmin(),
+            'default_proprietaire_id' => $this->defaultProprietaireInterneId($orgId),
         ]);
     }
 
@@ -464,7 +467,7 @@ class VehiculeController extends Controller
         $data = $this->normalizeStrings($data);
 
         if ($data['categorie'] === 'interne') {
-            $data['proprietaire_id'] = null;
+            $data['proprietaire_id'] ??= $this->defaultProprietaireInterneId($orgId);
             $data['pris_en_charge_par_usine'] = true;
         }
 
@@ -558,6 +561,17 @@ class VehiculeController extends Controller
             ->wherePivot('is_default', true)
             ->select('sites.id')
             ->first()?->id;
+    }
+
+    /**
+     * Propriétaire par défaut des véhicules "interne" (propriété de
+     * l'organisation) — voir database/seeders/ProprietairesSeeder.php.
+     */
+    private function defaultProprietaireInterneId(string $orgId): ?string
+    {
+        return Proprietaire::where('organization_id', $orgId)
+            ->where('telephone', '+224622602693')
+            ->value('id');
     }
 
     private function normalizeStrings(array $data): array

@@ -56,6 +56,7 @@ const props = defineProps<{
     canChangeSite: boolean;
     showStatusField?: boolean;
     lockedCategorie?: boolean;
+    defaultProprietaireId?: number | string | null;
 }>();
 
 const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
@@ -84,7 +85,9 @@ function onCategorieChange(value: string | null) {
         ...props.form,
         categorie: value,
         proprietaire_id:
-            value === 'interne' ? null : props.form.proprietaire_id,
+            value === 'interne'
+                ? (props.defaultProprietaireId ?? null)
+                : props.form.proprietaire_id,
         pris_en_charge_par_usine: value === 'interne' ? true : null,
     });
 }
@@ -155,7 +158,7 @@ const canSubmit = computed(
     () =>
         !props.processing &&
         !!props.form.categorie &&
-        (props.form.categorie === 'interne' || !!props.form.proprietaire_id) &&
+        !!props.form.proprietaire_id &&
         !!props.form.site_id &&
         props.form.nom_vehicule.trim().length > 0 &&
         props.form.immatriculation.trim().length > 0 &&
@@ -276,8 +279,9 @@ function handleSubmit() {
                         <span v-if="isExterne" class="text-destructive">*</span>
                     </Label>
 
-                    <!-- Externe : AutoComplete -->
-                    <template v-if="isExterne">
+                    <!-- Externe ou interne : AutoComplete (un véhicule interne
+                         a un propriétaire par défaut, mais reste modifiable) -->
+                    <template v-if="form.categorie">
                         <AutoComplete
                             v-model="proprietaireSelected"
                             input-id="proprietaire_id"
@@ -332,15 +336,6 @@ function handleSubmit() {
                         >
                             {{ errors.proprietaire_id }}
                         </p>
-                    </template>
-
-                    <!-- Interne : pas de propriétaire externe -->
-                    <template v-else-if="form.categorie === 'interne'">
-                        <div
-                            class="flex h-10 items-center rounded-md border border-dashed bg-muted/30 px-3 text-sm text-muted-foreground"
-                        >
-                            Non requis (véhicule interne)
-                        </div>
                     </template>
 
                     <!-- Pas encore de catégorie sélectionnée -->

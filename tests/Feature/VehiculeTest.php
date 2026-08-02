@@ -628,8 +628,13 @@ class VehiculeTest extends TestCase
             );
     }
 
-    public function test_show_expose_proprietaire_id_null_pour_vehicule_interne(): void
+    public function test_show_expose_proprietaire_id_null_quand_aucun_proprietaire(): void
     {
+        // Un véhicule interne a désormais un propriétaire par défaut (Moussa
+        // SIDIBE — cf. VehiculeController::defaultProprietaireInterneId()),
+        // mais une fiche peut rester sans propriétaire (donnée historique
+        // antérieure à cette règle, ou fiche Proprietaire par défaut absente
+        // de l'organisation) : Show doit gérer ce cas sans planter.
         $site = $this->user->sites()->first();
         $typeVehicule = TypeVehicule::factory()->create(['organization_id' => $this->org->id]);
 
@@ -648,6 +653,78 @@ class VehiculeTest extends TestCase
                 ->where('vehicule.proprietaire_id', null)
                 ->where('vehicule.proprietaire_nom', null)
             );
+    }
+
+    public function test_store_creates_vehicule_interne_avec_proprietaire_par_defaut(): void
+    {
+        // Cf. defaultProprietaireInterneId() : la fiche Proprietaire "Moussa
+        // SIDIBE" (téléphone +224622602693) est le propriétaire par défaut
+        // des véhicules internes lorsque l'organisation en dispose.
+        $defaut = Proprietaire::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom' => 'SIDIBE',
+            'prenom' => 'Moussa',
+            'telephone' => '+224622602693',
+        ]);
+        $site = $this->user->sites()->first();
+
+        $response = $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Tricycle Défaut',
+                'immatriculation' => 'TC-DEFAUT-GN',
+                'type_vehicule_id' => $this->typeId(),
+                'categorie' => 'interne',
+                'site_id' => $site->id,
+                'capacite_packs' => 50,
+                'is_active' => true,
+                'pris_en_charge_par_usine' => false,
+            ]);
+
+        $vehicule = Vehicule::query()
+            ->where('organization_id', $this->org->id)
+            ->where('immatriculation', 'TC-DEFAUT-GN')
+            ->firstOrFail();
+
+        $response->assertRedirect(route('vehicules.show', $vehicule));
+
+        $this->assertDatabaseHas('vehicules', [
+            'organization_id' => $this->org->id,
+            'immatriculation' => 'TC-DEFAUT-GN',
+            'categorie' => 'interne',
+            'proprietaire_id' => $defaut->id,
+        ]);
+    }
+
+    public function test_store_creates_vehicule_interne_avec_proprietaire_explicite(): void
+    {
+        // Un véhicule interne reste modifiable : un propriétaire explicite
+        // (différent du défaut) prime sur la valeur par défaut.
+        Proprietaire::factory()->create([
+            'organization_id' => $this->org->id,
+            'telephone' => '+224622602693',
+        ]);
+        $autre = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $site = $this->user->sites()->first();
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Tricycle Explicite',
+                'immatriculation' => 'TC-EXPLICITE-GN',
+                'type_vehicule_id' => $this->typeId(),
+                'categorie' => 'interne',
+                'proprietaire_id' => $autre->id,
+                'site_id' => $site->id,
+                'capacite_packs' => 50,
+                'is_active' => true,
+                'pris_en_charge_par_usine' => false,
+            ]);
+
+        $this->assertDatabaseHas('vehicules', [
+            'organization_id' => $this->org->id,
+            'immatriculation' => 'TC-EXPLICITE-GN',
+            'categorie' => 'interne',
+            'proprietaire_id' => $autre->id,
+        ]);
     }
 
     public function test_show_expose_livreur_nom_sans_doublon_de_designation(): void

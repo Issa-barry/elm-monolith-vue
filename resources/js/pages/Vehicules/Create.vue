@@ -28,6 +28,7 @@ const props = defineProps<{
     sites: SiteOption[];
     default_site_id: string | null;
     can_change_site: boolean;
+    default_proprietaire_id: string | null;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -60,7 +61,7 @@ const canSubmit = computed(() => {
     return (
         !form.processing &&
         !!form.categorie &&
-        (form.categorie === 'interne' || !!form.proprietaire_id) &&
+        !!form.proprietaire_id &&
         !!form.site_id &&
         form.nom_vehicule.trim().length > 0 &&
         form.immatriculation.trim().length > 0 &&
@@ -118,6 +119,7 @@ function submit() {
                 :sites="sites"
                 :can-change-site="can_change_site"
                 :locked-categorie="lockedCategorie"
+                :default-proprietaire-id="default_proprietaire_id"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />

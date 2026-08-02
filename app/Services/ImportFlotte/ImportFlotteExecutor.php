@@ -110,7 +110,9 @@ class ImportFlotteExecutor
                 'type_vehicule_id' => $vData['type_vehicule_id'],
                 'categorie' => $vData['categorie'],
                 'site_id' => $vData['site_id'],
-                'proprietaire_id' => $vData['categorie'] === 'externe' ? $proprietaireId : null,
+                'proprietaire_id' => $vData['categorie'] === 'externe'
+                    ? $proprietaireId
+                    : $this->defaultProprietaireInterneId($orgId),
                 'pris_en_charge_par_usine' => $vData['pris_en_charge_par_usine'],
                 'is_active' => false,
             ]);
@@ -210,5 +212,17 @@ class ImportFlotteExecutor
                 'ordre' => $ordre++,
             ]);
         }
+    }
+
+    /**
+     * Propriétaire par défaut des véhicules "interne" (propriété de
+     * l'organisation) — voir database/seeders/ProprietairesSeeder.php et
+     * VehiculeController::defaultProprietaireInterneId().
+     */
+    private function defaultProprietaireInterneId(string $orgId): ?string
+    {
+        return Proprietaire::where('organization_id', $orgId)
+            ->where('telephone', '+224622602693')
+            ->value('id');
     }
 }

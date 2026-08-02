@@ -403,7 +403,11 @@ function formatGNF(val: number): string {
                                     class="inline-flex items-center rounded-full bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700 dark:bg-orange-950 dark:text-orange-300"
                                     >Externe</span
                                 >
-                                <span v-else class="text-sm text-muted-foreground">—</span>
+                                <span
+                                    v-else
+                                    class="text-sm text-muted-foreground"
+                                    >—</span
+                                >
                             </p>
                         </div>
                         <div class="rounded-lg border bg-background p-4">
@@ -428,12 +432,7 @@ function formatGNF(val: number): string {
                             <p class="text-xs text-muted-foreground">
                                 Propriétaire
                             </p>
-                            <template v-if="vehicule.categorie === 'interne'">
-                                <p class="mt-1 text-sm text-muted-foreground">
-                                    Non applicable (véhicule interne)
-                                </p>
-                            </template>
-                            <template v-else-if="vehicule.proprietaire_id">
+                            <template v-if="vehicule.proprietaire_id">
                                 <p
                                     class="mt-1 text-sm font-medium"
                                     data-testid="proprietaire-nom"

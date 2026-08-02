@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\EquipeLivraison;
 use App\Models\Organization;
+use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TypeVehicule as TypeVehiculeModel;
 use App\Models\Vehicule;
@@ -59,6 +60,12 @@ class VehiculesSeeder extends Seeder
 
         $sonfonia = Site::where('organization_id', $org->id)
             ->where('nom', 'Sonfonia')
+            ->firstOrFail();
+
+        // Propriétaire par défaut des véhicules internes — voir ProprietairesSeeder
+        // et VehiculeController::defaultProprietaireInterneId().
+        $proprietaireInterne = Proprietaire::where('organization_id', $org->id)
+            ->where('telephone', '+224622602693')
             ->firstOrFail();
 
         $equipeParChauffeur = fn (string $tel) => EquipeLivraison::query()
@@ -166,7 +173,7 @@ class VehiculesSeeder extends Seeder
                 'capacite_packs' => 120,
                 'categorie' => 'interne',
                 'site_id' => $matoto->id,
-                'proprietaire_id' => null,
+                'proprietaire_id' => $proprietaireInterne->id,
                 'pris_en_charge_par_usine' => true,
                 'is_active' => true,
                 'equipe' => $eqElm1,
@@ -180,7 +187,7 @@ class VehiculesSeeder extends Seeder
                 'capacite_packs' => 80,
                 'categorie' => 'interne',
                 'site_id' => $matoto->id,
-                'proprietaire_id' => null,
+                'proprietaire_id' => $proprietaireInterne->id,
                 'pris_en_charge_par_usine' => true,
                 'is_active' => true,
                 'equipe' => $eqElm2,
@@ -194,7 +201,7 @@ class VehiculesSeeder extends Seeder
                 'capacite_packs' => 300,
                 'categorie' => 'interne',
                 'site_id' => $matoto->id,
-                'proprietaire_id' => null,
+                'proprietaire_id' => $proprietaireInterne->id,
                 'pris_en_charge_par_usine' => true,
                 'is_active' => true,
                 'equipe' => $eqElm3,
@@ -208,7 +215,7 @@ class VehiculesSeeder extends Seeder
                 'capacite_packs' => 100,
                 'categorie' => 'interne',
                 'site_id' => $matoto->id,
-                'proprietaire_id' => null,
+                'proprietaire_id' => $proprietaireInterne->id,
                 'pris_en_charge_par_usine' => true,
                 'is_active' => true,
                 'equipe' => $eqElm4,
@@ -222,7 +229,7 @@ class VehiculesSeeder extends Seeder
                 'capacite_packs' => 200,
                 'categorie' => 'interne',
                 'site_id' => $kouria->id,
-                'proprietaire_id' => null,
+                'proprietaire_id' => $proprietaireInterne->id,
                 'pris_en_charge_par_usine' => true,
                 'is_active' => true,
                 'equipe' => $eqCousin,
