@@ -314,6 +314,34 @@ class ImportFlotteTest extends TestCase
         $this->assertSame($livreur->id, $membre->livreur_id);
     }
 
+    public function test_confirm_vehicule_interne_recoit_proprietaire_par_defaut(): void
+    {
+        // Cf. ImportFlotteExecutor::defaultProprietaireInterneId() : un
+        // véhicule interne importé reçoit la fiche Proprietaire "Moussa
+        // SIDIBE" (téléphone +224622602693) comme propriétaire par défaut,
+        // au lieu de rester sans propriétaire.
+        $defaut = Proprietaire::factory()->create([
+            'organization_id' => $this->org->id,
+            'telephone' => '+224622602693',
+        ]);
+
+        $import = $this->importer(
+            [$this->ligneVehiculeExterne([
+                'vehicule_categorie' => 'interne',
+                'proprietaire_nom' => '', 'proprietaire_prenom' => '', 'proprietaire_telephone' => '', 'proprietaire_pays' => '',
+            ])],
+            [$this->ligneLivreurChauffeur()]
+        );
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
+        $this->assertSame('interne', $vehicule->categorie);
+        $this->assertSame($defaut->id, $vehicule->proprietaire_id);
+    }
+
     public function test_confirm_creates_livreur_sans_nom_avec_designation_par_defaut(): void
     {
         // Ni livreur_nom_complet ni livreur_nom/livreur_prenom renseignés : jamais
