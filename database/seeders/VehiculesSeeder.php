@@ -11,15 +11,17 @@ use Illuminate\Database\Seeder;
 
 /**
  * Crée 10 véhicules (5 externes + 5 internes) et les associe à leurs équipes.
+ * Tout véhicule (interne ou externe) est rattaché à un site — voir
+ * VehiculeController::store()/update().
  *
- * EXTERNES (appartiennent à un propriétaire privé) :
- * | Véhicule         | Type         | Équipe         | Immat      |
- * |------------------|--------------|----------------|------------|
- * | Nen Dow          | CAMION-1700  | Nen Dow        | RC-001-GN  |
- * | Kata Kata de Ali | Tricycle-80  | Auto Dogomet   | TC-001-GN  |
- * | Baba Ousou       | Minibus-200  | Baba Ousou     | VN-001-GN  |
- * | Kaloum Express   | Minibus-200  | Kaloum Express | KX-001-GN  |
- * | Conakry 2        | Tricycle-80  | Conakry 2      | TC-002-GN  |
+ * EXTERNES (appartiennent à un propriétaire privé, mais opèrent pour un site) :
+ * | Véhicule         | Type         | Équipe         | Immat      | Site     |
+ * |------------------|--------------|----------------|------------|----------|
+ * | Nen Dow          | CAMION-1700  | Nen Dow        | RC-001-GN  | Matoto   |
+ * | Kata Kata de Ali | Tricycle-80  | Auto Dogomet   | TC-001-GN  | Lambanyi |
+ * | Baba Ousou       | Minibus-200  | Baba Ousou     | VN-001-GN  | Matoto   |
+ * | Kaloum Express   | Minibus-200  | Kaloum Express | KX-001-GN  | Sonfonia |
+ * | Conakry 2        | Tricycle-80  | Conakry 2      | TC-002-GN  | Matoto   |
  *
  * INTERNES (appartiennent à l'organisation — 100 % livreurs) :
  * | Véhicule | Type        | Équipe           | Immat      | Site   |
@@ -49,6 +51,14 @@ class VehiculesSeeder extends Seeder
 
         $kouria = Site::where('organization_id', $org->id)
             ->where('nom', 'Kouria')
+            ->firstOrFail();
+
+        $lambanyi = Site::where('organization_id', $org->id)
+            ->where('nom', 'Lambanyi')
+            ->firstOrFail();
+
+        $sonfonia = Site::where('organization_id', $org->id)
+            ->where('nom', 'Sonfonia')
             ->firstOrFail();
 
         $equipeParChauffeur = fn (string $tel) => EquipeLivraison::query()
@@ -83,6 +93,7 @@ class VehiculesSeeder extends Seeder
                 'type_vehicule_id' => $type('CAMION-1700'),
                 'capacite_packs' => 500,
                 'categorie' => 'externe',
+                'site_id' => $matoto->id,
                 'proprietaire_id' => $eqNenDow->proprietaire_id,
                 'pris_en_charge_par_usine' => false,
                 'is_active' => true,
@@ -96,6 +107,7 @@ class VehiculesSeeder extends Seeder
                 'type_vehicule_id' => $type('Tricycle-80'),
                 'capacite_packs' => 80,
                 'categorie' => 'externe',
+                'site_id' => $lambanyi->id,
                 'proprietaire_id' => $eqAutoDogomet->proprietaire_id,
                 'pris_en_charge_par_usine' => false,
                 'is_active' => true,
@@ -109,6 +121,7 @@ class VehiculesSeeder extends Seeder
                 'type_vehicule_id' => $type('Minibus-200'),
                 'capacite_packs' => 150,
                 'categorie' => 'externe',
+                'site_id' => $matoto->id,
                 'proprietaire_id' => $eqBabaOusou->proprietaire_id,
                 'pris_en_charge_par_usine' => false,
                 'is_active' => true,
@@ -122,6 +135,7 @@ class VehiculesSeeder extends Seeder
                 'type_vehicule_id' => $type('Minibus-200'),
                 'capacite_packs' => 120,
                 'categorie' => 'externe',
+                'site_id' => $sonfonia->id,
                 'proprietaire_id' => $eqKaloumExpress->proprietaire_id,
                 'pris_en_charge_par_usine' => false,
                 'is_active' => true,
@@ -135,6 +149,7 @@ class VehiculesSeeder extends Seeder
                 'type_vehicule_id' => $type('Tricycle-80'),
                 'capacite_packs' => 60,
                 'categorie' => 'externe',
+                'site_id' => $matoto->id,
                 'proprietaire_id' => $eqConakry2->proprietaire_id,
                 'pris_en_charge_par_usine' => false,
                 'is_active' => true,

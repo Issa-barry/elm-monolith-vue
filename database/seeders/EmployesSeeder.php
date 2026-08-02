@@ -20,7 +20,7 @@ class EmployesSeeder extends Seeder
         $org = Organization::where('slug', 'elm')->firstOrFail();
 
         $matoto = Site::where('organization_id', $org->id)->where('nom', 'Matoto')->firstOrFail();
-        $lansanaya = Site::where('organization_id', $org->id)->where('nom', 'Lansanaya')->firstOrFail();
+        $lansanaya = Site::where('organization_id', $org->id)->where('nom', 'Cba (Lansanaya, Kountia)')->firstOrFail();
 
         $employes = [
             // ── Matoto (siège) ────────────────────────────────────────────────

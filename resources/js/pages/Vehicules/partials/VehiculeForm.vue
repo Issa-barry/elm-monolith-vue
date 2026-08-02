@@ -106,8 +106,7 @@ function removePhoto() {
 const isExterne = computed(() => props.form.categorie === 'externe');
 
 const currentSiteName = computed(
-    () =>
-        props.sites.find((s) => s.id === props.form.site_id)?.nom ?? '—',
+    () => props.sites.find((s) => s.id === props.form.site_id)?.nom ?? '—',
 );
 
 const selectedType = computed(() =>

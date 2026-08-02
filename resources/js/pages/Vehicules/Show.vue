@@ -390,6 +390,24 @@ function formatGNF(val: number): string {
                         </div>
                         <div class="rounded-lg border bg-background p-4">
                             <p class="text-xs text-muted-foreground">
+                                Catégorie
+                            </p>
+                            <p class="mt-1">
+                                <span
+                                    v-if="vehicule.categorie === 'interne'"
+                                    class="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-300"
+                                    >Interne</span
+                                >
+                                <span
+                                    v-else-if="vehicule.categorie === 'externe'"
+                                    class="inline-flex items-center rounded-full bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700 dark:bg-orange-950 dark:text-orange-300"
+                                    >Externe</span
+                                >
+                                <span v-else class="text-sm text-muted-foreground">—</span>
+                            </p>
+                        </div>
+                        <div class="rounded-lg border bg-background p-4">
+                            <p class="text-xs text-muted-foreground">
                                 Capacité
                             </p>
                             <p class="mt-1 text-sm font-medium">
@@ -401,15 +419,18 @@ function formatGNF(val: number): string {
                             </p>
                         </div>
                         <div class="rounded-lg border bg-background p-4">
+                            <p class="text-xs text-muted-foreground">Site</p>
+                            <p class="mt-1 text-sm font-medium">
+                                {{ vehicule.site_nom ?? '—' }}
+                            </p>
+                        </div>
+                        <div class="rounded-lg border bg-background p-4">
                             <p class="text-xs text-muted-foreground">
                                 Propriétaire
                             </p>
                             <template v-if="vehicule.categorie === 'interne'">
-                                <p class="mt-1 text-sm font-medium">
-                                    {{ vehicule.site_nom ?? '—' }}
-                                </p>
-                                <p class="mt-0.5 text-xs text-muted-foreground">
-                                    Site (véhicule interne)
+                                <p class="mt-1 text-sm text-muted-foreground">
+                                    Non applicable (véhicule interne)
                                 </p>
                             </template>
                             <template v-else-if="vehicule.proprietaire_id">
