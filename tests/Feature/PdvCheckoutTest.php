@@ -5,8 +5,10 @@ namespace Tests\Feature;
 use App\Enums\StatutCommandeVente;
 use App\Models\Client;
 use App\Models\CommandeVente;
+use App\Models\CommandeVenteLigne;
 use App\Models\Organization;
 use App\Models\Produit;
+use App\Models\ProduitStock;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\User;
@@ -112,6 +114,68 @@ class PdvCheckoutTest extends TestCase
         $commande = CommandeVente::first();
         $this->assertNotNull($commande->facture);
         $this->assertEquals(5000, $commande->facture->montant_net);
+    }
+
+    public function test_checkout_ne_decremente_pas_le_stock_dun_autre_site(): void
+    {
+        // Répartition explicite par site — reproduit le bug corrigé où le
+        // PDV décrémentait l'agrégat global au lieu du stock du site vendeur.
+        $autreSite = Site::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Autre site',
+            'type' => 'depot',
+            'localisation' => 'Conakry',
+        ]);
+        ProduitStock::create([
+            'organization_id' => $this->org->id,
+            'produit_id' => $this->produit->id,
+            'site_id' => $this->site->id,
+            'qte_stock' => 50,
+        ]);
+        ProduitStock::create([
+            'organization_id' => $this->org->id,
+            'produit_id' => $this->produit->id,
+            'site_id' => $autreSite->id,
+            'qte_stock' => 30,
+        ]);
+
+        $this->actingAs($this->user)->post('/backoffice/pdv/checkout', [
+            'mode' => 'Vente rapide',
+            'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 5]],
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('produit_stocks', [
+            'produit_id' => $this->produit->id,
+            'site_id' => $this->site->id,
+            'qte_stock' => 45,
+        ]);
+        $this->assertDatabaseHas('produit_stocks', [
+            'produit_id' => $this->produit->id,
+            'site_id' => $autreSite->id,
+            'qte_stock' => 30,
+        ]);
+        $this->assertEquals(75, $this->produit->fresh()->qte_stock);
+    }
+
+    public function test_checkout_trace_un_mouvement_de_stock(): void
+    {
+        $this->actingAs($this->user)->post('/backoffice/pdv/checkout', [
+            'mode' => 'Vente rapide',
+            'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 3]],
+        ])->assertRedirect();
+
+        $ligne = CommandeVenteLigne::where('produit_id', $this->produit->id)->firstOrFail();
+
+        $this->assertDatabaseHas('mouvements_stock', [
+            'produit_id' => $this->produit->id,
+            'site_id' => $this->site->id,
+            'type' => 'sortie',
+            'quantite' => 3,
+            'stock_avant' => 100,
+            'stock_apres' => 97,
+            'source_type' => CommandeVenteLigne::class,
+            'source_id' => $ligne->id,
+        ]);
     }
 
     // ── POST /pdv/checkout — Mode Client ─────────────────────────────────────
