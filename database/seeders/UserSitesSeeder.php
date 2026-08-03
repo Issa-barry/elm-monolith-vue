@@ -12,8 +12,8 @@ use Illuminate\Database\Seeder;
  *
  * Règle :
  *  - super_admin, admin_entreprise, comptable → Siège (Matoto)
- *  - manager                                  → Usine (Lansanaya)
- *  - commerciale                              → Agence (Lambagny)
+ *  - manager                                  → Usine (Cba - Lansanaya, Kountia)
+ *  - commerciale                              → Dépôt (Lambanyi)
  *
  * Doit être exécuté APRÈS SitesSeeder (les sites doivent exister).
  */
@@ -25,8 +25,8 @@ class UserSitesSeeder extends Seeder
 
         // ── Récupération des sites ────────────────────────────────────────────
         $siege = Site::where('organization_id', $org->id)->where('nom', 'Matoto')->firstOrFail();
-        $usine = Site::where('organization_id', $org->id)->where('nom', 'Lansanaya')->firstOrFail();
-        $agence = Site::where('organization_id', $org->id)->where('nom', 'Lambagny')->firstOrFail();
+        $usine = Site::where('organization_id', $org->id)->where('nom', 'Cba (Lansanaya, Kountia)')->firstOrFail();
+        $agence = Site::where('organization_id', $org->id)->where('nom', 'Lambanyi')->firstOrFail();
 
         // ── Matrice : téléphone/identifiant → site ────────────────────────────
         // On identifie les users par téléphone (unique) ou par prénom+nom.

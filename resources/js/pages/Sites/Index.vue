@@ -137,6 +137,10 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Sites', href: '/backoffice/sites' },
 ];
 
+function formatAdresse(site: Site): string {
+    return [site.ville, site.quartier].filter(Boolean).join(', ') || '—';
+}
+
 function escapeHtml(value: string): string {
     return value
         .replaceAll('&', '&amp;')
@@ -529,7 +533,7 @@ function confirmDelete(s: Site) {
                     >
                         <template #body="{ data }">
                             <span class="text-muted-foreground">{{
-                                data.localisation ?? '—'
+                                formatAdresse(data)
                             }}</span>
                         </template>
                     </Column>

@@ -24,6 +24,20 @@ class ProprietairesSeeder extends Seeder
         // ── Propriétaires sans compte (gestion interne uniquement) ────────────
         $sansCompte = [
             [
+                // Propriétaire par défaut des véhicules "interne" (propriété de
+                // l'organisation) — voir VehiculeController::defaultProprietaireInterneId().
+                // Distinct du compte User admin_entreprise "Moussa SIDIBÉ"
+                // (téléphone différent) : ici c'est une fiche Proprietaire, pas
+                // un utilisateur du back-office.
+                'nom' => 'SIDIBE',
+                'prenom' => 'Moussa',
+                'email' => 'moussa.sidibe@elm.gn',
+                'telephone' => '+224622602693',
+                'adresse' => 'Matoto',
+                'ville' => 'Conakry',
+                'is_active' => true,
+            ],
+            [
                 'nom' => 'BARRY',
                 'prenom' => 'Mamadou',
                 'email' => 'mamadou.barry@elm.gn',

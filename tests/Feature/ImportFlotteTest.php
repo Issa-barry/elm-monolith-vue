@@ -71,12 +71,15 @@ class ImportFlotteTest extends TestCase
 
     private function ligneVehiculeExterne(array $overrides = []): array
     {
+        // vehicule_site est obligatoire quelle que soit la catégorie : un
+        // véhicule externe est aussi rattaché à un site (celui pour lequel il
+        // opère) — 'Matoto' correspond au site créé dans setUp().
         return array_replace([
             'vehicule_immatriculation' => 'RC-1234-A',
             'vehicule_nom' => 'Camion 1',
             'vehicule_type' => 'Tricycle',
             'vehicule_categorie' => 'externe',
-            'vehicule_site' => '',
+            'vehicule_site' => 'Matoto',
             'vehicule_pris_en_charge_par_usine' => 'oui',
             'proprietaire_nom' => 'Diallo',
             'proprietaire_prenom' => 'Mamadou',
@@ -309,6 +312,34 @@ class ImportFlotteTest extends TestCase
 
         $livreur = Livreur::where('organization_id', $this->org->id)->where('telephone', '+224623000001')->firstOrFail();
         $this->assertSame($livreur->id, $membre->livreur_id);
+    }
+
+    public function test_confirm_vehicule_interne_recoit_proprietaire_par_defaut(): void
+    {
+        // Cf. ImportFlotteExecutor::defaultProprietaireInterneId() : un
+        // véhicule interne importé reçoit la fiche Proprietaire "Moussa
+        // SIDIBE" (téléphone +224622602693) comme propriétaire par défaut,
+        // au lieu de rester sans propriétaire.
+        $defaut = Proprietaire::factory()->create([
+            'organization_id' => $this->org->id,
+            'telephone' => '+224622602693',
+        ]);
+
+        $import = $this->importer(
+            [$this->ligneVehiculeExterne([
+                'vehicule_categorie' => 'interne',
+                'proprietaire_nom' => '', 'proprietaire_prenom' => '', 'proprietaire_telephone' => '', 'proprietaire_pays' => '',
+            ])],
+            [$this->ligneLivreurChauffeur()]
+        );
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
+        $this->assertSame('interne', $vehicule->categorie);
+        $this->assertSame($defaut->id, $vehicule->proprietaire_id);
     }
 
     public function test_confirm_creates_livreur_sans_nom_avec_designation_par_defaut(): void

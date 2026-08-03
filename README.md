@@ -4,6 +4,7 @@ PHP artisan migrate:fresh --seed
 PHP artisan optimize:clear
 PHP artisan optimize
 
+composer update
 php artisan migrate:fresh --seed
 php artisan optimize:clear
 php artisan optimize

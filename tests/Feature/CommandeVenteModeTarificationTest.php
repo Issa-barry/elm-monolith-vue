@@ -243,6 +243,12 @@ class CommandeVenteModeTarificationTest extends TestCase
             'total_ligne' => 350_000.0,
         ]);
 
+        // En production, ces transitions n'ont jamais lieu hors d'une requête
+        // authentifiée (created_by du mouvement de stock en dépend) — on
+        // s'assure donc ici d'un utilisateur courant, comme le ferait le
+        // vrai workflow HTTP.
+        $this->actingAs($this->user);
+
         CommandeVenteService::confirmer($commande);
         CommandeVenteService::demarrerChargement($commande);
 
