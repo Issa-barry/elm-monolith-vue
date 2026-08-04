@@ -34,8 +34,12 @@ class ImportFlotteVehiculesSheetExport implements FromArray, WithHeadings, WithT
         // Une seule ligne par véhicule — la capacité est résolue automatiquement
         // depuis le type de véhicule, pas besoin de la saisir ici. La commission
         // d'équipe se configure après coup dans Équipes de livraison.
+        //
+        // vehicule_site est obligatoire quelle que soit la catégorie : un
+        // véhicule externe est aussi rattaché à un site (celui pour lequel il
+        // opère), même s'il appartient à un propriétaire privé.
         return [
-            ['RC-1234-A', 'Camion 1', 'Tricycle', 'externe', '', 'oui', 'Diallo', 'Mamadou', '622000001', 'GN'],
+            ['RC-1234-A', 'Camion 1', 'Tricycle', 'externe', 'Matoto', 'oui', 'Diallo', 'Mamadou', '622000001', 'GN'],
         ];
     }
 }

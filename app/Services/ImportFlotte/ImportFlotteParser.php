@@ -289,29 +289,28 @@ class ImportFlotteParser
             }
         }
 
+        // Chaque véhicule (interne ou externe) est rattaché à un site.
         $site = null;
-        if ($categorie === 'interne') {
-            if ($siteNomSaisi === '') {
-                $erreurs[] = 'Site obligatoire pour un véhicule interne.';
-            } else {
-                $sitesDisponibles = Site::where('organization_id', $orgId)->whereNull('deleted_at')->get();
-                $site = ReferenceValueResolver::matchExact(
-                    $siteNomSaisi,
-                    $sitesDisponibles,
-                    [fn ($s) => $s->nom, fn ($s) => $s->code],
-                    [fn ($s) => $s->code]
-                );
+        if ($siteNomSaisi === '') {
+            $erreurs[] = 'Site obligatoire.';
+        } else {
+            $sitesDisponibles = Site::where('organization_id', $orgId)->whereNull('deleted_at')->get();
+            $site = ReferenceValueResolver::matchExact(
+                $siteNomSaisi,
+                $sitesDisponibles,
+                [fn ($s) => $s->nom, fn ($s) => $s->code],
+                [fn ($s) => $s->code]
+            );
 
-                if ($site && $site->nom !== $siteNomSaisi && $site->code !== $siteNomSaisi) {
-                    $normalisations[] = "\"{$siteNomSaisi}\" → \"{$site->nom}\"";
-                } elseif (! $site) {
-                    $suggestion = ReferenceValueResolver::suggestClosest($siteNomSaisi, $sitesDisponibles, fn ($s) => $s->nom);
-                    if ($suggestion) {
-                        $avertissements[] = "\"{$siteNomSaisi}\" semble correspondre à \"{$suggestion}\".";
-                        $erreurs[] = "Site introuvable : \"{$siteNomSaisi}\". Valeur proche trouvée : \"{$suggestion}\". Corrigez le fichier ou confirmez la correspondance.";
-                    } else {
-                        $erreurs[] = "Site introuvable : \"{$siteNomSaisi}\".";
-                    }
+            if ($site && $site->nom !== $siteNomSaisi && $site->code !== $siteNomSaisi) {
+                $normalisations[] = "\"{$siteNomSaisi}\" → \"{$site->nom}\"";
+            } elseif (! $site) {
+                $suggestion = ReferenceValueResolver::suggestClosest($siteNomSaisi, $sitesDisponibles, fn ($s) => $s->nom);
+                if ($suggestion) {
+                    $avertissements[] = "\"{$siteNomSaisi}\" semble correspondre à \"{$suggestion}\".";
+                    $erreurs[] = "Site introuvable : \"{$siteNomSaisi}\". Valeur proche trouvée : \"{$suggestion}\". Corrigez le fichier ou confirmez la correspondance.";
+                } else {
+                    $erreurs[] = "Site introuvable : \"{$siteNomSaisi}\".";
                 }
             }
         }

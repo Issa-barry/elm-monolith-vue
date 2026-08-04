@@ -46,7 +46,6 @@ async function openStepperModal(page: Page) {
     ).toBeVisible({ timeout: 10_000 });
 }
 
-
 test.beforeAll(async ({ browser }) => {
     const context = await browser.newContext();
     const page = await context.newPage();
@@ -64,8 +63,14 @@ test.beforeAll(async ({ browser }) => {
         await page
             .locator('#immatriculation')
             .fill(`${SETUP_VH_PREFIX}${unique}`);
-        const vhCombos = page.locator('#vehicule-form').getByRole('combobox');
-        await selectOptionFromCombobox(page, vhCombos.first());
+        // Catégorie n'est plus verrouillée par le site (voir Vehicules/Create.vue) :
+        // il faut sélectionner explicitement Interne puis un Type.
+        await selectOptionFromCombobox(
+            page,
+            page.locator('#categorie'),
+            /interne/i,
+        );
+        await selectOptionFromCombobox(page, page.locator('#type_vehicule'));
         await page
             .locator('#vehicule-form button[type="submit"]:visible')
             .first()
@@ -87,7 +92,11 @@ test.afterAll(async ({ browser }) => {
     const page = await context.newPage();
     try {
         await login(page);
-        await cleanupRowsByPrefix(page, '/backoffice/vehicules', SETUP_VH_PREFIX);
+        await cleanupRowsByPrefix(
+            page,
+            '/backoffice/vehicules',
+            SETUP_VH_PREFIX,
+        );
     } catch (e) {
         console.warn('E2E equipe afterAll cleanup warning:', e);
     } finally {
@@ -109,9 +118,7 @@ test.afterEach(async ({ browser }) => {
                 .first();
             await searchInput.fill(E2E_VH_PREFIX).catch(() => undefined);
             await searchInput.press('Enter').catch(() => undefined);
-            await page
-                .waitForLoadState('networkidle')
-                .catch(() => undefined);
+            await page.waitForLoadState('networkidle').catch(() => undefined);
 
             for (let i = 0; i < 4; i++) {
                 const row = page
@@ -178,7 +185,9 @@ test('créer une équipe depuis la fiche véhicule avec stepper', async ({
     // +224 affiché dans la ligne inline
     await expect(dialog.getByText('+224').first()).toBeVisible();
     // Nom complet visible dans le tableau
-    await expect(page.getByTestId('nom-complet-0')).toHaveValue('Mamadou Diallo');
+    await expect(page.getByTestId('nom-complet-0')).toHaveValue(
+        'Mamadou Diallo',
+    );
 
     // Passer à l'étape 2
     await dialog.getByRole('button', { name: /suivant/i }).click();
@@ -209,25 +218,26 @@ test('créer une équipe depuis la fiche véhicule avec stepper', async ({
 
     // Passer à l'étape 3
     await dialog.getByRole('button', { name: /suivant/i }).click();
-    await expect(
-        dialog.getByText(/récapitulatif/i).first(),
-    ).toBeVisible({ timeout: 5_000 });
+    await expect(dialog.getByText(/récapitulatif/i).first()).toBeVisible({
+        timeout: 5_000,
+    });
 
     // Vérifier le récap
     await expect(dialog.getByText(/Mamadou/i).first()).toBeVisible();
     await expect(dialog.getByText(/200 GNF/i).first()).toBeVisible();
 
     // Enregistrer
-    await dialog
-        .getByRole('button', { name: /enregistrer l'équipe/i })
-        .click();
+    await dialog.getByRole('button', { name: /enregistrer l'équipe/i }).click();
     await expect(dialog).toBeHidden({ timeout: 20_000 });
 
     // Après enregistrement, la page véhicule montre les membres
     await expect(page).toHaveURL(/\/vehicules\/[a-z0-9]+$/, {
         timeout: 15_000,
     });
-    await page.locator('aside button').filter({ hasText: /equipe/i }).click();
+    await page
+        .locator('aside button')
+        .filter({ hasText: /equipe/i })
+        .click();
     await expect(page.getByText(/Mamadou/i).first()).toBeVisible({
         timeout: 10_000,
     });
@@ -282,9 +292,7 @@ test('étape 1 inline : +224 affiché et téléphone invalide bloqué', async ({
     expect(phoneValue.replace(/\D/g, '')).toBe('');
 });
 
-test('étape 1 inline : validation bloque si champs vides', async ({
-    page,
-}) => {
+test('étape 1 inline : validation bloque si champs vides', async ({ page }) => {
     await openStepperModal(page);
     const dialog = page
         .locator('[role="dialog"]')
@@ -301,7 +309,9 @@ test('étape 1 inline : validation bloque si champs vides', async ({
         timeout: 3_000,
     });
     // Toujours à l'étape 1 : le bouton footer "Ajouter un membre" n'existe qu'à l'étape 1
-    await expect(dialog.getByRole('button', { name: /ajouter un membre/i })).toBeVisible();
+    await expect(
+        dialog.getByRole('button', { name: /ajouter un membre/i }),
+    ).toBeVisible();
 });
 
 test('étape 1 inline : supprimer une ligne sans sous-modal', async ({
@@ -340,8 +350,14 @@ test('fermeture avec modifications : affiche confirmation, "Continuer" garde le 
     await dialog.getByRole('button', { name: /ajouter un membre/i }).click();
 
     // Cliquer sur le X du modal principal
-    await page.locator('[role="dialog"]').filter({ hasText: /équipe/i })
-        .locator('.p-dialog-close-button, .p-dialog-header-close, .p-dialog-header button').first().click();
+    await page
+        .locator('[role="dialog"]')
+        .filter({ hasText: /équipe/i })
+        .locator(
+            '.p-dialog-close-button, .p-dialog-header-close, .p-dialog-header button',
+        )
+        .first()
+        .click();
 
     // La confirmation doit apparaître
     await expect(
@@ -368,8 +384,14 @@ test('fermeture avec modifications : "Quitter" ferme le wizard', async ({
     await dialog.getByRole('button', { name: /ajouter un membre/i }).click();
 
     // Cliquer sur le X
-    await page.locator('[role="dialog"]').filter({ hasText: /équipe/i })
-        .locator('.p-dialog-close-button, .p-dialog-header-close, .p-dialog-header button').first().click();
+    await page
+        .locator('[role="dialog"]')
+        .filter({ hasText: /équipe/i })
+        .locator(
+            '.p-dialog-close-button, .p-dialog-header-close, .p-dialog-header button',
+        )
+        .first()
+        .click();
 
     await expect(
         page.getByRole('dialog', { name: /quitter sans enregistrer/i }),
@@ -389,12 +411,20 @@ test('fermeture sans modifications : ferme directement sans confirmation', async
         .filter({ hasText: /équipe/i });
 
     // Aucune interaction — clic sur X
-    await page.locator('[role="dialog"]').filter({ hasText: /équipe/i })
-        .locator('.p-dialog-close-button, .p-dialog-header-close, .p-dialog-header button').first().click();
+    await page
+        .locator('[role="dialog"]')
+        .filter({ hasText: /équipe/i })
+        .locator(
+            '.p-dialog-close-button, .p-dialog-header-close, .p-dialog-header button',
+        )
+        .first()
+        .click();
 
     // Aucune confirmation, modal fermé directement
     await expect(
-        page.locator('[role="dialog"]').filter({ hasText: /quitter sans enregistrer/i }),
+        page
+            .locator('[role="dialog"]')
+            .filter({ hasText: /quitter sans enregistrer/i }),
     ).not.toBeVisible();
     await expect(dialog).toBeHidden({ timeout: 5_000 });
 });
