@@ -28,6 +28,12 @@ import { computed, onMounted, ref, watch } from 'vue';
 const page = usePage();
 const user = computed(() => (page.props as any).auth.user);
 const currentUrl = computed(() => page.url);
+const organizationName = computed(
+    () => user.value?.organization?.name ?? (page.props as any).name,
+);
+const organizationLogoUrl = computed(
+    () => user.value?.organization?.logo_url ?? null,
+);
 const { updateAppearance } = useAppearance();
 useScanInterceptor();
 const isDark = ref(false);
@@ -155,10 +161,19 @@ watch(currentUrl, () => {
                         :href="home()"
                         class="flex shrink-0 items-center gap-2 transition-opacity hover:opacity-80"
                     >
+                        <img
+                            v-if="organizationLogoUrl"
+                            :src="organizationLogoUrl"
+                            :alt="organizationName"
+                            class="h-7 w-7 object-contain"
+                        />
                         <AppLogoIcon
+                            v-else
                             class="h-7 w-7 fill-current text-primary"
                         />
-                        <span class="font-semibold">Eau la maman</span>
+                        <span class="font-semibold">{{
+                            organizationName
+                        }}</span>
                     </Link>
 
                     <nav

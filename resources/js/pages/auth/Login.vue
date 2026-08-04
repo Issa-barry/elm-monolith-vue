@@ -25,6 +25,7 @@ defineProps<{
     status?: string;
     canResetPassword: boolean;
     canRegister: boolean;
+    orgBranding?: { name: string; logo_url: string | null } | null;
 }>();
 
 interface CountryOption {
@@ -151,11 +152,22 @@ function handlePhoneKeydown(e: KeyboardEvent) {
                     :href="home()"
                     class="mx-auto mb-2 flex h-10 w-12 items-center justify-center rounded-md"
                 >
-                    <AppLogoIcon class="size-10 fill-current text-primary" />
+                    <img
+                        v-if="orgBranding?.logo_url"
+                        :src="orgBranding.logo_url"
+                        :alt="orgBranding.name"
+                        class="size-10 object-contain"
+                    />
+                    <AppLogoIcon
+                        v-else
+                        class="size-10 fill-current text-primary"
+                    />
                     <span class="sr-only">Accueil</span>
                 </Link>
                 <CardTitle class="text-2xl font-semibold">Connexion</CardTitle>
-                <CardDescription class="text-sm">Eau la maman</CardDescription>
+                <CardDescription class="text-sm">{{
+                    orgBranding?.name ?? 'Eau la maman'
+                }}</CardDescription>
             </CardHeader>
 
             <CardContent
