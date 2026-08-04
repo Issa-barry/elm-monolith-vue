@@ -9,9 +9,6 @@ use App\Enums\StatutFactureVente;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
 use App\Models\FactureVente;
-use App\Models\MouvementStock;
-use App\Models\Produit;
-use App\Models\ProduitStock;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -324,59 +321,21 @@ class CommandeVenteService
      */
     private static function decrementerStock(CommandeVente $commande): void
     {
-        $commande->load('lignes.produit');
+        $commande->load('lignes');
         $userId = Auth::id();
 
         foreach ($commande->lignes as $ligne) {
             $quantite = $ligne->quantite_chargee ?? $ligne->quantite_demandee;
 
-            if ($quantite <= 0) {
-                continue;
-            }
-
-            $dejaTraite = MouvementStock::where('source_type', CommandeVenteLigne::class)
-                ->where('source_id', $ligne->id)
-                ->where('type', 'sortie')
-                ->exists();
-
-            if ($dejaTraite) {
-                continue;
-            }
-
-            // Même convention que ProduitController::ajusterStock() : au tout
-            // premier enregistrement par site pour ce produit, on migre le
-            // stock global existant plutôt que de repartir de 0 (sinon la
-            // création de la ligne « adopte » un stock à 0 et écrase
-            // l'agrégat Produit::qte_stock au recalcul ci-dessous).
-            $aucuneLigneStockSite = ! ProduitStock::where('produit_id', $ligne->produit_id)->exists();
-            $produitStock = ProduitStock::firstOrCreate(
-                ['produit_id' => $ligne->produit_id, 'site_id' => $commande->site_id],
-                [
-                    'organization_id' => $commande->organization_id,
-                    'qte_stock' => $aucuneLigneStockSite ? (int) ($ligne->produit->qte_stock ?? 0) : 0,
-                ]
+            MouvementStockService::sortirStock(
+                produitId: $ligne->produit_id,
+                siteId: $commande->site_id,
+                orgId: $commande->organization_id,
+                quantite: $quantite,
+                sourceType: CommandeVenteLigne::class,
+                sourceId: $ligne->id,
+                userId: $userId,
             );
-
-            $stockAvant = $produitStock->qte_stock;
-            $stockApres = max(0, $stockAvant - $quantite);
-
-            $produitStock->update(['qte_stock' => $stockApres]);
-
-            $totalStock = ProduitStock::where('produit_id', $ligne->produit_id)->sum('qte_stock');
-            Produit::whereKey($ligne->produit_id)->update(['qte_stock' => $totalStock]);
-
-            MouvementStock::create([
-                'organization_id' => $commande->organization_id,
-                'site_id' => $commande->site_id,
-                'produit_id' => $ligne->produit_id,
-                'type' => 'sortie',
-                'quantite' => $quantite,
-                'stock_avant' => $stockAvant,
-                'stock_apres' => $stockApres,
-                'source_type' => CommandeVenteLigne::class,
-                'source_id' => $ligne->id,
-                'created_by' => $userId,
-            ]);
         }
     }
 

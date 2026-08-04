@@ -4,6 +4,7 @@ use App\Http\Controllers\ImportFlotteController;
 use App\Http\Controllers\Settings\DepenseParametrageController;
 use App\Http\Controllers\Settings\DepenseTypeController;
 use App\Http\Controllers\Settings\ModuleController;
+use App\Http\Controllers\Settings\OrganisationController;
 use App\Http\Controllers\Settings\ParametreController;
 use App\Http\Controllers\Settings\PasswordController;
 use App\Http\Controllers\Settings\ProfileController;
@@ -32,6 +33,9 @@ Route::middleware('auth')->group(function () {
 
     Route::get('settings/two-factor', [TwoFactorAuthenticationController::class, 'show'])
         ->name('two-factor.show');
+
+    Route::get('settings/organisation', [OrganisationController::class, 'edit'])->name('organisation.edit');
+    Route::put('settings/organisation', [OrganisationController::class, 'update'])->name('organisation.update');
 
     Route::get('settings/parametres', [ParametreController::class, 'edit'])->name('parametres.edit');
     Route::get('settings/parametres/templates/{template}', [ParametreController::class, 'downloadTemplate'])

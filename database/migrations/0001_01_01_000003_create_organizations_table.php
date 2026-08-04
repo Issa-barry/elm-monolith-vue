@@ -12,7 +12,9 @@ return new class extends Migration
             $table->ulid('id')->primary();
             $table->string('name');
             $table->string('slug')->unique();
+            $table->string('code', 20)->unique();
             $table->char('siret', 14)->nullable()->unique();
+            $table->string('logo_path')->nullable();
             $table->boolean('is_active')->default(true);
             $table->timestamps();
             $table->softDeletes();
