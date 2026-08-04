@@ -90,8 +90,7 @@ function submit() {
                 <form class="space-y-6" @submit.prevent="submit">
                     <div class="grid gap-2">
                         <Label for="name"
-                            >Nom
-                            <span class="text-destructive">*</span></Label
+                            >Nom <span class="text-destructive">*</span></Label
                         >
                         <Input
                             id="name"
@@ -111,10 +110,7 @@ function submit() {
                             class="mt-1 block w-full max-w-md"
                             placeholder="SIRET (optionnel)"
                         />
-                        <InputError
-                            class="mt-2"
-                            :message="form.errors.siret"
-                        />
+                        <InputError class="mt-2" :message="form.errors.siret" />
                     </div>
 
                     <div class="grid gap-2">
@@ -170,9 +166,9 @@ function submit() {
                             </Button>
                         </div>
                         <p class="text-xs text-muted-foreground">
-                            À partager aux utilisateurs de cette organisation
-                            — affiche directement son logo et son nom sur
-                            l'écran de connexion.
+                            À partager aux utilisateurs de cette organisation —
+                            affiche directement son logo et son nom sur l'écran
+                            de connexion.
                         </p>
                     </div>
 
@@ -236,9 +232,7 @@ function submit() {
                     </div>
 
                     <div class="flex items-center gap-4">
-                        <Button :disabled="form.processing"
-                            >Enregistrer</Button
-                        >
+                        <Button :disabled="form.processing">Enregistrer</Button>
                         <Transition
                             enter-active-class="transition ease-in-out"
                             enter-from-class="opacity-0"
