@@ -2,6 +2,7 @@
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
+import { useVehiculeCommandeTarification } from '@/composables/useVehiculeCommandeTarification';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
@@ -156,22 +157,14 @@ function applyVehiculeCapacityOnSingleLine(vehicule: VehiculeOption | null) {
     form.lignes[0].total = computeLigneTotal(form.lignes[0]);
 }
 
-// ── Mode de tarification (montant à encaisser par l'usine) ────────────────────
-// Cf. Ventes/Create.vue — miroir d'affichage, la source de vérité est
-// CommandeVenteController::resolveModeTarification côté serveur.
-const modeTarification = computed<'prix_vente' | 'prix_usine'>(() => {
-    if (form.vehicule_id === null) return 'prix_vente';
-    const v = props.vehicules.find((veh) => veh.id === form.vehicule_id);
-    return v && !v.pris_en_charge_par_usine ? 'prix_usine' : 'prix_vente';
-});
-
-// ── Éligibilité aux commissions — indépendante du mode de tarification
-// ci-dessus (cf. VehiculeCommandeContextResolver / CommissionGenerator).
-const commissionEligible = computed<boolean>(() => {
-    if (form.vehicule_id === null) return true;
-    const v = props.vehicules.find((veh) => veh.id === form.vehicule_id);
-    return v ? v.commission_eligible : true;
-});
+// ── Mode de tarification & éligibilité aux commissions ────────────────────────
+// Cf. Ventes/Create.vue / useVehiculeCommandeTarification — miroir
+// d'affichage, la source de vérité est VehiculeCommandeContextResolver côté
+// serveur.
+const { modeTarification, commissionEligible } = useVehiculeCommandeTarification(
+    () => props.vehicules,
+    () => form.vehicule_id,
+);
 
 // ── Libellés de prix — explicites (prix vente vs prix usine) ──────────────────
 // Le prix unitaire AFFICHÉ doit être celui réellement utilisé dans le calcul

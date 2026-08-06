@@ -13,6 +13,7 @@ use App\Models\Site;
 use App\Models\Vehicule;
 use App\Services\CommissionGenerator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
@@ -114,66 +115,43 @@ class CommandeVenteCommissionEligibiliteTest extends TestCase
     }
 
     // ── Les 4 combinaisons ────────────────────────────────────────────────────
+    // CommissionCalculator base son calcul sur prix_vente_snapshot -
+    // prix_usine_snapshot (marge), indépendamment du mode de tarification
+    // effectivement encaissé : (5000-3500) × 100 = 150 000.
 
-    public function test_pris_en_charge_oui_et_commission_eligible_oui(): void
-    {
+    #[DataProvider('combinaisonsProvider')]
+    public function test_les_4_combinaisons_pris_en_charge_et_commission_eligible(
+        bool $prisEnChargeParUsine,
+        bool $commissionEligible,
+        string $modeTarificationAttendu,
+    ): void {
         $produit = $this->makeProduit();
-        $vehicule = $this->makeVehicule(prisEnChargeParUsine: true, commissionEligible: true);
+        $vehicule = $this->makeVehicule($prisEnChargeParUsine, $commissionEligible);
         $this->attacherEquipe($vehicule);
 
         $commande = $this->creerCommande($vehicule, $produit);
 
-        $this->assertSame('prix_vente', $commande->mode_tarification_snapshot->value);
-        $this->assertTrue((bool) $commande->commission_eligible_snapshot);
-        $this->assertDatabaseHas('commissions_ventes', [
-            'commande_vente_id' => $commande->id,
-            'montant_commission_totale' => 150_000,
-        ]);
+        $this->assertSame($modeTarificationAttendu, $commande->mode_tarification_snapshot->value);
+        $this->assertSame($commissionEligible, (bool) $commande->commission_eligible_snapshot);
+
+        if ($commissionEligible) {
+            $this->assertDatabaseHas('commissions_ventes', [
+                'commande_vente_id' => $commande->id,
+                'montant_commission_totale' => 150_000,
+            ]);
+        } else {
+            $this->assertDatabaseMissing('commissions_ventes', ['commande_vente_id' => $commande->id]);
+        }
     }
 
-    public function test_pris_en_charge_oui_et_commission_eligible_non(): void
+    public static function combinaisonsProvider(): array
     {
-        $produit = $this->makeProduit();
-        $vehicule = $this->makeVehicule(prisEnChargeParUsine: true, commissionEligible: false);
-        $this->attacherEquipe($vehicule);
-
-        $commande = $this->creerCommande($vehicule, $produit);
-
-        $this->assertSame('prix_vente', $commande->mode_tarification_snapshot->value);
-        $this->assertFalse((bool) $commande->commission_eligible_snapshot);
-        $this->assertDatabaseMissing('commissions_ventes', ['commande_vente_id' => $commande->id]);
-    }
-
-    public function test_pris_en_charge_non_et_commission_eligible_oui(): void
-    {
-        $produit = $this->makeProduit();
-        $vehicule = $this->makeVehicule(prisEnChargeParUsine: false, commissionEligible: true);
-        $this->attacherEquipe($vehicule);
-
-        $commande = $this->creerCommande($vehicule, $produit);
-
-        $this->assertSame('prix_usine', $commande->mode_tarification_snapshot->value);
-        $this->assertTrue((bool) $commande->commission_eligible_snapshot);
-        // CommissionCalculator base son calcul sur prix_vente_snapshot -
-        // prix_usine_snapshot (marge), indépendamment du mode de tarification
-        // effectivement encaissé : (5000-3500) × 100 = 150 000.
-        $this->assertDatabaseHas('commissions_ventes', [
-            'commande_vente_id' => $commande->id,
-            'montant_commission_totale' => 150_000,
-        ]);
-    }
-
-    public function test_pris_en_charge_non_et_commission_eligible_non(): void
-    {
-        $produit = $this->makeProduit();
-        $vehicule = $this->makeVehicule(prisEnChargeParUsine: false, commissionEligible: false);
-        $this->attacherEquipe($vehicule);
-
-        $commande = $this->creerCommande($vehicule, $produit);
-
-        $this->assertSame('prix_usine', $commande->mode_tarification_snapshot->value);
-        $this->assertFalse((bool) $commande->commission_eligible_snapshot);
-        $this->assertDatabaseMissing('commissions_ventes', ['commande_vente_id' => $commande->id]);
+        return [
+            'pris en charge + éligible' => [true, true, 'prix_vente'],
+            'pris en charge + non éligible' => [true, false, 'prix_vente'],
+            'non pris en charge + éligible' => [false, true, 'prix_usine'],
+            'non pris en charge + non éligible' => [false, false, 'prix_usine'],
+        ];
     }
 
     // ── Immutabilité du snapshot ──────────────────────────────────────────────

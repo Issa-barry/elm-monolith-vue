@@ -14,6 +14,7 @@ use App\Models\Site;
 use App\Models\User;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\TestCase;
 
@@ -238,17 +239,24 @@ class PdvCheckoutTest extends TestCase
 
     // ── Snapshots mode_tarification / commission_eligible ────────────────────
     // Les deux notions sont indépendantes — voir VehiculeCommandeContextResolver.
-    // Testées ici via le même chemin HTTP que le reste de la classe.
-
-    public function test_checkout_mode_livreur_snapshot_pris_en_charge_et_commission_eligible(): void
-    {
+    // Testées ici via le même chemin HTTP que le reste de la classe, sur 3 des
+    // 4 combinaisons possibles (la 4e — deux "non" — est couverte côté
+    // CommandeVenteCommissionEligibiliteTest) pour prouver que le mode de
+    // tarification et l'éligibilité aux commissions ne sont jamais dérivés
+    // l'un de l'autre, y compris sur le chemin PDV.
+    #[DataProvider('prisEnChargeEtCommissionEligibleProvider')]
+    public function test_checkout_mode_livreur_snapshot_reflete_le_vehicule(
+        bool $prisEnChargeParUsine,
+        bool $commissionEligible,
+        string $modeTarificationAttendu,
+    ): void {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
             'capacite_packs' => 10,
-            'pris_en_charge_par_usine' => true,
-            'commission_eligible' => true,
+            'pris_en_charge_par_usine' => $prisEnChargeParUsine,
+            'commission_eligible' => $commissionEligible,
         ]);
 
         $this->actingAs($this->user)
@@ -260,62 +268,17 @@ class PdvCheckoutTest extends TestCase
             ->assertRedirect();
 
         $commande = CommandeVente::where('vehicule_id', $vehicule->id)->latest()->first();
-        $this->assertSame('prix_vente', $commande->mode_tarification_snapshot->value);
-        $this->assertTrue((bool) $commande->commission_eligible_snapshot);
+        $this->assertSame($modeTarificationAttendu, $commande->mode_tarification_snapshot->value);
+        $this->assertSame($commissionEligible, (bool) $commande->commission_eligible_snapshot);
     }
 
-    /**
-     * Combinaison où les deux notions divergent : véhicule pris en charge par
-     * l'usine (donc prix_vente) mais non éligible aux commissions. Prouve que
-     * le mode de tarification et l'éligibilité aux commissions ne sont plus
-     * dérivés l'un de l'autre, y compris sur le chemin PDV.
-     */
-    public function test_checkout_mode_livreur_snapshot_pris_en_charge_mais_non_eligible_commission(): void
+    public static function prisEnChargeEtCommissionEligibleProvider(): array
     {
-        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
-        $vehicule = Vehicule::factory()->create([
-            'organization_id' => $this->org->id,
-            'proprietaire_id' => $proprietaire->id,
-            'capacite_packs' => 10,
-            'pris_en_charge_par_usine' => true,
-            'commission_eligible' => false,
-        ]);
-
-        $this->actingAs($this->user)
-            ->post('/backoffice/pdv/checkout', [
-                'mode' => 'Livreur',
-                'vehicule_id' => $vehicule->id,
-                'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 1]],
-            ])
-            ->assertRedirect();
-
-        $commande = CommandeVente::where('vehicule_id', $vehicule->id)->latest()->first();
-        $this->assertSame('prix_vente', $commande->mode_tarification_snapshot->value);
-        $this->assertFalse((bool) $commande->commission_eligible_snapshot);
-    }
-
-    public function test_checkout_mode_livreur_snapshot_non_pris_en_charge_mais_eligible_commission(): void
-    {
-        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
-        $vehicule = Vehicule::factory()->create([
-            'organization_id' => $this->org->id,
-            'proprietaire_id' => $proprietaire->id,
-            'capacite_packs' => 10,
-            'pris_en_charge_par_usine' => false,
-            'commission_eligible' => true,
-        ]);
-
-        $this->actingAs($this->user)
-            ->post('/backoffice/pdv/checkout', [
-                'mode' => 'Livreur',
-                'vehicule_id' => $vehicule->id,
-                'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 1]],
-            ])
-            ->assertRedirect();
-
-        $commande = CommandeVente::where('vehicule_id', $vehicule->id)->latest()->first();
-        $this->assertSame('prix_usine', $commande->mode_tarification_snapshot->value);
-        $this->assertTrue((bool) $commande->commission_eligible_snapshot);
+        return [
+            'pris en charge + éligible' => [true, true, 'prix_vente'],
+            'pris en charge + non éligible' => [true, false, 'prix_vente'],
+            'non pris en charge + éligible' => [false, true, 'prix_usine'],
+        ];
     }
 
     // ── Validation stock ──────────────────────────────────────────────────────

@@ -3,6 +3,7 @@ import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
+import { useVehiculeCommandeTarification } from '@/composables/useVehiculeCommandeTarification';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
@@ -175,26 +176,15 @@ function applyVehiculeCapacityOnSingleLine(vehicule: VehiculeOption | null) {
     form.lignes[0].total = computeLigneTotal(form.lignes[0]);
 }
 
-// ── Mode de tarification (montant à encaisser par l'usine) ────────────────────
-// Un véhicule non pris en charge par l'usine ne fait remonter que le prix
-// usine à l'usine : la marge (prix_vente - prix_usine) reste à l'exploitant
-// externe. Notion indépendante de l'éligibilité aux commissions (cf.
-// commissionEligible ci-dessous) — ne pas re-coupler les deux. Source de
-// vérité côté serveur (VehiculeCommandeContextResolver) — ce calcul n'est
-// qu'un miroir d'affichage.
-const modeTarification = computed<'prix_vente' | 'prix_usine'>(() => {
-    if (form.vehicule_id === null) return 'prix_vente';
-    const v = props.vehicules.find((veh) => veh.id === form.vehicule_id);
-    return v && !v.pris_en_charge_par_usine ? 'prix_usine' : 'prix_vente';
-});
-
-// ── Éligibilité aux commissions — indépendante du mode de tarification
-// ci-dessus (cf. VehiculeCommandeContextResolver / CommissionGenerator).
-const commissionEligible = computed<boolean>(() => {
-    if (form.vehicule_id === null) return true;
-    const v = props.vehicules.find((veh) => veh.id === form.vehicule_id);
-    return v ? v.commission_eligible : true;
-});
+// ── Mode de tarification (montant à encaisser par l'usine) & éligibilité aux
+// commissions — deux notions indépendantes, jamais recalculées l'une à
+// partir de l'autre (cf. useVehiculeCommandeTarification). Source de vérité
+// côté serveur : VehiculeCommandeContextResolver — ce composable n'est qu'un
+// miroir d'affichage.
+const { modeTarification, commissionEligible } = useVehiculeCommandeTarification(
+    () => props.vehicules,
+    () => form.vehicule_id,
+);
 
 function produitPrixUsine(produitId: number | null): number {
     if (produitId === null) return 0;
