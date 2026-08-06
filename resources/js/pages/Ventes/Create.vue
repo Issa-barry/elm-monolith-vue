@@ -66,6 +66,7 @@ interface VehiculeOption {
     immatriculation: string;
     capacite_packs: number | null;
     pris_en_charge_par_usine: boolean;
+    commission_eligible: boolean;
     livreur_nom: string | null;
     livreur_telephone: string | null;
 }
@@ -177,13 +178,22 @@ function applyVehiculeCapacityOnSingleLine(vehicule: VehiculeOption | null) {
 // ── Mode de tarification (montant à encaisser par l'usine) ────────────────────
 // Un véhicule non pris en charge par l'usine ne fait remonter que le prix
 // usine à l'usine : la marge (prix_vente - prix_usine) reste à l'exploitant
-// externe et n'est ni encaissée ni commissionnée par l'usine. Source de
-// vérité côté serveur (CommandeVenteController::resolveModeTarification) —
-// ce calcul n'est qu'un miroir d'affichage.
+// externe. Notion indépendante de l'éligibilité aux commissions (cf.
+// commissionEligible ci-dessous) — ne pas re-coupler les deux. Source de
+// vérité côté serveur (VehiculeCommandeContextResolver) — ce calcul n'est
+// qu'un miroir d'affichage.
 const modeTarification = computed<'prix_vente' | 'prix_usine'>(() => {
     if (form.vehicule_id === null) return 'prix_vente';
     const v = props.vehicules.find((veh) => veh.id === form.vehicule_id);
     return v && !v.pris_en_charge_par_usine ? 'prix_usine' : 'prix_vente';
+});
+
+// ── Éligibilité aux commissions — indépendante du mode de tarification
+// ci-dessus (cf. VehiculeCommandeContextResolver / CommissionGenerator).
+const commissionEligible = computed<boolean>(() => {
+    if (form.vehicule_id === null) return true;
+    const v = props.vehicules.find((veh) => veh.id === form.vehicule_id);
+    return v ? v.commission_eligible : true;
 });
 
 function produitPrixUsine(produitId: number | null): number {
@@ -1236,7 +1246,21 @@ function confirmerEtCreer() {
                             Prix appliqué : Prix usine
                             <Info
                                 v-tooltip.top="
-                                    'L\'usine encaisse uniquement le prix usine. Aucune commission usine n\'est générée.'
+                                    'L\'usine encaisse uniquement le prix usine (marge non répercutée).'
+                                "
+                                class="h-3.5 w-3.5 cursor-help"
+                            />
+                        </span>
+                        <span
+                            v-if="
+                                form.vehicule_id !== null && !commissionEligible
+                            "
+                            class="inline-flex items-center gap-1 font-medium text-amber-600 dark:text-amber-400"
+                        >
+                            Aucune commission ne sera générée
+                            <Info
+                                v-tooltip.top="
+                                    'Ce véhicule n\'est pas éligible aux commissions (indépendamment du mode de tarification).'
                                 "
                                 class="h-3.5 w-3.5 cursor-help"
                             />

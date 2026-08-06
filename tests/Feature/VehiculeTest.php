@@ -142,6 +142,7 @@ class VehiculeTest extends TestCase
                 'capacite_packs' => 200,
                 'is_active' => true,
                 'pris_en_charge_par_usine' => false,
+                'commission_eligible' => true,
             ]);
 
         $vehicule = Vehicule::query()
@@ -172,6 +173,7 @@ class VehiculeTest extends TestCase
                 'capacite_packs' => 50,
                 'is_active' => true,
                 'pris_en_charge_par_usine' => false,
+                'commission_eligible' => true,
             ]);
 
         $vehicule = Vehicule::query()
@@ -203,6 +205,7 @@ class VehiculeTest extends TestCase
                 'categorie' => 'externe',
                 'proprietaire_id' => $proprietaire->id,
                 'pris_en_charge_par_usine' => false,
+                'commission_eligible' => true,
             ])
             ->assertSessionHasErrors('site_id');
     }
@@ -224,6 +227,7 @@ class VehiculeTest extends TestCase
                 'categorie' => 'interne',
                 'site_id' => $otherSite->id,
                 'pris_en_charge_par_usine' => true,
+                'commission_eligible' => true,
             ])
             ->assertSessionHasErrors('site_id');
     }
@@ -232,7 +236,7 @@ class VehiculeTest extends TestCase
     {
         $this->actingAs($this->user)
             ->post(route('vehicules.store'), [])
-            ->assertSessionHasErrors(['nom_vehicule', 'immatriculation', 'type_vehicule_id', 'categorie', 'site_id', 'pris_en_charge_par_usine']);
+            ->assertSessionHasErrors(['nom_vehicule', 'immatriculation', 'type_vehicule_id', 'categorie', 'site_id', 'pris_en_charge_par_usine', 'commission_eligible']);
     }
 
     public function test_store_fails_sans_pris_en_charge_par_usine(): void
@@ -246,8 +250,27 @@ class VehiculeTest extends TestCase
                 'type_vehicule_id' => $this->typeId(),
                 'categorie' => 'externe',
                 'proprietaire_id' => $proprietaire->id,
+                'commission_eligible' => true,
             ])
             ->assertSessionHasErrors('pris_en_charge_par_usine');
+    }
+
+    public function test_store_fails_sans_commission_eligible(): void
+    {
+        // commission_eligible est totalement indépendant de
+        // pris_en_charge_par_usine : validé et requis séparément.
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Camion Sans Eligibilite',
+                'immatriculation' => 'RC-054-GN',
+                'type_vehicule_id' => $this->typeId(),
+                'categorie' => 'externe',
+                'proprietaire_id' => $proprietaire->id,
+                'pris_en_charge_par_usine' => true,
+            ])
+            ->assertSessionHasErrors('commission_eligible');
     }
 
     public function test_store_creates_vehicule_avec_pris_en_charge_oui(): void
@@ -264,6 +287,7 @@ class VehiculeTest extends TestCase
                 'proprietaire_id' => $proprietaire->id,
                 'site_id' => $site->id,
                 'pris_en_charge_par_usine' => true,
+                'commission_eligible' => true,
             ])
             ->assertSessionHasNoErrors();
 
@@ -287,12 +311,69 @@ class VehiculeTest extends TestCase
                 'proprietaire_id' => $proprietaire->id,
                 'site_id' => $site->id,
                 'pris_en_charge_par_usine' => false,
+                'commission_eligible' => true,
             ])
             ->assertSessionHasNoErrors();
 
         $this->assertDatabaseHas('vehicules', [
             'immatriculation' => 'RC-052-GN',
             'pris_en_charge_par_usine' => false,
+        ]);
+    }
+
+    /**
+     * Les deux notions sont indépendantes : les 4 combinaisons doivent être
+     * acceptées — ici pris_en_charge_par_usine=true mais commission_eligible=false
+     * (usine encaisse le plein prix, mais ce véhicule ne génère aucune commission).
+     */
+    public function test_store_accepte_pris_en_charge_oui_et_commission_eligible_non(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $site = $this->user->sites()->first();
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Camion Charge Sans Commission',
+                'immatriculation' => 'RC-055-GN',
+                'type_vehicule_id' => $this->typeId(),
+                'categorie' => 'externe',
+                'proprietaire_id' => $proprietaire->id,
+                'site_id' => $site->id,
+                'pris_en_charge_par_usine' => true,
+                'commission_eligible' => false,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('vehicules', [
+            'immatriculation' => 'RC-055-GN',
+            'pris_en_charge_par_usine' => true,
+            'commission_eligible' => false,
+        ]);
+    }
+
+    /** Combinaison inverse : non pris en charge, mais éligible aux commissions. */
+    public function test_store_accepte_pris_en_charge_non_et_commission_eligible_oui(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $site = $this->user->sites()->first();
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Camion Commission Sans Charge',
+                'immatriculation' => 'RC-056-GN',
+                'type_vehicule_id' => $this->typeId(),
+                'categorie' => 'externe',
+                'proprietaire_id' => $proprietaire->id,
+                'site_id' => $site->id,
+                'pris_en_charge_par_usine' => false,
+                'commission_eligible' => true,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('vehicules', [
+            'immatriculation' => 'RC-056-GN',
+            'pris_en_charge_par_usine' => false,
+            'commission_eligible' => true,
         ]);
     }
 
@@ -308,12 +389,40 @@ class VehiculeTest extends TestCase
                 'categorie' => 'interne',
                 'site_id' => $site->id,
                 'pris_en_charge_par_usine' => false, // ignoré par le backend
+                'commission_eligible' => true,
             ])
             ->assertSessionHasNoErrors();
 
         $this->assertDatabaseHas('vehicules', [
             'immatriculation' => 'TC-053-GN',
             'pris_en_charge_par_usine' => true,
+        ]);
+    }
+
+    /**
+     * Contrairement à pris_en_charge_par_usine, commission_eligible n'est
+     * jamais forcé par la catégorie interne — reste la valeur soumise.
+     */
+    public function test_store_vehicule_interne_ne_force_pas_commission_eligible(): void
+    {
+        $site = $this->user->sites()->first();
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Interne Sans Commission',
+                'immatriculation' => 'TC-057-GN',
+                'type_vehicule_id' => $this->typeId(),
+                'categorie' => 'interne',
+                'site_id' => $site->id,
+                'pris_en_charge_par_usine' => false,
+                'commission_eligible' => false,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('vehicules', [
+            'immatriculation' => 'TC-057-GN',
+            'pris_en_charge_par_usine' => true,
+            'commission_eligible' => false,
         ]);
     }
 
@@ -376,6 +485,7 @@ class VehiculeTest extends TestCase
                 'proprietaire_id' => $proprietaire->id,
                 'site_id' => $site->id,
                 'pris_en_charge_par_usine' => false,
+                'commission_eligible' => true,
             ])
             ->assertSessionHasNoErrors();
 
@@ -406,6 +516,7 @@ class VehiculeTest extends TestCase
                 'proprietaire_id' => $proprietaire->id,
                 'site_id' => $otherSite->id,
                 'pris_en_charge_par_usine' => false,
+                'commission_eligible' => true,
             ])
             ->assertStatus(403);
 
@@ -427,6 +538,7 @@ class VehiculeTest extends TestCase
                 'proprietaire_id' => $proprietaire->id,
                 'site_id' => $ownSite->id,
                 'pris_en_charge_par_usine' => false,
+                'commission_eligible' => true,
             ])
             ->assertSessionHasNoErrors();
 
@@ -474,6 +586,7 @@ class VehiculeTest extends TestCase
                 'site_id' => $vehicule->site_id,
                 'is_active' => true,
                 'pris_en_charge_par_usine' => false,
+                'commission_eligible' => true,
             ])
             ->assertRedirect(route('vehicules.edit', $vehicule));
 
@@ -490,7 +603,7 @@ class VehiculeTest extends TestCase
 
         $this->actingAs($this->user)
             ->put(route('vehicules.update', $vehicule), [])
-            ->assertSessionHasErrors(['nom_vehicule', 'immatriculation', 'type_vehicule_id', 'categorie', 'site_id', 'pris_en_charge_par_usine']);
+            ->assertSessionHasErrors(['nom_vehicule', 'immatriculation', 'type_vehicule_id', 'categorie', 'site_id', 'pris_en_charge_par_usine', 'commission_eligible']);
     }
 
     public function test_update_modifie_pris_en_charge(): void
@@ -507,12 +620,41 @@ class VehiculeTest extends TestCase
                 'proprietaire_id' => $vehicule->proprietaire_id,
                 'site_id' => $vehicule->site_id,
                 'pris_en_charge_par_usine' => true,
+                'commission_eligible' => true,
             ])
             ->assertRedirect(route('vehicules.edit', $vehicule));
 
         $this->assertDatabaseHas('vehicules', [
             'id' => $vehicule->id,
             'pris_en_charge_par_usine' => true,
+        ]);
+    }
+
+    public function test_update_modifie_commission_eligible_independamment(): void
+    {
+        // commission_eligible peut changer sans toucher pris_en_charge_par_usine,
+        // et inversement — les deux colonnes ne sont jamais recalculées l'une
+        // à partir de l'autre côté backend.
+        $vehicule = $this->makeVehicule($this->org);
+        $vehicule->update(['pris_en_charge_par_usine' => true, 'commission_eligible' => true]);
+
+        $this->actingAs($this->user)
+            ->put(route('vehicules.update', $vehicule), [
+                'nom_vehicule' => $vehicule->nom_vehicule,
+                'immatriculation' => $vehicule->immatriculation,
+                'type_vehicule_id' => $vehicule->type_vehicule_id,
+                'categorie' => $vehicule->categorie,
+                'proprietaire_id' => $vehicule->proprietaire_id,
+                'site_id' => $vehicule->site_id,
+                'pris_en_charge_par_usine' => true,
+                'commission_eligible' => false,
+            ])
+            ->assertRedirect(route('vehicules.edit', $vehicule));
+
+        $this->assertDatabaseHas('vehicules', [
+            'id' => $vehicule->id,
+            'pris_en_charge_par_usine' => true,
+            'commission_eligible' => false,
         ]);
     }
 
@@ -527,9 +669,27 @@ class VehiculeTest extends TestCase
                 'type_vehicule_id' => $vehicule->type_vehicule_id,
                 'categorie' => $vehicule->categorie,
                 'proprietaire_id' => $vehicule->proprietaire_id,
+                'commission_eligible' => true,
                 // pris_en_charge_par_usine absent
             ])
             ->assertSessionHasErrors('pris_en_charge_par_usine');
+    }
+
+    public function test_update_fails_sans_commission_eligible(): void
+    {
+        $vehicule = $this->makeVehicule($this->org);
+
+        $this->actingAs($this->user)
+            ->put(route('vehicules.update', $vehicule), [
+                'nom_vehicule' => $vehicule->nom_vehicule,
+                'immatriculation' => $vehicule->immatriculation,
+                'type_vehicule_id' => $vehicule->type_vehicule_id,
+                'categorie' => $vehicule->categorie,
+                'proprietaire_id' => $vehicule->proprietaire_id,
+                'pris_en_charge_par_usine' => true,
+                // commission_eligible absent
+            ])
+            ->assertSessionHasErrors('commission_eligible');
     }
 
     public function test_update_autorise_meme_categorie_et_immatriculation(): void
@@ -546,6 +706,7 @@ class VehiculeTest extends TestCase
                 'site_id' => $vehicule->site_id,
                 'is_active' => true,
                 'pris_en_charge_par_usine' => false,
+                'commission_eligible' => true,
             ])
             ->assertRedirect(route('vehicules.edit', $vehicule));
     }
@@ -571,6 +732,7 @@ class VehiculeTest extends TestCase
                 'proprietaire_id' => $vehicule->proprietaire_id,
                 'site_id' => $otherSite->id,
                 'pris_en_charge_par_usine' => false,
+                'commission_eligible' => true,
             ])
             ->assertStatus(403);
 
@@ -678,6 +840,7 @@ class VehiculeTest extends TestCase
                 'capacite_packs' => 50,
                 'is_active' => true,
                 'pris_en_charge_par_usine' => false,
+                'commission_eligible' => true,
             ]);
 
         $vehicule = Vehicule::query()
@@ -717,6 +880,7 @@ class VehiculeTest extends TestCase
                 'capacite_packs' => 50,
                 'is_active' => true,
                 'pris_en_charge_par_usine' => false,
+                'commission_eligible' => true,
             ]);
 
         $this->assertDatabaseHas('vehicules', [

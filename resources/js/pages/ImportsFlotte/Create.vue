@@ -114,6 +114,16 @@ function submit() {
                     <strong>livreur_prenom</strong>) — utilisez celui qui vous
                     convient, sans dupliquer l'information.
                 </p>
+                <p class="mt-2 text-sm text-muted-foreground">
+                    <strong>vehicule_pris_en_charge_par_usine</strong>
+                    (dépenses du véhicule prises en charge par l'usine) et
+                    <strong>vehicule_commission_eligible</strong> (le véhicule
+                    génère-t-il une commission sur ses ventes) sont deux
+                    colonnes indépendantes — les 4 combinaisons Oui/Non sont
+                    possibles. <strong>vehicule_commission_eligible</strong>
+                    est facultative : si elle est omise, le véhicule importé
+                    est éligible aux commissions par défaut.
+                </p>
                 <a
                     href="/settings/imports-flotte/modele"
                     class="mt-4 inline-flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"

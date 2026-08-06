@@ -79,6 +79,7 @@ class VehiculeController extends Controller
                 : [],
             'frais_total' => $v->relationLoaded('frais') ? (float) $v->frais->sum('montant') : 0.0,
             'pris_en_charge_par_usine' => $v->pris_en_charge_par_usine,
+            'commission_eligible' => $v->commission_eligible,
             'photo_url' => $v->photo_url,
             'is_active' => $v->is_active,
         ];
@@ -210,6 +211,7 @@ class VehiculeController extends Controller
                 Rule::exists('proprietaires', 'id')->where('organization_id', $orgId),
             ],
             'pris_en_charge_par_usine' => 'required|boolean',
+            'commission_eligible' => 'required|boolean',
             'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
             'is_active' => 'boolean',
         ], $this->messages());
@@ -449,6 +451,7 @@ class VehiculeController extends Controller
                 Rule::exists('proprietaires', 'id')->where('organization_id', $orgId),
             ],
             'pris_en_charge_par_usine' => 'required|boolean',
+            'commission_eligible' => 'required|boolean',
             'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
             'is_active' => 'boolean',
         ], $this->messages());
@@ -604,6 +607,7 @@ class VehiculeController extends Controller
             'photo.mimes' => 'La photo doit être au format jpg, jpeg, png ou webp.',
             'photo.max' => 'La photo ne peut pas dépasser 3 Mo.',
             'pris_en_charge_par_usine.required' => 'Veuillez indiquer si les dépenses sont prises en charge par l\'usine (Oui ou Non).',
+            'commission_eligible.required' => 'Veuillez indiquer si ce véhicule est éligible aux commissions (Oui ou Non).',
         ];
     }
 }

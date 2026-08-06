@@ -26,6 +26,7 @@ interface VehiculeOption {
     immatriculation: string;
     capacite_packs: number | null;
     pris_en_charge_par_usine: boolean;
+    commission_eligible: boolean;
     livreur_nom: string | null;
 }
 
@@ -162,6 +163,14 @@ const modeTarification = computed<'prix_vente' | 'prix_usine'>(() => {
     if (form.vehicule_id === null) return 'prix_vente';
     const v = props.vehicules.find((veh) => veh.id === form.vehicule_id);
     return v && !v.pris_en_charge_par_usine ? 'prix_usine' : 'prix_vente';
+});
+
+// ── Éligibilité aux commissions — indépendante du mode de tarification
+// ci-dessus (cf. VehiculeCommandeContextResolver / CommissionGenerator).
+const commissionEligible = computed<boolean>(() => {
+    if (form.vehicule_id === null) return true;
+    const v = props.vehicules.find((veh) => veh.id === form.vehicule_id);
+    return v ? v.commission_eligible : true;
 });
 
 // ── Libellés de prix — explicites (prix vente vs prix usine) ──────────────────
@@ -649,8 +658,17 @@ function submit() {
                         Véhicule non pris en charge par l'usine — le montant à
                         encaisser est calculé au <strong>prix usine</strong>
                         (et non au prix de vente affiché ci-dessous). La marge
-                        reste à l'exploitant, aucune commission usine ne sera
-                        générée.
+                        reste à l'exploitant.
+                    </div>
+
+                    <!-- Éligibilité aux commissions : notion indépendante du mode
+                         de tarification ci-dessus. -->
+                    <div
+                        v-if="form.vehicule_id !== null && !commissionEligible"
+                        class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+                    >
+                        Ce véhicule n'est pas éligible aux commissions —
+                        aucune commission ne sera générée pour cette commande.
                     </div>
 
                     <!-- ── Tableau desktop ── -->

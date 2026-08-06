@@ -22,6 +22,10 @@ return new class extends Migration
             // l'usine peut changer plus tard, sans devoir recalculer rétroactivement
             // les commandes déjà passées — voir CommandeVenteService.
             $table->string('mode_tarification_snapshot', 20)->default('prix_vente');
+            // Fige l'éligibilité aux commissions du véhicule au moment de la
+            // création de la commande, indépendamment du mode de tarification
+            // ci-dessus — voir VehiculeCommandeContextResolver et CommissionGenerator.
+            $table->boolean('commission_eligible_snapshot')->default(true);
             $table->string('statut', 30)->default('brouillon');
             $table->timestamp('validated_at')->nullable();
 

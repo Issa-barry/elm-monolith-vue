@@ -31,8 +31,8 @@ class PdvCheckoutService
         }
 
         return DB::transaction(function () use ($data, $user, $siteId) {
-            $mode = $this->resolveModeTarification($data['vehicule_id'] ?? null);
-            [$lignesData, $total, $stockTrackedProduitIds] = $this->buildLignes($data['lignes'], $user->organization_id, (string) $siteId, $mode);
+            $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null);
+            [$lignesData, $total, $stockTrackedProduitIds] = $this->buildLignes($data['lignes'], $user->organization_id, (string) $siteId, $context->modeTarification);
 
             $commande = CommandeVente::create([
                 'organization_id' => $user->organization_id,
@@ -40,7 +40,8 @@ class PdvCheckoutService
                 'vehicule_id' => $data['vehicule_id'] ?? null,
                 'client_id' => $data['client_id'] ?? null,
                 'total_commande' => $total,
-                'mode_tarification_snapshot' => $mode->value,
+                'mode_tarification_snapshot' => $context->modeTarification->value,
+                'commission_eligible_snapshot' => $context->commissionEligible,
                 'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
                 'validated_at' => now(),
                 'created_by' => $user->id,
@@ -91,17 +92,6 @@ class PdvCheckoutService
                 'vehicule_id' => 'Un véhicule est obligatoire pour ce mode de vente.',
             ]);
         }
-    }
-
-    private function resolveModeTarification(?string $vehiculeId): ModeTarification
-    {
-        if (! $vehiculeId) {
-            return ModeTarification::PRIX_VENTE;
-        }
-
-        $vehicule = Vehicule::query()->select(['id', 'pris_en_charge_par_usine'])->find($vehiculeId);
-
-        return ModeTarification::fromPrisEnChargeParUsine($vehicule?->pris_en_charge_par_usine ?? true);
     }
 
     private function validateCapacite(array $data): void

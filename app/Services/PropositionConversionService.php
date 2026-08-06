@@ -56,6 +56,7 @@ class PropositionConversionService
                 'capacite_packs' => $proposition->capacite_packs,
                 'proprietaire_id' => $proprietaire->id,
                 'pris_en_charge_par_usine' => false,
+                'commission_eligible' => true,
                 'photo_path' => $proposition->photo_path,
                 'is_active' => false,
             ]);

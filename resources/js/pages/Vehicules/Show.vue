@@ -86,6 +86,7 @@ interface VehiculeData {
     equipe_id: string | null;
     equipe_membres: EquipeMembre[];
     pris_en_charge_par_usine: boolean;
+    commission_eligible: boolean;
     photo_url: string | null;
     is_active: boolean;
 }
@@ -458,11 +459,28 @@ function formatGNF(val: number): string {
                         </div>
                         <div class="rounded-lg border bg-background p-4">
                             <p class="text-xs text-muted-foreground">
-                                Commission prise en charge par l'usine
+                                Dépenses prises en charge par l'usine
                             </p>
                             <p class="mt-1">
                                 <span
                                     v-if="vehicule.pris_en_charge_par_usine"
+                                    class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700"
+                                    >Oui</span
+                                >
+                                <span
+                                    v-else
+                                    class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+                                    >Non</span
+                                >
+                            </p>
+                        </div>
+                        <div class="rounded-lg border bg-background p-4">
+                            <p class="text-xs text-muted-foreground">
+                                Véhicule éligible aux commissions
+                            </p>
+                            <p class="mt-1">
+                                <span
+                                    v-if="vehicule.commission_eligible"
                                     class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700"
                                     >Oui</span
                                 >

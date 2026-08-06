@@ -26,6 +26,7 @@ class Vehicule extends Model
         'capacite_packs',
         'proprietaire_id',
         'pris_en_charge_par_usine',
+        'commission_eligible',
         'photo_path',
         'is_active',
     ];
@@ -35,6 +36,7 @@ class Vehicule extends Model
         return [
             'is_active' => 'boolean',
             'pris_en_charge_par_usine' => 'boolean',
+            'commission_eligible' => 'boolean',
             'capacite_packs' => 'integer',
         ];
     }
