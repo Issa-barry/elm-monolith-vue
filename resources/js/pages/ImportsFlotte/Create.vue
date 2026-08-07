@@ -121,8 +121,8 @@ function submit() {
                     génère-t-il une commission sur ses ventes) sont deux
                     colonnes indépendantes — les 4 combinaisons Oui/Non sont
                     possibles. <strong>vehicule_commission_eligible</strong>
-                    est facultative : si elle est omise, le véhicule importé
-                    est éligible aux commissions par défaut.
+                    est facultative : si elle est omise, le véhicule importé est
+                    éligible aux commissions par défaut.
                 </p>
                 <a
                     href="/settings/imports-flotte/modele"

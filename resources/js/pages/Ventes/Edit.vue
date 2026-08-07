@@ -161,10 +161,11 @@ function applyVehiculeCapacityOnSingleLine(vehicule: VehiculeOption | null) {
 // Cf. Ventes/Create.vue / useVehiculeCommandeTarification — miroir
 // d'affichage, la source de vérité est VehiculeCommandeContextResolver côté
 // serveur.
-const { modeTarification, commissionEligible } = useVehiculeCommandeTarification(
-    () => props.vehicules,
-    () => form.vehicule_id,
-);
+const { modeTarification, commissionEligible } =
+    useVehiculeCommandeTarification(
+        () => props.vehicules,
+        () => form.vehicule_id,
+    );
 
 // ── Libellés de prix — explicites (prix vente vs prix usine) ──────────────────
 // Le prix unitaire AFFICHÉ doit être celui réellement utilisé dans le calcul
@@ -660,8 +661,8 @@ function submit() {
                         v-if="form.vehicule_id !== null && !commissionEligible"
                         class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
                     >
-                        Ce véhicule n'est pas éligible aux commissions —
-                        aucune commission ne sera générée pour cette commande.
+                        Ce véhicule n'est pas éligible aux commissions — aucune
+                        commission ne sera générée pour cette commande.
                     </div>
 
                     <!-- ── Tableau desktop ── -->

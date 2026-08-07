@@ -181,10 +181,11 @@ function applyVehiculeCapacityOnSingleLine(vehicule: VehiculeOption | null) {
 // partir de l'autre (cf. useVehiculeCommandeTarification). Source de vérité
 // côté serveur : VehiculeCommandeContextResolver — ce composable n'est qu'un
 // miroir d'affichage.
-const { modeTarification, commissionEligible } = useVehiculeCommandeTarification(
-    () => props.vehicules,
-    () => form.vehicule_id,
-);
+const { modeTarification, commissionEligible } =
+    useVehiculeCommandeTarification(
+        () => props.vehicules,
+        () => form.vehicule_id,
+    );
 
 function produitPrixUsine(produitId: number | null): number {
     if (produitId === null) return 0;

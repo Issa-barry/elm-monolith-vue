@@ -32,13 +32,16 @@ export function useVehiculeCommandeTarification<
     });
 
     const modeTarification = computed<'prix_vente' | 'prix_usine'>(() =>
-        selectedVehicule.value && !selectedVehicule.value.pris_en_charge_par_usine
+        selectedVehicule.value &&
+        !selectedVehicule.value.pris_en_charge_par_usine
             ? 'prix_usine'
             : 'prix_vente',
     );
 
     const commissionEligible = computed<boolean>(() =>
-        selectedVehicule.value ? selectedVehicule.value.commission_eligible : true,
+        selectedVehicule.value
+            ? selectedVehicule.value.commission_eligible
+            : true,
     );
 
     return { modeTarification, commissionEligible };
