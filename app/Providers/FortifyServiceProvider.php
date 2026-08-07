@@ -117,8 +117,8 @@ class FortifyServiceProvider extends ServiceProvider
             'status' => $request->session()->get('status'),
         ]));
 
-        Fortify::registerView(function () {
-            abort_unless($this->canRegister(), 404);
+        Fortify::registerView(static function () {
+            abort_unless(self::canRegister(), 404);
 
             return Inertia::render('auth/Register');
         });
@@ -138,7 +138,7 @@ class FortifyServiceProvider extends ServiceProvider
     {
         return [
             'canResetPassword' => Features::enabled(Features::resetPasswords()),
-            'canRegister' => $this->canRegister(),
+            'canRegister' => self::canRegister(),
             'status' => $request->session()->get('status'),
             'orgBranding' => $organisation ? [
                 'name' => $organisation->name,
@@ -176,7 +176,7 @@ class FortifyServiceProvider extends ServiceProvider
      * 2) La feature Fortify registration est active
      * 3) Le flag Pennant module.inscription est actif pour l'organisation publique
      */
-    private function canRegister(): bool
+    private static function canRegister(): bool
     {
         if (! env('WEB_REGISTRATION_ENABLED', true)) {
             return false;
