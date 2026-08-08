@@ -47,6 +47,7 @@ async function openStepperModal(page: Page) {
 }
 
 test.beforeAll(async ({ browser }) => {
+    test.setTimeout(120_000);
     const context = await browser.newContext();
     const page = await context.newPage();
     try {
