@@ -64,14 +64,18 @@ test.beforeAll(async ({ browser }) => {
         const unique = randomDigits(6);
 
         await navigateToFirstSiteVehiclesTab(page);
-        await page.getByTestId('add-site-vehicle-btn').click();
+        await page
+            .getByTestId('add-site-vehicle-btn')
+            .click({ timeout: 10_000 });
         await page.waitForURL(/\/vehicules\/create\?site_id=/, {
             timeout: 15_000,
         });
-        await page.locator('#nom_vehicule').fill(`${E2E_VH_PREFIX}${unique}`);
+        await page
+            .locator('#nom_vehicule')
+            .fill(`${E2E_VH_PREFIX}${unique}`, { timeout: 10_000 });
         await page
             .locator('#immatriculation')
-            .fill(`${SETUP_VH_PREFIX}${unique}`);
+            .fill(`${SETUP_VH_PREFIX}${unique}`, { timeout: 10_000 });
         // Catégorie n'est plus verrouillée par le site (voir Vehicules/Create.vue) :
         // il faut sélectionner explicitement Interne puis un Type.
         await selectOptionFromCombobox(
@@ -83,7 +87,7 @@ test.beforeAll(async ({ browser }) => {
         await page
             .locator('#vehicule-form button[type="submit"]:visible')
             .first()
-            .click();
+            .click({ timeout: 10_000 });
         await page.waitForURL(/\/vehicules\/[a-z0-9]+$/, { timeout: 20_000 });
     } finally {
         await context.close();
