@@ -28,6 +28,7 @@ class CommandeVente extends Model
         'reference',
         'total_commande',
         'mode_tarification_snapshot',
+        'commission_eligible_snapshot',
         'statut',
         'motif_annulation',
         'annulee_at',
@@ -49,6 +50,7 @@ class CommandeVente extends Model
         return [
             'total_commande' => 'decimal:2',
             'mode_tarification_snapshot' => ModeTarification::class,
+            'commission_eligible_snapshot' => 'boolean',
             'statut' => StatutCommandeVente::class,
             'annulee_at' => 'datetime',
             'a_charger_at' => 'datetime',

@@ -53,6 +53,7 @@ const form = useForm({
     site_id: props.default_site_id,
     proprietaire_id: props.initial_proprietaire_id,
     pris_en_charge_par_usine: null as boolean | null,
+    commission_eligible: null as boolean | null,
     photo: null as File | null,
     is_active: true,
 });
@@ -66,7 +67,8 @@ const canSubmit = computed(() => {
         form.nom_vehicule.trim().length > 0 &&
         form.immatriculation.trim().length > 0 &&
         !!form.type_vehicule_id &&
-        form.pris_en_charge_par_usine !== null
+        form.pris_en_charge_par_usine !== null &&
+        form.commission_eligible !== null
     );
 });
 

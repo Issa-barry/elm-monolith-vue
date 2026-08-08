@@ -102,7 +102,7 @@ class FortifyServiceProvider extends ServiceProvider
      */
     private function configureViews(): void
     {
-        Fortify::loginView(fn (Request $request) => Inertia::render('auth/Login', $this->loginProps($request)));
+        Fortify::loginView(fn (Request $request) => Inertia::render('auth/Login', self::loginProps($request)));
 
         Fortify::resetPasswordView(fn (Request $request) => Inertia::render('auth/ResetPassword', [
             'email' => $request->email,
@@ -117,8 +117,8 @@ class FortifyServiceProvider extends ServiceProvider
             'status' => $request->session()->get('status'),
         ]));
 
-        Fortify::registerView(function () {
-            abort_unless($this->canRegister(), 404);
+        Fortify::registerView(static function () {
+            abort_unless(self::canRegister(), 404);
 
             return Inertia::render('auth/Register');
         });
@@ -134,11 +134,11 @@ class FortifyServiceProvider extends ServiceProvider
      * configureLoginByCodeRoute()), qui affiche en plus le logo/nom de
      * l'organisation identifiée par son code avant toute authentification.
      */
-    private function loginProps(Request $request, ?Organization $organisation = null): array
+    private static function loginProps(Request $request, ?Organization $organisation = null): array
     {
         return [
             'canResetPassword' => Features::enabled(Features::resetPasswords()),
-            'canRegister' => $this->canRegister(),
+            'canRegister' => self::canRegister(),
             'status' => $request->session()->get('status'),
             'orgBranding' => $organisation ? [
                 'name' => $organisation->name,
@@ -156,10 +156,16 @@ class FortifyServiceProvider extends ServiceProvider
      */
     private function configureLoginByCodeRoute(): void
     {
+        // static fn (et non fn) : une closure non-static définie dans une méthode
+        // d'instance lie implicitement $this — ici le ServiceProvider, qui porte
+        // le conteneur Laravel entier ($app). route:cache tente alors de
+        // sérialiser tout ce graphe (config, bindings, tous les providers...) et
+        // épuise la mémoire. self::loginProps() est un appel statique résolu à la
+        // compilation, qui ne capture aucun état.
         Route::middleware(['web', 'guest:'.config('fortify.guard')])
-            ->get('login/{organisation:code}', fn (Request $request, Organization $organisation) => Inertia::render(
+            ->get('login/{organisation:code}', static fn (Request $request, Organization $organisation) => Inertia::render(
                 'auth/Login',
-                $this->loginProps($request, $organisation)
+                self::loginProps($request, $organisation)
             ))
             ->name('login.org');
     }
@@ -170,7 +176,7 @@ class FortifyServiceProvider extends ServiceProvider
      * 2) La feature Fortify registration est active
      * 3) Le flag Pennant module.inscription est actif pour l'organisation publique
      */
-    private function canRegister(): bool
+    private static function canRegister(): bool
     {
         if (! env('WEB_REGISTRATION_ENABLED', true)) {
             return false;

@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Enums\ModeTarification;
 use App\Enums\StatutCommission;
 use App\Models\CommandeVente;
 use App\Models\CommissionPart;
@@ -23,10 +22,12 @@ class CommissionGenerator
             return;
         }
 
-        // Véhicule non pris en charge par l'usine : l'usine n'encaisse que son
-        // prix usine (cf. ModeTarification), il n'y a donc aucune marge à
-        // commissionner — la différence reste directement à l'exploitant externe.
-        if ($commande->mode_tarification_snapshot === ModeTarification::PRIX_USINE) {
+        // Éligibilité aux commissions figée au moment de la commande
+        // (commission_eligible_snapshot) — notion indépendante du mode de
+        // tarification (prix_vente/prix_usine, cf. ModeTarification) : un
+        // véhicule peut être pris en charge par l'usine sans être éligible aux
+        // commissions, et inversement. Voir VehiculeCommandeContextResolver.
+        if (! $commande->commission_eligible_snapshot) {
             return;
         }
 

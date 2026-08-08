@@ -79,6 +79,7 @@ class VehiculeController extends Controller
                 : [],
             'frais_total' => $v->relationLoaded('frais') ? (float) $v->frais->sum('montant') : 0.0,
             'pris_en_charge_par_usine' => $v->pris_en_charge_par_usine,
+            'commission_eligible' => $v->commission_eligible,
             'photo_url' => $v->photo_url,
             'is_active' => $v->is_active,
         ];
@@ -186,33 +187,7 @@ class VehiculeController extends Controller
         $orgId = $user->organization_id;
         abort_if(! $orgId, 403, "Votre compte n'est associé à aucune organisation.");
 
-        $data = $request->validate([
-            'nom_vehicule' => 'required|string|max:100',
-            'immatriculation' => [
-                'required', 'string', 'max:20',
-                Rule::unique('vehicules', 'immatriculation')->where('organization_id', $orgId),
-            ],
-            'type_vehicule_id' => [
-                'required', 'string',
-                Rule::exists('type_vehicules', 'id')->where('organization_id', $orgId)->whereNull('deleted_at'),
-            ],
-            'categorie' => ['required', 'in:interne,externe'],
-            'capacite_packs' => 'nullable|integer|min:1|max:99999',
-            // Chaque véhicule (interne ou externe) est rattaché à un site.
-            'site_id' => [
-                'required', 'string',
-                Rule::exists('sites', 'id')->where('organization_id', $orgId),
-            ],
-            'proprietaire_id' => [
-                Rule::requiredIf(fn () => $request->input('categorie') === 'externe'),
-                'nullable',
-                'string',
-                Rule::exists('proprietaires', 'id')->where('organization_id', $orgId),
-            ],
-            'pris_en_charge_par_usine' => 'required|boolean',
-            'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
-            'is_active' => 'boolean',
-        ], $this->messages());
+        $data = $request->validate($this->validationRules($orgId), $this->messages());
 
         // Non-admin : ne peut créer que sur son(ses) propre(s) site(s) — un
         // admin peut choisir n'importe quel site de l'organisation.
@@ -423,35 +398,7 @@ class VehiculeController extends Controller
         $user = auth()->user();
         $orgId = $user->organization_id;
 
-        $data = $request->validate([
-            'nom_vehicule' => 'required|string|max:100',
-            'immatriculation' => [
-                'required', 'string', 'max:20',
-                Rule::unique('vehicules', 'immatriculation')
-                    ->where('organization_id', $orgId)
-                    ->ignore($vehicule->id),
-            ],
-            'type_vehicule_id' => [
-                'required', 'string',
-                Rule::exists('type_vehicules', 'id')->where('organization_id', $orgId)->whereNull('deleted_at'),
-            ],
-            'categorie' => ['required', 'in:interne,externe'],
-            'capacite_packs' => 'nullable|integer|min:1|max:99999',
-            // Chaque véhicule (interne ou externe) est rattaché à un site.
-            'site_id' => [
-                'required', 'string',
-                Rule::exists('sites', 'id')->where('organization_id', $orgId),
-            ],
-            'proprietaire_id' => [
-                Rule::requiredIf(fn () => $request->input('categorie') === 'externe'),
-                'nullable',
-                'string',
-                Rule::exists('proprietaires', 'id')->where('organization_id', $orgId),
-            ],
-            'pris_en_charge_par_usine' => 'required|boolean',
-            'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
-            'is_active' => 'boolean',
-        ], $this->messages());
+        $data = $request->validate($this->validationRules($orgId, $vehicule), $this->messages());
 
         // Non-admin : ne peut affecter le véhicule qu'à son(ses) propre(s)
         // site(s) — un admin peut choisir n'importe quel site de l'organisation.
@@ -586,6 +533,44 @@ class VehiculeController extends Controller
         return $data;
     }
 
+    /**
+     * Règles communes à store() et update() — seule la contrainte d'unicité
+     * de l'immatriculation diffère (ignore() du véhicule courant en édition).
+     */
+    private function validationRules(string $orgId, ?Vehicule $vehicule = null): array
+    {
+        $immatriculationRule = Rule::unique('vehicules', 'immatriculation')->where('organization_id', $orgId);
+        if ($vehicule) {
+            $immatriculationRule = $immatriculationRule->ignore($vehicule->id);
+        }
+
+        return [
+            'nom_vehicule' => 'required|string|max:100',
+            'immatriculation' => ['required', 'string', 'max:20', $immatriculationRule],
+            'type_vehicule_id' => [
+                'required', 'string',
+                Rule::exists('type_vehicules', 'id')->where('organization_id', $orgId)->whereNull('deleted_at'),
+            ],
+            'categorie' => ['required', 'in:interne,externe'],
+            'capacite_packs' => 'nullable|integer|min:1|max:99999',
+            // Chaque véhicule (interne ou externe) est rattaché à un site.
+            'site_id' => [
+                'required', 'string',
+                Rule::exists('sites', 'id')->where('organization_id', $orgId),
+            ],
+            'proprietaire_id' => [
+                Rule::requiredIf(fn () => request()->input('categorie') === 'externe'),
+                'nullable',
+                'string',
+                Rule::exists('proprietaires', 'id')->where('organization_id', $orgId),
+            ],
+            'pris_en_charge_par_usine' => 'required|boolean',
+            'commission_eligible' => 'required|boolean',
+            'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
+            'is_active' => 'boolean',
+        ];
+    }
+
     private function messages(): array
     {
         return [
@@ -604,6 +589,7 @@ class VehiculeController extends Controller
             'photo.mimes' => 'La photo doit être au format jpg, jpeg, png ou webp.',
             'photo.max' => 'La photo ne peut pas dépasser 3 Mo.',
             'pris_en_charge_par_usine.required' => 'Veuillez indiquer si les dépenses sont prises en charge par l\'usine (Oui ou Non).',
+            'commission_eligible.required' => 'Veuillez indiquer si ce véhicule est éligible aux commissions (Oui ou Non).',
         ];
     }
 }

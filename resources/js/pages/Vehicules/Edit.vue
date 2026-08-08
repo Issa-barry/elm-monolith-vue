@@ -32,6 +32,7 @@ interface VehiculeData {
     site_id: string | null;
     proprietaire_id: number | null;
     pris_en_charge_par_usine: boolean | null;
+    commission_eligible: boolean | null;
     photo_url: string | null;
     is_active: boolean;
     equipe_id: number | null;
@@ -70,6 +71,7 @@ const form = useForm({
             ? props.default_proprietaire_id
             : null),
     pris_en_charge_par_usine: props.vehicule.pris_en_charge_par_usine,
+    commission_eligible: props.vehicule.commission_eligible,
     photo: null as File | null,
     is_active: props.vehicule.is_active,
 });
@@ -83,7 +85,8 @@ const canSubmit = computed(() => {
         form.nom_vehicule.trim().length > 0 &&
         form.immatriculation.trim().length > 0 &&
         !!form.type_vehicule_id &&
-        form.pris_en_charge_par_usine !== null
+        form.pris_en_charge_par_usine !== null &&
+        form.commission_eligible !== null
     );
 });
 

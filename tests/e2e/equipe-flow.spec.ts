@@ -47,7 +47,16 @@ async function openStepperModal(page: Page) {
 }
 
 test.beforeAll(async ({ browser }) => {
-    const context = await browser.newContext();
+    test.setTimeout(120_000);
+    // storageState explicite : browser.newContext() n'hérite PAS de
+    // use.storageState (playwright.config.ts) — seule le fixture `page`
+    // automatique le fait. Sans ça, login() ne peut pas court-circuiter sur
+    // une session déjà valide et repasse par tout le flux UI à chaque hook,
+    // ce qui a fait dépasser le timeout du hook en CI (contention sur le
+    // rate limiter de connexion partagé entre tous les fichiers e2e).
+    const context = await browser.newContext({
+        storageState: '.auth/user.json',
+    });
     const page = await context.newPage();
     try {
         await login(page);
@@ -55,14 +64,18 @@ test.beforeAll(async ({ browser }) => {
         const unique = randomDigits(6);
 
         await navigateToFirstSiteVehiclesTab(page);
-        await page.getByTestId('add-site-vehicle-btn').click();
+        await page
+            .getByTestId('add-site-vehicle-btn')
+            .click({ timeout: 10_000 });
         await page.waitForURL(/\/vehicules\/create\?site_id=/, {
             timeout: 15_000,
         });
-        await page.locator('#nom_vehicule').fill(`${E2E_VH_PREFIX}${unique}`);
+        await page
+            .locator('#nom_vehicule')
+            .fill(`${E2E_VH_PREFIX}${unique}`, { timeout: 10_000 });
         await page
             .locator('#immatriculation')
-            .fill(`${SETUP_VH_PREFIX}${unique}`);
+            .fill(`${SETUP_VH_PREFIX}${unique}`, { timeout: 10_000 });
         // Catégorie n'est plus verrouillée par le site (voir Vehicules/Create.vue) :
         // il faut sélectionner explicitement Interne puis un Type.
         await selectOptionFromCombobox(
@@ -71,10 +84,20 @@ test.beforeAll(async ({ browser }) => {
             /interne/i,
         );
         await selectOptionFromCombobox(page, page.locator('#type_vehicule'));
+        // Éligibilité aux commissions : indépendante de la catégorie (contrairement
+        // à "Prise en charge par l'usine", pas d'auto-sélection pour un interne) —
+        // sans ce check le bouton submit reste désactivé indéfiniment (canSubmit
+        // exige commission_eligible !== null), voir vehicule-flow.spec.ts.
+        await page
+            .locator(
+                '#vehicule-form input[type="radio"][name="commission_eligible"]',
+            )
+            .first()
+            .check({ timeout: 10_000 });
         await page
             .locator('#vehicule-form button[type="submit"]:visible')
             .first()
-            .click();
+            .click({ timeout: 10_000 });
         await page.waitForURL(/\/vehicules\/[a-z0-9]+$/, { timeout: 20_000 });
     } finally {
         await context.close();
@@ -88,7 +111,9 @@ test.beforeEach(async ({ page }) => {
 
 test.afterAll(async ({ browser }) => {
     test.setTimeout(90_000);
-    const context = await browser.newContext();
+    const context = await browser.newContext({
+        storageState: '.auth/user.json',
+    });
     const page = await context.newPage();
     try {
         await login(page);
@@ -106,7 +131,9 @@ test.afterAll(async ({ browser }) => {
 
 test.afterEach(async ({ browser }) => {
     try {
-        const context = await browser.newContext();
+        const context = await browser.newContext({
+            storageState: '.auth/user.json',
+        });
         const page = await context.newPage();
         try {
             await login(page);

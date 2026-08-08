@@ -48,6 +48,15 @@ test('login + create vehicule interne via site + verify in site tab + verify glo
     );
     await selectOptionFromCombobox(page, page.locator('#type_vehicule'));
 
+    // Éligibilité aux commissions : indépendante de la catégorie (contrairement
+    // à "Prise en charge par l'usine", pas d'auto-sélection pour un interne).
+    await page
+        .locator(
+            '#vehicule-form input[type="radio"][name="commission_eligible"]',
+        )
+        .first()
+        .check();
+
     await expect(submitBtn).toBeEnabled();
     await submitBtn.click();
 
@@ -269,6 +278,13 @@ test("show — vehicule interne : propriétaire par défaut de l'organisation af
         /interne/i,
     );
     await selectOptionFromCombobox(page, page.locator('#type_vehicule'));
+
+    await page
+        .locator(
+            '#vehicule-form input[type="radio"][name="commission_eligible"]',
+        )
+        .first()
+        .check();
 
     await page.getByTestId('vehicle-form-submit').click();
     await page.waitForURL(/\/vehicules\/[a-z0-9]+$/, { timeout: 15_000 });

@@ -23,6 +23,7 @@ class VehiculeFactory extends Factory
             'proprietaire_id' => Proprietaire::factory()->create(['organization_id' => $org->id])->id,
             'categorie' => 'externe',
             'pris_en_charge_par_usine' => true,
+            'commission_eligible' => true,
             'is_active' => true,
         ];
     }

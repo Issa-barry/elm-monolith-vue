@@ -225,6 +225,10 @@ const mainNavItems = computed((): NavItem[] => {
             items: [
                 { title: 'Tableau de bord', href: '/backoffice/comptabilite' },
                 {
+                    title: 'Besoin de trésorerie',
+                    href: '/backoffice/comptabilite/tresorerie',
+                },
+                {
                     title: 'Commission logistique',
                     href: '/backoffice/comptabilite/commissions/logistique',
                 },

@@ -61,6 +61,8 @@ const props = withDefaults(
         fields: FilterField[];
         /** Masque le sélecteur générique Agence/Site */
         hideAgenceSelector?: boolean;
+        /** Masque le compteur "N résultats" (pages où il n'apporte rien, ex: trésorerie) */
+        hideResultCount?: boolean;
     }>(),
     {
         baseParams: () => ({}),
@@ -68,6 +70,7 @@ const props = withDefaults(
         sites: () => [],
         url: undefined,
         hideAgenceSelector: false,
+        hideResultCount: false,
     },
 );
 
@@ -548,6 +551,7 @@ const hasActiveFilters = computed(
 
         <template #actions>
             <span
+                v-if="!hideResultCount"
                 data-testid="filters-result-count"
                 class="shrink-0 text-xs whitespace-nowrap text-muted-foreground"
             >

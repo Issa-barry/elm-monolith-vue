@@ -259,6 +259,10 @@ class ImportFlotteParser
         $categorie = ImportTextNormalizer::normalize($categorieSaisie);
         $siteNomSaisi = trim((string) ($ligneVehicule['vehicule_site'] ?? ''));
         $prisEnChargeParUsine = $this->toBool($ligneVehicule['vehicule_pris_en_charge_par_usine'] ?? null) ?? false;
+        // Indépendant de vehicule_pris_en_charge_par_usine — colonne facultative :
+        // repli sur "éligible" (comportement par défaut, cf. migration vehicules)
+        // si absente du fichier, pour ne pas casser d'anciens fichiers d'import.
+        $commissionEligible = $this->toBool($ligneVehicule['vehicule_commission_eligible'] ?? null) ?? true;
 
         if ($nomVehicule === '') {
             $erreurs[] = 'Nom du véhicule manquant.';
@@ -376,6 +380,7 @@ class ImportFlotteParser
                 'categorie' => $categorie,
                 'site_id' => $site?->id,
                 'pris_en_charge_par_usine' => $prisEnChargeParUsine,
+                'commission_eligible' => $commissionEligible,
             ],
             // Pas d'équipe du tout (ni existante, ni à créer) pour un nouveau
             // véhicule sans aucun livreur dans le fichier : la création du

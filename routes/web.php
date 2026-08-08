@@ -17,6 +17,7 @@ use App\Http\Controllers\CommissionLogistiqueController;
 use App\Http\Controllers\CommissionPaymentController;
 use App\Http\Controllers\CommissionVehiculeController;
 use App\Http\Controllers\CommissionVenteController;
+use App\Http\Controllers\Comptabilite\BesoinTresorerieController;
 use App\Http\Controllers\Comptabilite\CommissionAjustementController;
 use App\Http\Controllers\Comptabilite\CommissionLogistiqueController as ComptabiliteCommissionLogistiqueController;
 use App\Http\Controllers\Comptabilite\CommissionProprietaireController;
@@ -330,6 +331,10 @@ Route::prefix('backoffice')->group(function () {
         // ── Module : Comptabilité ─────────────────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::COMPTABILITE)->prefix('comptabilite')->name('comptabilite.')->group(function () {
             Route::get('/', [ComptabiliteDashboardController::class, 'index'])->name('dashboard');
+
+            // ── Besoin de trésorerie (prévision, par agence) ────────────────────────
+            Route::get('tresorerie', [BesoinTresorerieController::class, 'index'])->name('tresorerie.index');
+            Route::get('tresorerie/{site}', [BesoinTresorerieController::class, 'show'])->name('tresorerie.show');
 
             Route::get('fiches/livreurs', [PaiementFicheController::class, 'indexLivreurs'])->name('fiches.livreurs');
             Route::get('fiches/proprietaires', [PaiementFicheController::class, 'indexProprietaires'])->name('fiches.proprietaires');
