@@ -22,6 +22,10 @@ return new class extends Migration
             $table->integer('capacite_packs')->nullable();
             $table->foreignUlid('proprietaire_id')->nullable()->constrained('proprietaires')->restrictOnDelete();
             $table->boolean('pris_en_charge_par_usine')->default(false);
+            // Indépendant de pris_en_charge_par_usine (financier) : détermine si
+            // les ventes réalisées avec ce véhicule génèrent une commission — voir
+            // CommissionGenerator et VehiculeCommandeContextResolver.
+            $table->boolean('commission_eligible')->default(true);
             $table->string('photo_path')->nullable();
             $table->boolean('is_active')->default(true);
             $table->timestamps();

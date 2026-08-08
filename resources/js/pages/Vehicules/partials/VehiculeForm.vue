@@ -41,6 +41,7 @@ interface FormData {
     site_id: string | null;
     proprietaire_id: number | string | null;
     pris_en_charge_par_usine: boolean | null;
+    commission_eligible: boolean | null;
     photo: File | null;
     is_active: boolean;
 }
@@ -163,7 +164,8 @@ const canSubmit = computed(
         props.form.nom_vehicule.trim().length > 0 &&
         props.form.immatriculation.trim().length > 0 &&
         !!props.form.type_vehicule_id &&
-        props.form.pris_en_charge_par_usine !== null,
+        props.form.pris_en_charge_par_usine !== null &&
+        props.form.commission_eligible !== null,
 );
 
 function handleSubmit() {
@@ -557,8 +559,69 @@ function handleSubmit() {
             </template>
         </div>
 
-        <!-- Photo -->
+        <!-- Éligibilité aux commissions — indépendante de la prise en charge
+             par l'usine ci-dessus : les deux notions ne doivent jamais être
+             recalculées l'une à partir de l'autre. -->
         <div class="order-4 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+            <h3
+                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
+            >
+                Véhicule éligible aux commissions ?
+                <span class="text-destructive">*</span>
+            </h3>
+
+            <div class="flex items-center gap-6">
+                <label class="flex cursor-pointer items-center gap-2.5">
+                    <input
+                        type="radio"
+                        name="commission_eligible"
+                        :value="true"
+                        :checked="form.commission_eligible === true"
+                        class="h-4 w-4 accent-primary"
+                        @change="
+                            $emit('update:form', {
+                                ...form,
+                                commission_eligible: true,
+                            })
+                        "
+                    />
+                    <span class="text-sm font-medium">Oui</span>
+                </label>
+
+                <label class="flex cursor-pointer items-center gap-2.5">
+                    <input
+                        type="radio"
+                        name="commission_eligible"
+                        :value="false"
+                        :checked="form.commission_eligible === false"
+                        class="h-4 w-4 accent-primary"
+                        @change="
+                            $emit('update:form', {
+                                ...form,
+                                commission_eligible: false,
+                            })
+                        "
+                    />
+                    <span class="text-sm font-medium">Non</span>
+                </label>
+            </div>
+
+            <p
+                v-if="errors.commission_eligible"
+                class="mt-1.5 text-xs text-destructive"
+            >
+                {{ errors.commission_eligible }}
+            </p>
+            <p
+                v-else-if="form.commission_eligible === null"
+                class="mt-1.5 text-xs text-muted-foreground"
+            >
+                Sélectionnez Oui ou Non.
+            </p>
+        </div>
+
+        <!-- Photo -->
+        <div class="order-5 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
                 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
             >
@@ -618,7 +681,7 @@ function handleSubmit() {
         </div>
 
         <!-- Statut -->
-        <div class="order-5 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+        <div class="order-6 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
                 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
             >
@@ -659,7 +722,7 @@ function handleSubmit() {
         </div>
 
         <!-- Pied de page -->
-        <div class="order-6 hidden items-center justify-between sm:flex">
+        <div class="order-7 hidden items-center justify-between sm:flex">
             <a href="/backoffice/vehicules">
                 <Button type="button" variant="outline">Retour</Button>
             </a>
@@ -672,6 +735,6 @@ function handleSubmit() {
                 {{ processing ? 'Enregistrement…' : 'Enregistrer' }}
             </Button>
         </div>
-        <div class="order-7 h-20 sm:hidden" />
+        <div class="order-8 h-20 sm:hidden" />
     </form>
 </template>

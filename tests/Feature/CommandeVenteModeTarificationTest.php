@@ -5,9 +5,6 @@ namespace Tests\Feature;
 use App\Enums\StatutCommandeVente;
 use App\Models\Client;
 use App\Models\CommandeVente;
-use App\Models\EquipeLivraison;
-use App\Models\EquipeLivreur;
-use App\Models\Livreur;
 use App\Models\Produit;
 use App\Models\Proprietaire;
 use App\Models\Site;
@@ -21,9 +18,12 @@ use Tests\TestCase;
 /**
  * Le montant à encaisser par l'usine varie selon que le véhicule assigné est
  * "pris en charge par l'usine" ou non :
- *  - pris en charge  : total = qte × prix_vente, commissions générées normalement.
- *  - non pris en charge : total = qte × prix_usine, aucune commission générée
- *    (la marge reste intégralement à l'exploitant externe).
+ *  - pris en charge  : total = qte × prix_vente.
+ *  - non pris en charge : total = qte × prix_usine.
+ *
+ * Cette notion est indépendante de l'éligibilité aux commissions
+ * (Vehicule::commission_eligible) — voir CommandeVenteCommissionEligibiliteTest
+ * pour les tests de génération de commission et les 4 combinaisons possibles.
  */
 class CommandeVenteModeTarificationTest extends TestCase
 {
@@ -66,35 +66,6 @@ class CommandeVenteModeTarificationTest extends TestCase
             'proprietaire_id' => $proprietaire->id,
             'capacite_packs' => $capacite,
             'pris_en_charge_par_usine' => $prisEnChargeParUsine,
-        ]);
-    }
-
-    /** Équipe à taux 100% (chauffeur + convoyeur + propriétaire), nécessaire pour que CommissionGenerator ne rejette pas la commande. */
-    private function attacherEquipe(Vehicule $vehicule, float $tauxChauffeur = 20.0, float $tauxConvoyeur = 10.0): void
-    {
-        $chauffeur = Livreur::factory()->create(['organization_id' => $this->org->id]);
-        $convoyeur = Livreur::factory()->create(['organization_id' => $this->org->id]);
-
-        $equipe = EquipeLivraison::create([
-            'organization_id' => $this->org->id,
-            'vehicule_id' => $vehicule->id,
-            'nom' => 'Équipe Test',
-            'is_active' => true,
-            'taux_commission_proprietaire' => round(100 - $tauxChauffeur - $tauxConvoyeur, 2),
-        ]);
-        EquipeLivreur::create([
-            'equipe_id' => $equipe->id,
-            'livreur_id' => $chauffeur->id,
-            'taux_commission' => $tauxChauffeur,
-            'role' => 'chauffeur',
-            'ordre' => 0,
-        ]);
-        EquipeLivreur::create([
-            'equipe_id' => $equipe->id,
-            'livreur_id' => $convoyeur->id,
-            'taux_commission' => $tauxConvoyeur,
-            'role' => 'convoyeur',
-            'ordre' => 1,
         ]);
     }
 
@@ -170,53 +141,6 @@ class CommandeVenteModeTarificationTest extends TestCase
 
         $this->assertEquals(50_000.0, (float) $commande->total_commande);
         $this->assertSame('prix_vente', $commande->mode_tarification_snapshot->value);
-    }
-
-    // ── commissions : générées uniquement si pris en charge ──────────────────
-
-    public function test_confirmer_genere_une_commission_quand_vehicule_pris_en_charge(): void
-    {
-        $produit = $this->makeProduit(prixVente: 5000, prixUsine: 3500);
-        $vehicule = $this->makeVehicule(prisEnChargeParUsine: true);
-        $this->attacherEquipe($vehicule);
-
-        $this->actingAs($this->user)
-            ->post(route('ventes.store'), [
-                'vehicule_id' => $vehicule->id,
-                'lignes' => [
-                    ['produit_id' => $produit->id, 'qte' => 100, 'prix_vente' => 5000],
-                ],
-            ])
-            ->assertRedirect();
-
-        $commande = CommandeVente::where('vehicule_id', $vehicule->id)->latest()->first();
-
-        $this->assertDatabaseHas('commissions_ventes', [
-            'commande_vente_id' => $commande->id,
-            'montant_commission_totale' => 150_000,
-        ]);
-    }
-
-    public function test_confirmer_ne_genere_aucune_commission_quand_vehicule_non_pris_en_charge(): void
-    {
-        $produit = $this->makeProduit(prixVente: 5000, prixUsine: 3500);
-        $vehicule = $this->makeVehicule(prisEnChargeParUsine: false);
-        $this->attacherEquipe($vehicule);
-
-        $this->actingAs($this->user)
-            ->post(route('ventes.store'), [
-                'vehicule_id' => $vehicule->id,
-                'lignes' => [
-                    ['produit_id' => $produit->id, 'qte' => 100, 'prix_vente' => 5000],
-                ],
-            ])
-            ->assertRedirect();
-
-        $commande = CommandeVente::where('vehicule_id', $vehicule->id)->latest()->first();
-
-        $this->assertDatabaseMissing('commissions_ventes', [
-            'commande_vente_id' => $commande->id,
-        ]);
     }
 
     // ── validerChargement : recalcul sur quantité réellement chargée ─────────

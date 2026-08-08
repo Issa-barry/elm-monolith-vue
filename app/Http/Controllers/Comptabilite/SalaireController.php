@@ -60,16 +60,7 @@ class SalaireController extends Controller
         $siteIds = ! $isAdmin ? $this->siteScope->accessibleSiteIds($user)->all() : [];
         $filtreSiteIds = $isAdmin ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
 
-        $periode = PaiePeriode::firstOrCreate(
-            ['organization_id' => $orgId, 'mois' => $filtreMois, 'annee' => $filtreAnnee],
-            ['statut' => 'brouillon'],
-        );
-
-        if ($periode->lignes()->count() === 0) {
-            $this->paieCalc->genererLignes($periode);
-            $this->paieCalc->calculerPeriode($periode);
-            $periode->refresh();
-        }
+        $periode = $this->paieCalc->getOrGenererPeriode($orgId, $filtreMois, $filtreAnnee);
 
         $lignes = collect();
 

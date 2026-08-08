@@ -133,6 +133,26 @@ class CommissionLogistiqueService
         });
     }
 
+    /**
+     * Détermine l'agence responsable du financement de la commission logistique
+     * d'un transfert.
+     *
+     * ⚠️ DÉCISION MÉTIER NON TRANCHÉE : un transfert relie deux sites
+     * (site_source_id, site_destination_id) et rien dans les règles actuelles
+     * du projet ne désigne lequel des deux doit financer la commission de
+     * l'équipe qui a effectué le transfert. Cette méthode isole ce choix en un
+     * point unique pour qu'il soit trivial à changer une fois la règle
+     * fonctionnelle confirmée — ne pas dupliquer cette décision ailleurs.
+     *
+     * Choix par défaut retenu ici (à confirmer) : le site source, l'agence de
+     * rattachement du véhicule/équipe qui exécute le transfert et à qui
+     * l'agence de départ doit reverser la commission de sa propre équipe.
+     */
+    public static function resolveSiteResponsable(TransfertLogistique $transfert): ?string
+    {
+        return $transfert->site_source_id;
+    }
+
     // ── Private ───────────────────────────────────────────────────────────────
 
     private static function calculerMontant(string $baseCalcul, float $valeurBase, ?int $quantite): float

@@ -16,6 +16,8 @@ class CommandeVenteFactory extends Factory
             'client_id' => null,
             'reference' => 'CMD-'.now()->format('dmy').'-'.str_pad((string) fake()->unique()->numberBetween(1, 999), 3, '0', STR_PAD_LEFT),
             'total_commande' => fake()->numberBetween(5000, 100000),
+            'mode_tarification_snapshot' => 'prix_vente',
+            'commission_eligible_snapshot' => true,
             'statut' => 'livree',
         ];
     }

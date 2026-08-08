@@ -22,6 +22,7 @@ class ImportFlotteVehiculesSheetExport implements FromArray, WithHeadings, WithT
             'vehicule_categorie',
             'vehicule_site',
             'vehicule_pris_en_charge_par_usine',
+            'vehicule_commission_eligible',
             'proprietaire_nom',
             'proprietaire_prenom',
             'proprietaire_telephone',
@@ -39,7 +40,7 @@ class ImportFlotteVehiculesSheetExport implements FromArray, WithHeadings, WithT
         // véhicule externe est aussi rattaché à un site (celui pour lequel il
         // opère), même s'il appartient à un propriétaire privé.
         return [
-            ['RC-1234-A', 'Camion 1', 'Tricycle', 'externe', 'Matoto', 'oui', 'Diallo', 'Mamadou', '622000001', 'GN'],
+            ['RC-1234-A', 'Camion 1', 'Tricycle', 'externe', 'Matoto', 'oui', 'oui', 'Diallo', 'Mamadou', '622000001', 'GN'],
         ];
     }
 }

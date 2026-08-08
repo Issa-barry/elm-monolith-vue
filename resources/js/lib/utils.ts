@@ -144,10 +144,14 @@ export function formatPhoneDisplay(
 }
 
 export function formatGNF(value: number | null | undefined): string {
-    return (
-        new Intl.NumberFormat('fr-FR').format(Math.round(Number(value ?? 0))) +
-        ' GNF'
+    const formatted = new Intl.NumberFormat('fr-FR').format(
+        Math.round(Number(value ?? 0)),
     );
+    // Le séparateur de milliers fr-FR par défaut est une espace fine
+    // insécable (U+202F), quasi invisible selon police/navigateur — on la
+    // remplace par une espace normale pour un rendu lisible garanti partout
+    // (ex: "120 000 GNF" au lieu de "120000 GNF" à l'écran).
+    return formatted.replace(/[  ]/g, ' ') + ' GNF';
 }
 
 export function phoneToTelHref(value: string | null | undefined) {

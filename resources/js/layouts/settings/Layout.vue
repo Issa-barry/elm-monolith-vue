@@ -7,6 +7,7 @@ import { Separator } from '@/components/ui/separator';
 import { usePermissions } from '@/composables/usePermissions';
 import { toUrl, urlIsActive } from '@/lib/utils';
 import { edit as editAppearance } from '@/routes/appearance';
+import { edit as editOrganisation } from '@/routes/organisation';
 import { edit as editParametres } from '@/routes/parametres';
 import { edit as editProfile } from '@/routes/profile';
 import { show } from '@/routes/two-factor';
@@ -30,7 +31,10 @@ const sidebarNavItems = computed((): NavItem[] => {
     ];
 
     if (isAdmin.value) {
-        items.push({ title: 'Roles & Permissions', href: '/backoffice/roles' });
+        items.push(
+            { title: 'Organisation', href: editOrganisation() },
+            { title: 'Roles & Permissions', href: '/backoffice/roles' },
+        );
     }
 
     if (can('parametres.update')) {

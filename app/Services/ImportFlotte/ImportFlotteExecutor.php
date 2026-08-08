@@ -114,6 +114,7 @@ class ImportFlotteExecutor
                     ? $proprietaireId
                     : $this->defaultProprietaireInterneId($orgId),
                 'pris_en_charge_par_usine' => $vData['pris_en_charge_par_usine'],
+                'commission_eligible' => $vData['commission_eligible'],
                 'is_active' => false,
             ]);
             $vehiculeId = $vehicule->id;
