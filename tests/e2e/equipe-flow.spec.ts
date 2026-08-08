@@ -48,7 +48,15 @@ async function openStepperModal(page: Page) {
 
 test.beforeAll(async ({ browser }) => {
     test.setTimeout(120_000);
-    const context = await browser.newContext();
+    // storageState explicite : browser.newContext() n'hérite PAS de
+    // use.storageState (playwright.config.ts) — seule le fixture `page`
+    // automatique le fait. Sans ça, login() ne peut pas court-circuiter sur
+    // une session déjà valide et repasse par tout le flux UI à chaque hook,
+    // ce qui a fait dépasser le timeout du hook en CI (contention sur le
+    // rate limiter de connexion partagé entre tous les fichiers e2e).
+    const context = await browser.newContext({
+        storageState: '.auth/user.json',
+    });
     const page = await context.newPage();
     try {
         await login(page);
@@ -89,7 +97,9 @@ test.beforeEach(async ({ page }) => {
 
 test.afterAll(async ({ browser }) => {
     test.setTimeout(90_000);
-    const context = await browser.newContext();
+    const context = await browser.newContext({
+        storageState: '.auth/user.json',
+    });
     const page = await context.newPage();
     try {
         await login(page);
@@ -107,7 +117,9 @@ test.afterAll(async ({ browser }) => {
 
 test.afterEach(async ({ browser }) => {
     try {
-        const context = await browser.newContext();
+        const context = await browser.newContext({
+            storageState: '.auth/user.json',
+        });
         const page = await context.newPage();
         try {
             await login(page);
