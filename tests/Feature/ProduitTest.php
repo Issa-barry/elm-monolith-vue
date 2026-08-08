@@ -6,9 +6,10 @@ use App\Models\DroitAjustementStock;
 use App\Models\MouvementStock;
 use App\Models\Organization;
 use App\Models\Produit;
-use App\Models\ProduitStock;
 use App\Models\Site;
 use App\Models\User;
+use App\Models\VarianteStock;
+use App\Services\ProduitService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -44,6 +45,35 @@ class ProduitTest extends TestCase
         $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
 
         return $user;
+    }
+
+    /**
+     * Produit + variante par défaut. $qteStock alimente directement le cache
+     * produits.qte_stock SANS créer de ligne variante_stocks (reproduit le scénario
+     * "compteur global pas encore ventilé par site", utilisé par les tests de migration
+     * au premier ajustement).
+     */
+    private function makeProduit(Organization $org, int $qteStock = 50): Produit
+    {
+        $produit = app(ProduitService::class)->creer([
+            'organization_id' => $org->id,
+            'nom' => 'Produit test',
+            'type' => 'materiel',
+            'statut' => 'actif',
+            'prix_achat' => 500,
+            'is_alerte' => false,
+        ]);
+
+        if ($qteStock !== 0) {
+            $produit->updateQuietly(['qte_stock' => $qteStock]);
+        }
+
+        return $produit->fresh();
+    }
+
+    private function varianteId(Produit $produit): string
+    {
+        return $produit->variantePrincipale()->first()->id;
     }
 
     // ── index ─────────────────────────────────────────────────────────────────
@@ -129,6 +159,7 @@ class ProduitTest extends TestCase
         $response->assertStatus(200);
         $props = $response->original->getData()['page']['props'];
         $this->assertArrayHasKey('sites', $props);
+        $this->assertArrayHasKey('categories', $props);
         $this->assertArrayHasKey('types', $props);
         $this->assertArrayHasKey('statuts', $props);
         $this->assertArrayHasKey('filters', $props);
@@ -153,14 +184,37 @@ class ProduitTest extends TestCase
                 'type' => 'materiel',
                 'statut' => 'actif',
                 'prix_achat' => 1000,
-                'qte_stock' => 100,
                 'is_alerte' => false,
             ])
             ->assertRedirect(route('produits.index'));
 
         $this->assertDatabaseHas('produits', [
             'organization_id' => $this->org->id,
+            'nom' => 'Rouleau plastique',
         ]);
+        $this->assertDatabaseHas('produit_variantes', [
+            'prix_achat' => 1000,
+            'is_default' => true,
+        ]);
+    }
+
+    public function test_store_cree_automatiquement_la_variante_par_defaut(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('produits.store'), [
+                'nom' => 'Eau minerale',
+                'type' => 'achat_vente',
+                'statut' => 'actif',
+                'prix_achat' => 3000,
+                'prix_vente' => 5000,
+            ]);
+
+        // setNomAttribute() ne conserve la casse que sur la 1ère lettre (reste en minuscule).
+        $produit = Produit::where('nom', 'Eau minerale')->firstOrFail();
+        $this->assertCount(1, $produit->variantes);
+        $variante = $produit->variantes->first();
+        $this->assertTrue($variante->is_default);
+        $this->assertNotEmpty($variante->code_interne);
     }
 
     public function test_store_fails_with_empty_data(): void
@@ -181,17 +235,40 @@ class ProduitTest extends TestCase
             ->assertSessionHasErrors('type');
     }
 
-    private function makeProduit(Organization $org, int $qteStock = 50): Produit
+    public function test_store_fails_sans_prix_requis_pour_le_type(): void
     {
-        return Produit::create([
-            'organization_id' => $org->id,
-            'nom' => 'Produit test',
-            'type' => 'materiel',
-            'statut' => 'actif',
-            'prix_achat' => 500,
-            'qte_stock' => $qteStock,
-            'is_alerte' => false,
-        ]);
+        // materiel exige prix_achat (ProduitType::requiredPrices()) — désormais appliqué
+        // via ProduitService::validerPrixSelonType(), contrairement à avant refonte.
+        $this->actingAs($this->user)
+            ->post(route('produits.store'), [
+                'nom' => 'Sans prix',
+                'type' => 'materiel',
+                'statut' => 'actif',
+            ])
+            ->assertSessionHasErrors('type');
+
+        $this->assertDatabaseMissing('produits', ['nom' => 'Sans prix']);
+    }
+
+    public function test_store_avec_options_genere_les_variantes(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('produits.store'), [
+                'nom' => 'T-shirt test',
+                'type' => 'achat_vente',
+                'statut' => 'actif',
+                'prix_achat' => 40000,
+                'prix_vente' => 75000,
+                'options' => [
+                    ['nom' => 'Couleur', 'valeurs' => ['Noir', 'Blanc']],
+                    ['nom' => 'Taille', 'valeurs' => ['S', 'M']],
+                ],
+            ])
+            ->assertRedirect(route('produits.index'));
+
+        $produit = Produit::where('nom', 'T-shirt test')->firstOrFail();
+        $this->assertCount(4, $produit->variantes); // 2 couleurs × 2 tailles
+        $this->assertSame(0, $produit->variantes->where('is_default', true)->count());
     }
 
     // ── show ──────────────────────────────────────────────────────────────────
@@ -210,9 +287,9 @@ class ProduitTest extends TestCase
         $produit = $this->makeProduit($this->org);
         $site = $this->defaultSite();
 
-        ProduitStock::create([
+        VarianteStock::create([
             'organization_id' => $this->org->id,
-            'produit_id' => $produit->id,
+            'produit_variante_id' => $this->varianteId($produit),
             'site_id' => $site->id,
             'qte_stock' => 30,
         ]);
@@ -265,7 +342,26 @@ class ProduitTest extends TestCase
         $this->assertDatabaseHas('produits', [
             'id' => $produit->id,
             'organization_id' => $this->org->id,
+            'nom' => 'Nouveau nom produit',
         ]);
+    }
+
+    public function test_update_sans_toucher_au_prix_ne_declenche_pas_derreur(): void
+    {
+        // Mise à jour partielle qui ne renvoie pas prix_achat : ne doit pas être rejetée
+        // comme si le prix (déjà présent sur la variante) était manquant.
+        $produit = $this->makeProduit($this->org);
+
+        $this->actingAs($this->user)
+            ->put(route('produits.update', $produit), [
+                'nom' => 'Nom modifié',
+                'type' => 'materiel',
+                'statut' => 'actif',
+            ])
+            ->assertSessionDoesntHaveErrors();
+
+        $variante = $produit->fresh()->variantePrincipale()->first();
+        $this->assertSame(500, $variante->prix_achat);
     }
 
     public function test_update_fails_with_missing_required_fields(): void
@@ -321,7 +417,7 @@ class ProduitTest extends TestCase
         ]);
 
         $this->assertDatabaseHas('mouvements_stock', [
-            'produit_id' => $produit->id,
+            'produit_variante_id' => $this->varianteId($produit),
             'site_id' => $site->id,
             'type' => 'entree',
             'quantite' => 20,
@@ -349,7 +445,7 @@ class ProduitTest extends TestCase
         ]);
 
         $this->assertDatabaseHas('mouvements_stock', [
-            'produit_id' => $produit->id,
+            'produit_variante_id' => $this->varianteId($produit),
             'site_id' => $site->id,
             'type' => 'sortie',
             'quantite' => 15,
@@ -358,12 +454,13 @@ class ProduitTest extends TestCase
         ]);
     }
 
-    public function test_ajuster_stock_cree_produit_stock_par_site(): void
+    public function test_ajuster_stock_cree_variante_stock_par_site(): void
     {
         $produit = $this->makeProduit($this->org, 50);
         $site = $this->defaultSite();
+        $varianteId = $this->varianteId($produit);
 
-        $this->assertDatabaseMissing('produit_stocks', ['produit_id' => $produit->id]);
+        $this->assertDatabaseMissing('variante_stocks', ['produit_variante_id' => $varianteId]);
 
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
@@ -373,8 +470,8 @@ class ProduitTest extends TestCase
             ])
             ->assertRedirect();
 
-        $this->assertDatabaseHas('produit_stocks', [
-            'produit_id' => $produit->id,
+        $this->assertDatabaseHas('variante_stocks', [
+            'produit_variante_id' => $varianteId,
             'site_id' => $site->id,
             'qte_stock' => 60, // 50 migré + 10 ajout
         ]);
@@ -383,6 +480,7 @@ class ProduitTest extends TestCase
     public function test_ajuster_stock_agrege_stock_total_sur_plusieurs_sites(): void
     {
         $produit = $this->makeProduit($this->org, 0);
+        $varianteId = $this->varianteId($produit);
         $site1 = $this->defaultSite();
         $site2 = Site::create([
             'organization_id' => $this->org->id,
@@ -391,23 +489,19 @@ class ProduitTest extends TestCase
             'localisation' => 'Kindia',
         ]);
 
-        // Stock site 1 : 30
-        ProduitStock::create([
+        VarianteStock::create([
             'organization_id' => $this->org->id,
-            'produit_id' => $produit->id,
+            'produit_variante_id' => $varianteId,
             'site_id' => $site1->id,
             'qte_stock' => 30,
         ]);
-
-        // Stock site 2 : 20
-        ProduitStock::create([
+        VarianteStock::create([
             'organization_id' => $this->org->id,
-            'produit_id' => $produit->id,
+            'produit_variante_id' => $varianteId,
             'site_id' => $site2->id,
             'qte_stock' => 20,
         ]);
 
-        // Ajout de 10 sur site1 → site1 = 40, total = 60
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site1->id,
@@ -417,8 +511,8 @@ class ProduitTest extends TestCase
             ->assertRedirect();
 
         $this->assertDatabaseHas('produits', ['id' => $produit->id, 'qte_stock' => 60]);
-        $this->assertDatabaseHas('produit_stocks', ['produit_id' => $produit->id, 'site_id' => $site1->id, 'qte_stock' => 40]);
-        $this->assertDatabaseHas('produit_stocks', ['produit_id' => $produit->id, 'site_id' => $site2->id, 'qte_stock' => 20]);
+        $this->assertDatabaseHas('variante_stocks', ['produit_variante_id' => $varianteId, 'site_id' => $site1->id, 'qte_stock' => 40]);
+        $this->assertDatabaseHas('variante_stocks', ['produit_variante_id' => $varianteId, 'site_id' => $site2->id, 'qte_stock' => 20]);
     }
 
     public function test_ajuster_stock_enregistre_le_motif(): void
@@ -435,7 +529,7 @@ class ProduitTest extends TestCase
             ->assertRedirect();
 
         $this->assertDatabaseHas('mouvements_stock', [
-            'produit_id' => $produit->id,
+            'produit_variante_id' => $this->varianteId($produit),
             'notes' => 'Correction de stock',
         ]);
     }
@@ -523,11 +617,12 @@ class ProduitTest extends TestCase
     public function test_ajuster_stock_echoue_si_retrait_depasse_stock_du_site(): void
     {
         $produit = $this->makeProduit($this->org, 0);
+        $varianteId = $this->varianteId($produit);
         $site = $this->defaultSite();
 
-        ProduitStock::create([
+        VarianteStock::create([
             'organization_id' => $this->org->id,
-            'produit_id' => $produit->id,
+            'produit_variante_id' => $varianteId,
             'site_id' => $site->id,
             'qte_stock' => 50,
         ]);
@@ -541,8 +636,8 @@ class ProduitTest extends TestCase
             ])
             ->assertSessionHasErrors('diminuer');
 
-        $this->assertDatabaseHas('produit_stocks', [
-            'produit_id' => $produit->id,
+        $this->assertDatabaseHas('variante_stocks', [
+            'produit_variante_id' => $varianteId,
             'site_id' => $site->id,
             'qte_stock' => 50,
         ]);
@@ -565,16 +660,17 @@ class ProduitTest extends TestCase
     public function test_ajuster_stock_ne_cree_pas_mouvement_si_validation_echoue(): void
     {
         $produit = $this->makeProduit($this->org, 0);
+        $varianteId = $this->varianteId($produit);
         $site = $this->defaultSite();
 
-        ProduitStock::create([
+        VarianteStock::create([
             'organization_id' => $this->org->id,
-            'produit_id' => $produit->id,
+            'produit_variante_id' => $varianteId,
             'site_id' => $site->id,
             'qte_stock' => 50,
         ]);
 
-        $countBefore = MouvementStock::where('produit_id', $produit->id)->count();
+        $countBefore = MouvementStock::where('produit_variante_id', $varianteId)->count();
 
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
@@ -584,7 +680,7 @@ class ProduitTest extends TestCase
             ])
             ->assertSessionHasErrors('diminuer');
 
-        $this->assertSame($countBefore, MouvementStock::where('produit_id', $produit->id)->count());
+        $this->assertSame($countBefore, MouvementStock::where('produit_variante_id', $varianteId)->count());
     }
 
     // ── historique ────────────────────────────────────────────────────────────
@@ -594,9 +690,9 @@ class ProduitTest extends TestCase
         $produit = $this->makeProduit($this->org, 0);
         $site = $this->defaultSite();
 
-        ProduitStock::create([
+        VarianteStock::create([
             'organization_id' => $this->org->id,
-            'produit_id' => $produit->id,
+            'produit_variante_id' => $this->varianteId($produit),
             'site_id' => $site->id,
             'qte_stock' => 50,
         ]);
@@ -622,6 +718,7 @@ class ProduitTest extends TestCase
     public function test_admin_peut_ajuster_stock_sur_nimporte_quel_site(): void
     {
         $produit = $this->makeProduit($this->org, 0);
+        $varianteId = $this->varianteId($produit);
 
         $autresSite = Site::create([
             'organization_id' => $this->org->id,
@@ -630,9 +727,9 @@ class ProduitTest extends TestCase
             'localisation' => 'Kindia',
         ]);
 
-        ProduitStock::create([
+        VarianteStock::create([
             'organization_id' => $this->org->id,
-            'produit_id' => $produit->id,
+            'produit_variante_id' => $varianteId,
             'site_id' => $autresSite->id,
             'qte_stock' => 20,
         ]);
@@ -646,8 +743,8 @@ class ProduitTest extends TestCase
             ])
             ->assertRedirect();
 
-        $this->assertDatabaseHas('produit_stocks', [
-            'produit_id' => $produit->id,
+        $this->assertDatabaseHas('variante_stocks', [
+            'produit_variante_id' => $varianteId,
             'site_id' => $autresSite->id,
             'qte_stock' => 25,
         ]);
@@ -656,11 +753,12 @@ class ProduitTest extends TestCase
     public function test_non_admin_peut_ajuster_stock_de_son_site(): void
     {
         $produit = $this->makeProduit($this->org, 0);
+        $varianteId = $this->varianteId($produit);
         $site = $this->defaultSite();
 
-        ProduitStock::create([
+        VarianteStock::create([
             'organization_id' => $this->org->id,
-            'produit_id' => $produit->id,
+            'produit_variante_id' => $varianteId,
             'site_id' => $site->id,
             'qte_stock' => 30,
         ]);
@@ -684,8 +782,8 @@ class ProduitTest extends TestCase
             ])
             ->assertRedirect();
 
-        $this->assertDatabaseHas('produit_stocks', [
-            'produit_id' => $produit->id,
+        $this->assertDatabaseHas('variante_stocks', [
+            'produit_variante_id' => $varianteId,
             'site_id' => $site->id,
             'qte_stock' => 40,
         ]);
@@ -694,6 +792,7 @@ class ProduitTest extends TestCase
     public function test_non_admin_ne_peut_pas_ajuster_stock_dun_autre_site(): void
     {
         $produit = $this->makeProduit($this->org, 0);
+        $varianteId = $this->varianteId($produit);
         $siteEmploye = $this->defaultSite();
 
         $siteInterdit = Site::create([
@@ -703,9 +802,9 @@ class ProduitTest extends TestCase
             'localisation' => 'Labé',
         ]);
 
-        ProduitStock::create([
+        VarianteStock::create([
             'organization_id' => $this->org->id,
-            'produit_id' => $produit->id,
+            'produit_variante_id' => $varianteId,
             'site_id' => $siteInterdit->id,
             'qte_stock' => 50,
         ]);
@@ -721,8 +820,8 @@ class ProduitTest extends TestCase
             ->assertStatus(403);
 
         // Le stock ne doit pas avoir changé
-        $this->assertDatabaseHas('produit_stocks', [
-            'produit_id' => $produit->id,
+        $this->assertDatabaseHas('variante_stocks', [
+            'produit_variante_id' => $varianteId,
             'site_id' => $siteInterdit->id,
             'qte_stock' => 50,
         ]);
@@ -731,6 +830,7 @@ class ProduitTest extends TestCase
     public function test_ajustement_modifie_uniquement_le_site_selectionne(): void
     {
         $produit = $this->makeProduit($this->org, 0);
+        $varianteId = $this->varianteId($produit);
         $site1 = $this->defaultSite();
         $site2 = Site::create([
             'organization_id' => $this->org->id,
@@ -739,20 +839,19 @@ class ProduitTest extends TestCase
             'localisation' => 'Mamou',
         ]);
 
-        ProduitStock::create([
+        VarianteStock::create([
             'organization_id' => $this->org->id,
-            'produit_id' => $produit->id,
+            'produit_variante_id' => $varianteId,
             'site_id' => $site1->id,
             'qte_stock' => 100,
         ]);
-        ProduitStock::create([
+        VarianteStock::create([
             'organization_id' => $this->org->id,
-            'produit_id' => $produit->id,
+            'produit_variante_id' => $varianteId,
             'site_id' => $site2->id,
             'qte_stock' => 200,
         ]);
 
-        // Ajustement sur site1 uniquement
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site1->id,
@@ -761,14 +860,13 @@ class ProduitTest extends TestCase
             ])
             ->assertRedirect();
 
-        $this->assertDatabaseHas('produit_stocks', [
-            'produit_id' => $produit->id,
+        $this->assertDatabaseHas('variante_stocks', [
+            'produit_variante_id' => $varianteId,
             'site_id' => $site1->id,
             'qte_stock' => 150,
         ]);
-        // Site2 inchangé
-        $this->assertDatabaseHas('produit_stocks', [
-            'produit_id' => $produit->id,
+        $this->assertDatabaseHas('variante_stocks', [
+            'produit_variante_id' => $varianteId,
             'site_id' => $site2->id,
             'qte_stock' => 200,
         ]);
@@ -779,14 +877,13 @@ class ProduitTest extends TestCase
         $produit = $this->makeProduit($this->org, 0);
         $site = $this->defaultSite();
 
-        ProduitStock::create([
+        VarianteStock::create([
             'organization_id' => $this->org->id,
-            'produit_id' => $produit->id,
+            'produit_variante_id' => $this->varianteId($produit),
             'site_id' => $site->id,
             'qte_stock' => 50,
         ]);
 
-        // Ajustement stock → crée un AuditLog STOCK_ADJUSTED
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site->id,
@@ -809,9 +906,9 @@ class ProduitTest extends TestCase
         $produit = $this->makeProduit($this->org, 0);
         $site = $this->defaultSite();
 
-        ProduitStock::create([
+        VarianteStock::create([
             'organization_id' => $this->org->id,
-            'produit_id' => $produit->id,
+            'produit_variante_id' => $this->varianteId($produit),
             'site_id' => $site->id,
             'qte_stock' => 30,
         ]);
@@ -839,9 +936,9 @@ class ProduitTest extends TestCase
         $produit = $this->makeProduit($this->org, 0);
         $site = $this->defaultSite();
 
-        ProduitStock::create([
+        VarianteStock::create([
             'organization_id' => $this->org->id,
-            'produit_id' => $produit->id,
+            'produit_variante_id' => $this->varianteId($produit),
             'site_id' => $site->id,
             'qte_stock' => 100,
         ]);
@@ -869,9 +966,9 @@ class ProduitTest extends TestCase
         $produit = $this->makeProduit($this->org, 0);
         $site = $this->defaultSite();
 
-        ProduitStock::create([
+        VarianteStock::create([
             'organization_id' => $this->org->id,
-            'produit_id' => $produit->id,
+            'produit_variante_id' => $this->varianteId($produit),
             'site_id' => $site->id,
             'qte_stock' => 10,
         ]);
@@ -890,6 +987,7 @@ class ProduitTest extends TestCase
     public function test_index_last_mouvement_filtre_par_site(): void
     {
         $produit = $this->makeProduit($this->org, 0);
+        $varianteId = $this->varianteId($produit);
         $site1 = $this->defaultSite();
         $site2 = Site::create([
             'organization_id' => $this->org->id,
@@ -898,20 +996,19 @@ class ProduitTest extends TestCase
             'localisation' => 'Mamou',
         ]);
 
-        ProduitStock::create([
+        VarianteStock::create([
             'organization_id' => $this->org->id,
-            'produit_id' => $produit->id,
+            'produit_variante_id' => $varianteId,
             'site_id' => $site1->id,
             'qte_stock' => 50,
         ]);
-        ProduitStock::create([
+        VarianteStock::create([
             'organization_id' => $this->org->id,
-            'produit_id' => $produit->id,
+            'produit_variante_id' => $varianteId,
             'site_id' => $site2->id,
             'qte_stock' => 50,
         ]);
 
-        // Entrée sur site1
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site1->id,
@@ -919,7 +1016,6 @@ class ProduitTest extends TestCase
                 'motif_type' => 'correction_stock',
             ]);
 
-        // Sortie sur site2
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
                 'site_id' => $site2->id,
@@ -927,7 +1023,6 @@ class ProduitTest extends TestCase
                 'motif_type' => 'correction_stock',
             ]);
 
-        // Filtrer sur site1 → doit voir l'entrée de site1, pas la sortie de site2
         $response = $this->actingAs($this->user)
             ->get(route('produits.index', ['site_ids' => [$site1->id]]));
 

@@ -6,6 +6,9 @@ use App\Enums\ProduitStatut;
 use App\Enums\ProduitType;
 use App\Models\Organization;
 use App\Models\Produit;
+use App\Models\Site;
+use App\Models\VarianteStock;
+use App\Services\ProduitService;
 use Illuminate\Database\Seeder;
 
 class ProduitsSeeder extends Seeder
@@ -13,6 +16,10 @@ class ProduitsSeeder extends Seeder
     public function run(): void
     {
         $org = Organization::where('slug', 'elm')->firstOrFail();
+        // Site par défaut pour le stock initial (avant refonte : qte_stock était un compteur
+        // global sur Produit, migré vers un site au premier ajustement manuel — désormais
+        // on l'attribue directement à un site réel dès le seed).
+        $siteParDefaut = Site::where('organization_id', $org->id)->orderBy('created_at')->first();
 
         $produits = [
             [
@@ -80,14 +87,28 @@ class ProduitsSeeder extends Seeder
             ],
         ];
 
+        $produitService = app(ProduitService::class);
+
         foreach ($produits as $data) {
-            Produit::firstOrCreate(
-                [
-                    'nom' => $data['nom'],
+            if (Produit::where('nom', $data['nom'])->where('organization_id', $org->id)->exists()) {
+                continue;
+            }
+
+            $qteInitiale = $data['qte_stock'] ?? 0;
+            unset($data['qte_stock']);
+
+            $produit = $produitService->creer([...$data, 'organization_id' => $org->id]);
+
+            if ($qteInitiale > 0 && $siteParDefaut) {
+                $variante = $produit->variantePrincipale()->first();
+                VarianteStock::create([
                     'organization_id' => $org->id,
-                ],
-                [...$data, 'organization_id' => $org->id]
-            );
+                    'produit_variante_id' => $variante->id,
+                    'site_id' => $siteParDefaut->id,
+                    'qte_stock' => $qteInitiale,
+                ]);
+                $produit->resynchroniserQteStock();
+            }
         }
     }
 }

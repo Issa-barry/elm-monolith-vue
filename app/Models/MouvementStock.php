@@ -16,7 +16,7 @@ class MouvementStock extends Model
     protected $fillable = [
         'organization_id',
         'site_id',
-        'produit_id',
+        'produit_variante_id',
         'type',
         'quantite',
         'stock_avant',
@@ -48,9 +48,9 @@ class MouvementStock extends Model
         return $this->belongsTo(Site::class);
     }
 
-    public function produit(): BelongsTo
+    public function variante(): BelongsTo
     {
-        return $this->belongsTo(Produit::class);
+        return $this->belongsTo(ProduitVariante::class, 'produit_variante_id');
     }
 
     public function source(): MorphTo

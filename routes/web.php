@@ -8,6 +8,7 @@ use App\Http\Controllers\Auth\LivreurRegistrationController;
 use App\Http\Controllers\Auth\RegisterLookupController;
 use App\Http\Controllers\Auth\RegisterOtpController;
 use App\Http\Controllers\CashbackController;
+use App\Http\Controllers\CategorieController;
 use App\Http\Controllers\Client\ClientDashboardController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\CommandeAchatController;
@@ -252,6 +253,14 @@ Route::prefix('backoffice')->group(function () {
 
         // ── Module : Produits ─────────────────────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::PRODUITS)->group(function () {
+            // Déclarées avant produits/{produit} par lisibilité (ULID ne collisionne jamais
+            // avec le littéral "categories", mais garde l'ordre explicite).
+            Route::get('produits/categories', [CategorieController::class, 'index'])->name('produits.categories.index');
+            Route::post('produits/categories', [CategorieController::class, 'store'])->name('produits.categories.store');
+            Route::put('produits/categories/{categorie}', [CategorieController::class, 'update'])->name('produits.categories.update');
+            Route::patch('produits/categories/{categorie}/toggle', [CategorieController::class, 'toggle'])->name('produits.categories.toggle');
+            Route::delete('produits/categories/{categorie}', [CategorieController::class, 'destroy'])->name('produits.categories.destroy');
+
             Route::resource('produits', ProduitController::class);
             Route::post('produits/{produit}/ajuster-stock', [ProduitController::class, 'ajusterStock'])
                 ->name('produits.ajuster-stock');

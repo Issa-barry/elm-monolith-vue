@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Models\Categorie;
 use App\Models\Client;
 use App\Models\CommandeAchat;
 use App\Models\CommandeVente;
@@ -19,6 +20,7 @@ use App\Models\Site;
 use App\Models\User;
 use App\Models\UserInvitation;
 use App\Models\Vehicule;
+use App\Policies\CategoriePolicy;
 use App\Policies\ClientPolicy;
 use App\Policies\CommandeAchatPolicy;
 use App\Policies\CommandeVentePolicy;
@@ -42,6 +44,7 @@ use Illuminate\Support\Facades\Gate;
 class AuthServiceProvider extends ServiceProvider
 {
     protected $policies = [
+        Categorie::class => CategoriePolicy::class,
         Client::class => ClientPolicy::class,
         Prestataire::class => PrestatairePolicy::class,
         Livreur::class => LivreurPolicy::class,

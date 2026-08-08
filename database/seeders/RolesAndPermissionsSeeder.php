@@ -19,7 +19,7 @@ class RolesAndPermissionsSeeder extends Seeder
         // Véhicules & logistique terrain
         'vehicules', 'type-vehicules', 'equipes-livraison', 'sites',
         // Commerce
-        'produits', 'packings', 'ventes', 'achats', 'factures', 'commissions', 'cashback', 'pdv',
+        'produits', 'categories', 'packings', 'ventes', 'achats', 'factures', 'commissions', 'cashback', 'pdv',
         // Opérations
         'logistique', 'transferts', 'receptions',
         // Finances
@@ -116,6 +116,7 @@ class RolesAndPermissionsSeeder extends Seeder
             // Commerce
             'produits.create',          'produits.read',          'produits.update',          'produits.delete',
             'produits.ajuster_stock',
+            'categories.create',        'categories.read',        'categories.update',        'categories.delete',
             'packings.create',          'packings.read',          'packings.update',          'packings.delete',
             'ventes.create',            'ventes.read',            'ventes.update',            'ventes.delete',
             'ventes.qte.update',        'ventes.prix.update',
@@ -170,6 +171,7 @@ class RolesAndPermissionsSeeder extends Seeder
             // Commerce
             'produits.read',            'produits.create',        'produits.update',
             'produits.ajuster_stock',
+            'categories.read',          'categories.create',      'categories.update',
             'packings.read',            'packings.create',        'packings.update',
             'ventes.create',            'ventes.read',            'ventes.update',
             'ventes.qte.update',        'ventes.prix.update',
@@ -213,6 +215,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'equipes-livraison.read',
             'sites.read',
             'produits.read',
+            'categories.read',
             'packings.read',
             'ventes.read',         'ventes.create',
             'ventes.confirmer',    'ventes.annuler',
@@ -224,7 +227,7 @@ class RolesAndPermissionsSeeder extends Seeder
         $comptable->syncPermissions([
             'clients.read',           'prestataires.read',  'livreurs.read',
             'proprietaires.read',     'vehicules.read',     'equipes-livraison.read',
-            'sites.read',             'produits.read',      'packings.read',
+            'sites.read',             'produits.read',      'categories.read',    'packings.read',
             'ventes.read',
             'factures.read',          'factures.encaisser',
             'commissions.read',       'commissions.payer',  'commissions.cloturer', 'commissions.exporter',
