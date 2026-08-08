@@ -84,6 +84,16 @@ test.beforeAll(async ({ browser }) => {
             /interne/i,
         );
         await selectOptionFromCombobox(page, page.locator('#type_vehicule'));
+        // Éligibilité aux commissions : indépendante de la catégorie (contrairement
+        // à "Prise en charge par l'usine", pas d'auto-sélection pour un interne) —
+        // sans ce check le bouton submit reste désactivé indéfiniment (canSubmit
+        // exige commission_eligible !== null), voir vehicule-flow.spec.ts.
+        await page
+            .locator(
+                '#vehicule-form input[type="radio"][name="commission_eligible"]',
+            )
+            .first()
+            .check({ timeout: 10_000 });
         await page
             .locator('#vehicule-form button[type="submit"]:visible')
             .first()
