@@ -59,6 +59,13 @@ class BesoinTresorerieController extends Controller
 
         $annee = (int) $request->input('annee', now()->year);
         $mois = (int) $request->input('mois', now()->month);
+        // Provenance de l'onglet cliqué sur l'index (p1/p2/mensuel) — sert
+        // uniquement à savoir quelles sections afficher ici, aucune incidence
+        // sur le calcul (le détail complet reste chargé dans tous les cas).
+        $echeance = $request->input('echeance', 'mensuel');
+        if (! in_array($echeance, ['p1', 'p2', 'mensuel'], true)) {
+            $echeance = 'mensuel';
+        }
 
         $detail = $this->besoinTresorerieService->detailAgence($orgId, $annee, $mois, $siteId);
         $siteNom = $siteId
@@ -68,7 +75,7 @@ class BesoinTresorerieController extends Controller
         return Inertia::render('Comptabilite/Tresorerie/Show', [
             'site' => ['id' => $siteId, 'nom' => $siteNom],
             'detail' => $detail,
-            'filters' => ['annee' => (string) $annee, 'mois' => (string) $mois],
+            'filters' => ['annee' => (string) $annee, 'mois' => (string) $mois, 'echeance' => $echeance],
         ]);
     }
 

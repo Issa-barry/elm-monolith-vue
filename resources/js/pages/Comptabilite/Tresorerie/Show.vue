@@ -35,7 +35,7 @@ const props = defineProps<{
         proprietaires: FicheDetail[];
         salaires: SalaireDetail[];
     };
-    filters: { annee: string; mois: string };
+    filters: { annee: string; mois: string; echeance: 'p1' | 'p2' | 'mensuel' };
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -79,13 +79,31 @@ const totalProprietaires = computed(() =>
 const totalSalaires = computed(() =>
     props.detail.salaires.reduce((s, l) => s + l.reste_a_payer, 0),
 );
-const totalAgence = computed(
-    () =>
-        totalLivreursP1.value +
-        totalLivreursP2.value +
-        totalProprietaires.value +
-        totalSalaires.value,
-);
+
+// ── Sections affichées selon l'échéance d'où vient le clic (index) ───────────
+// Le détail complet est toujours chargé (voir controller), seule la vue est
+// filtrée : un décaissement P1 ne concerne que les livreurs de la 1ère
+// quinzaine, un P2 les livreurs de la 2e + propriétaires + salaires.
+const showLivreursP1 = computed(() => props.filters.echeance !== 'p2');
+const showLivreursP2 = computed(() => props.filters.echeance !== 'p1');
+const showProprietaires = computed(() => props.filters.echeance !== 'p1');
+const showSalaires = computed(() => props.filters.echeance !== 'p1');
+
+const totalAgence = computed(() => {
+    let total = 0;
+    if (showLivreursP1.value) total += totalLivreursP1.value;
+    if (showLivreursP2.value) total += totalLivreursP2.value;
+    if (showProprietaires.value) total += totalProprietaires.value;
+    if (showSalaires.value) total += totalSalaires.value;
+    return total;
+});
+
+const echeanceLabel = computed(() => {
+    if (props.filters.echeance === 'p1') return 'Décaissement P1 (1 → 15)';
+    if (props.filters.echeance === 'p2')
+        return 'Décaissement P2 (16 → fin du mois)';
+    return 'Vue mensuelle';
+});
 
 const backHref = computed(
     () =>
@@ -102,8 +120,8 @@ const backHref = computed(
                 <div>
                     <h1 class="text-xl font-semibold">{{ site.nom }}</h1>
                     <p class="text-sm text-muted-foreground">
-                        {{ moisLabel }} {{ filters.annee }} — détail du
-                        besoin de trésorerie
+                        {{ moisLabel }} {{ filters.annee }} —
+                        {{ echeanceLabel }}
                     </p>
                 </div>
                 <Link :href="backHref">
@@ -124,7 +142,7 @@ const backHref = computed(
             </div>
 
             <!-- Livreurs P1 -->
-            <section class="rounded-xl border bg-card">
+            <section v-if="showLivreursP1" class="rounded-xl border bg-card">
                 <header
                     class="flex items-center justify-between border-b px-5 py-3"
                 >
@@ -139,7 +157,7 @@ const backHref = computed(
             </section>
 
             <!-- Livreurs P2 -->
-            <section class="rounded-xl border bg-card">
+            <section v-if="showLivreursP2" class="rounded-xl border bg-card">
                 <header
                     class="flex items-center justify-between border-b px-5 py-3"
                 >
@@ -154,7 +172,10 @@ const backHref = computed(
             </section>
 
             <!-- Propriétaires -->
-            <section class="rounded-xl border bg-card">
+            <section
+                v-if="showProprietaires"
+                class="rounded-xl border bg-card"
+            >
                 <header
                     class="flex items-center justify-between border-b px-5 py-3"
                 >
@@ -169,7 +190,7 @@ const backHref = computed(
             </section>
 
             <!-- Salaires -->
-            <section class="rounded-xl border bg-card">
+            <section v-if="showSalaires" class="rounded-xl border bg-card">
                 <header
                     class="flex items-center justify-between border-b px-5 py-3"
                 >

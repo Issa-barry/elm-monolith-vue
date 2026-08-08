@@ -439,6 +439,75 @@ class BesoinTresorerieServiceTest extends TestCase
         $this->assertSame(200_000.0, $row['livreurs_p1']);
     }
 
+    // ── P1 déjà envoyé mi-mois : le reste tombe à 0 mais le "_du" garde la trace ──
+
+    public function test_p1_deja_paye_le_reste_est_nul_mais_le_du_reste_positif(): void
+    {
+        $site = $this->defaultSite();
+        $livreur = $this->makeLivreur();
+        $this->makeCommissionVentePart($site, Carbon::parse('2026-08-05'), 'livreur', $livreur->id, 300_000);
+
+        $this->service->calculerPourMois($this->org->id, 2026, 8);
+
+        $fiche = PaiementFiche::where('organization_id', $this->org->id)
+            ->where('beneficiaire_type', 'livreur')
+            ->where('beneficiaire_id', $livreur->id)
+            ->firstOrFail();
+
+        // Paiement intégral de la fiche P1 — simule l'envoi réel du 15.
+        PaiementFichePaiement::create([
+            'fiche_id' => $fiche->id,
+            'organization_id' => $this->org->id,
+            'site_id' => $fiche->site_id,
+            'montant' => 300_000,
+            'mode_paiement' => 'especes',
+            'date_paiement' => '2026-08-15',
+        ]);
+
+        $rows = $this->service->calculerPourMois($this->org->id, 2026, 8);
+        $row = $this->rowFor($rows, $site);
+
+        // Rien à envoyer une deuxième fois...
+        $this->assertSame(0.0, $row['livreurs_p1']);
+        // ...mais le montant théorique reste visible, pour distinguer "payé" de "rien dû".
+        $this->assertSame(300_000.0, $row['livreurs_p1_du']);
+    }
+
+    // ── P1 anomalie : paiement partiel visible séparément du "_du" ──────────────
+
+    public function test_p1_partiel_est_visible_comme_anomalie_via_le_du(): void
+    {
+        $site = $this->defaultSite();
+        $livreur = $this->makeLivreur();
+        $this->makeCommissionVentePart($site, Carbon::parse('2026-08-05'), 'livreur', $livreur->id, 300_000);
+
+        $this->service->calculerPourMois($this->org->id, 2026, 8);
+
+        $fiche = PaiementFiche::where('organization_id', $this->org->id)
+            ->where('beneficiaire_type', 'livreur')
+            ->where('beneficiaire_id', $livreur->id)
+            ->firstOrFail();
+
+        PaiementFichePaiement::create([
+            'fiche_id' => $fiche->id,
+            'organization_id' => $this->org->id,
+            'site_id' => $fiche->site_id,
+            'montant' => 120_000,
+            'mode_paiement' => 'especes',
+            'date_paiement' => '2026-08-15',
+        ]);
+
+        $rows = $this->service->calculerPourMois($this->org->id, 2026, 8);
+        $row = $this->rowFor($rows, $site);
+
+        // Ni "rien dû" (0), ni "tout dû" (= du) : le reste doit se situer strictement
+        // entre les deux — c'est ce qui permet à l'écran de détecter une anomalie.
+        $this->assertSame(180_000.0, $row['livreurs_p1']);
+        $this->assertSame(300_000.0, $row['livreurs_p1_du']);
+        $this->assertGreaterThan(0.0, $row['livreurs_p1']);
+        $this->assertLessThan($row['livreurs_p1_du'], $row['livreurs_p1']);
+    }
+
     // ── 10. Le site historique de la vente ne bouge pas avec le véhicule ────────
 
     public function test_site_historique_de_la_commande_ignore_le_site_courant_du_vehicule(): void

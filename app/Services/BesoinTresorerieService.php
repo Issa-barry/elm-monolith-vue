@@ -34,11 +34,19 @@ use App\Models\Site;
  *     n'étaient générées qu'à l'ouverture de SalaireController::index()
  *     (cf. PaieCalculService::getOrGenererPeriode()).
  *
- * Chaque montant utilisé est le RESTE à financer (montant ajusté déjà
- * appliqué, déjà payé déduit) — jamais le brut théorique. Les commissions
- * annulées ou entièrement payées ne contribuent jamais (cf.
- * PeriodeCalculatorService, qui exclut désormais les parts annulées, et
- * montant_restant/reste_a_payer qui valent 0 pour une part déjà payée).
+ * Chaque montant "principal" (`livreurs_p1`, `livreurs_p2`, `proprietaires`,
+ * `salaires`) est le RESTE à financer (montant ajusté déjà appliqué, déjà
+ * payé déduit) — jamais le brut théorique. Les commissions annulées ou
+ * entièrement payées ne contribuent jamais (cf. PeriodeCalculatorService, qui
+ * exclut désormais les parts annulées, et montant_restant/reste_a_payer qui
+ * valent 0 pour une part déjà payée).
+ *
+ * Chaque poste porte aussi un champ `_du` (ex: `livreurs_p1_du`) : le montant
+ * théorique total (avant paiement). Sert uniquement à distinguer côté écran
+ * "rien à payer ce mois" (du = 0) de "déjà réglé" (du > 0, reste = 0) — le
+ * cas typique étant P1, déjà envoyé mi-mois au moment où on consulte P2 en
+ * fin de mois : le reste P1 tombe alors à 0 sans que ça se voie si on n'a que
+ * le reste. Ne sert jamais de base de calcul du "montant à envoyer".
  *
  * ⚠️ Limite connue et documentée : PaiementFichePaiement (le paiement d'une
  * fiche livreur/propriétaire) ne met pas à jour montant_verse sur la
@@ -59,7 +67,7 @@ class BesoinTresorerieService
     ) {}
 
     /**
-     * @return list<array{site_id: ?string, site_nom: string, livreurs_p1: float, livreurs_p2: float, proprietaires: float, salaires: float, total: float}>
+     * @return list<array{site_id: ?string, site_nom: string, livreurs_p1: float, livreurs_p1_du: float, livreurs_p2: float, livreurs_p2_du: float, proprietaires: float, proprietaires_du: float, salaires: float, salaires_du: float, total: float, total_du: float}>
      */
     public function calculerPourMois(string $organizationId, int $annee, int $mois): array
     {
@@ -75,18 +83,22 @@ class BesoinTresorerieService
     /**
      * Somme toutes agences confondues — sert de ligne "Total général" à l'écran.
      *
-     * @param  list<array{livreurs_p1: float, livreurs_p2: float, proprietaires: float, salaires: float, total: float}>  $rows
-     * @return array{livreurs_p1: float, livreurs_p2: float, proprietaires: float, salaires: float, total: float}
+     * @param  list<array<string, float|string|null>>  $rows
+     * @return array<string, float>
      */
     public static function totalGeneral(array $rows): array
     {
-        return [
-            'livreurs_p1' => round((float) array_sum(array_column($rows, 'livreurs_p1')), 2),
-            'livreurs_p2' => round((float) array_sum(array_column($rows, 'livreurs_p2')), 2),
-            'proprietaires' => round((float) array_sum(array_column($rows, 'proprietaires')), 2),
-            'salaires' => round((float) array_sum(array_column($rows, 'salaires')), 2),
-            'total' => round((float) array_sum(array_column($rows, 'total')), 2),
+        $champs = [
+            'livreurs_p1', 'livreurs_p1_du',
+            'livreurs_p2', 'livreurs_p2_du',
+            'proprietaires', 'proprietaires_du',
+            'salaires', 'salaires_du',
+            'total', 'total_du',
         ];
+
+        return collect($champs)
+            ->mapWithKeys(fn (string $champ) => [$champ => round((float) array_sum(array_column($rows, $champ)), 2)])
+            ->all();
     }
 
     /**
@@ -131,8 +143,7 @@ class BesoinTresorerieService
                 ->where('beneficiaire_type', 'livreur')
                 ->get(['site_id', 'montant_net', 'montant_paye'])
                 ->each(function (PaiementFiche $fiche) use (&$besoin, $colonne) {
-                    $cle = $fiche->site_id ?? self::SANS_AGENCE;
-                    $besoin[$cle][$colonne] = ($besoin[$cle][$colonne] ?? 0.0) + $fiche->montant_restant;
+                    $this->accumulerPoste($besoin, $fiche->site_id, $colonne, $fiche->montant_restant, (float) $fiche->montant_net);
                 });
         }
     }
@@ -151,8 +162,7 @@ class BesoinTresorerieService
                 ->where('beneficiaire_type', 'proprietaire')
                 ->get(['site_id', 'montant_net', 'montant_paye'])
                 ->each(function (PaiementFiche $fiche) use (&$besoin) {
-                    $cle = $fiche->site_id ?? self::SANS_AGENCE;
-                    $besoin[$cle]['proprietaires'] = ($besoin[$cle]['proprietaires'] ?? 0.0) + $fiche->montant_restant;
+                    $this->accumulerPoste($besoin, $fiche->site_id, 'proprietaires', $fiche->montant_restant, (float) $fiche->montant_net);
                 });
         }
     }
@@ -164,11 +174,18 @@ class BesoinTresorerieService
 
         PaieLigne::where('paie_periode_id', $periode->id)
             ->with('employe:id,site_id')
-            ->get(['id', 'employe_id', 'reste_a_payer'])
+            ->get(['id', 'employe_id', 'net', 'reste_a_payer'])
             ->each(function (PaieLigne $ligne) use (&$besoin) {
-                $cle = $ligne->employe?->site_id ?? self::SANS_AGENCE;
-                $besoin[$cle]['salaires'] = ($besoin[$cle]['salaires'] ?? 0.0) + (float) $ligne->reste_a_payer;
+                $this->accumulerPoste($besoin, $ligne->employe?->site_id, 'salaires', (float) $ligne->reste_a_payer, (float) $ligne->net);
             });
+    }
+
+    /** @param  array<string, array<string, float>>  $besoin */
+    private function accumulerPoste(array &$besoin, ?string $siteId, string $colonne, float $restant, float $du): void
+    {
+        $cle = $siteId ?? self::SANS_AGENCE;
+        $besoin[$cle][$colonne] = ($besoin[$cle][$colonne] ?? 0.0) + $restant;
+        $besoin[$cle]["{$colonne}_du"] = ($besoin[$cle]["{$colonne}_du"] ?? 0.0) + $du;
     }
 
     // ── Détail (drill-down) ──────────────────────────────────────────────────────
@@ -233,7 +250,7 @@ class BesoinTresorerieService
 
     /**
      * @param  array<string, array<string, float>>  $besoin
-     * @return list<array{site_id: ?string, site_nom: string, livreurs_p1: float, livreurs_p2: float, proprietaires: float, salaires: float, total: float}>
+     * @return list<array{site_id: ?string, site_nom: string, livreurs_p1: float, livreurs_p1_du: float, livreurs_p2: float, livreurs_p2_du: float, proprietaires: float, proprietaires_du: float, salaires: float, salaires_du: float, total: float, total_du: float}>
      */
     private function formatResultat(string $orgId, array $besoin): array
     {
@@ -257,18 +274,27 @@ class BesoinTresorerieService
     private function buildRow(?string $siteId, string $siteNom, array $montants): array
     {
         $livreursP1 = round($montants['livreurs_p1'] ?? 0.0, 2);
+        $livreursP1Du = round($montants['livreurs_p1_du'] ?? 0.0, 2);
         $livreursP2 = round($montants['livreurs_p2'] ?? 0.0, 2);
+        $livreursP2Du = round($montants['livreurs_p2_du'] ?? 0.0, 2);
         $proprietaires = round($montants['proprietaires'] ?? 0.0, 2);
+        $proprietairesDu = round($montants['proprietaires_du'] ?? 0.0, 2);
         $salaires = round($montants['salaires'] ?? 0.0, 2);
+        $salairesDu = round($montants['salaires_du'] ?? 0.0, 2);
 
         return [
             'site_id' => $siteId,
             'site_nom' => $siteNom,
             'livreurs_p1' => $livreursP1,
+            'livreurs_p1_du' => $livreursP1Du,
             'livreurs_p2' => $livreursP2,
+            'livreurs_p2_du' => $livreursP2Du,
             'proprietaires' => $proprietaires,
+            'proprietaires_du' => $proprietairesDu,
             'salaires' => $salaires,
+            'salaires_du' => $salairesDu,
             'total' => round($livreursP1 + $livreursP2 + $proprietaires + $salaires, 2),
+            'total_du' => round($livreursP1Du + $livreursP2Du + $proprietairesDu + $salairesDu, 2),
         ];
     }
 }
