@@ -76,6 +76,55 @@ class BesoinTresorerieControllerTest extends TestCase
             );
     }
 
+    public function test_index_filtre_par_site_ids_pour_admin(): void
+    {
+        $autreSite = Site::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Autre Site',
+            'type' => 'depot',
+            'localisation' => 'Conakry',
+        ]);
+
+        $this->actingAs($this->user)
+            ->get(route('comptabilite.tresorerie.index', ['site_ids' => [$autreSite->id]]))
+            ->assertStatus(200)
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Comptabilite/Tresorerie/Index')
+                ->where('rows.0.site_id', $autreSite->id)
+                ->has('rows', 1)
+            );
+    }
+
+    public function test_index_ignore_site_ids_pour_non_admin(): void
+    {
+        $ownSite = $this->user->sites()->first();
+        $autreSite = Site::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Autre Site Non Admin',
+            'type' => 'depot',
+            'localisation' => 'Conakry',
+        ]);
+
+        Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
+        Permission::firstOrCreate(['name' => 'comptabilite.read', 'guard_name' => 'web']);
+        $nonAdmin = User::factory()->create(['organization_id' => $this->org->id]);
+        $nonAdmin->assignRole('manager');
+        $nonAdmin->givePermissionTo('comptabilite.read');
+        $nonAdmin->sites()->attach($ownSite->id, ['role' => 'employe', 'is_default' => true]);
+
+        // Même en forçant site_ids vers un site étranger dans l'URL, un
+        // non-admin reste cantonné à ses propres sites (le cadenas côté UI
+        // n'est qu'un affichage — la restriction réelle est ici, côté serveur).
+        $this->actingAs($nonAdmin)
+            ->get(route('comptabilite.tresorerie.index', ['site_ids' => [$autreSite->id]]))
+            ->assertStatus(200)
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Comptabilite/Tresorerie/Index')
+                ->where('rows.0.site_id', $ownSite->id)
+                ->has('rows', 1)
+            );
+    }
+
     public function test_show_refuse_agence_non_accessible_pour_non_admin(): void
     {
         $ownSite = $this->user->sites()->first();

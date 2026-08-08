@@ -30,18 +30,35 @@ class BesoinTresorerieController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
+        $isAdmin = $user->isAdmin();
 
         $annee = (int) $request->input('annee', now()->year);
         $mois = (int) $request->input('mois', now()->month);
+        // Filtre Agence : uniquement pertinent pour un admin (même pattern que
+        // SalaireController) — un non-admin est toujours cantonné à ses sites
+        // via restreindreAuxSitesAccessibles(), le sélecteur reste verrouillé
+        // côté UI (DataFilters gère ce cadenas automatiquement).
+        $filtreSiteIds = $isAdmin ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
 
         $rows = $this->besoinTresorerieService->calculerPourMois($orgId, $annee, $mois);
         $rows = $this->restreindreAuxSitesAccessibles($rows, $user);
 
+        if ($isAdmin && $filtreSiteIds !== []) {
+            $rows = array_values(array_filter(
+                $rows,
+                fn (array $row) => $row['site_id'] !== null && in_array($row['site_id'], $filtreSiteIds, true),
+            ));
+        }
+
         return Inertia::render('Comptabilite/Tresorerie/Index', [
             'rows' => $rows,
             'total_general' => BesoinTresorerieService::totalGeneral($rows),
-            'filters' => ['annee' => (string) $annee, 'mois' => (string) $mois],
-            'is_admin' => $user->isAdmin(),
+            'filters' => [
+                'annee' => (string) $annee,
+                'mois' => (string) $mois,
+                'site_ids' => $filtreSiteIds,
+            ],
+            'is_admin' => $isAdmin,
         ]);
     }
 

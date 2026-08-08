@@ -2,13 +2,11 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
 import { formatGNF } from '@/lib/utils';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { CheckCircle2, CircleAlert, Info, Wallet } from 'lucide-vue-next';
+import { CheckCircle2, CircleAlert, Wallet } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface Row {
@@ -31,7 +29,7 @@ type Totaux = Omit<Row, 'site_id' | 'site_nom'>;
 const props = defineProps<{
     rows: Row[];
     total_general: Totaux;
-    filters: { annee: string; mois: string };
+    filters: { annee: string; mois: string; site_ids: string[] };
     is_admin: boolean;
 }>();
 
@@ -110,16 +108,6 @@ const tabs: { value: Echeance; label: string }[] = [
     { value: 'mensuel', label: 'Vue mensuelle' },
 ];
 
-const tabDescription = computed(() => {
-    if (activeTab.value === 'p1') {
-        return `Envoi du 15 ${moisLabel.value} — commissions livreurs de la première quinzaine (1 → 15) uniquement.`;
-    }
-    if (activeTab.value === 'p2') {
-        return `Envoi de fin ${moisLabel.value} — commissions livreurs de la 2ᵉ quinzaine (16 → ${dernierJourDuMois.value}) + commissions propriétaires + salaires du mois.`;
-    }
-    return `Vue consolidée du mois — pour analyse uniquement, ne correspond à aucun envoi unique.`;
-});
-
 // ── Statut P1 : la carte doit dire si c'est déjà envoyé, pas juste "0" ────────
 // livreurs_p1 = reste à payer, livreurs_p1_du = montant théorique total. Si du
 // > 0 et reste = 0, la quinzaine a déjà été réglée (probablement via l'envoi
@@ -145,14 +133,14 @@ const carteP1 = computed(() => {
     }
     if (statut === 'paye') {
         return {
-            label: 'P1 — Déjà envoyé',
+            label: 'P1 — Payé',
             montant: props.total_general.livreurs_p1_du,
             badge: { text: 'Payé', class: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' },
         };
     }
     if (statut === 'partiel') {
         return {
-            label: 'P1 — Reste à envoyer',
+            label: 'P1 — Partiellement payé',
             montant: props.total_general.livreurs_p1,
             badge: { text: 'Partiel', class: 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300' },
         };
@@ -192,17 +180,6 @@ function totalPourEcheance(row: Row, echeance: Echeance): number {
     return row.total;
 }
 
-// ── Agences sans besoin — masquées par défaut sur l'onglet actif ─────────────
-
-const afficherAgencesVides = ref(false);
-
-const rowsAffichees = computed(() => {
-    if (afficherAgencesVides.value) return props.rows;
-    return props.rows.filter(
-        (row) => totalPourEcheance(row, activeTab.value) > 0,
-    );
-});
-
 function detailHref(row: Row): string {
     const site = row.site_id ?? 'sans-agence';
     return `/backoffice/comptabilite/tresorerie/${site}?annee=${props.filters.annee}&mois=${props.filters.mois}&echeance=${activeTab.value}`;
@@ -224,30 +201,17 @@ function goToDetail(row: Row) {
                     Besoin de trésorerie
                 </h1>
                 <p class="text-sm text-muted-foreground">
-                    Prévision des fonds à envoyer aux agences — ne reflète pas
-                    encore un transfert de fonds réel, voir
-                    <Link
-                        href="/backoffice/comptabilite/journal"
-                        class="underline underline-offset-2"
-                        >le journal financier</Link
-                    >
-                    pour les mouvements déjà enregistrés.
+                    Prévision des fonds à envoyer aux agences.
                 </p>
             </div>
 
-            <DataFilters
-                url="/backoffice/comptabilite/tresorerie"
-                :values="filters"
-                :fields="filterFields"
-                :result-count="rows.length"
-                hide-agence-selector
-            />
-
-            <!-- Cartes KPI -->
+            <!-- Cartes de synthèse — même gabarit que les autres pages de liste
+                 (ex: Dépenses) : cards indépendantes au-dessus du bandeau de
+                 filtres, pas fusionnées dedans. -->
             <div class="grid gap-4 sm:grid-cols-3">
                 <div class="rounded-xl border bg-card p-4">
                     <div class="flex items-center justify-between gap-2">
-                        <p class="text-xs text-muted-foreground">
+                        <p class="text-sm text-muted-foreground">
                             {{ carteP1.label }}
                         </p>
                         <span
@@ -258,58 +222,75 @@ function goToDetail(row: Row) {
                             {{ carteP1.badge.text }}
                         </span>
                     </div>
-                    <p class="mt-1 text-xl font-bold tabular-nums">
+                    <p class="mt-1 text-2xl font-bold tabular-nums">
                         {{ formatGNF(carteP1.montant) }}
                     </p>
-                    <p class="mt-0.5 text-[11px] text-muted-foreground">
-                        1 → 15 {{ moisLabel }}
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        du 1er au 15 {{ moisLabel }}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-4">
-                    <p class="text-xs text-muted-foreground">P2 — À envoyer</p>
-                    <p class="mt-1 text-xl font-bold tabular-nums">
+                    <p class="text-sm text-muted-foreground">P2 — À envoyer</p>
+                    <p class="mt-1 text-2xl font-bold tabular-nums">
                         {{ formatGNF(totalP2) }}
                     </p>
-                    <p class="mt-0.5 text-[11px] text-muted-foreground">
-                        16 → {{ dernierJourDuMois }} {{ moisLabel }}
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        du 16 au {{ dernierJourDuMois }} {{ moisLabel }}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-4">
-                    <p class="text-xs text-muted-foreground">
+                    <p class="text-sm text-muted-foreground">
                         Total engagé ce mois
                     </p>
-                    <p class="mt-1 text-xl font-bold tabular-nums">
+                    <p class="mt-1 text-2xl font-bold tabular-nums">
                         {{ formatGNF(totalEngageMois) }}
                     </p>
-                    <p class="mt-0.5 text-[11px] text-muted-foreground">
-                        Informatif uniquement — jamais à décaisser en une fois
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        Informatif — jamais à décaisser en une fois
                     </p>
                 </div>
             </div>
 
-            <!-- Onglets décaissement -->
-            <div class="flex flex-col gap-3">
-                <div class="flex flex-wrap items-center gap-2">
-                    <button
-                        v-for="tab in tabs"
-                        :key="tab.value"
-                        type="button"
-                        class="rounded-full border px-4 py-1.5 text-sm font-medium transition-colors"
-                        :class="
-                            activeTab === tab.value
-                                ? 'border-primary bg-primary text-primary-foreground'
-                                : 'border-input bg-background text-muted-foreground hover:bg-muted'
-                        "
-                        @click="activeTab = tab.value"
-                    >
-                        {{ tab.label }}
-                    </button>
-                </div>
-                <p class="flex items-start gap-1.5 text-xs text-muted-foreground">
-                    <Info class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    {{ tabDescription }}
-                </p>
-            </div>
+            <DataFilters
+                url="/backoffice/comptabilite/tresorerie"
+                :values="filters"
+                :fields="filterFields"
+                :result-count="rows.length"
+                hide-result-count
+            >
+                <!-- Onglets décaissement — dans la barre de filtres, à côté
+                     d'Année/Mois : ce sont eux qui pilotent la vue, pas de
+                     rechargement serveur associé. -->
+                <template #inline>
+                    <!-- Même structure label+gap que les champs Année/Mois
+                         (span invisible de même hauteur) pour que les boutons
+                         s'alignent verticalement sur les selects, pas sur
+                         leurs labels. -->
+                    <div class="flex shrink-0 flex-col gap-1">
+                        <span
+                            class="text-xs font-medium text-transparent select-none"
+                            aria-hidden="true"
+                            >Vue</span
+                        >
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button
+                                v-for="tab in tabs"
+                                :key="tab.value"
+                                type="button"
+                                class="h-9 rounded-md border px-3 text-sm font-medium transition-colors"
+                                :class="
+                                    activeTab === tab.value
+                                        ? 'border-primary bg-primary text-primary-foreground'
+                                        : 'border-input bg-background text-muted-foreground hover:bg-muted'
+                                "
+                                @click="activeTab = tab.value"
+                            >
+                                {{ tab.label }}
+                            </button>
+                        </div>
+                    </div>
+                </template>
+            </DataFilters>
 
             <!-- Rappel P1 non soldé — visible seulement sur l'onglet P2, jamais compté dans son total -->
             <div
@@ -341,22 +322,6 @@ function goToDetail(row: Row) {
                 </span>
             </div>
 
-            <div class="flex items-center gap-2">
-                <Checkbox
-                    id="afficher-agences-vides"
-                    :model-value="afficherAgencesVides"
-                    @update:model-value="
-                        afficherAgencesVides = $event === true
-                    "
-                />
-                <Label
-                    for="afficher-agences-vides"
-                    class="cursor-pointer text-sm font-normal text-muted-foreground"
-                >
-                    Afficher les agences sans besoin
-                </Label>
-            </div>
-
             <!-- Tableau P1 : une seule colonne de montant + statut -->
             <div
                 v-if="activeTab === 'p1'"
@@ -381,7 +346,7 @@ function goToDetail(row: Row) {
                     </thead>
                     <tbody class="divide-y">
                         <tr
-                            v-for="row in rowsAffichees"
+                            v-for="row in rows"
                             :key="row.site_id ?? 'sans-agence'"
                             class="cursor-pointer hover:bg-muted/30"
                             @click="goToDetail(row)"
@@ -425,7 +390,7 @@ function goToDetail(row: Row) {
                                 {{ formatGNF(row.livreurs_p1) }}
                             </td>
                         </tr>
-                        <tr v-if="rowsAffichees.length === 0">
+                        <tr v-if="rows.length === 0">
                             <td
                                 colspan="4"
                                 class="px-4 py-10 text-center text-muted-foreground"
@@ -434,7 +399,7 @@ function goToDetail(row: Row) {
                             </td>
                         </tr>
                     </tbody>
-                    <tfoot v-if="rowsAffichees.length > 0">
+                    <tfoot v-if="rows.length > 0">
                         <tr class="border-t bg-muted/30 font-semibold">
                             <td class="px-4 py-3">Total</td>
                             <td class="px-4 py-3 text-right tabular-nums">
@@ -476,7 +441,7 @@ function goToDetail(row: Row) {
                     </thead>
                     <tbody class="divide-y">
                         <tr
-                            v-for="row in rowsAffichees"
+                            v-for="row in rows"
                             :key="row.site_id ?? 'sans-agence'"
                             class="cursor-pointer hover:bg-muted/30"
                             @click="goToDetail(row)"
@@ -505,7 +470,7 @@ function goToDetail(row: Row) {
                                 {{ formatGNF(totalPourEcheance(row, 'p2')) }}
                             </td>
                         </tr>
-                        <tr v-if="rowsAffichees.length === 0">
+                        <tr v-if="rows.length === 0">
                             <td
                                 colspan="5"
                                 class="px-4 py-10 text-center text-muted-foreground"
@@ -514,7 +479,7 @@ function goToDetail(row: Row) {
                             </td>
                         </tr>
                     </tbody>
-                    <tfoot v-if="rowsAffichees.length > 0">
+                    <tfoot v-if="rows.length > 0">
                         <tr class="border-t bg-muted/30 font-semibold">
                             <td class="px-4 py-3">Total</td>
                             <td class="px-4 py-3 text-right tabular-nums">
@@ -536,16 +501,6 @@ function goToDetail(row: Row) {
 
             <!-- Vue mensuelle : les 4 postes côte à côte, pour analyse -->
             <div v-else class="space-y-3">
-                <p
-                    class="flex items-start gap-1.5 rounded-lg border border-muted bg-muted/30 px-4 py-2.5 text-xs text-muted-foreground"
-                >
-                    <Info class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    Vue d'analyse : le total ci-dessous additionne les 4
-                    postes du mois (y compris un reste P1 non encore envoyé,
-                    le cas échéant). Ce n'est jamais le montant d'un seul
-                    décaissement — utilisez les onglets P1/P2 pour préparer un
-                    envoi.
-                </p>
                 <div class="overflow-x-auto rounded-xl border bg-card">
                     <table class="w-full min-w-[860px] text-sm">
                         <thead>
@@ -572,7 +527,7 @@ function goToDetail(row: Row) {
                         </thead>
                         <tbody class="divide-y">
                             <tr
-                                v-for="row in rowsAffichees"
+                                v-for="row in rows"
                                 :key="row.site_id ?? 'sans-agence'"
                                 class="cursor-pointer hover:bg-muted/30"
                                 @click="goToDetail(row)"
@@ -604,7 +559,7 @@ function goToDetail(row: Row) {
                                     {{ formatGNF(row.total) }}
                                 </td>
                             </tr>
-                            <tr v-if="rowsAffichees.length === 0">
+                            <tr v-if="rows.length === 0">
                                 <td
                                     colspan="6"
                                     class="px-4 py-10 text-center text-muted-foreground"
@@ -614,7 +569,7 @@ function goToDetail(row: Row) {
                                 </td>
                             </tr>
                         </tbody>
-                        <tfoot v-if="rowsAffichees.length > 0">
+                        <tfoot v-if="rows.length > 0">
                             <tr class="border-t bg-muted/30 font-semibold">
                                 <td class="px-4 py-3">Total général</td>
                                 <td class="px-4 py-3 text-right tabular-nums">
