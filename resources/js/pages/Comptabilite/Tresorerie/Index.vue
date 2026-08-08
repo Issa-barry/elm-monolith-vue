@@ -2,8 +2,8 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
-import { formatGNF } from '@/lib/utils';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatGNF } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { CheckCircle2, CircleAlert, Wallet } from 'lucide-vue-next';
@@ -92,9 +92,12 @@ const moisLabelLower = computed(() => moisLabel.value.toLowerCase());
 
 // Dernier jour réel du mois sélectionné — jamais une valeur codée en dur, se
 // recalcule automatiquement (mois à 30/31 jours, février bissextile ou non).
-const dernierJourDuMois = computed(
-    () =>
-        new Date(Number(props.filters.annee), Number(props.filters.mois), 0).getDate(),
+const dernierJourDuMois = computed(() =>
+    new Date(
+        Number(props.filters.annee),
+        Number(props.filters.mois),
+        0,
+    ).getDate(),
 );
 
 // ── Onglet actif : "décaissement" réel, pas un simple filtre de données ───────
@@ -131,7 +134,10 @@ function statutP1(du: number, restant: number): StatutP1 {
 }
 
 const statutP1Global = computed(() =>
-    statutP1(props.total_general.livreurs_p1_du, props.total_general.livreurs_p1),
+    statutP1(
+        props.total_general.livreurs_p1_du,
+        props.total_general.livreurs_p1,
+    ),
 );
 
 // Le titre de la carte devient la période elle-même (ex: "P1 — du 1er au 15
@@ -142,24 +148,36 @@ const carteP1 = computed(() => {
     if (statut === 'aucun_besoin') {
         return {
             montant: 0,
-            badge: { text: 'Aucun besoin', class: 'bg-muted text-muted-foreground' },
+            badge: {
+                text: 'Aucun besoin',
+                class: 'bg-muted text-muted-foreground',
+            },
         };
     }
     if (statut === 'paye') {
         return {
             montant: props.total_general.livreurs_p1_du,
-            badge: { text: 'Payé', class: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' },
+            badge: {
+                text: 'Payé',
+                class: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+            },
         };
     }
     if (statut === 'partiel') {
         return {
             montant: props.total_general.livreurs_p1,
-            badge: { text: 'Partiel', class: 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300' },
+            badge: {
+                text: 'Partiel',
+                class: 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+            },
         };
     }
     return {
         montant: props.total_general.livreurs_p1,
-        badge: { text: 'À envoyer', class: 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300' },
+        badge: {
+            text: 'À envoyer',
+            class: 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
+        },
     };
 });
 
@@ -175,7 +193,9 @@ const totalEngageMois = computed(() => props.total_general.total_du);
 // total "à envoyer" de P2. Passé le 20, on le présente comme une anomalie à
 // vérifier plutôt qu'un simple rappel neutre (P1 aurait dû être réglé).
 const p1NonSolde = computed(
-    () => statutP1Global.value === 'partiel' || statutP1Global.value === 'a_envoyer',
+    () =>
+        statutP1Global.value === 'partiel' ||
+        statutP1Global.value === 'a_envoyer',
 );
 const p1EnAnomalie = computed(
     () => p1NonSolde.value && new Date().getDate() > 20,
@@ -187,7 +207,8 @@ const p1EnAnomalie = computed(
 
 function totalPourEcheance(row: Row, echeance: Echeance): number {
     if (echeance === 'p1') return row.livreurs_p1;
-    if (echeance === 'p2') return row.livreurs_p2 + row.proprietaires + row.salaires;
+    if (echeance === 'p2')
+        return row.livreurs_p2 + row.proprietaires + row.salaires;
     return row.total;
 }
 
@@ -372,14 +393,24 @@ function goToDetail(row: Row) {
                             </td>
                             <td class="px-4 py-3">
                                 <span
-                                    v-if="statutP1(row.livreurs_p1_du, row.livreurs_p1) === 'paye'"
+                                    v-if="
+                                        statutP1(
+                                            row.livreurs_p1_du,
+                                            row.livreurs_p1,
+                                        ) === 'paye'
+                                    "
                                     class="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-400"
                                 >
                                     <CheckCircle2 class="h-3.5 w-3.5" />
                                     Payé
                                 </span>
                                 <span
-                                    v-else-if="statutP1(row.livreurs_p1_du, row.livreurs_p1) === 'partiel'"
+                                    v-else-if="
+                                        statutP1(
+                                            row.livreurs_p1_du,
+                                            row.livreurs_p1,
+                                        ) === 'partiel'
+                                    "
                                     class="text-xs font-medium text-amber-700 dark:text-amber-400"
                                 >
                                     Partiel

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button';
-import { formatGNF } from '@/lib/utils';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatGNF } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/vue3';
 import { ArrowLeft } from 'lucide-vue-next';
@@ -172,10 +172,7 @@ const backHref = computed(
             </section>
 
             <!-- Propriétaires -->
-            <section
-                v-if="showProprietaires"
-                class="rounded-xl border bg-card"
-            >
+            <section v-if="showProprietaires" class="rounded-xl border bg-card">
                 <header
                     class="flex items-center justify-between border-b px-5 py-3"
                 >
