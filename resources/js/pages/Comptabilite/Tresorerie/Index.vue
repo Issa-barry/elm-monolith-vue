@@ -86,7 +86,12 @@ const filterFields: FilterField[] = [
 const moisLabel = computed(
     () => moisNoms[Number(props.filters.mois) - 1] ?? props.filters.mois,
 );
+// Minuscule pour usage en milieu de phrase ("du 1er au 15 août"), convention
+// française — moisLabel (majuscule) reste utilisé pour le select de filtre.
+const moisLabelLower = computed(() => moisLabel.value.toLowerCase());
 
+// Dernier jour réel du mois sélectionné — jamais une valeur codée en dur, se
+// recalcule automatiquement (mois à 30/31 jours, février bissextile ou non).
 const dernierJourDuMois = computed(
     () =>
         new Date(Number(props.filters.annee), Number(props.filters.mois), 0).getDate(),
@@ -102,11 +107,14 @@ type Echeance = 'p1' | 'p2' | 'mensuel';
 const quinzaineDuJour: 'p1' | 'p2' = new Date().getDate() <= 15 ? 'p1' : 'p2';
 const activeTab = ref<Echeance>(quinzaineDuJour);
 
-const tabs: { value: Echeance; label: string }[] = [
-    { value: 'p1', label: 'P1 — Envoi mi-mois' },
-    { value: 'p2', label: 'P2 — Envoi fin de mois' },
+// Bornes affichées directement dans le libellé — plus explicite que "mi-mois"
+// / "fin de mois" pour qui ne connaît pas le vocabulaire métier P1/P2. La
+// borne haute de P2 suit dernierJourDuMois (jamais "31" en dur).
+const tabs = computed<{ value: Echeance; label: string }[]>(() => [
+    { value: 'p1', label: 'P1 — 1er au 15' },
+    { value: 'p2', label: `P2 — 16 au ${dernierJourDuMois.value}` },
     { value: 'mensuel', label: 'Vue mensuelle' },
-];
+]);
 
 // ── Statut P1 : la carte doit dire si c'est déjà envoyé, pas juste "0" ────────
 // livreurs_p1 = reste à payer, livreurs_p1_du = montant théorique total. Si du
@@ -126,29 +134,32 @@ const statutP1Global = computed(() =>
     statutP1(props.total_general.livreurs_p1_du, props.total_general.livreurs_p1),
 );
 
+// Le titre de la carte devient la période elle-même (ex: "P1 — du 1er au 15
+// août") — le statut réel (Payé/Partiel/À envoyer/Aucun besoin) est porté
+// uniquement par le badge, plus de doublon texte entre les deux.
 const carteP1 = computed(() => {
     const statut = statutP1Global.value;
     if (statut === 'aucun_besoin') {
-        return { label: 'P1 — Aucun besoin', montant: 0, badge: null as null | { text: string; class: string } };
+        return {
+            montant: 0,
+            badge: { text: 'Aucun besoin', class: 'bg-muted text-muted-foreground' },
+        };
     }
     if (statut === 'paye') {
         return {
-            label: 'P1 — Payé',
             montant: props.total_general.livreurs_p1_du,
             badge: { text: 'Payé', class: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' },
         };
     }
     if (statut === 'partiel') {
         return {
-            label: 'P1 — Partiellement payé',
             montant: props.total_general.livreurs_p1,
             badge: { text: 'Partiel', class: 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300' },
         };
     }
     return {
-        label: 'P1 — À envoyer',
         montant: props.total_general.livreurs_p1,
-        badge: null,
+        badge: { text: 'À envoyer', class: 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300' },
     };
 });
 
@@ -212,10 +223,9 @@ function goToDetail(row: Row) {
                 <div class="rounded-xl border bg-card p-4">
                     <div class="flex items-center justify-between gap-2">
                         <p class="text-sm text-muted-foreground">
-                            {{ carteP1.label }}
+                            P1 — du 1er au 15 {{ moisLabelLower }}
                         </p>
                         <span
-                            v-if="carteP1.badge"
                             class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
                             :class="carteP1.badge.class"
                         >
@@ -225,17 +235,14 @@ function goToDetail(row: Row) {
                     <p class="mt-1 text-2xl font-bold tabular-nums">
                         {{ formatGNF(carteP1.montant) }}
                     </p>
-                    <p class="mt-0.5 text-xs text-muted-foreground">
-                        du 1er au 15 {{ moisLabel }}
-                    </p>
                 </div>
                 <div class="rounded-xl border bg-card p-4">
-                    <p class="text-sm text-muted-foreground">P2 — À envoyer</p>
+                    <p class="text-sm text-muted-foreground">
+                        P2 — du 16 au {{ dernierJourDuMois }}
+                        {{ moisLabelLower }}
+                    </p>
                     <p class="mt-1 text-2xl font-bold tabular-nums">
                         {{ formatGNF(totalP2) }}
-                    </p>
-                    <p class="mt-0.5 text-xs text-muted-foreground">
-                        du 16 au {{ dernierJourDuMois }} {{ moisLabel }}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-4">
