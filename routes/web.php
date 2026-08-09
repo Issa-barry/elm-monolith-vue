@@ -281,6 +281,10 @@ Route::prefix('backoffice')->group(function () {
                 ->name('produits.archiver');
             Route::put('produits/{produit}/variantes/{variante}', [ProduitController::class, 'updateVariante'])
                 ->name('produits.variantes.update');
+            Route::get('produits/{produit}/variantes', [ProduitController::class, 'variantesIndex'])
+                ->name('produits.variantes.index');
+            Route::put('produits/{produit}/variantes', [ProduitController::class, 'variantesBulkUpdate'])
+                ->name('produits.variantes.bulk-update');
         });
 
         // ── Module : Sites ────────────────────────────────────────────────────────

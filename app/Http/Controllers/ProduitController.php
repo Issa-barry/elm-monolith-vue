@@ -208,7 +208,7 @@ class ProduitController extends Controller
             'categories' => Categorie::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom', 'parent_id']),
             'optionsCatalogue' => OptionCatalogue::where('organization_id', $orgId)
                 ->orderBy('position')->orderBy('nom')
-                ->with('valeurs:id,option_catalogue_id,valeur')
+                ->with('valeurs:id,option_catalogue_id,valeur,hex')
                 ->get(['id', 'nom']),
             'limites' => $this->limitesCatalogue($orgId),
         ]);
@@ -266,9 +266,22 @@ class ProduitController extends Controller
 
         $varianteIds = $produit->variantes->pluck('id')->all();
 
-        $stocksParSite = VarianteStock::whereIn('produit_variante_id', $varianteIds)
+        $varianteStocksRaw = VarianteStock::whereIn('produit_variante_id', $varianteIds)
             ->with('site:id,nom,code')
-            ->get()
+            ->get();
+
+        // Grain variante+site — consommé par AjusterStockModal.vue pour afficher/pré-remplir
+        // le stock réel de la variante sélectionnée (stocksParSite ci-dessous est un agrégat
+        // toutes variantes confondues, insuffisant dès qu'on ajuste une variante précise).
+        $varianteStocksParSiteEtVariante = $varianteStocksRaw
+            ->map(fn (VarianteStock $s) => [
+                'variante_id' => $s->produit_variante_id,
+                'site_id' => $s->site_id,
+                'qte_stock' => $s->qte_stock,
+            ])
+            ->values();
+
+        $stocksParSite = $varianteStocksRaw
             ->groupBy('site_id')
             ->map(function (Collection $parSite, $siteId) {
                 $premier = $parSite->first();
@@ -386,6 +399,7 @@ class ProduitController extends Controller
             'can_augmenter_stock' => $canAugmenter,
             'can_diminuer_stock' => $canDiminuer,
             'sites_autorises' => $sitesAutorisesRaw->values(),
+            'variante_stocks' => $varianteStocksParSiteEtVariante,
         ]);
     }
 
@@ -566,6 +580,15 @@ class ProduitController extends Controller
 
         $site = Site::where('id', $data['site_id'])->where('organization_id', $produit->organization_id)->firstOrFail();
 
+        // Produit à vraies déclinaisons : la variante est obligatoire, jamais un défaut implicite
+        // silencieux — sinon un appel sans variante_id ajusterait la variante par défaut cachée
+        // au lieu de la déclinaison réellement visée par l'utilisateur.
+        if (empty($data['variante_id']) && $produit->variantes()->count() > 1) {
+            throw ValidationException::withMessages([
+                'variante_id' => 'Ce produit a plusieurs variantes : précisez laquelle ajuster.',
+            ]);
+        }
+
         $variante = $data['variante_id'] ?? null
             ? ProduitVariante::where('id', $data['variante_id'])->where('produit_id', $produit->id)->firstOrFail()
             : ($produit->variantePrincipale()->first() ?? abort(422, 'Ce produit n\'a aucune variante.'));
@@ -681,6 +704,86 @@ class ProduitController extends Controller
         $variante->update($data);
 
         return back()->with('success', "Variante « {$variante->libelle} » mise à jour.");
+    }
+
+    /**
+     * Éditeur groupé façon Shopify — vue dense de toutes les variantes d'un produit, avec
+     * sélection multiple et modification en masse (cf. variantesBulkUpdate()). Le stock n'y est
+     * volontairement pas éditable : il reste soumis au flux motif-tracké "Ajuster le stock"
+     * (ajusterStock()) pour préserver la traçabilité des mouvements — ce n'est pas un oubli.
+     */
+    public function variantesIndex(Produit $produit): Response
+    {
+        $this->authorize('update', $produit);
+
+        $produit->load('variantes.valeurs.option');
+
+        return Inertia::render('Produits/Variantes/Index', [
+            'produit' => [
+                'id' => $produit->id,
+                'nom' => $produit->nom,
+                'type' => $produit->type?->value,
+            ],
+            'variantes' => $produit->variantes->map(fn (ProduitVariante $v) => [
+                'id' => $v->id,
+                'libelle' => $v->libelle,
+                'sku' => $v->sku,
+                'code_barres' => $v->code_barres,
+                'code_fournisseur' => $v->code_fournisseur,
+                'prix_usine' => $v->prix_usine,
+                'prix_vente' => $v->prix_vente,
+                'prix_achat' => $v->prix_achat,
+                'cout' => $v->cout,
+                'seuil_alerte_stock' => $v->seuil_alerte_stock,
+                'is_default' => $v->is_default,
+                'is_active' => $v->is_active,
+                'options' => $this->varianteOptions($v),
+            ]),
+        ]);
+    }
+
+    /**
+     * Modification en masse (prix/codes/statut) — jamais le SKU, généré automatiquement et
+     * volontairement non éditable (même règle que updateVariante()). Chaque ligne du payload ne
+     * doit porter que les variantes réellement modifiées par l'utilisateur (le frontend calcule
+     * le diff), avec l'ensemble de leurs champs éditables — un update() partiel par ligne.
+     */
+    public function variantesBulkUpdate(Request $request, Produit $produit): RedirectResponse
+    {
+        $this->authorize('update', $produit);
+
+        $data = $request->validate([
+            'variantes' => ['required', 'array', 'min:1'],
+            'variantes.*.id' => ['required', 'string'],
+            'variantes.*.code_barres' => ['nullable', 'string', 'max:100'],
+            'variantes.*.code_fournisseur' => ['nullable', 'string', 'max:100'],
+            'variantes.*.prix_usine' => ['nullable', 'integer', 'min:0'],
+            'variantes.*.prix_vente' => ['nullable', 'integer', 'min:0'],
+            'variantes.*.prix_achat' => ['nullable', 'integer', 'min:0'],
+            'variantes.*.cout' => ['nullable', 'integer', 'min:0'],
+            'variantes.*.seuil_alerte_stock' => ['nullable', 'integer', 'min:0'],
+            'variantes.*.is_active' => ['boolean'],
+        ]);
+
+        $champsVariante = ['prix_usine', 'prix_vente', 'prix_achat'];
+
+        DB::transaction(function () use ($produit, $data, $champsVariante) {
+            foreach ($data['variantes'] as $ligne) {
+                $variante = ProduitVariante::where('id', $ligne['id'])
+                    ->where('produit_id', $produit->id)
+                    ->firstOrFail();
+
+                $donneesEffectives = array_merge(
+                    Arr::only($variante->getAttributes(), $champsVariante),
+                    Arr::only($ligne, $champsVariante),
+                );
+                $this->produitService->validerPrixSelonType($produit->type, $donneesEffectives);
+
+                $variante->update(Arr::except($ligne, ['id']));
+            }
+        });
+
+        return back()->with('success', count($data['variantes']).' variante(s) mise(s) à jour.');
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

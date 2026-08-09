@@ -5,6 +5,7 @@ export interface MotifOption {
 
 export const MOTIFS_AUGMENTATION: MotifOption[] = [
     { label: 'Après production', value: 'apres_production' },
+    { label: 'Après achat', value: 'apres_achat' },
     { label: 'Retour', value: 'retour' },
     { label: 'Correction de stock', value: 'correction_stock' },
     { label: 'Autre', value: 'autre' },

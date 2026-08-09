@@ -116,6 +116,12 @@ interface Site {
     code: string;
 }
 
+interface VarianteStockEntry {
+    variante_id: string;
+    site_id: string;
+    qte_stock: number;
+}
+
 const props = defineProps<{
     produit: Produit;
     mouvements: StockMouvement[];
@@ -124,6 +130,7 @@ const props = defineProps<{
     can_augmenter_stock: boolean;
     can_diminuer_stock: boolean;
     sites_autorises: Site[];
+    variante_stocks: VarianteStockEntry[];
 }>();
 
 const { can } = usePermissions();
@@ -280,6 +287,15 @@ const ajustements = props.mouvements.map((m) => ({
                         <Sliders class="mr-2 h-4 w-4" />
                         Ajuster le stock
                     </Button>
+                    <Link
+                        v-if="can('produits.update') && produit.variantes.length > 1"
+                        :href="`/backoffice/produits/${produit.id}/variantes`"
+                    >
+                        <Button variant="outline">
+                            <Layers class="mr-2 h-4 w-4" />
+                            Gérer les variantes
+                        </Button>
+                    </Link>
                     <Link
                         v-if="can('produits.update')"
                         :href="`/backoffice/produits/${produit.id}/edit`"
@@ -781,6 +797,7 @@ const ajustements = props.mouvements.map((m) => ({
             :sites-autorises="sites_autorises"
             :can-augmenter="can_augmenter_stock"
             :can-diminuer="can_diminuer_stock"
+            :variante-stocks="variante_stocks"
         />
         <VarianteEditModal
             v-model:visible="showVarianteModal"

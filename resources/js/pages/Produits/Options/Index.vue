@@ -17,6 +17,7 @@ import { computed, reactive, ref } from 'vue';
 interface OptionCatalogueValeur {
     id: string;
     valeur: string;
+    hex: string | null;
     position: number;
 }
 
@@ -154,6 +155,17 @@ function destroy(option: OptionCatalogue) {
 // ── Valeurs (ajout/suppression en ligne) ────────────────────────────────────
 
 const nouvellesValeurs = reactive<Record<string, string>>({});
+const nouvellesHex = reactive<Record<string, string>>({});
+
+// Aide visuelle uniquement : le sélecteur de couleur n'apparaît que pour l'option
+// "Couleur" elle-même ou une option qui a déjà au moins une valeur avec un hex renseigné
+// (évite d'imposer un sélecteur de couleur sur une option Taille/Pointure).
+function estOptionCouleur(option: OptionCatalogue): boolean {
+    return (
+        option.nom.toLowerCase() === 'couleur' ||
+        option.valeurs.some((v) => !!v.hex)
+    );
+}
 
 function ajouterValeur(option: OptionCatalogue) {
     const valeur = (nouvellesValeurs[option.id] ?? '').trim();
@@ -161,11 +173,12 @@ function ajouterValeur(option: OptionCatalogue) {
 
     router.post(
         `/backoffice/produits/options/${option.id}/valeurs`,
-        { valeur },
+        { valeur, hex: nouvellesHex[option.id] || null },
         {
             preserveScroll: true,
             onSuccess: () => {
                 nouvellesValeurs[option.id] = '';
+                nouvellesHex[option.id] = '';
             },
         },
     );
@@ -279,6 +292,11 @@ function supprimerValeur(option: OptionCatalogue, valeur: OptionCatalogueValeur)
                             :key="valeur.id"
                             class="inline-flex items-center gap-1.5 rounded-md border bg-muted/40 px-2.5 py-1 text-sm"
                         >
+                            <span
+                                v-if="valeur.hex"
+                                class="h-3 w-3 shrink-0 rounded-full border"
+                                :style="{ backgroundColor: valeur.hex }"
+                            />
                             {{ valeur.valeur }}
                             <button
                                 type="button"
@@ -298,6 +316,13 @@ function supprimerValeur(option: OptionCatalogue, valeur: OptionCatalogueValeur)
                     </div>
 
                     <div class="mt-3 flex items-center gap-2">
+                        <input
+                            v-if="estOptionCouleur(option)"
+                            v-model="nouvellesHex[option.id]"
+                            type="color"
+                            title="Couleur (aide visuelle facultative)"
+                            class="h-8 w-8 cursor-pointer rounded border p-0.5"
+                        />
                         <InputText
                             v-model="nouvellesValeurs[option.id]"
                             placeholder="+ Ajouter une valeur"

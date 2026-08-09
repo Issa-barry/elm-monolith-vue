@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { Plus } from 'lucide-vue-next';
 import Dropdown from 'primevue/dropdown';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import CreateOptionCatalogueModal from './CreateOptionCatalogueModal.vue';
 
 export interface OptionCatalogueValeur {
     id: string;
     valeur: string;
+    hex?: string | null;
 }
 
 export interface OptionCatalogue {
@@ -20,6 +21,23 @@ const props = defineProps<{
     optionsCatalogue: OptionCatalogue[];
     invalid?: boolean;
 }>();
+
+// Les options les plus fréquentes remontent en tête de liste (le champ filtre du Dropdown
+// couvre le reste) — évite de noyer "Couleur"/"Taille" au milieu d'une vingtaine d'options
+// système (dimensions, connectivité...) pour un usage courant type habillement.
+const ORDRE_PRIORITAIRE = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Volume', 'Poids'];
+
+const optionsTriees = computed(() => {
+    const priorite = (nom: string) => {
+        const i = ORDRE_PRIORITAIRE.indexOf(nom);
+
+        return i === -1 ? ORDRE_PRIORITAIRE.length : i;
+    };
+
+    return [...props.optionsCatalogue].sort(
+        (a, b) => priorite(a.nom) - priorite(b.nom) || a.nom.localeCompare(b.nom),
+    );
+});
 
 const emit = defineEmits<{
     'update:modelValue': [string | null];
@@ -51,7 +69,7 @@ function onCreated(id: string) {
         <Dropdown
             :model-value="modelValue"
             @update:model-value="onChange"
-            :options="optionsCatalogue"
+            :options="optionsTriees"
             option-label="nom"
             option-value="id"
             filter

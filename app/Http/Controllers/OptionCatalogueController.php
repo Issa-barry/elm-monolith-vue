@@ -32,6 +32,7 @@ class OptionCatalogueController extends Controller
                 'valeurs' => $o->valeurs->map(fn ($v) => [
                     'id' => $v->id,
                     'valeur' => $v->valeur,
+                    'hex' => $v->hex,
                     'position' => $v->position,
                 ]),
             ]);
@@ -98,6 +99,7 @@ class OptionCatalogueController extends Controller
 
         $valeur = $option->valeurs()->create([
             'valeur' => $request->validated('valeur'),
+            'hex' => $request->validated('hex'),
             'position' => $position === null ? 0 : $position + 1,
         ]);
 

@@ -14,6 +14,7 @@ class OptionCatalogueValeur extends Model
     protected $fillable = [
         'option_catalogue_id',
         'valeur',
+        'hex',
         'position',
     ];
 

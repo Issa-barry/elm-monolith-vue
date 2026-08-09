@@ -89,6 +89,7 @@ interface Produit {
     is_low_stock: boolean;
     has_stock: boolean;
     is_used: boolean;
+    has_variantes: boolean;
     last_mouvement_type: 'entree' | 'sortie' | null;
     last_mouvement_quantite: number | null;
     stocks_par_site: SiteStock[];
@@ -881,13 +882,33 @@ function confirmArchive(produit: Produit) {
                                         <DropdownMenuItem
                                             v-if="
                                                 can_ajuster_stock &&
-                                                data.has_stock
+                                                data.has_stock &&
+                                                !data.has_variantes
                                             "
                                             class="cursor-pointer"
                                             @click="openStockModal(data)"
                                         >
                                             <Sliders class="h-4 w-4" />
                                             Ajuster le stock
+                                        </DropdownMenuItem>
+                                        <!-- Produit à variantes : l'ajustement se fait depuis sa fiche,
+                                        où le choix de la variante est possible (cf. Show.vue). -->
+                                        <DropdownMenuItem
+                                            v-else-if="
+                                                can_ajuster_stock &&
+                                                data.has_stock &&
+                                                data.has_variantes
+                                            "
+                                            class="cursor-pointer"
+                                            as-child
+                                        >
+                                            <Link
+                                                :href="`/backoffice/produits/${data.id}`"
+                                                class="flex items-center gap-2"
+                                            >
+                                                <Sliders class="h-4 w-4" />
+                                                Ajuster le stock (par variante)
+                                            </Link>
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator
                                             v-if="

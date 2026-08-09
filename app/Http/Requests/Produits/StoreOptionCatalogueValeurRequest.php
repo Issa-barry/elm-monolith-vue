@@ -18,6 +18,9 @@ class StoreOptionCatalogueValeurRequest extends FormRequest
     {
         return [
             'valeur' => ['required', 'string', 'max:255'],
+            // Aide visuelle facultative (pastille de couleur) — jamais utilisée pour de la
+            // logique métier, cf. migration hex sur option_catalogue_valeurs.
+            'hex' => ['nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'],
         ];
     }
 
@@ -26,6 +29,7 @@ class StoreOptionCatalogueValeurRequest extends FormRequest
         return [
             'valeur.required' => 'La valeur est obligatoire.',
             'valeur.max' => 'La valeur ne peut pas dépasser 255 caractères.',
+            'hex.regex' => 'La couleur doit être un code hexadécimal valide (ex : #FF0000).',
         ];
     }
 }

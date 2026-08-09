@@ -272,7 +272,11 @@
       "Bash(xargs cat)",
       "Bash(./vendor/bin/pint --test app/Http/Controllers/ProduitController.php app/Http/Controllers/OptionCatalogueController.php app/Models/OptionCatalogue.php database/migrations/2026_08_09_162339_add_is_system_to_option_catalogues_table.php database/seeders/OptionCatalogueDefaultSeeder.php database/seeders/CategorieDefaultSeeder.php database/seeders/DatabaseSeeder.php database/seeders/ProductionSeeder.php database/seeders/ProduitsSeeder.php database/seeders/Organizations/FelloDemo/FelloDemoOrganizationSeeder.php database/seeders/Organizations/FelloDemo/FelloDemoCatalogSeeder.php tests/Feature/DefaultSeedersTest.php tests/Feature/OptionCatalogueTest.php)",
       "Bash(./vendor/bin/pint tests/Feature/DefaultSeedersTest.php)",
-      "Bash(./vendor/bin/pint --test tests/Feature/DefaultSeedersTest.php)"
+      "Bash(./vendor/bin/pint --test tests/Feature/DefaultSeedersTest.php)",
+      "Bash(./vendor/bin/pint --test app/Models/OptionCatalogueValeur.php app/Http/Requests/Produits/StoreOptionCatalogueValeurRequest.php app/Http/Controllers/OptionCatalogueController.php app/Http/Controllers/ProduitController.php database/seeders/OptionCatalogueDefaultSeeder.php database/migrations/2026_08_09_170518_add_hex_to_option_catalogue_valeurs_table.php tests/Feature/DefaultSeedersTest.php)",
+      "Bash(./vendor/bin/pint database/seeders/OptionCatalogueDefaultSeeder.php)",
+      "Bash(./vendor/bin/pint --test database/seeders/OptionCatalogueDefaultSeeder.php)",
+      "Bash(./vendor/bin/pint --test app/Http/Controllers/ProduitController.php app/Enums/MotifAjustementStock.php routes/web.php tests/Feature/ProduitTest.php)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64",

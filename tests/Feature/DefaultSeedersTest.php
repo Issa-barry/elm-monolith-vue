@@ -17,25 +17,42 @@ class DefaultSeedersTest extends TestCase
 
     // ── OptionCatalogueDefaultSeeder ─────────────────────────────────────────────
 
-    public function test_seede_les_trois_options_systeme_avec_leurs_valeurs(): void
+    public function test_seede_la_bibliotheque_doptions_systeme_avec_leurs_valeurs(): void
     {
         $org = Organization::factory()->create();
 
         OptionCatalogueDefaultSeeder::seedPourOrganisation($org->id);
 
         $noms = OptionCatalogue::where('organization_id', $org->id)->pluck('nom')->sort()->values()->all();
-        $this->assertSame(['Couleur', 'Pointure', 'Taille'], $noms);
+        $this->assertContains('Couleur', $noms);
+        $this->assertContains('Taille', $noms);
+        $this->assertContains('Pointure', $noms);
+        $this->assertContains('Genre', $noms);
+        $this->assertContains('Matière', $noms);
+        $this->assertContains('Longueur', $noms);
+        $this->assertGreaterThanOrEqual(20, count($noms));
 
         $couleur = OptionCatalogue::where('organization_id', $org->id)->where('nom', 'Couleur')->firstOrFail();
         $this->assertTrue($couleur->is_system);
-        $this->assertGreaterThanOrEqual(5, $couleur->valeurs()->count());
-        $this->assertTrue($couleur->valeurs()->where('valeur', 'Noir')->exists());
+        $this->assertGreaterThanOrEqual(10, $couleur->valeurs()->count());
+        $noir = $couleur->valeurs()->where('valeur', 'Noir')->firstOrFail();
+        $this->assertSame('#000000', $noir->hex);
 
         $taille = OptionCatalogue::where('organization_id', $org->id)->where('nom', 'Taille')->firstOrFail();
         $this->assertTrue($taille->valeurs()->where('valeur', 'XL')->exists());
+        $this->assertTrue($taille->valeurs()->where('valeur', 'XXXL')->exists());
+
+        $genre = OptionCatalogue::where('organization_id', $org->id)->where('nom', 'Genre')->firstOrFail();
+        $this->assertSame(['Homme', 'Femme', 'Unisexe'], $genre->valeurs->pluck('valeur')->all());
 
         $pointure = OptionCatalogue::where('organization_id', $org->id)->where('nom', 'Pointure')->firstOrFail();
         $this->assertTrue($pointure->valeurs()->where('valeur', '40')->exists());
+        $this->assertTrue($pointure->valeurs()->where('valeur', '40.5')->exists());
+
+        // Options dimensionnelles/métier : créées sans valeurs imposées (chaque métier a ses
+        // propres graduations, cf. docblock du seeder).
+        $longueur = OptionCatalogue::where('organization_id', $org->id)->where('nom', 'Longueur')->firstOrFail();
+        $this->assertCount(0, $longueur->valeurs);
     }
 
     public function test_options_systeme_idempotent_sans_doublon(): void

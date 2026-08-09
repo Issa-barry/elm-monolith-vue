@@ -18,12 +18,24 @@ interface SiteStock {
     qte_stock: number;
 }
 
+interface VarianteMin {
+    id: string;
+    libelle: string;
+    sku: string | null;
+    is_default: boolean;
+    is_active: boolean;
+}
+
 interface ProduitMin {
     id: string;
     nom: string;
     sku: string | null;
     qte_stock: number | null;
     stocks_par_site: SiteStock[];
+    /** Absent depuis la liste Produits (non chargé pour chaque ligne, coûteux) — dans ce cas
+     * le sélecteur de variante ne s'affiche jamais (cf. Produits/Index.vue qui redirige les
+     * produits à variantes vers la fiche produit plutôt que d'ouvrir ce modal). */
+    variantes?: VarianteMin[];
 }
 
 interface Site {
@@ -32,14 +44,25 @@ interface Site {
     code: string;
 }
 
-const props = defineProps<{
-    visible: boolean;
-    produit: ProduitMin;
-    /** Sites sur lesquels l'utilisateur est autorisé à ajuster le stock. */
-    sitesAutorises: Site[];
-    canAugmenter: boolean;
-    canDiminuer: boolean;
-}>();
+interface VarianteStockEntry {
+    variante_id: string;
+    site_id: string;
+    qte_stock: number;
+}
+
+const props = withDefaults(
+    defineProps<{
+        visible: boolean;
+        produit: ProduitMin;
+        /** Sites sur lesquels l'utilisateur est autorisé à ajuster le stock. */
+        sitesAutorises: Site[];
+        canAugmenter: boolean;
+        canDiminuer: boolean;
+        /** Stock réel par variante × site — cf. ProduitController::show(). */
+        varianteStocks?: VarianteStockEntry[];
+    }>(),
+    { varianteStocks: () => [] },
+);
 
 const emit = defineEmits<{
     (e: 'update:visible', val: boolean): void;
@@ -52,20 +75,40 @@ const localVisible = computed({
 
 const form = useForm({
     site_id: null as string | null,
+    variante_id: null as string | null,
     augmenter: null as number | null,
     diminuer: null as number | null,
     motif_type: null as string | null,
     motif_detail: '',
 });
 
-// Si un seul site autorisé, le présélectionner automatiquement.
+// Produit à vraies déclinaisons commerciales (> 1 variante) : on demande explicitement
+// laquelle ajuster. Un produit simple ne montre jamais ce champ — la variante par défaut
+// (interne, invisible) reste implicite, cf. ProduitController::ajusterStock().
+const aPlusieursVariantes = computed(
+    () => (props.produit.variantes?.length ?? 0) > 1,
+);
+
+const varianteOptions = computed(() =>
+    (props.produit.variantes ?? []).map((v) => ({
+        label: v.libelle || 'Variante par défaut',
+        value: v.id,
+    })),
+);
+
+// Si un seul site autorisé, le présélectionner automatiquement. Idem variante si le produit
+// n'en a qu'une seule (produit simple — variante par défaut implicite côté serveur).
 // immediate:true car le composant monte avec visible=true (v-if + showModal
 // sont assignés dans le même tick par le parent).
 watch(
     () => props.visible,
     (val) => {
-        if (val && props.sitesAutorises.length === 1) {
+        if (!val) return;
+        if (props.sitesAutorises.length === 1) {
             form.site_id = props.sitesAutorises[0].id;
+        }
+        if (!aPlusieursVariantes.value && props.produit.variantes?.length === 1) {
+            form.variante_id = props.produit.variantes[0].id;
         }
     },
     { immediate: true },
@@ -119,6 +162,17 @@ const isAutre = computed(() => form.motif_type === 'autre');
 
 const stockActuel = computed(() => {
     if (!form.site_id) return props.produit.qte_stock ?? 0;
+
+    // Produit à variantes : le stock affiché doit être celui de LA variante sélectionnée sur
+    // ce site précis, jamais l'agrégat toutes variantes confondues (stocks_par_site), qui
+    // mélangerait par exemple le stock "Blanc" et "Noir" d'un même site.
+    if (form.variante_id) {
+        const entree = props.varianteStocks.find(
+            (s) => s.variante_id === form.variante_id && s.site_id === form.site_id,
+        );
+        return entree?.qte_stock ?? 0;
+    }
+
     const siteStock = props.produit.stocks_par_site.find(
         (s) => s.site_id === form.site_id,
     );
@@ -208,7 +262,13 @@ function submit() {
             </div>
             <div class="ml-auto shrink-0 text-right">
                 <p class="text-xs text-muted-foreground">
-                    {{ form.site_id ? 'Stock sur ce site' : 'Stock total' }}
+                    {{
+                        form.site_id && form.variante_id
+                            ? 'Stock de cette variante sur ce site'
+                            : form.site_id
+                              ? 'Stock sur ce site'
+                              : 'Stock total'
+                    }}
                 </p>
                 <p class="text-2xl font-bold tabular-nums">
                     {{ formatNum(stockActuel) }}
@@ -251,6 +311,31 @@ function submit() {
 
                 <p v-if="form.errors.site_id" class="text-xs text-destructive">
                     {{ form.errors.site_id }}
+                </p>
+            </div>
+
+            <!-- Variante (uniquement si le produit a de vraies déclinaisons) -->
+            <div v-if="aPlusieursVariantes" class="space-y-1.5">
+                <label for="ajuster-variante" class="text-sm font-medium">
+                    Variante <span class="text-destructive">*</span>
+                </label>
+                <Dropdown
+                    v-model="form.variante_id"
+                    input-id="ajuster-variante"
+                    :options="varianteOptions"
+                    option-label="label"
+                    option-value="value"
+                    filter
+                    placeholder="Sélectionner une variante…"
+                    class="w-full"
+                    :class="form.errors.variante_id ? 'p-invalid' : ''"
+                    :pt="{ root: { 'data-testid': 'stock-variante-select' } }"
+                />
+                <p
+                    v-if="form.errors.variante_id"
+                    class="text-xs text-destructive"
+                >
+                    {{ form.errors.variante_id }}
                 </p>
             </div>
 
@@ -408,6 +493,7 @@ function submit() {
                     :disabled="
                         form.processing ||
                         !form.site_id ||
+                        (aPlusieursVariantes && !form.variante_id) ||
                         (!form.augmenter && !form.diminuer)
                     "
                     @click="submit"

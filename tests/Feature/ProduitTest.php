@@ -658,6 +658,36 @@ class ProduitTest extends TestCase
             ->assertSessionHasErrors('diminuer');
     }
 
+    public function test_ajuster_stock_accepte_apres_achat_en_augmentation(): void
+    {
+        $produit = $this->makeProduit($this->org, 10);
+        $site = $this->defaultSite();
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
+                'augmenter' => 5,
+                'motif_type' => 'apres_achat',
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('produits', ['id' => $produit->id, 'qte_stock' => 15]);
+    }
+
+    public function test_ajuster_stock_refuse_apres_achat_en_diminution(): void
+    {
+        $produit = $this->makeProduit($this->org, 10);
+        $site = $this->defaultSite();
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
+                'diminuer' => 5,
+                'motif_type' => 'apres_achat',
+            ])
+            ->assertSessionHasErrors('motif_type');
+    }
+
     public function test_ajuster_stock_echoue_si_retrait_depasse_stock_du_site(): void
     {
         $produit = $this->makeProduit($this->org, 0);
@@ -1172,5 +1202,147 @@ class ProduitTest extends TestCase
                 'prix_achat' => null,
             ])
             ->assertSessionHasErrors('type');
+    }
+
+    // ── ajusterStock : variante obligatoire pour un produit à déclinaisons ──────
+
+    public function test_ajuster_stock_exige_une_variante_pour_un_produit_a_declinaisons(): void
+    {
+        $produit = $this->makeProduitDecline($this->org);
+        $site = $this->defaultSite();
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
+                'augmenter' => 5,
+                'motif_type' => 'correction_stock',
+            ])
+            ->assertSessionHasErrors('variante_id');
+    }
+
+    public function test_ajuster_stock_avec_variante_najuste_que_cette_variante(): void
+    {
+        $produit = $this->makeProduitDecline($this->org);
+        [$varianteA, $varianteB] = $produit->variantes->all();
+        $site = $this->defaultSite();
+
+        $this->actingAs($this->user)
+            ->post(route('produits.ajuster-stock', $produit), [
+                'site_id' => $site->id,
+                'variante_id' => $varianteA->id,
+                'augmenter' => 7,
+                'motif_type' => 'apres_achat',
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('variante_stocks', [
+            'produit_variante_id' => $varianteA->id,
+            'site_id' => $site->id,
+            'qte_stock' => 7,
+        ]);
+        $this->assertDatabaseMissing('variante_stocks', [
+            'produit_variante_id' => $varianteB->id,
+            'site_id' => $site->id,
+        ]);
+    }
+
+    // ── variantesIndex / variantesBulkUpdate (éditeur groupé) ────────────────────
+
+    public function test_variantes_index_returns_200_for_authorized_user(): void
+    {
+        $produit = $this->makeProduitDecline($this->org);
+
+        $this->actingAs($this->user)
+            ->get(route('produits.variantes.index', $produit))
+            ->assertStatus(200);
+    }
+
+    public function test_variantes_index_returns_403_for_other_organization(): void
+    {
+        $autreOrg = Organization::factory()->create();
+        $produit = $this->makeProduitDecline($autreOrg);
+
+        $this->actingAs($this->user)
+            ->get(route('produits.variantes.index', $produit))
+            ->assertStatus(403);
+    }
+
+    public function test_bulk_update_modifie_plusieurs_variantes(): void
+    {
+        $produit = $this->makeProduitDecline($this->org);
+        [$varianteA, $varianteB] = $produit->variantes->all();
+
+        $this->actingAs($this->user)
+            ->put(route('produits.variantes.bulk-update', $produit), [
+                'variantes' => [
+                    ['id' => $varianteA->id, 'prix_vente' => 3000, 'is_active' => true],
+                    ['id' => $varianteB->id, 'prix_vente' => 3500, 'is_active' => false],
+                ],
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('produit_variantes', ['id' => $varianteA->id, 'prix_vente' => 3000, 'is_active' => true]);
+        $this->assertDatabaseHas('produit_variantes', ['id' => $varianteB->id, 'prix_vente' => 3500, 'is_active' => false]);
+    }
+
+    public function test_bulk_update_ne_touche_pas_le_sku(): void
+    {
+        $produit = $this->makeProduitDecline($this->org);
+        $variante = $produit->variantes->first();
+        $skuOriginal = $variante->sku;
+
+        $this->actingAs($this->user)
+            ->put(route('produits.variantes.bulk-update', $produit), [
+                'variantes' => [
+                    ['id' => $variante->id, 'prix_vente' => 4000],
+                ],
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('produit_variantes', ['id' => $variante->id, 'sku' => $skuOriginal]);
+    }
+
+    public function test_bulk_update_echoue_si_type_exige_un_prix_manquant(): void
+    {
+        $produit = $this->makeProduitDecline($this->org);
+        $variante = $produit->variantes->first();
+
+        $this->actingAs($this->user)
+            ->put(route('produits.variantes.bulk-update', $produit), [
+                'variantes' => [
+                    ['id' => $variante->id, 'prix_vente' => null, 'prix_achat' => null],
+                ],
+            ])
+            ->assertSessionHasErrors('type');
+    }
+
+    public function test_bulk_update_refuse_une_variante_dun_autre_produit(): void
+    {
+        $produit = $this->makeProduitDecline($this->org);
+        $autreProduit = $this->makeProduitDecline($this->org);
+        $varianteAutreProduit = $autreProduit->variantes->first();
+
+        $this->actingAs($this->user)
+            ->put(route('produits.variantes.bulk-update', $produit), [
+                'variantes' => [
+                    ['id' => $varianteAutreProduit->id, 'prix_vente' => 5000],
+                ],
+            ])
+            ->assertStatus(404);
+    }
+
+    public function test_bulk_update_returns_403_for_other_organization(): void
+    {
+        $autreOrg = Organization::factory()->create();
+        $produit = $this->makeProduitDecline($autreOrg);
+        $variante = $produit->variantes->first();
+
+        $this->actingAs($this->user)
+            ->put(route('produits.variantes.bulk-update', $produit), [
+                'variantes' => [
+                    ['id' => $variante->id, 'prix_vente' => 5000],
+                ],
+            ])
+            ->assertStatus(403);
     }
 }

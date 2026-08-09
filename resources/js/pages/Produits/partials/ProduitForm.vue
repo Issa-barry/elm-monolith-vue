@@ -200,6 +200,17 @@ function valeursProposees(index: number): string[] {
     return [...new Set([...proposees, ...option.valeurs])];
 }
 
+// Pastille de couleur (aide visuelle uniquement) — cf. migration hex sur
+// option_catalogue_valeurs. Retourne null si la valeur n'a pas de hex renseigné.
+function hexPour(index: number, valeur: string): string | null {
+    const option = props.form.options[index];
+    const catalogue = props.optionsCatalogue.find(
+        (o) => o.id === option.option_catalogue_id,
+    );
+
+    return catalogue?.valeurs.find((v) => v.valeur === valeur)?.hex ?? null;
+}
+
 function toggleValeur(index: number, valeur: string) {
     const option = props.form.options[index];
     const dejaCoche = option.valeurs.includes(valeur);
@@ -463,6 +474,11 @@ const depasseLimiteVariantes = computed(
                                 <Checkbox
                                     :model-value="option.valeurs.includes(valeur)"
                                     @update:model-value="toggleValeur(i, valeur)"
+                                />
+                                <span
+                                    v-if="hexPour(i, valeur)"
+                                    class="h-3 w-3 shrink-0 rounded-full border"
+                                    :style="{ backgroundColor: hexPour(i, valeur)! }"
                                 />
                                 {{ valeur }}
                             </label>
