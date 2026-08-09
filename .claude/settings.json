@@ -260,7 +260,10 @@
       "Bash(php -l c:/laragon/www/eau-la-maman/elm-monolithe/tests/Feature/CategorieTest.php)",
       "Bash(npx prettier *)",
       "Bash(stat -c '%y' /tmp/categorie_test_run.txt 2>/dev/null; date)",
-      "Bash(stat -c '%y' /tmp/final_categories_build.txt 2>/dev/null; date)"
+      "Bash(stat -c '%y' /tmp/final_categories_build.txt 2>/dev/null; date)",
+      "Bash(php -l c:/laragon/www/eau-la-maman/elm-monolithe/app/Models/User.php)",
+      "Bash(php -l c:/laragon/www/eau-la-maman/elm-monolithe/tests/Unit/UserTest.php)",
+      "Bash(vendor/bin/pint app/Models/User.php tests/Unit/UserTest.php)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64",
