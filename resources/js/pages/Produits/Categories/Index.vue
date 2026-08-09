@@ -15,6 +15,7 @@ import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
 import Textarea from 'primevue/textarea';
+import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
@@ -35,6 +36,7 @@ const props = defineProps<{
 }>();
 
 const toast = useToast();
+const confirm = useConfirm();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
@@ -220,9 +222,25 @@ function destroy(categorie: Categorie) {
         });
         return;
     }
-    if (!confirm(`Supprimer la catégorie « ${categorie.nom} » ?`)) return;
-    router.delete(`/backoffice/produits/categories/${categorie.id}`, {
-        preserveScroll: true,
+    confirm.require({
+        message: `Supprimer la catégorie « ${categorie.nom} » ?`,
+        header: 'Confirmer la suppression',
+        icon: 'pi pi-exclamation-triangle',
+        rejectLabel: 'Annuler',
+        acceptLabel: 'Supprimer',
+        acceptClass: 'p-button-danger',
+        accept: () => {
+            router.delete(`/backoffice/produits/categories/${categorie.id}`, {
+                preserveScroll: true,
+                onSuccess: () =>
+                    toast.add({
+                        severity: 'success',
+                        summary: 'Supprimée',
+                        detail: `« ${categorie.nom} » a été supprimée.`,
+                        life: 3000,
+                    }),
+            });
+        },
     });
 }
 </script>
