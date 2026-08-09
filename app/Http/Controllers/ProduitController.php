@@ -250,7 +250,7 @@ class ProduitController extends Controller
     {
         $this->authorize('view', $produit);
 
-        $produit->load(['categorie', 'variantes.valeurs.option', 'medias']);
+        $produit->load(['categorie', 'variantes.valeurs.option', 'variantes.media', 'medias']);
         $orgId = $produit->organization_id;
         $user = auth()->user();
 
@@ -391,6 +391,8 @@ class ProduitController extends Controller
                     'is_default' => $v->is_default,
                     'is_active' => $v->is_active,
                     'options' => $this->varianteOptions($v),
+                    'media_id' => $v->media_id,
+                    'image_url' => $v->effective_image_url,
                 ]),
             ],
             'mouvements' => collect($mouvements),
@@ -400,6 +402,7 @@ class ProduitController extends Controller
             'can_diminuer_stock' => $canDiminuer,
             'sites_autorises' => $sitesAutorisesRaw->values(),
             'variante_stocks' => $varianteStocksParSiteEtVariante,
+            'limites' => $this->limitesCatalogue($orgId),
         ]);
     }
 
@@ -689,6 +692,7 @@ class ProduitController extends Controller
             'cout' => 'nullable|integer|min:0',
             'seuil_alerte_stock' => 'nullable|integer|min:0',
             'is_active' => 'boolean',
+            'media_id' => ['nullable', Rule::exists('produit_medias', 'id')->where('produit_id', $produit->id)],
         ]);
 
         // Valide les prix EFFECTIFS (valeurs déjà sur la variante, écrasées par celles envoyées)

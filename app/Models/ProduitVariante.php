@@ -30,6 +30,7 @@ class ProduitVariante extends Model
         'is_default',
         'is_active',
         'combo_hash',
+        'media_id',
         'position',
     ];
 
@@ -107,12 +108,36 @@ class ProduitVariante extends Model
         return $this->hasMany(VarianteStock::class);
     }
 
-    public function medias(): HasMany
+    /**
+     * Média spécifique à cette variante — nullable, plusieurs variantes peuvent partager le
+     * même média (ex: toutes les pointures "Blanc" pointent vers la même photo). Sans média
+     * propre, l'affichage retombe sur l'image principale du produit — cf.
+     * getEffectiveImageUrlAttribute().
+     */
+    public function media(): BelongsTo
     {
-        return $this->hasMany(ProduitMedia::class);
+        return $this->belongsTo(ProduitMedia::class, 'media_id');
     }
 
     // ── Accesseurs ────────────────────────────────────────────────────────────
+
+    /**
+     * URL résolue pour l'affichage (liste des variantes, groupes, PDV...) — centralise le
+     * fallback pour ne jamais réécrire cette logique dans chaque écran :
+     * 1. média propre à la variante ;
+     * 2. image principale du produit ;
+     * 3. null (le frontend affiche alors un placeholder).
+     * Respecte le eager loading déjà en place ('media', 'produit.medias') pour éviter le N+1.
+     */
+    public function getEffectiveImageUrlAttribute(): ?string
+    {
+        $media = $this->relationLoaded('media') ? $this->media : $this->media()->first();
+        if ($media) {
+            return $media->url;
+        }
+
+        return $this->produit?->image_url;
+    }
 
     /**
      * Libellé lisible de la combinaison (ex: "Noir / M"). Vide pour la variante par défaut.

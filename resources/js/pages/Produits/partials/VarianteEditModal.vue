@@ -21,14 +21,27 @@ interface Variante {
     cout: number | null;
     seuil_alerte_stock: number | null;
     is_active: boolean;
+    media_id?: string | null;
+    image_url?: string | null;
 }
 
-const props = defineProps<{
-    visible: boolean;
-    produitId: string;
-    variante: Variante | null;
-    isFabricable: boolean;
-}>();
+interface MediaOption {
+    id: string;
+    thumb_url: string | null;
+    url: string;
+}
+
+const props = withDefaults(
+    defineProps<{
+        visible: boolean;
+        produitId: string;
+        variante: Variante | null;
+        isFabricable: boolean;
+        /** Galerie du produit — absente si l'appelant ne gère pas encore les médias. */
+        medias?: MediaOption[];
+    }>(),
+    { medias: () => [] },
+);
 
 const emit = defineEmits<{
     'update:visible': [boolean];
@@ -48,6 +61,7 @@ const form = useForm({
     cout: null as number | null,
     seuil_alerte_stock: null as number | null,
     is_active: true,
+    media_id: null as string | null,
 });
 
 // La modale reste montée (v-if géré par le parent au moment de l'ouverture) : resynchroniser
@@ -64,6 +78,7 @@ watch(
         form.cout = v.cout;
         form.seuil_alerte_stock = v.seuil_alerte_stock;
         form.is_active = v.is_active;
+        form.media_id = v.media_id ?? null;
     },
     { immediate: true },
 );
@@ -113,6 +128,43 @@ function submit() {
         </div>
 
         <div class="space-y-4">
+            <div v-if="medias.length > 0" class="space-y-1.5">
+                <Label class="block">Image de la variante</Label>
+                <div class="flex flex-wrap gap-2">
+                    <button
+                        type="button"
+                        title="Utiliser l'image principale du produit"
+                        class="flex h-14 w-14 items-center justify-center rounded-md border-2 text-[10px] text-muted-foreground"
+                        :class="
+                            form.media_id === null
+                                ? 'border-primary bg-primary/5'
+                                : 'border-dashed'
+                        "
+                        @click="form.media_id = null"
+                    >
+                        Défaut
+                    </button>
+                    <button
+                        v-for="m in medias"
+                        :key="m.id"
+                        type="button"
+                        class="h-14 w-14 overflow-hidden rounded-md border-2"
+                        :class="
+                            form.media_id === m.id
+                                ? 'border-primary'
+                                : 'border-transparent'
+                        "
+                        @click="form.media_id = m.id"
+                    >
+                        <img
+                            :src="m.thumb_url ?? m.url"
+                            class="h-full w-full object-cover"
+                            alt=""
+                        />
+                    </button>
+                </div>
+            </div>
+
             <div
                 class="grid gap-4"
                 :class="isFabricable ? 'grid-cols-2' : 'grid-cols-2'"

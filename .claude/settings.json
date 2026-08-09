@@ -276,7 +276,11 @@
       "Bash(./vendor/bin/pint --test app/Models/OptionCatalogueValeur.php app/Http/Requests/Produits/StoreOptionCatalogueValeurRequest.php app/Http/Controllers/OptionCatalogueController.php app/Http/Controllers/ProduitController.php database/seeders/OptionCatalogueDefaultSeeder.php database/migrations/2026_08_09_170518_add_hex_to_option_catalogue_valeurs_table.php tests/Feature/DefaultSeedersTest.php)",
       "Bash(./vendor/bin/pint database/seeders/OptionCatalogueDefaultSeeder.php)",
       "Bash(./vendor/bin/pint --test database/seeders/OptionCatalogueDefaultSeeder.php)",
-      "Bash(./vendor/bin/pint --test app/Http/Controllers/ProduitController.php app/Enums/MotifAjustementStock.php routes/web.php tests/Feature/ProduitTest.php)"
+      "Bash(./vendor/bin/pint --test app/Http/Controllers/ProduitController.php app/Enums/MotifAjustementStock.php routes/web.php tests/Feature/ProduitTest.php)",
+      "Bash(grep -n ''\\\\''variantes'\\\\'' => $produit->variantes->map' c:/laragon/www/eau-la-maman/elm-monolithe/app/Http/Controllers/ProduitController.php)",
+      "Bash(grep -n \"use Illuminate\\\\\\\\\\\\\\\\Validation\\\\\\\\\\\\\\\\Rule;\" \"c:/laragon/www/eau-la-maman/elm-monolithe/app/Http/Controllers/ProduitController.php\")",
+      "Bash(grep -n \"FAIL\\\\|Tests\\\\\\\\\\\\\\\\Feature\" \"C:\\\\Users\\\\issab\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--laragon-www-eau-la-maman-elm-monolithe\\\\b191c652-67b4-4f7c-8b0d-b67fe0585f72\\\\tasks\\\\bvgecw723.output\")",
+      "Bash(./vendor/bin/pint --test app/Http/Controllers/MediaController.php app/Models/ProduitMedia.php app/Models/ProduitVariante.php app/Services/MediaService.php app/Http/Controllers/ProduitController.php routes/web.php database/migrations/2026_08_09_195923_move_media_association_to_variantes_table.php)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64",

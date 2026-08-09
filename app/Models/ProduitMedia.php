@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Storage;
 
 class ProduitMedia extends Model
@@ -18,7 +19,6 @@ class ProduitMedia extends Model
     protected $fillable = [
         'organization_id',
         'produit_id',
-        'produit_variante_id',
         'path',
         'thumb_path',
         'original_name',
@@ -43,9 +43,13 @@ class ProduitMedia extends Model
         return $this->belongsTo(Produit::class);
     }
 
-    public function variante(): BelongsTo
+    /**
+     * Variantes qui utilisent ce média — plusieurs variantes peuvent partager la même photo
+     * (ex: toutes les pointures "Blanc"), cf. migration move_media_association_to_variantes_table.
+     */
+    public function variantes(): HasMany
     {
-        return $this->belongsTo(ProduitVariante::class, 'produit_variante_id');
+        return $this->hasMany(ProduitVariante::class, 'media_id');
     }
 
     public function getUrlAttribute(): ?string

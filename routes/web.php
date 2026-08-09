@@ -40,6 +40,7 @@ use App\Http\Controllers\EquipeLivraisonController;
 use App\Http\Controllers\FactureVenteController;
 use App\Http\Controllers\FraisCommissionPartController;
 use App\Http\Controllers\LivreurController;
+use App\Http\Controllers\MediaController;
 use App\Http\Controllers\OptionCatalogueController;
 use App\Http\Controllers\PackingController;
 use App\Http\Controllers\PaieController;
@@ -285,6 +286,18 @@ Route::prefix('backoffice')->group(function () {
                 ->name('produits.variantes.index');
             Route::put('produits/{produit}/variantes', [ProduitController::class, 'variantesBulkUpdate'])
                 ->name('produits.variantes.bulk-update');
+
+            // Galerie photo produit — indépendante du formulaire principal, cf. MediaController.
+            Route::post('produits/{produit}/medias', [MediaController::class, 'store'])
+                ->name('produits.medias.store');
+            Route::patch('produits/{produit}/medias/reordonner', [MediaController::class, 'reordonner'])
+                ->name('produits.medias.reordonner');
+            Route::patch('produits/{produit}/medias/{media}/principale', [MediaController::class, 'definirPrincipale'])
+                ->name('produits.medias.principale');
+            Route::delete('produits/{produit}/medias/{media}', [MediaController::class, 'destroy'])
+                ->name('produits.medias.destroy');
+            Route::post('produits/{produit}/medias/{media}/variantes', [MediaController::class, 'assignerVariantes'])
+                ->name('produits.medias.assigner-variantes');
         });
 
         // ── Module : Sites ────────────────────────────────────────────────────────

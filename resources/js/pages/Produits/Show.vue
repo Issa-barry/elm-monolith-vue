@@ -13,6 +13,7 @@ import {
     Building2,
     Factory,
     History,
+    Image,
     Layers,
     Package,
     Pencil,
@@ -24,6 +25,7 @@ import {
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import AjusterStockModal from './partials/AjusterStockModal.vue';
+import GalerieMedias from './partials/GalerieMedias.vue';
 import HistoriqueModal from './partials/HistoriqueModal.vue';
 import VarianteEditModal from './partials/VarianteEditModal.vue';
 import VariantesGroupees from './partials/VariantesGroupees.vue';
@@ -57,6 +59,16 @@ interface Variante {
     is_default: boolean;
     is_active: boolean;
     options: VarianteOption[];
+    media_id: string | null;
+    image_url: string | null;
+}
+
+interface Media {
+    id: string;
+    url: string;
+    thumb_url: string | null;
+    is_primary: boolean;
+    position: number;
 }
 
 interface Produit {
@@ -84,6 +96,7 @@ interface Produit {
     updated_at: string | null;
     stocks_par_site: SiteStock[];
     variantes: Variante[];
+    medias: Media[];
 }
 
 interface StockMouvement {
@@ -131,6 +144,7 @@ const props = defineProps<{
     can_diminuer_stock: boolean;
     sites_autorises: Site[];
     variante_stocks: VarianteStockEntry[];
+    limites: { max_photos_produit: number };
 }>();
 
 const { can } = usePermissions();
@@ -604,6 +618,21 @@ const ajustements = props.mouvements.map((m) => ({
                 </div>
             </div>
 
+            <!-- ─── Photos ─── -->
+            <div class="rounded-xl border bg-card p-5">
+                <h2
+                    class="mb-4 flex items-center gap-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase"
+                >
+                    <Image class="h-4 w-4" />
+                    Photos
+                </h2>
+                <GalerieMedias
+                    :produit-id="produit.id"
+                    :medias="produit.medias"
+                    :max-photos="limites.max_photos_produit"
+                />
+            </div>
+
             <!-- ─── Variantes ─── -->
             <div
                 v-if="produit.variantes.length > 1"
@@ -621,6 +650,8 @@ const ajustements = props.mouvements.map((m) => ({
                 <VariantesGroupees
                     :variantes="produit.variantes"
                     :editable="can('produits.update')"
+                    :medias="produit.medias"
+                    :produit-id="produit.id"
                     @edit-variante="
                         (v) =>
                             editerVariante(
@@ -804,6 +835,7 @@ const ajustements = props.mouvements.map((m) => ({
             :produit-id="produit.id"
             :variante="varianteEnEdition"
             :is-fabricable="isFabricable"
+            :medias="produit.medias"
         />
     </AppLayout>
 </template>
