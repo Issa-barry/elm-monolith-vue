@@ -44,7 +44,10 @@ const toast = useToast();
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
     { title: 'Produits', href: '/backoffice/produits' },
-    { title: props.produit.nom, href: `/backoffice/produits/${props.produit.id}` },
+    {
+        title: props.produit.nom,
+        href: `/backoffice/produits/${props.produit.id}`,
+    },
     { title: 'Variantes', href: '#' },
 ];
 
@@ -110,7 +113,8 @@ function appliquerPrixGroupe() {
 
 function appliquerStatutGroupe() {
     rows.forEach((r) => {
-        if (selection.has(r.id)) r.is_active = bulkStatutValeur.value === 'actif';
+        if (selection.has(r.id))
+            r.is_active = bulkStatutValeur.value === 'actif';
     });
     showBulkStatut.value = false;
 }
@@ -179,7 +183,10 @@ function enregistrer() {
                         </p>
                     </div>
                 </div>
-                <Button :disabled="nbModifiees === 0 || processing" @click="enregistrer">
+                <Button
+                    :disabled="nbModifiees === 0 || processing"
+                    @click="enregistrer"
+                >
                     <Save class="mr-2 h-4 w-4" />
                     {{
                         processing
@@ -196,12 +203,22 @@ function enregistrer() {
                 v-if="selection.size > 0"
                 class="flex items-center gap-3 rounded-lg border bg-muted/40 px-4 py-2.5"
             >
-                <span class="text-sm font-medium">{{ selection.size }} sélectionnée(s)</span>
+                <span class="text-sm font-medium"
+                    >{{ selection.size }} sélectionnée(s)</span
+                >
                 <div class="flex gap-2">
-                    <Button variant="outline" size="sm" @click="showBulkPrix = true">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        @click="showBulkPrix = true"
+                    >
                         Modifier le prix
                     </Button>
-                    <Button variant="outline" size="sm" @click="showBulkStatut = true">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        @click="showBulkStatut = true"
+                    >
                         Modifier le statut
                     </Button>
                 </div>
@@ -219,7 +236,9 @@ function enregistrer() {
             <div class="overflow-x-auto rounded-xl border bg-card">
                 <table class="w-full text-xs">
                     <thead>
-                        <tr class="border-b bg-muted/30 text-[11px] font-semibold text-muted-foreground uppercase">
+                        <tr
+                            class="border-b bg-muted/30 text-[11px] font-semibold text-muted-foreground uppercase"
+                        >
                             <th class="w-10 py-2 pl-3">
                                 <Checkbox
                                     :model-value="toutSelectionne"
@@ -229,8 +248,15 @@ function enregistrer() {
                             <th class="px-2 py-2 text-left">Variante</th>
                             <th class="px-2 py-2 text-left">SKU</th>
                             <th class="px-2 py-2 text-left">Code-barres</th>
-                            <th class="px-2 py-2 text-left">Code fournisseur</th>
-                            <th v-if="isFabricable" class="px-2 py-2 text-right">Prix usine</th>
+                            <th class="px-2 py-2 text-left">
+                                Code fournisseur
+                            </th>
+                            <th
+                                v-if="isFabricable"
+                                class="px-2 py-2 text-right"
+                            >
+                                Prix usine
+                            </th>
                             <th class="px-2 py-2 text-right">Prix achat</th>
                             <th class="px-2 py-2 text-right">Prix vente</th>
                             <th class="px-2 py-2 text-right">Coût</th>
@@ -254,7 +280,9 @@ function enregistrer() {
                             <td class="px-2 font-medium whitespace-nowrap">
                                 {{ row.libelle || 'Variante par défaut' }}
                             </td>
-                            <td class="px-2 font-mono text-muted-foreground whitespace-nowrap">
+                            <td
+                                class="px-2 font-mono whitespace-nowrap text-muted-foreground"
+                            >
                                 {{ row.sku || '—' }}
                             </td>
                             <td class="px-2">
@@ -336,8 +364,9 @@ function enregistrer() {
             </div>
 
             <p class="text-xs text-muted-foreground">
-                Le stock ne se modifie pas ici — utilisez « Ajuster le stock » depuis la fiche
-                produit, qui trace chaque mouvement avec un motif.
+                Le stock ne se modifie pas ici — utilisez « Ajuster le stock »
+                depuis la fiche produit, qui trace chaque mouvement avec un
+                motif.
             </p>
         </div>
     </AppLayout>
@@ -363,14 +392,19 @@ function enregistrer() {
                 autofocus
             />
             <p class="text-xs text-muted-foreground">
-                Appliqué aux {{ selection.size }} variante(s) sélectionnée(s) — n'oubliez pas
-                d'enregistrer ensuite.
+                Appliqué aux {{ selection.size }} variante(s) sélectionnée(s) —
+                n'oubliez pas d'enregistrer ensuite.
             </p>
         </div>
         <template #footer>
             <div class="flex justify-end gap-2">
-                <Button variant="outline" @click="showBulkPrix = false">Annuler</Button>
-                <Button :disabled="bulkPrixValeur === null" @click="appliquerPrixGroupe">
+                <Button variant="outline" @click="showBulkPrix = false"
+                    >Annuler</Button
+                >
+                <Button
+                    :disabled="bulkPrixValeur === null"
+                    @click="appliquerPrixGroupe"
+                >
                     Appliquer
                 </Button>
             </div>
@@ -399,13 +433,15 @@ function enregistrer() {
                 class="w-full"
             />
             <p class="text-xs text-muted-foreground">
-                Appliqué aux {{ selection.size }} variante(s) sélectionnée(s) — n'oubliez pas
-                d'enregistrer ensuite.
+                Appliqué aux {{ selection.size }} variante(s) sélectionnée(s) —
+                n'oubliez pas d'enregistrer ensuite.
             </p>
         </div>
         <template #footer>
             <div class="flex justify-end gap-2">
-                <Button variant="outline" @click="showBulkStatut = false">Annuler</Button>
+                <Button variant="outline" @click="showBulkStatut = false"
+                    >Annuler</Button
+                >
                 <Button @click="appliquerStatutGroupe">Appliquer</Button>
             </div>
         </template>

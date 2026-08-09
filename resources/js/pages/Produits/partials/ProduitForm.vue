@@ -179,7 +179,10 @@ function updateOption(index: number, patch: Partial<OptionInput>) {
 
 // Choix d'une option de catalogue pour la ligne : repart d'une sélection de valeurs
 // vierge pour éviter de mélanger les valeurs d'une option précédemment choisie.
-function onOptionCatalogueSelected(index: number, option: OptionCatalogue | null) {
+function onOptionCatalogueSelected(
+    index: number,
+    option: OptionCatalogue | null,
+) {
     updateOption(index, {
         nom: option?.nom ?? '',
         option_catalogue_id: option?.id ?? null,
@@ -216,10 +219,15 @@ function toggleValeur(index: number, valeur: string) {
     const dejaCoche = option.valeurs.includes(valeur);
 
     if (dejaCoche) {
-        updateOption(index, { valeurs: option.valeurs.filter((v) => v !== valeur) });
+        updateOption(index, {
+            valeurs: option.valeurs.filter((v) => v !== valeur),
+        });
         return;
     }
-    if (props.limites && option.valeurs.length >= props.limites.max_valeurs_option) {
+    if (
+        props.limites &&
+        option.valeurs.length >= props.limites.max_valeurs_option
+    ) {
         return;
     }
     updateOption(index, { valeurs: [...option.valeurs, valeur] });
@@ -259,7 +267,6 @@ const depasseLimiteVariantes = computed(
         !!props.limites &&
         totalVariantes.value > props.limites.max_variantes_produit,
 );
-
 </script>
 
 <template>
@@ -426,10 +433,9 @@ const depasseLimiteVariantes = computed(
 
             <template v-if="!hasDeclinaisons">
                 <p class="text-sm text-muted-foreground">
-                    Produit simple, sans variante — couleur, taille, etc.
-                    Cochez la case ci-dessus pour définir des options (ex :
-                    Couleur, Taille) et générer les combinaisons
-                    automatiquement.
+                    Produit simple, sans variante — couleur, taille, etc. Cochez
+                    la case ci-dessus pour définir des options (ex : Couleur,
+                    Taille) et générer les combinaisons automatiquement.
                 </p>
             </template>
 
@@ -457,7 +463,10 @@ const depasseLimiteVariantes = computed(
                             <X class="h-4 w-4" />
                         </button>
                     </div>
-                    <p v-if="errors[`options.${i}.nom`]" class="mb-2 text-xs text-destructive">
+                    <p
+                        v-if="errors[`options.${i}.nom`]"
+                        class="mb-2 text-xs text-destructive"
+                    >
                         {{ errors[`options.${i}.nom`] }}
                     </p>
 
@@ -468,17 +477,24 @@ const depasseLimiteVariantes = computed(
                                 :key="valeur"
                                 class="flex cursor-pointer items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-sm"
                                 :class="{
-                                    'border-primary bg-primary/5': option.valeurs.includes(valeur),
+                                    'border-primary bg-primary/5':
+                                        option.valeurs.includes(valeur),
                                 }"
                             >
                                 <Checkbox
-                                    :model-value="option.valeurs.includes(valeur)"
-                                    @update:model-value="toggleValeur(i, valeur)"
+                                    :model-value="
+                                        option.valeurs.includes(valeur)
+                                    "
+                                    @update:model-value="
+                                        toggleValeur(i, valeur)
+                                    "
                                 />
                                 <span
                                     v-if="hexPour(i, valeur)"
                                     class="h-3 w-3 shrink-0 rounded-full border"
-                                    :style="{ backgroundColor: hexPour(i, valeur)! }"
+                                    :style="{
+                                        backgroundColor: hexPour(i, valeur)!,
+                                    }"
                                 />
                                 {{ valeur }}
                             </label>
@@ -613,8 +629,11 @@ const depasseLimiteVariantes = computed(
                 :class="isFabricable ? 'lg:grid-cols-4' : 'lg:grid-cols-3'"
             >
                 <div v-if="isFabricable">
-                    <Label class="mb-1.5 block">Prix usine</Label>
+                    <Label for="prix_usine" class="mb-1.5 block"
+                        >Prix usine</Label
+                    >
                     <InputNumber
+                        input-id="prix_usine"
                         :model-value="form.prix_usine"
                         @update:model-value="
                             $emit('update:form', {
@@ -637,8 +656,11 @@ const depasseLimiteVariantes = computed(
                 </div>
 
                 <div>
-                    <Label class="mb-1.5 block">Prix achat</Label>
+                    <Label for="prix_achat" class="mb-1.5 block"
+                        >Prix achat</Label
+                    >
                     <InputNumber
+                        input-id="prix_achat"
                         :model-value="form.prix_achat"
                         @update:model-value="
                             $emit('update:form', {
@@ -661,8 +683,11 @@ const depasseLimiteVariantes = computed(
                 </div>
 
                 <div>
-                    <Label class="mb-1.5 block">Prix vente</Label>
+                    <Label for="prix_vente" class="mb-1.5 block"
+                        >Prix vente</Label
+                    >
                     <InputNumber
+                        input-id="prix_vente"
                         :model-value="form.prix_vente"
                         @update:model-value="
                             $emit('update:form', {
@@ -685,8 +710,11 @@ const depasseLimiteVariantes = computed(
                 </div>
 
                 <div>
-                    <Label class="mb-1.5 block">Coût de revient</Label>
+                    <Label for="cout" class="mb-1.5 block"
+                        >Coût de revient</Label
+                    >
                     <InputNumber
+                        input-id="cout"
                         :model-value="form.cout"
                         @update:model-value="
                             $emit('update:form', { ...form, cout: $event })

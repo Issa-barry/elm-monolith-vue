@@ -107,7 +107,10 @@ watch(
         if (props.sitesAutorises.length === 1) {
             form.site_id = props.sitesAutorises[0].id;
         }
-        if (!aPlusieursVariantes.value && props.produit.variantes?.length === 1) {
+        if (
+            !aPlusieursVariantes.value &&
+            props.produit.variantes?.length === 1
+        ) {
             form.variante_id = props.produit.variantes[0].id;
         }
     },
@@ -168,7 +171,9 @@ const stockActuel = computed(() => {
     // mélangerait par exemple le stock "Blanc" et "Noir" d'un même site.
     if (form.variante_id) {
         const entree = props.varianteStocks.find(
-            (s) => s.variante_id === form.variante_id && s.site_id === form.site_id,
+            (s) =>
+                s.variante_id === form.variante_id &&
+                s.site_id === form.site_id,
         );
         return entree?.qte_stock ?? 0;
     }

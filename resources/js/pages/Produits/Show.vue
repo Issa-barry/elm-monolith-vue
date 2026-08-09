@@ -302,7 +302,10 @@ const ajustements = props.mouvements.map((m) => ({
                         Ajuster le stock
                     </Button>
                     <Link
-                        v-if="can('produits.update') && produit.variantes.length > 1"
+                        v-if="
+                            can('produits.update') &&
+                            produit.variantes.length > 1
+                        "
                         :href="`/backoffice/produits/${produit.id}/variantes`"
                     >
                         <Button variant="outline">
@@ -643,7 +646,8 @@ const ajustements = props.mouvements.map((m) => ({
                 >
                     <Layers class="h-4 w-4" />
                     Variantes
-                    <span class="font-normal normal-case text-muted-foreground/70"
+                    <span
+                        class="font-normal text-muted-foreground/70 normal-case"
                         >({{ produit.variantes.length }})</span
                     >
                 </h2>

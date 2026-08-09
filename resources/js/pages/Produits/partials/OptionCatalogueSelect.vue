@@ -25,7 +25,14 @@ const props = defineProps<{
 // Les options les plus fréquentes remontent en tête de liste (le champ filtre du Dropdown
 // couvre le reste) — évite de noyer "Couleur"/"Taille" au milieu d'une vingtaine d'options
 // système (dimensions, connectivité...) pour un usage courant type habillement.
-const ORDRE_PRIORITAIRE = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Volume', 'Poids'];
+const ORDRE_PRIORITAIRE = [
+    'Couleur',
+    'Taille',
+    'Pointure',
+    'Matière',
+    'Volume',
+    'Poids',
+];
 
 const optionsTriees = computed(() => {
     const priorite = (nom: string) => {
@@ -35,7 +42,8 @@ const optionsTriees = computed(() => {
     };
 
     return [...props.optionsCatalogue].sort(
-        (a, b) => priorite(a.nom) - priorite(b.nom) || a.nom.localeCompare(b.nom),
+        (a, b) =>
+            priorite(a.nom) - priorite(b.nom) || a.nom.localeCompare(b.nom),
     );
 });
 
@@ -50,10 +58,7 @@ const showCreateModal = ref(false);
 
 function onChange(id: string | null) {
     emit('update:modelValue', id);
-    emit(
-        'selected',
-        props.optionsCatalogue.find((o) => o.id === id) ?? null,
-    );
+    emit('selected', props.optionsCatalogue.find((o) => o.id === id) ?? null);
 }
 
 function onCreated(id: string) {

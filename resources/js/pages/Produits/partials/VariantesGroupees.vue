@@ -68,7 +68,10 @@ function assignerImage(media: MediaOption) {
     router.post(
         `/backoffice/produits/${props.produitId}/medias/${media.id}/variantes`,
         { variante_ids: groupe.variantes.map((v) => v.id) },
-        { preserveScroll: true, onSuccess: () => (groupeAssignation.value = null) },
+        {
+            preserveScroll: true,
+            onSuccess: () => (groupeAssignation.value = null),
+        },
     );
 }
 
@@ -95,26 +98,35 @@ const optionNames = computed(() => {
 const isGroupable = computed(() => optionNames.value.length >= 2);
 
 const groupBy = ref<string | null>(null);
-const groupByActif = computed(() => groupBy.value ?? optionNames.value[0] ?? null);
+const groupByActif = computed(
+    () => groupBy.value ?? optionNames.value[0] ?? null,
+);
 
 const groupes = computed(() => {
     if (!isGroupable.value || !groupByActif.value) return [];
 
     const parCle = new Map<string, Variante[]>();
     for (const v of props.variantes) {
-        const cle = v.options.find((o) => o.option === groupByActif.value)?.valeur ?? '—';
+        const cle =
+            v.options.find((o) => o.option === groupByActif.value)?.valeur ??
+            '—';
         if (!parCle.has(cle)) parCle.set(cle, []);
         parCle.get(cle)!.push(v);
     }
 
-    return Array.from(parCle.entries()).map(([cle, variantes]) => ({ cle, variantes }));
+    return Array.from(parCle.entries()).map(([cle, variantes]) => ({
+        cle,
+        variantes,
+    }));
 });
 
 function sousLibelle(v: Variante): string {
-    return v.options
-        .filter((o) => o.option !== groupByActif.value)
-        .map((o) => o.valeur)
-        .join(' / ') || (v.is_default ? 'Variante par défaut' : v.libelle);
+    return (
+        v.options
+            .filter((o) => o.option !== groupByActif.value)
+            .map((o) => o.valeur)
+            .join(' / ') || (v.is_default ? 'Variante par défaut' : v.libelle)
+    );
 }
 
 const groupesOuverts = reactive(new Set<string>());
@@ -144,16 +156,27 @@ function prixGroupe(variantes: Variante[]): string {
         </div>
 
         <!-- Vue groupée (2+ options) ─────────────────────────────────────── -->
-        <div v-if="isGroupable" class="divide-y divide-border/50 rounded-lg border">
+        <div
+            v-if="isGroupable"
+            class="divide-y divide-border/50 rounded-lg border"
+        >
             <div v-for="groupe in groupes" :key="groupe.cle">
-                <div class="flex w-full items-center justify-between gap-3 px-3 py-2.5 hover:bg-muted/40">
+                <div
+                    class="flex w-full items-center justify-between gap-3 px-3 py-2.5 hover:bg-muted/40"
+                >
                     <button
                         type="button"
                         class="flex flex-1 items-center gap-2 text-left"
                         @click="toggleGroupe(groupe.cle)"
                     >
-                        <ChevronDown v-if="groupesOuverts.has(groupe.cle)" class="h-4 w-4 shrink-0 text-muted-foreground" />
-                        <ChevronRight v-else class="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <ChevronDown
+                            v-if="groupesOuverts.has(groupe.cle)"
+                            class="h-4 w-4 shrink-0 text-muted-foreground"
+                        />
+                        <ChevronRight
+                            v-else
+                            class="h-4 w-4 shrink-0 text-muted-foreground"
+                        />
                         <img
                             v-if="imageGroupe(groupe.variantes)"
                             :src="imageGroupe(groupe.variantes)!"
@@ -162,7 +185,9 @@ function prixGroupe(variantes: Variante[]): string {
                         />
                         <span class="font-medium">{{ groupe.cle }}</span>
                         <span class="text-xs text-muted-foreground"
-                            >{{ groupe.variantes.length }} variante{{ groupe.variantes.length > 1 ? 's' : '' }}</span
+                            >{{ groupe.variantes.length }} variante{{
+                                groupe.variantes.length > 1 ? 's' : ''
+                            }}</span
                         >
                     </button>
                     <button
@@ -174,24 +199,39 @@ function prixGroupe(variantes: Variante[]): string {
                     >
                         <Image class="h-3.5 w-3.5" />
                     </button>
-                    <span class="text-sm font-semibold tabular-nums">{{ prixGroupe(groupe.variantes) }}</span>
+                    <span class="text-sm font-semibold tabular-nums">{{
+                        prixGroupe(groupe.variantes)
+                    }}</span>
                 </div>
 
-                <div v-if="groupesOuverts.has(groupe.cle)" class="overflow-x-auto border-t bg-muted/10">
+                <div
+                    v-if="groupesOuverts.has(groupe.cle)"
+                    class="overflow-x-auto border-t bg-muted/10"
+                >
                     <table class="w-full text-sm">
                         <tbody class="divide-y divide-border/50">
                             <tr v-for="v in groupe.variantes" :key="v.id">
-                                <td class="py-2 pr-4 pl-9">{{ sousLibelle(v) }}</td>
-                                <td class="py-2 pr-4 font-mono text-xs text-muted-foreground">
+                                <td class="py-2 pr-4 pl-9">
+                                    {{ sousLibelle(v) }}
+                                </td>
+                                <td
+                                    class="py-2 pr-4 font-mono text-xs text-muted-foreground"
+                                >
                                     {{ v.sku || '—' }}
                                 </td>
-                                <td class="py-2 pr-4 text-right font-semibold tabular-nums">
+                                <td
+                                    class="py-2 pr-4 text-right font-semibold tabular-nums"
+                                >
                                     {{ formatPrice(v.prix_vente) }}
                                 </td>
                                 <td class="py-2 pr-4">
                                     <StatusDot
-                                        :status="v.is_active ? 'actif' : 'inactif'"
-                                        :label="v.is_active ? 'Actif' : 'Inactif'"
+                                        :status="
+                                            v.is_active ? 'actif' : 'inactif'
+                                        "
+                                        :label="
+                                            v.is_active ? 'Actif' : 'Inactif'
+                                        "
                                     />
                                 </td>
                                 <td class="py-2 pr-3 text-right">
@@ -218,9 +258,13 @@ function prixGroupe(variantes: Variante[]): string {
             <table class="w-full text-sm">
                 <thead>
                     <tr class="border-b text-xs text-muted-foreground">
-                        <th class="pr-4 pb-2 text-left font-medium">Variante</th>
+                        <th class="pr-4 pb-2 text-left font-medium">
+                            Variante
+                        </th>
                         <th class="pr-4 pb-2 text-left font-medium">SKU</th>
-                        <th class="pr-4 pb-2 text-right font-medium">Prix vente</th>
+                        <th class="pr-4 pb-2 text-right font-medium">
+                            Prix vente
+                        </th>
                         <th class="pr-4 pb-2 text-left font-medium">Statut</th>
                         <th class="pb-2 text-right font-medium">
                             <span class="sr-only">Actions</span>
@@ -232,10 +276,14 @@ function prixGroupe(variantes: Variante[]): string {
                         <td class="py-2.5 pr-4 font-medium">
                             {{ v.libelle || 'Variante par défaut' }}
                         </td>
-                        <td class="py-2.5 pr-4 font-mono text-xs text-muted-foreground">
+                        <td
+                            class="py-2.5 pr-4 font-mono text-xs text-muted-foreground"
+                        >
                             {{ v.sku || '—' }}
                         </td>
-                        <td class="py-2.5 pr-4 text-right font-semibold tabular-nums">
+                        <td
+                            class="py-2.5 pr-4 text-right font-semibold tabular-nums"
+                        >
                             {{ formatPrice(v.prix_vente) }}
                         </td>
                         <td class="py-2.5 pr-4">
@@ -281,7 +329,11 @@ function prixGroupe(variantes: Variante[]): string {
                     class="aspect-square overflow-hidden rounded-md border-2 border-transparent hover:border-primary"
                     @click="assignerImage(m)"
                 >
-                    <img :src="m.thumb_url ?? m.url" class="h-full w-full object-cover" alt="" />
+                    <img
+                        :src="m.thumb_url ?? m.url"
+                        class="h-full w-full object-cover"
+                        alt=""
+                    />
                 </button>
             </div>
         </Dialog>

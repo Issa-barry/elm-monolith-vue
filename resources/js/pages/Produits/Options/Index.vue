@@ -184,7 +184,10 @@ function ajouterValeur(option: OptionCatalogue) {
     );
 }
 
-function supprimerValeur(option: OptionCatalogue, valeur: OptionCatalogueValeur) {
+function supprimerValeur(
+    option: OptionCatalogue,
+    valeur: OptionCatalogueValeur,
+) {
     router.delete(
         `/backoffice/produits/options/${option.id}/valeurs/${valeur.id}`,
         { preserveScroll: true },
@@ -205,8 +208,8 @@ function supprimerValeur(option: OptionCatalogue, valeur: OptionCatalogueValeur)
                     <p class="mt-1 text-sm text-muted-foreground">
                         Catalogue d'options réutilisables (Couleur, Taille,
                         Pointure…) — sert de bibliothèque de suggestions pour
-                        vos produits, sans jamais modifier leurs variantes
-                        déjà générées.
+                        vos produits, sans jamais modifier leurs variantes déjà
+                        générées.
                     </p>
                 </div>
                 <Button size="sm" @click="openCreate">
@@ -226,7 +229,10 @@ function supprimerValeur(option: OptionCatalogue, valeur: OptionCatalogueValeur)
             />
 
             <!-- Liste -->
-            <div v-if="filtered.length === 0" class="rounded-xl border bg-card p-4">
+            <div
+                v-if="filtered.length === 0"
+                class="rounded-xl border bg-card p-4"
+            >
                 <div
                     class="flex flex-col items-center gap-3 py-12 text-muted-foreground"
                 >

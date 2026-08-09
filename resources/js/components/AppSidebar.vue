@@ -196,8 +196,7 @@ const mainNavItems = computed((): NavItem[] => {
                 stockAlertes.value.total > 0
                     ? stockAlertes.value.total
                     : undefined,
-            items:
-                produitsSousItems.length > 0 ? produitsSousItems : undefined,
+            items: produitsSousItems.length > 0 ? produitsSousItems : undefined,
         });
     }
 

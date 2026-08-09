@@ -92,7 +92,8 @@ function supprimer(media: Media) {
     <div>
         <div class="mb-3 flex items-center justify-between">
             <p class="text-xs text-muted-foreground">
-                {{ medias.length }}<template v-if="maxPhotos"> / {{ maxPhotos }}</template>
+                {{ medias.length
+                }}<template v-if="maxPhotos"> / {{ maxPhotos }}</template>
                 photo(s)
             </p>
             <label
@@ -117,9 +118,14 @@ function supprimer(media: Media) {
             </label>
         </div>
 
-        <div v-if="medias.length === 0" class="rounded-lg border border-dashed p-6 text-center">
+        <div
+            v-if="medias.length === 0"
+            class="rounded-lg border border-dashed p-6 text-center"
+        >
             <Image class="mx-auto h-8 w-8 text-muted-foreground/40" />
-            <p class="mt-2 text-xs text-muted-foreground">Aucune photo pour ce produit.</p>
+            <p class="mt-2 text-xs text-muted-foreground">
+                Aucune photo pour ce produit.
+            </p>
         </div>
 
         <div v-else class="grid grid-cols-4 gap-2 sm:grid-cols-6">
@@ -129,17 +135,28 @@ function supprimer(media: Media) {
                 class="group relative aspect-square overflow-hidden rounded-lg border"
                 :class="{ 'ring-2 ring-primary': m.is_primary }"
             >
-                <img :src="m.thumb_url ?? m.url" class="h-full w-full object-cover" alt="" />
+                <img
+                    :src="m.thumb_url ?? m.url"
+                    class="h-full w-full object-cover"
+                    alt=""
+                />
                 <div
                     class="absolute inset-0 flex items-center justify-center gap-1 bg-black/50 opacity-0 transition-opacity group-hover:opacity-100"
                 >
                     <button
                         type="button"
-                        :title="m.is_primary ? 'Image principale' : 'Définir comme principale'"
+                        :title="
+                            m.is_primary
+                                ? 'Image principale'
+                                : 'Définir comme principale'
+                        "
                         class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-amber-500 hover:bg-white"
                         @click="definirPrincipale(m)"
                     >
-                        <Star class="h-3.5 w-3.5" :fill="m.is_primary ? 'currentColor' : 'none'" />
+                        <Star
+                            class="h-3.5 w-3.5"
+                            :fill="m.is_primary ? 'currentColor' : 'none'"
+                        />
                     </button>
                     <button
                         type="button"

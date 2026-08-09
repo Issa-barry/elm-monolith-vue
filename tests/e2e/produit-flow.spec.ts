@@ -27,6 +27,10 @@ test('login + create product + verify list', async ({ page }) => {
 
     await page.locator('#nom').fill(productName);
     await page.locator('#code_fournisseur').fill(supplierCode);
+    // Le type par défaut du formulaire ("Matériel") exige un prix d'achat
+    // (cf. ProduitType::requiredPrices()) — sans ça la création échoue en validation
+    // et reste sur /produits/create.
+    await page.locator('#prix_achat').fill('1000');
     await page.getByRole('button', { name: /^enregistrer$/i }).click();
 
     await expect(page).toHaveURL(/\/produits$/);

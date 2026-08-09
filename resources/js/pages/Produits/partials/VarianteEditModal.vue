@@ -273,7 +273,9 @@ function submit() {
             <div class="flex items-center gap-3">
                 <Checkbox id="variante-active" v-model="form.is_active" />
                 <div>
-                    <Label for="variante-active" class="cursor-pointer font-medium"
+                    <Label
+                        for="variante-active"
+                        class="cursor-pointer font-medium"
                         >Variante active</Label
                     >
                     <p class="text-xs text-muted-foreground">
