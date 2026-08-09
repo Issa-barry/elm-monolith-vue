@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\NormalizesLabel;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -17,7 +18,7 @@ use Illuminate\Support\Facades\Auth;
  */
 class OptionCatalogue extends Model
 {
-    use HasFactory, HasUlids, SoftDeletes;
+    use HasFactory, HasUlids, NormalizesLabel, SoftDeletes;
 
     protected $fillable = [
         'organization_id',
@@ -48,6 +49,13 @@ class OptionCatalogue extends Model
                 $o->updated_by = Auth::id();
             }
         });
+    }
+
+    // ── Mutateurs ─────────────────────────────────────────────────────────────
+
+    public function setNomAttribute(mixed $value): void
+    {
+        $this->attributes['nom'] = static::normalizeLabel($value);
     }
 
     // ── Relations ─────────────────────────────────────────────────────────────

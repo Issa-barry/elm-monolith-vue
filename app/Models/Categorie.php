@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\CategorieStatut;
+use App\Models\Concerns\NormalizesLabel;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -13,7 +14,7 @@ use Illuminate\Support\Facades\Auth;
 
 class Categorie extends Model
 {
-    use HasFactory, HasUlids, SoftDeletes;
+    use HasFactory, HasUlids, NormalizesLabel, SoftDeletes;
 
     protected $fillable = [
         'organization_id',
@@ -51,6 +52,13 @@ class Categorie extends Model
                 $c->updated_by = Auth::id();
             }
         });
+    }
+
+    // ── Mutateurs ─────────────────────────────────────────────────────────────
+
+    public function setNomAttribute(mixed $value): void
+    {
+        $this->attributes['nom'] = static::normalizeLabel($value);
     }
 
     // ── Relations ─────────────────────────────────────────────────────────────

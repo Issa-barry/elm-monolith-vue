@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\ProduitStatut;
 use App\Enums\ProduitType;
+use App\Models\Concerns\NormalizesLabel;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -16,7 +17,7 @@ use Illuminate\Support\Facades\DB;
 
 class Produit extends Model
 {
-    use HasFactory, HasUlids, SoftDeletes;
+    use HasFactory, HasUlids, NormalizesLabel, SoftDeletes;
 
     public ?bool $is_used_loaded = null;
 
@@ -84,13 +85,7 @@ class Produit extends Model
 
     public function setNomAttribute(mixed $value): void
     {
-        if ($value === null || trim($value) === '') {
-            $this->attributes['nom'] = $value;
-
-            return;
-        }
-        $v = trim(preg_replace('/\s+/u', ' ', $value));
-        $this->attributes['nom'] = mb_strtoupper(mb_substr($v, 0, 1)).mb_strtolower(mb_substr($v, 1));
+        $this->attributes['nom'] = static::normalizeLabel($value);
     }
 
     // ── Accesseurs ────────────────────────────────────────────────────────────
