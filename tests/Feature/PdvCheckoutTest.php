@@ -8,19 +8,20 @@ use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
 use App\Models\Organization;
 use App\Models\Produit;
-use App\Models\ProduitStock;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\User;
+use App\Models\VarianteStock;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\TestCase;
 
 class PdvCheckoutTest extends TestCase
 {
-    use HasAdminSetup, RefreshDatabase;
+    use HasAdminSetup, HasProduitVariante, RefreshDatabase;
 
     private User $user;
 
@@ -45,15 +46,11 @@ class PdvCheckoutTest extends TestCase
         ]);
         $this->user->sites()->attach($this->site->id, ['role' => 'employe', 'is_default' => true]);
 
-        $this->produit = Produit::create([
-            'organization_id' => $this->org->id,
-            'nom' => 'Pack 30',
-            'type' => 'fabricable',
-            'statut' => 'actif',
-            'prix_vente' => 5000,
-            'prix_usine' => 3000,
-            'qte_stock' => 100,
-        ]);
+        $this->produit = $this->makeProduitAvecVariante(
+            $this->org,
+            ['nom' => 'Pack 30', 'type' => 'fabricable', 'qte_stock' => 100],
+            ['prix_vente' => 5000, 'prix_usine' => 3000],
+        );
     }
 
     // ── GET /pdv ──────────────────────────────────────────────────────────────
@@ -127,15 +124,16 @@ class PdvCheckoutTest extends TestCase
             'type' => 'depot',
             'localisation' => 'Conakry',
         ]);
-        ProduitStock::create([
+        $variante = $this->produit->variantePrincipale()->first();
+        VarianteStock::create([
             'organization_id' => $this->org->id,
-            'produit_id' => $this->produit->id,
+            'produit_variante_id' => $variante->id,
             'site_id' => $this->site->id,
             'qte_stock' => 50,
         ]);
-        ProduitStock::create([
+        VarianteStock::create([
             'organization_id' => $this->org->id,
-            'produit_id' => $this->produit->id,
+            'produit_variante_id' => $variante->id,
             'site_id' => $autreSite->id,
             'qte_stock' => 30,
         ]);
@@ -145,13 +143,13 @@ class PdvCheckoutTest extends TestCase
             'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 5]],
         ])->assertRedirect();
 
-        $this->assertDatabaseHas('produit_stocks', [
-            'produit_id' => $this->produit->id,
+        $this->assertDatabaseHas('variante_stocks', [
+            'produit_variante_id' => $variante->id,
             'site_id' => $this->site->id,
             'qte_stock' => 45,
         ]);
-        $this->assertDatabaseHas('produit_stocks', [
-            'produit_id' => $this->produit->id,
+        $this->assertDatabaseHas('variante_stocks', [
+            'produit_variante_id' => $variante->id,
             'site_id' => $autreSite->id,
             'qte_stock' => 30,
         ]);
@@ -165,10 +163,11 @@ class PdvCheckoutTest extends TestCase
             'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 3]],
         ])->assertRedirect();
 
-        $ligne = CommandeVenteLigne::where('produit_id', $this->produit->id)->firstOrFail();
+        $variante = $this->produit->variantePrincipale()->first();
+        $ligne = CommandeVenteLigne::where('variante_id', $variante->id)->firstOrFail();
 
         $this->assertDatabaseHas('mouvements_stock', [
-            'produit_id' => $this->produit->id,
+            'produit_variante_id' => $variante->id,
             'site_id' => $this->site->id,
             'type' => 'sortie',
             'quantite' => 3,

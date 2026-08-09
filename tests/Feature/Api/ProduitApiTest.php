@@ -4,6 +4,7 @@ namespace Tests\Feature\Api;
 
 use App\Models\Organization;
 use App\Models\Produit;
+use App\Services\ProduitService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Tests\Feature\Concerns\HasAdminSetup;
@@ -22,17 +23,39 @@ class ProduitApiTest extends TestCase
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    /**
+     * $overrides['qte_stock'] alimente directement le cache produits.qte_stock (sans ligne
+     * variante_stocks), reproduisant le scénario "compteur global pas encore ventilé".
+     */
     private function makeProduit(Organization $org, array $overrides = []): Produit
     {
-        return Produit::create(array_merge([
+        $qteStock = array_key_exists('qte_stock', $overrides) ? $overrides['qte_stock'] : 50;
+        unset($overrides['qte_stock']);
+
+        $payload = array_merge([
             'organization_id' => $org->id,
             'nom' => 'Produit test',
             'type' => 'materiel',
             'statut' => 'actif',
-            'prix_achat' => 500,
-            'qte_stock' => 50,
             'is_alerte' => false,
-        ], $overrides));
+        ], $overrides);
+
+        if (($payload['type'] ?? 'materiel') !== 'service' && ! isset($payload['prix_achat'])) {
+            $payload['prix_achat'] = 500;
+        }
+
+        $produit = app(ProduitService::class)->creer($payload);
+
+        if ($qteStock !== 0) {
+            $produit->updateQuietly(['qte_stock' => $qteStock]);
+        }
+
+        return $produit->fresh();
+    }
+
+    private function varianteId(Produit $produit): string
+    {
+        return $produit->variantePrincipale()->first()->id;
     }
 
     // ── index ─────────────────────────────────────────────────────────────────
@@ -121,7 +144,6 @@ class ProduitApiTest extends TestCase
             'type' => 'materiel',
             'statut' => 'actif',
             'prix_achat' => 1500,
-            'qte_stock' => 100,
             'is_alerte' => false,
         ]);
 
@@ -131,12 +153,15 @@ class ProduitApiTest extends TestCase
                 'type' => 'materiel',
                 'statut' => 'actif',
                 'prix_achat' => 1500,
-                'qte_stock' => 100,
             ]);
 
         $this->assertDatabaseHas('produits', [
             'organization_id' => $this->org->id,
             'nom' => 'Nouveau produit',
+        ]);
+        $this->assertDatabaseHas('produit_variantes', [
+            'prix_achat' => 1500,
+            'is_default' => true,
         ]);
     }
 
@@ -147,6 +172,21 @@ class ProduitApiTest extends TestCase
         $this->postJson(route('api.backoffice.produits.store'), [])
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['nom', 'type', 'statut']);
+    }
+
+    public function test_store_fails_sans_prix_requis_pour_le_type(): void
+    {
+        Sanctum::actingAs($this->user, ['*']);
+
+        // materiel exige prix_achat — appliqué via ProduitService::validerPrixSelonType(),
+        // non contournable côté API (dette corrigée par la refonte).
+        $this->postJson(route('api.backoffice.produits.store'), [
+            'nom' => 'Sans prix',
+            'type' => 'materiel',
+            'statut' => 'actif',
+        ])->assertUnprocessable();
+
+        $this->assertDatabaseMissing('produits', ['nom' => 'Sans prix']);
     }
 
     // ── update ────────────────────────────────────────────────────────────────
@@ -169,10 +209,21 @@ class ProduitApiTest extends TestCase
                 'prix_achat' => 800,
             ]);
 
-        $this->assertDatabaseHas('produits', [
-            'id' => $produit->id,
+        $this->assertDatabaseHas('produit_variantes', [
+            'produit_id' => $produit->id,
             'prix_achat' => 800,
         ]);
+    }
+
+    public function test_update_sans_toucher_au_prix_ne_declenche_pas_derreur(): void
+    {
+        Sanctum::actingAs($this->user, ['*']);
+
+        $produit = $this->makeProduit($this->org);
+
+        $this->putJson(route('api.backoffice.produits.update', $produit), [
+            'nom' => 'Nom modifié',
+        ])->assertOk();
     }
 
     // ── destroy ───────────────────────────────────────────────────────────────
@@ -210,7 +261,7 @@ class ProduitApiTest extends TestCase
         ]);
 
         $this->assertDatabaseHas('mouvements_stock', [
-            'produit_id' => $produit->id,
+            'produit_variante_id' => $this->varianteId($produit),
             'type' => 'entree',
             'quantite' => 20,
             'stock_avant' => 50,
@@ -232,7 +283,7 @@ class ProduitApiTest extends TestCase
             ->assertJsonFragment(['qte_stock' => 35]);
 
         $this->assertDatabaseHas('mouvements_stock', [
-            'produit_id' => $produit->id,
+            'produit_variante_id' => $this->varianteId($produit),
             'type' => 'sortie',
             'quantite' => 15,
             'stock_avant' => 50,

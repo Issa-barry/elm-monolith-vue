@@ -19,6 +19,8 @@ class DatabaseSeeder extends Seeder
             SitesSeeder::class,                 // Sites (siège, usine, agences, dépôts)
             UserSitesSeeder::class,             // Rattachement utilisateurs → sites
             AdminEntrepriseSeeder::class,       // Comptes admin_entreprise additionnels (Matoto)
+            CategorieDefaultSeeder::class,       // Catégories par défaut (Vêtements, Chaussures, Boissons, Matériel)
+            OptionCatalogueDefaultSeeder::class, // Options système par défaut (Couleur, Taille, Pointure)
             ProduitsSeeder::class,              // Catalogue produits
             ParametreSeeder::class,             // Paramètres applicatifs
 

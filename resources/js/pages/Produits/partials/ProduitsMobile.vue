@@ -25,7 +25,7 @@ import { computed, ref } from 'vue';
 interface Produit {
     id: number;
     nom: string;
-    code_interne: string | null;
+    sku: string | null;
     image_url: string | null;
     is_alerte: boolean;
     statut: string;
@@ -53,7 +53,7 @@ const filteredProduits = computed(() => {
     const query = search.value.trim().toLowerCase();
     if (!query) return props.produits;
     return props.produits.filter((p) =>
-        [p.nom, p.code_interne ?? ''].join(' ').toLowerCase().includes(query),
+        [p.nom, p.sku ?? ''].join(' ').toLowerCase().includes(query),
     );
 });
 
@@ -165,7 +165,7 @@ const typeBadgeClass: Record<string, string> = {
                     </div>
                     <div class="mt-0.5 flex items-center gap-1.5">
                         <p class="font-mono text-[11px] text-muted-foreground">
-                            {{ data.code_interne || '—' }}
+                            {{ data.sku || '—' }}
                         </p>
                         <span
                             v-if="data.type_label"

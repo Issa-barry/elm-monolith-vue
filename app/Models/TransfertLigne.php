@@ -15,7 +15,7 @@ class TransfertLigne extends Model
 
     protected $fillable = [
         'transfert_logistique_id',
-        'produit_id',
+        'variante_id',
         'quantite_demandee',
         'quantite_chargee',
         'quantite_recue',
@@ -43,9 +43,9 @@ class TransfertLigne extends Model
         return $this->belongsTo(TransfertLogistique::class, 'transfert_logistique_id');
     }
 
-    public function produit(): BelongsTo
+    public function variante(): BelongsTo
     {
-        return $this->belongsTo(Produit::class);
+        return $this->belongsTo(ProduitVariante::class, 'variante_id');
     }
 
     // ── Accessors ─────────────────────────────────────────────────────────────

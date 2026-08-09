@@ -11,9 +11,36 @@ interface Option {
     label: string;
 }
 
+interface Categorie {
+    id: string;
+    nom: string;
+    parent_id: string | null;
+}
+
+interface OptionCatalogueValeur {
+    id: string;
+    valeur: string;
+}
+
+interface OptionCatalogue {
+    id: string;
+    nom: string;
+    valeurs: OptionCatalogueValeur[];
+}
+
+interface Limites {
+    max_photos_produit: number;
+    max_options_produit: number;
+    max_valeurs_option: number;
+    max_variantes_produit: number;
+}
+
 defineProps<{
     types: Option[];
     statuts: Option[];
+    categories: Categorie[];
+    optionsCatalogue: OptionCatalogue[];
+    limites: Limites;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -24,6 +51,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const form = useForm({
     nom: '',
+    categorie_id: null as string | null,
     code_fournisseur: null as string | null,
     type: 'materiel',
     statut: 'actif',
@@ -35,6 +63,11 @@ const form = useForm({
     description: null as string | null,
     is_alerte: false,
     image: null as File | null,
+    options: [] as {
+        nom: string;
+        valeurs: string[];
+        option_catalogue_id: string | null;
+    }[],
 });
 
 function submit() {
@@ -82,7 +115,11 @@ function submit() {
                 :errors="form.errors"
                 :types="types"
                 :statuts="statuts"
+                :categories="categories"
+                :options-catalogue="optionsCatalogue"
+                :limites="limites"
                 :processing="form.processing"
+                :allow-declinaisons="true"
                 @update:form="Object.assign(form, $event)"
                 @submit="submit"
             />

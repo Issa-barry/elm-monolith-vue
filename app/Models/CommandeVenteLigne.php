@@ -16,7 +16,7 @@ class CommandeVenteLigne extends Model
 
     protected $fillable = [
         'commande_vente_id',
-        'produit_id',
+        'variante_id',
         'quantite_demandee',
         'quantite_chargee',
         'quantite_livree',
@@ -25,6 +25,7 @@ class CommandeVenteLigne extends Model
         'prix_usine_snapshot',
         'prix_vente_snapshot',
         'total_ligne',
+        'libelle_snapshot',
     ];
 
     protected function casts(): array
@@ -47,9 +48,9 @@ class CommandeVenteLigne extends Model
         return $this->belongsTo(CommandeVente::class, 'commande_vente_id');
     }
 
-    public function produit(): BelongsTo
+    public function variante(): BelongsTo
     {
-        return $this->belongsTo(Produit::class);
+        return $this->belongsTo(ProduitVariante::class, 'variante_id');
     }
 
     // ── Accessors écart ───────────────────────────────────────────────────────

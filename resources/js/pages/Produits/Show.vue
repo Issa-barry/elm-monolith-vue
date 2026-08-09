@@ -13,6 +13,7 @@ import {
     Building2,
     Factory,
     History,
+    Image,
     Layers,
     Package,
     Pencil,
@@ -22,9 +23,12 @@ import {
     TrendingDown,
     Warehouse,
 } from 'lucide-vue-next';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import AjusterStockModal from './partials/AjusterStockModal.vue';
+import GalerieMedias from './partials/GalerieMedias.vue';
 import HistoriqueModal from './partials/HistoriqueModal.vue';
+import VarianteEditModal from './partials/VarianteEditModal.vue';
+import VariantesGroupees from './partials/VariantesGroupees.vue';
 
 interface SiteStock {
     site_id: string;
@@ -36,10 +40,41 @@ interface SiteStock {
     updated_at: string | null;
 }
 
+interface VarianteOption {
+    option: string;
+    valeur: string;
+}
+
+interface Variante {
+    id: string;
+    libelle: string;
+    sku: string | null;
+    code_barres: string | null;
+    code_fournisseur: string | null;
+    prix_usine: number | null;
+    prix_vente: number | null;
+    prix_achat: number | null;
+    cout: number | null;
+    seuil_alerte_stock: number | null;
+    is_default: boolean;
+    is_active: boolean;
+    options: VarianteOption[];
+    media_id: string | null;
+    image_url: string | null;
+}
+
+interface Media {
+    id: string;
+    url: string;
+    thumb_url: string | null;
+    is_primary: boolean;
+    position: number;
+}
+
 interface Produit {
     id: string;
     nom: string;
-    code_interne: string | null;
+    sku: string | null;
     code_fournisseur: string | null;
     image_url: string | null;
     type: string | null;
@@ -60,6 +95,8 @@ interface Produit {
     created_at: string | null;
     updated_at: string | null;
     stocks_par_site: SiteStock[];
+    variantes: Variante[];
+    medias: Media[];
 }
 
 interface StockMouvement {
@@ -92,6 +129,12 @@ interface Site {
     code: string;
 }
 
+interface VarianteStockEntry {
+    variante_id: string;
+    site_id: string;
+    qte_stock: number;
+}
+
 const props = defineProps<{
     produit: Produit;
     mouvements: StockMouvement[];
@@ -100,12 +143,22 @@ const props = defineProps<{
     can_augmenter_stock: boolean;
     can_diminuer_stock: boolean;
     sites_autorises: Site[];
+    variante_stocks: VarianteStockEntry[];
+    limites: { max_photos_produit: number };
 }>();
 
 const { can } = usePermissions();
 
 const showStockModal = ref(false);
 const showHistoriqueModal = ref(false);
+const showVarianteModal = ref(false);
+const varianteEnEdition = ref<Variante | null>(null);
+const isFabricable = computed(() => props.produit.type === 'fabricable');
+
+function editerVariante(variante: Variante) {
+    varianteEnEdition.value = variante;
+    showVarianteModal.value = true;
+}
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
@@ -228,7 +281,7 @@ const ajustements = props.mouvements.map((m) => ({
                         <p
                             class="mt-0.5 font-mono text-sm text-muted-foreground"
                         >
-                            {{ produit.code_interne || '—' }}
+                            {{ produit.sku || '—' }}
                         </p>
                     </div>
                 </div>
@@ -248,6 +301,18 @@ const ajustements = props.mouvements.map((m) => ({
                         <Sliders class="mr-2 h-4 w-4" />
                         Ajuster le stock
                     </Button>
+                    <Link
+                        v-if="
+                            can('produits.update') &&
+                            produit.variantes.length > 1
+                        "
+                        :href="`/backoffice/produits/${produit.id}/variantes`"
+                    >
+                        <Button variant="outline">
+                            <Layers class="mr-2 h-4 w-4" />
+                            Gérer les variantes
+                        </Button>
+                    </Link>
                     <Link
                         v-if="can('produits.update')"
                         :href="`/backoffice/produits/${produit.id}/edit`"
@@ -291,7 +356,7 @@ const ajustements = props.mouvements.map((m) => ({
                             />
                         </div>
                         <span class="font-mono text-xs text-muted-foreground">{{
-                            produit.code_interne || '—'
+                            produit.sku || '—'
                         }}</span>
                     </div>
 
@@ -324,10 +389,10 @@ const ajustements = props.mouvements.map((m) => ({
                     <div class="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
                         <div>
                             <span class="text-xs text-muted-foreground"
-                                >Code interne</span
+                                >SKU</span
                             >
                             <p class="font-mono font-semibold">
-                                {{ produit.code_interne || '—' }}
+                                {{ produit.sku || '—' }}
                             </p>
                         </div>
                         <div>
@@ -556,6 +621,50 @@ const ajustements = props.mouvements.map((m) => ({
                 </div>
             </div>
 
+            <!-- ─── Photos ─── -->
+            <div class="rounded-xl border bg-card p-5">
+                <h2
+                    class="mb-4 flex items-center gap-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase"
+                >
+                    <Image class="h-4 w-4" />
+                    Photos
+                </h2>
+                <GalerieMedias
+                    :produit-id="produit.id"
+                    :medias="produit.medias"
+                    :max-photos="limites.max_photos_produit"
+                />
+            </div>
+
+            <!-- ─── Variantes ─── -->
+            <div
+                v-if="produit.variantes.length > 1"
+                class="rounded-xl border bg-card p-5"
+            >
+                <h2
+                    class="mb-4 flex items-center gap-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase"
+                >
+                    <Layers class="h-4 w-4" />
+                    Variantes
+                    <span
+                        class="font-normal text-muted-foreground/70 normal-case"
+                        >({{ produit.variantes.length }})</span
+                    >
+                </h2>
+                <VariantesGroupees
+                    :variantes="produit.variantes"
+                    :editable="can('produits.update')"
+                    :medias="produit.medias"
+                    :produit-id="produit.id"
+                    @edit-variante="
+                        (v) =>
+                            editerVariante(
+                                produit.variantes.find((pv) => pv.id === v.id)!,
+                            )
+                    "
+                />
+            </div>
+
             <!-- ─── Description ─── -->
             <div
                 v-if="produit.description"
@@ -723,6 +832,14 @@ const ajustements = props.mouvements.map((m) => ({
             :sites-autorises="sites_autorises"
             :can-augmenter="can_augmenter_stock"
             :can-diminuer="can_diminuer_stock"
+            :variante-stocks="variante_stocks"
+        />
+        <VarianteEditModal
+            v-model:visible="showVarianteModal"
+            :produit-id="produit.id"
+            :variante="varianteEnEdition"
+            :is-fabricable="isFabricable"
+            :medias="produit.medias"
         />
     </AppLayout>
 </template>

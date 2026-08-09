@@ -11,6 +11,7 @@ use App\Models\Site;
 use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
@@ -27,7 +28,7 @@ use Tests\TestCase;
  */
 class CommandeVenteModeTarificationTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
+    use HasAdminSetup, HasOrgAndUser, HasProduitVariante, RefreshDatabase;
 
     private Site $defaultSite;
 
@@ -47,14 +48,11 @@ class CommandeVenteModeTarificationTest extends TestCase
 
     private function makeProduit(int $prixVente = 5000, int $prixUsine = 3500): Produit
     {
-        return Produit::create([
-            'organization_id' => $this->org->id,
-            'nom' => 'Pack Eau',
-            'type' => 'materiel',
-            'statut' => 'actif',
-            'prix_vente' => $prixVente,
-            'prix_usine' => $prixUsine,
-        ]);
+        return $this->makeProduitAvecVariante(
+            $this->org,
+            ['nom' => 'Pack Eau'],
+            ['prix_vente' => $prixVente, 'prix_usine' => $prixUsine],
+        );
     }
 
     private function makeVehicule(bool $prisEnChargeParUsine, int $capacite = 100): Vehicule
@@ -160,7 +158,7 @@ class CommandeVenteModeTarificationTest extends TestCase
         ]);
 
         $ligne = $commande->lignes()->create([
-            'produit_id' => $produit->id,
+            'variante_id' => $produit->variantePrincipale()->first()->id,
             'quantite_demandee' => 100,
             'prix_usine_snapshot' => 3500.0,
             'prix_vente_snapshot' => 5000.0,
@@ -206,7 +204,7 @@ class CommandeVenteModeTarificationTest extends TestCase
             'mode_tarification_snapshot' => 'prix_vente',
         ]);
         $commande->lignes()->create([
-            'produit_id' => $produit->id,
+            'variante_id' => $produit->variantePrincipale()->first()->id,
             'quantite_demandee' => 100,
             'prix_usine_snapshot' => 3500.0,
             'prix_vente_snapshot' => 5000.0,

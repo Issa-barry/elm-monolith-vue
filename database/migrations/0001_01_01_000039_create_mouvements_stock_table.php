@@ -12,7 +12,9 @@ return new class extends Migration
             $table->ulid('id')->primary();
             $table->foreignUlid('organization_id')->constrained()->cascadeOnDelete();
             $table->foreignUlid('site_id')->constrained('sites')->cascadeOnDelete();
-            $table->foreignUlid('produit_id')->constrained('produits')->cascadeOnDelete();
+            // restrictOnDelete (au lieu de cascade avant refonte) : évite qu'une suppression de
+            // variante efface silencieusement son historique de mouvements de stock.
+            $table->foreignUlid('produit_variante_id')->constrained('produit_variantes')->restrictOnDelete();
             $table->string('type');
             $table->integer('quantite');
             $table->unsignedInteger('stock_avant')->nullable();
@@ -22,7 +24,7 @@ return new class extends Migration
             $table->foreignUlid('created_by')->constrained('users')->cascadeOnDelete();
             $table->timestamps();
 
-            $table->index(['organization_id', 'site_id', 'produit_id']);
+            $table->index(['organization_id', 'site_id', 'produit_variante_id'], 'mouvements_stock_org_site_variante_idx');
             $table->index(['organization_id', 'created_at']);
             $table->unique(['source_type', 'source_id', 'site_id', 'type'], 'mouvements_source_unique');
         });

@@ -2,11 +2,13 @@
 
 namespace App\Providers;
 
+use App\Models\Categorie;
 use App\Models\Client;
 use App\Models\CommandeAchat;
 use App\Models\CommandeVente;
 use App\Models\EquipeLivraison;
 use App\Models\Livreur;
+use App\Models\OptionCatalogue;
 use App\Models\Packing;
 use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
@@ -19,11 +21,13 @@ use App\Models\Site;
 use App\Models\User;
 use App\Models\UserInvitation;
 use App\Models\Vehicule;
+use App\Policies\CategoriePolicy;
 use App\Policies\ClientPolicy;
 use App\Policies\CommandeAchatPolicy;
 use App\Policies\CommandeVentePolicy;
 use App\Policies\EquipeLivraisonPolicy;
 use App\Policies\LivreurPolicy;
+use App\Policies\OptionCataloguePolicy;
 use App\Policies\PackingPolicy;
 use App\Policies\PaiementFichePolicy;
 use App\Policies\PaiementPeriodePolicy;
@@ -42,6 +46,7 @@ use Illuminate\Support\Facades\Gate;
 class AuthServiceProvider extends ServiceProvider
 {
     protected $policies = [
+        Categorie::class => CategoriePolicy::class,
         Client::class => ClientPolicy::class,
         Prestataire::class => PrestatairePolicy::class,
         Livreur::class => LivreurPolicy::class,
@@ -59,6 +64,7 @@ class AuthServiceProvider extends ServiceProvider
         PaiePeriode::class => PaiePolicy::class,
         PaiementPeriode::class => PaiementPeriodePolicy::class,
         PaiementFiche::class => PaiementFichePolicy::class,
+        OptionCatalogue::class => OptionCataloguePolicy::class,
     ];
 
     public function boot(): void

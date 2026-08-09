@@ -141,7 +141,7 @@ class User extends Authenticatable
         $resources = [
             'clients', 'prestataires', 'livreurs', 'proprietaires', 'pieces-identite',
             'vehicules', 'type-vehicules', 'equipes-livraison', 'sites',
-            'produits', 'packings', 'ventes', 'achats', 'factures', 'commissions', 'cashback', 'pdv',
+            'produits', 'categories', 'options', 'packings', 'ventes', 'achats', 'factures', 'commissions', 'cashback', 'pdv',
             'logistique', 'transferts', 'receptions',
             'depenses', 'comptabilite', 'journal-financier',
             'rh-employes', 'rh-contrats', 'rh-paie',

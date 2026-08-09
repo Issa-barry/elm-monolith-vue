@@ -6,9 +6,9 @@ use App\Enums\MotifAjustementStock;
 use App\Models\MouvementStock;
 use App\Models\Organization;
 use App\Models\Produit;
-use App\Models\ProduitStock;
 use App\Models\Site;
 use App\Models\User;
+use App\Models\VarianteStock;
 use Illuminate\Database\Seeder;
 
 /**
@@ -17,7 +17,10 @@ use Illuminate\Database\Seeder;
  * contraire plus forts localement), pour illustrer la gestion de stock par
  * site dans la démo.
  *
- * NB : ProduitStock.is_alerte n'est jamais recalculé automatiquement dans le
+ * Depuis la refonte variant-first, le stock est porté par la variante (ici la variante
+ * par défaut de chaque produit simple — aucun produit de cette liste n'a de déclinaisons).
+ *
+ * NB : VarianteStock.is_alerte n'est jamais recalculé automatiquement dans le
  * projet (vérifié — aucun observer/job ne le fait) : calculé ici une seule
  * fois à la création, à partir du seuil.
  */
@@ -67,20 +70,26 @@ class FelloDemoStockSeeder extends Seeder
                 continue;
             }
 
-            $this->ventilerStock($produit, $madina, $qteMadina, $org->id, $admin->id);
-            $this->ventilerStock($produit, $cosa, $qteCosa, $org->id, $admin->id);
+            $variante = $produit->variantePrincipale()->first();
+            if (! $variante) {
+                $this->command->warn("Aucune variante pour le produit, stock ignoré : {$nom}");
 
-            $total = ProduitStock::where('produit_id', $produit->id)->sum('qte_stock');
-            $produit->update(['qte_stock' => $total]);
+                continue;
+            }
+
+            $this->ventilerStock($variante->id, $madina, $qteMadina, $org->id, $admin->id);
+            $this->ventilerStock($variante->id, $cosa, $qteCosa, $org->id, $admin->id);
+
+            $produit->resynchroniserQteStock();
         }
 
         $this->command->info('✓ Stock initial ventilé sur Boutique Madina et Boutique Cosa.');
     }
 
-    private function ventilerStock(Produit $produit, Site $site, int $qte, string $orgId, string $adminId): void
+    private function ventilerStock(string $varianteId, Site $site, int $qte, string $orgId, string $adminId): void
     {
-        $stock = ProduitStock::updateOrCreate(
-            ['produit_id' => $produit->id, 'site_id' => $site->id],
+        $stock = VarianteStock::updateOrCreate(
+            ['produit_variante_id' => $varianteId, 'site_id' => $site->id],
             [
                 'organization_id' => $orgId,
                 'qte_stock' => $qte,
@@ -89,7 +98,7 @@ class FelloDemoStockSeeder extends Seeder
             ]
         );
 
-        $dejaTrace = MouvementStock::where('source_type', ProduitStock::class)
+        $dejaTrace = MouvementStock::where('source_type', VarianteStock::class)
             ->where('source_id', $stock->id)
             ->where('type', 'entree')
             ->exists();
@@ -98,12 +107,12 @@ class FelloDemoStockSeeder extends Seeder
             MouvementStock::create([
                 'organization_id' => $orgId,
                 'site_id' => $site->id,
-                'produit_id' => $produit->id,
+                'produit_variante_id' => $varianteId,
                 'type' => 'entree',
                 'quantite' => $qte,
                 'stock_avant' => 0,
                 'stock_apres' => $qte,
-                'source_type' => ProduitStock::class,
+                'source_type' => VarianteStock::class,
                 'source_id' => $stock->id,
                 'notes' => MotifAjustementStock::AUTRE->toNotesString('Stock initial démo Fello Demo'),
                 'created_by' => $adminId,

@@ -11,21 +11,17 @@ return new class extends Migration
         Schema::create('produits', function (Blueprint $table) {
             $table->ulid('id')->primary();
             $table->foreignUlid('organization_id')->constrained()->cascadeOnDelete();
+            $table->foreignUlid('categorie_id')->nullable()->constrained('categories')->nullOnDelete();
             $table->string('nom');
-            $table->string('code_interne', 50)->nullable()->unique();
-            $table->string('code_fournisseur', 100)->nullable()->index();
-            $table->unsignedBigInteger('prix_usine')->nullable();
-            $table->unsignedBigInteger('prix_vente')->nullable();
-            $table->unsignedBigInteger('prix_achat')->nullable();
-            $table->unsignedBigInteger('cout')->nullable();
-            $table->unsignedInteger('qte_stock')->default(0);
-            $table->unsignedInteger('seuil_alerte_stock')->nullable();
             $table->string('type', 30)->default('materiel')->index();
             $table->string('statut', 30)->default('actif')->index();
             $table->text('description')->nullable();
-            $table->text('image_url')->nullable();
+
+            // Cache dénormalisé, resynchronisé depuis variante_stocks (somme toutes variantes/sites)
+            $table->unsignedInteger('qte_stock')->default(0);
             $table->boolean('is_alerte')->default(false)->index();
             $table->timestamp('last_stockout_notified_at')->nullable();
+
             $table->timestamp('archived_at')->nullable();
             $table->foreignUlid('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->foreignUlid('updated_by')->nullable()->constrained('users')->nullOnDelete();
@@ -36,6 +32,7 @@ return new class extends Migration
 
             $table->index(['statut', 'type']);
             $table->index(['organization_id', 'statut']);
+            $table->index(['organization_id', 'categorie_id']);
         });
     }
 

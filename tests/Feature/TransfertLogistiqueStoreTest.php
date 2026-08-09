@@ -14,11 +14,12 @@ use Laravel\Pennant\Feature;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
+use Tests\Concerns\HasProduitVariante;
 use Tests\TestCase;
 
 class TransfertLogistiqueStoreTest extends TestCase
 {
-    use RefreshDatabase;
+    use HasProduitVariante, RefreshDatabase;
 
     protected function setUp(): void
     {
@@ -71,12 +72,7 @@ class TransfertLogistiqueStoreTest extends TestCase
 
     private function makeProduit(Organization $org): Produit
     {
-        return Produit::create([
-            'organization_id' => $org->id,
-            'nom' => 'Produit Test',
-            'type' => 'materiel',
-            'statut' => 'actif',
-        ]);
+        return $this->makeProduitAvecVariante($org);
     }
 
     // ── Tests ─────────────────────────────────────────────────────────────────
@@ -114,7 +110,7 @@ class TransfertLogistiqueStoreTest extends TestCase
 
         $this->assertDatabaseHas('transfert_lignes', [
             'transfert_logistique_id' => $transfert->id,
-            'produit_id' => $produit->id,
+            'variante_id' => $produit->variantePrincipale()->first()->id,
             'quantite_demandee' => 10,
         ]);
     }

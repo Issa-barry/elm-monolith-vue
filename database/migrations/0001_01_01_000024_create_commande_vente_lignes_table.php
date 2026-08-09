@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('commande_vente_lignes', function (Blueprint $table) {
             $table->ulid('id')->primary();
             $table->foreignUlid('commande_vente_id')->constrained('commandes_ventes')->cascadeOnDelete();
-            $table->foreignUlid('produit_id')->constrained('produits')->restrictOnDelete();
+            $table->foreignUlid('variante_id')->constrained('produit_variantes')->restrictOnDelete();
 
             // Quantités du workflow
             $table->integer('quantite_demandee');         // Qté commandée (saisie à la création)
@@ -26,10 +26,13 @@ return new class extends Migration
             $table->decimal('prix_usine_snapshot', 12, 2);
             $table->decimal('prix_vente_snapshot', 12, 2);
             $table->decimal('total_ligne', 12, 2);
+            // Nom produit + libellé variante figés à la création (ex: "T-shirt Fello — Noir / M") —
+            // absent avant refonte, le document changeait rétroactivement si le produit était renommé.
+            $table->string('libelle_snapshot')->nullable();
 
             $table->timestamps();
 
-            $table->unique(['commande_vente_id', 'produit_id'], 'cv_lignes_commande_produit_unique');
+            $table->unique(['commande_vente_id', 'variante_id'], 'cv_lignes_commande_variante_unique');
         });
     }
 

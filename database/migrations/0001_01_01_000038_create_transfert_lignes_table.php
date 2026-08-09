@@ -11,7 +11,9 @@ return new class extends Migration
         Schema::create('transfert_lignes', function (Blueprint $table) {
             $table->ulid('id')->primary();
             $table->foreignUlid('transfert_logistique_id')->constrained('transferts_logistiques')->cascadeOnDelete();
-            $table->foreignUlid('produit_id')->constrained('produits')->cascadeOnDelete();
+            // restrictOnDelete (au lieu de cascade avant refonte) : évite qu'une suppression de
+            // variante efface silencieusement son historique de transfert.
+            $table->foreignUlid('variante_id')->constrained('produit_variantes')->restrictOnDelete();
             $table->integer('quantite_demandee')->nullable();
             $table->integer('quantite_chargee')->nullable();
             $table->integer('quantite_recue')->nullable();
@@ -20,7 +22,7 @@ return new class extends Migration
             $table->text('ecart_motif')->nullable();
             $table->timestamps();
 
-            $table->unique(['transfert_logistique_id', 'produit_id']);
+            $table->unique(['transfert_logistique_id', 'variante_id']);
         });
     }
 

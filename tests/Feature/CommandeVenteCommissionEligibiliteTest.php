@@ -14,6 +14,7 @@ use App\Models\Vehicule;
 use App\Services\CommissionGenerator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
@@ -28,7 +29,7 @@ use Tests\TestCase;
  */
 class CommandeVenteCommissionEligibiliteTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
+    use HasAdminSetup, HasOrgAndUser, HasProduitVariante, RefreshDatabase;
 
     private Site $defaultSite;
 
@@ -48,14 +49,11 @@ class CommandeVenteCommissionEligibiliteTest extends TestCase
 
     private function makeProduit(int $prixVente = 5000, int $prixUsine = 3500): Produit
     {
-        return Produit::create([
-            'organization_id' => $this->org->id,
-            'nom' => 'Pack Eau',
-            'type' => 'materiel',
-            'statut' => 'actif',
-            'prix_vente' => $prixVente,
-            'prix_usine' => $prixUsine,
-        ]);
+        return $this->makeProduitAvecVariante(
+            $this->org,
+            ['nom' => 'Pack Eau'],
+            ['prix_vente' => $prixVente, 'prix_usine' => $prixUsine],
+        );
     }
 
     private function makeVehicule(bool $prisEnChargeParUsine, bool $commissionEligible, int $capacite = 100): Vehicule

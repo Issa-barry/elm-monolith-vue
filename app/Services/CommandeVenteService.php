@@ -328,7 +328,7 @@ class CommandeVenteService
             $quantite = $ligne->quantite_chargee ?? $ligne->quantite_demandee;
 
             MouvementStockService::sortirStock(
-                produitId: $ligne->produit_id,
+                varianteId: $ligne->variante_id,
                 siteId: $commande->site_id,
                 orgId: $commande->organization_id,
                 quantite: $quantite,

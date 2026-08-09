@@ -30,22 +30,16 @@ class ImageService
      */
     public function storeAsWebp(UploadedFile $file, string $folder): string
     {
-        $image = $this->manager->read($file->getRealPath());
+        return $this->storeResized($file, $folder, $this->maxWidth, $this->maxHeight, $this->quality);
+    }
 
-        // Réduire si trop grande (garde le ratio)
-        if ($image->width() > $this->maxWidth || $image->height() > $this->maxHeight) {
-            $image->scaleDown($this->maxWidth, $this->maxHeight);
-        }
-
-        $filename = Str::uuid().'.webp';
-        $path = $folder.'/'.$filename;
-
-        Storage::disk('public')->put(
-            $path,
-            $image->toWebp($this->quality)->toString()
-        );
-
-        return $path;
+    /**
+     * Variante miniature (~200px par défaut) pour les listes/grilles denses (PDV, DataTable) —
+     * évite de servir l'image 1200px partout. Même conversion WebP que storeAsWebp().
+     */
+    public function storeThumb(UploadedFile $file, string $folder, int $size = 200): string
+    {
+        return $this->storeResized($file, $folder, $size, $size, $this->quality);
     }
 
     /**
@@ -56,5 +50,25 @@ class ImageService
         if ($path) {
             Storage::disk('public')->delete($path);
         }
+    }
+
+    private function storeResized(UploadedFile $file, string $folder, int $maxWidth, int $maxHeight, int $quality): string
+    {
+        $image = $this->manager->read($file->getRealPath());
+
+        // Réduire si trop grande (garde le ratio)
+        if ($image->width() > $maxWidth || $image->height() > $maxHeight) {
+            $image->scaleDown($maxWidth, $maxHeight);
+        }
+
+        $filename = Str::uuid().'.webp';
+        $path = $folder.'/'.$filename;
+
+        Storage::disk('public')->put(
+            $path,
+            $image->toWebp($quality)->toString()
+        );
+
+        return $path;
     }
 }

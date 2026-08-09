@@ -15,7 +15,9 @@ class ProduitHistoriqueController extends Controller
     {
         $this->authorize('view', $produit);
 
-        $mouvements = MouvementStock::where('produit_id', $produit->id)
+        $varianteIds = $produit->variantes()->pluck('id');
+
+        $mouvements = MouvementStock::whereIn('produit_variante_id', $varianteIds)
             ->with('createur:id,prenom,nom')
             ->orderByDesc('created_at')
             ->take(200)

@@ -24,6 +24,8 @@ class ProductionSeeder extends Seeder
 
             // ── Référentiels ──────────────────────────────────────────────────
             SitesSeeder::class,           // Sites réels (siège, usine, agences, dépôts)
+            CategorieDefaultSeeder::class,       // Catégories par défaut (Vêtements, Chaussures, Boissons, Matériel)
+            OptionCatalogueDefaultSeeder::class, // Options système par défaut (Couleur, Taille, Pointure)
             ProduitsSeeder::class,        // Catalogue produits
             ParametreSeeder::class,       // Paramètres applicatifs par défaut
             TypeVehiculesSeeder::class,   // Types de véhicule par défaut
