@@ -40,6 +40,7 @@ use App\Http\Controllers\EquipeLivraisonController;
 use App\Http\Controllers\FactureVenteController;
 use App\Http\Controllers\FraisCommissionPartController;
 use App\Http\Controllers\LivreurController;
+use App\Http\Controllers\OptionCatalogueController;
 use App\Http\Controllers\PackingController;
 use App\Http\Controllers\PaieController;
 use App\Http\Controllers\PaiementCommissionVenteController;
@@ -260,6 +261,16 @@ Route::prefix('backoffice')->group(function () {
             Route::put('produits/categories/{categorie}', [CategorieController::class, 'update'])->name('produits.categories.update');
             Route::patch('produits/categories/{categorie}/toggle', [CategorieController::class, 'toggle'])->name('produits.categories.toggle');
             Route::delete('produits/categories/{categorie}', [CategorieController::class, 'destroy'])->name('produits.categories.destroy');
+
+            // Catalogue d'options réutilisables — indépendant des options réellement portées
+            // par chaque produit (cf. ProduitOption), déclarées avant produits/{produit} pour
+            // la même raison de lisibilité que categories ci-dessus.
+            Route::get('produits/options', [OptionCatalogueController::class, 'index'])->name('produits.options.index');
+            Route::post('produits/options', [OptionCatalogueController::class, 'store'])->name('produits.options.store');
+            Route::put('produits/options/{option}', [OptionCatalogueController::class, 'update'])->name('produits.options.update');
+            Route::delete('produits/options/{option}', [OptionCatalogueController::class, 'destroy'])->name('produits.options.destroy');
+            Route::post('produits/options/{option}/valeurs', [OptionCatalogueController::class, 'storeValeur'])->name('produits.options.valeurs.store');
+            Route::delete('produits/options/{option}/valeurs/{valeur}', [OptionCatalogueController::class, 'destroyValeur'])->name('produits.options.valeurs.destroy');
 
             Route::resource('produits', ProduitController::class);
             Route::post('produits/{produit}/ajuster-stock', [ProduitController::class, 'ajusterStock'])

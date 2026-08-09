@@ -4,13 +4,15 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Image, Layers, Pencil, Plus, Save, X } from 'lucide-vue-next';
-import Chips from 'primevue/chips';
 import Dropdown from 'primevue/dropdown';
 import Editor from 'primevue/editor';
 import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
-import { computed, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import CategorieSelect from './CategorieSelect.vue';
+import OptionCatalogueSelect, {
+    type OptionCatalogue,
+} from './OptionCatalogueSelect.vue';
 
 // ── Props / Emits ─────────────────────────────────────────────────────────────
 interface Option {
@@ -34,6 +36,9 @@ interface Limites {
 interface OptionInput {
     nom: string;
     valeurs: string[];
+    /** Rattachement au catalogue d'options réutilisables — cf. OptionCatalogueSelect.vue.
+     * null pour une option historique créée avant l'existence du catalogue. */
+    option_catalogue_id: string | null;
 }
 
 interface Variante {
@@ -75,6 +80,7 @@ const props = withDefaults(
         types: Option[];
         statuts: Option[];
         categories?: Categorie[];
+        optionsCatalogue?: OptionCatalogue[];
         limites?: Limites;
         processing: boolean;
         currentImageUrl?: string | null;
@@ -86,6 +92,7 @@ const props = withDefaults(
     }>(),
     {
         categories: () => [],
+        optionsCatalogue: () => [],
         limites: undefined,
         currentImageUrl: null,
         currentSku: null,
@@ -128,7 +135,9 @@ const hasDeclinaisons = computed({
     set: (actif: boolean) => {
         emit('update:form', {
             ...props.form,
-            options: actif ? [{ nom: '', valeurs: [] }] : [],
+            options: actif
+                ? [{ nom: '', valeurs: [], option_catalogue_id: null }]
+                : [],
         });
     },
 });
@@ -142,7 +151,10 @@ function addOption() {
     }
     emit('update:form', {
         ...props.form,
-        options: [...props.form.options, { nom: '', valeurs: [] }],
+        options: [
+            ...props.form.options,
+            { nom: '', valeurs: [], option_catalogue_id: null },
+        ],
     });
 }
 
@@ -160,6 +172,56 @@ function updateOption(index: number, patch: Partial<OptionInput>) {
             i === index ? { ...o, ...patch } : o,
         ),
     });
+}
+
+// Choix d'une option de catalogue pour la ligne : repart d'une sélection de valeurs
+// vierge pour éviter de mélanger les valeurs d'une option précédemment choisie.
+function onOptionCatalogueSelected(index: number, option: OptionCatalogue | null) {
+    updateOption(index, {
+        nom: option?.nom ?? '',
+        option_catalogue_id: option?.id ?? null,
+        valeurs: [],
+    });
+}
+
+// Valeurs proposées à cocher pour une ligne : celles du catalogue + celles déjà
+// sélectionnées sur cette ligne mais absentes du catalogue (valeur historique ou
+// tout juste ajoutée via "+ Ajouter une valeur", pas encore rechargée depuis le serveur).
+function valeursProposees(index: number): string[] {
+    const option = props.form.options[index];
+    const catalogue = props.optionsCatalogue.find(
+        (o) => o.id === option.option_catalogue_id,
+    );
+    const proposees = catalogue?.valeurs.map((v) => v.valeur) ?? [];
+
+    return [...new Set([...proposees, ...option.valeurs])];
+}
+
+function toggleValeur(index: number, valeur: string) {
+    const option = props.form.options[index];
+    const dejaCoche = option.valeurs.includes(valeur);
+
+    if (dejaCoche) {
+        updateOption(index, { valeurs: option.valeurs.filter((v) => v !== valeur) });
+        return;
+    }
+    if (props.limites && option.valeurs.length >= props.limites.max_valeurs_option) {
+        return;
+    }
+    updateOption(index, { valeurs: [...option.valeurs, valeur] });
+}
+
+const nouvellesValeurs = reactive<Record<number, string>>({});
+
+function ajouterValeurLibre(index: number) {
+    const valeur = (nouvellesValeurs[index] ?? '').trim();
+    if (!valeur) return;
+
+    const option = props.form.options[index];
+    if (!option.valeurs.includes(valeur)) {
+        updateOption(index, { valeurs: [...option.valeurs, valeur] });
+    }
+    nouvellesValeurs[index] = '';
 }
 
 const totalVariantes = computed(() =>
@@ -367,18 +429,15 @@ function formatPrice(val: number | null): string {
                     :key="i"
                     class="rounded-lg border bg-muted/20 p-3 sm:p-4"
                 >
-                    <div class="mb-2 flex items-center gap-2">
-                        <InputText
-                            :model-value="option.nom"
-                            @update:model-value="
-                                updateOption(i, { nom: $event })
-                            "
-                            placeholder="Nom de l'option (ex : Couleur)"
-                            class="flex-1"
-                            :class="{
-                                'p-invalid': errors[`options.${i}.nom`],
-                            }"
-                        />
+                    <div class="mb-3 flex items-center gap-2">
+                        <div class="flex-1">
+                            <OptionCatalogueSelect
+                                :model-value="option.option_catalogue_id"
+                                :options-catalogue="optionsCatalogue"
+                                :invalid="!!errors[`options.${i}.nom`]"
+                                @selected="onOptionCatalogueSelected(i, $event)"
+                            />
+                        </div>
                         <button
                             type="button"
                             @click="removeOption(i)"
@@ -388,23 +447,62 @@ function formatPrice(val: number | null): string {
                             <X class="h-4 w-4" />
                         </button>
                     </div>
-                    <Chips
-                        :model-value="option.valeurs"
-                        @update:model-value="
-                            updateOption(i, { valeurs: $event })
-                        "
-                        placeholder="Ajouter une valeur puis Entrée (ex : Noir)"
-                        class="w-full"
-                        :class="{
-                            'p-invalid': errors[`options.${i}.valeurs`],
-                        }"
-                    />
-                    <p class="mt-1 text-xs text-muted-foreground">
-                        {{ option.valeurs.length }}
-                        <template v-if="limites">
-                            / {{ limites.max_valeurs_option }}</template
+                    <p v-if="errors[`options.${i}.nom`]" class="mb-2 text-xs text-destructive">
+                        {{ errors[`options.${i}.nom`] }}
+                    </p>
+
+                    <template v-if="option.option_catalogue_id">
+                        <div class="flex flex-wrap gap-2">
+                            <label
+                                v-for="valeur in valeursProposees(i)"
+                                :key="valeur"
+                                class="flex cursor-pointer items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-sm"
+                                :class="{
+                                    'border-primary bg-primary/5': option.valeurs.includes(valeur),
+                                }"
+                            >
+                                <Checkbox
+                                    :model-value="option.valeurs.includes(valeur)"
+                                    @update:model-value="toggleValeur(i, valeur)"
+                                />
+                                {{ valeur }}
+                            </label>
+                        </div>
+
+                        <div class="mt-2 flex items-center gap-2">
+                            <InputText
+                                v-model="nouvellesValeurs[i]"
+                                placeholder="+ Ajouter une valeur"
+                                class="h-8 max-w-[12rem] text-sm"
+                                @keyup.enter="ajouterValeurLibre(i)"
+                            />
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                @click="ajouterValeurLibre(i)"
+                            >
+                                Ajouter
+                            </Button>
+                        </div>
+
+                        <p class="mt-2 text-xs text-muted-foreground">
+                            {{ option.valeurs.length }}
+                            <template v-if="limites">
+                                / {{ limites.max_valeurs_option }}</template
+                            >
+                            valeur(s) sélectionnée(s)
+                        </p>
+                        <p
+                            v-if="errors[`options.${i}.valeurs`]"
+                            class="text-xs text-destructive"
                         >
-                        valeur(s)
+                            {{ errors[`options.${i}.valeurs`] }}
+                        </p>
+                    </template>
+                    <p v-else class="text-xs text-muted-foreground">
+                        Choisissez une option ci-dessus pour proposer ses
+                        valeurs (ex : Noir, Blanc, Rouge…).
                     </p>
                 </div>
 

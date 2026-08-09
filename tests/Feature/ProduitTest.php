@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\DroitAjustementStock;
 use App\Models\MouvementStock;
+use App\Models\OptionCatalogue;
 use App\Models\Organization;
 use App\Models\Produit;
 use App\Models\Site;
@@ -269,6 +270,49 @@ class ProduitTest extends TestCase
         $produit = Produit::where('nom', 'T-shirt test')->firstOrFail();
         $this->assertCount(4, $produit->variantes); // 2 couleurs × 2 tailles
         $this->assertSame(0, $produit->variantes->where('is_default', true)->count());
+    }
+
+    public function test_store_avec_option_catalogue_id_enrichit_le_catalogue_sans_dupliquer(): void
+    {
+        $option = OptionCatalogue::create(['organization_id' => $this->org->id, 'nom' => 'Couleur']);
+        $option->valeurs()->create(['valeur' => 'Noir', 'position' => 0]);
+
+        $this->actingAs($this->user)
+            ->post(route('produits.store'), [
+                'nom' => 'T-shirt catalogue',
+                'type' => 'achat_vente',
+                'statut' => 'actif',
+                'prix_achat' => 40000,
+                'prix_vente' => 75000,
+                'options' => [
+                    ['nom' => 'Couleur', 'valeurs' => ['Noir', 'Rouge'], 'option_catalogue_id' => $option->id],
+                ],
+            ])
+            ->assertRedirect(route('produits.index'));
+
+        // "Noir" existait déjà (pas de doublon), "Rouge" est ajouté au catalogue réutilisable.
+        $option->refresh();
+        $this->assertCount(2, $option->valeurs);
+        $this->assertSame(['Noir', 'Rouge'], $option->valeurs->pluck('valeur')->all());
+    }
+
+    public function test_store_options_catalogue_id_dune_autre_organisation_est_rejete(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $optionAutreOrg = OptionCatalogue::create(['organization_id' => $otherOrg->id, 'nom' => 'Couleur']);
+
+        $this->actingAs($this->user)
+            ->post(route('produits.store'), [
+                'nom' => 'T-shirt test',
+                'type' => 'achat_vente',
+                'statut' => 'actif',
+                'prix_achat' => 40000,
+                'prix_vente' => 75000,
+                'options' => [
+                    ['nom' => 'Couleur', 'valeurs' => ['Noir'], 'option_catalogue_id' => $optionAutreOrg->id],
+                ],
+            ])
+            ->assertSessionHasErrors('options.0.option_catalogue_id');
     }
 
     // ── show ──────────────────────────────────────────────────────────────────

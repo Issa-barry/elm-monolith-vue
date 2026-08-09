@@ -2,12 +2,14 @@
 
 namespace App\Services;
 
+use App\Models\OptionCatalogue;
 use App\Models\Parametre;
 use App\Models\Produit;
 use App\Models\ProduitOptionValeur;
 use App\Models\ProduitVariante;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class VarianteService
@@ -30,7 +32,7 @@ class VarianteService
     /**
      * Génère les variantes par produit cartésien des options fournies.
      *
-     * @param  array<int, array{nom: string, valeurs: array<int, string>}>  $optionsInput
+     * @param  array<int, array{nom: string, valeurs: array<int, string>, option_catalogue_id?: ?string}>  $optionsInput
      * @param  array<string, mixed>  $donneesVariante  Prix/codes appliqués à chaque variante générée
      *                                                 (l'utilisateur les ajuste ensuite individuellement).
      * @return Collection<int, ProduitVariante>
@@ -56,6 +58,15 @@ class VarianteService
                         'valeur' => $valeur,
                         'position' => $j,
                     ]);
+                }
+
+                // Enrichissement à sens unique et purement additif du catalogue réutilisable :
+                // les valeurs saisies ici (existantes ou nouvelles) alimentent le catalogue si
+                // l'utilisateur a rattaché l'option à une entrée existante, mais aucune écriture
+                // ne repart du catalogue vers cette option — cf. brief : modifier "Couleur" dans
+                // le catalogue ne doit jamais casser les variantes déjà générées.
+                if (! empty($optionInput['option_catalogue_id'])) {
+                    $this->enrichirCatalogue($orgId, $optionInput['option_catalogue_id'], array_values($optionInput['valeurs']));
                 }
 
                 $options[] = ['option' => $option, 'valeurs' => $valeurs];
@@ -85,6 +96,39 @@ class VarianteService
 
             return $variantes;
         });
+    }
+
+    /**
+     * Ajoute au catalogue réutilisable les valeurs saisies qui n'y figurent pas encore —
+     * append-only, jamais destructif. Échoue silencieusement si l'option de catalogue référencée
+     * n'existe pas ou appartient à une autre organisation (défensif : ne doit jamais bloquer la
+     * génération des variantes, le catalogue n'étant qu'une bibliothèque de suggestions).
+     *
+     * @param  array<int, string>  $valeurs
+     */
+    private function enrichirCatalogue(string $orgId, string $optionCatalogueId, array $valeurs): void
+    {
+        $optionCatalogue = OptionCatalogue::where('organization_id', $orgId)->find($optionCatalogueId);
+        if (! $optionCatalogue) {
+            return;
+        }
+
+        $existantes = $optionCatalogue->valeurs()->pluck('valeur')
+            ->map(fn ($v) => Str::lower(trim($v)))
+            ->all();
+
+        $position = $optionCatalogue->valeurs()->max('position');
+        $position = $position === null ? 0 : $position + 1;
+
+        foreach ($valeurs as $valeur) {
+            if (in_array(Str::lower(trim($valeur)), $existantes, true)) {
+                continue;
+            }
+
+            $optionCatalogue->valeurs()->create(['valeur' => $valeur, 'position' => $position]);
+            $existantes[] = Str::lower(trim($valeur));
+            $position++;
+        }
     }
 
     /**

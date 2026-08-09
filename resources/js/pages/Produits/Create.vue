@@ -17,6 +17,17 @@ interface Categorie {
     parent_id: string | null;
 }
 
+interface OptionCatalogueValeur {
+    id: string;
+    valeur: string;
+}
+
+interface OptionCatalogue {
+    id: string;
+    nom: string;
+    valeurs: OptionCatalogueValeur[];
+}
+
 interface Limites {
     max_photos_produit: number;
     max_options_produit: number;
@@ -28,6 +39,7 @@ defineProps<{
     types: Option[];
     statuts: Option[];
     categories: Categorie[];
+    optionsCatalogue: OptionCatalogue[];
     limites: Limites;
 }>();
 
@@ -51,7 +63,11 @@ const form = useForm({
     description: null as string | null,
     is_alerte: false,
     image: null as File | null,
-    options: [] as { nom: string; valeurs: string[] }[],
+    options: [] as {
+        nom: string;
+        valeurs: string[];
+        option_catalogue_id: string | null;
+    }[],
 });
 
 function submit() {
@@ -100,6 +116,7 @@ function submit() {
                 :types="types"
                 :statuts="statuts"
                 :categories="categories"
+                :options-catalogue="optionsCatalogue"
                 :limites="limites"
                 :processing="form.processing"
                 :allow-declinaisons="true"

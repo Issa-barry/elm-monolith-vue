@@ -9,6 +9,7 @@ use App\Enums\ProduitType;
 use App\Models\AuditLog;
 use App\Models\Categorie;
 use App\Models\MouvementStock;
+use App\Models\OptionCatalogue;
 use App\Models\Parametre;
 use App\Models\Produit;
 use App\Models\ProduitVariante;
@@ -205,6 +206,10 @@ class ProduitController extends Controller
             'types' => ProduitType::options(),
             'statuts' => ProduitStatut::options(),
             'categories' => Categorie::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom', 'parent_id']),
+            'optionsCatalogue' => OptionCatalogue::where('organization_id', $orgId)
+                ->orderBy('position')->orderBy('nom')
+                ->with('valeurs:id,option_catalogue_id,valeur')
+                ->get(['id', 'nom']),
             'limites' => $this->limitesCatalogue($orgId),
         ]);
     }
@@ -719,6 +724,9 @@ class ProduitController extends Controller
             'options.*.nom' => 'required_with:options|string|max:100',
             'options.*.valeurs' => 'required_with:options|array|min:1',
             'options.*.valeurs.*' => 'required|string|max:100',
+            // Rattachement optionnel au catalogue d'options réutilisables — purement informatif
+            // pour l'enrichissement du catalogue, cf. VarianteService::enrichirCatalogue().
+            'options.*.option_catalogue_id' => ['nullable', Rule::exists('option_catalogues', 'id')->where('organization_id', $orgId)],
         ]);
     }
 

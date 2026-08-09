@@ -98,7 +98,11 @@ const form = useForm({
     description: props.produit.description,
     is_alerte: props.produit.is_alerte,
     image: null as File | null,
-    options: [] as { nom: string; valeurs: string[] }[],
+    options: [] as {
+        nom: string;
+        valeurs: string[];
+        option_catalogue_id: string | null;
+    }[],
     _method: 'PUT',
 });
 
