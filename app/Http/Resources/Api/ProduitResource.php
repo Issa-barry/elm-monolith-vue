@@ -18,7 +18,7 @@ class ProduitResource extends JsonResource
             'nom' => $this->nom,
             'categorie_id' => $this->categorie_id,
             'categorie_nom' => $this->whenLoaded('categorie', fn () => $this->categorie?->nom),
-            'code_interne' => $variante?->code_interne,
+            'sku' => $variante?->sku,
             'code_barres' => $variante?->code_barres,
             'code_fournisseur' => $variante?->code_fournisseur,
             'type' => $this->type?->value,

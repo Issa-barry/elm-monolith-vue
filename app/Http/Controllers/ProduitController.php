@@ -66,7 +66,7 @@ class ProduitController extends Controller
         if (! empty($filters['search'])) {
             $s = $filters['search'];
             $query->where(fn ($q) => $q->where('nom', 'like', "%{$s}%")
-                ->orWhereHas('variantes', fn ($vq) => $vq->where('code_interne', 'like', "%{$s}%")));
+                ->orWhereHas('variantes', fn ($vq) => $vq->where('sku', 'like', "%{$s}%")));
         }
         if (! empty($filters['type'])) {
             $query->where('type', $filters['type']);
@@ -86,10 +86,16 @@ class ProduitController extends Controller
             ->get()
             ->groupBy('produit_variante_id');
 
+        // commande_vente_lignes/commande_achat_lignes portent variante_id (grain Phase 2) :
+        // on résout produit_id via la map variante → produit déjà construite ci-dessus.
+        $varianteToProduitId = $produits->flatMap(
+            fn (Produit $p) => $p->variantes->pluck('id')->mapWithKeys(fn ($vid) => [$vid => $p->id])
+        );
         $usedVarianteIds = collect()
             ->merge(DB::table('commande_vente_lignes')->whereIn('variante_id', $varianteIds)->pluck('variante_id'))
             ->merge(DB::table('commande_achat_lignes')->whereIn('variante_id', $varianteIds)->whereNotNull('variante_id')->pluck('variante_id'))
-            ->unique()->flip()->all();
+            ->unique();
+        $usedProduitIds = $usedVarianteIds->map(fn ($vid) => $varianteToProduitId->get($vid))->filter()->unique()->flip()->all();
 
         $lastMouvementsParVariante = MouvementStock::whereIn('produit_variante_id', $varianteIds)
             ->when(! empty($siteIds), fn ($q) => $q->whereIn('site_id', $siteIds))
@@ -98,7 +104,7 @@ class ProduitController extends Controller
             ->groupBy('produit_variante_id')
             ->map(fn ($ms) => $ms->first());
 
-        $mapped = $produits->map(function (Produit $p) use ($allVarianteStocks, $siteIds, $usedVarianteIds, $lastMouvementsParVariante) {
+        $mapped = $produits->map(function (Produit $p) use ($allVarianteStocks, $siteIds, $usedProduitIds, $lastMouvementsParVariante) {
             $varianteIdsProduit = $p->variantes->pluck('id')->all();
             $siteStocks = collect($varianteIdsProduit)->flatMap(fn ($vid) => $allVarianteStocks->get($vid, collect()));
             $variantePrincipale = $p->variantes->firstWhere('is_default', true) ?? $p->variantes->first();
@@ -124,14 +130,14 @@ class ProduitController extends Controller
                 ->sortByDesc('created_at')
                 ->first();
 
-            $isUsed = collect($varianteIdsProduit)->contains(fn ($vid) => isset($usedVarianteIds[$vid]));
+            $isUsed = isset($usedProduitIds[$p->id]);
 
             return [
                 'id' => $p->id,
                 'nom' => $p->nom,
                 'categorie_id' => $p->categorie_id,
                 'categorie_nom' => $p->categorie?->nom,
-                'code_interne' => $variantePrincipale?->code_interne,
+                'sku' => $variantePrincipale?->sku,
                 'code_fournisseur' => $variantePrincipale?->code_fournisseur,
                 'type' => $p->type?->value,
                 'type_label' => $p->type?->label(),
@@ -328,7 +334,7 @@ class ProduitController extends Controller
                 'id' => $produit->id,
                 'nom' => $produit->nom,
                 'categorie' => $produit->categorie ? ['id' => $produit->categorie->id, 'nom' => $produit->categorie->nom] : null,
-                'code_interne' => $variantePrincipale?->code_interne,
+                'sku' => $variantePrincipale?->sku,
                 'code_fournisseur' => $variantePrincipale?->code_fournisseur,
                 'code_barres' => $variantePrincipale?->code_barres,
                 'image_url' => $produit->image_url,
@@ -360,7 +366,7 @@ class ProduitController extends Controller
                 'variantes' => $produit->variantes->map(fn (ProduitVariante $v) => [
                     'id' => $v->id,
                     'libelle' => $v->libelle,
-                    'code_interne' => $v->code_interne,
+                    'sku' => $v->sku,
                     'code_barres' => $v->code_barres,
                     'prix_vente' => $v->prix_vente,
                     'is_default' => $v->is_default,
@@ -421,7 +427,7 @@ class ProduitController extends Controller
                 'id' => $produit->id,
                 'nom' => $produit->nom,
                 'categorie_id' => $produit->categorie_id,
-                'code_interne' => $variantePrincipale?->code_interne,
+                'sku' => $variantePrincipale?->sku,
                 'code_barres' => $variantePrincipale?->code_barres,
                 'code_fournisseur' => $variantePrincipale?->code_fournisseur,
                 'image_url' => $produit->image_url,
@@ -435,6 +441,7 @@ class ProduitController extends Controller
                 'description' => $produit->description,
                 'is_alerte' => $produit->is_alerte,
                 'has_variantes' => $produit->variantes->count() > 1,
+                'variantes_count' => $produit->variantes->count(),
                 'medias' => $produit->medias->map(fn ($m) => [
                     'id' => $m->id,
                     'url' => $m->url,

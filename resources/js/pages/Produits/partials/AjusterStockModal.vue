@@ -21,7 +21,7 @@ interface SiteStock {
 interface ProduitMin {
     id: string;
     nom: string;
-    code_interne: string | null;
+    sku: string | null;
     qte_stock: number | null;
     stocks_par_site: SiteStock[];
 }
@@ -200,10 +200,10 @@ function submit() {
             <div class="min-w-0">
                 <p class="truncate text-sm font-semibold">{{ produit.nom }}</p>
                 <p
-                    v-if="produit.code_interne"
+                    v-if="produit.sku"
                     class="font-mono text-xs text-muted-foreground"
                 >
-                    {{ produit.code_interne }}
+                    {{ produit.sku }}
                 </p>
             </div>
             <div class="ml-auto shrink-0 text-right">

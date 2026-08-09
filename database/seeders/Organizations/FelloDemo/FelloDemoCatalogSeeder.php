@@ -94,8 +94,12 @@ class FelloDemoCatalogSeeder extends Seeder
         // chantier (catalogue habillement à déclinaisons couleur/taille).
         $categorieTshirts = Categorie::where('organization_id', $org->id)->where('nom', 'T-shirts')->first();
         $nomDemo = 'T-shirt Fello édition démo';
+        // Produit::setNomAttribute() normalise la casse à l'enregistrement (majuscule en tête,
+        // reste en minuscules) — comparer contre le nom brut ferait toujours échouer ce contrôle
+        // d'idempotence pour "Fello" (créerait un doublon à chaque exécution du seeder).
+        $nomDemoNormalise = (new Produit(['nom' => $nomDemo]))->nom;
 
-        if ($categorieTshirts && ! Produit::where('organization_id', $org->id)->where('nom', $nomDemo)->exists()) {
+        if ($categorieTshirts && ! Produit::where('organization_id', $org->id)->where('nom', $nomDemoNormalise)->exists()) {
             $produit = $produitService->creer([
                 'organization_id' => $org->id,
                 'categorie_id' => $categorieTshirts->id,

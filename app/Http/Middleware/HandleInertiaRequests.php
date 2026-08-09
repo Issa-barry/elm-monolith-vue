@@ -37,10 +37,14 @@ class HandleInertiaRequests extends Middleware
             return ['ruptures' => 0, 'faibles' => 0, 'total' => 0];
         }
 
+        // seuil_alerte_stock vit désormais sur la variante par défaut (refonte variant-first) —
+        // eager load ciblé pour que Produit::is_low_stock (accédé ci-dessous) ne fasse pas
+        // une requête par produit sur ce middleware exécuté à chaque page.
         $produits = Produit::where('organization_id', $user->organization_id)
             ->where('statut', '!=', 'archive')
             ->whereNotNull('qte_stock')
-            ->get(['id', 'qte_stock', 'seuil_alerte_stock', 'type', 'organization_id']);
+            ->with(['variantes' => fn ($q) => $q->where('is_default', true)->select('id', 'produit_id', 'is_default', 'seuil_alerte_stock')])
+            ->get(['id', 'qte_stock', 'type', 'organization_id']);
 
         $ruptures = $produits->filter(fn ($p) => $p->type?->hasStock() && $p->qte_stock <= 0)->count();
         $faibles = $produits->filter(fn ($p) => $p->type?->hasStock() && $p->is_low_stock)->count();

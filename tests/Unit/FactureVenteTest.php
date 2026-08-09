@@ -15,11 +15,12 @@ use App\Models\Proprietaire;
 use App\Models\Vehicule;
 use App\Services\CommissionGenerator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Concerns\HasProduitVariante;
 use Tests\TestCase;
 
 class FactureVenteTest extends TestCase
 {
-    use RefreshDatabase;
+    use HasProduitVariante, RefreshDatabase;
 
     // ── recalculStatut ────────────────────────────────────────────────────────
 
@@ -74,14 +75,7 @@ class FactureVenteTest extends TestCase
 
     private function makeProduit(Organization $org): Produit
     {
-        return Produit::create([
-            'organization_id' => $org->id,
-            'nom' => 'Produit Test',
-            'type' => 'materiel',
-            'statut' => 'actif',
-            'prix_achat' => 0,
-            'qte_stock' => 0,
-        ]);
+        return $this->makeProduitAvecVariante($org, ['qte_stock' => 0], ['prix_achat' => 0]);
     }
 
     // ── CommissionGenerator (nouveau modèle) ──────────────────────────────────
@@ -120,7 +114,7 @@ class FactureVenteTest extends TestCase
             'total_commande' => 10000,
         ]);
         $commande->lignes()->create([
-            'produit_id' => $produit->id,
+            'variante_id' => $produit->variantePrincipale()->first()->id,
             'quantite_demandee' => 1,
             'prix_vente_snapshot' => 10000,
             'prix_usine_snapshot' => 0,
@@ -183,7 +177,7 @@ class FactureVenteTest extends TestCase
             'total_commande' => 100000,
         ]);
         $commande->lignes()->create([
-            'produit_id' => $produit->id,
+            'variante_id' => $produit->variantePrincipale()->first()->id,
             'quantite_demandee' => 1,
             'prix_vente_snapshot' => 100000,
             'prix_usine_snapshot' => 0,
@@ -262,7 +256,7 @@ class FactureVenteTest extends TestCase
             'total_commande' => 5000,
         ]);
         $commande->lignes()->create([
-            'produit_id' => $produit->id,
+            'variante_id' => $produit->variantePrincipale()->first()->id,
             'quantite_demandee' => 1,
             'prix_vente_snapshot' => 5000,
             'prix_usine_snapshot' => 0,

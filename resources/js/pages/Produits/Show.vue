@@ -39,7 +39,7 @@ interface SiteStock {
 interface Produit {
     id: string;
     nom: string;
-    code_interne: string | null;
+    sku: string | null;
     code_fournisseur: string | null;
     image_url: string | null;
     type: string | null;
@@ -228,7 +228,7 @@ const ajustements = props.mouvements.map((m) => ({
                         <p
                             class="mt-0.5 font-mono text-sm text-muted-foreground"
                         >
-                            {{ produit.code_interne || '—' }}
+                            {{ produit.sku || '—' }}
                         </p>
                     </div>
                 </div>
@@ -291,7 +291,7 @@ const ajustements = props.mouvements.map((m) => ({
                             />
                         </div>
                         <span class="font-mono text-xs text-muted-foreground">{{
-                            produit.code_interne || '—'
+                            produit.sku || '—'
                         }}</span>
                     </div>
 
@@ -324,10 +324,10 @@ const ajustements = props.mouvements.map((m) => ({
                     <div class="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
                         <div>
                             <span class="text-xs text-muted-foreground"
-                                >Code interne</span
+                                >SKU</span
                             >
                             <p class="font-mono font-semibold">
-                                {{ produit.code_interne || '—' }}
+                                {{ produit.sku || '—' }}
                             </p>
                         </div>
                         <div>

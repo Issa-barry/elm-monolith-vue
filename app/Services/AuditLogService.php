@@ -87,10 +87,13 @@ class AuditLogService
         }
 
         // Compare lignes by normalizing to a stable, sorted representation
+        // NOTE : variante_id est un ULID (string) — pas de cast (int) sous peine de tout
+        // ramener à 0 et rendre la comparaison inopérante (bug préexistant sur produit_id,
+        // à ne pas reproduire ici).
         $normalizeLignes = fn (array $lignes): array => collect($lignes)
-            ->sortBy('produit_id')
+            ->sortBy('variante_id')
             ->map(fn ($l) => [
-                'produit_id' => (int) ($l['produit_id'] ?? 0),
+                'variante_id' => (string) ($l['variante_id'] ?? ''),
                 'produit_nom' => (string) ($l['produit_nom'] ?? ''),
                 'quantite_demandee' => (int) ($l['quantite_demandee'] ?? 0),
                 'prix_vente_snapshot' => (float) ($l['prix_vente_snapshot'] ?? 0),

@@ -39,16 +39,20 @@ class ProduitController extends Controller
             ->orderBy('nom')
             ->get();
 
+        // commande_vente_lignes/commande_achat_lignes portent variante_id (grain Phase 2) :
+        // on résout produit_id via la map variante → produit construite depuis l'eager load.
         $varianteIds = $produits->flatMap(fn (Produit $p) => $p->variantes->pluck('id'))->all();
+        $varianteToProduitId = $produits->flatMap(
+            fn (Produit $p) => $p->variantes->pluck('id')->mapWithKeys(fn ($vid) => [$vid => $p->id])
+        );
         $usedVarianteIds = collect()
             ->merge(DB::table('commande_vente_lignes')->whereIn('variante_id', $varianteIds)->pluck('variante_id'))
             ->merge(DB::table('commande_achat_lignes')->whereIn('variante_id', $varianteIds)->whereNotNull('variante_id')->pluck('variante_id'))
-            ->unique()
-            ->flip()
-            ->all();
+            ->unique();
+        $usedProduitIds = $usedVarianteIds->map(fn ($vid) => $varianteToProduitId->get($vid))->filter()->unique()->flip()->all();
 
-        $produits->each(function (Produit $p) use ($usedVarianteIds) {
-            $p->is_used_loaded = collect($p->variantes->pluck('id'))->contains(fn ($vid) => isset($usedVarianteIds[$vid]));
+        $produits->each(function (Produit $p) use ($usedProduitIds) {
+            $p->is_used_loaded = isset($usedProduitIds[$p->id]);
         });
 
         return ProduitResource::collection($produits);

@@ -2,7 +2,8 @@
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Image, Save, X } from 'lucide-vue-next';
+import { Image, Layers, Plus, Save, X } from 'lucide-vue-next';
+import Chips from 'primevue/chips';
 import Dropdown from 'primevue/dropdown';
 import Editor from 'primevue/editor';
 import InputNumber from 'primevue/inputnumber';
@@ -15,8 +16,27 @@ interface Option {
     label: string;
 }
 
+interface Categorie {
+    id: number | string;
+    nom: string;
+    parent_id: number | string | null;
+}
+
+interface Limites {
+    max_photos_produit: number;
+    max_options_produit: number;
+    max_valeurs_option: number;
+    max_variantes_produit: number;
+}
+
+interface OptionInput {
+    nom: string;
+    valeurs: string[];
+}
+
 interface FormData {
     nom: string;
+    categorie_id: number | string | null;
     code_fournisseur: string | null;
     type: string;
     statut: string;
@@ -28,20 +48,38 @@ interface FormData {
     description: string | null;
     is_alerte: boolean;
     image: File | null;
+    options: OptionInput[];
 }
 
-const props = defineProps<{
-    form: FormData;
-    errors: Partial<Record<keyof FormData, string>>;
-    types: Option[];
-    statuts: Option[];
-    processing: boolean;
-    currentImageUrl?: string | null;
-    currentCodeInterne?: string | null;
-}>();
+const props = withDefaults(
+    defineProps<{
+        form: FormData;
+        errors: Partial<Record<string, string>>;
+        types: Option[];
+        statuts: Option[];
+        categories?: Categorie[];
+        limites?: Limites;
+        processing: boolean;
+        currentImageUrl?: string | null;
+        currentSku?: string | null;
+        // Le builder d'options n'est proposé qu'à la création — ProduitService::mettreAJourSimple()
+        // ne gère que le produit simple (variante par défaut), pas l'ajout de déclinaisons après coup.
+        allowDeclinaisons?: boolean;
+        existingVariantesCount?: number;
+    }>(),
+    {
+        categories: () => [],
+        limites: undefined,
+        currentImageUrl: null,
+        currentSku: null,
+        allowDeclinaisons: false,
+        existingVariantesCount: 0,
+    },
+);
 
 const emit = defineEmits<{
     submit: [];
+    'update:form': [FormData];
 }>();
 
 const typeHasStock = computed(() => !['service'].includes(props.form.type));
@@ -64,6 +102,68 @@ function removeImage() {
 
 const displayImage = computed(
     () => previewUrl.value ?? props.currentImageUrl ?? null,
+);
+
+// ── Déclinaisons (options/variantes) ────────────────────────────────────────
+const hasDeclinaisons = computed({
+    get: () => props.form.options.length > 0,
+    set: (actif: boolean) => {
+        emit('update:form', {
+            ...props.form,
+            options: actif ? [{ nom: '', valeurs: [] }] : [],
+        });
+    },
+});
+
+function addOption() {
+    if (
+        props.limites &&
+        props.form.options.length >= props.limites.max_options_produit
+    ) {
+        return;
+    }
+    emit('update:form', {
+        ...props.form,
+        options: [...props.form.options, { nom: '', valeurs: [] }],
+    });
+}
+
+function removeOption(index: number) {
+    emit('update:form', {
+        ...props.form,
+        options: props.form.options.filter((_, i) => i !== index),
+    });
+}
+
+function updateOption(index: number, patch: Partial<OptionInput>) {
+    emit('update:form', {
+        ...props.form,
+        options: props.form.options.map((o, i) =>
+            i === index ? { ...o, ...patch } : o,
+        ),
+    });
+}
+
+const totalVariantes = computed(() =>
+    props.form.options.length === 0
+        ? 0
+        : props.form.options.reduce(
+              (acc, o) => acc * Math.max(o.valeurs.length, 1),
+              1,
+          ),
+);
+
+const optionsSummary = computed(() =>
+    props.form.options
+        .filter((o) => o.valeurs.length > 0)
+        .map((o) => `${o.valeurs.length} ${o.nom || 'valeur(s)'}`)
+        .join(' × '),
+);
+
+const depasseLimiteVariantes = computed(
+    () =>
+        !!props.limites &&
+        totalVariantes.value > props.limites.max_variantes_produit,
 );
 </script>
 
@@ -139,7 +239,10 @@ const displayImage = computed(
                         id="nom"
                         :model-value="form.nom"
                         @update:model-value="
-                            $emit('update:form', { ...form, nom: $event })
+                            $emit('update:form', {
+                                ...form,
+                                nom: $event ?? '',
+                            })
                         "
                         class="w-full"
                         :class="{ 'p-invalid': errors.nom }"
@@ -149,13 +252,40 @@ const displayImage = computed(
                     </p>
                 </div>
 
-                <!-- Code-barres (édition uniquement) -->
-                <div v-if="currentCodeInterne">
-                    <Label class="mb-1.5 block">Code-barres (Code 128)</Label>
+                <!-- Catégorie -->
+                <div>
+                    <Label class="mb-1.5 block">Catégorie</Label>
+                    <Dropdown
+                        :model-value="form.categorie_id"
+                        @update:model-value="
+                            $emit('update:form', {
+                                ...form,
+                                categorie_id: $event,
+                            })
+                        "
+                        :options="categories"
+                        option-label="nom"
+                        option-value="id"
+                        show-clear
+                        placeholder="Aucune catégorie"
+                        class="w-full"
+                        :class="{ 'p-invalid': errors.categorie_id }"
+                    />
+                    <p
+                        v-if="errors.categorie_id"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.categorie_id }}
+                    </p>
+                </div>
+
+                <!-- SKU (généré automatiquement, édition uniquement) -->
+                <div v-if="currentSku">
+                    <Label class="mb-1.5 block">SKU</Label>
                     <div
                         class="flex h-10 w-full items-center rounded-md border bg-muted/40 px-3 font-mono text-sm tracking-widest text-muted-foreground select-all"
                     >
-                        {{ currentCodeInterne }}
+                        {{ currentSku }}
                     </div>
                 </div>
 
@@ -179,6 +309,147 @@ const displayImage = computed(
             </div>
         </div>
 
+        <!-- Section : Déclinaisons (options/variantes) ─────────────────────── -->
+        <div
+            v-if="allowDeclinaisons"
+            class="rounded-xl border bg-card p-4 shadow-sm sm:p-6"
+        >
+            <div class="mb-4 flex items-center justify-between sm:mb-5">
+                <h3
+                    class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                >
+                    Déclinaisons
+                </h3>
+                <div class="flex items-center gap-2">
+                    <Checkbox
+                        id="has_declinaisons"
+                        :model-value="hasDeclinaisons"
+                        @update:model-value="
+                            hasDeclinaisons = $event === true
+                        "
+                    />
+                    <Label
+                        for="has_declinaisons"
+                        class="cursor-pointer text-sm font-medium"
+                        >Ce produit a des déclinaisons</Label
+                    >
+                </div>
+            </div>
+
+            <template v-if="!hasDeclinaisons">
+                <p class="text-sm text-muted-foreground">
+                    Produit simple, sans déclinaison — couleur, taille, etc.
+                    Cochez la case ci-dessus pour définir des options (ex :
+                    Couleur, Taille) et générer les combinaisons
+                    automatiquement.
+                </p>
+            </template>
+
+            <div v-else class="space-y-4">
+                <div
+                    v-for="(option, i) in form.options"
+                    :key="i"
+                    class="rounded-lg border bg-muted/20 p-3 sm:p-4"
+                >
+                    <div class="mb-2 flex items-center gap-2">
+                        <InputText
+                            :model-value="option.nom"
+                            @update:model-value="
+                                updateOption(i, { nom: $event })
+                            "
+                            placeholder="Nom de l'option (ex : Couleur)"
+                            class="flex-1"
+                            :class="{
+                                'p-invalid':
+                                    errors[`options.${i}.nom`],
+                            }"
+                        />
+                        <button
+                            type="button"
+                            @click="removeOption(i)"
+                            class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                            aria-label="Supprimer l'option"
+                        >
+                            <X class="h-4 w-4" />
+                        </button>
+                    </div>
+                    <Chips
+                        :model-value="option.valeurs"
+                        @update:model-value="
+                            updateOption(i, { valeurs: $event })
+                        "
+                        placeholder="Ajouter une valeur puis Entrée (ex : Noir)"
+                        class="w-full"
+                        :class="{
+                            'p-invalid': errors[`options.${i}.valeurs`],
+                        }"
+                    />
+                    <p class="mt-1 text-xs text-muted-foreground">
+                        {{ option.valeurs.length }}
+                        <template v-if="limites">
+                            / {{ limites.max_valeurs_option }}</template
+                        >
+                        valeur(s)
+                    </p>
+                </div>
+
+                <Button
+                    v-if="
+                        !limites ||
+                        form.options.length < limites.max_options_produit
+                    "
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    @click="addOption"
+                >
+                    <Plus class="mr-1.5 h-4 w-4" />
+                    Ajouter une option
+                </Button>
+
+                <div
+                    class="flex items-start gap-2 rounded-lg bg-muted/40 p-3 text-sm"
+                    :class="{
+                        'bg-destructive/10 text-destructive':
+                            depasseLimiteVariantes,
+                    }"
+                >
+                    <Layers class="mt-0.5 h-4 w-4 shrink-0" />
+                    <span v-if="totalVariantes > 0">
+                        {{ optionsSummary }} =
+                        <strong>{{ totalVariantes }} variante(s)</strong>
+                        seront générées à l'enregistrement.
+                        <template v-if="depasseLimiteVariantes">
+                            Cela dépasse la limite de
+                            {{ limites?.max_variantes_produit }} variantes
+                            autorisée pour votre organisation.
+                        </template>
+                    </span>
+                    <span v-else class="text-muted-foreground">
+                        Ajoutez au moins une valeur par option pour générer
+                        les variantes.
+                    </span>
+                </div>
+                <p v-if="errors.options" class="text-xs text-destructive">
+                    {{ errors.options }}
+                </p>
+            </div>
+        </div>
+
+        <!-- Info variantes existantes (édition d'un produit déjà décliné) ──── -->
+        <div
+            v-else-if="existingVariantesCount > 1"
+            class="flex items-start gap-3 rounded-xl border bg-muted/30 p-4 text-sm sm:p-6"
+        >
+            <Layers class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+            <p class="text-muted-foreground">
+                Ce produit a {{ existingVariantesCount }} déclinaisons. Le
+                prix/stock de chaque variante se gère individuellement depuis
+                la fiche produit — les champs ci-dessous ne s'appliquent qu'à
+                la variante par défaut.
+            </p>
+        </div>
+
         <!-- Section : Tarification ───────────────────────────────────────── -->
         <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
@@ -187,6 +458,13 @@ const displayImage = computed(
                 Tarification
                 <span class="text-xs font-normal normal-case">(GNF)</span>
             </h3>
+            <p
+                v-if="hasDeclinaisons"
+                class="-mt-2 mb-4 text-xs text-muted-foreground"
+            >
+                Appliqué aux {{ totalVariantes || '' }} variantes générées —
+                ajustable ensuite individuellement.
+            </p>
 
             <div
                 class="grid gap-4 sm:grid-cols-2 sm:gap-5"

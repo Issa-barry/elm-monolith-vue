@@ -15,11 +15,12 @@ class CommandeAchatLigne extends Model
 
     protected $fillable = [
         'commande_achat_id',
-        'produit_id',
+        'variante_id',
         'qte',
         'qte_recue',
         'prix_achat_snapshot',
         'total_ligne',
+        'libelle_snapshot',
     ];
 
     protected function casts(): array
@@ -39,8 +40,8 @@ class CommandeAchatLigne extends Model
         return $this->belongsTo(CommandeAchat::class, 'commande_achat_id');
     }
 
-    public function produit(): BelongsTo
+    public function variante(): BelongsTo
     {
-        return $this->belongsTo(Produit::class);
+        return $this->belongsTo(ProduitVariante::class, 'variante_id');
     }
 }

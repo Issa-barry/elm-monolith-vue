@@ -13,8 +13,8 @@ return new class extends Migration
             $table->foreignUlid('organization_id')->constrained()->cascadeOnDelete();
             $table->foreignUlid('produit_id')->constrained('produits')->cascadeOnDelete();
 
-            // Référence — SKU = code_interne, déplacé depuis produits (source unique)
-            $table->string('code_interne', 50)->nullable();
+            // Référence — SKU, déplacé depuis produits.code_interne (nommé clairement, source unique)
+            $table->string('sku', 50)->nullable();
             $table->string('code_barres', 100)->nullable();
             $table->string('code_fournisseur', 100)->nullable()->index();
 
@@ -36,7 +36,7 @@ return new class extends Migration
             $table->timestamps();
             $table->softDeletes();
 
-            $table->unique(['organization_id', 'code_interne']);
+            $table->unique(['organization_id', 'sku']);
             $table->unique(['organization_id', 'code_barres']);
             $table->unique(['produit_id', 'combo_hash']);
             $table->index(['organization_id', 'produit_id']);

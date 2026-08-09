@@ -214,7 +214,7 @@ class ProduitTest extends TestCase
         $this->assertCount(1, $produit->variantes);
         $variante = $produit->variantes->first();
         $this->assertTrue($variante->is_default);
-        $this->assertNotEmpty($variante->code_interne);
+        $this->assertNotEmpty($variante->sku);
     }
 
     public function test_store_fails_with_empty_data(): void

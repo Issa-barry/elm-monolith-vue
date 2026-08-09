@@ -11,10 +11,24 @@ interface Option {
     label: string;
 }
 
+interface Categorie {
+    id: number | string;
+    nom: string;
+    parent_id: number | string | null;
+}
+
+interface Limites {
+    max_photos_produit: number;
+    max_options_produit: number;
+    max_valeurs_option: number;
+    max_variantes_produit: number;
+}
+
 interface ProduitData {
     id: number;
     nom: string;
-    code_interne: string | null;
+    categorie_id: number | string | null;
+    sku: string | null;
     code_fournisseur: string | null;
     type: string;
     statut: string;
@@ -26,12 +40,15 @@ interface ProduitData {
     description: string | null;
     is_alerte: boolean;
     image_url: string | null;
+    variantes_count: number;
 }
 
 const props = defineProps<{
     produit: ProduitData;
     types: Option[];
     statuts: Option[];
+    categories: Categorie[];
+    limites: Limites;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -42,6 +59,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const form = useForm({
     nom: props.produit.nom,
+    categorie_id: props.produit.categorie_id,
     code_fournisseur: props.produit.code_fournisseur,
     type: props.produit.type,
     statut: props.produit.statut,
@@ -53,6 +71,7 @@ const form = useForm({
     description: props.produit.description,
     is_alerte: props.produit.is_alerte,
     image: null as File | null,
+    options: [] as { nom: string; valeurs: string[] }[],
     _method: 'PUT',
 });
 
@@ -106,9 +125,13 @@ function submit() {
                 :errors="form.errors"
                 :types="types"
                 :statuts="statuts"
+                :categories="categories"
+                :limites="limites"
                 :processing="form.processing"
                 :current-image-url="produit.image_url"
-                :current-code-interne="produit.code_interne"
+                :current-sku="produit.sku"
+                :allow-declinaisons="false"
+                :existing-variantes-count="produit.variantes_count"
                 @update:form="Object.assign(form, $event)"
                 @submit="submit"
             />

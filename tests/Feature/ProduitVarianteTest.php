@@ -50,7 +50,7 @@ class ProduitVarianteTest extends TestCase
         $variante = $produit->variantes->first();
         $this->assertTrue($variante->is_default);
         $this->assertSame('default', $variante->combo_hash);
-        $this->assertNotEmpty($variante->code_interne);
+        $this->assertNotEmpty($variante->sku);
         $this->assertSame('', $variante->libelle);
     }
 
@@ -108,7 +108,7 @@ class ProduitVarianteTest extends TestCase
             ['nom' => 'Taille', 'valeurs' => ['S', 'M', 'L']],
         ]);
 
-        $skus = $variantes->pluck('code_interne');
+        $skus = $variantes->pluck('sku');
         $this->assertSame($skus->count(), $skus->unique()->count());
     }
 

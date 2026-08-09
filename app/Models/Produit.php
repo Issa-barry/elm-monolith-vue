@@ -106,7 +106,10 @@ class Produit extends Model
             return $this->is_used_loaded;
         }
 
-        $varianteIds = $this->variantes()->pluck('id');
+        $varianteIds = $this->relationLoaded('variantes')
+            ? $this->variantes->pluck('id')
+            : $this->variantes()->pluck('id');
+
         if ($varianteIds->isEmpty()) {
             return false;
         }
@@ -129,7 +132,12 @@ class Produit extends Model
         if (! $this->type?->hasStock() || $this->qte_stock <= 0) {
             return false;
         }
-        $seuil = $this->variantePrincipale()->first()?->seuil_alerte_stock ?? Parametre::getSeuilStockFaible((int) $this->organization_id);
+        // Respecte l'eager loading ('variantes' préchargée en amont) pour éviter une requête
+        // par produit — sinon variantePrincipale()->first() interroge la DB à chaque appel.
+        $variante = $this->relationLoaded('variantes')
+            ? $this->variantes->firstWhere('is_default', true)
+            : $this->variantePrincipale()->first();
+        $seuil = $variante?->seuil_alerte_stock ?? Parametre::getSeuilStockFaible((int) $this->organization_id);
 
         return $seuil > 0 && $this->qte_stock <= $seuil;
     }

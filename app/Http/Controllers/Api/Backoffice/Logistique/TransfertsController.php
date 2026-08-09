@@ -4,11 +4,14 @@ namespace App\Http\Controllers\Api\Backoffice\Logistique;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\Logistique\TransfertResource;
+use App\Models\Produit;
+use App\Models\ProduitVariante;
 use App\Models\TransfertLogistique;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class TransfertsController extends Controller
 {
@@ -59,6 +62,7 @@ class TransfertsController extends Controller
             'notes' => ['nullable', 'string', 'max:2000'],
             'lignes' => ['required', 'array', 'min:1'],
             'lignes.*.produit_id' => ['required', 'string', 'exists:produits,id'],
+            'lignes.*.variante_id' => ['nullable', 'string', 'exists:produit_variantes,id'],
             'lignes.*.quantite_demandee' => ['required', 'integer', 'min:1'],
         ]);
 
@@ -73,8 +77,10 @@ class TransfertsController extends Controller
         ]);
 
         foreach ($data['lignes'] as $ligne) {
+            $variante = $this->resolveVariante($ligne);
+
             $transfert->lignes()->create([
-                'produit_id' => $ligne['produit_id'],
+                'variante_id' => $variante->id,
                 'quantite_demandee' => $ligne['quantite_demandee'],
             ]);
         }
@@ -83,7 +89,8 @@ class TransfertsController extends Controller
             'siteSource:id,nom',
             'siteDestination:id,nom',
             'vehicule:id,nom_vehicule,immatriculation',
-            'lignes.produit:id,nom,code_interne',
+            'lignes.variante:id,produit_id,sku',
+            'lignes.variante.produit:id,nom',
         ]);
 
         return response()->json(new TransfertResource($transfert), 201);
@@ -103,11 +110,43 @@ class TransfertsController extends Controller
             'siteDestination:id,nom',
             'vehicule:id,nom_vehicule,immatriculation',
             'equipeLivraison:id,vehicule_id', 'equipeLivraison.vehicule:id,nom_vehicule',
-            'lignes.produit:id,nom,code_interne,image_url',
+            'lignes.variante:id,produit_id,sku',
+            // image_url est un accesseur (dérivé de produit_medias, pas une colonne) : on charge
+            // la relation medias plutôt que de la lister dans un select() limité aux colonnes.
+            'lignes.variante.produit:id,nom',
+            'lignes.variante.produit.medias',
             'commission.parts',
             'activites',
         ]);
 
         return response()->json(new TransfertResource($transfert));
+    }
+
+    /**
+     * Résout la variante à transférer. Le formulaire actuel ne propose qu'un sélecteur de
+     * produit (pas encore de sélecteur de variante — Phase 3) ; si le produit n'a qu'une
+     * seule variante (cas normal), on la prend directement.
+     */
+    private function resolveVariante(array $ligne): ProduitVariante
+    {
+        if (! empty($ligne['variante_id'])) {
+            return ProduitVariante::findOrFail($ligne['variante_id']);
+        }
+
+        $produit = Produit::with('variantes')->findOrFail($ligne['produit_id']);
+
+        if ($produit->variantes->count() === 1) {
+            return $produit->variantes->first();
+        }
+
+        if ($produit->variantes->count() > 1) {
+            throw ValidationException::withMessages([
+                'lignes' => "Le produit « {$produit->nom} » a plusieurs déclinaisons — précisez la variante à transférer.",
+            ]);
+        }
+
+        throw ValidationException::withMessages([
+            'lignes' => "Le produit « {$produit->nom} » n'a aucune variante disponible.",
+        ]);
     }
 }

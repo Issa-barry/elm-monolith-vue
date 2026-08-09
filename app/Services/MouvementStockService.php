@@ -3,10 +3,10 @@
 namespace App\Services;
 
 use App\Models\MouvementStock;
-use App\Models\Produit;
-use App\Models\ProduitStock;
+use App\Models\ProduitVariante;
 use App\Models\TransfertLigne;
 use App\Models\TransfertLogistique;
+use App\Models\VarianteStock;
 use Illuminate\Support\Facades\Auth;
 
 /**
@@ -33,7 +33,7 @@ class MouvementStockService
             self::creerSiAbsent([
                 'organization_id' => $transfert->organization_id,
                 'site_id' => $transfert->site_source_id,
-                'produit_id' => $ligne->produit_id,
+                'produit_variante_id' => $ligne->variante_id,
                 'type' => 'sortie',
                 'quantite' => $quantite,
                 'source_type' => TransfertLigne::class,
@@ -60,7 +60,7 @@ class MouvementStockService
             self::creerSiAbsent([
                 'organization_id' => $transfert->organization_id,
                 'site_id' => $transfert->site_destination_id,
-                'produit_id' => $ligne->produit_id,
+                'produit_variante_id' => $ligne->variante_id,
                 'type' => 'entree',
                 'quantite' => $quantite,
                 'source_type' => TransfertLigne::class,
@@ -88,11 +88,12 @@ class MouvementStockService
     }
 
     /**
-     * Sortie de stock générique pour un produit sur un site donné : décrémente
-     * ProduitStock (borné à 0), recalcule l'agrégat Produit::qte_stock, et
-     * trace un MouvementStock — idempotent sur (source_type, source_id, site_id, type).
+     * Sortie de stock générique pour une variante sur un site donné : décrémente
+     * VarianteStock (borné à 0), resynchronise l'agrégat Produit::qte_stock (rollup
+     * sur toutes les variantes/sites), et trace un MouvementStock — idempotent sur
+     * (source_type, source_id, site_id, type).
      *
-     * Au tout premier mouvement pour un produit sur un site, migre le stock
+     * Au tout premier mouvement pour une variante sur un site, migre le stock
      * global existant (Produit::qte_stock) plutôt que de repartir de 0 —
      * sinon la création de la ligne « adopte » un stock à 0 et écrase
      * l'agrégat au recalcul (cf. CommandeVenteService::decrementerStock() et
@@ -104,7 +105,7 @@ class MouvementStockService
      * voir enregistrerSortieSource()/enregistrerEntreeDestination() ci-dessus).
      */
     public static function sortirStock(
-        string $produitId,
+        string $varianteId,
         string $siteId,
         string $orgId,
         int $quantite,
@@ -126,26 +127,25 @@ class MouvementStockService
             return;
         }
 
-        $aucuneLigneStockSite = ! ProduitStock::where('produit_id', $produitId)->exists();
-        $produitStock = ProduitStock::firstOrCreate(
-            ['produit_id' => $produitId, 'site_id' => $siteId],
+        $aucuneLigneStockSite = ! VarianteStock::where('produit_variante_id', $varianteId)->exists();
+        $varianteStock = VarianteStock::firstOrCreate(
+            ['produit_variante_id' => $varianteId, 'site_id' => $siteId],
             [
                 'organization_id' => $orgId,
-                'qte_stock' => $aucuneLigneStockSite ? (int) (Produit::find($produitId)?->qte_stock ?? 0) : 0,
+                'qte_stock' => $aucuneLigneStockSite ? self::qteStockProduitParent($varianteId) : 0,
             ]
         );
 
-        $stockAvant = $produitStock->qte_stock;
+        $stockAvant = $varianteStock->qte_stock;
         $stockApres = max(0, $stockAvant - $quantite);
-        $produitStock->update(['qte_stock' => $stockApres]);
+        $varianteStock->update(['qte_stock' => $stockApres]);
 
-        $totalStock = ProduitStock::where('produit_id', $produitId)->sum('qte_stock');
-        Produit::whereKey($produitId)->update(['qte_stock' => $totalStock]);
+        ProduitVariante::find($varianteId)?->produit?->resynchroniserQteStock();
 
         MouvementStock::create([
             'organization_id' => $orgId,
             'site_id' => $siteId,
-            'produit_id' => $produitId,
+            'produit_variante_id' => $varianteId,
             'type' => 'sortie',
             'quantite' => $quantite,
             'stock_avant' => $stockAvant,
@@ -157,23 +157,28 @@ class MouvementStockService
     }
 
     /**
-     * Quantité disponible pour un produit sur un site donné, en tenant compte
+     * Quantité disponible pour une variante sur un site donné, en tenant compte
      * de la migration du stock legacy (cf. sortirStock()) : si aucune ligne
-     * ProduitStock n'existe encore pour ce produit (aucun site), on retombe
-     * sur l'agrégat global plutôt que de considérer 0 disponible.
+     * VarianteStock n'existe encore pour cette variante (aucun site), on retombe
+     * sur l'agrégat global du produit parent plutôt que de considérer 0 disponible.
      */
-    public static function quantiteDisponible(string $produitId, string $siteId): int
+    public static function quantiteDisponible(string $varianteId, string $siteId): int
     {
-        $stock = ProduitStock::where('produit_id', $produitId)->where('site_id', $siteId)->first();
+        $stock = VarianteStock::where('produit_variante_id', $varianteId)->where('site_id', $siteId)->first();
         if ($stock) {
             return $stock->qte_stock;
         }
 
-        if (ProduitStock::where('produit_id', $produitId)->exists()) {
+        if (VarianteStock::where('produit_variante_id', $varianteId)->exists()) {
             return 0;
         }
 
-        return (int) (Produit::find($produitId)?->qte_stock ?? 0);
+        return self::qteStockProduitParent($varianteId);
+    }
+
+    private static function qteStockProduitParent(string $varianteId): int
+    {
+        return (int) (ProduitVariante::find($varianteId)?->produit?->qte_stock ?? 0);
     }
 
     // ── Private ───────────────────────────────────────────────────────────────

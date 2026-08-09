@@ -50,7 +50,11 @@ class ConfirmerDepartController extends Controller
             'siteDestination:id,nom',
             'vehicule:id,nom_vehicule,immatriculation',
             'equipeLivraison:id,vehicule_id', 'equipeLivraison.vehicule:id,nom_vehicule',
-            'lignes.produit:id,nom,code_interne,image_url',
+            'lignes.variante:id,produit_id,sku',
+            // image_url est un accesseur (dérivé de produit_medias, pas une colonne) : on charge
+            // la relation medias plutôt que de la lister dans un select() limité aux colonnes.
+            'lignes.variante.produit:id,nom',
+            'lignes.variante.produit.medias',
         ]);
 
         return response()->json(new TransfertResource($transfert));

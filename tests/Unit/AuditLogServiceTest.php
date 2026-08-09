@@ -27,7 +27,7 @@ class AuditLogServiceTest extends TestCase
             'total_commande' => 5000.00,
             'statut' => 'brouillon',
             'lignes' => [
-                ['produit_id' => 10, 'produit_nom' => 'P1', 'quantite_demandee' => 2, 'prix_vente_snapshot' => 100.0],
+                ['variante_id' => 10, 'produit_nom' => 'P1', 'quantite_demandee' => 2, 'prix_vente_snapshot' => 100.0],
             ],
         ];
 
@@ -85,13 +85,13 @@ class AuditLogServiceTest extends TestCase
 
         $before = array_merge($base, [
             'lignes' => [
-                ['produit_id' => 10, 'produit_nom' => 'P1', 'quantite_demandee' => 1, 'prix_vente_snapshot' => 1000.0],
+                ['variante_id' => 10, 'produit_nom' => 'P1', 'quantite_demandee' => 1, 'prix_vente_snapshot' => 1000.0],
             ],
         ]);
 
         $after = array_merge($base, [
             'lignes' => [
-                ['produit_id' => 10, 'produit_nom' => 'P1', 'quantite_demandee' => 2, 'prix_vente_snapshot' => 1000.0],
+                ['variante_id' => 10, 'produit_nom' => 'P1', 'quantite_demandee' => 2, 'prix_vente_snapshot' => 1000.0],
             ],
         ]);
 
@@ -111,8 +111,8 @@ class AuditLogServiceTest extends TestCase
     {
         $base = ['vehicule_id' => 1, 'vehicule_nom' => 'A', 'client_id' => null, 'client_nom' => null, 'total_commande' => 200.0, 'statut' => 'brouillon'];
 
-        $ligne1 = ['produit_id' => 10, 'produit_nom' => 'P1', 'quantite_demandee' => 1, 'prix_vente_snapshot' => 100.0];
-        $ligne2 = ['produit_id' => 20, 'produit_nom' => 'P2', 'quantite_demandee' => 1, 'prix_vente_snapshot' => 100.0];
+        $ligne1 = ['variante_id' => 10, 'produit_nom' => 'P1', 'quantite_demandee' => 1, 'prix_vente_snapshot' => 100.0];
+        $ligne2 = ['variante_id' => 20, 'produit_nom' => 'P2', 'quantite_demandee' => 1, 'prix_vente_snapshot' => 100.0];
 
         $before = array_merge($base, ['lignes' => [$ligne1, $ligne2]]);
         $after = array_merge($base, ['lignes' => [$ligne2, $ligne1]]);

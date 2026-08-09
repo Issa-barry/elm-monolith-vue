@@ -8,7 +8,6 @@ use App\Models\CommandeVente;
 use App\Models\FactureVente;
 use App\Models\Organization;
 use App\Models\Parametre;
-use App\Models\Produit;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TypeVehicule;
@@ -17,13 +16,14 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Spatie\Permission\Models\Permission;
+use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 class CommandeVenteTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
+    use HasAdminSetup, HasOrgAndUser, HasProduitVariante, RefreshDatabase;
 
     private Site $defaultSite;
 
@@ -44,14 +44,11 @@ class CommandeVenteTest extends TestCase
 
     private function makeContext(Organization $org): array
     {
-        $produit = Produit::create([
-            'organization_id' => $org->id,
-            'nom' => 'Rouleau',
-            'type' => 'materiel',
-            'statut' => 'actif',
-            'prix_vente' => 2000,
-            'prix_usine' => 1500,
-        ]);
+        $produit = $this->makeProduitAvecVariante(
+            $org,
+            ['nom' => 'Rouleau'],
+            ['prix_vente' => 2000, 'prix_usine' => 1500],
+        );
 
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id]);
         $vehicule = Vehicule::factory()->create([
@@ -142,7 +139,7 @@ class CommandeVenteTest extends TestCase
             ->post(route('ventes.store'), [
                 'client_id' => $client->id,
                 'lignes' => [
-                    ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => (int) $produit->prix_vente],
+                    ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => (int) $produit->variantePrincipale()->first()->prix_vente],
                 ],
             ])
             ->assertRedirect();
@@ -162,7 +159,7 @@ class CommandeVenteTest extends TestCase
             ->post(route('ventes.store'), [
                 'client_id' => $client->id,
                 'lignes' => [
-                    ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => (int) $produit->prix_vente],
+                    ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => (int) $produit->variantePrincipale()->first()->prix_vente],
                 ],
             ])
             ->assertRedirect();
@@ -173,7 +170,7 @@ class CommandeVenteTest extends TestCase
 
         $this->assertDatabaseHas('factures_ventes', [
             'commande_vente_id' => $commande->id,
-            'montant_net' => (int) $produit->prix_vente,
+            'montant_net' => (int) $produit->variantePrincipale()->first()->prix_vente,
         ]);
     }
 
@@ -303,14 +300,8 @@ class CommandeVenteTest extends TestCase
         ['vehicule' => $vehicule] = $this->makeContext($this->org);
         $vehicule->update(['capacite_packs' => 5]);
 
-        $p1 = Produit::create([
-            'organization_id' => $this->org->id, 'nom' => 'Px', 'type' => 'materiel',
-            'statut' => 'actif', 'prix_vente' => 1000, 'prix_usine' => 800,
-        ]);
-        $p2 = Produit::create([
-            'organization_id' => $this->org->id, 'nom' => 'Py', 'type' => 'materiel',
-            'statut' => 'actif', 'prix_vente' => 1500, 'prix_usine' => 1000,
-        ]);
+        $p1 = $this->makeProduitAvecVariante($this->org, ['nom' => 'Px'], ['prix_vente' => 1000, 'prix_usine' => 800]);
+        $p2 = $this->makeProduitAvecVariante($this->org, ['nom' => 'Py'], ['prix_vente' => 1500, 'prix_usine' => 1000]);
 
         $this->actingAs($this->user)
             ->post(route('ventes.store'), [
@@ -377,14 +368,8 @@ class CommandeVenteTest extends TestCase
         ['vehicule' => $vehicule] = $this->makeContext($this->org);
         $vehicule->update(['capacite_packs' => 10]);
 
-        $produit1 = Produit::create([
-            'organization_id' => $this->org->id, 'nom' => 'P1', 'type' => 'materiel',
-            'statut' => 'actif', 'prix_vente' => 1000, 'prix_usine' => 800,
-        ]);
-        $produit2 = Produit::create([
-            'organization_id' => $this->org->id, 'nom' => 'P2', 'type' => 'materiel',
-            'statut' => 'actif', 'prix_vente' => 1500, 'prix_usine' => 1000,
-        ]);
+        $produit1 = $this->makeProduitAvecVariante($this->org, ['nom' => 'P1'], ['prix_vente' => 1000, 'prix_usine' => 800]);
+        $produit2 = $this->makeProduitAvecVariante($this->org, ['nom' => 'P2'], ['prix_vente' => 1500, 'prix_usine' => 1000]);
 
         $this->actingAs($this->user)
             ->post(route('ventes.store'), [
@@ -554,14 +539,8 @@ class CommandeVenteTest extends TestCase
         ['vehicule' => $vehicule] = $this->makeContext($this->org);
         $vehicule->update(['capacite_packs' => 5]);
 
-        $p1 = Produit::create([
-            'organization_id' => $this->org->id, 'nom' => 'Pa', 'type' => 'materiel',
-            'statut' => 'actif', 'prix_vente' => 1000, 'prix_usine' => 800,
-        ]);
-        $p2 = Produit::create([
-            'organization_id' => $this->org->id, 'nom' => 'Pb', 'type' => 'materiel',
-            'statut' => 'actif', 'prix_vente' => 1500, 'prix_usine' => 1000,
-        ]);
+        $p1 = $this->makeProduitAvecVariante($this->org, ['nom' => 'Pa'], ['prix_vente' => 1000, 'prix_usine' => 800]);
+        $p2 = $this->makeProduitAvecVariante($this->org, ['nom' => 'Pb'], ['prix_vente' => 1500, 'prix_usine' => 1000]);
 
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
@@ -721,11 +700,11 @@ class CommandeVenteTest extends TestCase
         ]);
 
         $commande->lignes()->create([
-            'produit_id' => $produit->id,
+            'variante_id' => $produit->variantePrincipale()->first()->id,
             'quantite_demandee' => 2,
-            'prix_usine_snapshot' => (float) $produit->prix_usine,
-            'prix_vente_snapshot' => (float) $produit->prix_vente,
-            'total_ligne' => 2 * (float) $produit->prix_vente,
+            'prix_usine_snapshot' => (float) $produit->variantePrincipale()->first()->prix_usine,
+            'prix_vente_snapshot' => (float) $produit->variantePrincipale()->first()->prix_vente,
+            'total_ligne' => 2 * (float) $produit->variantePrincipale()->first()->prix_vente,
         ]);
 
         $this->actingAs($this->user)
@@ -748,7 +727,7 @@ class CommandeVenteTest extends TestCase
             ->post(route('ventes.store'), [
                 'vehicule_id' => $vehicule->id,
                 'lignes' => [
-                    ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => (int) $produit->prix_vente + 500],
+                    ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => (int) $produit->variantePrincipale()->first()->prix_vente + 500],
                 ],
             ])
             ->assertSessionHasErrors('lignes.0.prix_vente');
@@ -760,7 +739,7 @@ class CommandeVenteTest extends TestCase
         $this->user->givePermissionTo('ventes.prix.update');
 
         ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
-        $customPrice = (int) $produit->prix_vente + 500;
+        $customPrice = (int) $produit->variantePrincipale()->first()->prix_vente + 500;
 
         $this->actingAs($this->user)
             ->post(route('ventes.store'), [
@@ -775,7 +754,7 @@ class CommandeVenteTest extends TestCase
 
         $this->assertDatabaseHas('commande_vente_lignes', [
             'commande_vente_id' => $commande->id,
-            'produit_id' => $produit->id,
+            'variante_id' => $produit->variantePrincipale()->first()->id,
             'prix_vente_snapshot' => $customPrice,
         ]);
     }
@@ -789,22 +768,22 @@ class CommandeVenteTest extends TestCase
             'site_id' => $this->defaultSite->id,
             'vehicule_id' => $vehicule->id,
             'statut' => StatutCommandeVente::BROUILLON,
-            'total_commande' => (float) $produit->prix_vente,
+            'total_commande' => (float) $produit->variantePrincipale()->first()->prix_vente,
         ]);
 
         $commande->lignes()->create([
-            'produit_id' => $produit->id,
+            'variante_id' => $produit->variantePrincipale()->first()->id,
             'quantite_demandee' => 1,
-            'prix_usine_snapshot' => (float) $produit->prix_usine,
-            'prix_vente_snapshot' => (float) $produit->prix_vente,
-            'total_ligne' => (float) $produit->prix_vente,
+            'prix_usine_snapshot' => (float) $produit->variantePrincipale()->first()->prix_usine,
+            'prix_vente_snapshot' => (float) $produit->variantePrincipale()->first()->prix_vente,
+            'total_ligne' => (float) $produit->variantePrincipale()->first()->prix_vente,
         ]);
 
         $this->actingAs($this->user)
             ->put(route('ventes.update', $commande), [
                 'vehicule_id' => $vehicule->id,
                 'lignes' => [
-                    ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => (int) $produit->prix_vente + 500],
+                    ['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => (int) $produit->variantePrincipale()->first()->prix_vente + 500],
                 ],
             ])
             ->assertSessionHasErrors('lignes.0.prix_vente');
@@ -813,7 +792,7 @@ class CommandeVenteTest extends TestCase
     public function test_update_accepts_existing_custom_prix_without_permission(): void
     {
         ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
-        $customPrice = (int) $produit->prix_vente + 700;
+        $customPrice = (int) $produit->variantePrincipale()->first()->prix_vente + 700;
 
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
@@ -824,9 +803,9 @@ class CommandeVenteTest extends TestCase
         ]);
 
         $commande->lignes()->create([
-            'produit_id' => $produit->id,
+            'variante_id' => $produit->variantePrincipale()->first()->id,
             'quantite_demandee' => 1,
-            'prix_usine_snapshot' => (float) $produit->prix_usine,
+            'prix_usine_snapshot' => (float) $produit->variantePrincipale()->first()->prix_usine,
             'prix_vente_snapshot' => (float) $customPrice,
             'total_ligne' => (float) $customPrice,
         ]);
@@ -874,11 +853,11 @@ class CommandeVenteTest extends TestCase
             'total_commande' => 5000,
         ]);
         $commande->lignes()->create([
-            'produit_id' => $produit->id,
+            'variante_id' => $produit->variantePrincipale()->first()->id,
             'quantite_demandee' => 2,
-            'prix_usine_snapshot' => (float) $produit->prix_usine,
-            'prix_vente_snapshot' => (float) $produit->prix_vente,
-            'total_ligne' => 2 * (float) $produit->prix_vente,
+            'prix_usine_snapshot' => (float) $produit->variantePrincipale()->first()->prix_usine,
+            'prix_vente_snapshot' => (float) $produit->variantePrincipale()->first()->prix_vente,
+            'total_ligne' => 2 * (float) $produit->variantePrincipale()->first()->prix_vente,
         ]);
 
         $this->actingAs($this->user)
@@ -900,11 +879,11 @@ class CommandeVenteTest extends TestCase
             'total_commande' => 4000,
         ]);
         $commande->lignes()->create([
-            'produit_id' => $produit->id,
+            'variante_id' => $produit->variantePrincipale()->first()->id,
             'quantite_demandee' => 2,
-            'prix_usine_snapshot' => (float) $produit->prix_usine,
-            'prix_vente_snapshot' => (float) $produit->prix_vente,
-            'total_ligne' => 2 * (float) $produit->prix_vente,
+            'prix_usine_snapshot' => (float) $produit->variantePrincipale()->first()->prix_usine,
+            'prix_vente_snapshot' => (float) $produit->variantePrincipale()->first()->prix_vente,
+            'total_ligne' => 2 * (float) $produit->variantePrincipale()->first()->prix_vente,
         ]);
 
         $this->actingAs($this->user)
@@ -1173,11 +1152,11 @@ class CommandeVenteTest extends TestCase
             'total_commande' => 4000,
         ]);
         $commande->lignes()->create([
-            'produit_id' => $produit->id,
+            'variante_id' => $produit->variantePrincipale()->first()->id,
             'quantite_demandee' => 2,
-            'prix_usine_snapshot' => (float) $produit->prix_usine,
-            'prix_vente_snapshot' => (float) $produit->prix_vente,
-            'total_ligne' => 2 * (float) $produit->prix_vente,
+            'prix_usine_snapshot' => (float) $produit->variantePrincipale()->first()->prix_usine,
+            'prix_vente_snapshot' => (float) $produit->variantePrincipale()->first()->prix_vente,
+            'total_ligne' => 2 * (float) $produit->variantePrincipale()->first()->prix_vente,
         ]);
 
         $this->actingAs($this->user)

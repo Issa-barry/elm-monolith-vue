@@ -19,7 +19,7 @@ class ProduitVariante extends Model
     protected $fillable = [
         'organization_id',
         'produit_id',
-        'code_interne',
+        'sku',
         'code_barres',
         'code_fournisseur',
         'prix_usine',
@@ -51,12 +51,12 @@ class ProduitVariante extends Model
         static::creating(function (ProduitVariante $v) {
             // Génération auto du SKU (même algorithme que l'ancien Produit::booted(),
             // déplacé ici puisque le SKU est désormais porté par la variante).
-            if (empty($v->code_interne)) {
+            if (empty($v->sku)) {
                 $orgId = $v->organization_id;
                 do {
                     $candidat = date('Ymd').str_pad((string) mt_rand(1, 99999), 5, '0', STR_PAD_LEFT);
-                } while (static::withTrashed()->where('organization_id', $orgId)->where('code_interne', $candidat)->exists());
-                $v->code_interne = $candidat;
+                } while (static::withTrashed()->where('organization_id', $orgId)->where('sku', $candidat)->exists());
+                $v->sku = $candidat;
             }
             if (empty($v->combo_hash)) {
                 $v->combo_hash = self::COMBO_HASH_DEFAUT;
@@ -66,9 +66,9 @@ class ProduitVariante extends Model
 
     // ── Mutateurs ─────────────────────────────────────────────────────────────
 
-    public function setCodeInterneAttribute(mixed $value): void
+    public function setSkuAttribute(mixed $value): void
     {
-        $this->attributes['code_interne'] = ($value !== null && $value !== '')
+        $this->attributes['sku'] = ($value !== null && $value !== '')
             ? mb_strtoupper(trim(preg_replace('/\s+/', '', $value)))
             : null;
     }

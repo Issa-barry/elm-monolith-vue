@@ -47,7 +47,9 @@ class FelloDemoSeederTest extends TestCase
 
         $this->assertSame(2, Site::where('organization_id', $fello->id)->count());
         $this->assertSame(2, User::where('organization_id', $fello->id)->count());
-        $this->assertSame(21, Produit::where('organization_id', $fello->id)->count());
+        // 21 produits du catalogue de base + 1 "T-shirt Fello édition démo" (démonstration
+        // options/variantes couleur × taille — cf. FelloDemoCatalogSeeder).
+        $this->assertSame(22, Produit::where('organization_id', $fello->id)->count());
         $this->assertSame(5, Client::where('organization_id', $fello->id)->count());
         $this->assertGreaterThan(0, CommandeVente::where('organization_id', $fello->id)->count());
     }
@@ -84,7 +86,9 @@ class FelloDemoSeederTest extends TestCase
         $this->assertSame(1, Organization::where('slug', 'fello-demo')->count());
         $this->assertSame(2, Site::where('organization_id', $fello->id)->count());
         $this->assertSame(2, User::where('organization_id', $fello->id)->count());
-        $this->assertSame(21, Produit::where('organization_id', $fello->id)->count());
+        // 21 produits du catalogue de base + 1 "T-shirt Fello édition démo" (démonstration
+        // options/variantes couleur × taille — cf. FelloDemoCatalogSeeder).
+        $this->assertSame(22, Produit::where('organization_id', $fello->id)->count());
         $this->assertSame(5, Client::where('organization_id', $fello->id)->count());
     }
 }

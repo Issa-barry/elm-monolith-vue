@@ -9,13 +9,15 @@ class TransfertLigneResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        $produit = $this->whenLoaded('produit');
+        $variante = $this->whenLoaded('variante');
+        $produit = $variante?->relationLoaded('produit') ? $variante->produit : null;
 
         return [
             'id' => $this->id,
-            'produit_id' => $this->produit_id,
-            'produit_nom' => $produit ? $produit->nom : null,
-            'produit_code' => $produit ? $produit->code_interne : null,
+            'variante_id' => $this->variante_id,
+            'produit_nom' => $produit?->nom,
+            'variante_libelle' => $variante?->libelle,
+            'sku' => $variante?->sku,
             'produit_image_url' => $produit && $produit->image_url ? url($produit->image_url) : null,
             'quantite_demandee' => $this->quantite_demandee,
             'quantite_chargee' => $this->quantite_chargee,
