@@ -176,6 +176,18 @@ const mainNavItems = computed((): NavItem[] => {
                 stockAlertes.value.total > 0
                     ? stockAlertes.value.total
                     : undefined,
+            items: can('categories.read')
+                ? [
+                      {
+                          title: 'Tous les produits',
+                          href: '/backoffice/produits',
+                      },
+                      {
+                          title: 'Catégories',
+                          href: '/backoffice/produits/categories',
+                      },
+                  ]
+                : undefined,
         });
     }
 

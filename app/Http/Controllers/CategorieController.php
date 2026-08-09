@@ -44,9 +44,13 @@ class CategorieController extends Controller
     {
         $this->authorize('create', Categorie::class);
 
-        Categorie::create([...$request->validated(), 'organization_id' => auth()->user()->organization_id]);
+        $categorie = Categorie::create([...$request->validated(), 'organization_id' => auth()->user()->organization_id]);
 
-        return back()->with('success', 'Catégorie créée avec succès.');
+        // Permet à la création rapide depuis un formulaire Produit (modale, sans navigation)
+        // de sélectionner automatiquement la catégorie tout juste créée — cf. CategorieSelect.vue.
+        return back()
+            ->with('success', 'Catégorie créée avec succès.')
+            ->with('created_categorie_id', $categorie->id);
     }
 
     public function update(UpdateCategorieRequest $request, Categorie $categorie): RedirectResponse

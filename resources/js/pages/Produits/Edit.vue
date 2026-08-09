@@ -14,9 +14,9 @@ interface Option {
 }
 
 interface Categorie {
-    id: number | string;
+    id: string;
     nom: string;
-    parent_id: number | string | null;
+    parent_id: string | null;
 }
 
 interface Limites {
@@ -44,7 +44,7 @@ interface Variante {
 interface ProduitData {
     id: number;
     nom: string;
-    categorie_id: number | string | null;
+    categorie_id: string | null;
     sku: string | null;
     code_fournisseur: string | null;
     type: string;

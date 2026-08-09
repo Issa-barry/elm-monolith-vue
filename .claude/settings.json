@@ -252,7 +252,15 @@
       "Bash(php -l c:/laragon/www/eau-la-maman/elm-monolithe/routes/web.php)",
       "Bash(php -l c:/laragon/www/eau-la-maman/elm-monolithe/tests/Feature/ProduitTest.php)",
       "Bash(vendor/bin/pint app/Http/Controllers/ProduitController.php routes/web.php tests/Feature/ProduitTest.php resources/js/pages/Produits/Show.vue resources/js/pages/Produits/partials/VarianteEditModal.vue)",
-      "Bash(vendor/bin/pint app/Http/Controllers/ProduitController.php resources/js/pages/Produits/Edit.vue resources/js/pages/Produits/partials/ProduitForm.vue)"
+      "Bash(vendor/bin/pint app/Http/Controllers/ProduitController.php resources/js/pages/Produits/Edit.vue resources/js/pages/Produits/partials/ProduitForm.vue)",
+      "Bash(php -l c:/laragon/www/eau-la-maman/elm-monolithe/app/Http/Controllers/CategorieController.php)",
+      "Bash(php -l c:/laragon/www/eau-la-maman/elm-monolithe/app/Http/Middleware/HandleInertiaRequests.php)",
+      "Bash(stat -c '%y' /tmp/categories_tsc.txt 2>/dev/null; date)",
+      "Bash(vendor/bin/pint app/Http/Controllers/CategorieController.php app/Http/Controllers/ProduitController.php app/Http/Middleware/HandleInertiaRequests.php)",
+      "Bash(php -l c:/laragon/www/eau-la-maman/elm-monolithe/tests/Feature/CategorieTest.php)",
+      "Bash(npx prettier *)",
+      "Bash(stat -c '%y' /tmp/categorie_test_run.txt 2>/dev/null; date)",
+      "Bash(stat -c '%y' /tmp/final_categories_build.txt 2>/dev/null; date)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64",

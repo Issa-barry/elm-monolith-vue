@@ -13,6 +13,7 @@ export type Resource =
     | 'equipes-livraison'
     | 'sites'
     | 'produits'
+    | 'categories'
     | 'packings'
     | 'ventes'
     | 'achats'

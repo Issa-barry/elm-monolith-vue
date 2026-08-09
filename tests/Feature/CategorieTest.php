@@ -86,6 +86,17 @@ class CategorieTest extends TestCase
         $this->assertDatabaseHas('categories', ['nom' => 'T-shirts', 'parent_id' => $parent->id]);
     }
 
+    public function test_store_flashes_created_categorie_id(): void
+    {
+        // Consommé par CreateCategorieModal.vue pour sélectionner automatiquement la
+        // catégorie tout juste créée depuis le formulaire Produit, sans navigation.
+        $response = $this->actingAs($this->user)
+            ->post(route('produits.categories.store'), ['nom' => 'Boissons']);
+
+        $categorie = Categorie::where('nom', 'Boissons')->firstOrFail();
+        $response->assertSessionHas('created_categorie_id', $categorie->id);
+    }
+
     public function test_store_fails_without_nom(): void
     {
         $this->actingAs($this->user)

@@ -12,9 +12,9 @@ interface Option {
 }
 
 interface Categorie {
-    id: number | string;
+    id: string;
     nom: string;
-    parent_id: number | string | null;
+    parent_id: string | null;
 }
 
 interface Limites {
@@ -39,7 +39,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const form = useForm({
     nom: '',
-    categorie_id: null as number | string | null,
+    categorie_id: null as string | null,
     code_fournisseur: null as string | null,
     type: 'materiel',
     statut: 'actif',

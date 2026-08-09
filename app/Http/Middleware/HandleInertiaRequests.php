@@ -245,6 +245,7 @@ class HandleInertiaRequests extends Middleware
                 'error' => $request->session()->get('error'),
                 'warning' => $request->session()->get('warning'),
                 'pdv_commande' => $request->session()->get('pdv_commande'),
+                'created_categorie_id' => $request->session()->get('created_categorie_id'),
             ],
         ];
     }

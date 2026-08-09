@@ -10,6 +10,7 @@ import Editor from 'primevue/editor';
 import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import { computed, ref } from 'vue';
+import CategorieSelect from './CategorieSelect.vue';
 
 // ── Props / Emits ─────────────────────────────────────────────────────────────
 interface Option {
@@ -18,9 +19,9 @@ interface Option {
 }
 
 interface Categorie {
-    id: number | string;
+    id: string;
     nom: string;
-    parent_id: number | string | null;
+    parent_id: string | null;
 }
 
 interface Limites {
@@ -52,7 +53,7 @@ interface Variante {
 
 interface FormData {
     nom: string;
-    categorie_id: number | string | null;
+    categorie_id: string | null;
     code_fournisseur: string | null;
     type: string;
     statut: string;
@@ -277,7 +278,7 @@ function formatPrice(val: number | null): string {
                 <!-- Catégorie -->
                 <div>
                     <Label class="mb-1.5 block">Catégorie</Label>
-                    <Dropdown
+                    <CategorieSelect
                         :model-value="form.categorie_id"
                         @update:model-value="
                             $emit('update:form', {
@@ -285,13 +286,8 @@ function formatPrice(val: number | null): string {
                                 categorie_id: $event,
                             })
                         "
-                        :options="categories"
-                        option-label="nom"
-                        option-value="id"
-                        show-clear
-                        placeholder="Aucune catégorie"
-                        class="w-full"
-                        :class="{ 'p-invalid': errors.categorie_id }"
+                        :categories="categories"
+                        :invalid="!!errors.categorie_id"
                     />
                     <p
                         v-if="errors.categorie_id"
@@ -346,9 +342,7 @@ function formatPrice(val: number | null): string {
                     <Checkbox
                         id="has_declinaisons"
                         :model-value="hasDeclinaisons"
-                        @update:model-value="
-                            hasDeclinaisons = $event === true
-                        "
+                        @update:model-value="hasDeclinaisons = $event === true"
                     />
                     <Label
                         for="has_declinaisons"
@@ -382,8 +376,7 @@ function formatPrice(val: number | null): string {
                             placeholder="Nom de l'option (ex : Couleur)"
                             class="flex-1"
                             :class="{
-                                'p-invalid':
-                                    errors[`options.${i}.nom`],
+                                'p-invalid': errors[`options.${i}.nom`],
                             }"
                         />
                         <button
@@ -448,8 +441,8 @@ function formatPrice(val: number | null): string {
                         </template>
                     </span>
                     <span v-else class="text-muted-foreground">
-                        Ajoutez au moins une valeur par option pour générer
-                        les variantes.
+                        Ajoutez au moins une valeur par option pour générer les
+                        variantes.
                     </span>
                 </div>
                 <p v-if="errors.options" class="text-xs text-destructive">
@@ -481,9 +474,7 @@ function formatPrice(val: number | null): string {
                             <th class="pr-4 pb-2 text-left font-medium">
                                 Déclinaison
                             </th>
-                            <th class="pr-4 pb-2 text-left font-medium">
-                                SKU
-                            </th>
+                            <th class="pr-4 pb-2 text-left font-medium">SKU</th>
                             <th class="pr-4 pb-2 text-right font-medium">
                                 Prix vente
                             </th>
