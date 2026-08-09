@@ -268,6 +268,8 @@ Route::prefix('backoffice')->group(function () {
                 ->name('produits.historique');
             Route::patch('produits/{produit}/archiver', [ProduitController::class, 'archiver'])
                 ->name('produits.archiver');
+            Route::put('produits/{produit}/variantes/{variante}', [ProduitController::class, 'updateVariante'])
+                ->name('produits.variantes.update');
         });
 
         // ── Module : Sites ────────────────────────────────────────────────────────

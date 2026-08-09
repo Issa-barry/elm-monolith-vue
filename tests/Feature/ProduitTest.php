@@ -1033,4 +1033,100 @@ class ProduitTest extends TestCase
         $this->assertSame('entree', $found['last_mouvement_type']);
         $this->assertSame(10, $found['last_mouvement_quantite']);
     }
+
+    // ── updateVariante ───────────────────────────────────────────────────────
+
+    /** Produit à déclinaisons (2 variantes : Noir / Blanc) via le vrai chemin de création. */
+    private function makeProduitDecline(Organization $org): Produit
+    {
+        return app(ProduitService::class)->creer([
+            'organization_id' => $org->id,
+            'nom' => 'T-shirt test',
+            'type' => 'achat_vente',
+            'statut' => 'actif',
+            'prix_achat' => 1000,
+            'prix_vente' => 2000,
+            'options' => [
+                ['nom' => 'Couleur', 'valeurs' => ['Noir', 'Blanc']],
+            ],
+        ])->fresh(['variantes']);
+    }
+
+    public function test_update_variante_modifie_le_prix_et_redirige(): void
+    {
+        $produit = $this->makeProduitDecline($this->org);
+        $variante = $produit->variantes->first();
+
+        $this->actingAs($this->user)
+            ->put(route('produits.variantes.update', [$produit, $variante]), [
+                'prix_vente' => 2500,
+                'prix_achat' => 1200,
+                'is_active' => true,
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('produit_variantes', [
+            'id' => $variante->id,
+            'prix_vente' => 2500,
+            'prix_achat' => 1200,
+        ]);
+    }
+
+    public function test_update_variante_peut_desactiver_la_variante(): void
+    {
+        $produit = $this->makeProduitDecline($this->org);
+        $variante = $produit->variantes->first();
+
+        $this->actingAs($this->user)
+            ->put(route('produits.variantes.update', [$produit, $variante]), [
+                'prix_vente' => (int) $variante->prix_vente,
+                'prix_achat' => (int) $variante->prix_achat,
+                'is_active' => false,
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('produit_variantes', [
+            'id' => $variante->id,
+            'is_active' => false,
+        ]);
+    }
+
+    public function test_update_variante_refuse_variante_dun_autre_produit(): void
+    {
+        $produit = $this->makeProduitDecline($this->org);
+        $autreProduit = $this->makeProduitDecline($this->org);
+        $varianteAutreProduit = $autreProduit->variantes->first();
+
+        $this->actingAs($this->user)
+            ->put(route('produits.variantes.update', [$produit, $varianteAutreProduit]), [
+                'prix_vente' => 3000,
+            ])
+            ->assertStatus(404);
+    }
+
+    public function test_update_variante_retourne_403_pour_autre_organisation(): void
+    {
+        $autreOrg = Organization::factory()->create();
+        $produit = $this->makeProduitDecline($autreOrg);
+        $variante = $produit->variantes->first();
+
+        $this->actingAs($this->user)
+            ->put(route('produits.variantes.update', [$produit, $variante]), [
+                'prix_vente' => 3000,
+            ])
+            ->assertStatus(403);
+    }
+
+    public function test_update_variante_echoue_si_type_exige_un_prix_manquant(): void
+    {
+        $produit = $this->makeProduitDecline($this->org);
+        $variante = $produit->variantes->first();
+
+        $this->actingAs($this->user)
+            ->put(route('produits.variantes.update', [$produit, $variante]), [
+                'prix_vente' => null,
+                'prix_achat' => null,
+            ])
+            ->assertSessionHasErrors('type');
+    }
 }

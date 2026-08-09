@@ -4,7 +4,9 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ArrowLeft, Save } from 'lucide-vue-next';
+import { computed, ref } from 'vue';
 import ProduitForm from './partials/ProduitForm.vue';
+import VarianteEditModal from './partials/VarianteEditModal.vue';
 
 interface Option {
     value: string;
@@ -24,6 +26,21 @@ interface Limites {
     max_variantes_produit: number;
 }
 
+interface Variante {
+    id: string;
+    libelle: string;
+    sku: string | null;
+    code_barres: string | null;
+    code_fournisseur: string | null;
+    prix_usine: number | null;
+    prix_vente: number | null;
+    prix_achat: number | null;
+    cout: number | null;
+    seuil_alerte_stock: number | null;
+    is_default: boolean;
+    is_active: boolean;
+}
+
 interface ProduitData {
     id: number;
     nom: string;
@@ -41,6 +58,7 @@ interface ProduitData {
     is_alerte: boolean;
     image_url: string | null;
     variantes_count: number;
+    variantes: Variante[];
 }
 
 const props = defineProps<{
@@ -50,6 +68,15 @@ const props = defineProps<{
     categories: Categorie[];
     limites: Limites;
 }>();
+
+const showVarianteModal = ref(false);
+const varianteEnEdition = ref<Variante | null>(null);
+const isFabricable = computed(() => props.produit.type === 'fabricable');
+
+function editerVariante(variante: Variante) {
+    varianteEnEdition.value = variante;
+    showVarianteModal.value = true;
+}
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
@@ -131,11 +158,19 @@ function submit() {
                 :current-image-url="produit.image_url"
                 :current-sku="produit.sku"
                 :allow-declinaisons="false"
-                :existing-variantes-count="produit.variantes_count"
+                :existing-variantes="produit.variantes"
                 @update:form="Object.assign(form, $event)"
                 @submit="submit"
+                @edit-variante="editerVariante"
             />
         </div>
+
+        <VarianteEditModal
+            v-model:visible="showVarianteModal"
+            :produit-id="String(produit.id)"
+            :variante="varianteEnEdition"
+            :is-fabricable="isFabricable"
+        />
 
         <!-- ─── Footer sticky mobile ─── -->
         <div

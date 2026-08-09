@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Image, Layers, Plus, Save, X } from 'lucide-vue-next';
+import { Image, Layers, Pencil, Plus, Save, X } from 'lucide-vue-next';
 import Chips from 'primevue/chips';
 import Dropdown from 'primevue/dropdown';
 import Editor from 'primevue/editor';
@@ -32,6 +33,21 @@ interface Limites {
 interface OptionInput {
     nom: string;
     valeurs: string[];
+}
+
+interface Variante {
+    id: string;
+    libelle: string;
+    sku: string | null;
+    code_barres: string | null;
+    code_fournisseur: string | null;
+    prix_usine: number | null;
+    prix_vente: number | null;
+    prix_achat: number | null;
+    cout: number | null;
+    seuil_alerte_stock: number | null;
+    is_default: boolean;
+    is_active: boolean;
 }
 
 interface FormData {
@@ -65,7 +81,7 @@ const props = withDefaults(
         // Le builder d'options n'est proposé qu'à la création — ProduitService::mettreAJourSimple()
         // ne gère que le produit simple (variante par défaut), pas l'ajout de déclinaisons après coup.
         allowDeclinaisons?: boolean;
-        existingVariantesCount?: number;
+        existingVariantes?: Variante[];
     }>(),
     {
         categories: () => [],
@@ -73,13 +89,14 @@ const props = withDefaults(
         currentImageUrl: null,
         currentSku: null,
         allowDeclinaisons: false,
-        existingVariantesCount: 0,
+        existingVariantes: () => [],
     },
 );
 
 const emit = defineEmits<{
     submit: [];
     'update:form': [FormData];
+    'edit-variante': [Variante];
 }>();
 
 const typeHasStock = computed(() => !['service'].includes(props.form.type));
@@ -165,6 +182,11 @@ const depasseLimiteVariantes = computed(
         !!props.limites &&
         totalVariantes.value > props.limites.max_variantes_produit,
 );
+
+function formatPrice(val: number | null): string {
+    if (val === null || val === undefined) return '—';
+    return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
+}
 </script>
 
 <template>
@@ -436,18 +458,79 @@ const depasseLimiteVariantes = computed(
             </div>
         </div>
 
-        <!-- Info variantes existantes (édition d'un produit déjà décliné) ──── -->
+        <!-- Déclinaisons existantes (édition d'un produit déjà décliné) ────── -->
         <div
-            v-else-if="existingVariantesCount > 1"
-            class="flex items-start gap-3 rounded-xl border bg-muted/30 p-4 text-sm sm:p-6"
+            v-else-if="existingVariantes.length > 1"
+            class="rounded-xl border bg-card p-4 shadow-sm sm:p-6"
         >
-            <Layers class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-            <p class="text-muted-foreground">
-                Ce produit a {{ existingVariantesCount }} déclinaisons. Le
-                prix/stock de chaque variante se gère individuellement depuis
-                la fiche produit — les champs ci-dessous ne s'appliquent qu'à
-                la variante par défaut.
+            <h3
+                class="mb-1 flex items-center gap-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+            >
+                <Layers class="h-4 w-4" />
+                Déclinaisons ({{ existingVariantes.length }})
+            </h3>
+            <p class="mb-4 text-xs text-muted-foreground">
+                Prix et statut se gèrent individuellement par variante — les
+                champs de tarification ci-dessous ne s'appliquent qu'à la
+                variante par défaut.
             </p>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b text-xs text-muted-foreground">
+                            <th class="pr-4 pb-2 text-left font-medium">
+                                Déclinaison
+                            </th>
+                            <th class="pr-4 pb-2 text-left font-medium">
+                                SKU
+                            </th>
+                            <th class="pr-4 pb-2 text-right font-medium">
+                                Prix vente
+                            </th>
+                            <th class="pr-4 pb-2 text-left font-medium">
+                                Statut
+                            </th>
+                            <th class="pb-2 text-right font-medium">
+                                <span class="sr-only">Actions</span>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-border/50">
+                        <tr v-for="v in existingVariantes" :key="v.id">
+                            <td class="py-2.5 pr-4 font-medium">
+                                {{ v.libelle || 'Variante par défaut' }}
+                            </td>
+                            <td
+                                class="py-2.5 pr-4 font-mono text-xs text-muted-foreground"
+                            >
+                                {{ v.sku || '—' }}
+                            </td>
+                            <td
+                                class="py-2.5 pr-4 text-right font-semibold tabular-nums"
+                            >
+                                {{ formatPrice(v.prix_vente) }}
+                            </td>
+                            <td class="py-2.5 pr-4">
+                                <StatusDot
+                                    :status="v.is_active ? 'actif' : 'inactif'"
+                                    :label="v.is_active ? 'Actif' : 'Inactif'"
+                                />
+                            </td>
+                            <td class="py-2.5 text-right">
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    @click="emit('edit-variante', v)"
+                                >
+                                    <Pencil class="mr-1.5 h-3.5 w-3.5" />
+                                    Modifier
+                                </Button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- Section : Tarification ───────────────────────────────────────── -->

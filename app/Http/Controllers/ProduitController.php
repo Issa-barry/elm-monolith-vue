@@ -21,6 +21,7 @@ use App\Services\ProduitService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -442,6 +443,20 @@ class ProduitController extends Controller
                 'is_alerte' => $produit->is_alerte,
                 'has_variantes' => $produit->variantes->count() > 1,
                 'variantes_count' => $produit->variantes->count(),
+                'variantes' => $produit->variantes->map(fn (ProduitVariante $v) => [
+                    'id' => $v->id,
+                    'libelle' => $v->libelle,
+                    'sku' => $v->sku,
+                    'code_barres' => $v->code_barres,
+                    'code_fournisseur' => $v->code_fournisseur,
+                    'prix_usine' => $v->prix_usine,
+                    'prix_vente' => $v->prix_vente,
+                    'prix_achat' => $v->prix_achat,
+                    'cout' => $v->cout,
+                    'seuil_alerte_stock' => $v->seuil_alerte_stock,
+                    'is_default' => $v->is_default,
+                    'is_active' => $v->is_active,
+                ]),
                 'medias' => $produit->medias->map(fn ($m) => [
                     'id' => $m->id,
                     'url' => $m->url,
@@ -622,6 +637,43 @@ class ProduitController extends Controller
         });
 
         return back()->with('success', 'Stock mis à jour avec succès.');
+    }
+
+    /**
+     * Édite une variante individuelle (prix/codes/statut) — nécessaire dès qu'un produit a
+     * plusieurs déclinaisons, puisque ProduitService::mettreAJourSimple() (formulaire principal)
+     * ne touche que la variante par défaut. Le SKU n'est volontairement pas éditable ici (généré
+     * automatiquement, cf. ProduitVariante::booted()).
+     */
+    public function updateVariante(Request $request, Produit $produit, ProduitVariante $variante): RedirectResponse
+    {
+        $this->authorize('update', $produit);
+        abort_unless($variante->produit_id === $produit->id, 404);
+
+        $data = $request->validate([
+            'code_barres' => 'nullable|string|max:100',
+            'code_fournisseur' => 'nullable|string|max:100',
+            'prix_usine' => 'nullable|integer|min:0',
+            'prix_vente' => 'nullable|integer|min:0',
+            'prix_achat' => 'nullable|integer|min:0',
+            'cout' => 'nullable|integer|min:0',
+            'seuil_alerte_stock' => 'nullable|integer|min:0',
+            'is_active' => 'boolean',
+        ]);
+
+        // Valide les prix EFFECTIFS (valeurs déjà sur la variante, écrasées par celles envoyées)
+        // — même logique que ProduitService::mettreAJourSimple() pour ne pas rejeter une mise à
+        // jour partielle qui ne touche pas au prix.
+        $champsVariante = ['prix_usine', 'prix_vente', 'prix_achat'];
+        $donneesEffectives = array_merge(
+            Arr::only($variante->getAttributes(), $champsVariante),
+            Arr::only($data, $champsVariante),
+        );
+        $this->produitService->validerPrixSelonType($produit->type, $donneesEffectives);
+
+        $variante->update($data);
+
+        return back()->with('success', "Variante « {$variante->libelle} » mise à jour.");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

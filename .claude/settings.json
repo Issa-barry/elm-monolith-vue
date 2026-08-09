@@ -248,7 +248,11 @@
       "Bash(php -l c:/laragon/www/eau-la-maman/elm-monolithe/database/seeders/Organizations/FelloDemo/FelloDemoCatalogSeeder.php)",
       "Bash(php -l c:/laragon/www/eau-la-maman/elm-monolithe/tests/Feature/FelloDemoSeederTest.php)",
       "Bash(vendor/bin/pint database/seeders/Organizations/FelloDemo/FelloDemoCatalogSeeder.php tests/Feature/FelloDemoSeederTest.php)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(php -l c:/laragon/www/eau-la-maman/elm-monolithe/routes/web.php)",
+      "Bash(php -l c:/laragon/www/eau-la-maman/elm-monolithe/tests/Feature/ProduitTest.php)",
+      "Bash(vendor/bin/pint app/Http/Controllers/ProduitController.php routes/web.php tests/Feature/ProduitTest.php resources/js/pages/Produits/Show.vue resources/js/pages/Produits/partials/VarianteEditModal.vue)",
+      "Bash(vendor/bin/pint app/Http/Controllers/ProduitController.php resources/js/pages/Produits/Edit.vue resources/js/pages/Produits/partials/ProduitForm.vue)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64",

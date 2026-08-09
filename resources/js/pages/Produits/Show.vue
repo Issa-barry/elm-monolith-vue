@@ -22,9 +22,10 @@ import {
     TrendingDown,
     Warehouse,
 } from 'lucide-vue-next';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import AjusterStockModal from './partials/AjusterStockModal.vue';
 import HistoriqueModal from './partials/HistoriqueModal.vue';
+import VarianteEditModal from './partials/VarianteEditModal.vue';
 
 interface SiteStock {
     site_id: string;
@@ -34,6 +35,21 @@ interface SiteStock {
     seuil_alerte_stock: number | null;
     is_alerte: boolean;
     updated_at: string | null;
+}
+
+interface Variante {
+    id: string;
+    libelle: string;
+    sku: string | null;
+    code_barres: string | null;
+    code_fournisseur: string | null;
+    prix_usine: number | null;
+    prix_vente: number | null;
+    prix_achat: number | null;
+    cout: number | null;
+    seuil_alerte_stock: number | null;
+    is_default: boolean;
+    is_active: boolean;
 }
 
 interface Produit {
@@ -60,6 +76,7 @@ interface Produit {
     created_at: string | null;
     updated_at: string | null;
     stocks_par_site: SiteStock[];
+    variantes: Variante[];
 }
 
 interface StockMouvement {
@@ -106,6 +123,14 @@ const { can } = usePermissions();
 
 const showStockModal = ref(false);
 const showHistoriqueModal = ref(false);
+const showVarianteModal = ref(false);
+const varianteEnEdition = ref<Variante | null>(null);
+const isFabricable = computed(() => props.produit.type === 'fabricable');
+
+function editerVariante(variante: Variante) {
+    varianteEnEdition.value = variante;
+    showVarianteModal.value = true;
+}
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
@@ -556,6 +581,79 @@ const ajustements = props.mouvements.map((m) => ({
                 </div>
             </div>
 
+            <!-- ─── Déclinaisons ─── -->
+            <div
+                v-if="produit.variantes.length > 1"
+                class="rounded-xl border bg-card p-5"
+            >
+                <h2
+                    class="mb-4 flex items-center gap-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase"
+                >
+                    <Layers class="h-4 w-4" />
+                    Déclinaisons
+                    <span class="font-normal normal-case text-muted-foreground/70"
+                        >({{ produit.variantes.length }})</span
+                    >
+                </h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b text-xs text-muted-foreground">
+                                <th class="pr-4 pb-2 text-left font-medium">
+                                    Déclinaison
+                                </th>
+                                <th class="pr-4 pb-2 text-left font-medium">
+                                    SKU
+                                </th>
+                                <th class="pr-4 pb-2 text-right font-medium">
+                                    Prix vente
+                                </th>
+                                <th class="pr-4 pb-2 text-left font-medium">
+                                    Statut
+                                </th>
+                                <th class="pb-2 text-right font-medium">
+                                    <span class="sr-only">Actions</span>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-border/50">
+                            <tr v-for="v in produit.variantes" :key="v.id">
+                                <td class="py-2.5 pr-4 font-medium">
+                                    {{ v.libelle || 'Variante par défaut' }}
+                                </td>
+                                <td
+                                    class="py-2.5 pr-4 font-mono text-xs text-muted-foreground"
+                                >
+                                    {{ v.sku || '—' }}
+                                </td>
+                                <td
+                                    class="py-2.5 pr-4 text-right font-semibold tabular-nums"
+                                >
+                                    {{ formatPrice(v.prix_vente) }}
+                                </td>
+                                <td class="py-2.5 pr-4">
+                                    <StatusDot
+                                        :status="v.is_active ? 'actif' : 'inactif'"
+                                        :label="v.is_active ? 'Actif' : 'Inactif'"
+                                    />
+                                </td>
+                                <td class="py-2.5 text-right">
+                                    <Button
+                                        v-if="can('produits.update')"
+                                        variant="ghost"
+                                        size="sm"
+                                        @click="editerVariante(v)"
+                                    >
+                                        <Pencil class="mr-1.5 h-3.5 w-3.5" />
+                                        Modifier
+                                    </Button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <!-- ─── Description ─── -->
             <div
                 v-if="produit.description"
@@ -723,6 +821,12 @@ const ajustements = props.mouvements.map((m) => ({
             :sites-autorises="sites_autorises"
             :can-augmenter="can_augmenter_stock"
             :can-diminuer="can_diminuer_stock"
+        />
+        <VarianteEditModal
+            v-model:visible="showVarianteModal"
+            :produit-id="produit.id"
+            :variante="varianteEnEdition"
+            :is-fabricable="isFabricable"
         />
     </AppLayout>
 </template>
