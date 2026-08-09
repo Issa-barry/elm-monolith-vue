@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Enums\ProduitStatut;
 use App\Enums\ProduitType;
+use App\Models\Categorie;
 use App\Models\Organization;
 use App\Models\Produit;
 use App\Models\Site;
@@ -21,9 +22,15 @@ class ProduitsSeeder extends Seeder
         // on l'attribue directement à un site réel dès le seed).
         $siteParDefaut = Site::where('organization_id', $org->id)->orderBy('created_at')->first();
 
+        // Catégories créées par CategorieDefaultSeeder (exécuté avant celui-ci dans
+        // DatabaseSeeder/ProductionSeeder) — null si absent, categorie_id reste alors nullable.
+        $categorieEau = Categorie::where('organization_id', $org->id)->where('nom', 'Eau')->value('id');
+        $categorieMateriel = Categorie::where('organization_id', $org->id)->where('nom', 'Matériel')->value('id');
+
         $produits = [
             [
                 'nom' => 'Rouleau',
+                'categorie_id' => $categorieMateriel,
                 'type' => ProduitType::MATERIEL->value,
                 'statut' => ProduitStatut::ACTIF->value,
                 'prix_achat' => 300,
@@ -32,6 +39,7 @@ class ProduitsSeeder extends Seeder
             ],
             [
                 'nom' => 'Pack de 6 bouteilles',
+                'categorie_id' => $categorieEau,
                 'type' => ProduitType::FABRICABLE->value,
                 'statut' => ProduitStatut::ACTIF->value,
                 'prix_usine' => 4100,
@@ -40,6 +48,7 @@ class ProduitsSeeder extends Seeder
             ],
             [
                 'nom' => 'Pack de 8 bouteilles',
+                'categorie_id' => $categorieEau,
                 'type' => ProduitType::FABRICABLE->value,
                 'statut' => ProduitStatut::ACTIF->value,
                 'prix_usine' => 4500,
@@ -48,6 +57,7 @@ class ProduitsSeeder extends Seeder
             ],
             [
                 'nom' => 'Pack de 350ml',
+                'categorie_id' => $categorieEau,
                 'type' => ProduitType::FABRICABLE->value,
                 'statut' => ProduitStatut::ACTIF->value,
                 'prix_usine' => 18000,
@@ -58,6 +68,7 @@ class ProduitsSeeder extends Seeder
             ],
             [
                 'nom' => 'Packs de 1.500ml',
+                'categorie_id' => $categorieEau,
                 'type' => ProduitType::FABRICABLE->value,
                 'statut' => ProduitStatut::ACTIF->value,
                 'prix_usine' => 22000,
@@ -68,6 +79,7 @@ class ProduitsSeeder extends Seeder
             ],
             [
                 'nom' => 'Packs de 500ml',
+                'categorie_id' => $categorieEau,
                 'type' => ProduitType::FABRICABLE->value,
                 'statut' => ProduitStatut::ACTIF->value,
                 'prix_usine' => 18000,
@@ -78,6 +90,7 @@ class ProduitsSeeder extends Seeder
             ],
             [
                 'nom' => 'Packs de 50ml',
+                'categorie_id' => $categorieEau,
                 'type' => ProduitType::FABRICABLE->value,
                 'statut' => ProduitStatut::ACTIF->value,
                 'prix_usine' => 18000,

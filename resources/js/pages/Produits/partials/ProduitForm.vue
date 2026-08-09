@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Image, Layers, Pencil, Plus, Save, X } from 'lucide-vue-next';
+import { Image, Layers, Plus, Save, X } from 'lucide-vue-next';
 import Dropdown from 'primevue/dropdown';
 import Editor from 'primevue/editor';
 import InputNumber from 'primevue/inputnumber';
@@ -13,6 +12,9 @@ import CategorieSelect from './CategorieSelect.vue';
 import OptionCatalogueSelect, {
     type OptionCatalogue,
 } from './OptionCatalogueSelect.vue';
+import VariantesGroupees, {
+    type Variante as VarianteGroupee,
+} from './VariantesGroupees.vue';
 
 // ── Props / Emits ─────────────────────────────────────────────────────────────
 interface Option {
@@ -54,6 +56,7 @@ interface Variante {
     seuil_alerte_stock: number | null;
     is_default: boolean;
     is_active: boolean;
+    options: VarianteGroupee['options'];
 }
 
 interface FormData {
@@ -246,10 +249,6 @@ const depasseLimiteVariantes = computed(
         totalVariantes.value > props.limites.max_variantes_produit,
 );
 
-function formatPrice(val: number | null): string {
-    if (val === null || val === undefined) return '—';
-    return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
-}
 </script>
 
 <template>
@@ -389,7 +388,7 @@ function formatPrice(val: number | null): string {
             </div>
         </div>
 
-        <!-- Section : Déclinaisons (options/variantes) ─────────────────────── -->
+        <!-- Section : Options & variantes ─────────────────────────────────── -->
         <div
             v-if="allowDeclinaisons"
             class="rounded-xl border bg-card p-4 shadow-sm sm:p-6"
@@ -398,7 +397,7 @@ function formatPrice(val: number | null): string {
                 <h3
                     class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
                 >
-                    Déclinaisons
+                    Options &amp; variantes
                 </h3>
                 <div class="flex items-center gap-2">
                     <Checkbox
@@ -409,14 +408,14 @@ function formatPrice(val: number | null): string {
                     <Label
                         for="has_declinaisons"
                         class="cursor-pointer text-sm font-medium"
-                        >Ce produit a des déclinaisons</Label
+                        >Ce produit a des variantes</Label
                     >
                 </div>
             </div>
 
             <template v-if="!hasDeclinaisons">
                 <p class="text-sm text-muted-foreground">
-                    Produit simple, sans déclinaison — couleur, taille, etc.
+                    Produit simple, sans variante — couleur, taille, etc.
                     Cochez la case ci-dessus pour définir des options (ex :
                     Couleur, Taille) et générer les combinaisons
                     automatiquement.
@@ -549,7 +548,7 @@ function formatPrice(val: number | null): string {
             </div>
         </div>
 
-        <!-- Déclinaisons existantes (édition d'un produit déjà décliné) ────── -->
+        <!-- Variantes existantes (édition d'un produit déjà décliné) ───────── -->
         <div
             v-else-if="existingVariantes.length > 1"
             class="rounded-xl border bg-card p-4 shadow-sm sm:p-6"
@@ -558,68 +557,23 @@ function formatPrice(val: number | null): string {
                 class="mb-1 flex items-center gap-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase"
             >
                 <Layers class="h-4 w-4" />
-                Déclinaisons ({{ existingVariantes.length }})
+                Variantes ({{ existingVariantes.length }})
             </h3>
             <p class="mb-4 text-xs text-muted-foreground">
                 Prix et statut se gèrent individuellement par variante — les
                 champs de tarification ci-dessous ne s'appliquent qu'à la
                 variante par défaut.
             </p>
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr class="border-b text-xs text-muted-foreground">
-                            <th class="pr-4 pb-2 text-left font-medium">
-                                Déclinaison
-                            </th>
-                            <th class="pr-4 pb-2 text-left font-medium">SKU</th>
-                            <th class="pr-4 pb-2 text-right font-medium">
-                                Prix vente
-                            </th>
-                            <th class="pr-4 pb-2 text-left font-medium">
-                                Statut
-                            </th>
-                            <th class="pb-2 text-right font-medium">
-                                <span class="sr-only">Actions</span>
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-border/50">
-                        <tr v-for="v in existingVariantes" :key="v.id">
-                            <td class="py-2.5 pr-4 font-medium">
-                                {{ v.libelle || 'Variante par défaut' }}
-                            </td>
-                            <td
-                                class="py-2.5 pr-4 font-mono text-xs text-muted-foreground"
-                            >
-                                {{ v.sku || '—' }}
-                            </td>
-                            <td
-                                class="py-2.5 pr-4 text-right font-semibold tabular-nums"
-                            >
-                                {{ formatPrice(v.prix_vente) }}
-                            </td>
-                            <td class="py-2.5 pr-4">
-                                <StatusDot
-                                    :status="v.is_active ? 'actif' : 'inactif'"
-                                    :label="v.is_active ? 'Actif' : 'Inactif'"
-                                />
-                            </td>
-                            <td class="py-2.5 text-right">
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    @click="emit('edit-variante', v)"
-                                >
-                                    <Pencil class="mr-1.5 h-3.5 w-3.5" />
-                                    Modifier
-                                </Button>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+            <VariantesGroupees
+                :variantes="existingVariantes"
+                @edit-variante="
+                    (v) =>
+                        emit(
+                            'edit-variante',
+                            existingVariantes.find((ev) => ev.id === v.id)!,
+                        )
+                "
+            />
         </div>
 
         <!-- Section : Tarification ───────────────────────────────────────── -->

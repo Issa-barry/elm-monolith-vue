@@ -23,6 +23,7 @@ class OptionCatalogue extends Model
     protected $fillable = [
         'organization_id',
         'nom',
+        'is_system',
         'position',
         'created_by',
         'updated_by',
@@ -30,6 +31,7 @@ class OptionCatalogue extends Model
 
     protected $casts = [
         'position' => 'integer',
+        'is_system' => 'boolean',
     ];
 
     protected static function booted(): void

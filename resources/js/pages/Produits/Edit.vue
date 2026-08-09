@@ -26,6 +26,11 @@ interface Limites {
     max_variantes_produit: number;
 }
 
+interface VarianteOption {
+    option: string;
+    valeur: string;
+}
+
 interface Variante {
     id: string;
     libelle: string;
@@ -39,6 +44,7 @@ interface Variante {
     seuil_alerte_stock: number | null;
     is_default: boolean;
     is_active: boolean;
+    options: VarianteOption[];
 }
 
 interface ProduitData {

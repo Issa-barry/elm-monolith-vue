@@ -26,6 +26,7 @@ import { computed, ref } from 'vue';
 import AjusterStockModal from './partials/AjusterStockModal.vue';
 import HistoriqueModal from './partials/HistoriqueModal.vue';
 import VarianteEditModal from './partials/VarianteEditModal.vue';
+import VariantesGroupees from './partials/VariantesGroupees.vue';
 
 interface SiteStock {
     site_id: string;
@@ -35,6 +36,11 @@ interface SiteStock {
     seuil_alerte_stock: number | null;
     is_alerte: boolean;
     updated_at: string | null;
+}
+
+interface VarianteOption {
+    option: string;
+    valeur: string;
 }
 
 interface Variante {
@@ -50,6 +56,7 @@ interface Variante {
     seuil_alerte_stock: number | null;
     is_default: boolean;
     is_active: boolean;
+    options: VarianteOption[];
 }
 
 interface Produit {
@@ -581,7 +588,7 @@ const ajustements = props.mouvements.map((m) => ({
                 </div>
             </div>
 
-            <!-- ─── Déclinaisons ─── -->
+            <!-- ─── Variantes ─── -->
             <div
                 v-if="produit.variantes.length > 1"
                 class="rounded-xl border bg-card p-5"
@@ -590,68 +597,21 @@ const ajustements = props.mouvements.map((m) => ({
                     class="mb-4 flex items-center gap-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase"
                 >
                     <Layers class="h-4 w-4" />
-                    Déclinaisons
+                    Variantes
                     <span class="font-normal normal-case text-muted-foreground/70"
                         >({{ produit.variantes.length }})</span
                     >
                 </h2>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr class="border-b text-xs text-muted-foreground">
-                                <th class="pr-4 pb-2 text-left font-medium">
-                                    Déclinaison
-                                </th>
-                                <th class="pr-4 pb-2 text-left font-medium">
-                                    SKU
-                                </th>
-                                <th class="pr-4 pb-2 text-right font-medium">
-                                    Prix vente
-                                </th>
-                                <th class="pr-4 pb-2 text-left font-medium">
-                                    Statut
-                                </th>
-                                <th class="pb-2 text-right font-medium">
-                                    <span class="sr-only">Actions</span>
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-border/50">
-                            <tr v-for="v in produit.variantes" :key="v.id">
-                                <td class="py-2.5 pr-4 font-medium">
-                                    {{ v.libelle || 'Variante par défaut' }}
-                                </td>
-                                <td
-                                    class="py-2.5 pr-4 font-mono text-xs text-muted-foreground"
-                                >
-                                    {{ v.sku || '—' }}
-                                </td>
-                                <td
-                                    class="py-2.5 pr-4 text-right font-semibold tabular-nums"
-                                >
-                                    {{ formatPrice(v.prix_vente) }}
-                                </td>
-                                <td class="py-2.5 pr-4">
-                                    <StatusDot
-                                        :status="v.is_active ? 'actif' : 'inactif'"
-                                        :label="v.is_active ? 'Actif' : 'Inactif'"
-                                    />
-                                </td>
-                                <td class="py-2.5 text-right">
-                                    <Button
-                                        v-if="can('produits.update')"
-                                        variant="ghost"
-                                        size="sm"
-                                        @click="editerVariante(v)"
-                                    >
-                                        <Pencil class="mr-1.5 h-3.5 w-3.5" />
-                                        Modifier
-                                    </Button>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+                <VariantesGroupees
+                    :variantes="produit.variantes"
+                    :editable="can('produits.update')"
+                    @edit-variante="
+                        (v) =>
+                            editerVariante(
+                                produit.variantes.find((pv) => pv.id === v.id)!,
+                            )
+                    "
+                />
             </div>
 
             <!-- ─── Description ─── -->

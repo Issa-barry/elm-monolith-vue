@@ -6,6 +6,7 @@ use App\Enums\CategorieStatut;
 use App\Enums\ProduitStatut;
 use App\Enums\ProduitType;
 use App\Models\Categorie;
+use App\Models\OptionCatalogue;
 use App\Models\Organization;
 use App\Models\Produit;
 use App\Services\ProduitService;
@@ -65,11 +66,21 @@ class FelloDemoCatalogSeeder extends Seeder
         $produitService = app(ProduitService::class);
         $total = 0;
 
+        // Catégories parentes créées par CategorieDefaultSeeder (cf. FelloDemoOrganizationSeeder)
+        // — les sous-catégories vêtements se rattachent à "Vêtements" ; "Chaussures" a déjà sa
+        // propre catégorie racine, pas besoin d'un niveau intermédiaire supplémentaire ici.
+        $vetements = Categorie::where('organization_id', $org->id)->whereNull('parent_id')->where('nom', 'Vêtements')->first();
+        $chaussuresParent = Categorie::where('organization_id', $org->id)->whereNull('parent_id')->where('nom', 'Chaussures')->first();
+
         foreach (self::PRODUITS as $nomCategorie => $items) {
-            $categorie = Categorie::firstOrCreate(
-                ['organization_id' => $org->id, 'nom' => $nomCategorie],
-                ['statut' => CategorieStatut::ACTIF]
-            );
+            if ($nomCategorie === 'Chaussures' && $chaussuresParent) {
+                $categorie = $chaussuresParent;
+            } else {
+                $categorie = Categorie::firstOrCreate(
+                    ['organization_id' => $org->id, 'nom' => $nomCategorie, 'parent_id' => $vetements?->id],
+                    ['statut' => CategorieStatut::ACTIF]
+                );
+            }
 
             foreach ($items as $item) {
                 if (Produit::where('organization_id', $org->id)->where('nom', $item['nom'])->exists()) {
@@ -110,8 +121,16 @@ class FelloDemoCatalogSeeder extends Seeder
                 'prix_vente' => 75000,
                 'seuil_alerte_stock' => 5,
                 'options' => [
-                    ['nom' => 'Couleur', 'valeurs' => ['Noir', 'Blanc']],
-                    ['nom' => 'Taille', 'valeurs' => ['S', 'M', 'L']],
+                    [
+                        'nom' => 'Couleur',
+                        'valeurs' => ['Noir', 'Blanc'],
+                        'option_catalogue_id' => OptionCatalogue::where('organization_id', $org->id)->where('nom', 'Couleur')->value('id'),
+                    ],
+                    [
+                        'nom' => 'Taille',
+                        'valeurs' => ['S', 'M', 'L'],
+                        'option_catalogue_id' => OptionCatalogue::where('organization_id', $org->id)->where('nom', 'Taille')->value('id'),
+                    ],
                 ],
             ]);
             $total++;

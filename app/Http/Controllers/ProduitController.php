@@ -250,7 +250,7 @@ class ProduitController extends Controller
     {
         $this->authorize('view', $produit);
 
-        $produit->load(['categorie', 'variantes.valeurs', 'medias']);
+        $produit->load(['categorie', 'variantes.valeurs.option', 'medias']);
         $orgId = $produit->organization_id;
         $user = auth()->user();
 
@@ -377,6 +377,7 @@ class ProduitController extends Controller
                     'prix_vente' => $v->prix_vente,
                     'is_default' => $v->is_default,
                     'is_active' => $v->is_active,
+                    'options' => $this->varianteOptions($v),
                 ]),
             ],
             'mouvements' => collect($mouvements),
@@ -424,7 +425,7 @@ class ProduitController extends Controller
     {
         $this->authorize('update', $produit);
 
-        $produit->load(['variantes', 'medias']);
+        $produit->load(['variantes.valeurs.option', 'medias']);
         $variantePrincipale = $produit->variantes->firstWhere('is_default', true) ?? $produit->variantes->first();
         $orgId = $produit->organization_id;
 
@@ -461,6 +462,7 @@ class ProduitController extends Controller
                     'seuil_alerte_stock' => $v->seuil_alerte_stock,
                     'is_default' => $v->is_default,
                     'is_active' => $v->is_active,
+                    'options' => $this->varianteOptions($v),
                 ]),
                 'medias' => $produit->medias->map(fn ($m) => [
                     'id' => $m->id,
@@ -691,6 +693,22 @@ class ProduitController extends Controller
             'max_valeurs_option' => Parametre::getMaxValeursOption($orgId),
             'max_variantes_produit' => Parametre::getMaxVariantesProduit($orgId),
         ];
+    }
+
+    /**
+     * Décompose une variante en paires {option, valeur} triées par position d'option puis
+     * de valeur — permet au frontend de regrouper les variantes par n'importe laquelle de
+     * leurs options (pattern "Regrouper par" façon Shopify) sans requête supplémentaire.
+     * Nécessite variantes.valeurs.option pré-chargé par l'appelant (évite le N+1).
+     *
+     * @return array<int, array{option: string, valeur: string}>
+     */
+    private function varianteOptions(ProduitVariante $variante): array
+    {
+        $valeurs = $variante->valeurs->all();
+        usort($valeurs, fn ($a, $b) => [$a->option->position, $a->position] <=> [$b->option->position, $b->position]);
+
+        return array_map(fn ($v) => ['option' => $v->option->nom, 'valeur' => $v->valeur], $valeurs);
     }
 
     /**

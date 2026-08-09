@@ -27,6 +27,7 @@ class OptionCatalogueController extends Controller
             ->map(fn (OptionCatalogue $o) => [
                 'id' => $o->id,
                 'nom' => $o->nom,
+                'is_system' => $o->is_system,
                 'position' => $o->position,
                 'valeurs' => $o->valeurs->map(fn ($v) => [
                     'id' => $v->id,
@@ -77,6 +78,12 @@ class OptionCatalogueController extends Controller
     public function destroy(OptionCatalogue $option): RedirectResponse
     {
         $this->authorize('delete', $option);
+
+        if ($option->is_system) {
+            return back()->withErrors([
+                'delete' => "« {$option->nom} » est une option système proposée par défaut et ne peut pas être supprimée. Vous pouvez toujours ajuster ses valeurs.",
+            ]);
+        }
 
         $option->delete();
 

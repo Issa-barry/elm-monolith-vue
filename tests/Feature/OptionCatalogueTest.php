@@ -151,6 +151,17 @@ class OptionCatalogueTest extends TestCase
             ->assertStatus(403);
     }
 
+    public function test_destroy_refuse_une_option_systeme(): void
+    {
+        $option = $this->makeOption($this->org, ['is_system' => true]);
+
+        $this->actingAs($this->user)
+            ->delete(route('produits.options.destroy', $option))
+            ->assertSessionHasErrors('delete');
+
+        $this->assertDatabaseHas('option_catalogues', ['id' => $option->id, 'deleted_at' => null]);
+    }
+
     // ── valeurs ───────────────────────────────────────────────────────────────
 
     public function test_store_valeur_ajoute_une_valeur_au_catalogue(): void

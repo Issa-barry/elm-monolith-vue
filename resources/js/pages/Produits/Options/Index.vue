@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { ListTree, Pencil, Plus, Trash2, X } from 'lucide-vue-next';
+import { ListTree, Lock, Pencil, Plus, Trash2, X } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import InputText from 'primevue/inputtext';
 import { useConfirm } from 'primevue/useconfirm';
@@ -23,6 +23,7 @@ interface OptionCatalogueValeur {
 interface OptionCatalogue {
     id: string;
     nom: string;
+    is_system: boolean;
     position: number;
     valeurs: OptionCatalogueValeur[];
 }
@@ -191,7 +192,7 @@ function supprimerValeur(option: OptionCatalogue, valeur: OptionCatalogueValeur)
                     <p class="mt-1 text-sm text-muted-foreground">
                         Catalogue d'options réutilisables (Couleur, Taille,
                         Pointure…) — sert de bibliothèque de suggestions pour
-                        vos produits, sans jamais modifier leurs déclinaisons
+                        vos produits, sans jamais modifier leurs variantes
                         déjà générées.
                     </p>
                 </div>
@@ -243,7 +244,14 @@ function supprimerValeur(option: OptionCatalogue, valeur: OptionCatalogueValeur)
                     class="rounded-xl border bg-card p-4 shadow-sm sm:p-5"
                 >
                     <div class="mb-3 flex items-center justify-between gap-2">
-                        <h3 class="font-medium">{{ option.nom }}</h3>
+                        <h3 class="flex items-center gap-1.5 font-medium">
+                            {{ option.nom }}
+                            <Lock
+                                v-if="option.is_system"
+                                class="h-3 w-3 text-muted-foreground"
+                                aria-label="Option système"
+                            />
+                        </h3>
                         <div class="flex gap-0.5">
                             <button
                                 type="button"
@@ -254,6 +262,7 @@ function supprimerValeur(option: OptionCatalogue, valeur: OptionCatalogueValeur)
                                 <Pencil class="h-3.5 w-3.5" />
                             </button>
                             <button
+                                v-if="!option.is_system"
                                 type="button"
                                 title="Supprimer"
                                 class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
