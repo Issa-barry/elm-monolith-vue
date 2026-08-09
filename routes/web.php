@@ -8,6 +8,7 @@ use App\Http\Controllers\Auth\LivreurRegistrationController;
 use App\Http\Controllers\Auth\RegisterLookupController;
 use App\Http\Controllers\Auth\RegisterOtpController;
 use App\Http\Controllers\CashbackController;
+use App\Http\Controllers\CategorieController;
 use App\Http\Controllers\Client\ClientDashboardController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\CommandeAchatController;
@@ -39,6 +40,8 @@ use App\Http\Controllers\EquipeLivraisonController;
 use App\Http\Controllers\FactureVenteController;
 use App\Http\Controllers\FraisCommissionPartController;
 use App\Http\Controllers\LivreurController;
+use App\Http\Controllers\MediaController;
+use App\Http\Controllers\OptionCatalogueController;
 use App\Http\Controllers\PackingController;
 use App\Http\Controllers\PaieController;
 use App\Http\Controllers\PaiementCommissionVenteController;
@@ -252,6 +255,24 @@ Route::prefix('backoffice')->group(function () {
 
         // ── Module : Produits ─────────────────────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::PRODUITS)->group(function () {
+            // Déclarées avant produits/{produit} par lisibilité (ULID ne collisionne jamais
+            // avec le littéral "categories", mais garde l'ordre explicite).
+            Route::get('produits/categories', [CategorieController::class, 'index'])->name('produits.categories.index');
+            Route::post('produits/categories', [CategorieController::class, 'store'])->name('produits.categories.store');
+            Route::put('produits/categories/{categorie}', [CategorieController::class, 'update'])->name('produits.categories.update');
+            Route::patch('produits/categories/{categorie}/toggle', [CategorieController::class, 'toggle'])->name('produits.categories.toggle');
+            Route::delete('produits/categories/{categorie}', [CategorieController::class, 'destroy'])->name('produits.categories.destroy');
+
+            // Catalogue d'options réutilisables — indépendant des options réellement portées
+            // par chaque produit (cf. ProduitOption), déclarées avant produits/{produit} pour
+            // la même raison de lisibilité que categories ci-dessus.
+            Route::get('produits/options', [OptionCatalogueController::class, 'index'])->name('produits.options.index');
+            Route::post('produits/options', [OptionCatalogueController::class, 'store'])->name('produits.options.store');
+            Route::put('produits/options/{option}', [OptionCatalogueController::class, 'update'])->name('produits.options.update');
+            Route::delete('produits/options/{option}', [OptionCatalogueController::class, 'destroy'])->name('produits.options.destroy');
+            Route::post('produits/options/{option}/valeurs', [OptionCatalogueController::class, 'storeValeur'])->name('produits.options.valeurs.store');
+            Route::delete('produits/options/{option}/valeurs/{valeur}', [OptionCatalogueController::class, 'destroyValeur'])->name('produits.options.valeurs.destroy');
+
             Route::resource('produits', ProduitController::class);
             Route::post('produits/{produit}/ajuster-stock', [ProduitController::class, 'ajusterStock'])
                 ->name('produits.ajuster-stock');
@@ -259,6 +280,24 @@ Route::prefix('backoffice')->group(function () {
                 ->name('produits.historique');
             Route::patch('produits/{produit}/archiver', [ProduitController::class, 'archiver'])
                 ->name('produits.archiver');
+            Route::put('produits/{produit}/variantes/{variante}', [ProduitController::class, 'updateVariante'])
+                ->name('produits.variantes.update');
+            Route::get('produits/{produit}/variantes', [ProduitController::class, 'variantesIndex'])
+                ->name('produits.variantes.index');
+            Route::put('produits/{produit}/variantes', [ProduitController::class, 'variantesBulkUpdate'])
+                ->name('produits.variantes.bulk-update');
+
+            // Galerie photo produit — indépendante du formulaire principal, cf. MediaController.
+            Route::post('produits/{produit}/medias', [MediaController::class, 'store'])
+                ->name('produits.medias.store');
+            Route::patch('produits/{produit}/medias/reordonner', [MediaController::class, 'reordonner'])
+                ->name('produits.medias.reordonner');
+            Route::patch('produits/{produit}/medias/{media}/principale', [MediaController::class, 'definirPrincipale'])
+                ->name('produits.medias.principale');
+            Route::delete('produits/{produit}/medias/{media}', [MediaController::class, 'destroy'])
+                ->name('produits.medias.destroy');
+            Route::post('produits/{produit}/medias/{media}/variantes', [MediaController::class, 'assignerVariantes'])
+                ->name('produits.medias.assigner-variantes');
         });
 
         // ── Module : Sites ────────────────────────────────────────────────────────

@@ -7,18 +7,24 @@ use App\Enums\MotifAjustementStock;
 use App\Enums\ProduitStatut;
 use App\Enums\ProduitType;
 use App\Models\AuditLog;
+use App\Models\Categorie;
 use App\Models\MouvementStock;
+use App\Models\OptionCatalogue;
+use App\Models\Parametre;
 use App\Models\Produit;
-use App\Models\ProduitStock;
+use App\Models\ProduitVariante;
 use App\Models\Site;
+use App\Models\VarianteStock;
 use App\Services\AuditLogService;
 use App\Services\DroitAjustementStockService;
-use App\Services\ImageService;
+use App\Services\MediaService;
+use App\Services\ProduitService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -29,6 +35,8 @@ class ProduitController extends Controller
     public function __construct(
         private readonly AuditLogService $auditService,
         private readonly DroitAjustementStockService $droitService,
+        private readonly ProduitService $produitService,
+        private readonly MediaService $mediaService,
     ) {}
 
     public function index(Request $request): Response
@@ -39,23 +47,28 @@ class ProduitController extends Controller
         $orgId = $user->organization_id;
         $isAdmin = $user->isAdmin();
 
-        $filters = $request->only(['search', 'type', 'statut']);
+        $filters = $request->only(['search', 'type', 'statut', 'categorie_id']);
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
 
-        // Non-admin sans filtre explicite → ses sites (pour l'affichage du stock par site)
         if (empty($siteIds) && ! $isAdmin) {
-            $siteIds = $user->sites()
-                ->pluck('sites.id')
-                ->map(fn ($id) => (string) $id)
-                ->toArray();
+            $siteIds = $user->sites()->pluck('sites.id')->map(fn ($id) => (string) $id)->toArray();
         }
 
-        $query = Produit::where('organization_id', $orgId)->orderBy('nom');
+        $query = Produit::where('organization_id', $orgId)
+            ->with([
+                'categorie:id,nom',
+                'variantes' => fn ($q) => $q->orderBy('position'),
+                // Pas de limit() ici : une contrainte LIMIT sur un eager load hasMany s'applique
+                // à l'ensemble du résultat, pas par produit. getImageUrlAttribute() prend le
+                // premier (is_primary puis position) dans la collection déjà chargée.
+                'medias' => fn ($q) => $q->orderByDesc('is_primary')->orderBy('position'),
+            ])
+            ->orderBy('nom');
 
         if (! empty($filters['search'])) {
             $s = $filters['search'];
             $query->where(fn ($q) => $q->where('nom', 'like', "%{$s}%")
-                ->orWhere('code_interne', 'like', "%{$s}%"));
+                ->orWhereHas('variantes', fn ($vq) => $vq->where('sku', 'like', "%{$s}%")));
         }
         if (! empty($filters['type'])) {
             $query->where('type', $filters['type']);
@@ -63,68 +76,80 @@ class ProduitController extends Controller
         if (! empty($filters['statut'])) {
             $query->where('statut', $filters['statut']);
         }
+        if (! empty($filters['categorie_id'])) {
+            $query->where('categorie_id', $filters['categorie_id']);
+        }
 
         $produits = $query->get();
-        $produitIds = $produits->pluck('id')->all();
+        $varianteIds = $produits->flatMap(fn (Produit $p) => $p->variantes->pluck('id'))->all();
 
-        // Charger tous les stocks par site en une requête
-        $allProduitStocks = ProduitStock::whereIn('produit_id', $produitIds)
+        $allVarianteStocks = VarianteStock::whereIn('produit_variante_id', $varianteIds)
             ->with('site:id,nom,code')
             ->get()
-            ->groupBy('produit_id');
+            ->groupBy('produit_variante_id');
 
-        // Produits utilisés dans des commandes
-        $usedIds = collect()
-            ->merge(DB::table('commande_vente_lignes')->whereIn('produit_id', $produitIds)->pluck('produit_id'))
-            ->merge(DB::table('commande_achat_lignes')->whereIn('produit_id', $produitIds)->whereNotNull('produit_id')->pluck('produit_id'))
-            ->unique()->flip()->all();
+        // commande_vente_lignes/commande_achat_lignes portent variante_id (grain Phase 2) :
+        // on résout produit_id via la map variante → produit déjà construite ci-dessus.
+        $varianteToProduitId = $produits->flatMap(
+            fn (Produit $p) => $p->variantes->pluck('id')->mapWithKeys(fn ($vid) => [$vid => $p->id])
+        );
+        $usedVarianteIds = collect()
+            ->merge(DB::table('commande_vente_lignes')->whereIn('variante_id', $varianteIds)->pluck('variante_id'))
+            ->merge(DB::table('commande_achat_lignes')->whereIn('variante_id', $varianteIds)->whereNotNull('variante_id')->pluck('variante_id'))
+            ->unique();
+        $usedProduitIds = $usedVarianteIds->map(fn ($vid) => $varianteToProduitId->get($vid))->filter()->unique()->flip()->all();
 
-        // Dernier mouvement par produit (filtré aux sites sélectionnés si applicable)
-        $lastMouvements = MouvementStock::whereIn('produit_id', $produitIds)
+        $lastMouvementsParVariante = MouvementStock::whereIn('produit_variante_id', $varianteIds)
             ->when(! empty($siteIds), fn ($q) => $q->whereIn('site_id', $siteIds))
             ->orderByDesc('created_at')
-            ->get(['produit_id', 'type', 'quantite'])
-            ->groupBy('produit_id')
+            ->get(['produit_variante_id', 'type', 'quantite', 'created_at'])
+            ->groupBy('produit_variante_id')
             ->map(fn ($ms) => $ms->first());
 
-        $mapped = $produits->map(function (Produit $p) use ($allProduitStocks, $siteIds, $usedIds, $lastMouvements) {
-            $siteStocks = $allProduitStocks->get($p->id, collect());
+        $mapped = $produits->map(function (Produit $p) use ($allVarianteStocks, $siteIds, $usedProduitIds, $lastMouvementsParVariante) {
+            $varianteIdsProduit = $p->variantes->pluck('id')->all();
+            $siteStocks = collect($varianteIdsProduit)->flatMap(fn ($vid) => $allVarianteStocks->get($vid, collect()));
+            $variantePrincipale = $p->variantes->firstWhere('is_default', true) ?? $p->variantes->first();
             $hasStock = $p->type?->hasStock() ?? true;
 
             if (! empty($siteIds)) {
-                // Stock = somme des sites sélectionnés uniquement
                 $filteredStocks = $siteStocks->filter(fn ($s) => in_array((string) $s->site_id, $siteIds, true));
                 $qteDisplay = (int) $filteredStocks->sum('qte_stock');
-                // Seuil : pertinent uniquement si 1 seul site sélectionné
                 $seuilDisplay = count($siteIds) === 1
-                    ? ($filteredStocks->first()?->seuil_alerte_stock ?? $p->seuil_alerte_stock)
-                    : $p->seuil_alerte_stock;
+                    ? ($filteredStocks->first()?->seuil_alerte_stock ?? $variantePrincipale?->seuil_alerte_stock)
+                    : $variantePrincipale?->seuil_alerte_stock;
             } else {
-                // Toutes les agences : agrégat complet
-                $qteDisplay = $siteStocks->isNotEmpty()
-                    ? (int) $siteStocks->sum('qte_stock')
-                    : (int) ($p->qte_stock ?? 0);
-                $seuilDisplay = $p->seuil_alerte_stock;
+                $qteDisplay = $siteStocks->isNotEmpty() ? (int) $siteStocks->sum('qte_stock') : (int) ($p->qte_stock ?? 0);
+                $seuilDisplay = $variantePrincipale?->seuil_alerte_stock;
             }
 
             $inStock = ! $hasStock || $qteDisplay > 0;
             $isLowStock = $hasStock && $qteDisplay > 0 && $seuilDisplay !== null && $seuilDisplay > 0 && $qteDisplay <= $seuilDisplay;
-            $lastMouvement = $lastMouvements->get($p->id);
+
+            $lastMouvement = collect($varianteIdsProduit)
+                ->map(fn ($vid) => $lastMouvementsParVariante->get($vid))
+                ->filter()
+                ->sortByDesc('created_at')
+                ->first();
+
+            $isUsed = isset($usedProduitIds[$p->id]);
 
             return [
                 'id' => $p->id,
                 'nom' => $p->nom,
-                'code_interne' => $p->code_interne,
-                'code_fournisseur' => $p->code_fournisseur,
+                'categorie_id' => $p->categorie_id,
+                'categorie_nom' => $p->categorie?->nom,
+                'sku' => $variantePrincipale?->sku,
+                'code_fournisseur' => $variantePrincipale?->code_fournisseur,
                 'type' => $p->type?->value,
                 'type_label' => $p->type?->label(),
                 'statut' => $p->statut?->value,
                 'statut_label' => $p->statut?->label(),
                 'image_url' => $p->image_url,
-                'prix_usine' => $p->prix_usine,
-                'prix_vente' => $p->prix_vente,
-                'prix_achat' => $p->prix_achat,
-                'cout' => $p->cout,
+                'prix_usine' => $variantePrincipale?->prix_usine,
+                'prix_vente' => $variantePrincipale?->prix_vente,
+                'prix_achat' => $variantePrincipale?->prix_achat,
+                'cout' => $variantePrincipale?->cout,
                 'description' => $p->description,
                 'is_alerte' => $p->is_alerte,
                 'qte_stock' => $qteDisplay,
@@ -132,7 +157,9 @@ class ProduitController extends Controller
                 'has_stock' => $hasStock,
                 'in_stock' => $inStock,
                 'is_low_stock' => $isLowStock,
-                'is_used' => isset($usedIds[$p->id]),
+                'is_used' => $isUsed,
+                'variantes_count' => $p->variantes->count(),
+                'has_variantes' => $p->variantes->count() > 1,
                 'last_mouvement_type' => $lastMouvement?->type,
                 'last_mouvement_quantite' => $lastMouvement?->quantite,
                 'stocks_par_site' => $siteStocks->map(fn ($s) => [
@@ -147,9 +174,8 @@ class ProduitController extends Controller
             ];
         });
 
-        $allSites = Site::where('organization_id', $orgId)
-            ->orderBy('nom')
-            ->get(['id', 'nom', 'code']);
+        $allSites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom', 'code']);
+        $categories = Categorie::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom', 'parent_id']);
 
         $canAjuster = $this->droitService->canAjuster($user, $orgId);
         $sitesAutorisesRaw = $canAjuster
@@ -159,6 +185,7 @@ class ProduitController extends Controller
         return Inertia::render('Produits/Index', [
             'produits' => $mapped,
             'sites' => $allSites,
+            'categories' => $categories,
             'can_ajuster_stock' => $canAjuster,
             'can_augmenter_stock' => $this->droitService->canAugmenter($user, $orgId),
             'can_diminuer_stock' => $this->droitService->canDiminuer($user, $orgId),
@@ -173,9 +200,17 @@ class ProduitController extends Controller
     {
         $this->authorize('create', Produit::class);
 
+        $orgId = auth()->user()->organization_id;
+
         return Inertia::render('Produits/Create', [
             'types' => ProduitType::options(),
             'statuts' => ProduitStatut::options(),
+            'categories' => Categorie::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom', 'parent_id']),
+            'optionsCatalogue' => OptionCatalogue::where('organization_id', $orgId)
+                ->orderBy('position')->orderBy('nom')
+                ->with('valeurs:id,option_catalogue_id,valeur,hex')
+                ->get(['id', 'nom']),
+            'limites' => $this->limitesCatalogue($orgId),
         ]);
     }
 
@@ -183,54 +218,43 @@ class ProduitController extends Controller
     {
         $this->authorize('create', Produit::class);
 
-        $data = $request->validate([
-            'nom' => 'required|string|max:255',
-            'code_fournisseur' => 'nullable|string|max:100',
-            'type' => 'required|in:'.implode(',', ProduitType::values()),
-            'statut' => 'required|in:'.implode(',', ProduitStatut::values()),
-            'prix_usine' => 'nullable|integer|min:0',
-            'prix_vente' => 'nullable|integer|min:0',
-            'prix_achat' => 'nullable|integer|min:0',
-            'cout' => 'nullable|integer|min:0',
-            'seuil_alerte_stock' => 'nullable|integer|min:0',
-            'description' => 'nullable|string',
-            'is_alerte' => 'boolean',
-            'image' => 'nullable|image|max:2048',
-        ]);
-
-        if ($request->hasFile('image')) {
-            $path = (new ImageService)->storeAsWebp($request->file('image'), 'produits');
-            $data['image_url'] = '/storage/'.$path;
-        }
-        unset($data['image']);
+        $data = $this->validerFormulaire($request);
 
         $orgId = auth()->user()->organization_id;
         abort_if(! $orgId, 403, 'Votre compte n\'est associé à aucune organisation.');
 
-        $produit = Produit::create([...$data, 'organization_id' => $orgId]);
+        // Transaction englobante : si l'upload d'images échoue (limite dépassée), le produit
+        // qui vient d'être créé ne doit pas rester orphelin en base.
+        $produit = DB::transaction(function () use ($data, $orgId, $request) {
+            $produit = $this->produitService->creer([...$data, 'organization_id' => $orgId]);
+
+            if ($request->hasFile('images')) {
+                $this->mediaService->ajouter($produit, $request->file('images'));
+            }
+
+            return $produit;
+        });
 
         $this->auditService->record(
             $produit,
             AuditEvent::CREATED,
             auth()->user(),
             null,
-            $this->produitSnapshot($produit),
+            $this->produitSnapshot($produit->fresh(['variantes'])),
         );
 
-        return redirect()->route('produits.index')
-            ->with('success', 'Produit créé avec succès.');
+        return redirect()->route('produits.index')->with('success', 'Produit créé avec succès.');
     }
 
     public function show(Produit $produit): Response
     {
         $this->authorize('view', $produit);
 
+        $produit->load(['categorie', 'variantes.valeurs.option', 'variantes.media', 'medias']);
         $orgId = $produit->organization_id;
         $user = auth()->user();
 
-        $allSites = Site::where('organization_id', $orgId)
-            ->orderBy('nom')
-            ->get(['id', 'nom', 'code']);
+        $allSites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom', 'code']);
 
         $canAjuster = $this->droitService->canAjuster($user, $orgId);
         $sitesAutorisesRaw = $canAjuster
@@ -240,26 +264,44 @@ class ProduitController extends Controller
         $canAugmenter = $this->droitService->canAugmenter($user, $orgId);
         $canDiminuer = $this->droitService->canDiminuer($user, $orgId);
 
-        $stocksParSite = ProduitStock::where('produit_id', $produit->id)
+        $varianteIds = $produit->variantes->pluck('id')->all();
+
+        $varianteStocksRaw = VarianteStock::whereIn('produit_variante_id', $varianteIds)
             ->with('site:id,nom,code')
-            ->get()
-            ->map(fn ($s) => [
+            ->get();
+
+        // Grain variante+site — consommé par AjusterStockModal.vue pour afficher/pré-remplir
+        // le stock réel de la variante sélectionnée (stocksParSite ci-dessous est un agrégat
+        // toutes variantes confondues, insuffisant dès qu'on ajuste une variante précise).
+        $varianteStocksParSiteEtVariante = $varianteStocksRaw
+            ->map(fn (VarianteStock $s) => [
+                'variante_id' => $s->produit_variante_id,
                 'site_id' => $s->site_id,
-                'site_code' => $s->site?->code,
-                'site_nom' => $s->site?->nom,
                 'qte_stock' => $s->qte_stock,
-                'seuil_alerte_stock' => $s->seuil_alerte_stock,
-                'is_alerte' => $s->is_alerte,
-                'updated_at' => $s->updated_at?->toISOString(),
             ])
             ->values();
 
-        $totalStock = $stocksParSite->isNotEmpty()
-            ? $stocksParSite->sum('qte_stock')
-            : (int) ($produit->qte_stock ?? 0);
+        $stocksParSite = $varianteStocksRaw
+            ->groupBy('site_id')
+            ->map(function (Collection $parSite, $siteId) {
+                $premier = $parSite->first();
 
-        $mouvements = MouvementStock::where('produit_id', $produit->id)
-            ->with(['createur:id,prenom,nom', 'site:id,nom,code'])
+                return [
+                    'site_id' => $siteId,
+                    'site_code' => $premier->site?->code,
+                    'site_nom' => $premier->site?->nom,
+                    'qte_stock' => $parSite->sum('qte_stock'),
+                    'seuil_alerte_stock' => $parSite->first()?->seuil_alerte_stock,
+                    'is_alerte' => $parSite->contains('is_alerte', true),
+                    'updated_at' => $parSite->max('updated_at'),
+                ];
+            })
+            ->values();
+
+        $totalStock = $stocksParSite->isNotEmpty() ? $stocksParSite->sum('qte_stock') : (int) ($produit->qte_stock ?? 0);
+
+        $mouvements = MouvementStock::whereIn('produit_variante_id', $varianteIds)
+            ->with(['createur:id,prenom,nom', 'site:id,nom,code', 'variante:id,combo_hash'])
             ->orderByDesc('created_at')
             ->take(100)
             ->get()
@@ -280,7 +322,6 @@ class ProduitController extends Controller
             ])
             ->toArray();
 
-        // Stock initial dérivé de l'audit de création
         $creation = AuditLog::where('auditable_type', Produit::class)
             ->where('auditable_id', $produit->id)
             ->where('event_code', 'CREATED')
@@ -302,7 +343,8 @@ class ProduitController extends Controller
             ];
         }
 
-        $seuilDisplay = $produit->seuil_alerte_stock;
+        $variantePrincipale = $produit->variantes->firstWhere('is_default', true) ?? $produit->variantes->first();
+        $seuilDisplay = $variantePrincipale?->seuil_alerte_stock;
         $hasStock = $produit->type?->hasStock() ?? true;
         $isLowStock = $hasStock && $totalStock > 0 && $seuilDisplay !== null && $seuilDisplay > 0 && $totalStock <= $seuilDisplay;
 
@@ -310,17 +352,19 @@ class ProduitController extends Controller
             'produit' => [
                 'id' => $produit->id,
                 'nom' => $produit->nom,
-                'code_interne' => $produit->code_interne,
-                'code_fournisseur' => $produit->code_fournisseur,
+                'categorie' => $produit->categorie ? ['id' => $produit->categorie->id, 'nom' => $produit->categorie->nom] : null,
+                'sku' => $variantePrincipale?->sku,
+                'code_fournisseur' => $variantePrincipale?->code_fournisseur,
+                'code_barres' => $variantePrincipale?->code_barres,
                 'image_url' => $produit->image_url,
                 'type' => $produit->type?->value,
                 'type_label' => $produit->type?->label(),
                 'statut' => $produit->statut?->value,
                 'statut_label' => $produit->statut?->label(),
-                'prix_usine' => $produit->prix_usine,
-                'prix_vente' => $produit->prix_vente,
-                'prix_achat' => $produit->prix_achat,
-                'cout' => $produit->cout,
+                'prix_usine' => $variantePrincipale?->prix_usine,
+                'prix_vente' => $variantePrincipale?->prix_vente,
+                'prix_achat' => $variantePrincipale?->prix_achat,
+                'cout' => $variantePrincipale?->cout,
                 'qte_stock' => $totalStock,
                 'seuil_alerte_stock' => $seuilDisplay,
                 'description' => $produit->description,
@@ -331,6 +375,25 @@ class ProduitController extends Controller
                 'created_at' => $produit->created_at?->toISOString(),
                 'updated_at' => $produit->updated_at?->toISOString(),
                 'stocks_par_site' => $stocksParSite,
+                'medias' => $produit->medias->map(fn ($m) => [
+                    'id' => $m->id,
+                    'url' => $m->url,
+                    'thumb_url' => $m->thumb_url,
+                    'is_primary' => $m->is_primary,
+                    'position' => $m->position,
+                ]),
+                'variantes' => $produit->variantes->map(fn (ProduitVariante $v) => [
+                    'id' => $v->id,
+                    'libelle' => $v->libelle,
+                    'sku' => $v->sku,
+                    'code_barres' => $v->code_barres,
+                    'prix_vente' => $v->prix_vente,
+                    'is_default' => $v->is_default,
+                    'is_active' => $v->is_active,
+                    'options' => $this->varianteOptions($v),
+                    'media_id' => $v->media_id,
+                    'image_url' => $v->effective_image_url,
+                ]),
             ],
             'mouvements' => collect($mouvements),
             'historiques' => $this->loadModifications($produit),
@@ -338,6 +401,8 @@ class ProduitController extends Controller
             'can_augmenter_stock' => $canAugmenter,
             'can_diminuer_stock' => $canDiminuer,
             'sites_autorises' => $sitesAutorisesRaw->values(),
+            'variante_stocks' => $varianteStocksParSiteEtVariante,
+            'limites' => $this->limitesCatalogue($orgId),
         ]);
     }
 
@@ -345,7 +410,9 @@ class ProduitController extends Controller
     {
         $this->authorize('view', $produit);
 
-        $ajustements = MouvementStock::where('produit_id', $produit->id)
+        $varianteIds = $produit->variantes()->pluck('id');
+
+        $ajustements = MouvementStock::whereIn('produit_variante_id', $varianteIds)
             ->with(['createur:id,prenom,nom', 'site:id,nom,code'])
             ->orderByDesc('created_at')
             ->take(200)
@@ -375,25 +442,57 @@ class ProduitController extends Controller
     {
         $this->authorize('update', $produit);
 
+        $produit->load(['variantes.valeurs.option', 'medias']);
+        $variantePrincipale = $produit->variantes->firstWhere('is_default', true) ?? $produit->variantes->first();
+        $orgId = $produit->organization_id;
+
         return Inertia::render('Produits/Edit', [
             'produit' => [
                 'id' => $produit->id,
                 'nom' => $produit->nom,
-                'code_interne' => $produit->code_interne,
-                'code_fournisseur' => $produit->code_fournisseur,
+                'categorie_id' => $produit->categorie_id,
+                'sku' => $variantePrincipale?->sku,
+                'code_barres' => $variantePrincipale?->code_barres,
+                'code_fournisseur' => $variantePrincipale?->code_fournisseur,
                 'image_url' => $produit->image_url,
                 'type' => $produit->type?->value,
                 'statut' => $produit->statut?->value,
-                'prix_usine' => $produit->prix_usine,
-                'prix_vente' => $produit->prix_vente,
-                'prix_achat' => $produit->prix_achat,
-                'cout' => $produit->cout,
-                'seuil_alerte_stock' => $produit->seuil_alerte_stock,
+                'prix_usine' => $variantePrincipale?->prix_usine,
+                'prix_vente' => $variantePrincipale?->prix_vente,
+                'prix_achat' => $variantePrincipale?->prix_achat,
+                'cout' => $variantePrincipale?->cout,
+                'seuil_alerte_stock' => $variantePrincipale?->seuil_alerte_stock,
                 'description' => $produit->description,
                 'is_alerte' => $produit->is_alerte,
+                'has_variantes' => $produit->variantes->count() > 1,
+                'variantes_count' => $produit->variantes->count(),
+                'variantes' => $produit->variantes->map(fn (ProduitVariante $v) => [
+                    'id' => $v->id,
+                    'libelle' => $v->libelle,
+                    'sku' => $v->sku,
+                    'code_barres' => $v->code_barres,
+                    'code_fournisseur' => $v->code_fournisseur,
+                    'prix_usine' => $v->prix_usine,
+                    'prix_vente' => $v->prix_vente,
+                    'prix_achat' => $v->prix_achat,
+                    'cout' => $v->cout,
+                    'seuil_alerte_stock' => $v->seuil_alerte_stock,
+                    'is_default' => $v->is_default,
+                    'is_active' => $v->is_active,
+                    'options' => $this->varianteOptions($v),
+                ]),
+                'medias' => $produit->medias->map(fn ($m) => [
+                    'id' => $m->id,
+                    'url' => $m->url,
+                    'thumb_url' => $m->thumb_url,
+                    'is_primary' => $m->is_primary,
+                    'position' => $m->position,
+                ]),
             ],
             'types' => ProduitType::options(),
             'statuts' => ProduitStatut::options(),
+            'categories' => Categorie::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom', 'parent_id']),
+            'limites' => $this->limitesCatalogue($orgId),
         ]);
     }
 
@@ -401,41 +500,28 @@ class ProduitController extends Controller
     {
         $this->authorize('update', $produit);
 
-        $data = $request->validate([
-            'nom' => 'required|string|max:255',
-            'code_fournisseur' => 'nullable|string|max:100',
-            'type' => 'required|in:'.implode(',', ProduitType::values()),
-            'statut' => 'required|in:'.implode(',', ProduitStatut::values()),
-            'prix_usine' => 'nullable|integer|min:0',
-            'prix_vente' => 'nullable|integer|min:0',
-            'prix_achat' => 'nullable|integer|min:0',
-            'cout' => 'nullable|integer|min:0',
-            'seuil_alerte_stock' => 'nullable|integer|min:0',
-            'description' => 'nullable|string',
-            'is_alerte' => 'boolean',
-            'image' => 'nullable|image|max:2048',
-        ]);
+        $data = $this->validerFormulaire($request, $produit);
 
-        if ($request->hasFile('image')) {
-            $imageService = new ImageService;
-            $imageService->delete(str_replace('/storage/', '', $produit->image_url ?? ''));
-            $path = $imageService->storeAsWebp($request->file('image'), 'produits');
-            $data['image_url'] = '/storage/'.$path;
-        }
-        unset($data['image']);
+        $oldSnapshot = $this->produitSnapshot($produit->fresh(['variantes']));
 
-        $oldSnapshot = $this->produitSnapshot($produit);
-        $produit->update($data);
-        $produit->refresh();
-        $newSnapshot = $this->produitSnapshot($produit);
+        $produit = DB::transaction(function () use ($produit, $data, $request) {
+            $produit = $this->produitService->mettreAJourSimple($produit, $data);
+
+            if ($request->hasFile('images')) {
+                $this->mediaService->ajouter($produit, $request->file('images'));
+            }
+
+            return $produit;
+        });
+
+        $newSnapshot = $this->produitSnapshot($produit->fresh(['variantes']));
 
         [$oldDiff, $newDiff] = $this->produitDiff($oldSnapshot, $newSnapshot);
         if ($oldDiff !== null || $newDiff !== null) {
             $this->auditService->record($produit, AuditEvent::UPDATED, auth()->user(), $oldDiff, $newDiff);
         }
 
-        return redirect()->route('produits.index')
-            ->with('success', 'Produit mis à jour avec succès.');
+        return redirect()->route('produits.index')->with('success', 'Produit mis à jour avec succès.');
     }
 
     public function archiver(Produit $produit): RedirectResponse
@@ -459,10 +545,10 @@ class ProduitController extends Controller
     {
         $this->authorize('delete', $produit);
 
-        $this->auditService->record($produit, AuditEvent::DELETED, auth()->user(), $this->produitSnapshot($produit), null);
+        $this->auditService->record($produit, AuditEvent::DELETED, auth()->user(), $this->produitSnapshot($produit->fresh(['variantes'])), null);
 
-        if ($produit->image_url) {
-            Storage::disk('public')->delete(str_replace('/storage/', '', $produit->image_url));
+        foreach ($produit->medias as $media) {
+            $this->mediaService->supprimer($media);
         }
 
         $produit->delete();
@@ -477,6 +563,7 @@ class ProduitController extends Controller
 
         $data = $request->validate([
             'site_id' => ['required', 'exists:sites,id'],
+            'variante_id' => ['nullable', 'exists:produit_variantes,id'],
             'augmenter' => ['nullable', 'integer', 'min:1'],
             'diminuer' => ['nullable', 'integer', 'min:1'],
             'motif_type' => ['required', Rule::in(MotifAjustementStock::validValues())],
@@ -494,13 +581,22 @@ class ProduitController extends Controller
             'motif_detail.max' => 'Le détail du motif ne peut pas dépasser 500 caractères.',
         ]);
 
-        // Vérifier que le site appartient à l'organisation du produit
-        $site = Site::where('id', $data['site_id'])
-            ->where('organization_id', $produit->organization_id)
-            ->firstOrFail();
+        $site = Site::where('id', $data['site_id'])->where('organization_id', $produit->organization_id)->firstOrFail();
+
+        // Produit à vraies déclinaisons : la variante est obligatoire, jamais un défaut implicite
+        // silencieux — sinon un appel sans variante_id ajusterait la variante par défaut cachée
+        // au lieu de la déclinaison réellement visée par l'utilisateur.
+        if (empty($data['variante_id']) && $produit->variantes()->count() > 1) {
+            throw ValidationException::withMessages([
+                'variante_id' => 'Ce produit a plusieurs variantes : précisez laquelle ajuster.',
+            ]);
+        }
+
+        $variante = $data['variante_id'] ?? null
+            ? ProduitVariante::where('id', $data['variante_id'])->where('produit_id', $produit->id)->firstOrFail()
+            : ($produit->variantePrincipale()->first() ?? abort(422, 'Ce produit n\'a aucune variante.'));
 
         $user = auth()->user();
-
         $hasAugmenter = ! empty($data['augmenter']);
         $hasDiminuer = ! empty($data['diminuer']);
 
@@ -521,18 +617,16 @@ class ProduitController extends Controller
             throw ValidationException::withMessages(['motif_type' => 'Ce motif n\'est pas valide pour ce type d\'ajustement.']);
         }
 
-        // Récupérer ou initialiser le stock pour ce site
-        $existingCount = ProduitStock::where('produit_id', $produit->id)->count();
-        $produitStock = ProduitStock::firstOrCreate(
-            ['produit_id' => $produit->id, 'site_id' => $site->id],
+        $existingCount = VarianteStock::where('produit_variante_id', $variante->id)->count();
+        $varianteStock = VarianteStock::firstOrCreate(
+            ['produit_variante_id' => $variante->id, 'site_id' => $site->id],
             [
                 'organization_id' => $produit->organization_id,
-                // Premier enregistrement : migrer le stock global existant
                 'qte_stock' => $existingCount === 0 ? (int) ($produit->qte_stock ?? 0) : 0,
             ]
         );
 
-        $stockAvant = $produitStock->qte_stock;
+        $stockAvant = $varianteStock->qte_stock;
         $notes = MotifAjustementStock::from($data['motif_type'])->toNotesString($data['motif_detail'] ?? '');
 
         if ($hasDiminuer && (int) $data['diminuer'] > $stockAvant) {
@@ -545,17 +639,14 @@ class ProduitController extends Controller
         $type = $hasAugmenter ? 'entree' : 'sortie';
         $stockApres = $hasAugmenter ? $stockAvant + $quantite : $stockAvant - $quantite;
 
-        DB::transaction(function () use ($produit, $produitStock, $site, $type, $quantite, $stockAvant, $stockApres, $notes, $user) {
-            $produitStock->update(['qte_stock' => $stockApres]);
-
-            // Mettre à jour le stock agrégé du produit
-            $totalStock = ProduitStock::where('produit_id', $produit->id)->sum('qte_stock');
-            $produit->update(['qte_stock' => $totalStock]);
+        DB::transaction(function () use ($produit, $varianteStock, $variante, $site, $type, $quantite, $stockAvant, $stockApres, $notes, $user) {
+            $varianteStock->update(['qte_stock' => $stockApres]);
+            $produit->resynchroniserQteStock();
 
             MouvementStock::create([
                 'organization_id' => $produit->organization_id,
                 'site_id' => $site->id,
-                'produit_id' => $produit->id,
+                'produit_variante_id' => $variante->id,
                 'type' => $type,
                 'quantite' => $quantite,
                 'stock_avant' => $stockAvant,
@@ -581,7 +672,188 @@ class ProduitController extends Controller
         return back()->with('success', 'Stock mis à jour avec succès.');
     }
 
+    /**
+     * Édite une variante individuelle (prix/codes/statut) — nécessaire dès qu'un produit a
+     * plusieurs déclinaisons, puisque ProduitService::mettreAJourSimple() (formulaire principal)
+     * ne touche que la variante par défaut. Le SKU n'est volontairement pas éditable ici (généré
+     * automatiquement, cf. ProduitVariante::booted()).
+     */
+    public function updateVariante(Request $request, Produit $produit, ProduitVariante $variante): RedirectResponse
+    {
+        $this->authorize('update', $produit);
+        abort_unless($variante->produit_id === $produit->id, 404);
+
+        $data = $request->validate([
+            'code_barres' => 'nullable|string|max:100',
+            'code_fournisseur' => 'nullable|string|max:100',
+            'prix_usine' => 'nullable|integer|min:0',
+            'prix_vente' => 'nullable|integer|min:0',
+            'prix_achat' => 'nullable|integer|min:0',
+            'cout' => 'nullable|integer|min:0',
+            'seuil_alerte_stock' => 'nullable|integer|min:0',
+            'is_active' => 'boolean',
+            'media_id' => ['nullable', Rule::exists('produit_medias', 'id')->where('produit_id', $produit->id)],
+        ]);
+
+        // Valide les prix EFFECTIFS (valeurs déjà sur la variante, écrasées par celles envoyées)
+        // — même logique que ProduitService::mettreAJourSimple() pour ne pas rejeter une mise à
+        // jour partielle qui ne touche pas au prix.
+        $champsVariante = ['prix_usine', 'prix_vente', 'prix_achat'];
+        $donneesEffectives = array_merge(
+            Arr::only($variante->getAttributes(), $champsVariante),
+            Arr::only($data, $champsVariante),
+        );
+        $this->produitService->validerPrixSelonType($produit->type, $donneesEffectives);
+
+        $variante->update($data);
+
+        return back()->with('success', "Variante « {$variante->libelle} » mise à jour.");
+    }
+
+    /**
+     * Éditeur groupé façon Shopify — vue dense de toutes les variantes d'un produit, avec
+     * sélection multiple et modification en masse (cf. variantesBulkUpdate()). Le stock n'y est
+     * volontairement pas éditable : il reste soumis au flux motif-tracké "Ajuster le stock"
+     * (ajusterStock()) pour préserver la traçabilité des mouvements — ce n'est pas un oubli.
+     */
+    public function variantesIndex(Produit $produit): Response
+    {
+        $this->authorize('update', $produit);
+
+        $produit->load('variantes.valeurs.option');
+
+        return Inertia::render('Produits/Variantes/Index', [
+            'produit' => [
+                'id' => $produit->id,
+                'nom' => $produit->nom,
+                'type' => $produit->type?->value,
+            ],
+            'variantes' => $produit->variantes->map(fn (ProduitVariante $v) => [
+                'id' => $v->id,
+                'libelle' => $v->libelle,
+                'sku' => $v->sku,
+                'code_barres' => $v->code_barres,
+                'code_fournisseur' => $v->code_fournisseur,
+                'prix_usine' => $v->prix_usine,
+                'prix_vente' => $v->prix_vente,
+                'prix_achat' => $v->prix_achat,
+                'cout' => $v->cout,
+                'seuil_alerte_stock' => $v->seuil_alerte_stock,
+                'is_default' => $v->is_default,
+                'is_active' => $v->is_active,
+                'options' => $this->varianteOptions($v),
+            ]),
+        ]);
+    }
+
+    /**
+     * Modification en masse (prix/codes/statut) — jamais le SKU, généré automatiquement et
+     * volontairement non éditable (même règle que updateVariante()). Chaque ligne du payload ne
+     * doit porter que les variantes réellement modifiées par l'utilisateur (le frontend calcule
+     * le diff), avec l'ensemble de leurs champs éditables — un update() partiel par ligne.
+     */
+    public function variantesBulkUpdate(Request $request, Produit $produit): RedirectResponse
+    {
+        $this->authorize('update', $produit);
+
+        $data = $request->validate([
+            'variantes' => ['required', 'array', 'min:1'],
+            'variantes.*.id' => ['required', 'string'],
+            'variantes.*.code_barres' => ['nullable', 'string', 'max:100'],
+            'variantes.*.code_fournisseur' => ['nullable', 'string', 'max:100'],
+            'variantes.*.prix_usine' => ['nullable', 'integer', 'min:0'],
+            'variantes.*.prix_vente' => ['nullable', 'integer', 'min:0'],
+            'variantes.*.prix_achat' => ['nullable', 'integer', 'min:0'],
+            'variantes.*.cout' => ['nullable', 'integer', 'min:0'],
+            'variantes.*.seuil_alerte_stock' => ['nullable', 'integer', 'min:0'],
+            'variantes.*.is_active' => ['boolean'],
+        ]);
+
+        $champsVariante = ['prix_usine', 'prix_vente', 'prix_achat'];
+
+        DB::transaction(function () use ($produit, $data, $champsVariante) {
+            foreach ($data['variantes'] as $ligne) {
+                $variante = ProduitVariante::where('id', $ligne['id'])
+                    ->where('produit_id', $produit->id)
+                    ->firstOrFail();
+
+                $donneesEffectives = array_merge(
+                    Arr::only($variante->getAttributes(), $champsVariante),
+                    Arr::only($ligne, $champsVariante),
+                );
+                $this->produitService->validerPrixSelonType($produit->type, $donneesEffectives);
+
+                $variante->update(Arr::except($ligne, ['id']));
+            }
+        });
+
+        return back()->with('success', count($data['variantes']).' variante(s) mise(s) à jour.');
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private function limitesCatalogue(string $orgId): array
+    {
+        return [
+            'max_photos_produit' => Parametre::getMaxPhotosProduit($orgId),
+            'max_options_produit' => Parametre::getMaxOptionsProduit($orgId),
+            'max_valeurs_option' => Parametre::getMaxValeursOption($orgId),
+            'max_variantes_produit' => Parametre::getMaxVariantesProduit($orgId),
+        ];
+    }
+
+    /**
+     * Décompose une variante en paires {option, valeur} triées par position d'option puis
+     * de valeur — permet au frontend de regrouper les variantes par n'importe laquelle de
+     * leurs options (pattern "Regrouper par" façon Shopify) sans requête supplémentaire.
+     * Nécessite variantes.valeurs.option pré-chargé par l'appelant (évite le N+1).
+     *
+     * @return array<int, array{option: string, valeur: string}>
+     */
+    private function varianteOptions(ProduitVariante $variante): array
+    {
+        $valeurs = $variante->valeurs->all();
+        usort($valeurs, fn ($a, $b) => [$a->option->position, $a->position] <=> [$b->option->position, $b->position]);
+
+        return array_map(fn ($v) => ['option' => $v->option->nom, 'valeur' => $v->valeur], $valeurs);
+    }
+
+    /**
+     * Validation partagée create/update. Le prix requis selon le type est vérifié par
+     * ProduitService::validerPrixSelonType() (appelé par le service, pas ici) pour rester
+     * l'unique point de vérité partagé avec l'API.
+     */
+    private function validerFormulaire(Request $request, ?Produit $produit = null): array
+    {
+        $orgId = auth()->user()->organization_id;
+
+        return $request->validate([
+            'nom' => 'required|string|max:255',
+            'categorie_id' => ['nullable', Rule::exists('categories', 'id')->where('organization_id', $orgId)],
+            'code_barres' => 'nullable|string|max:100',
+            'code_fournisseur' => 'nullable|string|max:100',
+            'type' => 'required|in:'.implode(',', ProduitType::values()),
+            'statut' => 'required|in:'.implode(',', ProduitStatut::values()),
+            'prix_usine' => 'nullable|integer|min:0',
+            'prix_vente' => 'nullable|integer|min:0',
+            'prix_achat' => 'nullable|integer|min:0',
+            'cout' => 'nullable|integer|min:0',
+            'seuil_alerte_stock' => 'nullable|integer|min:0',
+            'description' => 'nullable|string',
+            'is_alerte' => 'boolean',
+            'images' => 'nullable|array',
+            'images.*' => 'image|max:2048',
+            // Optionnel : déclinaisons (couleur/taille...). Absent/vide = produit simple
+            // (variante par défaut invisible). Consommé par ProduitService::creer().
+            'options' => 'nullable|array',
+            'options.*.nom' => 'required_with:options|string|max:100',
+            'options.*.valeurs' => 'required_with:options|array|min:1',
+            'options.*.valeurs.*' => 'required|string|max:100',
+            // Rattachement optionnel au catalogue d'options réutilisables — purement informatif
+            // pour l'enrichissement du catalogue, cf. VarianteService::enrichirCatalogue().
+            'options.*.option_catalogue_id' => ['nullable', Rule::exists('option_catalogues', 'id')->where('organization_id', $orgId)],
+        ]);
+    }
 
     private function loadModifications(Produit $produit): array
     {
@@ -605,19 +877,21 @@ class ProduitController extends Controller
 
     private function produitSnapshot(Produit $produit): array
     {
+        $variante = $produit->variantes->firstWhere('is_default', true) ?? $produit->variantes->first();
+
         return array_filter([
             'nom' => $produit->nom,
             'type' => $produit->type?->label(),
             'statut' => $produit->statut?->label(),
-            'prix_vente' => $produit->prix_vente,
-            'prix_achat' => $produit->prix_achat,
-            'prix_usine' => $produit->prix_usine,
-            'cout' => $produit->cout,
+            'prix_vente' => $variante?->prix_vente,
+            'prix_achat' => $variante?->prix_achat,
+            'prix_usine' => $variante?->prix_usine,
+            'cout' => $variante?->cout,
             'qte_stock' => $produit->qte_stock,
-            'seuil_alerte_stock' => $produit->seuil_alerte_stock,
+            'seuil_alerte_stock' => $variante?->seuil_alerte_stock,
             'is_alerte' => $produit->is_alerte,
             'description' => $produit->description,
-            'code_fournisseur' => $produit->code_fournisseur,
+            'code_fournisseur' => $variante?->code_fournisseur,
         ], fn ($v) => $v !== null && $v !== '');
     }
 

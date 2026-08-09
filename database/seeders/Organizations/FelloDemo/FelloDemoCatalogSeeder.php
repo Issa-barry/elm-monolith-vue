@@ -2,21 +2,25 @@
 
 namespace Database\Seeders\Organizations\FelloDemo;
 
+use App\Enums\CategorieStatut;
 use App\Enums\ProduitStatut;
 use App\Enums\ProduitType;
+use App\Models\Categorie;
+use App\Models\OptionCatalogue;
 use App\Models\Organization;
 use App\Models\Produit;
+use App\Services\ProduitService;
 use Illuminate\Database\Seeder;
 
 /**
  * Catalogue de démonstration (vêtements/accessoires), type ACHAT_VENTE
  * (revente, pas de fabrication — nécessite prix_achat + prix_vente).
  *
- * Le projet n'a PAS de modèle/colonne "catégorie" pour Produit (vérifié :
- * aucune table categories, aucune colonne categorie sur produits — seule
- * Vehicule a une colonne categorie, sans rapport). La catégorie demandée
- * dans le scénario est donc indiquée dans `description`, faute de mieux,
- * plutôt que d'inventer un champ qui n'existe pas dans le schéma réel.
+ * Depuis la refonte variant-first : les catégories sont de vraies lignes `categories`
+ * (avant refonte, elles étaient indiquées dans `description`, faute de modèle Categorie —
+ * cf. historique git). Un produit ("T-shirt Fello édition démo") illustre en plus le système
+ * d'options/variantes (Couleur × Taille) — c'est le persona qui a justifié le chantier
+ * variantes : ce n'est pas qu'un besoin spéculatif du tenant de démo.
  */
 class FelloDemoCatalogSeeder extends Seeder
 {
@@ -59,26 +63,80 @@ class FelloDemoCatalogSeeder extends Seeder
     public function run(): void
     {
         $org = Organization::where('slug', 'fello-demo')->firstOrFail();
+        $produitService = app(ProduitService::class);
         $total = 0;
 
-        foreach (self::PRODUITS as $categorie => $items) {
-            foreach ($items as $item) {
-                Produit::updateOrCreate(
-                    ['organization_id' => $org->id, 'nom' => $item['nom']],
-                    [
-                        'type' => ProduitType::ACHAT_VENTE,
-                        'statut' => ProduitStatut::ACTIF,
-                        'prix_achat' => $item['achat'],
-                        'prix_vente' => $item['vente'],
-                        'description' => "Catégorie : {$categorie}",
-                        'seuil_alerte_stock' => 10,
-                    ]
+        // Catégories parentes créées par CategorieDefaultSeeder (cf. FelloDemoOrganizationSeeder)
+        // — les sous-catégories vêtements se rattachent à "Vêtements" ; "Chaussures" a déjà sa
+        // propre catégorie racine, pas besoin d'un niveau intermédiaire supplémentaire ici.
+        $vetements = Categorie::where('organization_id', $org->id)->whereNull('parent_id')->where('nom', 'Vêtements')->first();
+        $chaussuresParent = Categorie::where('organization_id', $org->id)->whereNull('parent_id')->where('nom', 'Chaussures')->first();
+
+        foreach (self::PRODUITS as $nomCategorie => $items) {
+            if ($nomCategorie === 'Chaussures' && $chaussuresParent) {
+                $categorie = $chaussuresParent;
+            } else {
+                $categorie = Categorie::firstOrCreate(
+                    ['organization_id' => $org->id, 'nom' => $nomCategorie, 'parent_id' => $vetements?->id],
+                    ['statut' => CategorieStatut::ACTIF]
                 );
+            }
+
+            foreach ($items as $item) {
+                if (Produit::where('organization_id', $org->id)->where('nom', $item['nom'])->exists()) {
+                    continue;
+                }
+
+                $produitService->creer([
+                    'organization_id' => $org->id,
+                    'categorie_id' => $categorie->id,
+                    'nom' => $item['nom'],
+                    'type' => ProduitType::ACHAT_VENTE->value,
+                    'statut' => ProduitStatut::ACTIF->value,
+                    'prix_achat' => $item['achat'],
+                    'prix_vente' => $item['vente'],
+                    'seuil_alerte_stock' => 10,
+                ]);
                 $total++;
             }
         }
 
-        $nbCategories = count(self::PRODUITS);
-        $this->command->info("✓ {$total} produits créés ({$nbCategories} catégories, indiquées dans la description — pas de modèle Categorie dans le projet).");
+        // Démonstration du système d'options/variantes — persona réel qui a justifié le
+        // chantier (catalogue habillement à déclinaisons couleur/taille).
+        $categorieTshirts = Categorie::where('organization_id', $org->id)->where('nom', 'T-shirts')->first();
+        $nomDemo = 'T-shirt Fello édition démo';
+        // Produit::setNomAttribute() normalise la casse à l'enregistrement (majuscule en tête,
+        // reste en minuscules) — comparer contre le nom brut ferait toujours échouer ce contrôle
+        // d'idempotence pour "Fello" (créerait un doublon à chaque exécution du seeder).
+        $nomDemoNormalise = (new Produit(['nom' => $nomDemo]))->nom;
+
+        if ($categorieTshirts && ! Produit::where('organization_id', $org->id)->where('nom', $nomDemoNormalise)->exists()) {
+            $produit = $produitService->creer([
+                'organization_id' => $org->id,
+                'categorie_id' => $categorieTshirts->id,
+                'nom' => $nomDemo,
+                'type' => ProduitType::ACHAT_VENTE->value,
+                'statut' => ProduitStatut::ACTIF->value,
+                'prix_achat' => 40000,
+                'prix_vente' => 75000,
+                'seuil_alerte_stock' => 5,
+                'options' => [
+                    [
+                        'nom' => 'Couleur',
+                        'valeurs' => ['Noir', 'Blanc'],
+                        'option_catalogue_id' => OptionCatalogue::where('organization_id', $org->id)->where('nom', 'Couleur')->value('id'),
+                    ],
+                    [
+                        'nom' => 'Taille',
+                        'valeurs' => ['S', 'M', 'L'],
+                        'option_catalogue_id' => OptionCatalogue::where('organization_id', $org->id)->where('nom', 'Taille')->value('id'),
+                    ],
+                ],
+            ]);
+            $total++;
+            $this->command->info('  → '.$produit->variantes()->count()." variantes générées pour « {$nomDemo} » (démonstration options/variantes).");
+        }
+
+        $this->command->info("✓ {$total} produits créés, classés dans ".count(self::PRODUITS).' catégories réelles.');
     }
 }

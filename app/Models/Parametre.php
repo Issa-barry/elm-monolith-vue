@@ -34,6 +34,17 @@ class Parametre extends Model
 
     public const GROUPE_VENTES = 'ventes';
 
+    public const GROUPE_CATALOGUE = 'catalogue';
+
+    // ── Bornes système (indépendantes de l'organisation, non contournables) ────
+    public const MAX_PHOTOS_PRODUIT_SYSTEME = 50;
+
+    public const MAX_OPTIONS_PRODUIT_SYSTEME = 10;
+
+    public const MAX_VALEURS_OPTION_SYSTEME = 100;
+
+    public const MAX_VARIANTES_PRODUIT_SYSTEME = 500;
+
     // ── Clés ──────────────────────────────────────────────────────────────────
     public const CLE_SEUIL_STOCK_FAIBLE = 'seuil_stock_faible';
 
@@ -54,6 +65,14 @@ class Parametre extends Model
     public const CLE_VENTES_CONTROLE_IMPAYES_ACTIF = 'ventes_controle_impayes_actif';
 
     public const CLE_VENTES_SEUIL_IMPAYES_MAX = 'ventes_seuil_impayes_max';
+
+    public const CLE_MAX_PHOTOS_PRODUIT = 'max_photos_produit';
+
+    public const CLE_MAX_OPTIONS_PRODUIT = 'max_options_produit';
+
+    public const CLE_MAX_VALEURS_OPTION = 'max_valeurs_option';
+
+    public const CLE_MAX_VARIANTES_PRODUIT = 'max_variantes_produit';
 
     protected $fillable = [
         'organization_id',
@@ -119,6 +138,10 @@ class Parametre extends Model
             self::CLE_VENTES_AUTORISER_SAISIE_DESSOUS_QTE_MAX,
             self::CLE_VENTES_CONTROLE_IMPAYES_ACTIF,
             self::CLE_VENTES_SEUIL_IMPAYES_MAX,
+            self::CLE_MAX_PHOTOS_PRODUIT,
+            self::CLE_MAX_OPTIONS_PRODUIT,
+            self::CLE_MAX_VALEURS_OPTION,
+            self::CLE_MAX_VARIANTES_PRODUIT,
         ] as $cle) {
             Cache::forget(self::cacheKey($orgId, $cle));
         }
@@ -216,6 +239,54 @@ class Parametre extends Model
             ],
         );
         Cache::forget(self::cacheKey($orgId, self::CLE_VENTES_SEUIL_IMPAYES_MAX));
+    }
+
+    public static function getMaxPhotosProduit(string $orgId): int
+    {
+        return (int) self::get($orgId, self::CLE_MAX_PHOTOS_PRODUIT, 6);
+    }
+
+    public static function getMaxOptionsProduit(string $orgId): int
+    {
+        return (int) self::get($orgId, self::CLE_MAX_OPTIONS_PRODUIT, 3);
+    }
+
+    public static function getMaxValeursOption(string $orgId): int
+    {
+        return (int) self::get($orgId, self::CLE_MAX_VALEURS_OPTION, 20);
+    }
+
+    public static function getMaxVariantesProduit(string $orgId): int
+    {
+        return (int) self::get($orgId, self::CLE_MAX_VARIANTES_PRODUIT, 100);
+    }
+
+    /**
+     * Enregistre les 4 limites catalogue en une fois (formulaire "Configuration du catalogue").
+     * Bornes système (MAX_*_SYSTEME) non contournables — à valider en amont côté FormRequest,
+     * ici en dernier filet de sécurité.
+     */
+    public static function setLimitesCatalogue(string $orgId, int $maxPhotos, int $maxOptions, int $maxValeurs, int $maxVariantes): void
+    {
+        $entrees = [
+            self::CLE_MAX_PHOTOS_PRODUIT => [min($maxPhotos, self::MAX_PHOTOS_PRODUIT_SYSTEME), 'Nombre maximum de photos par produit'],
+            self::CLE_MAX_OPTIONS_PRODUIT => [min($maxOptions, self::MAX_OPTIONS_PRODUIT_SYSTEME), "Nombre maximum d'options par produit"],
+            self::CLE_MAX_VALEURS_OPTION => [min($maxValeurs, self::MAX_VALEURS_OPTION_SYSTEME), 'Nombre maximum de valeurs par option'],
+            self::CLE_MAX_VARIANTES_PRODUIT => [min($maxVariantes, self::MAX_VARIANTES_PRODUIT_SYSTEME), 'Nombre maximum de variantes générées par produit'],
+        ];
+
+        foreach ($entrees as $cle => [$valeur, $description]) {
+            static::updateOrCreate(
+                ['organization_id' => $orgId, 'cle' => $cle],
+                [
+                    'valeur' => (string) max(1, $valeur),
+                    'type' => self::TYPE_INTEGER,
+                    'groupe' => self::GROUPE_CATALOGUE,
+                    'description' => $description,
+                ],
+            );
+            Cache::forget(self::cacheKey($orgId, $cle));
+        }
     }
 
     // ── Relations ─────────────────────────────────────────────────────────────

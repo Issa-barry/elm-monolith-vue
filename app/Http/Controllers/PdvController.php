@@ -10,6 +10,7 @@ use App\Models\Produit;
 use App\Models\Vehicule;
 use App\Services\PdvCheckoutService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -23,21 +24,7 @@ class PdvController extends Controller
     {
         $orgId = auth()->user()->organization_id;
 
-        $produits = Produit::where('organization_id', $orgId)
-            ->where('statut', ProduitStatut::ACTIF)
-            ->whereIn('type', ProduitType::vendableValues())
-            ->orderBy('nom')
-            ->get()
-            ->map(fn (Produit $p) => [
-                'id' => $p->id,
-                'code' => $p->code_interne ?? '',
-                'name' => $p->nom,
-                'subtitle' => $p->description ?? '',
-                'category' => null,
-                'stock' => (int) $p->qte_stock,
-                'unitPrice' => (int) $p->prix_vente,
-                'image' => $p->image_url ?? null,
-            ])->values();
+        $produits = $this->produitsPdv($orgId);
 
         $vehicules = Vehicule::with([
             'typeVehicule',
@@ -103,7 +90,7 @@ class PdvController extends Controller
             $userSite->id,
         );
 
-        $commande->load(['lignes.produit']);
+        $commande->load(['lignes.variante.produit']);
 
         $ticket = [
             'commande_id' => $commande->id,
@@ -112,8 +99,8 @@ class PdvController extends Controller
             'org_nom' => $user->organization?->nom ?? config('app.name'),
             'total_commande' => (float) $commande->total_commande,
             'lignes' => $commande->lignes->map(fn ($l) => [
-                'nom' => $l->produit?->nom ?? '—',
-                'qte' => (int) $l->qte,
+                'nom' => $l->libelle_snapshot ?? $l->variante?->produit?->nom ?? '—',
+                'qte' => (int) $l->quantite_demandee,
                 'prix_vente' => (int) $l->prix_vente_snapshot,
                 'total' => (float) $l->total_ligne,
             ])->values()->all(),
@@ -121,5 +108,36 @@ class PdvController extends Controller
 
         return redirect()->route('pdv.index')
             ->with('pdv_commande', $ticket);
+    }
+
+    /**
+     * Le PDV ne propose pour l'instant qu'une grille de produits (pas de sélecteur de variante
+     * — Phase 3) : on affiche prix/stock/SKU de la variante par défaut (ou la première) comme
+     * représentative. PdvCheckoutService::resolveVariante() exigera un variante_id explicite
+     * au moment de la vente pour un produit à déclinaisons multiples.
+     */
+    private function produitsPdv(string $orgId): Collection
+    {
+        return Produit::where('organization_id', $orgId)
+            ->where('statut', ProduitStatut::ACTIF)
+            ->whereIn('type', ProduitType::vendableValues())
+            ->with(['variantes', 'medias'])
+            ->orderBy('nom')
+            ->get()
+            ->map(function (Produit $p) {
+                $variante = $p->variantes->firstWhere('is_default', true) ?? $p->variantes->first();
+
+                return [
+                    'id' => $p->id,
+                    'variante_id' => $variante?->id,
+                    'code' => $variante?->sku ?? '',
+                    'name' => $p->nom,
+                    'subtitle' => $p->description ?? '',
+                    'category' => null,
+                    'stock' => (int) $p->qte_stock,
+                    'unitPrice' => (int) ($variante?->prix_vente ?? 0),
+                    'image' => $p->image_url ?? null,
+                ];
+            })->values();
     }
 }

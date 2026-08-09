@@ -5,9 +5,10 @@ namespace Tests\Feature;
 use App\Models\DroitAjustementStock;
 use App\Models\Organization;
 use App\Models\Produit;
-use App\Models\ProduitStock;
 use App\Models\Site;
 use App\Models\User;
+use App\Models\VarianteStock;
+use App\Services\ProduitService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -36,17 +37,18 @@ class ProduitAjustementScopeTest extends TestCase
             'localisation' => 'Conakry',
         ]);
 
-        $this->produit = Produit::create([
+        $this->produit = app(ProduitService::class)->creer([
             'organization_id' => $this->org->id,
             'nom' => 'Pack eau 1.5L',
             'type' => 'materiel',
             'statut' => 'actif',
+            'prix_achat' => 500,
             'is_alerte' => false,
         ]);
 
-        ProduitStock::create([
+        VarianteStock::create([
             'organization_id' => $this->org->id,
-            'produit_id' => $this->produit->id,
+            'produit_variante_id' => $this->produit->variantePrincipale()->first()->id,
             'site_id' => $this->site->id,
             'qte_stock' => 100,
         ]);

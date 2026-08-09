@@ -3,6 +3,8 @@
 namespace Database\Seeders\Organizations\FelloDemo;
 
 use App\Models\Organization;
+use Database\Seeders\CategorieDefaultSeeder;
+use Database\Seeders\OptionCatalogueDefaultSeeder;
 use Illuminate\Database\Seeder;
 use Spatie\Permission\Models\Role;
 
@@ -30,6 +32,11 @@ class FelloDemoOrganizationSeeder extends Seeder
         foreach (['admin_entreprise', 'commerciale', 'client'] as $role) {
             Role::firstOrCreate(['name' => $role, 'guard_name' => 'web']);
         }
+
+        // Catalogues de référence par défaut — FelloDemoCatalogSeeder s'appuie dessus
+        // (catégories Vêtements/Chaussures) au lieu de recréer sa propre arborescence.
+        CategorieDefaultSeeder::seedPourOrganisation($org->id);
+        OptionCatalogueDefaultSeeder::seedPourOrganisation($org->id);
 
         $this->command->info("✓ Organisation « Fello Demo » prête (slug: fello-demo, id: {$org->id}).");
     }

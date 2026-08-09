@@ -6,15 +6,15 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class ProduitStock extends Model
+class VarianteStock extends Model
 {
     use HasUlids;
 
-    protected $table = 'produit_stocks';
+    protected $table = 'variante_stocks';
 
     protected $fillable = [
         'organization_id',
-        'produit_id',
+        'produit_variante_id',
         'site_id',
         'qte_stock',
         'seuil_alerte_stock',
@@ -29,9 +29,9 @@ class ProduitStock extends Model
 
     // ── Relations ─────────────────────────────────────────────────────────────
 
-    public function produit(): BelongsTo
+    public function variante(): BelongsTo
     {
-        return $this->belongsTo(Produit::class);
+        return $this->belongsTo(ProduitVariante::class, 'produit_variante_id');
     }
 
     public function site(): BelongsTo

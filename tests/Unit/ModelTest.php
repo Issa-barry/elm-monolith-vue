@@ -21,6 +21,7 @@ use App\Models\Packing;
 use App\Models\Parametre;
 use App\Models\Prestataire;
 use App\Models\Produit;
+use App\Models\ProduitVariante;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TypeVehicule;
@@ -30,11 +31,12 @@ use App\Models\Versement;
 use App\Models\VersementCommission;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;
+use Tests\Concerns\HasProduitVariante;
 use Tests\TestCase;
 
 class ModelTest extends TestCase
 {
-    use RefreshDatabase;
+    use HasProduitVariante, RefreshDatabase;
 
     private function makeOrg(): Organization
     {
@@ -663,15 +665,11 @@ class ModelTest extends TestCase
             'total_commande' => 2000,
             'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
         ]);
-        $produit = Produit::create([
-            'organization_id' => $org->id,
-            'nom' => 'Prod',
-            'type' => 'materiel',
-            'statut' => 'actif',
-        ]);
+        $produit = $this->makeProduitAvecVariante($org);
+        $variante = $produit->variantePrincipale()->first();
         $ligne = CommandeVenteLigne::create([
             'commande_vente_id' => $commande->id,
-            'produit_id' => $produit->id,
+            'variante_id' => $variante->id,
             'quantite_demandee' => 2,
             'prix_usine_snapshot' => 500,
             'prix_vente_snapshot' => 1000,
@@ -679,7 +677,8 @@ class ModelTest extends TestCase
         ]);
 
         $this->assertInstanceOf(CommandeVente::class, $ligne->commande);
-        $this->assertInstanceOf(Produit::class, $ligne->produit);
+        $this->assertInstanceOf(ProduitVariante::class, $ligne->variante);
+        $this->assertInstanceOf(Produit::class, $ligne->variante->produit);
     }
 
     // ── CommandeAchat ─────────────────────────────────────────────────────────
@@ -732,22 +731,19 @@ class ModelTest extends TestCase
             'total_commande' => 1000,
             'statut' => StatutCommandeAchat::EN_COURS,
         ]);
-        $produit = Produit::create([
-            'organization_id' => $org->id,
-            'nom' => 'Prod',
-            'type' => 'materiel',
-            'statut' => 'actif',
-        ]);
+        $produit = $this->makeProduitAvecVariante($org);
+        $variante = $produit->variantePrincipale()->first();
         $ligne = CommandeAchatLigne::create([
             'commande_achat_id' => $commande->id,
-            'produit_id' => $produit->id,
+            'variante_id' => $variante->id,
             'qte' => 5,
             'prix_achat_snapshot' => 200,
             'total_ligne' => 1000,
         ]);
 
         $this->assertInstanceOf(CommandeAchat::class, $ligne->commande);
-        $this->assertInstanceOf(Produit::class, $ligne->produit);
+        $this->assertInstanceOf(ProduitVariante::class, $ligne->variante);
+        $this->assertInstanceOf(Produit::class, $ligne->variante->produit);
     }
 
     // ── Site ──────────────────────────────────────────────────────────────────

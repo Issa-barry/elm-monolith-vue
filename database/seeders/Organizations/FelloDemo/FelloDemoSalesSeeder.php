@@ -7,9 +7,9 @@ use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
 use App\Models\Organization;
-use App\Models\ProduitStock;
 use App\Models\Site;
 use App\Models\User;
+use App\Models\VarianteStock;
 use App\Services\CommandeVenteService;
 use App\Services\PdvCheckoutService;
 use Carbon\Carbon;
@@ -118,22 +118,34 @@ class FelloDemoSalesSeeder extends Seeder
         $checkoutService = app(PdvCheckoutService::class);
 
         for ($i = 0; $i < $nbVentes; $i++) {
-            $stockDisponible = ProduitStock::where('site_id', $site->id)
-                ->where('qte_stock', '>', 0)
-                ->pluck('qte_stock', 'produit_id');
+            // Jointure vers produit_variantes pour retrouver le produit_id : PdvCheckoutService
+            // (via PdvCheckoutRequest) exige toujours produit_id sur la ligne, variante_id n'est
+            // qu'optionnel (bridge Phase 3 — pas encore de sélecteur de variante côté PDV).
+            $stockDisponible = VarianteStock::where('variante_stocks.site_id', $site->id)
+                ->where('variante_stocks.qte_stock', '>', 0)
+                ->join('produit_variantes', 'produit_variantes.id', '=', 'variante_stocks.produit_variante_id')
+                ->get([
+                    'variante_stocks.produit_variante_id as variante_id',
+                    'variante_stocks.qte_stock',
+                    'produit_variantes.produit_id',
+                ]);
 
             if ($stockDisponible->isEmpty()) {
                 $this->command->warn("Plus de stock disponible sur {$site->nom}, arrêt après {$i} ventes.");
                 break;
             }
 
-            $produitIds = $stockDisponible->keys()->shuffle();
-            $nbLignes = min(random_int(1, 4), $produitIds->count());
+            $varianteRows = $stockDisponible->shuffle();
+            $nbLignes = min(random_int(1, 4), $varianteRows->count());
             $lignes = [];
 
-            foreach ($produitIds->take($nbLignes) as $produitId) {
-                $dispo = (int) $stockDisponible[$produitId];
-                $lignes[] = ['produit_id' => $produitId, 'quantite' => random_int(1, min(3, $dispo))];
+            foreach ($varianteRows->take($nbLignes) as $row) {
+                $dispo = (int) $row->qte_stock;
+                $lignes[] = [
+                    'produit_id' => $row->produit_id,
+                    'variante_id' => $row->variante_id,
+                    'quantite' => random_int(1, min(3, $dispo)),
+                ];
             }
 
             $staff = (mt_rand(1, 100) / 100) <= $probaStaffPrincipal ? $staffPrincipal : $staffSecondaire;

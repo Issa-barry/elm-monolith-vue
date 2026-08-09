@@ -22,11 +22,12 @@ use Laravel\Pennant\Feature;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
+use Tests\Concerns\HasProduitVariante;
 use Tests\TestCase;
 
 class ReceptionValidationAdminTest extends TestCase
 {
-    use RefreshDatabase;
+    use HasProduitVariante, RefreshDatabase;
 
     protected Organization $org;
 
@@ -108,11 +109,11 @@ class ReceptionValidationAdminTest extends TestCase
 
         $this->vehicule->update(['equipe_livraison_id' => $this->equipe->id]);
 
-        $this->produit = Produit::create([
-            'organization_id' => $this->org->id,
-            'nom' => 'Eau 19L',
-            'prix_vente' => 5000,
-        ]);
+        $this->produit = $this->makeProduitAvecVariante(
+            $this->org,
+            ['nom' => 'Eau 19L'],
+            ['prix_vente' => 5000],
+        );
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -142,7 +143,7 @@ class ReceptionValidationAdminTest extends TestCase
 
         TransfertLigne::create([
             'transfert_logistique_id' => $transfert->id,
-            'produit_id' => $this->produit->id,
+            'variante_id' => $this->produit->variantePrincipale()->first()->id,
             'quantite_demandee' => $qteDemandee,
             'quantite_chargee' => $qteDemandee,
             'quantite_recue' => $qteRecue,

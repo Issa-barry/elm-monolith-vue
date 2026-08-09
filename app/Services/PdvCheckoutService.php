@@ -9,8 +9,9 @@ use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
 use App\Models\FactureVente;
 use App\Models\Produit;
-use App\Models\ProduitStock;
+use App\Models\ProduitVariante;
 use App\Models\User;
+use App\Models\VarianteStock;
 use App\Models\Vehicule;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -20,7 +21,7 @@ class PdvCheckoutService
     /**
      * Enregistre une vente PDV directement en EN_COURS avec facture.
      * Stock du site décrémenté de manière atomique (lockForUpdate() sur
-     * ProduitStock) via MouvementStockService::sortirStock().
+     * VarianteStock) via MouvementStockService::sortirStock().
      */
     public function checkout(array $data, User $user, string|int $siteId): CommandeVente
     {
@@ -32,7 +33,7 @@ class PdvCheckoutService
 
         return DB::transaction(function () use ($data, $user, $siteId) {
             $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null);
-            [$lignesData, $total, $stockTrackedProduitIds] = $this->buildLignes($data['lignes'], $user->organization_id, (string) $siteId, $context->modeTarification);
+            [$lignesData, $total, $stockTrackedVarianteIds] = $this->buildLignes($data['lignes'], $user->organization_id, (string) $siteId, $context->modeTarification);
 
             $commande = CommandeVente::create([
                 'organization_id' => $user->organization_id,
@@ -51,12 +52,12 @@ class PdvCheckoutService
                 /** @var CommandeVenteLigne $ligneModel */
                 $ligneModel = $commande->lignes()->create($ligne);
 
-                if (! in_array($ligneModel->produit_id, $stockTrackedProduitIds, true)) {
+                if (! in_array($ligneModel->variante_id, $stockTrackedVarianteIds, true)) {
                     continue;
                 }
 
                 MouvementStockService::sortirStock(
-                    produitId: $ligneModel->produit_id,
+                    varianteId: $ligneModel->variante_id,
                     siteId: (string) $siteId,
                     orgId: $user->organization_id,
                     quantite: $ligneModel->quantite_demandee,
@@ -119,38 +120,26 @@ class PdvCheckoutService
     }
 
     /**
-     * Vérifie le stock du site et construit les lignes (le décrément proprement
-     * dit a lieu dans checkout(), après création de chaque ligne, via
-     * MouvementStockService::sortirStock() — il lui faut l'id de la ligne pour
-     * tracer le mouvement). lockForUpdate() sur les stocks du site garantit
-     * l'atomicité contre les ventes concurrentes sur ce même site.
+     * Résout la variante réellement vendue. La grille PDV actuelle ne propose qu'une
+     * sélection de produit (pas de sélecteur de variante — Phase 3) : si le produit n'a
+     * qu'une seule variante (cas normal), on la prend directement ; sinon on exige que
+     * variante_id soit explicitement fourni plutôt que de deviner laquelle vendre.
      */
-    private function buildLignes(array $lignes, string|int $orgId, string $siteId, ModeTarification $mode): array
+    private function resolveVariante(array $ligne, string $orgId): ProduitVariante
     {
-        $produitIds = collect($lignes)->pluck('produit_id')->unique()->values()->all();
+        if (! empty($ligne['variante_id'])) {
+            $variante = ProduitVariante::with('produit')->find($ligne['variante_id']);
 
-        $produits = Produit::whereIn('id', $produitIds)
-            ->where('organization_id', $orgId)
-            ->where('statut', ProduitStatut::ACTIF)
-            ->get()
-            ->keyBy('id');
-
-        // Verrouille les lignes de stock du site concernées, pour empêcher une
-        // survente en cas de ventes PDV concurrentes sur ce même site.
-        $stocksSite = ProduitStock::where('site_id', $siteId)
-            ->whereIn('produit_id', $produitIds)
-            ->lockForUpdate()
-            ->get()
-            ->keyBy('produit_id');
-
-        $lignesData = [];
-        $stockTrackedProduitIds = [];
-        $total = 0;
-
-        foreach ($lignes as $ligne) {
-            $produitId = $ligne['produit_id'];
-            $qte = (int) $ligne['quantite'];
-            $produit = $produits->get($produitId);
+            if (! $variante || $variante->produit_id !== $ligne['produit_id']) {
+                throw ValidationException::withMessages([
+                    'lignes' => 'La variante sélectionnée est introuvable.',
+                ]);
+            }
+        } else {
+            $produit = Produit::with('variantes')
+                ->where('organization_id', $orgId)
+                ->where('statut', ProduitStatut::ACTIF)
+                ->find($ligne['produit_id']);
 
             if (! $produit) {
                 throw ValidationException::withMessages([
@@ -158,15 +147,71 @@ class PdvCheckoutService
                 ]);
             }
 
-            if ($produit->type->hasStock()) {
-                $stockTrackedProduitIds[] = $produitId;
-                $disponible = $stocksSite->get($produitId)?->qte_stock;
+            if ($produit->variantes->count() === 1) {
+                $variante = $produit->variantes->first();
+                $variante->setRelation('produit', $produit);
+            } elseif ($produit->variantes->count() > 1) {
+                throw ValidationException::withMessages([
+                    'lignes' => "Le produit « {$produit->nom} » a plusieurs déclinaisons — précisez la variante à vendre.",
+                ]);
+            } else {
+                throw ValidationException::withMessages([
+                    'lignes' => "Le produit « {$produit->nom} » n'a aucune variante disponible.",
+                ]);
+            }
+        }
 
-                // Aucune ligne ProduitStock pour ce produit, sur aucun site :
-                // stock jamais ventilé — on retombe sur l'agrégat legacy
+        if (! $variante->produit || $variante->produit->organization_id !== $orgId || $variante->produit->statut !== ProduitStatut::ACTIF) {
+            throw ValidationException::withMessages([
+                'lignes' => 'Le produit sélectionné est introuvable ou inactif.',
+            ]);
+        }
+
+        return $variante;
+    }
+
+    /**
+     * Vérifie le stock du site et construit les lignes (le décrément proprement
+     * dit a lieu dans checkout(), après création de chaque ligne, via
+     * MouvementStockService::sortirStock() — il lui faut l'id de la ligne pour
+     * tracer le mouvement). lockForUpdate() sur les stocks du site garantit
+     * l'atomicité contre les ventes concurrentes sur ce même site.
+     */
+    private function buildLignes(array $lignes, string $orgId, string $siteId, ModeTarification $mode): array
+    {
+        $resolved = collect($lignes)->map(fn (array $ligne) => [
+            'variante' => $this->resolveVariante($ligne, $orgId),
+            'qte' => (int) $ligne['quantite'],
+        ]);
+
+        $varianteIds = $resolved->pluck('variante.id')->unique()->values()->all();
+
+        // Verrouille les lignes de stock du site concernées, pour empêcher une
+        // survente en cas de ventes PDV concurrentes sur ce même site.
+        $stocksSite = VarianteStock::where('site_id', $siteId)
+            ->whereIn('produit_variante_id', $varianteIds)
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('produit_variante_id');
+
+        $lignesData = [];
+        $stockTrackedVarianteIds = [];
+        $total = 0;
+
+        foreach ($resolved as $item) {
+            $variante = $item['variante'];
+            $produit = $variante->produit;
+            $qte = $item['qte'];
+
+            if ($produit->type->hasStock()) {
+                $stockTrackedVarianteIds[] = $variante->id;
+                $disponible = $stocksSite->get($variante->id)?->qte_stock;
+
+                // Aucune ligne VarianteStock pour cette variante, sur aucun site :
+                // stock jamais ventilé — on retombe sur l'agrégat legacy du produit parent
                 // (même convention que MouvementStockService::sortirStock()).
                 if ($disponible === null) {
-                    $disponible = ProduitStock::where('produit_id', $produitId)->exists()
+                    $disponible = VarianteStock::where('produit_variante_id', $variante->id)->exists()
                         ? 0
                         : (int) $produit->qte_stock;
                 }
@@ -178,21 +223,22 @@ class PdvCheckoutService
                 }
             }
 
-            $prixVente = (int) $produit->prix_vente;
-            $prixUsine = (int) $produit->prix_usine;
+            $prixVente = (int) ($variante->prix_vente ?? 0);
+            $prixUsine = (int) ($variante->prix_usine ?? 0);
             $totalLigne = $qte * ($mode === ModeTarification::PRIX_VENTE ? $prixVente : $prixUsine);
 
             $lignesData[] = [
-                'produit_id' => $produit->id,
+                'variante_id' => $variante->id,
                 'quantite_demandee' => $qte,
                 'prix_usine_snapshot' => $prixUsine,
                 'prix_vente_snapshot' => $prixVente,
                 'total_ligne' => $totalLigne,
+                'libelle_snapshot' => $variante->libelle !== '' ? "{$produit->nom} — {$variante->libelle}" : $produit->nom,
             ];
 
             $total += $totalLigne;
         }
 
-        return [$lignesData, $total, $stockTrackedProduitIds];
+        return [$lignesData, $total, $stockTrackedVarianteIds];
     }
 }

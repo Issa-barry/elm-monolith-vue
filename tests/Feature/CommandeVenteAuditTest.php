@@ -7,20 +7,20 @@ use App\Models\AuditLog;
 use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\Organization;
-use App\Models\Produit;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
 use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 class CommandeVenteAuditTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
+    use HasAdminSetup, HasOrgAndUser, HasProduitVariante, RefreshDatabase;
 
     private Site $defaultSite;
 
@@ -40,14 +40,11 @@ class CommandeVenteAuditTest extends TestCase
 
     private function makeContext(Organization $org): array
     {
-        $produit = Produit::create([
-            'organization_id' => $org->id,
-            'nom' => 'Rouleau',
-            'type' => 'materiel',
-            'statut' => 'actif',
-            'prix_vente' => 2000,
-            'prix_usine' => 1500,
-        ]);
+        $produit = $this->makeProduitAvecVariante(
+            $org,
+            ['nom' => 'Rouleau'],
+            ['prix_vente' => 2000, 'prix_usine' => 1500],
+        );
 
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id]);
         $vehicule = Vehicule::factory()->create([

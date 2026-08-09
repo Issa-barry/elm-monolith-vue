@@ -7,16 +7,16 @@ use App\Features\ModuleFeature;
 use App\Models\CommandeAchat;
 use App\Models\Organization;
 use App\Models\Prestataire;
-use App\Models\Produit;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Pennant\Feature;
+use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 class CommandeAchatTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
+    use HasAdminSetup, HasOrgAndUser, HasProduitVariante, RefreshDatabase;
 
     protected function setUp(): void
     {
@@ -28,14 +28,11 @@ class CommandeAchatTest extends TestCase
 
     private function makeContext(Organization $org): array
     {
-        $produit = Produit::create([
-            'organization_id' => $org->id,
-            'nom' => 'Produit achat test',
-            'type' => 'materiel',
-            'statut' => 'actif',
-            'prix_achat' => 1000,
-            'qte_stock' => 0,
-        ]);
+        $produit = $this->makeProduitAvecVariante(
+            $org,
+            ['nom' => 'Produit achat test', 'qte_stock' => 0],
+            ['prix_achat' => 1000],
+        );
 
         $prestataire = Prestataire::create([
             'organization_id' => $org->id,
@@ -156,7 +153,7 @@ class CommandeAchatTest extends TestCase
         ['produit' => $produit] = $this->makeContext($this->org);
         $commande = $this->makeCommande($this->org);
         $ligne = $commande->lignes()->create([
-            'produit_id' => $produit->id,
+            'variante_id' => $produit->variantePrincipale()->first()->id,
             'qte' => 3,
             'prix_achat_snapshot' => 1000,
             'total_ligne' => 3000,

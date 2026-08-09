@@ -168,6 +168,26 @@ const mainNavItems = computed((): NavItem[] => {
     }
 
     if (canSee('produits.read', 'produits')) {
+        const produitsSousItems = [];
+        if (can('categories.read') || can('options.read')) {
+            produitsSousItems.push({
+                title: 'Tous les produits',
+                href: '/backoffice/produits',
+            });
+        }
+        if (can('categories.read')) {
+            produitsSousItems.push({
+                title: 'Catégories',
+                href: '/backoffice/produits/categories',
+            });
+        }
+        if (can('options.read')) {
+            produitsSousItems.push({
+                title: 'Options',
+                href: '/backoffice/produits/options',
+            });
+        }
+
         items.push({
             title: 'Produits',
             href: '/backoffice/produits',
@@ -176,6 +196,7 @@ const mainNavItems = computed((): NavItem[] => {
                 stockAlertes.value.total > 0
                     ? stockAlertes.value.total
                     : undefined,
+            items: produitsSousItems.length > 0 ? produitsSousItems : undefined,
         });
     }
 

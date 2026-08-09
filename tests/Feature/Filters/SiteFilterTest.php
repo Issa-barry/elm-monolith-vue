@@ -5,13 +5,14 @@ namespace Tests\Feature\Filters;
 use App\Models\CommandeVente;
 use App\Models\FactureVente;
 use App\Models\Produit;
-use App\Models\ProduitStock;
 use App\Models\Site;
 use App\Models\User;
+use App\Models\VarianteStock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
+use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
@@ -24,7 +25,7 @@ use Tests\TestCase;
  */
 class SiteFilterTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
+    use HasAdminSetup, HasOrgAndUser, HasProduitVariante, RefreshDatabase;
 
     private Site $siteA;
 
@@ -188,20 +189,17 @@ class SiteFilterTest extends TestCase
 
     private function makeProduit(): Produit
     {
-        return Produit::create([
-            'organization_id' => $this->org->id,
-            'nom' => 'Produit Test',
-            'type' => 'fabricable',
-            'statut' => 'actif',
-            'is_alerte' => false,
-        ]);
+        return $this->makeProduitAvecVariante(
+            $this->org,
+            ['nom' => 'Produit Test', 'type' => 'fabricable', 'is_alerte' => false],
+        );
     }
 
-    private function makeProduitStock(Produit $produit, Site $site, int $qte): ProduitStock
+    private function makeProduitStock(Produit $produit, Site $site, int $qte): VarianteStock
     {
-        return ProduitStock::create([
+        return VarianteStock::create([
             'organization_id' => $this->org->id,
-            'produit_id' => $produit->id,
+            'produit_variante_id' => $produit->variantePrincipale()->first()->id,
             'site_id' => $site->id,
             'qte_stock' => $qte,
         ]);
