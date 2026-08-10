@@ -39,13 +39,11 @@ class VehiculeCapaciteTest extends TestCase
             'type-vehicules.read', 'type-vehicules.create', 'type-vehicules.update', 'type-vehicules.delete',
         ]);
 
-        $this->defaultSite = Site::create([
-            'organization_id' => $this->org->id,
-            'nom' => 'Site Principal',
-            'type' => 'depot',
-            'localisation' => 'Conakry',
-        ]);
-        $this->user->sites()->attach($this->defaultSite->id, ['role' => 'employe', 'is_default' => true]);
+        // initOrgAndUser() a déjà créé et rattaché un site par défaut (is_default: true) —
+        // en recréer un second ici marquerait deux sites "par défaut" pour le même
+        // utilisateur, ambigu pour la résolution de site du PDV (wherePivot('is_default', true)
+        // ->first()) : on réutilise celui déjà en place.
+        $this->defaultSite = Site::where('organization_id', $this->org->id)->firstOrFail();
     }
 
     private function makeCategorie(Organization $org, string $nom): Categorie
@@ -253,7 +251,6 @@ class VehiculeCapaciteTest extends TestCase
 
     public function test_pdv_capacites_par_categorie_sont_independantes(): void
     {
-        $this->initOrgAndUser(['produits.read']);
         $sachet = $this->makeCategorie($this->org, 'Sachet');
         $bouteille = $this->makeCategorie($this->org, 'Bouteille');
         $vehicule = $this->makeVehicule($this->org, ['capacite_packs' => null]);
@@ -279,7 +276,6 @@ class VehiculeCapaciteTest extends TestCase
 
     public function test_pdv_depassement_dune_categorie_est_rejete(): void
     {
-        $this->initOrgAndUser(['produits.read']);
         $sachet = $this->makeCategorie($this->org, 'Sachet');
         $vehicule = $this->makeVehicule($this->org, ['capacite_packs' => null]);
         $vehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachet->id, 'capacite_max' => 70]);
