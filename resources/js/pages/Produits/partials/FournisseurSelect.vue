@@ -11,7 +11,7 @@ export interface FournisseurOption {
     phone: string | null;
 }
 
-const props = defineProps<{
+defineProps<{
     modelValue: string | null;
     fournisseurs: FournisseurOption[];
     invalid?: boolean;
