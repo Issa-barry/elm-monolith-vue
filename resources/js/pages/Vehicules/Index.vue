@@ -107,6 +107,16 @@ const agenceOptions = computed(() =>
 
 const filterFields = computed<FilterField[]>(() => [
     {
+        key: 'statut',
+        label: 'Statut',
+        type: 'select',
+        inline: true,
+        options: [
+            { value: 'actif', label: 'Actif' },
+            { value: 'inactif', label: 'Inactif' },
+        ],
+    },
+    {
         key: 'nom',
         label: 'Rechercher',
         type: 'text',
@@ -126,15 +136,6 @@ const filterFields = computed<FilterField[]>(() => [
         options: [
             { value: 'interne', label: 'Interne' },
             { value: 'externe', label: 'Externe' },
-        ],
-    },
-    {
-        key: 'statut',
-        label: 'Statut',
-        type: 'select',
-        options: [
-            { value: 'actif', label: 'Actif' },
-            { value: 'inactif', label: 'Inactif' },
         ],
     },
     {
@@ -492,12 +493,11 @@ function confirmDelete(v: Vehicule) {
                 :result-count="filteredVehicules.length"
                 @apply="
                     (vals) => {
-                        search.value = (vals.nom as string) || '';
-                        filterType.value = (vals.type as string) || null;
-                        filterCategorie.value =
-                            (vals.categorie as string) || null;
-                        filterStatut.value = (vals.statut as string) || null;
-                        filterAgence.value = (vals.agence as string) || null;
+                        search = (vals.nom as string) || '';
+                        filterType = (vals.type as string) || null;
+                        filterCategorie = (vals.categorie as string) || null;
+                        filterStatut = (vals.statut as string) || null;
+                        filterAgence = (vals.agence as string) || null;
                     }
                 "
                 @reset="resetFilters"

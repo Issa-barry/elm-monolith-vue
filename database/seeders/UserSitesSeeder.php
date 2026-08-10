@@ -25,7 +25,7 @@ class UserSitesSeeder extends Seeder
 
         // ── Récupération des sites ────────────────────────────────────────────
         $siege = Site::where('organization_id', $org->id)->where('nom', 'Matoto')->firstOrFail();
-        $usine = Site::where('organization_id', $org->id)->where('nom', 'Cba (Lansanaya, Kountia)')->firstOrFail();
+        $usine = Site::where('organization_id', $org->id)->where('nom', 'CBA')->firstOrFail();
         $agence = Site::where('organization_id', $org->id)->where('nom', 'Lambanyi')->firstOrFail();
 
         // ── Matrice : téléphone/identifiant → site ────────────────────────────

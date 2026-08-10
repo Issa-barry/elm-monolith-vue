@@ -29,6 +29,18 @@ class ReferenceValueResolverTest extends TestCase
         $this->assertNotNull($match);
     }
 
+    public function test_matches_exact_ignoring_dash_presence(): void
+    {
+        // Import réel : les valeurs collées sans tiret ("Tricycle75",
+        // "Tricycle100") doivent matcher les types stockés avec tiret
+        // ("Tricycle-75", "Tricycle-100") sans lever d'erreur ni de suggestion.
+        $candidates = [$this->candidate('Tricycle-75')];
+        $match = ReferenceValueResolver::matchExact('Tricycle75', $candidates, fn ($c) => $c->nom);
+
+        $this->assertNotNull($match);
+        $this->assertSame('Tricycle-75', $match->nom);
+    }
+
     public function test_returns_null_when_no_candidate_matches(): void
     {
         $candidates = [$this->candidate('Tricycle-70')];

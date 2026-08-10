@@ -24,10 +24,10 @@ class SitesSeeder extends Seeder
 
         $sitesRattaches = [
             [
-                'nom' => 'Cba (Lansanaya, Kountia)',
+                'nom' => 'CBA',
                 'type' => SiteType::USINE->value,
                 'ville' => 'Conakry',
-                'quartier' => 'Kountia',
+                'quartier' => 'Lansanaya, Kountia',
                 'telephone' => '+224626078393',
             ],
             [
