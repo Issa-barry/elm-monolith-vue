@@ -71,7 +71,7 @@ interface Produit {
     id: string;
     nom: string;
     sku: string | null;
-    code_fournisseur: string | null;
+    code_barres: string | null;
     type: string | null;
     type_label: string | null;
     image_url: string | null;
@@ -284,11 +284,11 @@ function exportExcel(): void {
     }
 
     const columns = [
-        { label: 'SKU', value: (p: Produit) => p.sku },
+        { label: 'Référence', value: (p: Produit) => p.sku },
         { label: 'Nom', value: (p: Produit) => p.nom },
         {
-            label: 'Code fournisseur',
-            value: (p: Produit) => p.code_fournisseur,
+            label: 'Code-barres',
+            value: (p: Produit) => p.code_barres,
         },
         { label: 'Type', value: (p: Produit) => p.type_label },
         { label: 'Statut', value: (p: Produit) => p.statut_label },
@@ -653,10 +653,10 @@ function confirmArchive(produit: Produit) {
                         </template>
                     </Column>
 
-                    <!-- SKU -->
+                    <!-- Référence (sku) -->
                     <Column
                         field="sku"
-                        header="SKU"
+                        header="Référence"
                         sortable
                         style="width: 160px"
                     >

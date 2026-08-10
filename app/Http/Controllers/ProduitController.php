@@ -8,6 +8,7 @@ use App\Enums\ProduitStatut;
 use App\Enums\ProduitType;
 use App\Models\AuditLog;
 use App\Models\Categorie;
+use App\Models\Fournisseur;
 use App\Models\MouvementStock;
 use App\Models\OptionCatalogue;
 use App\Models\Parametre;
@@ -67,8 +68,11 @@ class ProduitController extends Controller
 
         if (! empty($filters['search'])) {
             $s = $filters['search'];
+            // Recherche par nom, référence (sku) ou code-barres — mêmes deux notions
+            // d'identifiant externe que côté PDV (cf. PdvController::produitsPdv()).
             $query->where(fn ($q) => $q->where('nom', 'like', "%{$s}%")
-                ->orWhereHas('variantes', fn ($vq) => $vq->where('sku', 'like', "%{$s}%")));
+                ->orWhereHas('variantes', fn ($vq) => $vq->where('sku', 'like', "%{$s}%")
+                    ->orWhere('code_barres', 'like', "%{$s}%")));
         }
         if (! empty($filters['type'])) {
             $query->where('type', $filters['type']);
@@ -140,7 +144,7 @@ class ProduitController extends Controller
                 'categorie_id' => $p->categorie_id,
                 'categorie_nom' => $p->categorie?->nom,
                 'sku' => $variantePrincipale?->sku,
-                'code_fournisseur' => $variantePrincipale?->code_fournisseur,
+                'code_barres' => $variantePrincipale?->code_barres,
                 'type' => $p->type?->value,
                 'type_label' => $p->type?->label(),
                 'statut' => $p->statut?->value,
@@ -210,6 +214,7 @@ class ProduitController extends Controller
                 ->orderBy('position')->orderBy('nom')
                 ->with('valeurs:id,option_catalogue_id,valeur,hex')
                 ->get(['id', 'nom']),
+            'fournisseurs' => $this->fournisseursOptions($orgId),
             'limites' => $this->limitesCatalogue($orgId),
         ]);
     }
@@ -240,17 +245,17 @@ class ProduitController extends Controller
             AuditEvent::CREATED,
             auth()->user(),
             null,
-            $this->produitSnapshot($produit->fresh(['variantes'])),
+            $this->produitSnapshot($produit->fresh(['variantes', 'fournisseur'])),
         );
 
-        return redirect()->route('produits.index')->with('success', 'Produit créé avec succès.');
+        return redirect()->route('produits.show', $produit)->with('success', 'Produit créé avec succès.');
     }
 
     public function show(Produit $produit): Response
     {
         $this->authorize('view', $produit);
 
-        $produit->load(['categorie', 'variantes.valeurs.option', 'variantes.media', 'medias']);
+        $produit->load(['categorie', 'fournisseur', 'variantes.valeurs.option', 'variantes.media', 'medias']);
         $orgId = $produit->organization_id;
         $user = auth()->user();
 
@@ -353,8 +358,12 @@ class ProduitController extends Controller
                 'id' => $produit->id,
                 'nom' => $produit->nom,
                 'categorie' => $produit->categorie ? ['id' => $produit->categorie->id, 'nom' => $produit->categorie->nom] : null,
+                'fournisseur' => $produit->fournisseur ? [
+                    'id' => $produit->fournisseur->id,
+                    'nom_complet' => $produit->fournisseur->nom_complet,
+                    'phone' => $produit->fournisseur->phone,
+                ] : null,
                 'sku' => $variantePrincipale?->sku,
-                'code_fournisseur' => $variantePrincipale?->code_fournisseur,
                 'code_barres' => $variantePrincipale?->code_barres,
                 'image_url' => $produit->image_url,
                 'type' => $produit->type?->value,
@@ -451,9 +460,9 @@ class ProduitController extends Controller
                 'id' => $produit->id,
                 'nom' => $produit->nom,
                 'categorie_id' => $produit->categorie_id,
+                'fournisseur_id' => $produit->fournisseur_id,
                 'sku' => $variantePrincipale?->sku,
                 'code_barres' => $variantePrincipale?->code_barres,
-                'code_fournisseur' => $variantePrincipale?->code_fournisseur,
                 'image_url' => $produit->image_url,
                 'type' => $produit->type?->value,
                 'statut' => $produit->statut?->value,
@@ -471,7 +480,6 @@ class ProduitController extends Controller
                     'libelle' => $v->libelle,
                     'sku' => $v->sku,
                     'code_barres' => $v->code_barres,
-                    'code_fournisseur' => $v->code_fournisseur,
                     'prix_usine' => $v->prix_usine,
                     'prix_vente' => $v->prix_vente,
                     'prix_achat' => $v->prix_achat,
@@ -492,6 +500,7 @@ class ProduitController extends Controller
             'types' => ProduitType::options(),
             'statuts' => ProduitStatut::options(),
             'categories' => Categorie::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom', 'parent_id']),
+            'fournisseurs' => $this->fournisseursOptions($orgId),
             'limites' => $this->limitesCatalogue($orgId),
         ]);
     }
@@ -502,7 +511,7 @@ class ProduitController extends Controller
 
         $data = $this->validerFormulaire($request, $produit);
 
-        $oldSnapshot = $this->produitSnapshot($produit->fresh(['variantes']));
+        $oldSnapshot = $this->produitSnapshot($produit->fresh(['variantes', 'fournisseur']));
 
         $produit = DB::transaction(function () use ($produit, $data, $request) {
             $produit = $this->produitService->mettreAJourSimple($produit, $data);
@@ -514,14 +523,14 @@ class ProduitController extends Controller
             return $produit;
         });
 
-        $newSnapshot = $this->produitSnapshot($produit->fresh(['variantes']));
+        $newSnapshot = $this->produitSnapshot($produit->fresh(['variantes', 'fournisseur']));
 
         [$oldDiff, $newDiff] = $this->produitDiff($oldSnapshot, $newSnapshot);
         if ($oldDiff !== null || $newDiff !== null) {
             $this->auditService->record($produit, AuditEvent::UPDATED, auth()->user(), $oldDiff, $newDiff);
         }
 
-        return redirect()->route('produits.index')->with('success', 'Produit mis à jour avec succès.');
+        return redirect()->route('produits.show', $produit)->with('success', 'Produit mis à jour avec succès.');
     }
 
     public function archiver(Produit $produit): RedirectResponse
@@ -545,7 +554,7 @@ class ProduitController extends Controller
     {
         $this->authorize('delete', $produit);
 
-        $this->auditService->record($produit, AuditEvent::DELETED, auth()->user(), $this->produitSnapshot($produit->fresh(['variantes'])), null);
+        $this->auditService->record($produit, AuditEvent::DELETED, auth()->user(), $this->produitSnapshot($produit->fresh(['variantes', 'fournisseur'])), null);
 
         foreach ($produit->medias as $media) {
             $this->mediaService->supprimer($media);
@@ -685,7 +694,6 @@ class ProduitController extends Controller
 
         $data = $request->validate([
             'code_barres' => 'nullable|string|max:100',
-            'code_fournisseur' => 'nullable|string|max:100',
             'prix_usine' => 'nullable|integer|min:0',
             'prix_vente' => 'nullable|integer|min:0',
             'prix_achat' => 'nullable|integer|min:0',
@@ -733,7 +741,6 @@ class ProduitController extends Controller
                 'libelle' => $v->libelle,
                 'sku' => $v->sku,
                 'code_barres' => $v->code_barres,
-                'code_fournisseur' => $v->code_fournisseur,
                 'prix_usine' => $v->prix_usine,
                 'prix_vente' => $v->prix_vente,
                 'prix_achat' => $v->prix_achat,
@@ -760,7 +767,6 @@ class ProduitController extends Controller
             'variantes' => ['required', 'array', 'min:1'],
             'variantes.*.id' => ['required', 'string'],
             'variantes.*.code_barres' => ['nullable', 'string', 'max:100'],
-            'variantes.*.code_fournisseur' => ['nullable', 'string', 'max:100'],
             'variantes.*.prix_usine' => ['nullable', 'integer', 'min:0'],
             'variantes.*.prix_vente' => ['nullable', 'integer', 'min:0'],
             'variantes.*.prix_achat' => ['nullable', 'integer', 'min:0'],
@@ -803,6 +809,26 @@ class ProduitController extends Controller
     }
 
     /**
+     * Fournisseurs actifs de l'organisation, pour peupler FournisseurSelect.vue — préchargés
+     * en une fois (comme categories/optionsCatalogue) plutôt qu'en recherche distante : le
+     * volume attendu (prestataires d'une PME) ne justifie pas une pagination/API dédiée.
+     */
+    private function fournisseursOptions(string $orgId): Collection
+    {
+        return Fournisseur::where('organization_id', $orgId)
+            ->where('is_active', true)
+            ->orderBy('raison_sociale')
+            ->orderBy('nom')
+            ->get()
+            ->map(fn (Fournisseur $f) => [
+                'id' => $f->id,
+                'nom_complet' => $f->nom_complet,
+                'phone' => $f->phone,
+            ])
+            ->values();
+    }
+
+    /**
      * Décompose une variante en paires {option, valeur} triées par position d'option puis
      * de valeur — permet au frontend de regrouper les variantes par n'importe laquelle de
      * leurs options (pattern "Regrouper par" façon Shopify) sans requête supplémentaire.
@@ -826,12 +852,23 @@ class ProduitController extends Controller
     private function validerFormulaire(Request $request, ?Produit $produit = null): array
     {
         $orgId = auth()->user()->organization_id;
+        // Variante par défaut du produit édité — exclue de la contrainte d'unicité ci-dessous
+        // (sinon une mise à jour qui ne touche pas au code-barres se rejetterait elle-même).
+        $varianteId = $produit?->variantePrincipale()->first()?->id;
 
         return $request->validate([
             'nom' => 'required|string|max:255',
             'categorie_id' => ['nullable', Rule::exists('categories', 'id')->where('organization_id', $orgId)],
-            'code_barres' => 'nullable|string|max:100',
-            'code_fournisseur' => 'nullable|string|max:100',
+            'fournisseur_id' => [
+                'nullable',
+                Rule::exists('fournisseurs', 'id')->where('organization_id', $orgId),
+            ],
+            'code_barres' => [
+                'nullable', 'string', 'max:100',
+                Rule::unique('produit_variantes', 'code_barres')
+                    ->where('organization_id', $orgId)
+                    ->ignore($varianteId),
+            ],
             'type' => 'required|in:'.implode(',', ProduitType::values()),
             'statut' => 'required|in:'.implode(',', ProduitStatut::values()),
             'prix_usine' => 'nullable|integer|min:0',
@@ -891,7 +928,8 @@ class ProduitController extends Controller
             'seuil_alerte_stock' => $variante?->seuil_alerte_stock,
             'is_alerte' => $produit->is_alerte,
             'description' => $produit->description,
-            'code_fournisseur' => $variante?->code_fournisseur,
+            'code_barres' => $variante?->code_barres,
+            'fournisseur' => $produit->fournisseur?->nom_complet,
         ], fn ($v) => $v !== null && $v !== '');
     }
 

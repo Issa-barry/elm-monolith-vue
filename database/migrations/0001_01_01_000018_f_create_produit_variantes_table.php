@@ -13,10 +13,14 @@ return new class extends Migration
             $table->foreignUlid('organization_id')->constrained()->cascadeOnDelete();
             $table->foreignUlid('produit_id')->constrained('produits')->cascadeOnDelete();
 
-            // Référence — SKU, déplacé depuis produits.code_interne (nommé clairement, source unique)
-            $table->string('sku', 50)->nullable();
+            // Référence interne — identifiant stable de l'article (style numéro d'article IKEA,
+            // généré automatiquement par Organization::prochaineReferenceProduit(), jamais
+            // dérivé du nom/catégorie/prix). Toujours attribuée à la création : obligatoire.
+            $table->string('sku', 50);
+            // Code-barres scannable (EAN/UPC/Code128...) — facultatif, distinct de la référence.
+            // Pas de champ "code_fournisseur" séparé : un code-barres fourni par le fournisseur
+            // va directement ici, il n'y a qu'une seule notion de "code externe" par article.
             $table->string('code_barres', 100)->nullable();
-            $table->string('code_fournisseur', 100)->nullable()->index();
 
             // Prix / coût — déplacés depuis produits
             $table->unsignedBigInteger('prix_usine')->nullable();

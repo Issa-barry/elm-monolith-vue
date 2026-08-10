@@ -21,8 +21,14 @@ class StoreProduitRequest extends FormRequest
         return [
             'nom' => ['required', 'string', 'max:255'],
             'categorie_id' => ['nullable', Rule::exists('categories', 'id')->where('organization_id', $orgId)],
-            'code_barres' => ['nullable', 'string', 'max:100'],
-            'code_fournisseur' => ['nullable', 'string', 'max:100'],
+            'fournisseur_id' => [
+                'nullable',
+                Rule::exists('fournisseurs', 'id')->where('organization_id', $orgId),
+            ],
+            'code_barres' => [
+                'nullable', 'string', 'max:100',
+                Rule::unique('produit_variantes', 'code_barres')->where('organization_id', $orgId),
+            ],
             'type' => ['required', Rule::in(ProduitType::values())],
             'statut' => ['required', Rule::in(ProduitStatut::values())],
             'prix_usine' => ['nullable', 'integer', 'min:0'],
@@ -50,7 +56,7 @@ class StoreProduitRequest extends FormRequest
             'nom.max' => 'Le nom ne peut pas dépasser 255 caractères.',
             'categorie_id.exists' => 'La catégorie sélectionnée est invalide.',
             'code_barres.max' => 'Le code-barres ne peut pas dépasser 100 caractères.',
-            'code_fournisseur.max' => 'Le code fournisseur ne peut pas dépasser 100 caractères.',
+            'code_barres.unique' => 'Ce code-barres est déjà utilisé par un autre produit.',
             'type.required' => 'Le type de produit est obligatoire.',
             'type.in' => 'Le type sélectionné est invalide.',
             'statut.required' => 'Le statut du produit est obligatoire.',

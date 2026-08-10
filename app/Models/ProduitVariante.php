@@ -21,7 +21,6 @@ class ProduitVariante extends Model
         'produit_id',
         'sku',
         'code_barres',
-        'code_fournisseur',
         'prix_usine',
         'prix_vente',
         'prix_achat',
@@ -50,14 +49,12 @@ class ProduitVariante extends Model
     protected static function booted(): void
     {
         static::creating(function (ProduitVariante $v) {
-            // Génération auto du SKU (même algorithme que l'ancien Produit::booted(),
-            // déplacé ici puisque le SKU est désormais porté par la variante).
+            // Référence auto (style numéro d'article IKEA) si non fournie explicitement —
+            // séquentielle par organisation, cf. Organization::prochaineReferenceProduit().
+            // N'encode ni le nom, ni la catégorie, ni le prix : stable même si le produit
+            // change de nom/catégorie/prix par la suite.
             if (empty($v->sku)) {
-                $orgId = $v->organization_id;
-                do {
-                    $candidat = date('Ymd').str_pad((string) mt_rand(1, 99999), 5, '0', STR_PAD_LEFT);
-                } while (static::withTrashed()->where('organization_id', $orgId)->where('sku', $candidat)->exists());
-                $v->sku = $candidat;
+                $v->sku = Organization::prochaineReferenceProduit($v->organization_id);
             }
             if (empty($v->combo_hash)) {
                 $v->combo_hash = self::COMBO_HASH_DEFAUT;
@@ -70,13 +67,6 @@ class ProduitVariante extends Model
     public function setSkuAttribute(mixed $value): void
     {
         $this->attributes['sku'] = ($value !== null && $value !== '')
-            ? mb_strtoupper(trim(preg_replace('/\s+/', '', $value)))
-            : null;
-    }
-
-    public function setCodeFournisseurAttribute(mixed $value): void
-    {
-        $this->attributes['code_fournisseur'] = ($value !== null && $value !== '')
             ? mb_strtoupper(trim(preg_replace('/\s+/', '', $value)))
             : null;
     }

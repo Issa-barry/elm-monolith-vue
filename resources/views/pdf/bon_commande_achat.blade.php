@@ -99,9 +99,9 @@
     <div class="info-row">
         <div class="info-block">
             <div class="info-block-title">Fournisseur</div>
-            <p class="value">{{ $commande->prestataire?->nom ?? '—' }}</p>
-            @if($commande->prestataire?->phone)
-                <p>{{ $commande->prestataire->phone }}</p>
+            <p class="value">{{ $commande->fournisseur?->nom_complet ?? '—' }}</p>
+            @if($commande->fournisseur?->phone)
+                <p>{{ $commande->fournisseur->phone }}</p>
             @endif
         </div>
         <div class="info-block">

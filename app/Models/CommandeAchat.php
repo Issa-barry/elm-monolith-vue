@@ -22,7 +22,7 @@ class CommandeAchat extends Model
 
     protected $fillable = [
         'organization_id',
-        'prestataire_id',
+        'fournisseur_id',
         'reference',
         'note',
         'total_commande',
@@ -84,9 +84,9 @@ class CommandeAchat extends Model
         return $this->belongsTo(Organization::class);
     }
 
-    public function prestataire(): BelongsTo
+    public function fournisseur(): BelongsTo
     {
-        return $this->belongsTo(Prestataire::class);
+        return $this->belongsTo(Fournisseur::class);
     }
 
     public function lignes(): HasMany

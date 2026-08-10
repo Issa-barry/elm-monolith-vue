@@ -146,8 +146,7 @@ class ProduitMediaTest extends TestCase
                 'type' => 'service',
                 'statut' => 'actif',
                 'images' => [UploadedFile::fake()->image('a.jpg'), UploadedFile::fake()->image('b.jpg')],
-            ])
-            ->assertRedirect(route('produits.index'));
+            ]);
 
         $produit = Produit::where('nom', 'Produit avec galerie')->firstOrFail();
         $this->assertCount(2, $produit->medias);
@@ -167,5 +166,25 @@ class ProduitMediaTest extends TestCase
             ->assertSessionHasErrors('images');
 
         $this->assertDatabaseMissing('produits', ['nom' => 'Trop de photos']);
+    }
+
+    public function test_update_produit_avec_image_cree_le_media(): void
+    {
+        // Régression : ProduitForm.vue envoyait autrefois un champ "image" (singulier) alors
+        // que le backend n'écoute que "images" (pluriel, tableau) — le fichier n'atteignait
+        // jamais MediaService::ajouter(), la photo semblait "disparaître" après sauvegarde.
+        $produit = $this->makeProduit();
+
+        $this->actingAs($this->user)
+            ->post(route('produits.update', $produit), [
+                '_method' => 'PUT',
+                'nom' => $produit->nom,
+                'type' => $produit->type->value,
+                'statut' => $produit->statut->value,
+                'images' => [UploadedFile::fake()->image('a.jpg')],
+            ])
+            ->assertRedirect(route('produits.show', $produit));
+
+        $this->assertCount(1, $produit->fresh()->medias);
     }
 }

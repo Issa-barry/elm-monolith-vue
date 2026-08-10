@@ -38,6 +38,7 @@ use App\Http\Controllers\EmployeController;
 use App\Http\Controllers\EncaissementVenteController;
 use App\Http\Controllers\EquipeLivraisonController;
 use App\Http\Controllers\FactureVenteController;
+use App\Http\Controllers\FournisseurController;
 use App\Http\Controllers\FraisCommissionPartController;
 use App\Http\Controllers\LivreurController;
 use App\Http\Controllers\MediaController;
@@ -193,6 +194,9 @@ Route::prefix('backoffice')->group(function () {
             Route::patch('achats/{achat}/receptionner', [CommandeAchatController::class, 'receptionner'])->name('achats.receptionner');
             Route::patch('achats/{achat}/annuler', [CommandeAchatController::class, 'annuler'])->name('achats.annuler');
             Route::get('achats/{achat}/pdf', [CommandeAchatController::class, 'pdf'])->name('achats.pdf');
+
+            // Fournisseurs — entité séparée de Prestataire, rattachée au contexte Achats.
+            Route::resource('fournisseurs', FournisseurController::class);
         });
 
         // ── Module : Packings ─────────────────────────────────────────────────────
@@ -272,6 +276,13 @@ Route::prefix('backoffice')->group(function () {
             Route::delete('produits/options/{option}', [OptionCatalogueController::class, 'destroy'])->name('produits.options.destroy');
             Route::post('produits/options/{option}/valeurs', [OptionCatalogueController::class, 'storeValeur'])->name('produits.options.valeurs.store');
             Route::delete('produits/options/{option}/valeurs/{valeur}', [OptionCatalogueController::class, 'destroyValeur'])->name('produits.options.valeurs.destroy');
+
+            // Création rapide d'un fournisseur (entité séparée, cf. FournisseurController) depuis
+            // le formulaire Produit — rattachée au module Produits (pas Achats) : elle doit
+            // fonctionner même si le module Achats est désactivé pour l'organisation, cf.
+            // FournisseurSelect.vue. Le CRUD complet reste sous le module Achats (route
+            // fournisseurs.* ci-dessus).
+            Route::post('produits/fournisseurs', [FournisseurController::class, 'storeRapide'])->name('produits.fournisseurs.store');
 
             Route::resource('produits', ProduitController::class);
             Route::post('produits/{produit}/ajuster-stock', [ProduitController::class, 'ajusterStock'])

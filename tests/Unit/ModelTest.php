@@ -53,7 +53,7 @@ class ModelTest extends TestCase
         return Prestataire::create([
             'organization_id' => $org->id,
             'nom' => 'PREST'.uniqid(),
-            'type' => 'fournisseur',
+            'type' => 'machiniste',
         ]);
     }
 
@@ -77,7 +77,7 @@ class ModelTest extends TestCase
         $p = Prestataire::create([
             'organization_id' => $this->makeOrg()->id,
             'raison_sociale' => 'Société ABC',
-            'type' => 'fournisseur',
+            'type' => 'machiniste',
         ]);
 
         $this->assertSame('Société Abc', $p->nom_complet);
@@ -89,7 +89,7 @@ class ModelTest extends TestCase
             'organization_id' => $this->makeOrg()->id,
             'nom' => 'DIALLO',
             'prenom' => 'Mamadou',
-            'type' => 'fournisseur',
+            'type' => 'machiniste',
         ]);
 
         $this->assertNotNull($p->nom_complet);
@@ -110,8 +110,8 @@ class ModelTest extends TestCase
     public function test_prestataire_scope_actifs(): void
     {
         $org = $this->makeOrg();
-        Prestataire::create(['organization_id' => $org->id, 'nom' => 'ACTIF', 'type' => 'fournisseur', 'is_active' => true]);
-        Prestataire::create(['organization_id' => $org->id, 'nom' => 'INACTIF', 'type' => 'fournisseur', 'is_active' => false]);
+        Prestataire::create(['organization_id' => $org->id, 'nom' => 'ACTIF', 'type' => 'machiniste', 'is_active' => true]);
+        Prestataire::create(['organization_id' => $org->id, 'nom' => 'INACTIF', 'type' => 'machiniste', 'is_active' => false]);
 
         $actifs = Prestataire::actifs()->where('organization_id', $org->id)->get();
         $this->assertCount(1, $actifs);
@@ -121,12 +121,12 @@ class ModelTest extends TestCase
     public function test_prestataire_scope_par_type(): void
     {
         $org = $this->makeOrg();
-        Prestataire::create(['organization_id' => $org->id, 'nom' => 'FOUR', 'type' => 'fournisseur']);
+        Prestataire::create(['organization_id' => $org->id, 'nom' => 'MACHI', 'type' => 'machiniste']);
         Prestataire::create(['organization_id' => $org->id, 'nom' => 'MECA', 'type' => 'mecanicien']);
 
-        $fournisseurs = Prestataire::parType('fournisseur')->where('organization_id', $org->id)->get();
-        $this->assertCount(1, $fournisseurs);
-        $this->assertSame('FOUR', $fournisseurs->first()->nom);
+        $machinistes = Prestataire::parType('machiniste')->where('organization_id', $org->id)->get();
+        $this->assertCount(1, $machinistes);
+        $this->assertSame('MACHI', $machinistes->first()->nom);
     }
 
     public function test_prestataire_scope_par_type_accepts_enum(): void
@@ -190,7 +190,7 @@ class ModelTest extends TestCase
     public function test_prestataire_organization_relation(): void
     {
         $org = $this->makeOrg();
-        $p = Prestataire::create(['organization_id' => $org->id, 'nom' => 'TEST', 'type' => 'fournisseur']);
+        $p = Prestataire::create(['organization_id' => $org->id, 'nom' => 'TEST', 'type' => 'machiniste']);
 
         $this->assertInstanceOf(Organization::class, $p->organization);
         $this->assertEquals($org->id, $p->organization->id);

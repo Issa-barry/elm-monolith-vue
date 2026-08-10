@@ -20,12 +20,23 @@ class UpdateProduitRequest extends FormRequest
     public function rules(): array
     {
         $orgId = $this->user()->organization_id;
+        // Variante par défaut du produit édité — exclue de la contrainte d'unicité ci-dessous
+        // (sinon une mise à jour qui ne touche pas au code-barres se rejetterait elle-même).
+        $varianteId = $this->route('produit')->variantePrincipale()->first()?->id;
 
         return [
             'nom' => ['sometimes', 'required', 'string', 'max:255'],
             'categorie_id' => ['nullable', Rule::exists('categories', 'id')->where('organization_id', $orgId)],
-            'code_barres' => ['nullable', 'string', 'max:100'],
-            'code_fournisseur' => ['nullable', 'string', 'max:100'],
+            'fournisseur_id' => [
+                'nullable',
+                Rule::exists('fournisseurs', 'id')->where('organization_id', $orgId),
+            ],
+            'code_barres' => [
+                'nullable', 'string', 'max:100',
+                Rule::unique('produit_variantes', 'code_barres')
+                    ->where('organization_id', $orgId)
+                    ->ignore($varianteId),
+            ],
             'type' => ['nullable', Rule::in(ProduitType::values())],
             'statut' => ['nullable', Rule::in(ProduitStatut::values())],
             'prix_usine' => ['nullable', 'integer', 'min:0'],
@@ -48,7 +59,7 @@ class UpdateProduitRequest extends FormRequest
             'nom.max' => 'Le nom ne peut pas dépasser 255 caractères.',
             'categorie_id.exists' => 'La catégorie sélectionnée est invalide.',
             'code_barres.max' => 'Le code-barres ne peut pas dépasser 100 caractères.',
-            'code_fournisseur.max' => 'Le code fournisseur ne peut pas dépasser 100 caractères.',
+            'code_barres.unique' => 'Ce code-barres est déjà utilisé par un autre produit.',
             'type.in' => 'Le type sélectionné est invalide.',
             'statut.in' => 'Le statut sélectionné est invalide.',
             'prix_usine.integer' => 'Le prix usine doit être un nombre entier.',

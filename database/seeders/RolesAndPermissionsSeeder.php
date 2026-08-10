@@ -19,7 +19,7 @@ class RolesAndPermissionsSeeder extends Seeder
         // Véhicules & logistique terrain
         'vehicules', 'type-vehicules', 'equipes-livraison', 'sites',
         // Commerce
-        'produits', 'categories', 'options', 'packings', 'ventes', 'achats', 'factures', 'commissions', 'cashback', 'pdv',
+        'produits', 'categories', 'options', 'packings', 'ventes', 'achats', 'fournisseurs', 'factures', 'commissions', 'cashback', 'pdv',
         // Opérations
         'logistique', 'transferts', 'receptions',
         // Finances
@@ -123,6 +123,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'ventes.qte.update',        'ventes.prix.update',
             'ventes.confirmer',         'ventes.annuler',         'ventes.demarrer_chargement', 'ventes.valider_chargement',
             'achats.create',            'achats.read',            'achats.update',            'achats.delete',
+            'fournisseurs.create',      'fournisseurs.read',      'fournisseurs.update',      'fournisseurs.delete',
             'factures.create',          'factures.read',          'factures.update',          'factures.delete',
             'factures.encaisser',       'factures.annuler',
             'commissions.create',       'commissions.read',       'commissions.update',       'commissions.delete',
@@ -179,6 +180,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'ventes.qte.update',        'ventes.prix.update',
             'ventes.confirmer',         'ventes.annuler',         'ventes.demarrer_chargement', 'ventes.valider_chargement',
             'achats.create',            'achats.read',            'achats.update',
+            'fournisseurs.create',      'fournisseurs.read',      'fournisseurs.update',
             'factures.read',            'factures.create',
             'factures.encaisser',
             'commissions.read',

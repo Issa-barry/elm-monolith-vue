@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api;
 
+use App\Models\Fournisseur;
 use App\Models\Organization;
 use App\Models\Produit;
 use App\Services\ProduitService;
@@ -122,6 +123,28 @@ class ProduitApiTest extends TestCase
             ]);
     }
 
+    public function test_show_expose_le_fournisseur(): void
+    {
+        Sanctum::actingAs($this->user, ['*']);
+
+        $fournisseur = Fournisseur::create([
+            'organization_id' => $this->org->id,
+            'raison_sociale' => 'SOGUIDEP',
+            'phone' => '+224620000020',
+            'code_phone_pays' => '+224',
+            'code_pays' => 'GN',
+            'is_active' => true,
+        ]);
+        $produit = $this->makeProduit($this->org, ['fournisseur_id' => $fournisseur->id]);
+
+        $this->getJson(route('api.backoffice.produits.show', $produit))
+            ->assertOk()
+            ->assertJsonFragment([
+                'fournisseur_id' => $fournisseur->id,
+                'fournisseur_nom' => 'Soguidep',
+            ]);
+    }
+
     public function test_show_returns_404_for_other_org(): void
     {
         Sanctum::actingAs($this->user, ['*']);
@@ -163,6 +186,59 @@ class ProduitApiTest extends TestCase
             'prix_achat' => 1500,
             'is_default' => true,
         ]);
+    }
+
+    public function test_store_creates_produit_avec_fournisseur(): void
+    {
+        Sanctum::actingAs($this->user, ['*']);
+
+        $fournisseur = Fournisseur::create([
+            'organization_id' => $this->org->id,
+            'raison_sociale' => 'SOGUIDEP',
+            'phone' => '+224620000021',
+            'code_phone_pays' => '+224',
+            'code_pays' => 'GN',
+            'is_active' => true,
+        ]);
+
+        $response = $this->postJson(route('api.backoffice.produits.store'), [
+            'nom' => 'Produit avec fournisseur',
+            'type' => 'materiel',
+            'statut' => 'actif',
+            'prix_achat' => 1500,
+            'fournisseur_id' => $fournisseur->id,
+        ]);
+
+        $response->assertCreated();
+        $this->assertDatabaseHas('produits', [
+            'nom' => 'Produit avec fournisseur',
+            'fournisseur_id' => $fournisseur->id,
+        ]);
+    }
+
+    public function test_store_refuse_un_fournisseur_dune_autre_organisation(): void
+    {
+        Sanctum::actingAs($this->user, ['*']);
+
+        $autreOrg = Organization::factory()->create();
+        $fournisseurAilleurs = Fournisseur::create([
+            'organization_id' => $autreOrg->id,
+            'raison_sociale' => 'Ailleurs',
+            'phone' => '+224620000022',
+            'code_phone_pays' => '+224',
+            'code_pays' => 'GN',
+            'is_active' => true,
+        ]);
+
+        $this->postJson(route('api.backoffice.produits.store'), [
+            'nom' => 'Produit isolation API',
+            'type' => 'materiel',
+            'statut' => 'actif',
+            'prix_achat' => 1500,
+            'fournisseur_id' => $fournisseurAilleurs->id,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['fournisseur_id']);
     }
 
     public function test_store_validates_required_fields(): void

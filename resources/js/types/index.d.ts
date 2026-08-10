@@ -18,6 +18,7 @@ export type Resource =
     | 'packings'
     | 'ventes'
     | 'achats'
+    | 'fournisseurs'
     | 'depenses'
     | 'users'
     | 'parametres'

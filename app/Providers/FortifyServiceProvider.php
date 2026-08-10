@@ -18,6 +18,7 @@ use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
+use Laravel\Fortify\Contracts\LockoutResponse;
 use Laravel\Fortify\Contracts\LoginResponse;
 use Laravel\Fortify\Contracts\RegisterResponse;
 use Laravel\Fortify\Features;
@@ -38,6 +39,11 @@ class FortifyServiceProvider extends ServiceProvider
         $this->app->singleton(
             RegisterResponse::class,
             \App\Http\Responses\RegisterResponse::class,
+        );
+
+        $this->app->singleton(
+            LockoutResponse::class,
+            \App\Http\Responses\LockoutResponse::class,
         );
     }
 
@@ -65,14 +71,21 @@ class FortifyServiceProvider extends ServiceProvider
 
             if ($phone === null) {
                 throw ValidationException::withMessages([
-                    'telephone' => [__('auth.phone_format')],
+                    'telephone' => ['Format de téléphone invalide. Utilisez le format international (ex : +33612345678).'],
                 ]);
             }
 
             $user = User::where('telephone', $phone)->first();
 
             if (! $user || ! Hash::check($request->password, $user->password)) {
-                return null;
+                // Message en dur (comme les autres branches ci-dessous) plutôt que
+                // `return null` : le fallback interne de Fortify (trans('auth.failed'))
+                // dépend de la résolution de APP_LOCALE côté serveur, qui peut retomber
+                // en anglais en prod (config cachée, env mal propagé...). Le login ne
+                // doit jamais afficher de message en anglais.
+                throw ValidationException::withMessages([
+                    'telephone' => ['Numéro de téléphone ou mot de passe incorrect.'],
+                ]);
             }
 
             // Le statut du compte (en attente/désactivé) est un blocage plus fondamental

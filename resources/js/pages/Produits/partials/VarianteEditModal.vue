@@ -14,7 +14,6 @@ interface Variante {
     libelle: string;
     sku: string | null;
     code_barres: string | null;
-    code_fournisseur: string | null;
     prix_usine: number | null;
     prix_vente: number | null;
     prix_achat: number | null;
@@ -54,7 +53,6 @@ const localVisible = computed({
 
 const form = useForm({
     code_barres: null as string | null,
-    code_fournisseur: null as string | null,
     prix_usine: null as number | null,
     prix_vente: null as number | null,
     prix_achat: null as number | null,
@@ -71,7 +69,6 @@ watch(
     (v) => {
         if (!v) return;
         form.code_barres = v.code_barres;
-        form.code_fournisseur = v.code_fournisseur;
         form.prix_usine = v.prix_usine;
         form.prix_vente = v.prix_vente;
         form.prix_achat = v.prix_achat;
@@ -239,22 +236,13 @@ function submit() {
                 </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
-                <div class="space-y-1.5">
-                    <Label class="block">Code-barres</Label>
-                    <InputText
-                        v-model="form.code_barres"
-                        class="w-full font-mono"
-                        :class="form.errors.code_barres ? 'p-invalid' : ''"
-                    />
-                </div>
-                <div class="space-y-1.5">
-                    <Label class="block">Code fournisseur</Label>
-                    <InputText
-                        v-model="form.code_fournisseur"
-                        class="w-full font-mono"
-                    />
-                </div>
+            <div class="space-y-1.5">
+                <Label class="block">Code-barres</Label>
+                <InputText
+                    v-model="form.code_barres"
+                    class="w-full font-mono"
+                    :class="form.errors.code_barres ? 'p-invalid' : ''"
+                />
             </div>
 
             <div class="space-y-1.5">
