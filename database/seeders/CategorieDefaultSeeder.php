@@ -22,7 +22,7 @@ class CategorieDefaultSeeder extends Seeder
     private const ARBRE = [
         'Vêtements' => ['T-shirts', 'Chemises', 'Pantalons', 'Accessoires'],
         'Chaussures' => ['Sneakers', 'Sandales', 'Bottes', 'Autres'],
-        'Boissons' => ['Eau'],
+        'Boissons' => ['Eau', 'Sachet', 'Bouteille'],
         'Matériel' => [],
     ];
 

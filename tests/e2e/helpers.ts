@@ -287,7 +287,12 @@ export async function applyDrawerFilterOption(
 export function getVisibleSearchInput(page: Page): Locator {
     return page
         .locator(
-            '[data-testid="search-input"]:visible, [data-testid^="filter-inline-"]:visible, input[placeholder*="rechercher" i]:not([data-testid="global-search"]):visible, input[placeholder*="recherche" i]:not([data-testid="global-search"]):visible',
+            // Le testid `filter-inline-*` est aussi posé sur le wrapper <div> des filtres
+            // select/multi-select (cf. DataFilters.vue) — restreint à `input` pour ne jamais
+            // matcher autre chose qu'un vrai champ texte remplissable (ex: le filtre Statut,
+            // qui peut désormais apparaître avant "Rechercher" dans le DOM, cf. standard UI
+            // Agence → Statut → autres filtres inline).
+            '[data-testid="search-input"]:visible, input[data-testid^="filter-inline-"]:visible, input[placeholder*="rechercher" i]:not([data-testid="global-search"]):visible, input[placeholder*="recherche" i]:not([data-testid="global-search"]):visible',
         )
         .first();
 }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Categorie;
 use App\Models\Depense;
 use App\Models\EquipeLivreur;
 use App\Models\Proprietaire;
@@ -9,11 +10,13 @@ use App\Models\Site;
 use App\Models\TypeVehicule;
 use App\Models\User;
 use App\Models\Vehicule;
+use App\Models\VehiculeCapacite;
 use App\Models\VehiculeFrais;
 use App\Services\ImageService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -78,6 +81,17 @@ class VehiculeController extends Controller
                 ])->values()->all()
                 : [],
             'frais_total' => $v->relationLoaded('frais') ? (float) $v->frais->sum('montant') : 0.0,
+            // Capacité par catégorie (nouveau régime, cf. VehiculeCapaciteService) — vide tant
+            // que l'organisation n'a rien configuré, auquel cas capacite_packs ci-dessus fait
+            // toujours foi seul.
+            'capacites' => $v->relationLoaded('capacites')
+                ? $v->capacites->map(fn (VehiculeCapacite $c) => [
+                    'id' => $c->id,
+                    'categorie_id' => $c->categorie_id,
+                    'categorie_nom' => $c->categorie?->nom,
+                    'capacite_max' => $c->capacite_max,
+                ])->values()->all()
+                : [],
             'pris_en_charge_par_usine' => $v->pris_en_charge_par_usine,
             'commission_eligible' => $v->commission_eligible,
             'photo_url' => $v->photo_url,
@@ -124,7 +138,7 @@ class VehiculeController extends Controller
     {
         $this->authorize('viewAny', Vehicule::class);
 
-        $vehicules = Vehicule::with(['typeVehicule', 'site', 'proprietaire.user.sites', 'equipe.membres.livreur'])
+        $vehicules = Vehicule::with(['typeVehicule', 'site', 'proprietaire.user.sites', 'equipe.membres.livreur', 'capacites.categorie'])
             ->where('organization_id', auth()->user()->organization_id)
             ->orderBy('nom_vehicule')
             ->get()
@@ -225,7 +239,7 @@ class VehiculeController extends Controller
     {
         $this->authorize('view', $vehicule);
 
-        $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'equipe.membres.livreur', 'equipe.proprietaire']);
+        $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'equipe.membres.livreur', 'equipe.proprietaire', 'capacites.categorie']);
 
         $depenses = Depense::where('beneficiaire_type', 'vehicule')
             ->where('beneficiaire_id', $vehicule->id)
@@ -279,6 +293,7 @@ class VehiculeController extends Controller
             'depenses' => $depenses,
             'equipe' => $equipeData,
             'proprietaires' => $this->proprietairesOptions(),
+            'categories' => $this->categoriesOptions(),
         ]);
     }
 
@@ -469,6 +484,58 @@ class VehiculeController extends Controller
                 'capacite_defaut' => $t->capacite_defaut,
             ])
             ->toArray();
+    }
+
+    private function categoriesOptions(): array
+    {
+        return Categorie::where('organization_id', auth()->user()->organization_id)
+            ->orderBy('nom')
+            ->get(['id', 'nom'])
+            ->map(fn (Categorie $c) => ['value' => $c->id, 'label' => $c->nom])
+            ->toArray();
+    }
+
+    /**
+     * Synchronise intégralement les capacités par catégorie du véhicule (supprime puis
+     * recrée) — plus simple qu'un CRUD ligne à ligne pour une petite liste éditée en bloc
+     * depuis le formulaire, et évite les soucis de contrainte unique(vehicule_id, categorie_id)
+     * lors d'un remplacement de catégorie sur une ligne existante.
+     */
+    public function syncCapacites(Request $request, Vehicule $vehicule): RedirectResponse
+    {
+        $this->authorize('update', $vehicule);
+
+        $orgId = auth()->user()->organization_id;
+
+        $data = $request->validate([
+            'capacites' => 'array',
+            'capacites.*.categorie_id' => [
+                'required', 'string',
+                Rule::exists('categories', 'id')->where('organization_id', $orgId),
+                'distinct',
+            ],
+            'capacites.*.capacite_max' => 'required|integer|min:1|max:99999',
+        ], [
+            'capacites.*.categorie_id.required' => 'La catégorie est obligatoire.',
+            'capacites.*.categorie_id.exists' => 'Catégorie invalide.',
+            'capacites.*.categorie_id.distinct' => 'Chaque catégorie ne peut avoir qu\'une seule ligne de capacité.',
+            'capacites.*.capacite_max.required' => 'La capacité est obligatoire.',
+            'capacites.*.capacite_max.min' => 'La capacité doit être supérieure à 0.',
+        ]);
+
+        DB::transaction(function () use ($data, $vehicule, $orgId) {
+            $vehicule->capacites()->delete();
+            foreach ($data['capacites'] ?? [] as $ligne) {
+                $vehicule->capacites()->create([
+                    'organization_id' => $orgId,
+                    'categorie_id' => $ligne['categorie_id'],
+                    'capacite_max' => $ligne['capacite_max'],
+                ]);
+            }
+        });
+
+        return redirect()->route('vehicules.show', $vehicule)
+            ->with('success', 'Capacités mises à jour.');
     }
 
     private function proprietairesOptions(): array

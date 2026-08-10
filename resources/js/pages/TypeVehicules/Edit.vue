@@ -2,6 +2,7 @@
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import VehiculeCapacitesCard from '@/components/VehiculeCapacitesCard.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/vue3';
@@ -15,9 +16,18 @@ interface TypeVehiculeData {
     unite_capacite: string;
     description: string | null;
     is_active: boolean;
+    capacites: Array<{
+        id: string;
+        categorie_id: string;
+        categorie_nom: string | null;
+        capacite_max: number;
+    }>;
 }
 
-const props = defineProps<{ type: TypeVehiculeData }>();
+const props = defineProps<{
+    type: TypeVehiculeData;
+    categories: Array<{ value: string; label: string }>;
+}>();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
@@ -152,6 +162,14 @@ function submit() {
                     </Button>
                 </div>
             </form>
+
+            <VehiculeCapacitesCard
+                class="mt-6"
+                :capacites="type.capacites"
+                :categories="categories"
+                :capacite-legacy="type.capacite_defaut"
+                :sync-url="`/backoffice/type-vehicules/${type.id}/capacites`"
+            />
         </div>
     </AppLayout>
 </template>
