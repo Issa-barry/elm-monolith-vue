@@ -14,7 +14,10 @@ class ImportTextNormalizer
         $value = trim($value);
         $value = str_replace(['’', '`'], "'", $value);
         $value = str_replace(['–', '—'], '-', $value);
-        $value = preg_replace('/\s*-\s*/', '-', $value) ?? $value;
+        // Le tiret est un séparateur optionnel dans nos libellés (ex :
+        // "Tricycle-75") : on le retire plutôt que de le normaliser, pour que
+        // "Tricycle75" / "Tricycle-75" / "Tricycle 75" soient équivalents.
+        $value = preg_replace('/\s*-\s*/', '', $value) ?? $value;
         $value = self::stripAccents($value);
         $value = mb_strtolower($value, 'UTF-8');
 

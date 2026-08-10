@@ -2,6 +2,7 @@
 import DetailHeader from '@/components/DetailHeader.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
+import VehiculeCapacitesCard from '@/components/VehiculeCapacitesCard.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
@@ -78,6 +79,12 @@ interface VehiculeData {
     type_vehicule_id: string | null;
     categorie: string | null;
     capacite_packs: number | null;
+    capacites: Array<{
+        id: string;
+        categorie_id: string;
+        categorie_nom: string | null;
+        capacite_max: number;
+    }>;
     site_id: string | null;
     site_nom: string | null;
     proprietaire_id: string | null;
@@ -96,6 +103,7 @@ const props = defineProps<{
     depenses: DepenseRow[];
     equipe: EquipeData | null;
     proprietaires: ProprietaireOption[];
+    categories: Array<{ value: string; label: string }>;
 }>();
 
 const { can } = usePermissions();
@@ -346,153 +354,169 @@ function formatGNF(val: number): string {
                 </aside>
 
                 <!-- Informations tab -->
-                <div
-                    v-if="activeTab === 'informations'"
-                    class="rounded-xl border bg-card p-5 sm:p-6"
-                >
-                    <div class="flex items-center justify-between gap-2">
-                        <h2
-                            class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
-                        >
-                            Informations du véhicule
-                        </h2>
-                        <Link
-                            v-if="can('vehicules.update')"
-                            :href="`/backoffice/vehicules/${vehicule.id}/edit`"
-                        >
-                            <Button size="sm" variant="outline">
-                                <Pencil class="mr-1.5 h-4 w-4" />
-                                Modifier
-                            </Button>
-                        </Link>
-                    </div>
-                    <div class="mt-5 grid gap-4 sm:grid-cols-2">
-                        <div class="rounded-lg border bg-background p-4">
-                            <p class="text-xs text-muted-foreground">
-                                Nom du véhicule
-                            </p>
-                            <p class="mt-1 text-sm font-medium">
-                                {{ vehicule.nom_vehicule }}
-                            </p>
+                <template v-if="activeTab === 'informations'">
+                    <div class="rounded-xl border bg-card p-5 sm:p-6">
+                        <div class="flex items-center justify-between gap-2">
+                            <h2
+                                class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                            >
+                                Informations du véhicule
+                            </h2>
+                            <Link
+                                v-if="can('vehicules.update')"
+                                :href="`/backoffice/vehicules/${vehicule.id}/edit`"
+                            >
+                                <Button size="sm" variant="outline">
+                                    <Pencil class="mr-1.5 h-4 w-4" />
+                                    Modifier
+                                </Button>
+                            </Link>
                         </div>
-                        <div class="rounded-lg border bg-background p-4">
-                            <p class="text-xs text-muted-foreground">
-                                Immatriculation
-                            </p>
-                            <p class="mt-1 font-mono text-sm font-medium">
-                                {{ vehicule.immatriculation }}
-                            </p>
-                        </div>
-                        <div class="rounded-lg border bg-background p-4">
-                            <p class="text-xs text-muted-foreground">Type</p>
-                            <p class="mt-1 text-sm font-medium">
-                                {{ vehicule.type_label }}
-                            </p>
-                        </div>
-                        <div class="rounded-lg border bg-background p-4">
-                            <p class="text-xs text-muted-foreground">
-                                Catégorie
-                            </p>
-                            <p class="mt-1">
-                                <span
-                                    v-if="vehicule.categorie === 'interne'"
-                                    class="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-300"
-                                    >Interne</span
-                                >
-                                <span
-                                    v-else-if="vehicule.categorie === 'externe'"
-                                    class="inline-flex items-center rounded-full bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700 dark:bg-orange-950 dark:text-orange-300"
-                                    >Externe</span
-                                >
-                                <span
-                                    v-else
-                                    class="text-sm text-muted-foreground"
-                                    >—</span
-                                >
-                            </p>
-                        </div>
-                        <div class="rounded-lg border bg-background p-4">
-                            <p class="text-xs text-muted-foreground">
-                                Capacité
-                            </p>
-                            <p class="mt-1 text-sm font-medium">
-                                {{
-                                    vehicule.capacite_packs !== null
-                                        ? `${vehicule.capacite_packs} packs`
-                                        : '—'
-                                }}
-                            </p>
-                        </div>
-                        <div class="rounded-lg border bg-background p-4">
-                            <p class="text-xs text-muted-foreground">Site</p>
-                            <p class="mt-1 text-sm font-medium">
-                                {{ vehicule.site_nom ?? '—' }}
-                            </p>
-                        </div>
-                        <div class="rounded-lg border bg-background p-4">
-                            <p class="text-xs text-muted-foreground">
-                                Propriétaire
-                            </p>
-                            <template v-if="vehicule.proprietaire_id">
-                                <p
-                                    class="mt-1 text-sm font-medium"
-                                    data-testid="proprietaire-nom"
-                                >
-                                    {{ vehicule.proprietaire_nom }}
+                        <div class="mt-5 grid gap-4 sm:grid-cols-2">
+                            <div class="rounded-lg border bg-background p-4">
+                                <p class="text-xs text-muted-foreground">
+                                    Nom du véhicule
                                 </p>
-                                <p
-                                    class="mt-0.5 font-mono text-xs text-muted-foreground"
-                                    data-testid="proprietaire-telephone"
-                                >
+                                <p class="mt-1 text-sm font-medium">
+                                    {{ vehicule.nom_vehicule }}
+                                </p>
+                            </div>
+                            <div class="rounded-lg border bg-background p-4">
+                                <p class="text-xs text-muted-foreground">
+                                    Immatriculation
+                                </p>
+                                <p class="mt-1 font-mono text-sm font-medium">
+                                    {{ vehicule.immatriculation }}
+                                </p>
+                            </div>
+                            <div class="rounded-lg border bg-background p-4">
+                                <p class="text-xs text-muted-foreground">
+                                    Type
+                                </p>
+                                <p class="mt-1 text-sm font-medium">
+                                    {{ vehicule.type_label }}
+                                </p>
+                            </div>
+                            <div class="rounded-lg border bg-background p-4">
+                                <p class="text-xs text-muted-foreground">
+                                    Catégorie
+                                </p>
+                                <p class="mt-1">
+                                    <span
+                                        v-if="vehicule.categorie === 'interne'"
+                                        class="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-300"
+                                        >Interne</span
+                                    >
+                                    <span
+                                        v-else-if="
+                                            vehicule.categorie === 'externe'
+                                        "
+                                        class="inline-flex items-center rounded-full bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700 dark:bg-orange-950 dark:text-orange-300"
+                                        >Externe</span
+                                    >
+                                    <span
+                                        v-else
+                                        class="text-sm text-muted-foreground"
+                                        >—</span
+                                    >
+                                </p>
+                            </div>
+                            <div class="rounded-lg border bg-background p-4">
+                                <p class="text-xs text-muted-foreground">
+                                    Capacité
+                                </p>
+                                <p class="mt-1 text-sm font-medium">
                                     {{
-                                        formatPhoneDisplay(
-                                            vehicule.proprietaire_telephone,
-                                        )
+                                        vehicule.capacite_packs !== null
+                                            ? `${vehicule.capacite_packs} packs`
+                                            : '—'
                                     }}
                                 </p>
-                            </template>
-                            <template v-else>
-                                <p class="mt-1 text-sm text-muted-foreground">
-                                    Aucun propriétaire rattaché
+                            </div>
+                            <div class="rounded-lg border bg-background p-4">
+                                <p class="text-xs text-muted-foreground">
+                                    Site
                                 </p>
-                            </template>
-                        </div>
-                        <div class="rounded-lg border bg-background p-4">
-                            <p class="text-xs text-muted-foreground">
-                                Dépenses prises en charge par l'usine
-                            </p>
-                            <p class="mt-1">
-                                <span
-                                    v-if="vehicule.pris_en_charge_par_usine"
-                                    class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700"
-                                    >Oui</span
-                                >
-                                <span
-                                    v-else
-                                    class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
-                                    >Non</span
-                                >
-                            </p>
-                        </div>
-                        <div class="rounded-lg border bg-background p-4">
-                            <p class="text-xs text-muted-foreground">
-                                Véhicule éligible aux commissions
-                            </p>
-                            <p class="mt-1">
-                                <span
-                                    v-if="vehicule.commission_eligible"
-                                    class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700"
-                                    >Oui</span
-                                >
-                                <span
-                                    v-else
-                                    class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
-                                    >Non</span
-                                >
-                            </p>
+                                <p class="mt-1 text-sm font-medium">
+                                    {{ vehicule.site_nom ?? '—' }}
+                                </p>
+                            </div>
+                            <div class="rounded-lg border bg-background p-4">
+                                <p class="text-xs text-muted-foreground">
+                                    Propriétaire
+                                </p>
+                                <template v-if="vehicule.proprietaire_id">
+                                    <p
+                                        class="mt-1 text-sm font-medium"
+                                        data-testid="proprietaire-nom"
+                                    >
+                                        {{ vehicule.proprietaire_nom }}
+                                    </p>
+                                    <p
+                                        class="mt-0.5 font-mono text-xs text-muted-foreground"
+                                        data-testid="proprietaire-telephone"
+                                    >
+                                        {{
+                                            formatPhoneDisplay(
+                                                vehicule.proprietaire_telephone,
+                                            )
+                                        }}
+                                    </p>
+                                </template>
+                                <template v-else>
+                                    <p
+                                        class="mt-1 text-sm text-muted-foreground"
+                                    >
+                                        Aucun propriétaire rattaché
+                                    </p>
+                                </template>
+                            </div>
+                            <div class="rounded-lg border bg-background p-4">
+                                <p class="text-xs text-muted-foreground">
+                                    Dépenses prises en charge par l'usine
+                                </p>
+                                <p class="mt-1">
+                                    <span
+                                        v-if="vehicule.pris_en_charge_par_usine"
+                                        class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700"
+                                        >Oui</span
+                                    >
+                                    <span
+                                        v-else
+                                        class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+                                        >Non</span
+                                    >
+                                </p>
+                            </div>
+                            <div class="rounded-lg border bg-background p-4">
+                                <p class="text-xs text-muted-foreground">
+                                    Véhicule éligible aux commissions
+                                </p>
+                                <p class="mt-1">
+                                    <span
+                                        v-if="vehicule.commission_eligible"
+                                        class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700"
+                                        >Oui</span
+                                    >
+                                    <span
+                                        v-else
+                                        class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+                                        >Non</span
+                                    >
+                                </p>
+                            </div>
                         </div>
                     </div>
-                </div>
+
+                    <VehiculeCapacitesCard
+                        v-if="can('vehicules.update')"
+                        class="mt-6"
+                        :capacites="vehicule.capacites"
+                        :categories="categories"
+                        :capacite-legacy="vehicule.capacite_packs"
+                        :sync-url="`/backoffice/vehicules/${vehicule.id}/capacites`"
+                    />
+                </template>
 
                 <!-- Equipe tab -->
                 <div

@@ -300,7 +300,11 @@
       "Bash(echo \"=== Achats/CommandeAchat/ProduitForm errors ===\")",
       "Bash(grep -n 'Achats/\\\\|ProduitForm\\\\|FournisseurSelect\\\\|CreateFournisseurModal' 'C:\\\\Users\\\\issab\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--laragon-www-eau-la-maman-elm-monolithe\\\\b191c652-67b4-4f7c-8b0d-b67fe0585f72\\\\tasks\\\\bkgbrln3f.output')",
       "Bash(./vendor/bin/pint --dirty --test)",
-      "Bash(git rev-list *)"
+      "Bash(git rev-list *)",
+      "Bash(grep -n 'protected $fillable' -A 10 app/Models/VarianteStock.php)",
+      "Bash(xargs -I{} echo {})",
+      "Bash(node -e \"console.log\\(/cba|lansanaya|lambagny|dabompa/i.test\\('CBA'\\)\\)\")",
+      "Bash(vendor/bin/pint --test database/seeders/SuperAdminSeeder.php tests/Unit/SuperAdminSeederTest.php)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64",

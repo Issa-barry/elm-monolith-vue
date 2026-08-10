@@ -32,10 +32,20 @@ class SuperAdminSeeder extends Seeder
 
         $prenom = env('SUPER_ADMIN_PRENOM') ?: $this->command->ask('Prénom du super admin');
         $nom = env('SUPER_ADMIN_NOM') ?: $this->command->ask('Nom du super admin');
-        $telephone = env('SUPER_ADMIN_TELEPHONE') ?: $this->command->ask('Téléphone (format E.164, ex: +224620000000)');
+        $telephoneSaisi = env('SUPER_ADMIN_TELEPHONE') ?: $this->command->ask('Téléphone (numéro local, sans indicatif, ex: 620000000)');
         $codePays = env('SUPER_ADMIN_CODE_PAYS') ?: $this->command->ask('Code pays', 'GN');
 
         [$paysNom, $codePhonePays] = self::PAYS[strtoupper($codePays)] ?? [null, null];
+
+        // Le login (Fortify::authenticateUsing, cf. FortifyServiceProvider) normalise toujours
+        // le téléphone soumis en E.164 avant de comparer à `users.telephone` — un compte dont
+        // le téléphone n'est pas stocké au format "+<indicatif><local sans 0 initial>" ne peut
+        // JAMAIS se connecter, quel que soit le mot de passe. Bug réel constaté en prod le
+        // 10/08/2026 : l'ancienne version stockait $telephoneSaisi tel quel (ex: "758855039"
+        // sans "+33"), créant un compte inutilisable.
+        $telephone = str_starts_with($telephoneSaisi, '+')
+            ? $telephoneSaisi
+            : ($codePhonePays ?? '').ltrim($telephoneSaisi, '0');
 
         $password = env('SUPER_ADMIN_PASSWORD');
         $generated = false;

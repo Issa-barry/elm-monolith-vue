@@ -41,7 +41,7 @@ async function fillLogistiqueForm(page: Page): Promise<void> {
         await selectOptionFromCombobox(
             page,
             siteSourceCombobox,
-            /lansanaya|lambagny|dabompa/i,
+            /cba|lansanaya|lambagny|dabompa/i,
         );
     }
 

@@ -85,7 +85,7 @@ async function createTransfertAndGenerateCommission(
         await selectOptionFromCombobox(
             page,
             siteSourceCombobox,
-            /lansanaya|lambagny|dabompa/i,
+            /cba|lansanaya|lambagny|dabompa/i,
         );
     }
 
