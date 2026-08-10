@@ -226,10 +226,12 @@ Route::prefix('backoffice')->group(function () {
             });
 
             Route::resource('type-vehicules', TypeVehiculeController::class)->except(['show']);
+            Route::put('type-vehicules/{typeVehicule}/capacites', [TypeVehiculeController::class, 'syncCapacites'])->name('type-vehicules.capacites.sync');
             Route::resource('vehicules', VehiculeController::class);
             Route::post('vehicules/{vehicule}/frais', [VehiculeController::class, 'storeFrais'])->name('vehicules.frais.store');
             Route::patch('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'updateFrais'])->name('vehicules.frais.update');
             Route::delete('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'destroyFrais'])->name('vehicules.frais.destroy');
+            Route::put('vehicules/{vehicule}/capacites', [VehiculeController::class, 'syncCapacites'])->name('vehicules.capacites.sync');
             Route::resource('proprietaires', ProprietaireController::class);
 
             // Pièces d'identité (propriétaires uniquement pour le moment)

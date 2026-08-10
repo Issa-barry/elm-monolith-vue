@@ -18,6 +18,8 @@ use Illuminate\Validation\ValidationException;
 
 class PdvCheckoutService
 {
+    public function __construct(private readonly VehiculeCapaciteService $vehiculeCapaciteService) {}
+
     /**
      * Enregistre une vente PDV directement en EN_COURS avec facture.
      * Stock du site décrémenté de manière atomique (lockForUpdate() sur
@@ -97,26 +99,15 @@ class PdvCheckoutService
 
     private function validateCapacite(array $data): void
     {
-        $vehicule = Vehicule::select(['id', 'capacite_packs', 'type_vehicule_id'])
-            ->with('typeVehicule')
-            ->find($data['vehicule_id']);
-
-        // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
-        // on retombe sur la capacité par défaut du type (cf. VehiculeController).
-        $capaciteVehicule = $vehicule?->capacite_packs ?? $vehicule?->typeVehicule?->capacite_defaut;
-
-        if (! $vehicule || $capaciteVehicule === null) {
+        $vehicule = Vehicule::find($data['vehicule_id']);
+        if (! $vehicule) {
             return;
         }
 
-        $qteTotale = collect($data['lignes'])->sum(fn ($l) => (int) ($l['quantite'] ?? 0));
-        $capacite = (int) $capaciteVehicule;
-
-        if ($qteTotale > $capacite) {
-            throw ValidationException::withMessages([
-                'lignes' => "La quantité totale ({$qteTotale}) dépasse la capacité du véhicule ({$capacite} packs maximum).",
-            ]);
-        }
+        // PDV n'a jamais exigé de chargement complet (contrairement à la vente web, cf.
+        // Parametre::isVentesAutorisationSaisieDessousQteMax) ni de bypass par permission —
+        // comportement historique préservé tel quel.
+        $this->vehiculeCapaciteService->verifier($vehicule, $data['lignes'], 'quantite', false, false);
     }
 
     /**

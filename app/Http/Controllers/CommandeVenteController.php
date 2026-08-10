@@ -23,6 +23,7 @@ use App\Models\Vehicule;
 use App\Services\AuditLogService;
 use App\Services\CommandeVenteActiviteService;
 use App\Services\CommandeVenteService;
+use App\Services\VehiculeCapaciteService;
 use App\Services\VehiculeCommandeContextResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -41,7 +42,10 @@ class CommandeVenteController extends Controller
 
     private const UNIT_PRICE_UPDATE_PERMISSION = 'ventes.prix.update';
 
-    public function __construct(private readonly AuditLogService $auditService) {}
+    public function __construct(
+        private readonly AuditLogService $auditService,
+        private readonly VehiculeCapaciteService $vehiculeCapaciteService,
+    ) {}
 
     // ── Check solvabilité ─────────────────────────────────────────────────────
 
@@ -878,39 +882,20 @@ class CommandeVenteController extends Controller
             return;
         }
 
-        $vehicule = Vehicule::query()
-            ->select(['id', 'capacite_packs', 'type_vehicule_id'])
-            ->with('typeVehicule')
-            ->find($data['vehicule_id']);
+        $vehicule = Vehicule::query()->find($data['vehicule_id']);
         if (! $vehicule) {
             return;
         }
 
-        // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
-        // on retombe sur la capacité par défaut du type (cf. VehiculeController).
-        $capaciteVehicule = $vehicule->capacite_packs ?? $vehicule->typeVehicule?->capacite_defaut;
-
-        if ($capaciteVehicule === null) {
-            throw ValidationException::withMessages([
-                'vehicule_id' => 'Le véhicule sélectionné n\'a pas de capacité définie.',
-            ]);
-        }
-
-        $qteTotale = collect($data['lignes'] ?? [])->sum(fn (array $ligne): int => (int) ($ligne['qte'] ?? 0));
-        $capacite = (int) $capaciteVehicule;
-
-        if ($qteTotale > $capacite && ! auth()->user()->can('ventes.qte.update')) {
-            throw ValidationException::withMessages([
-                'lignes' => "La quantité totale ({$qteTotale} packs) dépasse la capacité du véhicule ({$capacite} packs maximum).",
-            ]);
-        }
-
         $orgId = auth()->user()->organization_id;
-        if (! Parametre::isVentesAutorisationSaisieDessousQteMax($orgId) && $qteTotale < $capacite) {
-            throw ValidationException::withMessages([
-                'lignes' => "La quantité totale ({$qteTotale} packs) est inférieure à la capacité du véhicule ({$capacite} packs). Le chargement complet est obligatoire.",
-            ]);
-        }
+
+        $this->vehiculeCapaciteService->verifier(
+            $vehicule,
+            $data['lignes'] ?? [],
+            'qte',
+            ! Parametre::isVentesAutorisationSaisieDessousQteMax($orgId),
+            auth()->user()->can('ventes.qte.update'),
+        );
     }
 
     private function enforcePrixVentePolicy(array $data, ?CommandeVente $commande): void

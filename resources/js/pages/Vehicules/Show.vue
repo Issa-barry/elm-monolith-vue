@@ -2,6 +2,7 @@
 import DetailHeader from '@/components/DetailHeader.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
+import VehiculeCapacitesCard from '@/components/VehiculeCapacitesCard.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
@@ -78,6 +79,12 @@ interface VehiculeData {
     type_vehicule_id: string | null;
     categorie: string | null;
     capacite_packs: number | null;
+    capacites: Array<{
+        id: string;
+        categorie_id: string;
+        categorie_nom: string | null;
+        capacite_max: number;
+    }>;
     site_id: string | null;
     site_nom: string | null;
     proprietaire_id: string | null;
@@ -96,6 +103,7 @@ const props = defineProps<{
     depenses: DepenseRow[];
     equipe: EquipeData | null;
     proprietaires: ProprietaireOption[];
+    categories: Array<{ value: string; label: string }>;
 }>();
 
 const { can } = usePermissions();
@@ -346,10 +354,8 @@ function formatGNF(val: number): string {
                 </aside>
 
                 <!-- Informations tab -->
-                <div
-                    v-if="activeTab === 'informations'"
-                    class="rounded-xl border bg-card p-5 sm:p-6"
-                >
+                <template v-if="activeTab === 'informations'">
+                <div class="rounded-xl border bg-card p-5 sm:p-6">
                     <div class="flex items-center justify-between gap-2">
                         <h2
                             class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
@@ -493,6 +499,16 @@ function formatGNF(val: number): string {
                         </div>
                     </div>
                 </div>
+
+                <VehiculeCapacitesCard
+                    v-if="can('vehicules.update')"
+                    class="mt-6"
+                    :capacites="vehicule.capacites"
+                    :categories="categories"
+                    :capacite-legacy="vehicule.capacite_packs"
+                    :sync-url="`/backoffice/vehicules/${vehicule.id}/capacites`"
+                />
+                </template>
 
                 <!-- Equipe tab -->
                 <div

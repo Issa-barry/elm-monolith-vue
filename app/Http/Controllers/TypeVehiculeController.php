@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Categorie;
 use App\Models\TypeVehicule;
+use App\Models\TypeVehiculeCapacite;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -67,6 +70,8 @@ class TypeVehiculeController extends Controller
     {
         $this->authorize('update', $typeVehicule);
 
+        $typeVehicule->load('capacites.categorie');
+
         return Inertia::render('TypeVehicules/Edit', [
             'type' => [
                 'id' => $typeVehicule->id,
@@ -75,8 +80,65 @@ class TypeVehiculeController extends Controller
                 'unite_capacite' => $typeVehicule->unite_capacite,
                 'description' => $typeVehicule->description,
                 'is_active' => $typeVehicule->is_active,
+                'capacites' => $typeVehicule->capacites->map(fn (TypeVehiculeCapacite $c) => [
+                    'id' => $c->id,
+                    'categorie_id' => $c->categorie_id,
+                    'categorie_nom' => $c->categorie?->nom,
+                    'capacite_max' => $c->capacite_max,
+                ])->values()->all(),
             ],
+            'categories' => $this->categoriesOptions(),
         ]);
+    }
+
+    /**
+     * Synchronise intégralement les capacités par catégorie par défaut du type — reprises par
+     * tout véhicule de ce type sans capacité propre, cf. VehiculeCapaciteService.
+     */
+    public function syncCapacites(Request $request, TypeVehicule $typeVehicule): RedirectResponse
+    {
+        $this->authorize('update', $typeVehicule);
+
+        $orgId = auth()->user()->organization_id;
+
+        $data = $request->validate([
+            'capacites' => 'array',
+            'capacites.*.categorie_id' => [
+                'required', 'string',
+                Rule::exists('categories', 'id')->where('organization_id', $orgId),
+                'distinct',
+            ],
+            'capacites.*.capacite_max' => 'required|integer|min:1|max:99999',
+        ], [
+            'capacites.*.categorie_id.required' => 'La catégorie est obligatoire.',
+            'capacites.*.categorie_id.exists' => 'Catégorie invalide.',
+            'capacites.*.categorie_id.distinct' => 'Chaque catégorie ne peut avoir qu\'une seule ligne de capacité.',
+            'capacites.*.capacite_max.required' => 'La capacité est obligatoire.',
+            'capacites.*.capacite_max.min' => 'La capacité doit être supérieure à 0.',
+        ]);
+
+        DB::transaction(function () use ($data, $typeVehicule, $orgId) {
+            $typeVehicule->capacites()->delete();
+            foreach ($data['capacites'] ?? [] as $ligne) {
+                $typeVehicule->capacites()->create([
+                    'organization_id' => $orgId,
+                    'categorie_id' => $ligne['categorie_id'],
+                    'capacite_max' => $ligne['capacite_max'],
+                ]);
+            }
+        });
+
+        return redirect()->route('type-vehicules.edit', $typeVehicule)
+            ->with('success', 'Capacités mises à jour.');
+    }
+
+    private function categoriesOptions(): array
+    {
+        return Categorie::where('organization_id', auth()->user()->organization_id)
+            ->orderBy('nom')
+            ->get(['id', 'nom'])
+            ->map(fn (Categorie $c) => ['value' => $c->id, 'label' => $c->nom])
+            ->toArray();
     }
 
     public function update(Request $request, TypeVehicule $typeVehicule): RedirectResponse

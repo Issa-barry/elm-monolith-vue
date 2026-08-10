@@ -92,6 +92,11 @@ class Vehicule extends Model
         return $this->hasMany(CommissionLogistique::class);
     }
 
+    public function capacites(): HasMany
+    {
+        return $this->hasMany(VehiculeCapacite::class);
+    }
+
     // ── Métier ────────────────────────────────────────────────────────────────
 
     /**
