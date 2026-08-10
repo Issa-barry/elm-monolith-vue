@@ -41,7 +41,7 @@ async function createPrestataire(page: Page, suffix: string): Promise<string> {
     await selectOptionFromCombobox(
         page,
         form.getByRole('combobox').first(),
-        /fournisseur/i,
+        /machiniste/i,
     );
 
     await page.locator('#prenom').fill(prenom);
