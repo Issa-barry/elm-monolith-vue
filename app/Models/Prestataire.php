@@ -50,9 +50,6 @@ class Prestataire extends Model
             if (empty($p->reference)) {
                 $p->reference = self::generateReference();
             }
-            if (empty($p->type)) {
-                $p->type = PrestataireType::FOURNISSEUR;
-            }
             $p->code_pays = self::normalizeIsoCountryCode($p->code_pays) ?? 'GN';
             $p->code_phone_pays = self::normalizeDialCode($p->code_phone_pays) ?? '+224';
             $p->phone = self::normalizePhoneE164($p->phone, $p->code_phone_pays);

@@ -7,6 +7,7 @@ use App\Models\Client;
 use App\Models\CommandeAchat;
 use App\Models\CommandeVente;
 use App\Models\EquipeLivraison;
+use App\Models\Fournisseur;
 use App\Models\Livreur;
 use App\Models\OptionCatalogue;
 use App\Models\Packing;
@@ -26,6 +27,7 @@ use App\Policies\ClientPolicy;
 use App\Policies\CommandeAchatPolicy;
 use App\Policies\CommandeVentePolicy;
 use App\Policies\EquipeLivraisonPolicy;
+use App\Policies\FournisseurPolicy;
 use App\Policies\LivreurPolicy;
 use App\Policies\OptionCataloguePolicy;
 use App\Policies\PackingPolicy;
@@ -49,6 +51,7 @@ class AuthServiceProvider extends ServiceProvider
         Categorie::class => CategoriePolicy::class,
         Client::class => ClientPolicy::class,
         Prestataire::class => PrestatairePolicy::class,
+        Fournisseur::class => FournisseurPolicy::class,
         Livreur::class => LivreurPolicy::class,
         Proprietaire::class => ProprietairePolicy::class,
         Produit::class => ProduitPolicy::class,

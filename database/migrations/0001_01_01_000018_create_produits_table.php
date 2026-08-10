@@ -12,6 +12,11 @@ return new class extends Migration
             $table->ulid('id')->primary();
             $table->foreignUlid('organization_id')->constrained()->cascadeOnDelete();
             $table->foreignUlid('categorie_id')->nullable()->constrained('categories')->nullOnDelete();
+            // Fournisseur principal (0 ou 1) — entité dédiée (table fournisseurs), distincte de
+            // Prestataire (main-d'œuvre externe : machiniste, mécanicien, consultant).
+            // nullOnDelete plutôt que restrict : supprimer un fournisseur ne doit jamais bloquer
+            // sur les produits qui le référençaient, juste les détacher.
+            $table->foreignUlid('fournisseur_id')->nullable()->constrained('fournisseurs')->nullOnDelete();
             $table->string('nom');
             $table->string('type', 30)->default('materiel')->index();
             $table->string('statut', 30)->default('actif')->index();
@@ -33,6 +38,7 @@ return new class extends Migration
             $table->index(['statut', 'type']);
             $table->index(['organization_id', 'statut']);
             $table->index(['organization_id', 'categorie_id']);
+            $table->index(['organization_id', 'fournisseur_id']);
         });
     }
 

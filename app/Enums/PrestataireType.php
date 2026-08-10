@@ -7,7 +7,6 @@ enum PrestataireType: string
     case MACHINISTE = 'machiniste';
     case MECANICIEN = 'mecanicien';
     case CONSULTANT = 'consultant';
-    case FOURNISSEUR = 'fournisseur';
 
     public function label(): string
     {
@@ -15,7 +14,6 @@ enum PrestataireType: string
             self::MACHINISTE => 'Machiniste',
             self::MECANICIEN => 'Mécanicien',
             self::CONSULTANT => 'Consultant',
-            self::FOURNISSEUR => 'Fournisseur',
         };
     }
 

@@ -1,0 +1,148 @@
+<script setup lang="ts">
+import { Spinner } from '@/components/ui/spinner';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { type BreadcrumbItem } from '@/types';
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { ArrowLeft, CheckCircle, Save } from 'lucide-vue-next';
+import { computed, watch } from 'vue';
+import FournisseurForm from './partials/FournisseurForm.vue';
+
+interface FournisseurData {
+    id: string;
+    reference: string;
+    nom: string | null;
+    prenom: string | null;
+    raison_sociale: string | null;
+    email: string | null;
+    phone: string | null;
+    code_phone_pays: string;
+    code_pays: string;
+    pays: string;
+    ville: string | null;
+    adresse: string | null;
+    notes: string | null;
+    is_active: boolean;
+}
+
+const props = defineProps<{ fournisseur: FournisseurData }>();
+const page = usePage();
+const flashSuccess = computed(
+    () => (page.props as any).flash?.success as string | undefined,
+);
+
+const breadcrumbs: BreadcrumbItem[] = [
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Fournisseurs', href: '/backoffice/fournisseurs' },
+    { title: props.fournisseur.reference, href: '#' },
+];
+
+const form = useForm({
+    nom: props.fournisseur.nom,
+    prenom: props.fournisseur.prenom,
+    raison_sociale: props.fournisseur.raison_sociale,
+    email: props.fournisseur.email,
+    phone: props.fournisseur.phone,
+    code_phone_pays: props.fournisseur.code_phone_pays,
+    code_pays: props.fournisseur.code_pays,
+    pays: props.fournisseur.pays,
+    ville: props.fournisseur.ville,
+    adresse: props.fournisseur.adresse,
+    notes: props.fournisseur.notes,
+    is_active: props.fournisseur.is_active,
+});
+
+function submit() {
+    form.put(`/backoffice/fournisseurs/${props.fournisseur.id}`);
+}
+
+function handleFormUpdate(updated: Record<string, unknown>) {
+    const changed = Object.keys(updated).filter(
+        (k) => (form as Record<string, unknown>)[k] !== updated[k],
+    );
+    Object.assign(form, updated);
+    if (changed.length) form.clearErrors(...changed);
+}
+
+// Efface les erreurs croisées identité dès que la condition change
+watch(
+    () => [form.raison_sociale, form.prenom, form.nom] as const,
+    ([rs, prenom, nom]) => {
+        if (rs) form.clearErrors('prenom', 'nom');
+        if (prenom || nom) form.clearErrors('raison_sociale');
+    },
+);
+</script>
+
+<template>
+    <Head :title="`Modifier — ${fournisseur.reference}`" />
+
+    <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
+        <!-- Header mobile -->
+        <div
+            class="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur-sm sm:hidden"
+        >
+            <div class="relative flex items-center justify-center px-4 py-3">
+                <Link
+                    href="/backoffice/fournisseurs"
+                    class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
+                >
+                    <ArrowLeft class="h-4 w-4" />
+                </Link>
+                <div class="text-center">
+                    <h1 class="text-[17px] leading-tight font-semibold">
+                        Modifier
+                    </h1>
+                    <p class="text-[11px] text-muted-foreground">
+                        {{ fournisseur.reference }}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="mx-auto max-w-2xl pb-6 sm:p-6">
+            <div class="mx-auto hidden max-w-2xl px-6 pt-6 pb-0 sm:block">
+                <div class="mb-8">
+                    <h1 class="text-2xl font-semibold tracking-tight">
+                        Modifier le fournisseur
+                    </h1>
+                    <p class="mt-1 font-mono text-sm text-muted-foreground">
+                        {{ fournisseur.reference }}
+                    </p>
+                </div>
+            </div>
+
+            <div
+                v-if="flashSuccess"
+                class="mx-6 mb-4 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800"
+            >
+                <CheckCircle class="h-4 w-4 shrink-0" />
+                {{ flashSuccess }}
+            </div>
+
+            <FournisseurForm
+                :form="form"
+                :errors="form.errors"
+                :processing="form.processing"
+                :reference="fournisseur.reference"
+                @submit="submit"
+                @update:form="handleFormUpdate($event)"
+            />
+        </div>
+
+        <!-- Footer sticky mobile -->
+        <div
+            class="fixed right-0 bottom-0 left-0 z-30 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur-sm sm:hidden"
+        >
+            <button
+                type="submit"
+                form="fournisseur-form"
+                :disabled="form.processing"
+                class="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-transform active:scale-[0.98] disabled:opacity-60"
+            >
+                <Spinner v-if="form.processing" class="h-4 w-4" />
+                <Save v-else class="h-4 w-4" />
+                {{ form.processing ? 'Enregistrement…' : 'Enregistrer' }}
+            </button>
+        </div>
+    </AppLayout>
+</template>

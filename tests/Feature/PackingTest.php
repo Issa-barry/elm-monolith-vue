@@ -29,8 +29,8 @@ class PackingTest extends TestCase
     {
         return Prestataire::create([
             'organization_id' => $org->id,
-            'nom' => 'FOURNISSEUR TEST',
-            'type' => 'fournisseur',
+            'nom' => 'MACHINISTE TEST',
+            'type' => 'machiniste',
             'is_active' => true,
         ]);
     }

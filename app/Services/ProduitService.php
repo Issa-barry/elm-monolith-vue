@@ -12,7 +12,7 @@ class ProduitService
 {
     /** Champs de produit_variantes portés par le formulaire Produit (variante par défaut/générées). */
     private const CHAMPS_VARIANTE = [
-        'code_barres', 'code_fournisseur', 'prix_usine', 'prix_vente', 'prix_achat', 'cout', 'seuil_alerte_stock',
+        'code_barres', 'prix_usine', 'prix_vente', 'prix_achat', 'cout', 'seuil_alerte_stock',
     ];
 
     public function __construct(private VarianteService $varianteService) {}

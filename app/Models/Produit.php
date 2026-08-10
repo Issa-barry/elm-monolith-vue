@@ -24,6 +24,7 @@ class Produit extends Model
     protected $fillable = [
         'organization_id',
         'categorie_id',
+        'fournisseur_id',
         'nom',
         'type',
         'statut',
@@ -155,6 +156,15 @@ class Produit extends Model
     public function categorie(): BelongsTo
     {
         return $this->belongsTo(Categorie::class);
+    }
+
+    /**
+     * Fournisseur principal (0 ou 1) — entité dédiée (table fournisseurs), distincte de
+     * Prestataire (main-d'œuvre externe : machiniste, mécanicien, consultant).
+     */
+    public function fournisseur(): BelongsTo
+    {
+        return $this->belongsTo(Fournisseur::class, 'fournisseur_id');
     }
 
     public function variantes(): HasMany

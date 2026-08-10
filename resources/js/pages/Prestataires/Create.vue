@@ -31,7 +31,7 @@ const form = useForm({
     pays: 'Guinée',
     ville: null as string | null,
     adresse: null as string | null,
-    type: 'fournisseur',
+    type: 'machiniste',
     notes: null as string | null,
     is_active: true,
 });

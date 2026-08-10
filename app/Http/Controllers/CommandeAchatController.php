@@ -7,8 +7,8 @@ use App\Enums\ProduitType;
 use App\Enums\StatutCommandeAchat;
 use App\Models\CommandeAchat;
 use App\Models\CommandeAchatLigne;
+use App\Models\Fournisseur;
 use App\Models\MouvementStock;
-use App\Models\Prestataire;
 use App\Models\Produit;
 use App\Models\ProduitVariante;
 use App\Models\Site;
@@ -30,7 +30,7 @@ class CommandeAchatController extends Controller
 
         $orgId = auth()->user()->organization_id;
 
-        $commandes = CommandeAchat::with(['prestataire', 'lignes'])
+        $commandes = CommandeAchat::with(['fournisseur', 'lignes'])
             ->where('organization_id', $orgId)
             ->orderByDesc('created_at')
             ->get()
@@ -40,7 +40,7 @@ class CommandeAchatController extends Controller
                 'statut' => $c->statut?->value,
                 'statut_label' => $c->statut_label,
                 'total_commande' => (float) $c->total_commande,
-                'prestataire_nom' => $c->prestataire?->nom,
+                'fournisseur_nom' => $c->fournisseur?->nom_complet,
                 'note' => $c->note,
                 'created_at' => $c->created_at?->format('d/m/Y'),
                 'is_annulee' => $c->isAnnulee(),
@@ -77,17 +77,18 @@ class CommandeAchatController extends Controller
                 ];
             });
 
-        $prestataires = Prestataire::where('organization_id', $orgId)
+        $fournisseurs = Fournisseur::where('organization_id', $orgId)
+            ->where('is_active', true)
             ->orderBy('nom')
             ->get()
-            ->map(fn (Prestataire $p) => [
-                'id' => $p->id,
-                'nom' => $p->nom,
+            ->map(fn (Fournisseur $f) => [
+                'id' => $f->id,
+                'nom' => $f->nom_complet,
             ]);
 
         return Inertia::render('Achats/Create', [
             'produits' => $produits,
-            'prestataires' => $prestataires,
+            'fournisseurs' => $fournisseurs,
         ]);
     }
 
@@ -99,7 +100,7 @@ class CommandeAchatController extends Controller
         abort_if(! $orgId, 403, "Votre compte n'est associé à aucune organisation.");
 
         $data = $request->validate([
-            'prestataire_id' => 'nullable|exists:prestataires,id',
+            'fournisseur_id' => 'nullable|exists:fournisseurs,id',
             'note' => 'nullable|string|max:1000',
             'lignes' => 'required|array|min:1',
             'lignes.*.produit_id' => 'required|exists:produits,id',
@@ -141,7 +142,7 @@ class CommandeAchatController extends Controller
 
         $commande = CommandeAchat::create([
             'organization_id' => $orgId,
-            'prestataire_id' => $data['prestataire_id'] ?? null,
+            'fournisseur_id' => $data['fournisseur_id'] ?? null,
             'note' => $data['note'] ?? null,
             'total_commande' => $totalCommande,
         ]);
@@ -158,7 +159,7 @@ class CommandeAchatController extends Controller
     {
         $this->authorize('view', $achat);
 
-        $achat->load(['prestataire', 'lignes.variante.produit', 'createdBy']);
+        $achat->load(['fournisseur', 'lignes.variante.produit', 'createdBy']);
 
         $lignes = $achat->lignes->map(fn ($l) => [
             'id' => $l->id,
@@ -177,7 +178,7 @@ class CommandeAchatController extends Controller
                 'statut' => $achat->statut?->value,
                 'statut_label' => $achat->statut_label,
                 'total_commande' => (float) $achat->total_commande,
-                'prestataire_nom' => $achat->prestataire?->nom,
+                'fournisseur_nom' => $achat->fournisseur?->nom_complet,
                 'note' => $achat->note,
                 'motif_annulation' => $achat->motif_annulation,
                 'annulee_at' => $achat->annulee_at?->toISOString(),
@@ -330,7 +331,7 @@ class CommandeAchatController extends Controller
     {
         $this->authorize('view', $achat);
 
-        $achat->load(['prestataire', 'lignes.variante.produit', 'createdBy', 'organization']);
+        $achat->load(['fournisseur', 'lignes.variante.produit', 'createdBy', 'organization']);
 
         $createdBy = $achat->createdBy
             ? trim($achat->createdBy->prenom.' '.$achat->createdBy->nom)

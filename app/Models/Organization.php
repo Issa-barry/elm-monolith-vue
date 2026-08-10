@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 
 class Organization extends Model
 {
@@ -72,6 +73,30 @@ class Organization extends Model
         }
 
         return $code;
+    }
+
+    /**
+     * Prochaine référence produit (ProduitVariante.sku) de cette organisation — un entier
+     * séquentiel, style numéro d'article IKEA : stable une fois attribué, n'encode ni le nom,
+     * ni la catégorie, ni le prix, ni la date de création. Le compteur vit sur l'organisation
+     * (pas une table globale) pour que chaque tenant ait sa propre numérotation, cohérente avec
+     * l'unicité ['organization_id', 'sku'] de produit_variantes — deux organisations peuvent
+     * avoir la référence "100001" sans collision.
+     *
+     * `lockForUpdate` sérialise les créations concurrentes de variantes pour la même
+     * organisation (verrou levé à la fin de la transaction appelante, cf.
+     * ProduitService::creer) : deux créations simultanées ne peuvent jamais se voir attribuer
+     * la même référence.
+     */
+    public static function prochaineReferenceProduit(string $organizationId): string
+    {
+        return DB::transaction(function () use ($organizationId) {
+            $organization = self::whereKey($organizationId)->lockForUpdate()->firstOrFail();
+            $reference = (string) $organization->next_produit_reference;
+            $organization->increment('next_produit_reference');
+
+            return $reference;
+        });
     }
 
     public function users(): HasMany

@@ -9,6 +9,9 @@ import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import { computed, reactive, ref } from 'vue';
 import CategorieSelect from './CategorieSelect.vue';
+import FournisseurSelect, {
+    type FournisseurOption,
+} from './FournisseurSelect.vue';
 import OptionCatalogueSelect, {
     type OptionCatalogue,
 } from './OptionCatalogueSelect.vue';
@@ -48,7 +51,6 @@ interface Variante {
     libelle: string;
     sku: string | null;
     code_barres: string | null;
-    code_fournisseur: string | null;
     prix_usine: number | null;
     prix_vente: number | null;
     prix_achat: number | null;
@@ -62,7 +64,8 @@ interface Variante {
 interface FormData {
     nom: string;
     categorie_id: string | null;
-    code_fournisseur: string | null;
+    fournisseur_id: string | null;
+    code_barres: string | null;
     type: string;
     statut: string;
     prix_usine: number | null;
@@ -72,7 +75,9 @@ interface FormData {
     seuil_alerte_stock: number | null;
     description: string | null;
     is_alerte: boolean;
-    image: File | null;
+    // Tableau (même si un seul fichier ici) : le backend attend la clé "images[]"
+    // (ProduitController::validerFormulaire()), partagée avec la galerie multi-photo.
+    images: File[];
     options: OptionInput[];
 }
 
@@ -83,6 +88,7 @@ const props = withDefaults(
         types: Option[];
         statuts: Option[];
         categories?: Categorie[];
+        fournisseurs?: FournisseurOption[];
         optionsCatalogue?: OptionCatalogue[];
         limites?: Limites;
         processing: boolean;
@@ -95,6 +101,7 @@ const props = withDefaults(
     }>(),
     {
         categories: () => [],
+        fournisseurs: () => [],
         optionsCatalogue: () => [],
         limites: undefined,
         currentImageUrl: null,
@@ -119,13 +126,13 @@ function onImageChange(e: Event) {
     const file = (e.target as HTMLInputElement).files?.[0] ?? null;
     if (previewUrl.value) URL.revokeObjectURL(previewUrl.value);
     previewUrl.value = file ? URL.createObjectURL(file) : null;
-    emit('update:form', { ...props.form, image: file });
+    emit('update:form', { ...props.form, images: file ? [file] : [] });
 }
 
 function removeImage() {
     if (previewUrl.value) URL.revokeObjectURL(previewUrl.value);
     previewUrl.value = null;
-    emit('update:form', { ...props.form, image: null });
+    emit('update:form', { ...props.form, images: [] });
 }
 
 const displayImage = computed(
@@ -376,9 +383,31 @@ const depasseLimiteVariantes = computed(
                     </p>
                 </div>
 
-                <!-- SKU (généré automatiquement, édition uniquement) -->
+                <!-- Fournisseur -->
+                <div>
+                    <Label class="mb-1.5 block">Fournisseur</Label>
+                    <FournisseurSelect
+                        :model-value="form.fournisseur_id"
+                        @update:model-value="
+                            $emit('update:form', {
+                                ...form,
+                                fournisseur_id: $event,
+                            })
+                        "
+                        :fournisseurs="fournisseurs"
+                        :invalid="!!errors.fournisseur_id"
+                    />
+                    <p
+                        v-if="errors.fournisseur_id"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.fournisseur_id }}
+                    </p>
+                </div>
+
+                <!-- Référence (sku, générée automatiquement, édition uniquement) -->
                 <div v-if="currentSku">
-                    <Label class="mb-1.5 block">SKU</Label>
+                    <Label class="mb-1.5 block">Référence</Label>
                     <div
                         class="flex h-10 w-full items-center rounded-md border bg-muted/40 px-3 font-mono text-sm tracking-widest text-muted-foreground select-all"
                     >
@@ -386,22 +415,29 @@ const depasseLimiteVariantes = computed(
                     </div>
                 </div>
 
-                <!-- Code fournisseur -->
+                <!-- Code-barres -->
                 <div>
-                    <Label for="code_fournisseur" class="mb-1.5 block"
-                        >Code fournisseur</Label
+                    <Label for="code_barres" class="mb-1.5 block"
+                        >Code-barres</Label
                     >
                     <InputText
-                        id="code_fournisseur"
-                        :model-value="form.code_fournisseur ?? ''"
+                        id="code_barres"
+                        :model-value="form.code_barres ?? ''"
                         @update:model-value="
                             $emit('update:form', {
                                 ...form,
-                                code_fournisseur: $event || null,
+                                code_barres: $event || null,
                             })
                         "
                         class="w-full font-mono"
+                        :class="{ 'p-invalid': errors.code_barres }"
                     />
+                    <p
+                        v-if="errors.code_barres"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.code_barres }}
+                    </p>
                 </div>
             </div>
         </div>

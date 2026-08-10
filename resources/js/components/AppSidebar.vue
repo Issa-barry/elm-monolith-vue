@@ -132,12 +132,23 @@ const mainNavItems = computed((): NavItem[] => {
         });
     }
 
-    if (canSee('achats.read', 'achats'))
+    if (canSee('achats.read', 'achats')) {
+        const achatsSubItems = [
+            { title: 'Commandes', href: '/backoffice/achats' },
+        ];
+        if (can('fournisseurs.read')) {
+            achatsSubItems.push({
+                title: 'Fournisseurs',
+                href: '/backoffice/fournisseurs',
+            });
+        }
         items.push({
             title: 'Achats',
             href: '/backoffice/achats',
             icon: PackageCheck,
+            items: achatsSubItems,
         });
+    }
     if (canSee('packings.read', 'packings'))
         items.push({
             title: 'Packings',

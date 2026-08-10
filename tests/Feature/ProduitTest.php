@@ -3,9 +3,11 @@
 namespace Tests\Feature;
 
 use App\Models\DroitAjustementStock;
+use App\Models\Fournisseur;
 use App\Models\MouvementStock;
 use App\Models\OptionCatalogue;
 use App\Models\Organization;
+use App\Models\Prestataire;
 use App\Models\Produit;
 use App\Models\Site;
 use App\Models\User;
@@ -75,6 +77,18 @@ class ProduitTest extends TestCase
     private function varianteId(Produit $produit): string
     {
         return $produit->variantePrincipale()->first()->id;
+    }
+
+    private function makeFournisseur(Organization $org, array $overrides = []): Fournisseur
+    {
+        return Fournisseur::create(array_merge([
+            'organization_id' => $org->id,
+            'raison_sociale' => 'SOGUIDEP',
+            'phone' => '+224620000009',
+            'code_phone_pays' => '+224',
+            'code_pays' => 'GN',
+            'is_active' => true,
+        ], $overrides));
     }
 
     // ── index ─────────────────────────────────────────────────────────────────
@@ -152,6 +166,64 @@ class ProduitTest extends TestCase
         $this->assertSame('Actif', $produits[0]['nom']);
     }
 
+    public function test_index_recherche_par_reference(): void
+    {
+        $cible = app(ProduitService::class)->creer([
+            'organization_id' => $this->org->id,
+            'nom' => 'Produit cible',
+            'type' => 'materiel',
+            'statut' => 'actif',
+            'prix_achat' => 100,
+            'prix_vente' => 200,
+        ]);
+        app(ProduitService::class)->creer([
+            'organization_id' => $this->org->id,
+            'nom' => 'Autre produit',
+            'type' => 'materiel',
+            'statut' => 'actif',
+            'prix_achat' => 100,
+            'prix_vente' => 200,
+        ]);
+        $reference = $cible->variantes->first()->sku;
+
+        $response = $this->actingAs($this->user)
+            ->get(route('produits.index', ['search' => $reference]));
+
+        $response->assertStatus(200);
+        $produits = $response->original->getData()['page']['props']['produits'];
+        $this->assertCount(1, $produits);
+        $this->assertSame('Produit cible', $produits[0]['nom']);
+    }
+
+    public function test_index_recherche_par_code_barres(): void
+    {
+        $cible = app(ProduitService::class)->creer([
+            'organization_id' => $this->org->id,
+            'nom' => 'Produit scanné',
+            'type' => 'materiel',
+            'statut' => 'actif',
+            'prix_achat' => 100,
+            'prix_vente' => 200,
+            'code_barres' => '3274080005003',
+        ]);
+        app(ProduitService::class)->creer([
+            'organization_id' => $this->org->id,
+            'nom' => 'Autre produit scanné',
+            'type' => 'materiel',
+            'statut' => 'actif',
+            'prix_achat' => 100,
+            'prix_vente' => 200,
+        ]);
+
+        $response = $this->actingAs($this->user)
+            ->get(route('produits.index', ['search' => '3274080005003']));
+
+        $response->assertStatus(200);
+        $produits = $response->original->getData()['page']['props']['produits'];
+        $this->assertCount(1, $produits);
+        $this->assertSame('Produit scanné', $produits[0]['nom']);
+    }
+
     public function test_index_inclut_sites_et_options(): void
     {
         $response = $this->actingAs($this->user)
@@ -186,8 +258,7 @@ class ProduitTest extends TestCase
                 'statut' => 'actif',
                 'prix_achat' => 1000,
                 'is_alerte' => false,
-            ])
-            ->assertRedirect(route('produits.index'));
+            ]);
 
         $this->assertDatabaseHas('produits', [
             'organization_id' => $this->org->id,
@@ -197,6 +268,20 @@ class ProduitTest extends TestCase
             'prix_achat' => 1000,
             'is_default' => true,
         ]);
+    }
+
+    public function test_store_redirige_vers_la_fiche_produit(): void
+    {
+        $response = $this->actingAs($this->user)
+            ->post(route('produits.store'), [
+                'nom' => 'Rouleau plastique redirection',
+                'type' => 'materiel',
+                'statut' => 'actif',
+                'prix_achat' => 1000,
+            ]);
+
+        $produit = Produit::where('nom', 'Rouleau plastique redirection')->firstOrFail();
+        $response->assertRedirect(route('produits.show', $produit));
     }
 
     public function test_store_cree_automatiquement_la_variante_par_defaut(): void
@@ -216,6 +301,184 @@ class ProduitTest extends TestCase
         $variante = $produit->variantes->first();
         $this->assertTrue($variante->is_default);
         $this->assertNotEmpty($variante->sku);
+    }
+
+    public function test_store_avec_code_barres(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('produits.store'), [
+                'nom' => 'Produit avec code-barres',
+                'type' => 'materiel',
+                'statut' => 'actif',
+                'prix_achat' => 1000,
+                'code_barres' => '3274080005003',
+            ]);
+
+        $this->assertDatabaseHas('produit_variantes', [
+            'code_barres' => '3274080005003',
+        ]);
+    }
+
+    public function test_store_refuse_un_code_barres_deja_utilise(): void
+    {
+        app(ProduitService::class)->creer([
+            'organization_id' => $this->org->id,
+            'nom' => 'Premier produit',
+            'type' => 'materiel',
+            'statut' => 'actif',
+            'prix_achat' => 1000,
+            'code_barres' => '3274080005003',
+        ]);
+
+        $response = $this->actingAs($this->user)
+            ->post(route('produits.store'), [
+                'nom' => 'Deuxième produit',
+                'type' => 'materiel',
+                'statut' => 'actif',
+                'prix_achat' => 1000,
+                'code_barres' => '3274080005003',
+            ]);
+
+        $response->assertSessionHasErrors('code_barres');
+    }
+
+    // ── fournisseur ──────────────────────────────────────────────────────────────
+
+    public function test_store_creates_produit_sans_fournisseur(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('produits.store'), [
+                'nom' => 'Produit sans fournisseur',
+                'type' => 'materiel',
+                'statut' => 'actif',
+                'prix_achat' => 1000,
+            ]);
+
+        $produit = Produit::where('nom', 'Produit sans fournisseur')->firstOrFail();
+        $this->assertNull($produit->fournisseur_id);
+    }
+
+    public function test_store_creates_produit_avec_fournisseur(): void
+    {
+        $fournisseur = $this->makeFournisseur($this->org);
+
+        $this->actingAs($this->user)
+            ->post(route('produits.store'), [
+                'nom' => 'Produit avec fournisseur',
+                'type' => 'materiel',
+                'statut' => 'actif',
+                'prix_achat' => 1000,
+                'fournisseur_id' => $fournisseur->id,
+            ]);
+
+        $produit = Produit::where('nom', 'Produit avec fournisseur')->firstOrFail();
+        $this->assertSame($fournisseur->id, $produit->fournisseur_id);
+    }
+
+    public function test_store_refuse_un_fournisseur_dune_autre_organisation(): void
+    {
+        $autreOrg = Organization::factory()->create();
+        $fournisseurAilleurs = $this->makeFournisseur($autreOrg);
+
+        $this->actingAs($this->user)
+            ->post(route('produits.store'), [
+                'nom' => 'Produit test isolation',
+                'type' => 'materiel',
+                'statut' => 'actif',
+                'prix_achat' => 1000,
+                'fournisseur_id' => $fournisseurAilleurs->id,
+            ])
+            ->assertSessionHasErrors('fournisseur_id');
+    }
+
+    public function test_store_refuse_un_id_de_prestataire_comme_fournisseur(): void
+    {
+        // Fournisseur et Prestataire sont deux tables/entités distinctes (machiniste,
+        // mécanicien, consultant — jamais de "fournisseur" côté Prestataire) : l'id d'un
+        // Prestataire ne doit jamais être accepté comme fournisseur_id d'un produit.
+        $machiniste = Prestataire::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Diallo',
+            'prenom' => 'Mamadou',
+            'phone' => '+224620000010',
+            'type' => 'machiniste',
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('produits.store'), [
+                'nom' => 'Produit test type',
+                'type' => 'materiel',
+                'statut' => 'actif',
+                'prix_achat' => 1000,
+                'fournisseur_id' => $machiniste->id,
+            ])
+            ->assertSessionHasErrors('fournisseur_id');
+    }
+
+    public function test_update_change_le_fournisseur_du_produit(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $ancien = $this->makeFournisseur($this->org, ['raison_sociale' => 'Ancien fournisseur', 'phone' => '+224620000011']);
+        $produit->update(['fournisseur_id' => $ancien->id]);
+
+        $nouveau = $this->makeFournisseur($this->org, ['raison_sociale' => 'Nouveau fournisseur', 'phone' => '+224620000012']);
+
+        $this->actingAs($this->user)
+            ->put(route('produits.update', $produit), [
+                'nom' => $produit->nom,
+                'type' => 'materiel',
+                'statut' => 'actif',
+                'fournisseur_id' => $nouveau->id,
+            ]);
+
+        $this->assertSame($nouveau->id, $produit->fresh()->fournisseur_id);
+    }
+
+    public function test_update_retire_le_fournisseur_sans_le_supprimer(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $fournisseur = $this->makeFournisseur($this->org);
+        $produit->update(['fournisseur_id' => $fournisseur->id]);
+
+        $this->actingAs($this->user)
+            ->put(route('produits.update', $produit), [
+                'nom' => $produit->nom,
+                'type' => 'materiel',
+                'statut' => 'actif',
+                'fournisseur_id' => null,
+            ]);
+
+        $this->assertNull($produit->fresh()->fournisseur_id);
+        $this->assertDatabaseHas('fournisseurs', ['id' => $fournisseur->id, 'deleted_at' => null]);
+    }
+
+    public function test_show_inclut_le_fournisseur(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $fournisseur = $this->makeFournisseur($this->org);
+        $produit->update(['fournisseur_id' => $fournisseur->id]);
+
+        $response = $this->actingAs($this->user)
+            ->get(route('produits.show', $produit));
+
+        $props = $response->original->getData()['page']['props'];
+        $this->assertSame($fournisseur->id, $props['produit']['fournisseur']['id']);
+        $this->assertSame($fournisseur->nom_complet, $props['produit']['fournisseur']['nom_complet']);
+    }
+
+    public function test_edit_inclut_la_liste_des_fournisseurs_actifs(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $actif = $this->makeFournisseur($this->org, ['raison_sociale' => 'Actif', 'phone' => '+224620000013']);
+        $this->makeFournisseur($this->org, ['raison_sociale' => 'Inactif', 'phone' => '+224620000014', 'is_active' => false]);
+
+        $response = $this->actingAs($this->user)
+            ->get(route('produits.edit', $produit));
+
+        $props = $response->original->getData()['page']['props'];
+        $ids = collect($props['fournisseurs'])->pluck('id')->all();
+        $this->assertContains($actif->id, $ids);
+        $this->assertCount(1, $ids);
     }
 
     public function test_store_fails_with_empty_data(): void
@@ -264,8 +527,7 @@ class ProduitTest extends TestCase
                     ['nom' => 'Couleur', 'valeurs' => ['Noir', 'Blanc']],
                     ['nom' => 'Taille', 'valeurs' => ['S', 'M']],
                 ],
-            ])
-            ->assertRedirect(route('produits.index'));
+            ]);
 
         $produit = Produit::where('nom', 'T-shirt test')->firstOrFail();
         $this->assertCount(4, $produit->variantes); // 2 couleurs × 2 tailles
@@ -287,8 +549,7 @@ class ProduitTest extends TestCase
                 'options' => [
                     ['nom' => 'Couleur', 'valeurs' => ['Noir', 'Rouge'], 'option_catalogue_id' => $option->id],
                 ],
-            ])
-            ->assertRedirect(route('produits.index'));
+            ]);
 
         // "Noir" existait déjà (pas de doublon), "Rouge" est ajouté au catalogue réutilisable.
         $option->refresh();
@@ -381,7 +642,7 @@ class ProduitTest extends TestCase
                 'statut' => 'actif',
                 'is_alerte' => false,
             ])
-            ->assertRedirect(route('produits.index'));
+            ->assertRedirect(route('produits.show', $produit));
 
         $this->assertDatabaseHas('produits', [
             'id' => $produit->id,
@@ -406,6 +667,47 @@ class ProduitTest extends TestCase
 
         $variante = $produit->fresh()->variantePrincipale()->first();
         $this->assertSame(500, $variante->prix_achat);
+    }
+
+    public function test_update_conserve_le_meme_code_barres_sans_conflit(): void
+    {
+        // Renvoyer sur update le code-barres déjà présent sur SA PROPRE variante ne doit
+        // jamais être rejeté comme "déjà utilisé" — Rule::unique(...)->ignore() doit exclure
+        // la variante éditée elle-même.
+        $produit = $this->makeProduit($this->org);
+        $produit->variantePrincipale()->first()->update(['code_barres' => '3274080005003']);
+
+        $this->actingAs($this->user)
+            ->put(route('produits.update', $produit), [
+                'nom' => 'Produit test',
+                'type' => 'materiel',
+                'statut' => 'actif',
+                'code_barres' => '3274080005003',
+            ])
+            ->assertSessionDoesntHaveErrors();
+    }
+
+    public function test_update_refuse_un_code_barres_dun_autre_produit(): void
+    {
+        $autre = $this->makeProduit($this->org);
+        $autre->variantePrincipale()->first()->update(['code_barres' => '3274080005003']);
+
+        $produit = app(ProduitService::class)->creer([
+            'organization_id' => $this->org->id,
+            'nom' => 'Deuxième produit',
+            'type' => 'materiel',
+            'statut' => 'actif',
+            'prix_achat' => 500,
+        ]);
+
+        $this->actingAs($this->user)
+            ->put(route('produits.update', $produit), [
+                'nom' => 'Deuxième produit',
+                'type' => 'materiel',
+                'statut' => 'actif',
+                'code_barres' => '3274080005003',
+            ])
+            ->assertSessionHasErrors('code_barres');
     }
 
     public function test_update_fails_with_missing_required_fields(): void
