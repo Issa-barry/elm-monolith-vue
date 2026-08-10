@@ -149,7 +149,11 @@ function save() {
                 @click="save"
             >
                 <Save class="mr-1.5 h-3.5 w-3.5" />
-                {{ form.processing ? 'Enregistrement…' : 'Enregistrer' }}
+                {{
+                    form.processing
+                        ? 'Enregistrement…'
+                        : 'Enregistrer les capacités'
+                }}
             </Button>
         </div>
     </div>
