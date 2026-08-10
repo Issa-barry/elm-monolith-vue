@@ -18,6 +18,8 @@ class ProduitResource extends JsonResource
             'nom' => $this->nom,
             'categorie_id' => $this->categorie_id,
             'categorie_nom' => $this->whenLoaded('categorie', fn () => $this->categorie?->nom),
+            'fournisseur_id' => $this->fournisseur_id,
+            'fournisseur_nom' => $this->whenLoaded('fournisseur', fn () => $this->fournisseur?->nom_complet),
             'sku' => $variante?->sku,
             'code_barres' => $variante?->code_barres,
             'type' => $this->type?->value,

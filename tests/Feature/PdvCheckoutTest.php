@@ -6,6 +6,7 @@ use App\Enums\StatutCommandeVente;
 use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
+use App\Models\Fournisseur;
 use App\Models\Organization;
 use App\Models\Produit;
 use App\Models\Proprietaire;
@@ -71,6 +72,31 @@ class PdvCheckoutTest extends TestCase
     public function test_pdv_index_redirects_unauthenticated(): void
     {
         $this->get('/backoffice/pdv')->assertRedirect(route('login'));
+    }
+
+    /**
+     * Le fournisseur n'est pas une information nécessaire pour vendre un produit — le payload
+     * PDV ne doit pas l'embarquer, même si le produit en a un.
+     */
+    public function test_pdv_index_nexpose_pas_le_fournisseur(): void
+    {
+        $fournisseur = Fournisseur::create([
+            'organization_id' => $this->org->id,
+            'raison_sociale' => 'SOGUIDEP',
+            'phone' => '+224620000030',
+            'code_phone_pays' => '+224',
+            'code_pays' => 'GN',
+            'is_active' => true,
+        ]);
+        $this->produit->update(['fournisseur_id' => $fournisseur->id]);
+
+        $this->actingAs($this->user)
+            ->get('/backoffice/pdv')
+            ->assertInertia(fn ($page) => $page
+                ->component('PDV/Index')
+                ->missing('produits.0.fournisseur_id')
+                ->missing('produits.0.fournisseur_nom')
+            );
     }
 
     /**

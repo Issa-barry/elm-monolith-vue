@@ -73,6 +73,11 @@ interface Media {
 interface Produit {
     id: string;
     nom: string;
+    fournisseur: {
+        id: string;
+        nom_complet: string;
+        phone: string | null;
+    } | null;
     sku: string | null;
     code_barres: string | null;
     image_url: string | null;
@@ -400,6 +405,19 @@ const ajustements = props.mouvements.map((m) => ({
                             >
                             <p class="font-mono font-semibold">
                                 {{ produit.code_barres || '—' }}
+                            </p>
+                        </div>
+                        <div class="col-span-2">
+                            <span class="text-xs text-muted-foreground"
+                                >Fournisseur</span
+                            >
+                            <p class="font-semibold">
+                                {{ produit.fournisseur?.nom_complet || '—' }}
+                                <span
+                                    v-if="produit.fournisseur?.phone"
+                                    class="font-normal text-muted-foreground"
+                                    >— {{ produit.fournisseur.phone }}</span
+                                >
                             </p>
                         </div>
                     </div>

@@ -9,6 +9,9 @@ import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import { computed, reactive, ref } from 'vue';
 import CategorieSelect from './CategorieSelect.vue';
+import FournisseurSelect, {
+    type FournisseurOption,
+} from './FournisseurSelect.vue';
 import OptionCatalogueSelect, {
     type OptionCatalogue,
 } from './OptionCatalogueSelect.vue';
@@ -61,6 +64,7 @@ interface Variante {
 interface FormData {
     nom: string;
     categorie_id: string | null;
+    fournisseur_id: string | null;
     code_barres: string | null;
     type: string;
     statut: string;
@@ -84,6 +88,7 @@ const props = withDefaults(
         types: Option[];
         statuts: Option[];
         categories?: Categorie[];
+        fournisseurs?: FournisseurOption[];
         optionsCatalogue?: OptionCatalogue[];
         limites?: Limites;
         processing: boolean;
@@ -96,6 +101,7 @@ const props = withDefaults(
     }>(),
     {
         categories: () => [],
+        fournisseurs: () => [],
         optionsCatalogue: () => [],
         limites: undefined,
         currentImageUrl: null,
@@ -374,6 +380,28 @@ const depasseLimiteVariantes = computed(
                         class="mt-1 text-xs text-destructive"
                     >
                         {{ errors.categorie_id }}
+                    </p>
+                </div>
+
+                <!-- Fournisseur -->
+                <div>
+                    <Label class="mb-1.5 block">Fournisseur</Label>
+                    <FournisseurSelect
+                        :model-value="form.fournisseur_id"
+                        @update:model-value="
+                            $emit('update:form', {
+                                ...form,
+                                fournisseur_id: $event,
+                            })
+                        "
+                        :fournisseurs="fournisseurs"
+                        :invalid="!!errors.fournisseur_id"
+                    />
+                    <p
+                        v-if="errors.fournisseur_id"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.fournisseur_id }}
                     </p>
                 </div>
 

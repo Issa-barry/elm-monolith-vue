@@ -17,6 +17,12 @@ interface Categorie {
     parent_id: string | null;
 }
 
+interface FournisseurOption {
+    id: string;
+    nom_complet: string;
+    phone: string | null;
+}
+
 interface OptionCatalogueValeur {
     id: string;
     valeur: string;
@@ -39,6 +45,7 @@ defineProps<{
     types: Option[];
     statuts: Option[];
     categories: Categorie[];
+    fournisseurs: FournisseurOption[];
     optionsCatalogue: OptionCatalogue[];
     limites: Limites;
 }>();
@@ -52,6 +59,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     nom: '',
     categorie_id: null as string | null,
+    fournisseur_id: null as string | null,
     code_barres: null as string | null,
     type: 'materiel',
     statut: 'actif',
@@ -116,6 +124,7 @@ function submit() {
                 :types="types"
                 :statuts="statuts"
                 :categories="categories"
+                :fournisseurs="fournisseurs"
                 :options-catalogue="optionsCatalogue"
                 :limites="limites"
                 :processing="form.processing"

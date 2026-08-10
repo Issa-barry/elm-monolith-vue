@@ -16,6 +16,7 @@ class DatabaseSeeder extends Seeder
             ClientSeeder::class,                // Comptes clients (utilisateurs)
             ClientsInscriptionSeeder::class,    // 2 clients sans compte (lookup inscription)
             PrestatairesSeeder::class,          // Prestataires de service
+            FournisseursSeeder::class,          // Fournisseurs (entité séparée, cf. FournisseurController)
             SitesSeeder::class,                 // Sites (siège, usine, agences, dépôts)
             UserSitesSeeder::class,             // Rattachement utilisateurs → sites
             AdminEntrepriseSeeder::class,       // Comptes admin_entreprise additionnels (Matoto)

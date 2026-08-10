@@ -5,19 +5,12 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ArrowLeft, Save } from 'lucide-vue-next';
 import { watch } from 'vue';
-import PrestataireForm from './partials/PrestataireForm.vue';
-
-interface Option {
-    value: string;
-    label: string;
-}
-
-defineProps<{ types: Option[] }>();
+import FournisseurForm from './partials/FournisseurForm.vue';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
-    { title: 'Prestataires', href: '/backoffice/prestataires' },
-    { title: 'Nouveau prestataire', href: '#' },
+    { title: 'Fournisseurs', href: '/backoffice/fournisseurs' },
+    { title: 'Nouveau fournisseur', href: '#' },
 ];
 
 const form = useForm({
@@ -31,13 +24,12 @@ const form = useForm({
     pays: 'Guinée',
     ville: null as string | null,
     adresse: null as string | null,
-    type: 'machiniste',
     notes: null as string | null,
     is_active: true,
 });
 
 function submit() {
-    form.post('/backoffice/prestataires');
+    form.post('/backoffice/fournisseurs');
 }
 
 function handleFormUpdate(updated: Record<string, unknown>) {
@@ -59,7 +51,7 @@ watch(
 </script>
 
 <template>
-    <Head title="Nouveau prestataire" />
+    <Head title="Nouveau fournisseur" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
         <!-- Header mobile -->
@@ -68,14 +60,14 @@ watch(
         >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
-                    href="/backoffice/prestataires"
+                    href="/backoffice/fournisseurs"
                     class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
                 >
                     <ArrowLeft class="h-4 w-4" />
                 </Link>
                 <div class="text-center">
                     <h1 class="text-[17px] leading-tight font-semibold">
-                        Nouveau prestataire
+                        Nouveau fournisseur
                     </h1>
                 </div>
             </div>
@@ -85,18 +77,17 @@ watch(
             <div class="mx-auto hidden max-w-2xl px-6 pt-6 pb-0 sm:block">
                 <div class="mb-8">
                     <h1 class="text-2xl font-semibold tracking-tight">
-                        Nouveau prestataire
+                        Nouveau fournisseur
                     </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        Ajoutez un prestataire à votre organisation.
+                        Ajoutez un fournisseur à votre organisation.
                     </p>
                 </div>
             </div>
 
-            <PrestataireForm
+            <FournisseurForm
                 :form="form"
                 :errors="form.errors"
-                :types="types"
                 :processing="form.processing"
                 @submit="submit"
                 @update:form="handleFormUpdate($event)"
@@ -109,14 +100,16 @@ watch(
         >
             <button
                 type="submit"
-                form="prestataire-form"
+                form="fournisseur-form"
                 :disabled="form.processing"
                 class="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-transform active:scale-[0.98] disabled:opacity-60"
             >
                 <Spinner v-if="form.processing" class="h-4 w-4" />
                 <Save v-else class="h-4 w-4" />
                 {{
-                    form.processing ? 'Enregistrement…' : 'Créer le prestataire'
+                    form.processing
+                        ? 'Enregistrement…'
+                        : 'Créer le fournisseur'
                 }}
             </button>
         </div>

@@ -288,7 +288,18 @@
       "Bash(./vendor/bin/pint --test tests/Feature/ProduitTest.php tests/Feature/ProduitMediaTest.php app/Http/Controllers/ProduitController.php)",
       "Bash(grep -n 'protected $fillable' -A 20 app/Models/Produit.php)",
       "Bash(tee \"C:\\\\Users\\\\issab\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--laragon-www-eau-la-maman-elm-monolithe\\\\70753565-de4a-44dd-9b05-c8aa682bee76\\\\scratchpad\\\\test-run-2.txt\")",
-      "Bash(./vendor/bin/pint --dirty)"
+      "Bash(./vendor/bin/pint --dirty)",
+      "Bash(grep -n \"use App\\\\\\\\\\\\\\\\Http\\\\\\\\\\\\\\\\Controllers\\\\\\\\\\\\\\\\PrestataireController\" routes/web.php)",
+      "Bash(grep -n \"^use App\\\\\\\\\\\\\\\\Http\\\\\\\\\\\\\\\\Controllers\" routes/web.php)",
+      "Bash(grep -n \"^use App\\\\\\\\\\\\\\\\Http\\\\\\\\\\\\\\\\Controllers\\\\\\\\\\\\\\\\F\\\\|^use App\\\\\\\\\\\\\\\\Http\\\\\\\\\\\\\\\\Controllers\\\\\\\\\\\\\\\\E\" routes/web.php)",
+      "Bash(grep -n \"^use App\\\\\\\\\\\\\\\\Http\\\\\\\\\\\\\\\\Controllers\\\\\\\\\\\\\\\\\" routes/web.php)",
+      "Bash(grep -E \"\\\\\\\\\\\\\\\\\\(D|E|F|G\\)\")",
+      "Bash(grep -n \"Prestataire::create\\\\|use App\\\\\\\\\\\\\\\\Models\\\\\\\\\\\\\\\\Prestataire\" tests/Feature/ProduitTest.php)",
+      "Bash(echo \"=== total error count ===\")",
+      "Bash(grep -c 'error TS' 'C:\\\\Users\\\\issab\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--laragon-www-eau-la-maman-elm-monolithe\\\\b191c652-67b4-4f7c-8b0d-b67fe0585f72\\\\tasks\\\\bkgbrln3f.output')",
+      "Bash(echo \"=== Achats/CommandeAchat/ProduitForm errors ===\")",
+      "Bash(grep -n 'Achats/\\\\|ProduitForm\\\\|FournisseurSelect\\\\|CreateFournisseurModal' 'C:\\\\Users\\\\issab\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--laragon-www-eau-la-maman-elm-monolithe\\\\b191c652-67b4-4f7c-8b0d-b67fe0585f72\\\\tasks\\\\bkgbrln3f.output')",
+      "Bash(./vendor/bin/pint --dirty --test)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64",

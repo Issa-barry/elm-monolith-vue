@@ -141,8 +141,8 @@ class PolicyTest extends TestCase
         $org = Organization::factory()->create();
         $otherOrg = Organization::factory()->create();
         $userWith = $this->userWithPermissions($org, ['prestataires.read']);
-        $prestataireSameOrg = Prestataire::create(['organization_id' => $org->id, 'nom' => 'TEST', 'type' => 'fournisseur']);
-        $prestataireOtherOrg = Prestataire::create(['organization_id' => $otherOrg->id, 'nom' => 'OTHER', 'type' => 'fournisseur']);
+        $prestataireSameOrg = Prestataire::create(['organization_id' => $org->id, 'nom' => 'TEST', 'type' => 'machiniste']);
+        $prestataireOtherOrg = Prestataire::create(['organization_id' => $otherOrg->id, 'nom' => 'OTHER', 'type' => 'machiniste']);
 
         $policy = new PrestatairePolicy;
 
@@ -167,8 +167,8 @@ class PolicyTest extends TestCase
         $org = Organization::factory()->create();
         $otherOrg = Organization::factory()->create();
         $userWith = $this->userWithPermissions($org, ['prestataires.update']);
-        $prestataireSameOrg = Prestataire::create(['organization_id' => $org->id, 'nom' => 'TEST', 'type' => 'fournisseur']);
-        $prestataireOtherOrg = Prestataire::create(['organization_id' => $otherOrg->id, 'nom' => 'OTHER', 'type' => 'fournisseur']);
+        $prestataireSameOrg = Prestataire::create(['organization_id' => $org->id, 'nom' => 'TEST', 'type' => 'machiniste']);
+        $prestataireOtherOrg = Prestataire::create(['organization_id' => $otherOrg->id, 'nom' => 'OTHER', 'type' => 'machiniste']);
 
         $policy = new PrestatairePolicy;
 
@@ -181,8 +181,8 @@ class PolicyTest extends TestCase
         $org = Organization::factory()->create();
         $otherOrg = Organization::factory()->create();
         $userWith = $this->userWithPermissions($org, ['prestataires.delete']);
-        $prestataireSameOrg = Prestataire::create(['organization_id' => $org->id, 'nom' => 'TEST', 'type' => 'fournisseur']);
-        $prestataireOtherOrg = Prestataire::create(['organization_id' => $otherOrg->id, 'nom' => 'OTHER', 'type' => 'fournisseur']);
+        $prestataireSameOrg = Prestataire::create(['organization_id' => $org->id, 'nom' => 'TEST', 'type' => 'machiniste']);
+        $prestataireOtherOrg = Prestataire::create(['organization_id' => $otherOrg->id, 'nom' => 'OTHER', 'type' => 'machiniste']);
 
         $policy = new PrestatairePolicy;
 
@@ -194,7 +194,7 @@ class PolicyTest extends TestCase
     {
         $org = Organization::factory()->create();
         $userWithout = $this->userWithoutPermissions($org);
-        $prestataire = Prestataire::create(['organization_id' => $org->id, 'nom' => 'TEST', 'type' => 'fournisseur']);
+        $prestataire = Prestataire::create(['organization_id' => $org->id, 'nom' => 'TEST', 'type' => 'machiniste']);
 
         $policy = new PrestatairePolicy;
 

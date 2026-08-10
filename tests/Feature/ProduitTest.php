@@ -3,9 +3,11 @@
 namespace Tests\Feature;
 
 use App\Models\DroitAjustementStock;
+use App\Models\Fournisseur;
 use App\Models\MouvementStock;
 use App\Models\OptionCatalogue;
 use App\Models\Organization;
+use App\Models\Prestataire;
 use App\Models\Produit;
 use App\Models\Site;
 use App\Models\User;
@@ -75,6 +77,18 @@ class ProduitTest extends TestCase
     private function varianteId(Produit $produit): string
     {
         return $produit->variantePrincipale()->first()->id;
+    }
+
+    private function makeFournisseur(Organization $org, array $overrides = []): Fournisseur
+    {
+        return Fournisseur::create(array_merge([
+            'organization_id' => $org->id,
+            'raison_sociale' => 'SOGUIDEP',
+            'phone' => '+224620000009',
+            'code_phone_pays' => '+224',
+            'code_pays' => 'GN',
+            'is_active' => true,
+        ], $overrides));
     }
 
     // ── index ─────────────────────────────────────────────────────────────────
@@ -326,6 +340,145 @@ class ProduitTest extends TestCase
             ]);
 
         $response->assertSessionHasErrors('code_barres');
+    }
+
+    // ── fournisseur ──────────────────────────────────────────────────────────────
+
+    public function test_store_creates_produit_sans_fournisseur(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('produits.store'), [
+                'nom' => 'Produit sans fournisseur',
+                'type' => 'materiel',
+                'statut' => 'actif',
+                'prix_achat' => 1000,
+            ]);
+
+        $produit = Produit::where('nom', 'Produit sans fournisseur')->firstOrFail();
+        $this->assertNull($produit->fournisseur_id);
+    }
+
+    public function test_store_creates_produit_avec_fournisseur(): void
+    {
+        $fournisseur = $this->makeFournisseur($this->org);
+
+        $this->actingAs($this->user)
+            ->post(route('produits.store'), [
+                'nom' => 'Produit avec fournisseur',
+                'type' => 'materiel',
+                'statut' => 'actif',
+                'prix_achat' => 1000,
+                'fournisseur_id' => $fournisseur->id,
+            ]);
+
+        $produit = Produit::where('nom', 'Produit avec fournisseur')->firstOrFail();
+        $this->assertSame($fournisseur->id, $produit->fournisseur_id);
+    }
+
+    public function test_store_refuse_un_fournisseur_dune_autre_organisation(): void
+    {
+        $autreOrg = Organization::factory()->create();
+        $fournisseurAilleurs = $this->makeFournisseur($autreOrg);
+
+        $this->actingAs($this->user)
+            ->post(route('produits.store'), [
+                'nom' => 'Produit test isolation',
+                'type' => 'materiel',
+                'statut' => 'actif',
+                'prix_achat' => 1000,
+                'fournisseur_id' => $fournisseurAilleurs->id,
+            ])
+            ->assertSessionHasErrors('fournisseur_id');
+    }
+
+    public function test_store_refuse_un_id_de_prestataire_comme_fournisseur(): void
+    {
+        // Fournisseur et Prestataire sont deux tables/entités distinctes (machiniste,
+        // mécanicien, consultant — jamais de "fournisseur" côté Prestataire) : l'id d'un
+        // Prestataire ne doit jamais être accepté comme fournisseur_id d'un produit.
+        $machiniste = Prestataire::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Diallo',
+            'prenom' => 'Mamadou',
+            'phone' => '+224620000010',
+            'type' => 'machiniste',
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('produits.store'), [
+                'nom' => 'Produit test type',
+                'type' => 'materiel',
+                'statut' => 'actif',
+                'prix_achat' => 1000,
+                'fournisseur_id' => $machiniste->id,
+            ])
+            ->assertSessionHasErrors('fournisseur_id');
+    }
+
+    public function test_update_change_le_fournisseur_du_produit(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $ancien = $this->makeFournisseur($this->org, ['raison_sociale' => 'Ancien fournisseur', 'phone' => '+224620000011']);
+        $produit->update(['fournisseur_id' => $ancien->id]);
+
+        $nouveau = $this->makeFournisseur($this->org, ['raison_sociale' => 'Nouveau fournisseur', 'phone' => '+224620000012']);
+
+        $this->actingAs($this->user)
+            ->put(route('produits.update', $produit), [
+                'nom' => $produit->nom,
+                'type' => 'materiel',
+                'statut' => 'actif',
+                'fournisseur_id' => $nouveau->id,
+            ]);
+
+        $this->assertSame($nouveau->id, $produit->fresh()->fournisseur_id);
+    }
+
+    public function test_update_retire_le_fournisseur_sans_le_supprimer(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $fournisseur = $this->makeFournisseur($this->org);
+        $produit->update(['fournisseur_id' => $fournisseur->id]);
+
+        $this->actingAs($this->user)
+            ->put(route('produits.update', $produit), [
+                'nom' => $produit->nom,
+                'type' => 'materiel',
+                'statut' => 'actif',
+                'fournisseur_id' => null,
+            ]);
+
+        $this->assertNull($produit->fresh()->fournisseur_id);
+        $this->assertDatabaseHas('fournisseurs', ['id' => $fournisseur->id, 'deleted_at' => null]);
+    }
+
+    public function test_show_inclut_le_fournisseur(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $fournisseur = $this->makeFournisseur($this->org);
+        $produit->update(['fournisseur_id' => $fournisseur->id]);
+
+        $response = $this->actingAs($this->user)
+            ->get(route('produits.show', $produit));
+
+        $props = $response->original->getData()['page']['props'];
+        $this->assertSame($fournisseur->id, $props['produit']['fournisseur']['id']);
+        $this->assertSame($fournisseur->nom_complet, $props['produit']['fournisseur']['nom_complet']);
+    }
+
+    public function test_edit_inclut_la_liste_des_fournisseurs_actifs(): void
+    {
+        $produit = $this->makeProduit($this->org);
+        $actif = $this->makeFournisseur($this->org, ['raison_sociale' => 'Actif', 'phone' => '+224620000013']);
+        $this->makeFournisseur($this->org, ['raison_sociale' => 'Inactif', 'phone' => '+224620000014', 'is_active' => false]);
+
+        $response = $this->actingAs($this->user)
+            ->get(route('produits.edit', $produit));
+
+        $props = $response->original->getData()['page']['props'];
+        $ids = collect($props['fournisseurs'])->pluck('id')->all();
+        $this->assertContains($actif->id, $ids);
+        $this->assertCount(1, $ids);
     }
 
     public function test_store_fails_with_empty_data(): void

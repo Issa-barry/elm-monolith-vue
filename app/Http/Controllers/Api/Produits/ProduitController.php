@@ -62,7 +62,7 @@ class ProduitController extends Controller
     {
         $this->authorize('view', $produit);
 
-        $produit->load(['categorie', 'variantes', 'medias']);
+        $produit->load(['categorie', 'fournisseur', 'variantes', 'medias']);
 
         return response()->json(new ProduitResource($produit));
     }
@@ -92,10 +92,10 @@ class ProduitController extends Controller
             AuditEvent::CREATED,
             $r->user(),
             null,
-            $this->produitSnapshot($produit->fresh(['variantes'])),
+            $this->produitSnapshot($produit->fresh(['variantes', 'fournisseur'])),
         );
 
-        return response()->json(new ProduitResource($produit->fresh(['variantes', 'categorie', 'medias'])), 201);
+        return response()->json(new ProduitResource($produit->fresh(['variantes', 'categorie', 'fournisseur', 'medias'])), 201);
     }
 
     public function update(UpdateProduitRequest $r, Produit $produit): JsonResponse
@@ -103,7 +103,7 @@ class ProduitController extends Controller
         $data = $r->validated();
         $images = $r->file('images', []);
 
-        $oldSnapshot = $this->produitSnapshot($produit->fresh(['variantes']));
+        $oldSnapshot = $this->produitSnapshot($produit->fresh(['variantes', 'fournisseur']));
 
         $produit = DB::transaction(function () use ($produit, $data, $images) {
             $produit = $this->produitService->mettreAJourSimple($produit, $data);
@@ -115,14 +115,14 @@ class ProduitController extends Controller
             return $produit;
         });
 
-        $newSnapshot = $this->produitSnapshot($produit->fresh(['variantes']));
+        $newSnapshot = $this->produitSnapshot($produit->fresh(['variantes', 'fournisseur']));
 
         [$oldDiff, $newDiff] = $this->produitDiff($oldSnapshot, $newSnapshot);
         if ($oldDiff !== null || $newDiff !== null) {
             $this->auditService->record($produit, AuditEvent::UPDATED, $r->user(), $oldDiff, $newDiff);
         }
 
-        return response()->json(new ProduitResource($produit->fresh(['variantes', 'categorie', 'medias'])));
+        return response()->json(new ProduitResource($produit->fresh(['variantes', 'categorie', 'fournisseur', 'medias'])));
     }
 
     public function archiver(Request $r, Produit $produit): JsonResponse
@@ -139,7 +139,7 @@ class ProduitController extends Controller
 
         $produit->update(['statut' => ProduitStatut::ARCHIVE]);
 
-        return response()->json(new ProduitResource($produit->fresh(['variantes', 'categorie', 'medias'])));
+        return response()->json(new ProduitResource($produit->fresh(['variantes', 'categorie', 'fournisseur', 'medias'])));
     }
 
     public function destroy(Request $r, Produit $produit): JsonResponse
@@ -150,7 +150,7 @@ class ProduitController extends Controller
             $produit,
             AuditEvent::DELETED,
             $r->user(),
-            $this->produitSnapshot($produit->fresh(['variantes'])),
+            $this->produitSnapshot($produit->fresh(['variantes', 'fournisseur'])),
             null,
         );
 
@@ -250,7 +250,7 @@ class ProduitController extends Controller
             );
         });
 
-        return response()->json(new ProduitResource($produit->fresh(['variantes', 'categorie', 'medias'])));
+        return response()->json(new ProduitResource($produit->fresh(['variantes', 'categorie', 'fournisseur', 'medias'])));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -272,6 +272,7 @@ class ProduitController extends Controller
             'is_alerte' => $produit->is_alerte,
             'description' => $produit->description,
             'code_barres' => $variante?->code_barres,
+            'fournisseur' => $produit->fournisseur?->nom_complet,
         ], fn ($v) => $v !== null && $v !== '');
     }
 

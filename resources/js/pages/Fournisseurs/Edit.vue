@@ -2,42 +2,57 @@
 import { Spinner } from '@/components/ui/spinner';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, useForm } from '@inertiajs/vue3';
-import { ArrowLeft, Save } from 'lucide-vue-next';
-import { watch } from 'vue';
-import PrestataireForm from './partials/PrestataireForm.vue';
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { ArrowLeft, CheckCircle, Save } from 'lucide-vue-next';
+import { computed, watch } from 'vue';
+import FournisseurForm from './partials/FournisseurForm.vue';
 
-interface Option {
-    value: string;
-    label: string;
+interface FournisseurData {
+    id: string;
+    reference: string;
+    nom: string | null;
+    prenom: string | null;
+    raison_sociale: string | null;
+    email: string | null;
+    phone: string | null;
+    code_phone_pays: string;
+    code_pays: string;
+    pays: string;
+    ville: string | null;
+    adresse: string | null;
+    notes: string | null;
+    is_active: boolean;
 }
 
-defineProps<{ types: Option[] }>();
+const props = defineProps<{ fournisseur: FournisseurData }>();
+const page = usePage();
+const flashSuccess = computed(
+    () => (page.props as any).flash?.success as string | undefined,
+);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
-    { title: 'Prestataires', href: '/backoffice/prestataires' },
-    { title: 'Nouveau prestataire', href: '#' },
+    { title: 'Fournisseurs', href: '/backoffice/fournisseurs' },
+    { title: props.fournisseur.reference, href: '#' },
 ];
 
 const form = useForm({
-    nom: null as string | null,
-    prenom: null as string | null,
-    raison_sociale: null as string | null,
-    email: null as string | null,
-    phone: null as string | null,
-    code_phone_pays: '+224',
-    code_pays: 'GN',
-    pays: 'Guinée',
-    ville: null as string | null,
-    adresse: null as string | null,
-    type: 'machiniste',
-    notes: null as string | null,
-    is_active: true,
+    nom: props.fournisseur.nom,
+    prenom: props.fournisseur.prenom,
+    raison_sociale: props.fournisseur.raison_sociale,
+    email: props.fournisseur.email,
+    phone: props.fournisseur.phone,
+    code_phone_pays: props.fournisseur.code_phone_pays,
+    code_pays: props.fournisseur.code_pays,
+    pays: props.fournisseur.pays,
+    ville: props.fournisseur.ville,
+    adresse: props.fournisseur.adresse,
+    notes: props.fournisseur.notes,
+    is_active: props.fournisseur.is_active,
 });
 
 function submit() {
-    form.post('/backoffice/prestataires');
+    form.put(`/backoffice/fournisseurs/${props.fournisseur.id}`);
 }
 
 function handleFormUpdate(updated: Record<string, unknown>) {
@@ -59,7 +74,7 @@ watch(
 </script>
 
 <template>
-    <Head title="Nouveau prestataire" />
+    <Head :title="`Modifier — ${fournisseur.reference}`" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
         <!-- Header mobile -->
@@ -68,15 +83,18 @@ watch(
         >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
-                    href="/backoffice/prestataires"
+                    href="/backoffice/fournisseurs"
                     class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
                 >
                     <ArrowLeft class="h-4 w-4" />
                 </Link>
                 <div class="text-center">
                     <h1 class="text-[17px] leading-tight font-semibold">
-                        Nouveau prestataire
+                        Modifier
                     </h1>
+                    <p class="text-[11px] text-muted-foreground">
+                        {{ fournisseur.reference }}
+                    </p>
                 </div>
             </div>
         </div>
@@ -85,19 +103,27 @@ watch(
             <div class="mx-auto hidden max-w-2xl px-6 pt-6 pb-0 sm:block">
                 <div class="mb-8">
                     <h1 class="text-2xl font-semibold tracking-tight">
-                        Nouveau prestataire
+                        Modifier le fournisseur
                     </h1>
-                    <p class="mt-1 text-sm text-muted-foreground">
-                        Ajoutez un prestataire à votre organisation.
+                    <p class="mt-1 font-mono text-sm text-muted-foreground">
+                        {{ fournisseur.reference }}
                     </p>
                 </div>
             </div>
 
-            <PrestataireForm
+            <div
+                v-if="flashSuccess"
+                class="mx-6 mb-4 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800"
+            >
+                <CheckCircle class="h-4 w-4 shrink-0" />
+                {{ flashSuccess }}
+            </div>
+
+            <FournisseurForm
                 :form="form"
                 :errors="form.errors"
-                :types="types"
                 :processing="form.processing"
+                :reference="fournisseur.reference"
                 @submit="submit"
                 @update:form="handleFormUpdate($event)"
             />
@@ -109,15 +135,13 @@ watch(
         >
             <button
                 type="submit"
-                form="prestataire-form"
+                form="fournisseur-form"
                 :disabled="form.processing"
                 class="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-transform active:scale-[0.98] disabled:opacity-60"
             >
                 <Spinner v-if="form.processing" class="h-4 w-4" />
                 <Save v-else class="h-4 w-4" />
-                {{
-                    form.processing ? 'Enregistrement…' : 'Créer le prestataire'
-                }}
+                {{ form.processing ? 'Enregistrement…' : 'Enregistrer' }}
             </button>
         </div>
     </AppLayout>

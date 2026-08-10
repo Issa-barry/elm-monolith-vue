@@ -26,8 +26,8 @@ class PrestataireTest extends TestCase
     {
         return Prestataire::create(array_merge([
             'organization_id' => $org->id,
-            'nom' => 'FOURNISSEUR TEST',
-            'type' => 'fournisseur',
+            'nom' => 'PRESTATAIRE TEST',
+            'type' => 'machiniste',
             'is_active' => true,
         ], $overrides));
     }
@@ -40,7 +40,7 @@ class PrestataireTest extends TestCase
             'phone' => '622000001',
             'code_pays' => 'GN',
             'ville' => 'Conakry',
-            'type' => 'fournisseur',
+            'type' => 'machiniste',
             'is_active' => true,
         ], $overrides);
     }

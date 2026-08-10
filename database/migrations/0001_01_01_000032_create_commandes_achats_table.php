@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('commandes_achats', function (Blueprint $table) {
             $table->ulid('id')->primary();
             $table->foreignUlid('organization_id')->constrained()->cascadeOnDelete();
-            $table->foreignUlid('prestataire_id')->nullable()->constrained('prestataires')->nullOnDelete();
+            $table->foreignUlid('fournisseur_id')->nullable()->constrained('fournisseurs')->nullOnDelete();
             $table->string('reference')->unique();
             $table->text('note')->nullable();
             $table->decimal('total_commande', 12, 2)->default(0);

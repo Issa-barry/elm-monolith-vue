@@ -5,8 +5,8 @@ namespace Tests\Feature;
 use App\Enums\StatutCommandeAchat;
 use App\Features\ModuleFeature;
 use App\Models\CommandeAchat;
+use App\Models\Fournisseur;
 use App\Models\Organization;
-use App\Models\Prestataire;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Pennant\Feature;
 use Tests\Concerns\HasProduitVariante;
@@ -34,14 +34,13 @@ class CommandeAchatTest extends TestCase
             ['prix_achat' => 1000],
         );
 
-        $prestataire = Prestataire::create([
+        $fournisseur = Fournisseur::create([
             'organization_id' => $org->id,
             'nom' => 'FOURNISSEUR TEST',
-            'type' => 'fournisseur',
             'is_active' => true,
         ]);
 
-        return compact('produit', 'prestataire');
+        return compact('produit', 'fournisseur');
     }
 
     private function makeCommande(Organization $org, array $overrides = []): CommandeAchat
@@ -89,11 +88,11 @@ class CommandeAchatTest extends TestCase
 
     public function test_store_creates_commande_achat_and_redirects(): void
     {
-        ['produit' => $produit, 'prestataire' => $prestataire] = $this->makeContext($this->org);
+        ['produit' => $produit, 'fournisseur' => $fournisseur] = $this->makeContext($this->org);
 
         $response = $this->actingAs($this->user)
             ->post(route('achats.store'), [
-                'prestataire_id' => $prestataire->id,
+                'fournisseur_id' => $fournisseur->id,
                 'lignes' => [
                     [
                         'produit_id' => $produit->id,
@@ -107,7 +106,7 @@ class CommandeAchatTest extends TestCase
 
         $this->assertDatabaseHas('commandes_achats', [
             'organization_id' => $this->org->id,
-            'prestataire_id' => $prestataire->id,
+            'fournisseur_id' => $fournisseur->id,
         ]);
     }
 

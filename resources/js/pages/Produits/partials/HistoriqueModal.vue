@@ -87,6 +87,7 @@ const FIELD_LABELS: Record<string, string> = {
     is_alerte: 'Alerte',
     description: 'Description',
     code_barres: 'Code-barres',
+    fournisseur: 'Fournisseur',
 };
 
 function formatVal(key: string, val: unknown): string {

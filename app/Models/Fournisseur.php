@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Enums\PrestataireType;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -10,7 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class Prestataire extends Model
+class Fournisseur extends Model
 {
     use HasFactory, HasUlids, SoftDeletes;
 
@@ -27,17 +26,15 @@ class Prestataire extends Model
         'pays',
         'ville',
         'adresse',
-        'type',
         'notes',
         'is_active',
     ];
 
-    protected $appends = ['nom_complet', 'type_label'];
+    protected $appends = ['nom_complet'];
 
     protected function casts(): array
     {
         return [
-            'type' => PrestataireType::class,
             'is_active' => 'boolean',
         ];
     }
@@ -46,33 +43,35 @@ class Prestataire extends Model
 
     protected static function booted(): void
     {
-        static::creating(function (Prestataire $p) {
-            if (empty($p->reference)) {
-                $p->reference = self::generateReference();
+        static::creating(function (Fournisseur $f) {
+            if (empty($f->reference)) {
+                $f->reference = self::generateReference();
             }
-            $p->code_pays = self::normalizeIsoCountryCode($p->code_pays) ?? 'GN';
-            $p->code_phone_pays = self::normalizeDialCode($p->code_phone_pays) ?? '+224';
-            $p->phone = self::normalizePhoneE164($p->phone, $p->code_phone_pays);
-            if (empty($p->pays)) {
-                $p->pays = 'Guinée';
+            $f->code_pays = self::normalizeIsoCountryCode($f->code_pays) ?? 'GN';
+            $f->code_phone_pays = self::normalizeDialCode($f->code_phone_pays) ?? '+224';
+            $f->phone = self::normalizePhoneE164($f->phone, $f->code_phone_pays);
+            if (empty($f->pays)) {
+                $f->pays = 'Guinée';
             }
         });
 
-        static::updating(function (Prestataire $p) {
-            $p->code_pays = self::normalizeIsoCountryCode($p->code_pays) ?? 'GN';
-            $p->code_phone_pays = self::normalizeDialCode($p->code_phone_pays) ?? '+224';
-            $p->phone = self::normalizePhoneE164($p->phone, $p->code_phone_pays);
+        static::updating(function (Fournisseur $f) {
+            $f->code_pays = self::normalizeIsoCountryCode($f->code_pays) ?? 'GN';
+            $f->code_phone_pays = self::normalizeDialCode($f->code_phone_pays) ?? '+224';
+            $f->phone = self::normalizePhoneE164($f->phone, $f->code_phone_pays);
         });
     }
 
     // ── Référence auto ────────────────────────────────────────────────────────
 
+    // Préfixe 'F' (vs 'P' pour Prestataire) — permet de distinguer les deux séries de
+    // références au premier coup d'œil malgré le même format lettres/chiffres.
     public static function generateReference(): string
     {
         do {
             $letters = strtoupper(substr(str_shuffle('ABCDEFGHIJKLMNOPQRSTUVWXYZ'), 0, 2));
             $digits = str_pad(rand(0, 9999), 4, '0', STR_PAD_LEFT);
-            $ref = 'P'.$letters.$digits;
+            $ref = 'F'.$letters.$digits;
         } while (self::withTrashed()->where('reference', $ref)->exists());
 
         return $ref;
@@ -131,11 +130,6 @@ class Prestataire extends Model
         return $full !== '' ? $full : null;
     }
 
-    public function getTypeLabelAttribute(): string
-    {
-        return $this->type instanceof PrestataireType ? $this->type->label() : '';
-    }
-
     // ── Relations ─────────────────────────────────────────────────────────────
 
     public function organization(): BelongsTo
@@ -150,14 +144,7 @@ class Prestataire extends Model
         return $q->where('is_active', true);
     }
 
-    public function scopeParType(Builder $q, PrestataireType|string $type): Builder
-    {
-        $value = $type instanceof PrestataireType ? $type->value : $type;
-
-        return $q->where('type', $value);
-    }
-
-    // ── Normalisation statique ────────────────────────────────────────────────
+    // ── Normalisation statique (identique à Prestataire — même patron pays/téléphone) ──────
 
     public static function normalizeEmail(mixed $value): ?string
     {

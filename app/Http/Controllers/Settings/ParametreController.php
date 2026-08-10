@@ -73,6 +73,12 @@ class ParametreController extends Controller
                     'headers' => [
                         'nom',
                         'code_barres',
+                        // Nom du fournisseur (raison_sociale ou nom complet) — une seule
+                        // colonne texte, pas les coordonnées complètes : le rattachement à un
+                        // Prestataire existant (ou sa création) reste à faire par le futur
+                        // parseur d'import, pas par ce template qui ne fait qu'annoncer les
+                        // colonnes attendues.
+                        'fournisseur',
                         'type',
                         'statut',
                         'prix_usine',

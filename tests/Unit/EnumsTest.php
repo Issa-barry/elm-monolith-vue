@@ -50,7 +50,6 @@ class EnumsTest extends TestCase
         $this->assertSame('Machiniste', PrestataireType::MACHINISTE->label());
         $this->assertSame('Mécanicien', PrestataireType::MECANICIEN->label());
         $this->assertSame('Consultant', PrestataireType::CONSULTANT->label());
-        $this->assertSame('Fournisseur', PrestataireType::FOURNISSEUR->label());
     }
 
     public function test_prestataire_type_values(): void
@@ -59,13 +58,12 @@ class EnumsTest extends TestCase
         $this->assertContains('machiniste', $values);
         $this->assertContains('mecanicien', $values);
         $this->assertContains('consultant', $values);
-        $this->assertContains('fournisseur', $values);
     }
 
     public function test_prestataire_type_options_returns_all_cases(): void
     {
         $options = PrestataireType::options();
-        $this->assertCount(4, $options);
+        $this->assertCount(3, $options);
         foreach ($options as $option) {
             $this->assertArrayHasKey('value', $option);
             $this->assertArrayHasKey('label', $option);

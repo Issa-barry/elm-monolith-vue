@@ -30,7 +30,7 @@ interface CommandeData {
     statut: string;
     statut_label: string;
     total_commande: number;
-    prestataire_nom: string | null;
+    fournisseur_nom: string | null;
     note: string | null;
     motif_annulation: string | null;
     annulee_at: string | null;
@@ -242,7 +242,7 @@ function submitAnnuler() {
                     <div>
                         <p class="text-xs text-muted-foreground">Fournisseur</p>
                         <p class="mt-0.5 font-medium">
-                            {{ commande.prestataire_nom ?? '—' }}
+                            {{ commande.fournisseur_nom ?? '—' }}
                         </p>
                     </div>
                     <div>

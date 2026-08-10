@@ -61,6 +61,7 @@ class ParametreTemplateDownloadTest extends TestCase
             ->assertHeader('content-disposition', 'attachment; filename="template-produits.xls"')
             ->assertSee('nom')
             ->assertSee('code_barres')
+            ->assertSee('fournisseur')
             ->assertSee('seuil_alerte_stock');
     }
 

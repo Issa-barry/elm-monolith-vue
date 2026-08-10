@@ -8,6 +8,7 @@ use App\Enums\ProduitStatut;
 use App\Enums\ProduitType;
 use App\Models\AuditLog;
 use App\Models\Categorie;
+use App\Models\Fournisseur;
 use App\Models\MouvementStock;
 use App\Models\OptionCatalogue;
 use App\Models\Parametre;
@@ -213,6 +214,7 @@ class ProduitController extends Controller
                 ->orderBy('position')->orderBy('nom')
                 ->with('valeurs:id,option_catalogue_id,valeur,hex')
                 ->get(['id', 'nom']),
+            'fournisseurs' => $this->fournisseursOptions($orgId),
             'limites' => $this->limitesCatalogue($orgId),
         ]);
     }
@@ -243,7 +245,7 @@ class ProduitController extends Controller
             AuditEvent::CREATED,
             auth()->user(),
             null,
-            $this->produitSnapshot($produit->fresh(['variantes'])),
+            $this->produitSnapshot($produit->fresh(['variantes', 'fournisseur'])),
         );
 
         return redirect()->route('produits.show', $produit)->with('success', 'Produit créé avec succès.');
@@ -253,7 +255,7 @@ class ProduitController extends Controller
     {
         $this->authorize('view', $produit);
 
-        $produit->load(['categorie', 'variantes.valeurs.option', 'variantes.media', 'medias']);
+        $produit->load(['categorie', 'fournisseur', 'variantes.valeurs.option', 'variantes.media', 'medias']);
         $orgId = $produit->organization_id;
         $user = auth()->user();
 
@@ -356,6 +358,11 @@ class ProduitController extends Controller
                 'id' => $produit->id,
                 'nom' => $produit->nom,
                 'categorie' => $produit->categorie ? ['id' => $produit->categorie->id, 'nom' => $produit->categorie->nom] : null,
+                'fournisseur' => $produit->fournisseur ? [
+                    'id' => $produit->fournisseur->id,
+                    'nom_complet' => $produit->fournisseur->nom_complet,
+                    'phone' => $produit->fournisseur->phone,
+                ] : null,
                 'sku' => $variantePrincipale?->sku,
                 'code_barres' => $variantePrincipale?->code_barres,
                 'image_url' => $produit->image_url,
@@ -453,6 +460,7 @@ class ProduitController extends Controller
                 'id' => $produit->id,
                 'nom' => $produit->nom,
                 'categorie_id' => $produit->categorie_id,
+                'fournisseur_id' => $produit->fournisseur_id,
                 'sku' => $variantePrincipale?->sku,
                 'code_barres' => $variantePrincipale?->code_barres,
                 'image_url' => $produit->image_url,
@@ -492,6 +500,7 @@ class ProduitController extends Controller
             'types' => ProduitType::options(),
             'statuts' => ProduitStatut::options(),
             'categories' => Categorie::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom', 'parent_id']),
+            'fournisseurs' => $this->fournisseursOptions($orgId),
             'limites' => $this->limitesCatalogue($orgId),
         ]);
     }
@@ -502,7 +511,7 @@ class ProduitController extends Controller
 
         $data = $this->validerFormulaire($request, $produit);
 
-        $oldSnapshot = $this->produitSnapshot($produit->fresh(['variantes']));
+        $oldSnapshot = $this->produitSnapshot($produit->fresh(['variantes', 'fournisseur']));
 
         $produit = DB::transaction(function () use ($produit, $data, $request) {
             $produit = $this->produitService->mettreAJourSimple($produit, $data);
@@ -514,7 +523,7 @@ class ProduitController extends Controller
             return $produit;
         });
 
-        $newSnapshot = $this->produitSnapshot($produit->fresh(['variantes']));
+        $newSnapshot = $this->produitSnapshot($produit->fresh(['variantes', 'fournisseur']));
 
         [$oldDiff, $newDiff] = $this->produitDiff($oldSnapshot, $newSnapshot);
         if ($oldDiff !== null || $newDiff !== null) {
@@ -545,7 +554,7 @@ class ProduitController extends Controller
     {
         $this->authorize('delete', $produit);
 
-        $this->auditService->record($produit, AuditEvent::DELETED, auth()->user(), $this->produitSnapshot($produit->fresh(['variantes'])), null);
+        $this->auditService->record($produit, AuditEvent::DELETED, auth()->user(), $this->produitSnapshot($produit->fresh(['variantes', 'fournisseur'])), null);
 
         foreach ($produit->medias as $media) {
             $this->mediaService->supprimer($media);
@@ -800,6 +809,26 @@ class ProduitController extends Controller
     }
 
     /**
+     * Fournisseurs actifs de l'organisation, pour peupler FournisseurSelect.vue — préchargés
+     * en une fois (comme categories/optionsCatalogue) plutôt qu'en recherche distante : le
+     * volume attendu (prestataires d'une PME) ne justifie pas une pagination/API dédiée.
+     */
+    private function fournisseursOptions(string $orgId): Collection
+    {
+        return Fournisseur::where('organization_id', $orgId)
+            ->where('is_active', true)
+            ->orderBy('raison_sociale')
+            ->orderBy('nom')
+            ->get()
+            ->map(fn (Fournisseur $f) => [
+                'id' => $f->id,
+                'nom_complet' => $f->nom_complet,
+                'phone' => $f->phone,
+            ])
+            ->values();
+    }
+
+    /**
      * Décompose une variante en paires {option, valeur} triées par position d'option puis
      * de valeur — permet au frontend de regrouper les variantes par n'importe laquelle de
      * leurs options (pattern "Regrouper par" façon Shopify) sans requête supplémentaire.
@@ -830,6 +859,10 @@ class ProduitController extends Controller
         return $request->validate([
             'nom' => 'required|string|max:255',
             'categorie_id' => ['nullable', Rule::exists('categories', 'id')->where('organization_id', $orgId)],
+            'fournisseur_id' => [
+                'nullable',
+                Rule::exists('fournisseurs', 'id')->where('organization_id', $orgId),
+            ],
             'code_barres' => [
                 'nullable', 'string', 'max:100',
                 Rule::unique('produit_variantes', 'code_barres')
@@ -896,6 +929,7 @@ class ProduitController extends Controller
             'is_alerte' => $produit->is_alerte,
             'description' => $produit->description,
             'code_barres' => $variante?->code_barres,
+            'fournisseur' => $produit->fournisseur?->nom_complet,
         ], fn ($v) => $v !== null && $v !== '');
     }
 

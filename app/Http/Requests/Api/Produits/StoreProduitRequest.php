@@ -21,6 +21,10 @@ class StoreProduitRequest extends FormRequest
         return [
             'nom' => ['required', 'string', 'max:255'],
             'categorie_id' => ['nullable', Rule::exists('categories', 'id')->where('organization_id', $orgId)],
+            'fournisseur_id' => [
+                'nullable',
+                Rule::exists('fournisseurs', 'id')->where('organization_id', $orgId),
+            ],
             'code_barres' => [
                 'nullable', 'string', 'max:100',
                 Rule::unique('produit_variantes', 'code_barres')->where('organization_id', $orgId),
