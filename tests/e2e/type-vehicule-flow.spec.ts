@@ -36,10 +36,16 @@ test('login + create type vehicule + verify in list + edit + delete', async ({
     // Step 4: Edit
     const row = page.locator('tbody tr', { hasText: nom });
     await row.getByRole('link').first().click();
-    await page.waitForURL(/\/type-vehicules\/[a-z0-9]+\/edit$/, { timeout: 15_000 });
+    await page.waitForURL(/\/type-vehicules\/[a-z0-9]+\/edit$/, {
+        timeout: 15_000,
+    });
 
     await page.locator('#nom').fill(nomModifie);
-    await page.getByRole('button', { name: /enregistrer/i }).click();
+    // Exact match : la fiche a aussi un bouton "Enregistrer les capacités" (par catégorie),
+    // que /enregistrer/i matcherait aussi — cf. VehiculeCapacitesCard.vue.
+    await page
+        .getByRole('button', { name: 'Enregistrer', exact: true })
+        .click();
     await page.waitForURL(/\/type-vehicules$/, { timeout: 15_000 });
 
     await expect(page.getByText(nomModifie)).toBeVisible({ timeout: 10_000 });
@@ -50,7 +56,9 @@ test('login + create type vehicule + verify in list + edit + delete', async ({
     const editedRow = page.locator('tbody tr', { hasText: nomModifie });
     await editedRow.getByRole('button').last().click();
     // Inertia DELETE stays on the same URL — wait for the row to disappear
-    await expect(page.getByText(nomModifie)).not.toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(nomModifie)).not.toBeVisible({
+        timeout: 10_000,
+    });
 });
 
 test('default types appear in list', async ({ page }) => {
@@ -62,8 +70,16 @@ test('default types appear in list', async ({ page }) => {
     // Types par défaut du seeder (TypeVehiculesSeeder::TYPES) — noms exacts :
     // un match partiel comme "Camion" résout à la fois "CAMION-1500" et
     // "CAMIONETTE-450" (violation du mode strict de Playwright).
-    await expect(page.getByRole('cell', { name: 'CAMION-1500', exact: true })).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByRole('cell', { name: 'Minibus-200', exact: true })).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByRole('cell', { name: 'Minibus-270', exact: true })).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByRole('cell', { name: 'Tricycle-70', exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(
+        page.getByRole('cell', { name: 'CAMION-1500', exact: true }),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(
+        page.getByRole('cell', { name: 'Minibus-200', exact: true }),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(
+        page.getByRole('cell', { name: 'Minibus-270', exact: true }),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(
+        page.getByRole('cell', { name: 'Tricycle-70', exact: true }),
+    ).toBeVisible({ timeout: 10_000 });
 });
