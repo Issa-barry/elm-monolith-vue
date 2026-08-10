@@ -52,7 +52,9 @@ function removeRow(index: number) {
 const form = useForm({ capacites: [] as CapaciteRow[] });
 
 const canSave = computed(() =>
-    rows.value.every((r) => r.categorie_id && r.capacite_max && r.capacite_max > 0),
+    rows.value.every(
+        (r) => r.categorie_id && r.capacite_max && r.capacite_max > 0,
+    ),
 );
 
 function save() {
