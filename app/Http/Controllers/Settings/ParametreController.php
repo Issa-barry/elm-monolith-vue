@@ -72,7 +72,7 @@ class ParametreController extends Controller
                     'name' => 'produits',
                     'headers' => [
                         'nom',
-                        'code_fournisseur',
+                        'code_barres',
                         'type',
                         'statut',
                         'prix_usine',

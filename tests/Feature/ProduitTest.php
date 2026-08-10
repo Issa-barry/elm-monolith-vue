@@ -152,6 +152,64 @@ class ProduitTest extends TestCase
         $this->assertSame('Actif', $produits[0]['nom']);
     }
 
+    public function test_index_recherche_par_reference(): void
+    {
+        $cible = app(ProduitService::class)->creer([
+            'organization_id' => $this->org->id,
+            'nom' => 'Produit cible',
+            'type' => 'materiel',
+            'statut' => 'actif',
+            'prix_achat' => 100,
+            'prix_vente' => 200,
+        ]);
+        app(ProduitService::class)->creer([
+            'organization_id' => $this->org->id,
+            'nom' => 'Autre produit',
+            'type' => 'materiel',
+            'statut' => 'actif',
+            'prix_achat' => 100,
+            'prix_vente' => 200,
+        ]);
+        $reference = $cible->variantes->first()->sku;
+
+        $response = $this->actingAs($this->user)
+            ->get(route('produits.index', ['search' => $reference]));
+
+        $response->assertStatus(200);
+        $produits = $response->original->getData()['page']['props']['produits'];
+        $this->assertCount(1, $produits);
+        $this->assertSame('Produit cible', $produits[0]['nom']);
+    }
+
+    public function test_index_recherche_par_code_barres(): void
+    {
+        $cible = app(ProduitService::class)->creer([
+            'organization_id' => $this->org->id,
+            'nom' => 'Produit scanné',
+            'type' => 'materiel',
+            'statut' => 'actif',
+            'prix_achat' => 100,
+            'prix_vente' => 200,
+            'code_barres' => '3274080005003',
+        ]);
+        app(ProduitService::class)->creer([
+            'organization_id' => $this->org->id,
+            'nom' => 'Autre produit scanné',
+            'type' => 'materiel',
+            'statut' => 'actif',
+            'prix_achat' => 100,
+            'prix_vente' => 200,
+        ]);
+
+        $response = $this->actingAs($this->user)
+            ->get(route('produits.index', ['search' => '3274080005003']));
+
+        $response->assertStatus(200);
+        $produits = $response->original->getData()['page']['props']['produits'];
+        $this->assertCount(1, $produits);
+        $this->assertSame('Produit scanné', $produits[0]['nom']);
+    }
+
     public function test_index_inclut_sites_et_options(): void
     {
         $response = $this->actingAs($this->user)
@@ -186,8 +244,7 @@ class ProduitTest extends TestCase
                 'statut' => 'actif',
                 'prix_achat' => 1000,
                 'is_alerte' => false,
-            ])
-            ->assertRedirect(route('produits.index'));
+            ]);
 
         $this->assertDatabaseHas('produits', [
             'organization_id' => $this->org->id,
@@ -197,6 +254,20 @@ class ProduitTest extends TestCase
             'prix_achat' => 1000,
             'is_default' => true,
         ]);
+    }
+
+    public function test_store_redirige_vers_la_fiche_produit(): void
+    {
+        $response = $this->actingAs($this->user)
+            ->post(route('produits.store'), [
+                'nom' => 'Rouleau plastique redirection',
+                'type' => 'materiel',
+                'statut' => 'actif',
+                'prix_achat' => 1000,
+            ]);
+
+        $produit = Produit::where('nom', 'Rouleau plastique redirection')->firstOrFail();
+        $response->assertRedirect(route('produits.show', $produit));
     }
 
     public function test_store_cree_automatiquement_la_variante_par_defaut(): void
@@ -216,6 +287,45 @@ class ProduitTest extends TestCase
         $variante = $produit->variantes->first();
         $this->assertTrue($variante->is_default);
         $this->assertNotEmpty($variante->sku);
+    }
+
+    public function test_store_avec_code_barres(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('produits.store'), [
+                'nom' => 'Produit avec code-barres',
+                'type' => 'materiel',
+                'statut' => 'actif',
+                'prix_achat' => 1000,
+                'code_barres' => '3274080005003',
+            ]);
+
+        $this->assertDatabaseHas('produit_variantes', [
+            'code_barres' => '3274080005003',
+        ]);
+    }
+
+    public function test_store_refuse_un_code_barres_deja_utilise(): void
+    {
+        app(ProduitService::class)->creer([
+            'organization_id' => $this->org->id,
+            'nom' => 'Premier produit',
+            'type' => 'materiel',
+            'statut' => 'actif',
+            'prix_achat' => 1000,
+            'code_barres' => '3274080005003',
+        ]);
+
+        $response = $this->actingAs($this->user)
+            ->post(route('produits.store'), [
+                'nom' => 'Deuxième produit',
+                'type' => 'materiel',
+                'statut' => 'actif',
+                'prix_achat' => 1000,
+                'code_barres' => '3274080005003',
+            ]);
+
+        $response->assertSessionHasErrors('code_barres');
     }
 
     public function test_store_fails_with_empty_data(): void
@@ -264,8 +374,7 @@ class ProduitTest extends TestCase
                     ['nom' => 'Couleur', 'valeurs' => ['Noir', 'Blanc']],
                     ['nom' => 'Taille', 'valeurs' => ['S', 'M']],
                 ],
-            ])
-            ->assertRedirect(route('produits.index'));
+            ]);
 
         $produit = Produit::where('nom', 'T-shirt test')->firstOrFail();
         $this->assertCount(4, $produit->variantes); // 2 couleurs × 2 tailles
@@ -287,8 +396,7 @@ class ProduitTest extends TestCase
                 'options' => [
                     ['nom' => 'Couleur', 'valeurs' => ['Noir', 'Rouge'], 'option_catalogue_id' => $option->id],
                 ],
-            ])
-            ->assertRedirect(route('produits.index'));
+            ]);
 
         // "Noir" existait déjà (pas de doublon), "Rouge" est ajouté au catalogue réutilisable.
         $option->refresh();
@@ -381,7 +489,7 @@ class ProduitTest extends TestCase
                 'statut' => 'actif',
                 'is_alerte' => false,
             ])
-            ->assertRedirect(route('produits.index'));
+            ->assertRedirect(route('produits.show', $produit));
 
         $this->assertDatabaseHas('produits', [
             'id' => $produit->id,
@@ -406,6 +514,47 @@ class ProduitTest extends TestCase
 
         $variante = $produit->fresh()->variantePrincipale()->first();
         $this->assertSame(500, $variante->prix_achat);
+    }
+
+    public function test_update_conserve_le_meme_code_barres_sans_conflit(): void
+    {
+        // Renvoyer sur update le code-barres déjà présent sur SA PROPRE variante ne doit
+        // jamais être rejeté comme "déjà utilisé" — Rule::unique(...)->ignore() doit exclure
+        // la variante éditée elle-même.
+        $produit = $this->makeProduit($this->org);
+        $produit->variantePrincipale()->first()->update(['code_barres' => '3274080005003']);
+
+        $this->actingAs($this->user)
+            ->put(route('produits.update', $produit), [
+                'nom' => 'Produit test',
+                'type' => 'materiel',
+                'statut' => 'actif',
+                'code_barres' => '3274080005003',
+            ])
+            ->assertSessionDoesntHaveErrors();
+    }
+
+    public function test_update_refuse_un_code_barres_dun_autre_produit(): void
+    {
+        $autre = $this->makeProduit($this->org);
+        $autre->variantePrincipale()->first()->update(['code_barres' => '3274080005003']);
+
+        $produit = app(ProduitService::class)->creer([
+            'organization_id' => $this->org->id,
+            'nom' => 'Deuxième produit',
+            'type' => 'materiel',
+            'statut' => 'actif',
+            'prix_achat' => 500,
+        ]);
+
+        $this->actingAs($this->user)
+            ->put(route('produits.update', $produit), [
+                'nom' => 'Deuxième produit',
+                'type' => 'materiel',
+                'statut' => 'actif',
+                'code_barres' => '3274080005003',
+            ])
+            ->assertSessionHasErrors('code_barres');
     }
 
     public function test_update_fails_with_missing_required_fields(): void

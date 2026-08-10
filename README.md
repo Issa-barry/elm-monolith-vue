@@ -1,3 +1,7 @@
+# 1er deploiement 
+cd domains/xxx.com/public_html
+php artisan migrate --force^
+
 # Eau maman — Monolithe
 composer update
 PHP artisan migrate:fresh --seed

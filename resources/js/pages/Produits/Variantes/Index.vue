@@ -23,7 +23,6 @@ interface VarianteRow {
     libelle: string;
     sku: string | null;
     code_barres: string | null;
-    code_fournisseur: string | null;
     prix_usine: number | null;
     prix_vente: number | null;
     prix_achat: number | null;
@@ -65,7 +64,6 @@ function estModifiee(row: VarianteRow): boolean {
 
     return (
         row.code_barres !== orig.code_barres ||
-        row.code_fournisseur !== orig.code_fournisseur ||
         row.prix_usine !== orig.prix_usine ||
         row.prix_vente !== orig.prix_vente ||
         row.prix_achat !== orig.prix_achat ||
@@ -133,7 +131,6 @@ function enregistrer() {
             variantes: modifiees.map((r) => ({
                 id: r.id,
                 code_barres: r.code_barres,
-                code_fournisseur: r.code_fournisseur,
                 prix_usine: r.prix_usine,
                 prix_vente: r.prix_vente,
                 prix_achat: r.prix_achat,
@@ -246,11 +243,8 @@ function enregistrer() {
                                 />
                             </th>
                             <th class="px-2 py-2 text-left">Variante</th>
-                            <th class="px-2 py-2 text-left">SKU</th>
+                            <th class="px-2 py-2 text-left">Référence</th>
                             <th class="px-2 py-2 text-left">Code-barres</th>
-                            <th class="px-2 py-2 text-left">
-                                Code fournisseur
-                            </th>
                             <th
                                 v-if="isFabricable"
                                 class="px-2 py-2 text-right"
@@ -288,12 +282,6 @@ function enregistrer() {
                             <td class="px-2">
                                 <InputText
                                     v-model="row.code_barres"
-                                    class="h-7 w-32 text-xs"
-                                />
-                            </td>
-                            <td class="px-2">
-                                <InputText
-                                    v-model="row.code_fournisseur"
                                     class="h-7 w-32 text-xs"
                                 />
                             </td>

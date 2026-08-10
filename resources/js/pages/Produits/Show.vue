@@ -50,7 +50,6 @@ interface Variante {
     libelle: string;
     sku: string | null;
     code_barres: string | null;
-    code_fournisseur: string | null;
     prix_usine: number | null;
     prix_vente: number | null;
     prix_achat: number | null;
@@ -75,7 +74,7 @@ interface Produit {
     id: string;
     nom: string;
     sku: string | null;
-    code_fournisseur: string | null;
+    code_barres: string | null;
     image_url: string | null;
     type: string | null;
     type_label: string | null;
@@ -389,7 +388,7 @@ const ajustements = props.mouvements.map((m) => ({
                     <div class="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
                         <div>
                             <span class="text-xs text-muted-foreground"
-                                >SKU</span
+                                >Référence</span
                             >
                             <p class="font-mono font-semibold">
                                 {{ produit.sku || '—' }}
@@ -397,10 +396,10 @@ const ajustements = props.mouvements.map((m) => ({
                         </div>
                         <div>
                             <span class="text-xs text-muted-foreground"
-                                >Code fournisseur</span
+                                >Code-barres</span
                             >
                             <p class="font-mono font-semibold">
-                                {{ produit.code_fournisseur || '—' }}
+                                {{ produit.code_barres || '—' }}
                             </p>
                         </div>
                     </div>

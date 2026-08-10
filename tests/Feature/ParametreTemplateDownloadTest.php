@@ -60,7 +60,7 @@ class ParametreTemplateDownloadTest extends TestCase
             ->assertHeader('content-type', 'application/vnd.ms-excel; charset=UTF-8')
             ->assertHeader('content-disposition', 'attachment; filename="template-produits.xls"')
             ->assertSee('nom')
-            ->assertSee('code_fournisseur')
+            ->assertSee('code_barres')
             ->assertSee('seuil_alerte_stock');
     }
 

@@ -112,9 +112,13 @@ class PdvController extends Controller
 
     /**
      * Le PDV ne propose pour l'instant qu'une grille de produits (pas de sélecteur de variante
-     * — Phase 3) : on affiche prix/stock/SKU de la variante par défaut (ou la première) comme
-     * représentative. PdvCheckoutService::resolveVariante() exigera un variante_id explicite
-     * au moment de la vente pour un produit à déclinaisons multiples.
+     * — Phase 3) : on affiche prix/stock/référence de la variante par défaut (ou la première)
+     * comme représentative. PdvCheckoutService::resolveVariante() exigera un variante_id
+     * explicite au moment de la vente pour un produit à déclinaisons multiples.
+     *
+     * `code_barres` est transmis en plus de `code` (référence) pour que la recherche PDV
+     * (filteredProducts côté frontend) retrouve un article aussi bien par sa référence que
+     * par un scan de code-barres — les deux notions sont distinctes (cf. ProduitVariante).
      */
     private function produitsPdv(string $orgId): Collection
     {
@@ -131,6 +135,7 @@ class PdvController extends Controller
                     'id' => $p->id,
                     'variante_id' => $variante?->id,
                     'code' => $variante?->sku ?? '',
+                    'codeBarres' => $variante?->code_barres ?? '',
                     'name' => $p->nom,
                     'subtitle' => $p->description ?? '',
                     'category' => null,

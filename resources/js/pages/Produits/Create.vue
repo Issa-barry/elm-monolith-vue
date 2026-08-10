@@ -52,7 +52,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     nom: '',
     categorie_id: null as string | null,
-    code_fournisseur: null as string | null,
+    code_barres: null as string | null,
     type: 'materiel',
     statut: 'actif',
     prix_usine: null as number | null,
@@ -62,7 +62,7 @@ const form = useForm({
     seuil_alerte_stock: null as number | null,
     description: null as string | null,
     is_alerte: false,
-    image: null as File | null,
+    images: [] as File[],
     options: [] as {
         nom: string;
         valeurs: string[];

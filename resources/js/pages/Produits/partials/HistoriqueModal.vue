@@ -86,7 +86,7 @@ const FIELD_LABELS: Record<string, string> = {
     seuil_alerte_stock: "Seuil d'alerte",
     is_alerte: 'Alerte',
     description: 'Description',
-    code_fournisseur: 'Code fournisseur',
+    code_barres: 'Code-barres',
 };
 
 function formatVal(key: string, val: unknown): string {

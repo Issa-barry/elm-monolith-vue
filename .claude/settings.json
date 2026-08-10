@@ -280,7 +280,15 @@
       "Bash(grep -n ''\\\\''variantes'\\\\'' => $produit->variantes->map' c:/laragon/www/eau-la-maman/elm-monolithe/app/Http/Controllers/ProduitController.php)",
       "Bash(grep -n \"use Illuminate\\\\\\\\\\\\\\\\Validation\\\\\\\\\\\\\\\\Rule;\" \"c:/laragon/www/eau-la-maman/elm-monolithe/app/Http/Controllers/ProduitController.php\")",
       "Bash(grep -n \"FAIL\\\\|Tests\\\\\\\\\\\\\\\\Feature\" \"C:\\\\Users\\\\issab\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--laragon-www-eau-la-maman-elm-monolithe\\\\b191c652-67b4-4f7c-8b0d-b67fe0585f72\\\\tasks\\\\bvgecw723.output\")",
-      "Bash(./vendor/bin/pint --test app/Http/Controllers/MediaController.php app/Models/ProduitMedia.php app/Models/ProduitVariante.php app/Services/MediaService.php app/Http/Controllers/ProduitController.php routes/web.php database/migrations/2026_08_09_195923_move_media_association_to_variantes_table.php)"
+      "Bash(./vendor/bin/pint --test app/Http/Controllers/MediaController.php app/Models/ProduitMedia.php app/Models/ProduitVariante.php app/Services/MediaService.php app/Http/Controllers/ProduitController.php routes/web.php database/migrations/2026_08_09_195923_move_media_association_to_variantes_table.php)",
+      "Bash(./vendor/bin/pint --test tests/Feature/ProduitMediaTest.php)",
+      "Bash(php -r 'require '\\\\''vendor/autoload.php'\\\\''; $app = require '\\\\''bootstrap/app.php'\\\\''; echo '\\\\''ok'\\\\'';')",
+      "Bash(php -l app/Providers/FortifyServiceProvider.php)",
+      "Bash(php -l app/Http/Responses/LockoutResponse.php)",
+      "Bash(./vendor/bin/pint --test tests/Feature/ProduitTest.php tests/Feature/ProduitMediaTest.php app/Http/Controllers/ProduitController.php)",
+      "Bash(grep -n 'protected $fillable' -A 20 app/Models/Produit.php)",
+      "Bash(tee \"C:\\\\Users\\\\issab\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--laragon-www-eau-la-maman-elm-monolithe\\\\70753565-de4a-44dd-9b05-c8aa682bee76\\\\scratchpad\\\\test-run-2.txt\")",
+      "Bash(./vendor/bin/pint --dirty)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64",

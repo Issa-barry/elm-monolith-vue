@@ -36,7 +36,6 @@ interface Variante {
     libelle: string;
     sku: string | null;
     code_barres: string | null;
-    code_fournisseur: string | null;
     prix_usine: number | null;
     prix_vente: number | null;
     prix_achat: number | null;
@@ -52,7 +51,7 @@ interface ProduitData {
     nom: string;
     categorie_id: string | null;
     sku: string | null;
-    code_fournisseur: string | null;
+    code_barres: string | null;
     type: string;
     statut: string;
     prix_usine: number | null;
@@ -93,7 +92,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     nom: props.produit.nom,
     categorie_id: props.produit.categorie_id,
-    code_fournisseur: props.produit.code_fournisseur,
+    code_barres: props.produit.code_barres,
     type: props.produit.type,
     statut: props.produit.statut,
     prix_usine: props.produit.prix_usine,
@@ -103,7 +102,7 @@ const form = useForm({
     seuil_alerte_stock: props.produit.seuil_alerte_stock,
     description: props.produit.description,
     is_alerte: props.produit.is_alerte,
-    image: null as File | null,
+    images: [] as File[],
     options: [] as {
         nom: string;
         valeurs: string[];

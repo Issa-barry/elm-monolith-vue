@@ -271,7 +271,7 @@ class ProduitController extends Controller
             'seuil_alerte_stock' => $variante?->seuil_alerte_stock,
             'is_alerte' => $produit->is_alerte,
             'description' => $produit->description,
-            'code_fournisseur' => $variante?->code_fournisseur,
+            'code_barres' => $variante?->code_barres,
         ], fn ($v) => $v !== null && $v !== '');
     }
 

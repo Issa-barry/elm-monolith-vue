@@ -67,8 +67,11 @@ class ProduitController extends Controller
 
         if (! empty($filters['search'])) {
             $s = $filters['search'];
+            // Recherche par nom, référence (sku) ou code-barres — mêmes deux notions
+            // d'identifiant externe que côté PDV (cf. PdvController::produitsPdv()).
             $query->where(fn ($q) => $q->where('nom', 'like', "%{$s}%")
-                ->orWhereHas('variantes', fn ($vq) => $vq->where('sku', 'like', "%{$s}%")));
+                ->orWhereHas('variantes', fn ($vq) => $vq->where('sku', 'like', "%{$s}%")
+                    ->orWhere('code_barres', 'like', "%{$s}%")));
         }
         if (! empty($filters['type'])) {
             $query->where('type', $filters['type']);
@@ -140,7 +143,7 @@ class ProduitController extends Controller
                 'categorie_id' => $p->categorie_id,
                 'categorie_nom' => $p->categorie?->nom,
                 'sku' => $variantePrincipale?->sku,
-                'code_fournisseur' => $variantePrincipale?->code_fournisseur,
+                'code_barres' => $variantePrincipale?->code_barres,
                 'type' => $p->type?->value,
                 'type_label' => $p->type?->label(),
                 'statut' => $p->statut?->value,
@@ -243,7 +246,7 @@ class ProduitController extends Controller
             $this->produitSnapshot($produit->fresh(['variantes'])),
         );
 
-        return redirect()->route('produits.index')->with('success', 'Produit créé avec succès.');
+        return redirect()->route('produits.show', $produit)->with('success', 'Produit créé avec succès.');
     }
 
     public function show(Produit $produit): Response
@@ -354,7 +357,6 @@ class ProduitController extends Controller
                 'nom' => $produit->nom,
                 'categorie' => $produit->categorie ? ['id' => $produit->categorie->id, 'nom' => $produit->categorie->nom] : null,
                 'sku' => $variantePrincipale?->sku,
-                'code_fournisseur' => $variantePrincipale?->code_fournisseur,
                 'code_barres' => $variantePrincipale?->code_barres,
                 'image_url' => $produit->image_url,
                 'type' => $produit->type?->value,
@@ -453,7 +455,6 @@ class ProduitController extends Controller
                 'categorie_id' => $produit->categorie_id,
                 'sku' => $variantePrincipale?->sku,
                 'code_barres' => $variantePrincipale?->code_barres,
-                'code_fournisseur' => $variantePrincipale?->code_fournisseur,
                 'image_url' => $produit->image_url,
                 'type' => $produit->type?->value,
                 'statut' => $produit->statut?->value,
@@ -471,7 +472,6 @@ class ProduitController extends Controller
                     'libelle' => $v->libelle,
                     'sku' => $v->sku,
                     'code_barres' => $v->code_barres,
-                    'code_fournisseur' => $v->code_fournisseur,
                     'prix_usine' => $v->prix_usine,
                     'prix_vente' => $v->prix_vente,
                     'prix_achat' => $v->prix_achat,
@@ -521,7 +521,7 @@ class ProduitController extends Controller
             $this->auditService->record($produit, AuditEvent::UPDATED, auth()->user(), $oldDiff, $newDiff);
         }
 
-        return redirect()->route('produits.index')->with('success', 'Produit mis à jour avec succès.');
+        return redirect()->route('produits.show', $produit)->with('success', 'Produit mis à jour avec succès.');
     }
 
     public function archiver(Produit $produit): RedirectResponse
@@ -685,7 +685,6 @@ class ProduitController extends Controller
 
         $data = $request->validate([
             'code_barres' => 'nullable|string|max:100',
-            'code_fournisseur' => 'nullable|string|max:100',
             'prix_usine' => 'nullable|integer|min:0',
             'prix_vente' => 'nullable|integer|min:0',
             'prix_achat' => 'nullable|integer|min:0',
@@ -733,7 +732,6 @@ class ProduitController extends Controller
                 'libelle' => $v->libelle,
                 'sku' => $v->sku,
                 'code_barres' => $v->code_barres,
-                'code_fournisseur' => $v->code_fournisseur,
                 'prix_usine' => $v->prix_usine,
                 'prix_vente' => $v->prix_vente,
                 'prix_achat' => $v->prix_achat,
@@ -760,7 +758,6 @@ class ProduitController extends Controller
             'variantes' => ['required', 'array', 'min:1'],
             'variantes.*.id' => ['required', 'string'],
             'variantes.*.code_barres' => ['nullable', 'string', 'max:100'],
-            'variantes.*.code_fournisseur' => ['nullable', 'string', 'max:100'],
             'variantes.*.prix_usine' => ['nullable', 'integer', 'min:0'],
             'variantes.*.prix_vente' => ['nullable', 'integer', 'min:0'],
             'variantes.*.prix_achat' => ['nullable', 'integer', 'min:0'],
@@ -826,12 +823,19 @@ class ProduitController extends Controller
     private function validerFormulaire(Request $request, ?Produit $produit = null): array
     {
         $orgId = auth()->user()->organization_id;
+        // Variante par défaut du produit édité — exclue de la contrainte d'unicité ci-dessous
+        // (sinon une mise à jour qui ne touche pas au code-barres se rejetterait elle-même).
+        $varianteId = $produit?->variantePrincipale()->first()?->id;
 
         return $request->validate([
             'nom' => 'required|string|max:255',
             'categorie_id' => ['nullable', Rule::exists('categories', 'id')->where('organization_id', $orgId)],
-            'code_barres' => 'nullable|string|max:100',
-            'code_fournisseur' => 'nullable|string|max:100',
+            'code_barres' => [
+                'nullable', 'string', 'max:100',
+                Rule::unique('produit_variantes', 'code_barres')
+                    ->where('organization_id', $orgId)
+                    ->ignore($varianteId),
+            ],
             'type' => 'required|in:'.implode(',', ProduitType::values()),
             'statut' => 'required|in:'.implode(',', ProduitStatut::values()),
             'prix_usine' => 'nullable|integer|min:0',
@@ -891,7 +895,7 @@ class ProduitController extends Controller
             'seuil_alerte_stock' => $variante?->seuil_alerte_stock,
             'is_alerte' => $produit->is_alerte,
             'description' => $produit->description,
-            'code_fournisseur' => $variante?->code_fournisseur,
+            'code_barres' => $variante?->code_barres,
         ], fn ($v) => $v !== null && $v !== '');
     }
 

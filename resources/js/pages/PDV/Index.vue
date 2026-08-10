@@ -21,6 +21,7 @@ import {
 interface Product {
     id: number;
     code: string;
+    codeBarres: string;
     name: string;
     subtitle: string;
     category: 'Packs' | 'Accessoires' | 'Boissons' | null;
@@ -238,8 +239,10 @@ const filteredProducts = computed(() => {
             return true;
         }
 
+        // Recherche par nom, référence (sku) ou scan de code-barres — un lecteur de
+        // code-barres tape la valeur scannée puis Entrée, exactement comme une saisie manuelle.
         const bag =
-            `${product.name} ${product.subtitle} ${product.code}`.toLowerCase();
+            `${product.name} ${product.subtitle} ${product.code} ${product.codeBarres}`.toLowerCase();
 
         return bag.includes(query);
     });

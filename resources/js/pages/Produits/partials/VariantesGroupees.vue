@@ -261,7 +261,9 @@ function prixGroupe(variantes: Variante[]): string {
                         <th class="pr-4 pb-2 text-left font-medium">
                             Variante
                         </th>
-                        <th class="pr-4 pb-2 text-left font-medium">SKU</th>
+                        <th class="pr-4 pb-2 text-left font-medium">
+                            Référence
+                        </th>
                         <th class="pr-4 pb-2 text-right font-medium">
                             Prix vente
                         </th>

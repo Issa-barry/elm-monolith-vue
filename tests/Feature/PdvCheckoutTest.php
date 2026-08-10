@@ -73,6 +73,22 @@ class PdvCheckoutTest extends TestCase
         $this->get('/backoffice/pdv')->assertRedirect(route('login'));
     }
 
+    /**
+     * Le PDV recherche un article par référence OU par code-barres (scan) — les deux
+     * doivent être transmis au frontend, pas seulement la référence.
+     */
+    public function test_pdv_index_expose_le_code_barres_pour_le_scan(): void
+    {
+        $this->produit->variantePrincipale()->first()->update(['code_barres' => '3274080005003']);
+
+        $this->actingAs($this->user)
+            ->get('/backoffice/pdv')
+            ->assertInertia(fn ($page) => $page
+                ->component('PDV/Index')
+                ->where('produits.0.codeBarres', '3274080005003')
+            );
+    }
+
     // ── POST /pdv/checkout — Vente rapide ─────────────────────────────────────
 
     public function test_checkout_vente_rapide_creates_commande_en_cours(): void

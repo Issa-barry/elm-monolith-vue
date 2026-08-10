@@ -20,7 +20,6 @@ class ProduitResource extends JsonResource
             'categorie_nom' => $this->whenLoaded('categorie', fn () => $this->categorie?->nom),
             'sku' => $variante?->sku,
             'code_barres' => $variante?->code_barres,
-            'code_fournisseur' => $variante?->code_fournisseur,
             'type' => $this->type?->value,
             'type_label' => $this->type?->label(),
             'type_has_stock' => $this->type?->hasStock() ?? true,
