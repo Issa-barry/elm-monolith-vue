@@ -60,15 +60,38 @@ enum ProduitType: string
         };
     }
 
+    /**
+     * Champ de coût de référence à comparer à prix_vente pour ce type (prix_vente doit lui
+     * être strictement supérieur — cf. ProduitService::validerPrixSelonType()). null quand le
+     * type n'a pas de règle de marge produit (MATERIEL n'est pas vendable, SERVICE n'a aucun prix).
+     */
+    public function champPrixReference(): ?string
+    {
+        return match ($this) {
+            self::FABRICABLE => 'prix_usine',
+            self::ACHAT_VENTE => 'prix_achat',
+            self::MATERIEL, self::SERVICE => null,
+        };
+    }
+
     public static function values(): array
     {
         return array_column(self::cases(), 'value');
     }
 
+    /**
+     * `required_prices` expose requiredPrices() au frontend (ProduitForm.vue) pour afficher un
+     * "*" sur les champs de prix effectivement obligatoires pour le type sélectionné — sans
+     * dupliquer cette règle métier côté JS, le backend reste la seule source de vérité.
+     */
     public static function options(): array
     {
         return array_map(
-            fn (self $case) => ['value' => $case->value, 'label' => $case->label()],
+            fn (self $case) => [
+                'value' => $case->value,
+                'label' => $case->label(),
+                'required_prices' => $case->requiredPrices(),
+            ],
             self::cases()
         );
     }

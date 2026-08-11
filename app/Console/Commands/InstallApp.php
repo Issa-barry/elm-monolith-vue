@@ -8,7 +8,8 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Première initialisation d'une organisation : crée (ou réutilise) l'organisation, le premier
- * compte super_admin, et optionnellement un jeu de catégories/options de départ.
+ * compte super_admin, et optionnellement un catalogue de départ (catégories, options, types de
+ * véhicule).
  *
  * Simple façade interactive autour de InstallationService — toute la logique métier (org,
  * super_admin, catalogue, installed_at) vit dans ce service, partagée avec l'assistant web
@@ -60,6 +61,7 @@ class InstallApp extends Command
 
         $categories = $this->confirm('Créer les catégories prédéfinies ?', true);
         $options = $this->confirm('Installer la bibliothèque d\'options prédéfinies ?', true);
+        $typesVehicule = $this->confirm('Créer les types de véhicule prédéfinis (Tricycle, Minibus, Camionnette, Camion, Remorque) ?', true);
 
         $this->newLine();
         $this->info('Création...');
@@ -75,7 +77,7 @@ class InstallApp extends Command
                     'password' => $password,
                     'password_confirmation' => $confirmation,
                 ],
-                catalogue: ['categories' => $categories, 'options' => $options],
+                catalogue: ['categories' => $categories, 'options' => $options, 'types_vehicule' => $typesVehicule],
             );
         } catch (ValidationException $e) {
             foreach ($e->errors() as $messages) {
@@ -95,6 +97,9 @@ class InstallApp extends Command
         }
         if ($options) {
             $this->line('✓ Options créées');
+        }
+        if ($typesVehicule) {
+            $this->line('✓ Types de véhicule créés');
         }
 
         $this->newLine();

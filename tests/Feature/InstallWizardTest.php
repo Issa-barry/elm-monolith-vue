@@ -6,6 +6,7 @@ use App\Models\AppInstallation;
 use App\Models\Categorie;
 use App\Models\OptionCatalogue;
 use App\Models\Organization;
+use App\Models\TypeVehicule;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Middleware\ThrottleRequests;
@@ -43,7 +44,7 @@ class InstallWizardTest extends TestCase
                 'password' => 'Sup3r$ecretPwd',
                 'password_confirmation' => 'Sup3r$ecretPwd',
             ],
-            'catalogue' => ['categories' => false, 'options' => false],
+            'catalogue' => ['categories' => false, 'options' => false, 'types_vehicule' => false],
         ], $overrides);
     }
 
@@ -185,6 +186,25 @@ class InstallWizardTest extends TestCase
         $org = Organization::where('slug', 'elm-test')->firstOrFail();
         $this->assertSame(0, Categorie::where('organization_id', $org->id)->count());
         $this->assertGreaterThan(0, OptionCatalogue::where('organization_id', $org->id)->count());
+    }
+
+    public function test_types_vehicule_oui(): void
+    {
+        $this->post('/install', $this->payload([
+            'catalogue' => ['types_vehicule' => true],
+        ]))->assertOk();
+
+        $org = Organization::where('slug', 'elm-test')->firstOrFail();
+        $this->assertSame(5, TypeVehicule::where('organization_id', $org->id)->count());
+        $this->assertTrue(TypeVehicule::where('organization_id', $org->id)->where('nom', 'Minibus')->exists());
+    }
+
+    public function test_installation_sans_catalogue_ne_cree_aucun_type_vehicule(): void
+    {
+        $this->post('/install', $this->payload())->assertOk();
+
+        $org = Organization::where('slug', 'elm-test')->firstOrFail();
+        $this->assertSame(0, TypeVehicule::where('organization_id', $org->id)->count());
     }
 
     public function test_reutilise_organisation_existante_de_meme_nom_sans_dupliquer(): void

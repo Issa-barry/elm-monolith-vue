@@ -89,6 +89,7 @@ class InstallWizardController extends Controller
             'admin.password_confirmation' => 'required|string',
             'catalogue.categories' => 'boolean',
             'catalogue.options' => 'boolean',
+            'catalogue.types_vehicule' => 'boolean',
         ]);
 
         // La complexité/confirmation du mot de passe est revalidée par InstallationService

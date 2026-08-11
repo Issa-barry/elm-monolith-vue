@@ -719,6 +719,71 @@ class ProduitTest extends TestCase
             ->assertSessionHasErrors(['nom', 'type', 'statut']);
     }
 
+    public function test_update_refuse_prix_vente_inferieur_ou_egal_au_prix_achat(): void
+    {
+        $produit = app(ProduitService::class)->creer([
+            'organization_id' => $this->org->id,
+            'nom' => 'Produit achat_vente',
+            'type' => 'achat_vente',
+            'statut' => 'actif',
+            'prix_achat' => 100000,
+            'prix_vente' => 120000,
+        ]);
+
+        $this->actingAs($this->user)
+            ->put(route('produits.update', $produit), [
+                'nom' => $produit->nom,
+                'type' => 'achat_vente',
+                'statut' => 'actif',
+                'prix_achat' => 100000,
+                'prix_vente' => 90000,
+            ])
+            ->assertSessionHasErrors('prix_vente');
+
+        $this->assertSame(120000, $produit->fresh()->variantePrincipale()->first()->prix_vente);
+    }
+
+    /**
+     * Scénario critique (spec "Prix produit & marge") : un produit à plusieurs variantes
+     * (aucune "is_default" — cf. test_store_avec_options_genere_les_variantes) dont on change
+     * le type via le formulaire principal, qui ne touche jamais les variantes existantes. Si
+     * une de ces variantes devient incompatible avec le nouveau type, le changement doit être
+     * refusé en bloc, sans écriture partielle.
+     */
+    public function test_update_refuse_changement_de_type_si_une_variante_existante_devient_incoherente(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('produits.store'), [
+                'nom' => 'T-shirt multi-variantes',
+                'type' => 'achat_vente',
+                'statut' => 'actif',
+                'prix_achat' => 8000,
+                'prix_vente' => 10000,
+                'options' => [
+                    ['nom' => 'Couleur', 'valeurs' => ['Noir', 'Blanc']],
+                ],
+            ]);
+        $produit = Produit::where('nom', 'T-shirt multi-variantes')->firstOrFail();
+
+        // Noir/Blanc ont prix_achat=8000/prix_vente=10000/prix_usine=null : valide pour
+        // ACHAT_VENTE, mais FABRICABLE exige prix_usine — absent sur les deux, et le payload
+        // ci-dessous ne cible que le type + des prix "globaux", jamais une variante précise.
+        $this->actingAs($this->user)
+            ->put(route('produits.update', $produit), [
+                'nom' => $produit->nom,
+                'type' => 'fabricable',
+                'statut' => 'actif',
+                'prix_usine' => 8000,
+                'prix_vente' => 10000,
+            ])
+            ->assertSessionHasErrors('type');
+
+        $produit->refresh();
+        $this->assertSame('achat_vente', $produit->type->value);
+        $this->assertCount(2, $produit->variantes);
+        $this->assertTrue($produit->variantes->every(fn ($v) => (int) $v->prix_achat === 8000));
+    }
+
     // ── destroy ───────────────────────────────────────────────────────────────
 
     public function test_destroy_deletes_produit_and_redirects(): void
@@ -1506,6 +1571,22 @@ class ProduitTest extends TestCase
             ->assertSessionHasErrors('type');
     }
 
+    public function test_update_variante_refuse_prix_vente_inferieur_ou_egal_au_prix_achat(): void
+    {
+        // Produit ACHAT_VENTE : prix_vente doit rester strictement supérieur à prix_achat.
+        $produit = $this->makeProduitDecline($this->org);
+        $variante = $produit->variantes->first();
+
+        $this->actingAs($this->user)
+            ->put(route('produits.variantes.update', [$produit, $variante]), [
+                'prix_vente' => 1000,
+                'prix_achat' => 1000,
+            ])
+            ->assertSessionHasErrors('prix_vente');
+
+        $this->assertDatabaseMissing('produit_variantes', ['id' => $variante->id, 'prix_vente' => 1000]);
+    }
+
     // ── ajusterStock : variante obligatoire pour un produit à déclinaisons ──────
 
     public function test_ajuster_stock_exige_une_variante_pour_un_produit_a_declinaisons(): void
@@ -1616,6 +1697,24 @@ class ProduitTest extends TestCase
                 ],
             ])
             ->assertSessionHasErrors('type');
+    }
+
+    public function test_bulk_update_refuse_prix_vente_inferieur_ou_egal_au_prix_achat(): void
+    {
+        $produit = $this->makeProduitDecline($this->org);
+        [$varianteA, $varianteB] = $produit->variantes->all();
+
+        $this->actingAs($this->user)
+            ->put(route('produits.variantes.bulk-update', $produit), [
+                'variantes' => [
+                    ['id' => $varianteA->id, 'prix_vente' => 3000, 'is_active' => true],
+                    ['id' => $varianteB->id, 'prix_vente' => 900, 'prix_achat' => 900, 'is_active' => true],
+                ],
+            ])
+            ->assertSessionHasErrors('prix_vente');
+
+        // Aucune des deux lignes ne doit avoir été appliquée (échec sur la 2e ligne, DB::transaction).
+        $this->assertDatabaseMissing('produit_variantes', ['id' => $varianteA->id, 'prix_vente' => 3000]);
     }
 
     public function test_bulk_update_refuse_une_variante_dun_autre_produit(): void

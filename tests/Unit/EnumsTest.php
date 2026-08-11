@@ -323,6 +323,17 @@ class EnumsTest extends TestCase
         foreach ($options as $option) {
             $this->assertArrayHasKey('value', $option);
             $this->assertArrayHasKey('label', $option);
+            $this->assertArrayHasKey('required_prices', $option);
         }
+    }
+
+    public function test_produit_type_options_expose_required_prices_pour_le_frontend(): void
+    {
+        $options = collect(ProduitType::options())->keyBy('value');
+
+        $this->assertSame(['prix_achat'], $options['materiel']['required_prices']);
+        $this->assertSame([], $options['service']['required_prices']);
+        $this->assertSame(['prix_usine', 'prix_vente'], $options['fabricable']['required_prices']);
+        $this->assertSame(['prix_achat', 'prix_vente'], $options['achat_vente']['required_prices']);
     }
 }
