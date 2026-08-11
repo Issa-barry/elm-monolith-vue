@@ -321,7 +321,8 @@
       "Bash(php -l app/Enums/ProduitType.php)",
       "Bash(php -l tests/Unit/ProduitServicePrixTest.php)",
       "Bash(vendor/bin/pint --test app/Enums/ProduitType.php resources/js/pages/Produits)",
-      "Bash(vendor/bin/pint --test tests/Unit/EnumsTest.php)"
+      "Bash(vendor/bin/pint --test tests/Unit/EnumsTest.php)",
+      "Bash(vendor/bin/pint app/Services/ProduitService.php)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64",
