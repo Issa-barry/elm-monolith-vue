@@ -76,6 +76,7 @@ class SiteImportParser
                 $ligne,
                 $numeroLigne,
                 $idParNomExistant,
+                $sitesExistants,
                 $candidatsParent,
                 $premiereLigneParNom
             );
@@ -88,6 +89,7 @@ class SiteImportParser
         Collection $ligne,
         int $numeroLigne,
         Collection $idParNomExistant,
+        Collection $sitesExistants,
         Collection $candidatsParent,
         array &$premiereLigneParNom
     ): array {
@@ -189,12 +191,24 @@ class SiteImportParser
 
         $idExistant = $idParNomExistant->get($nomNormalise);
 
+        // Un nom "nouveau" mais proche d'un site déjà en base (ex: "Cba (Lansanaya,
+        // Kountia)" vs "CBA") n'est jamais bloqué — juste signalé, pour éviter de
+        // créer silencieusement un doublon plutôt que de réutiliser le site existant.
+        $avertissements = [];
+        if (! $idExistant) {
+            $suggestion = $this->trouverSiteProche($nom, $sitesExistants);
+            if ($suggestion) {
+                $avertissements[] = "Un site proche existe déjà : « {$suggestion} ». Vérifiez qu'il ne s'agit pas d'un doublon avant de confirmer.";
+            }
+        }
+
         return [
             'numero_ligne' => $numeroLigne,
             'nom' => $nom,
             'statut' => $idExistant ? 'existant' : 'nouveau',
             'erreurs' => [],
             'normalisations' => $normalisations,
+            'avertissements' => $avertissements,
             'data' => [
                 'nom' => $nom,
                 'type' => $type->value,
@@ -209,6 +223,31 @@ class SiteImportParser
                 'existing_id' => $idExistant,
             ],
         ];
+    }
+
+    /**
+     * ReferenceValueResolver::suggestClosest() (Levenshtein, distance max 2) ne voit pas ce cas
+     * réel : un nom importé qui reprend le nom d'un site existant en préfixe, complété d'une
+     * précision entre parenthèses/virgule (ex: "Cba (Lansanaya, Kountia)" pour un site déjà
+     * nommé "CBA") — l'écart de caractères dépasse largement une distance de 2. On vérifie donc
+     * en plus une relation de préfixe entre noms normalisés, avant de retomber sur Levenshtein
+     * pour les fautes de frappe classiques.
+     */
+    private function trouverSiteProche(string $nom, Collection $sitesExistants): ?string
+    {
+        $cible = ImportTextNormalizer::normalize($nom);
+
+        foreach ($sitesExistants as $site) {
+            $candidat = ImportTextNormalizer::normalize($site->nom);
+            if ($candidat === '' || $candidat === $cible) {
+                continue;
+            }
+            if (str_starts_with($cible, $candidat) || str_starts_with($candidat, $cible)) {
+                return $site->nom;
+            }
+        }
+
+        return ReferenceValueResolver::suggestClosest($nom, $sitesExistants, fn (Site $s) => $s->nom);
     }
 
     private function coordonneeOuNull(mixed $valeur, float $min, float $max, string $champ, int $numeroLigne, array &$erreurs): ?float
@@ -234,6 +273,7 @@ class SiteImportParser
             'statut' => 'erreur',
             'erreurs' => $erreurs,
             'normalisations' => $normalisations,
+            'avertissements' => [],
             'data' => null,
         ];
     }
