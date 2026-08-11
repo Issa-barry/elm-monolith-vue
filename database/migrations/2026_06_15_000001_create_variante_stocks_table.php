@@ -14,8 +14,6 @@ return new class extends Migration
             $table->foreignUlid('produit_variante_id')->constrained('produit_variantes')->cascadeOnDelete();
             $table->foreignUlid('site_id')->constrained('sites')->cascadeOnDelete();
             $table->unsignedInteger('qte_stock')->default(0);
-            $table->unsignedInteger('seuil_alerte_stock')->nullable();
-            $table->boolean('is_alerte')->default(false);
             $table->timestamps();
 
             $table->unique(['produit_variante_id', 'site_id']);

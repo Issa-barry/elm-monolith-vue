@@ -17,14 +17,10 @@ class VarianteStock extends Model
         'produit_variante_id',
         'site_id',
         'qte_stock',
-        'seuil_alerte_stock',
-        'is_alerte',
     ];
 
     protected $casts = [
         'qte_stock' => 'integer',
-        'seuil_alerte_stock' => 'integer',
-        'is_alerte' => 'boolean',
     ];
 
     // ── Relations ─────────────────────────────────────────────────────────────

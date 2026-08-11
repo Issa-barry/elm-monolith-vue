@@ -13,9 +13,10 @@ interface Option {
     label: string;
 }
 
-// `required_prices` (cf. ProduitType::options()) pilote l'affichage du "*" sur les champs de
-// prix obligatoires pour le type sélectionné, dans ProduitForm.vue.
+// `required_prices`/`gere_stock` (cf. ProduitTypeController::typesOptions()) pilotent
+// l'affichage du "*" sur les prix obligatoires et de la section Stock, dans ProduitForm.vue.
 interface ProduitTypeOption extends Option {
+    gere_stock: boolean;
     required_prices: string[];
 }
 
@@ -52,7 +53,6 @@ interface Variante {
     prix_vente: number | null;
     prix_achat: number | null;
     cout: number | null;
-    seuil_alerte_stock: number | null;
     is_default: boolean;
     is_active: boolean;
     options: VarianteOption[];
@@ -65,15 +65,15 @@ interface ProduitData {
     fournisseur_id: string | null;
     sku: string | null;
     code_barres: string | null;
-    type: string;
+    produit_type_id: string;
     statut: string;
     prix_usine: number | null;
     prix_vente: number | null;
     prix_achat: number | null;
     cout: number | null;
+    alerte_stock_active: boolean;
     seuil_alerte_stock: number | null;
     description: string | null;
-    is_alerte: boolean;
     image_url: string | null;
     variantes_count: number;
     variantes: Variante[];
@@ -86,11 +86,17 @@ const props = defineProps<{
     categories: Categorie[];
     fournisseurs: FournisseurOption[];
     limites: Limites;
+    seuilOrganisationDefaut: number;
 }>();
 
 const showVarianteModal = ref(false);
 const varianteEnEdition = ref<Variante | null>(null);
-const isFabricable = computed(() => props.produit.type === 'fabricable');
+const prixUsineRequis = computed(
+    () =>
+        props.types
+            .find((t) => t.value === props.produit.produit_type_id)
+            ?.required_prices.includes('prix_usine') ?? false,
+);
 
 function editerVariante(variante: Variante) {
     varianteEnEdition.value = variante;
@@ -108,15 +114,15 @@ const form = useForm({
     categorie_id: props.produit.categorie_id,
     fournisseur_id: props.produit.fournisseur_id,
     code_barres: props.produit.code_barres,
-    type: props.produit.type,
+    produit_type_id: props.produit.produit_type_id,
     statut: props.produit.statut,
     prix_usine: props.produit.prix_usine,
     prix_vente: props.produit.prix_vente,
     prix_achat: props.produit.prix_achat,
     cout: props.produit.cout,
+    alerte_stock_active: props.produit.alerte_stock_active,
     seuil_alerte_stock: props.produit.seuil_alerte_stock,
     description: props.produit.description,
-    is_alerte: props.produit.is_alerte,
     images: [] as File[],
     options: [] as {
         nom: string;
@@ -179,6 +185,7 @@ function submit() {
                 :categories="categories"
                 :fournisseurs="fournisseurs"
                 :limites="limites"
+                :seuil-organisation-defaut="seuilOrganisationDefaut"
                 :processing="form.processing"
                 :current-image-url="produit.image_url"
                 :current-sku="produit.sku"
@@ -194,7 +201,7 @@ function submit() {
             v-model:visible="showVarianteModal"
             :produit-id="String(produit.id)"
             :variante="varianteEnEdition"
-            :is-fabricable="isFabricable"
+            :prix-usine-requis="prixUsineRequis"
         />
 
         <!-- ─── Footer sticky mobile ─── -->

@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Enums\ProduitStatut;
-use App\Enums\ProduitType;
 use App\Http\Requests\PdvCheckoutRequest;
 use App\Models\Client;
 use App\Models\Produit;
@@ -124,7 +123,7 @@ class PdvController extends Controller
     {
         return Produit::where('organization_id', $orgId)
             ->where('statut', ProduitStatut::ACTIF)
-            ->whereIn('type', ProduitType::vendableValues())
+            ->whereHas('produitType', fn ($q) => $q->where('vendable', true))
             ->with(['variantes', 'medias'])
             ->orderBy('nom')
             ->get()

@@ -3,7 +3,6 @@
 namespace App\Http\Requests\Api\Produits;
 
 use App\Enums\ProduitStatut;
-use App\Enums\ProduitType;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -37,15 +36,18 @@ class UpdateProduitRequest extends FormRequest
                     ->where('organization_id', $orgId)
                     ->ignore($varianteId),
             ],
-            'type' => ['nullable', Rule::in(ProduitType::values())],
+            'produit_type_id' => [
+                'sometimes', 'required',
+                Rule::exists('produit_types', 'id')->where('organization_id', $orgId)->where('statut', 'actif'),
+            ],
             'statut' => ['nullable', Rule::in(ProduitStatut::values())],
             'prix_usine' => ['nullable', 'integer', 'min:0'],
             'prix_vente' => ['nullable', 'integer', 'min:0'],
             'prix_achat' => ['nullable', 'integer', 'min:0'],
             'cout' => ['nullable', 'integer', 'min:0'],
-            'seuil_alerte_stock' => ['nullable', 'integer', 'min:0'],
+            'alerte_stock_active' => ['boolean'],
+            'seuil_alerte_stock' => ['nullable', 'integer', 'min:1'],
             'description' => ['nullable', 'string'],
-            'is_alerte' => ['boolean'],
             'images' => ['nullable', 'array'],
             'images.*' => ['image', 'max:2048'],
         ];
@@ -60,7 +62,8 @@ class UpdateProduitRequest extends FormRequest
             'categorie_id.exists' => 'La catégorie sélectionnée est invalide.',
             'code_barres.max' => 'Le code-barres ne peut pas dépasser 100 caractères.',
             'code_barres.unique' => 'Ce code-barres est déjà utilisé par un autre produit.',
-            'type.in' => 'Le type sélectionné est invalide.',
+            'produit_type_id.required' => 'Le type de produit est obligatoire.',
+            'produit_type_id.exists' => 'Le type sélectionné est invalide ou inactif.',
             'statut.in' => 'Le statut sélectionné est invalide.',
             'prix_usine.integer' => 'Le prix usine doit être un nombre entier.',
             'prix_usine.min' => 'Le prix usine ne peut pas être négatif.',
@@ -70,9 +73,10 @@ class UpdateProduitRequest extends FormRequest
             'prix_achat.min' => 'Le prix d\'achat ne peut pas être négatif.',
             'cout.integer' => 'Le coût doit être un nombre entier.',
             'cout.min' => 'Le coût ne peut pas être négatif.',
+            'alerte_stock_active.required' => 'Indiquez si vous souhaitez être alerté en cas de stock faible.',
+            'alerte_stock_active.boolean' => 'Le champ alerte doit être vrai ou faux.',
             'seuil_alerte_stock.integer' => 'Le seuil d\'alerte doit être un nombre entier.',
-            'seuil_alerte_stock.min' => 'Le seuil d\'alerte ne peut pas être négatif.',
-            'is_alerte.boolean' => 'Le champ alerte doit être vrai ou faux.',
+            'seuil_alerte_stock.min' => 'Le seuil d\'alerte doit être d\'au moins 1 unité (laissez vide pour utiliser le seuil par défaut de l\'organisation).',
             'images.*.image' => 'Le fichier doit être une image.',
             'images.*.max' => 'Chaque image ne peut pas dépasser 2 Mo.',
         ];

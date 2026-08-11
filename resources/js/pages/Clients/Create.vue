@@ -20,8 +20,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const form = useForm({
-    nom: '',
-    prenom: '',
+    nom_complet: '',
     email: null as string | null,
     telephone: null as string | null,
     adresse: null as string | null,

@@ -7,7 +7,6 @@ use App\Enums\ClientType;
 use App\Enums\ModeTarification;
 use App\Enums\MotifAnnulation;
 use App\Enums\ProduitStatut;
-use App\Enums\ProduitType;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutCommission;
 use App\Enums\StatutFactureVente;
@@ -1068,7 +1067,7 @@ class CommandeVenteController extends Controller
         // resolveVariante() exigera un variante_id explicite au moment de la vente.
         return Produit::where('organization_id', $orgId)
             ->where('statut', ProduitStatut::ACTIF)
-            ->whereIn('type', ProduitType::vendableValues())
+            ->whereHas('produitType', fn ($q) => $q->where('vendable', true))
             ->with('variantes')
             ->orderBy('nom')
             ->get()
@@ -1116,12 +1115,11 @@ class CommandeVenteController extends Controller
     {
         return Client::where('organization_id', $orgId)
             ->where('is_active', true)
-            ->orderBy('nom')
+            ->orderBy('nom_complet')
             ->get()
             ->map(fn (Client $c) => [
                 'id' => $c->id,
-                'nom' => $c->nom,
-                'prenom' => $c->prenom,
+                'nom_complet' => $c->nom_complet,
                 'telephone' => $c->telephone,
                 'type' => $c->type->value,
                 // Véhicules partenaire mémorisés — facultatifs, jamais un prérequis pour vendre

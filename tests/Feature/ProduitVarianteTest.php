@@ -6,9 +6,11 @@ use App\Models\Categorie;
 use App\Models\Organization;
 use App\Models\Parametre;
 use App\Models\Produit;
+use App\Models\ProduitType;
 use App\Models\ProduitVariante;
 use App\Services\ProduitService;
 use App\Services\VarianteService;
+use Database\Seeders\ProduitTypeDefaultSeeder;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -26,6 +28,15 @@ class ProduitVarianteTest extends TestCase
     {
         parent::setUp();
         $this->initOrgAndUser(['produits.read', 'produits.create']);
+        ProduitTypeDefaultSeeder::seedPourOrganisation($this->org->id);
+    }
+
+    private function typeId(string $code, ?Organization $org = null): string
+    {
+        $org ??= $this->org;
+        ProduitTypeDefaultSeeder::seedPourOrganisation($org->id);
+
+        return ProduitType::where('organization_id', $org->id)->where('code', $code)->value('id');
     }
 
     private function makeProduitSansVariante(): Produit
@@ -33,7 +44,7 @@ class ProduitVarianteTest extends TestCase
         return Produit::create([
             'organization_id' => $this->org->id,
             'nom' => 'T-shirt',
-            'type' => 'achat_vente',
+            'produit_type_id' => $this->typeId('achat_vente'),
             'statut' => 'actif',
         ]);
     }
@@ -45,7 +56,7 @@ class ProduitVarianteTest extends TestCase
         $produit = app(ProduitService::class)->creer([
             'organization_id' => $this->org->id,
             'nom' => 'Eau 500ml',
-            'type' => 'fabricable',
+            'produit_type_id' => $this->typeId('fabricable'),
             'statut' => 'actif',
             'prix_usine' => 4000,
             'prix_vente' => 5000,
@@ -135,7 +146,7 @@ class ProduitVarianteTest extends TestCase
         $premier = app(ProduitService::class)->creer([
             'organization_id' => $this->org->id,
             'nom' => 'Produit A',
-            'type' => 'materiel',
+            'produit_type_id' => $this->typeId('materiel'),
             'statut' => 'actif',
             'prix_achat' => 100,
             'prix_vente' => 200,
@@ -143,7 +154,7 @@ class ProduitVarianteTest extends TestCase
         $second = app(ProduitService::class)->creer([
             'organization_id' => $this->org->id,
             'nom' => 'Produit B',
-            'type' => 'materiel',
+            'produit_type_id' => $this->typeId('materiel'),
             'statut' => 'actif',
             'prix_achat' => 100,
             'prix_vente' => 200,
@@ -159,7 +170,7 @@ class ProduitVarianteTest extends TestCase
         $produit = app(ProduitService::class)->creer([
             'organization_id' => $this->org->id,
             'nom' => 'Nom initial',
-            'type' => 'materiel',
+            'produit_type_id' => $this->typeId('materiel'),
             'statut' => 'actif',
             'prix_achat' => 100,
             'prix_vente' => 200,
@@ -174,7 +185,7 @@ class ProduitVarianteTest extends TestCase
 
         app(ProduitService::class)->mettreAJourSimple($produit, [
             'nom' => 'Nom modifié',
-            'type' => 'materiel',
+            'produit_type_id' => $this->typeId('materiel'),
             'statut' => 'actif',
             'categorie_id' => $autreCategorie->id,
             'prix_achat' => 999,
@@ -191,7 +202,7 @@ class ProduitVarianteTest extends TestCase
         $produitOrgA = app(ProduitService::class)->creer([
             'organization_id' => $this->org->id,
             'nom' => 'Produit org A',
-            'type' => 'materiel',
+            'produit_type_id' => $this->typeId('materiel'),
             'statut' => 'actif',
             'prix_achat' => 100,
             'prix_vente' => 200,
@@ -199,7 +210,7 @@ class ProduitVarianteTest extends TestCase
         $produitOrgB = app(ProduitService::class)->creer([
             'organization_id' => $autreOrg->id,
             'nom' => 'Produit org B',
-            'type' => 'materiel',
+            'produit_type_id' => $this->typeId('materiel', $autreOrg),
             'statut' => 'actif',
             'prix_achat' => 100,
             'prix_vente' => 200,
@@ -218,7 +229,7 @@ class ProduitVarianteTest extends TestCase
         $produit = app(ProduitService::class)->creer([
             'organization_id' => $this->org->id,
             'nom' => 'Produit sans catégorie',
-            'type' => 'materiel',
+            'produit_type_id' => $this->typeId('materiel'),
             'statut' => 'actif',
             'prix_achat' => 100,
             'prix_vente' => 200,
@@ -235,7 +246,7 @@ class ProduitVarianteTest extends TestCase
         $produit = app(ProduitService::class)->creer([
             'organization_id' => $this->org->id,
             'nom' => 'Produit avec code-barres',
-            'type' => 'materiel',
+            'produit_type_id' => $this->typeId('materiel'),
             'statut' => 'actif',
             'prix_achat' => 100,
             'prix_vente' => 200,
@@ -253,7 +264,7 @@ class ProduitVarianteTest extends TestCase
         $produit = app(ProduitService::class)->creer([
             'organization_id' => $this->org->id,
             'nom' => 'Produit sans code-barres',
-            'type' => 'materiel',
+            'produit_type_id' => $this->typeId('materiel'),
             'statut' => 'actif',
             'prix_achat' => 100,
             'prix_vente' => 200,
@@ -301,7 +312,7 @@ class ProduitVarianteTest extends TestCase
         app(ProduitService::class)->creer([
             'organization_id' => $this->org->id,
             'nom' => 'Premier produit',
-            'type' => 'materiel',
+            'produit_type_id' => $this->typeId('materiel'),
             'statut' => 'actif',
             'prix_achat' => 100,
             'prix_vente' => 200,
@@ -316,7 +327,7 @@ class ProduitVarianteTest extends TestCase
         app(ProduitService::class)->creer([
             'organization_id' => $this->org->id,
             'nom' => 'Deuxième produit',
-            'type' => 'materiel',
+            'produit_type_id' => $this->typeId('materiel'),
             'statut' => 'actif',
             'prix_achat' => 100,
             'prix_vente' => 200,

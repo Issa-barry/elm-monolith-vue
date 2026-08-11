@@ -27,14 +27,14 @@ interface Produit {
     nom: string;
     sku: string | null;
     image_url: string | null;
-    is_alerte: boolean;
     statut: string;
     statut_label: string;
-    type: string | null;
-    type_label: string | null;
+    produit_type_id: string | null;
+    type_nom: string | null;
     qte_stock: number | null;
     in_stock: boolean;
     is_low_stock: boolean;
+    is_out_of_stock: boolean;
     has_stock: boolean;
     is_used: boolean;
 }
@@ -56,16 +56,6 @@ const filteredProduits = computed(() => {
         [p.nom, p.sku ?? ''].join(' ').toLowerCase().includes(query),
     );
 });
-
-const typeBadgeClass: Record<string, string> = {
-    materiel:
-        'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400',
-    fabricable:
-        'bg-violet-100 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400',
-    achat_vente:
-        'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400',
-    service: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
-};
 </script>
 
 <template>
@@ -159,7 +149,11 @@ const typeBadgeClass: Record<string, string> = {
                             {{ data.nom }}
                         </p>
                         <AlertTriangle
-                            v-if="data.is_alerte"
+                            v-if="data.is_out_of_stock"
+                            class="h-3.5 w-3.5 shrink-0 text-red-500"
+                        />
+                        <AlertTriangle
+                            v-else-if="data.is_low_stock"
                             class="h-3.5 w-3.5 shrink-0 text-amber-500"
                         />
                     </div>
@@ -168,14 +162,10 @@ const typeBadgeClass: Record<string, string> = {
                             {{ data.sku || '—' }}
                         </p>
                         <span
-                            v-if="data.type_label"
-                            class="rounded px-1 py-0.5 text-[10px] leading-none font-medium"
-                            :class="
-                                typeBadgeClass[data.type ?? ''] ??
-                                'bg-muted text-muted-foreground'
-                            "
+                            v-if="data.type_nom"
+                            class="rounded bg-muted px-1 py-0.5 text-[10px] leading-none font-medium text-muted-foreground"
                         >
-                            {{ data.type_label }}
+                            {{ data.type_nom }}
                         </span>
                     </div>
                 </Link>

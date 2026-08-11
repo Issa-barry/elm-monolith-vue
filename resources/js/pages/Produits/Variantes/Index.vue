@@ -27,14 +27,18 @@ interface VarianteRow {
     prix_vente: number | null;
     prix_achat: number | null;
     cout: number | null;
-    seuil_alerte_stock: number | null;
     is_default: boolean;
     is_active: boolean;
     options: VarianteOption[];
 }
 
 const props = defineProps<{
-    produit: { id: string; nom: string; type: string | null };
+    produit: {
+        id: string;
+        nom: string;
+        type_nom: string | null;
+        prix_usine_requis: boolean;
+    };
     variantes: VarianteRow[];
 }>();
 
@@ -50,7 +54,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Variantes', href: '#' },
 ];
 
-const isFabricable = computed(() => props.produit.type === 'fabricable');
+const prixUsineRequis = computed(() => props.produit.prix_usine_requis);
 
 // ── État éditable ────────────────────────────────────────────────────────────
 // Copie locale éditable + snapshot d'origine pour calculer le diff à l'enregistrement
@@ -68,7 +72,6 @@ function estModifiee(row: VarianteRow): boolean {
         row.prix_vente !== orig.prix_vente ||
         row.prix_achat !== orig.prix_achat ||
         row.cout !== orig.cout ||
-        row.seuil_alerte_stock !== orig.seuil_alerte_stock ||
         row.is_active !== orig.is_active
     );
 }
@@ -135,7 +138,6 @@ function enregistrer() {
                 prix_vente: r.prix_vente,
                 prix_achat: r.prix_achat,
                 cout: r.cout,
-                seuil_alerte_stock: r.seuil_alerte_stock,
                 is_active: r.is_active,
             })),
         },
@@ -246,7 +248,7 @@ function enregistrer() {
                             <th class="px-2 py-2 text-left">Référence</th>
                             <th class="px-2 py-2 text-left">Code-barres</th>
                             <th
-                                v-if="isFabricable"
+                                v-if="prixUsineRequis"
                                 class="px-2 py-2 text-right"
                             >
                                 Prix usine
@@ -254,7 +256,6 @@ function enregistrer() {
                             <th class="px-2 py-2 text-right">Prix achat</th>
                             <th class="px-2 py-2 text-right">Prix vente</th>
                             <th class="px-2 py-2 text-right">Coût</th>
-                            <th class="px-2 py-2 text-right">Seuil alerte</th>
                             <th class="px-2 py-2 text-left">Statut</th>
                         </tr>
                     </thead>
@@ -285,7 +286,7 @@ function enregistrer() {
                                     class="h-7 w-32 text-xs"
                                 />
                             </td>
-                            <td v-if="isFabricable" class="px-2">
+                            <td v-if="prixUsineRequis" class="px-2">
                                 <InputNumber
                                     v-model="row.prix_usine"
                                     :min="0"
@@ -326,14 +327,6 @@ function enregistrer() {
                                 />
                             </td>
                             <td class="px-2">
-                                <InputNumber
-                                    v-model="row.seuil_alerte_stock"
-                                    :min="0"
-                                    class="w-20"
-                                    input-class="h-7 w-20 text-xs text-right"
-                                />
-                            </td>
-                            <td class="px-2">
                                 <div class="flex items-center gap-1.5">
                                     <Checkbox
                                         :model-value="row.is_active"
@@ -354,7 +347,9 @@ function enregistrer() {
             <p class="text-xs text-muted-foreground">
                 Le stock ne se modifie pas ici — utilisez « Ajuster le stock »
                 depuis la fiche produit, qui trace chaque mouvement avec un
-                motif.
+                motif. Le seuil d'alerte de stock faible se configure au
+                niveau du produit (pas par variante) et s'applique à toutes
+                ses variantes.
             </p>
         </div>
     </AppLayout>

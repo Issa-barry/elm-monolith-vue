@@ -12,8 +12,12 @@ return new class extends Migration
             $table->ulid('id')->primary();
             $table->foreignUlid('organization_id')->constrained()->cascadeOnDelete();
             $table->foreignUlid('user_id')->nullable()->constrained()->nullOnDelete();
-            $table->string('nom', 100);
+            // Identité civile (nom/prenom) conservée pour compat mais jamais demandée dans
+            // l'interface — comme Livreur, l'UI ne saisit que nom_complet (facultatif en base,
+            // toujours renseigné en pratique par le formulaire).
+            $table->string('nom', 100)->nullable();
             $table->string('prenom', 100)->nullable();
+            $table->string('nom_complet', 150)->nullable();
             $table->string('email')->nullable();
             $table->string('telephone', 20)->nullable();
             $table->text('adresse')->nullable();

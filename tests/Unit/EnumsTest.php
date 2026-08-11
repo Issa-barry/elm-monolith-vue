@@ -5,7 +5,6 @@ namespace Tests\Unit;
 use App\Enums\PackingStatut;
 use App\Enums\PrestataireType;
 use App\Enums\ProduitStatut;
-use App\Enums\ProduitType;
 use App\Enums\SiteRole;
 use App\Enums\SiteStatut;
 use App\Enums\SiteType;
@@ -246,94 +245,40 @@ class EnumsTest extends TestCase
     }
 
     // ── ProduitType ───────────────────────────────────────────────────────────
+    // Depuis la refonte CRUD (remplace l'ancien enum figé App\Enums\ProduitType), les
+    // capacités structurelles vivent sur des lignes App\Models\ProduitType par organisation
+    // (cf. ProduitTypeDefaultSeeder pour les 4 types historiques, testés en Feature via
+    // ProduitTypeTest). Ici, on ne teste que les méthodes pures dérivées des attributs,
+    // utilisables sur une instance non persistée.
 
-    public function test_produit_type_labels(): void
+    public function test_produit_type_required_prices_derivees_des_booleens(): void
     {
-        $this->assertSame('Matériel', ProduitType::MATERIEL->label());
-        $this->assertSame('Service', ProduitType::SERVICE->label());
-        $this->assertSame('Fabricable', ProduitType::FABRICABLE->label());
-        $this->assertSame('Achat / Vente', ProduitType::ACHAT_VENTE->label());
+        $materiel = new \App\Models\ProduitType(['prix_achat_requis' => true, 'prix_usine_requis' => false, 'prix_vente_requis' => false]);
+        $this->assertSame(['prix_achat'], $materiel->requiredPrices());
+
+        $service = new \App\Models\ProduitType(['prix_achat_requis' => false, 'prix_usine_requis' => false, 'prix_vente_requis' => false]);
+        $this->assertSame([], $service->requiredPrices());
+
+        $fabricable = new \App\Models\ProduitType(['prix_achat_requis' => false, 'prix_usine_requis' => true, 'prix_vente_requis' => true]);
+        $this->assertSame(['prix_usine', 'prix_vente'], $fabricable->requiredPrices());
+
+        $achatVente = new \App\Models\ProduitType(['prix_achat_requis' => true, 'prix_usine_requis' => false, 'prix_vente_requis' => true]);
+        $this->assertSame(['prix_achat', 'prix_vente'], $achatVente->requiredPrices());
     }
 
-    public function test_produit_type_has_stock(): void
+    public function test_produit_type_champ_prix_reference(): void
     {
-        $this->assertTrue(ProduitType::MATERIEL->hasStock());
-        $this->assertFalse(ProduitType::SERVICE->hasStock());
-        $this->assertTrue(ProduitType::FABRICABLE->hasStock());
-        $this->assertTrue(ProduitType::ACHAT_VENTE->hasStock());
+        $type = new \App\Models\ProduitType(['champ_prix_reference' => 'prix_achat']);
+        $this->assertSame('prix_achat', $type->champPrixReference());
+
+        $sansReference = new \App\Models\ProduitType(['champ_prix_reference' => null]);
+        $this->assertNull($sansReference->champPrixReference());
     }
 
-    public function test_produit_type_is_vendable(): void
+    public function test_produit_type_vendable_achetable_sont_des_booleens_stockes(): void
     {
-        $this->assertFalse(ProduitType::MATERIEL->isVendable());
-        $this->assertFalse(ProduitType::SERVICE->isVendable());
-        $this->assertTrue(ProduitType::FABRICABLE->isVendable());
-        $this->assertTrue(ProduitType::ACHAT_VENTE->isVendable());
-    }
-
-    public function test_produit_type_is_achetable(): void
-    {
-        $this->assertTrue(ProduitType::MATERIEL->isAchetable());
-        $this->assertFalse(ProduitType::SERVICE->isAchetable());
-        $this->assertFalse(ProduitType::FABRICABLE->isAchetable());
-        $this->assertTrue(ProduitType::ACHAT_VENTE->isAchetable());
-    }
-
-    public function test_produit_type_vendable_values(): void
-    {
-        $values = ProduitType::vendableValues();
-        $this->assertContains('fabricable', $values);
-        $this->assertContains('achat_vente', $values);
-        $this->assertNotContains('materiel', $values);
-        $this->assertNotContains('service', $values);
-    }
-
-    public function test_produit_type_achetable_values(): void
-    {
-        $values = ProduitType::achetableValues();
-        $this->assertContains('materiel', $values);
-        $this->assertContains('achat_vente', $values);
-        $this->assertNotContains('fabricable', $values);
-        $this->assertNotContains('service', $values);
-    }
-
-    public function test_produit_type_required_prices(): void
-    {
-        $this->assertContains('prix_achat', ProduitType::MATERIEL->requiredPrices());
-        $this->assertEmpty(ProduitType::SERVICE->requiredPrices());
-        $this->assertContains('prix_usine', ProduitType::FABRICABLE->requiredPrices());
-        $this->assertContains('prix_vente', ProduitType::FABRICABLE->requiredPrices());
-        $this->assertContains('prix_achat', ProduitType::ACHAT_VENTE->requiredPrices());
-        $this->assertContains('prix_vente', ProduitType::ACHAT_VENTE->requiredPrices());
-    }
-
-    public function test_produit_type_values(): void
-    {
-        $values = ProduitType::values();
-        $this->assertContains('materiel', $values);
-        $this->assertContains('service', $values);
-        $this->assertContains('fabricable', $values);
-        $this->assertContains('achat_vente', $values);
-    }
-
-    public function test_produit_type_options(): void
-    {
-        $options = ProduitType::options();
-        $this->assertCount(4, $options);
-        foreach ($options as $option) {
-            $this->assertArrayHasKey('value', $option);
-            $this->assertArrayHasKey('label', $option);
-            $this->assertArrayHasKey('required_prices', $option);
-        }
-    }
-
-    public function test_produit_type_options_expose_required_prices_pour_le_frontend(): void
-    {
-        $options = collect(ProduitType::options())->keyBy('value');
-
-        $this->assertSame(['prix_achat'], $options['materiel']['required_prices']);
-        $this->assertSame([], $options['service']['required_prices']);
-        $this->assertSame(['prix_usine', 'prix_vente'], $options['fabricable']['required_prices']);
-        $this->assertSame(['prix_achat', 'prix_vente'], $options['achat_vente']['required_prices']);
+        $type = new \App\Models\ProduitType(['vendable' => true, 'achetable' => false]);
+        $this->assertTrue($type->isVendable());
+        $this->assertFalse($type->isAchetable());
     }
 }

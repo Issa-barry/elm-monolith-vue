@@ -189,11 +189,12 @@ class CategorieTest extends TestCase
     public function test_destroy_refuse_si_categorie_utilisee_par_un_produit(): void
     {
         $categorie = $this->makeCategorie($this->org);
+        \Database\Seeders\ProduitTypeDefaultSeeder::seedPourOrganisation($this->org->id);
         Produit::create([
             'organization_id' => $this->org->id,
             'categorie_id' => $categorie->id,
             'nom' => 'Produit',
-            'type' => 'service',
+            'produit_type_id' => \App\Models\ProduitType::where('organization_id', $this->org->id)->where('code', 'service')->value('id'),
             'statut' => 'actif',
         ]);
 

@@ -120,7 +120,7 @@ class PdvCheckoutService
     private function resolveVariante(array $ligne, string $orgId): ProduitVariante
     {
         if (! empty($ligne['variante_id'])) {
-            $variante = ProduitVariante::with('produit')->find($ligne['variante_id']);
+            $variante = ProduitVariante::with('produit.produitType')->find($ligne['variante_id']);
 
             if (! $variante || $variante->produit_id !== $ligne['produit_id']) {
                 throw ValidationException::withMessages([
@@ -128,7 +128,7 @@ class PdvCheckoutService
                 ]);
             }
         } else {
-            $produit = Produit::with('variantes')
+            $produit = Produit::with(['variantes', 'produitType'])
                 ->where('organization_id', $orgId)
                 ->where('statut', ProduitStatut::ACTIF)
                 ->find($ligne['produit_id']);
@@ -195,7 +195,7 @@ class PdvCheckoutService
             $produit = $variante->produit;
             $qte = $item['qte'];
 
-            if ($produit->type->hasStock()) {
+            if ($produit->produitType->gere_stock) {
                 $stockTrackedVarianteIds[] = $variante->id;
                 $disponible = $stocksSite->get($variante->id)?->qte_stock;
 

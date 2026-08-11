@@ -2,8 +2,8 @@
 
 namespace App\Services;
 
-use App\Enums\ProduitType;
 use App\Models\Produit;
+use App\Models\ProduitType;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -12,7 +12,7 @@ class ProduitService
 {
     /** Champs de produit_variantes portés par le formulaire Produit (variante par défaut/générées). */
     private const CHAMPS_VARIANTE = [
-        'code_barres', 'prix_usine', 'prix_vente', 'prix_achat', 'cout', 'seuil_alerte_stock',
+        'code_barres', 'prix_usine', 'prix_vente', 'prix_achat', 'cout',
     ];
 
     public function __construct(private VarianteService $varianteService) {}
@@ -21,12 +21,13 @@ class ProduitService
      * Crée un produit + sa/ses variante(s) en une transaction. Point d'entrée unique partagé
      * par les controllers Web et API (élimine la duplication de logique constatée avant refonte).
      *
-     * $donnees attend les champs produits (nom/type/statut/categorie_id/description), les champs
-     * de CHAMPS_VARIANTE, et optionnellement 'options' => [['nom'=>..,'valeurs'=>[..]], ...].
+     * $donnees attend les champs produits (nom/produit_type_id/statut/categorie_id/description,
+     * seuil_alerte_stock/alerte_stock_active), les champs de CHAMPS_VARIANTE, et optionnellement
+     * 'options' => [['nom'=>..,'valeurs'=>[..]], ...].
      */
     public function creer(array $donnees): Produit
     {
-        $type = ProduitType::from($donnees['type']);
+        $type = ProduitType::findOrFail($donnees['produit_type_id']);
         $donneesVariante = Arr::only($donnees, self::CHAMPS_VARIANTE);
         $this->validerPrixSelonType($type, $donneesVariante);
 
@@ -40,7 +41,7 @@ class ProduitService
                 $this->varianteService->creerVarianteParDefaut($produit, $donneesVariante);
             }
 
-            return $produit->fresh(['variantes', 'categorie']);
+            return $produit->fresh(['variantes', 'categorie', 'produitType']);
         });
     }
 
@@ -51,8 +52,8 @@ class ProduitService
      */
     public function mettreAJourSimple(Produit $produit, array $donnees): Produit
     {
-        $ancienType = $produit->type;
-        $type = ProduitType::from($donnees['type'] ?? $produit->type->value);
+        $ancienTypeId = $produit->produit_type_id;
+        $type = ProduitType::findOrFail($donnees['produit_type_id'] ?? $ancienTypeId);
         $variante = $produit->variantePrincipale()->first();
         $donneesVariante = Arr::only($donnees, self::CHAMPS_VARIANTE);
 
@@ -71,7 +72,7 @@ class ProduitService
         // avec le nouveau type, sinon le changement est refusé en bloc (avant toute écriture,
         // pour ne jamais laisser le produit dans un état où sa variante principale est déjà
         // au nouveau type mais une variante secondaire ne l'est pas).
-        if ($type !== $ancienType) {
+        if ($type->id !== $ancienTypeId) {
             $this->validerCoherenceAutresVariantesPourType($produit, $type, $variante?->id);
         }
 
@@ -84,17 +85,20 @@ class ProduitService
                 $this->varianteService->creerVarianteParDefaut($produit, $donneesVariante);
             }
 
-            return $produit->fresh(['variantes', 'categorie']);
+            return $produit->fresh(['variantes', 'categorie', 'produitType']);
         });
     }
 
     /**
      * Centralise la dette identifiée avant refonte : ProduitType::requiredPrices() existait
-     * mais n'était appliqué nulle part côté validation serveur. Un seul point d'entrée pour
-     * Web et API — non contournable via l'API. Vérifie la présence des prix requis pour le
-     * type, PUIS leur cohérence relationnelle (prix_vente strictement supérieur au coût de
-     * référence du type — cf. ProduitType::champPrixReference()) : un produit vendu à perte ou
-     * à marge nulle est refusé, jamais silencieusement accepté.
+     * (dans l'ancien enum) mais n'était appliqué nulle part côté validation serveur. Un seul
+     * point d'entrée pour Web et API — non contournable via l'API. Vérifie la présence des prix
+     * requis pour le type, PUIS leur cohérence relationnelle (prix_vente strictement supérieur
+     * au coût de référence du type — cf. ProduitType::champPrixReference()) : un produit vendu
+     * à perte ou à marge nulle est refusé, jamais silencieusement accepté. Ce garde-fou reste
+     * imposé par le système même si les capacités du type sont désormais éditables par
+     * l'organisation (cf. ProduitTypeController) — l'admin choisit la configuration du type,
+     * jamais la désactivation de la règle de marge qui en découle.
      */
     public function validerPrixSelonType(ProduitType $type, array $donneesPrix): void
     {
@@ -127,7 +131,7 @@ class ProduitService
 
             $label = $autre->libelle !== '' ? $autre->libelle : 'variante principale';
             throw ValidationException::withMessages([
-                'type' => "Impossible de passer le produit en \"{$nouveauType->label()}\" : la variante « {$label} » n'est pas compatible avec ce type.",
+                'produit_type_id' => "Impossible de passer le produit en « {$nouveauType->nom} » : la variante « {$label} » n'est pas compatible avec ce type.",
             ]);
         }
     }
@@ -155,8 +159,8 @@ class ProduitService
             $liste = implode(', ', array_map(fn ($c) => $labels[$c] ?? $c, $manquants));
 
             return [
-                'champ' => 'type',
-                'message' => "Pour le type \"{$type->label()}\", les champs suivants sont obligatoires : {$liste}.",
+                'champ' => 'produit_type_id',
+                'message' => "Pour le type « {$type->nom} », les champs suivants sont obligatoires : {$liste}.",
             ];
         }
 

@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Enums\ProduitStatut;
-use App\Enums\ProduitType;
 use App\Enums\StatutCommandeAchat;
 use App\Models\CommandeAchat;
 use App\Models\CommandeAchatLigne;
@@ -62,7 +61,7 @@ class CommandeAchatController extends Controller
 
         $produits = Produit::where('organization_id', $orgId)
             ->where('statut', ProduitStatut::ACTIF)
-            ->whereIn('type', ProduitType::achetableValues())
+            ->whereHas('produitType', fn ($q) => $q->where('achetable', true))
             ->with('variantes')
             ->orderBy('nom')
             ->get()

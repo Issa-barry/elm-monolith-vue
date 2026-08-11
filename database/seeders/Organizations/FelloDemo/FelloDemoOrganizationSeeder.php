@@ -5,6 +5,7 @@ namespace Database\Seeders\Organizations\FelloDemo;
 use App\Models\Organization;
 use Database\Seeders\CategorieDefaultSeeder;
 use Database\Seeders\OptionCatalogueDefaultSeeder;
+use Database\Seeders\ProduitTypeDefaultSeeder;
 use Illuminate\Database\Seeder;
 use Spatie\Permission\Models\Role;
 
@@ -32,6 +33,10 @@ class FelloDemoOrganizationSeeder extends Seeder
         foreach (['admin_entreprise', 'commerciale', 'client'] as $role) {
             Role::firstOrCreate(['name' => $role, 'guard_name' => 'web']);
         }
+
+        // Obligatoire (contrairement aux catalogues ci-dessous) : un produit ne peut pas
+        // exister sans type — cf. docblock de ProduitTypeDefaultSeeder.
+        ProduitTypeDefaultSeeder::seedPourOrganisation($org->id);
 
         // Catalogues de référence par défaut — FelloDemoCatalogSeeder s'appuie dessus
         // (catégories Vêtements/Chaussures) au lieu de recréer sa propre arborescence.

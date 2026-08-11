@@ -4,7 +4,9 @@ namespace Tests\Unit;
 
 use App\Models\Organization;
 use App\Models\Produit;
+use App\Models\ProduitType;
 use App\Services\ProduitService;
+use Database\Seeders\ProduitTypeDefaultSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
@@ -27,10 +29,19 @@ class ProduitServicePrixTest extends TestCase
         parent::setUp();
         $this->service = app(ProduitService::class);
         $this->org = Organization::factory()->create();
+        ProduitTypeDefaultSeeder::seedPourOrganisation($this->org->id);
     }
 
+    /** Raccourci 'type' => 'materiel'|'service'|'fabricable'|'achat_vente' résolu en produit_type_id. */
     private function creer(array $overrides): Produit
     {
+        if (array_key_exists('type', $overrides)) {
+            $overrides['produit_type_id'] = ProduitType::where('organization_id', $this->org->id)
+                ->where('code', $overrides['type'])
+                ->value('id');
+            unset($overrides['type']);
+        }
+
         return $this->service->creer(array_merge([
             'organization_id' => $this->org->id,
             'nom' => 'Produit test',
@@ -79,7 +90,7 @@ class ProduitServicePrixTest extends TestCase
             $this->creer(['type' => 'fabricable', 'prix_vente' => 6000]);
             $this->fail('ValidationException attendue.');
         } catch (ValidationException $e) {
-            $this->assertArrayHasKey('type', $e->errors());
+            $this->assertArrayHasKey('produit_type_id', $e->errors());
         }
     }
 
@@ -124,7 +135,7 @@ class ProduitServicePrixTest extends TestCase
             $this->creer(['type' => 'achat_vente', 'prix_achat' => 100000]);
             $this->fail('ValidationException attendue.');
         } catch (ValidationException $e) {
-            $this->assertArrayHasKey('type', $e->errors());
+            $this->assertArrayHasKey('produit_type_id', $e->errors());
         }
     }
 
@@ -188,17 +199,22 @@ class ProduitServicePrixTest extends TestCase
 
     // ── Changement de type : produit à variante unique ───────────────────────
 
+    private function typeId(string $code): string
+    {
+        return ProduitType::where('organization_id', $this->org->id)->where('code', $code)->value('id');
+    }
+
     public function test_changement_de_type_accepte_si_la_variante_unique_reste_coherente(): void
     {
         $produit = $this->creer(['type' => 'achat_vente', 'prix_achat' => 100000, 'prix_vente' => 120000]);
 
         $produit = $this->service->mettreAJourSimple($produit, [
-            'type' => 'fabricable',
+            'produit_type_id' => $this->typeId('fabricable'),
             'prix_usine' => 100000,
             'prix_vente' => 120000,
         ]);
 
-        $this->assertSame('fabricable', $produit->type->value);
+        $this->assertSame($this->typeId('fabricable'), $produit->produit_type_id);
     }
 
     // ── Changement de type : produit multi-variantes (scénario critique) ────
@@ -209,7 +225,7 @@ class ProduitServicePrixTest extends TestCase
         return $this->service->creer([
             'organization_id' => $this->org->id,
             'nom' => 'Produit multi-variantes',
-            'type' => 'achat_vente',
+            'produit_type_id' => $this->typeId('achat_vente'),
             'statut' => 'actif',
             'prix_achat' => 8000,
             'prix_vente' => 10000,
@@ -228,20 +244,21 @@ class ProduitServicePrixTest extends TestCase
         // prix_vente=10000/prix_usine=null : valide pour ACHAT_VENTE, mais FABRICABLE exige
         // prix_usine, absent sur les deux. Le changement doit donc être refusé.
         $produit = $this->creerProduitMultiVariantes();
+        $ancienTypeId = $produit->produit_type_id;
 
         try {
             $this->service->mettreAJourSimple($produit, [
-                'type' => 'fabricable',
+                'produit_type_id' => $this->typeId('fabricable'),
                 'prix_usine' => 8000,
                 'prix_vente' => 10000,
             ]);
             $this->fail('ValidationException attendue : ni "Noir" ni "Blanc" n\'ont de prix_usine.');
         } catch (ValidationException $e) {
-            $this->assertArrayHasKey('type', $e->errors());
+            $this->assertArrayHasKey('produit_type_id', $e->errors());
         }
 
         $produit->refresh();
-        $this->assertSame('achat_vente', $produit->type->value, 'Le type ne doit pas avoir changé en base.');
+        $this->assertSame($ancienTypeId, $produit->produit_type_id, 'Le type ne doit pas avoir changé en base.');
         $this->assertCount(2, $produit->variantes, 'Aucune variante ne doit avoir été créée ni modifiée par un changement refusé.');
         $this->assertTrue($produit->variantes->every(fn ($v) => $v->prix_achat === 8000), 'Aucune écriture partielle ne doit persister.');
     }
@@ -257,11 +274,11 @@ class ProduitServicePrixTest extends TestCase
         }
 
         $produit = $this->service->mettreAJourSimple($produit->fresh(), [
-            'type' => 'fabricable',
+            'produit_type_id' => $this->typeId('fabricable'),
             'prix_usine' => 8000,
             'prix_vente' => 10000,
         ]);
 
-        $this->assertSame('fabricable', $produit->type->value);
+        $this->assertSame($this->typeId('fabricable'), $produit->produit_type_id);
     }
 }

@@ -19,6 +19,7 @@ class Client extends Model
         'user_id',
         'nom',
         'prenom',
+        'nom_complet',
         'email',
         'telephone',
         'code_phone_pays',
@@ -40,9 +41,16 @@ class Client extends Model
         ];
     }
 
+    /**
+     * Comme Livreur : nom_complet est le champ réellement saisi/affiché dans l'interface.
+     * nom/prenom ne sont conservés que pour compat avec d'anciennes données (fallback ici,
+     * jamais redemandés dans le formulaire).
+     */
     public function getNomCompletAttribute(): string
     {
-        return trim("{$this->prenom} {$this->nom}");
+        $saisi = trim((string) ($this->attributes['nom_complet'] ?? ''));
+
+        return $saisi !== '' ? $saisi : trim("{$this->prenom} {$this->nom}");
     }
 
     public function isPartenaire(): bool

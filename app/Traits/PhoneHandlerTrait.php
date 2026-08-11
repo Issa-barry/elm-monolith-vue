@@ -197,6 +197,9 @@ trait PhoneHandlerTrait
         if (! empty($data['prenom'])) {
             $data['prenom'] = $this->ucTitle($data['prenom']);
         }
+        if (! empty($data['nom_complet'])) {
+            $data['nom_complet'] = $this->ucTitle(trim($data['nom_complet']));
+        }
         if (! empty($data['raison_sociale'])) {
             $data['raison_sociale'] = $this->ucTitle($data['raison_sociale']);
         }

@@ -5,7 +5,9 @@ namespace Tests\Feature\Api;
 use App\Models\Fournisseur;
 use App\Models\Organization;
 use App\Models\Produit;
+use App\Models\ProduitType;
 use App\Services\ProduitService;
+use Database\Seeders\ProduitTypeDefaultSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Tests\Feature\Concerns\HasAdminSetup;
@@ -20,28 +22,41 @@ class ProduitApiTest extends TestCase
     {
         parent::setUp();
         $this->initOrgAndUser(['produits.read', 'produits.create', 'produits.update', 'produits.delete']);
+        ProduitTypeDefaultSeeder::seedPourOrganisation($this->org->id);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    private function typeId(string $code, ?Organization $org = null): string
+    {
+        $org ??= $this->org;
+        ProduitTypeDefaultSeeder::seedPourOrganisation($org->id);
+
+        return ProduitType::where('organization_id', $org->id)->where('code', $code)->value('id');
+    }
+
     /**
      * $overrides['qte_stock'] alimente directement le cache produits.qte_stock (sans ligne
      * variante_stocks), reproduisant le scénario "compteur global pas encore ventilé".
+     * $overrides['type'] (code stable, ex: 'service') est résolu en produit_type_id.
      */
     private function makeProduit(Organization $org, array $overrides = []): Produit
     {
         $qteStock = array_key_exists('qte_stock', $overrides) ? $overrides['qte_stock'] : 50;
         unset($overrides['qte_stock']);
 
+        $typeCode = $overrides['type'] ?? 'materiel';
+        unset($overrides['type']);
+
         $payload = array_merge([
             'organization_id' => $org->id,
             'nom' => 'Produit test',
-            'type' => 'materiel',
+            'produit_type_id' => $this->typeId($typeCode, $org),
             'statut' => 'actif',
-            'is_alerte' => false,
+            'alerte_stock_active' => false,
         ], $overrides);
 
-        if (($payload['type'] ?? 'materiel') !== 'service' && ! isset($payload['prix_achat'])) {
+        if ($typeCode !== 'service' && ! isset($payload['prix_achat'])) {
             $payload['prix_achat'] = 500;
         }
 
@@ -80,7 +95,7 @@ class ProduitApiTest extends TestCase
         $response->assertJsonFragment([
             'id' => $produit->id,
             'nom' => $produit->nom,
-            'type' => 'materiel',
+            'produit_type_id' => $produit->produit_type_id,
             'statut' => 'actif',
         ]);
     }
@@ -113,13 +128,13 @@ class ProduitApiTest extends TestCase
             ->assertJsonFragment([
                 'id' => $produit->id,
                 'nom' => $produit->nom,
-                'type' => 'materiel',
-                'type_label' => 'Matériel',
-                'type_has_stock' => true,
+                'produit_type_id' => $produit->produit_type_id,
+                'type_nom' => 'Matériel',
+                'type_gere_stock' => true,
                 'statut' => 'actif',
                 'statut_label' => 'Actif',
                 'qte_stock' => 50,
-                'is_alerte' => false,
+                'alerte_stock_active' => false,
             ]);
     }
 
@@ -164,16 +179,16 @@ class ProduitApiTest extends TestCase
 
         $response = $this->postJson(route('api.backoffice.produits.store'), [
             'nom' => 'Nouveau produit',
-            'type' => 'materiel',
+            'produit_type_id' => $this->typeId('materiel'),
             'statut' => 'actif',
             'prix_achat' => 1500,
-            'is_alerte' => false,
+            'alerte_stock_active' => false,
         ]);
 
         $response->assertCreated()
             ->assertJsonFragment([
                 'nom' => 'Nouveau produit',
-                'type' => 'materiel',
+                'produit_type_id' => $this->typeId('materiel'),
                 'statut' => 'actif',
                 'prix_achat' => 1500,
             ]);
@@ -203,7 +218,7 @@ class ProduitApiTest extends TestCase
 
         $response = $this->postJson(route('api.backoffice.produits.store'), [
             'nom' => 'Produit avec fournisseur',
-            'type' => 'materiel',
+            'produit_type_id' => $this->typeId('materiel'),
             'statut' => 'actif',
             'prix_achat' => 1500,
             'fournisseur_id' => $fournisseur->id,
@@ -232,7 +247,7 @@ class ProduitApiTest extends TestCase
 
         $this->postJson(route('api.backoffice.produits.store'), [
             'nom' => 'Produit isolation API',
-            'type' => 'materiel',
+            'produit_type_id' => $this->typeId('materiel'),
             'statut' => 'actif',
             'prix_achat' => 1500,
             'fournisseur_id' => $fournisseurAilleurs->id,
@@ -247,7 +262,7 @@ class ProduitApiTest extends TestCase
 
         $this->postJson(route('api.backoffice.produits.store'), [])
             ->assertUnprocessable()
-            ->assertJsonValidationErrors(['nom', 'type', 'statut']);
+            ->assertJsonValidationErrors(['nom', 'produit_type_id', 'statut', 'alerte_stock_active']);
     }
 
     public function test_store_fails_sans_prix_requis_pour_le_type(): void
@@ -258,7 +273,7 @@ class ProduitApiTest extends TestCase
         // non contournable côté API (dette corrigée par la refonte).
         $this->postJson(route('api.backoffice.produits.store'), [
             'nom' => 'Sans prix',
-            'type' => 'materiel',
+            'produit_type_id' => $this->typeId('materiel'),
             'statut' => 'actif',
         ])->assertUnprocessable();
 
@@ -275,7 +290,7 @@ class ProduitApiTest extends TestCase
 
         $this->postJson(route('api.backoffice.produits.store'), [
             'nom' => 'Eau minérale 500ml',
-            'type' => 'fabricable',
+            'produit_type_id' => $this->typeId('fabricable'),
             'statut' => 'actif',
             'prix_usine' => 5100,
             'prix_vente' => 6000,
@@ -288,7 +303,7 @@ class ProduitApiTest extends TestCase
 
         $this->postJson(route('api.backoffice.produits.store'), [
             'nom' => 'Pack bouteille 500ml',
-            'type' => 'fabricable',
+            'produit_type_id' => $this->typeId('fabricable'),
             'statut' => 'actif',
             'prix_usine' => 18000,
             'prix_vente' => 18000,
@@ -305,7 +320,7 @@ class ProduitApiTest extends TestCase
 
         $this->postJson(route('api.backoffice.produits.store'), [
             'nom' => 'Produit revente à perte',
-            'type' => 'achat_vente',
+            'produit_type_id' => $this->typeId('achat_vente'),
             'statut' => 'actif',
             'prix_achat' => 100000,
             'prix_vente' => 90000,
@@ -323,7 +338,7 @@ class ProduitApiTest extends TestCase
         $produit = app(ProduitService::class)->creer([
             'organization_id' => $this->org->id,
             'nom' => 'Produit fabricable',
-            'type' => 'fabricable',
+            'produit_type_id' => $this->typeId('fabricable'),
             'statut' => 'actif',
             'prix_usine' => 5100,
             'prix_vente' => 6000,
@@ -348,7 +363,7 @@ class ProduitApiTest extends TestCase
 
         $this->putJson(route('api.backoffice.produits.update', $produit), [
             'nom' => 'Produit modifié',
-            'type' => 'materiel',
+            'produit_type_id' => $this->typeId('materiel'),
             'statut' => 'actif',
             'prix_achat' => 800,
         ])

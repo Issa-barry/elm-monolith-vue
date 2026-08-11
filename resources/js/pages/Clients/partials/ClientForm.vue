@@ -15,8 +15,10 @@ function flagUrl(code: string) {
 }
 
 interface FormData {
-    nom: string;
-    prenom: string;
+    nom_complet: string;
+    // Conservé en base pour compat mais jamais affiché/saisi ici — cf. règle métier
+    // "pas besoin d'email sur ce projet". La valeur existante est réémise telle quelle
+    // à chaque soumission pour ne pas l'écraser.
     email: string | null;
     telephone: string | null;
     adresse: string | null;
@@ -159,56 +161,33 @@ function onSubmit() {
             >
                 Identité
             </h3>
-            <div class="grid gap-5 sm:grid-cols-2">
+            <div class="grid gap-5">
                 <div>
-                    <Label for="prenom" class="mb-1.5 block"
-                        >Prénom <span class="text-destructive">*</span></Label
+                    <Label for="nom_complet" class="mb-1.5 block"
+                        >Nom complet
+                        <span class="text-destructive">*</span></Label
                     >
                     <InputText
-                        id="prenom"
-                        :model-value="form.prenom"
+                        id="nom_complet"
+                        :model-value="form.nom_complet"
                         @update:model-value="
                             $emit('update:form', {
                                 ...form,
-                                prenom: String($event ?? ''),
+                                nom_complet: String($event ?? ''),
                             })
                         "
                         class="w-full"
                         :disabled="isReadOnly"
                         :class="[
                             readonlyInputClass,
-                            { 'p-invalid': errors.prenom },
+                            { 'p-invalid': errors.nom_complet },
                         ]"
                     />
                     <p
-                        v-if="errors.prenom"
+                        v-if="errors.nom_complet"
                         class="mt-1 text-xs text-destructive"
                     >
-                        {{ errors.prenom }}
-                    </p>
-                </div>
-                <div>
-                    <Label for="nom" class="mb-1.5 block"
-                        >Nom <span class="text-destructive">*</span></Label
-                    >
-                    <InputText
-                        id="nom"
-                        :model-value="form.nom"
-                        @update:model-value="
-                            $emit('update:form', {
-                                ...form,
-                                nom: String($event ?? ''),
-                            })
-                        "
-                        class="w-full"
-                        :disabled="isReadOnly"
-                        :class="[
-                            readonlyInputClass,
-                            { 'p-invalid': errors.nom },
-                        ]"
-                    />
-                    <p v-if="errors.nom" class="mt-1 text-xs text-destructive">
-                        {{ errors.nom }}
+                        {{ errors.nom_complet }}
                     </p>
                 </div>
             </div>
@@ -327,13 +306,13 @@ function onSubmit() {
             >
                 Contact
             </h3>
-            <div class="grid gap-5 sm:grid-cols-2">
+            <div class="grid gap-5">
                 <div>
                     <Label for="telephone" class="mb-1.5 block"
                         >Téléphone
                         <span class="text-destructive">*</span></Label
                     >
-                    <div class="flex gap-2">
+                    <div class="flex max-w-md gap-2">
                         <div
                             class="flex h-10 w-24 shrink-0 items-center justify-center gap-1.5 rounded-md border bg-muted/40 px-2 font-mono text-sm text-muted-foreground"
                             :class="readonlyPrefixClass"
@@ -372,32 +351,6 @@ function onSubmit() {
                     </p>
                     <p v-else class="mt-1 text-xs text-muted-foreground">
                         Saisissez les chiffres sans indicatif
-                    </p>
-                </div>
-                <div>
-                    <Label for="email" class="mb-1.5 block">Email</Label>
-                    <InputText
-                        id="email"
-                        :model-value="form.email ?? ''"
-                        @update:model-value="
-                            $emit('update:form', {
-                                ...form,
-                                email: $event || null,
-                            })
-                        "
-                        type="email"
-                        class="w-full"
-                        :disabled="isReadOnly"
-                        :class="[
-                            readonlyInputClass,
-                            { 'p-invalid': errors.email },
-                        ]"
-                    />
-                    <p
-                        v-if="errors.email"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ errors.email }}
                     </p>
                 </div>
             </div>

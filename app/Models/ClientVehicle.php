@@ -24,10 +24,13 @@ class ClientVehicle extends Model
     protected $fillable = [
         'organization_id',
         'client_id',
-        'libelle',
+        'nom_vehicule',
         'immatriculation',
         'chauffeur_nom',
         'chauffeur_telephone',
+        'chauffeur_code_pays',
+        'chauffeur_code_phone_pays',
+        'chauffeur_pays',
     ];
 
     public function organization(): BelongsTo
@@ -47,7 +50,7 @@ class ClientVehicle extends Model
      */
     public function getLibelleAfficheAttribute(): string
     {
-        $parts = array_filter([$this->libelle, $this->immatriculation]);
+        $parts = array_filter([$this->nom_vehicule, $this->immatriculation]);
 
         return $parts ? implode(' — ', $parts) : 'Véhicule partenaire';
     }

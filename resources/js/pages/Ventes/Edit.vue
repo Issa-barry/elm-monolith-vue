@@ -36,8 +36,7 @@ interface ClientVehiculeOption {
 
 interface ClientOption {
     id: number;
-    nom: string;
-    prenom: string | null;
+    nom_complet: string;
     telephone: string | null;
     type: 'standard' | 'partenaire';
     vehicules: ClientVehiculeOption[];
@@ -230,8 +229,7 @@ function searchClient(event: { query: string }) {
     clientSuggests.value = q
         ? props.clients.filter(
               (c) =>
-                  c.nom.toLowerCase().includes(q) ||
-                  (c.prenom && c.prenom.toLowerCase().includes(q)) ||
+                  c.nom_complet.toLowerCase().includes(q) ||
                   (c.telephone && c.telephone.includes(q)),
           )
         : [...props.clients];
@@ -244,16 +242,22 @@ const selectedClientVehicules = computed(
 function onClientSelect(c: ClientOption | null) {
     form.client_id = c?.id ?? null;
     form.client_vehicule_id = null;
+    // Le type de client (partenaire) peut à lui seul faire basculer modeTarification
+    // vers "prix_usine" (cf. useVehiculeCommandeTarification) — sans ce recalcul, le
+    // total des lignes déjà saisies reste figé sur l'ancien mode (prix_vente) alors
+    // que le prix unitaire affiché, lui, se met à jour immédiatement.
+    recomputeAllTotals();
 }
 
 function onClientClear() {
     form.client_id = null;
     form.client_vehicule_id = null;
     clientSelected.value = null;
+    recomputeAllTotals();
 }
 
 function clientLabel(c: ClientOption): string {
-    return [c.prenom, c.nom].filter(Boolean).join(' ');
+    return c.nom_complet;
 }
 
 // ── Dropdown : Produit ────────────────────────────────────────────────────────
@@ -543,11 +547,7 @@ function submit() {
                                 <template #option="{ option }">
                                     <div class="py-0.5">
                                         <div class="leading-tight font-medium">
-                                            {{
-                                                [option.prenom, option.nom]
-                                                    .filter(Boolean)
-                                                    .join(' ')
-                                            }}
+                                            {{ option.nom_complet }}
                                         </div>
                                         <div
                                             v-if="option.telephone"

@@ -20,10 +20,16 @@ return new class extends Migration
             $table->ulid('id')->primary();
             $table->foreignUlid('organization_id')->constrained()->cascadeOnDelete();
             $table->foreignUlid('client_id')->constrained('clients')->cascadeOnDelete();
-            $table->string('libelle', 100)->nullable();
+            $table->string('nom_vehicule', 100)->nullable();
             $table->string('immatriculation', 20)->nullable();
             $table->string('chauffeur_nom', 100)->nullable();
+            // Téléphone chauffeur facultatif, mais dès qu'il est saisi il est validé/normalisé
+            // selon un code pays choisi en liste déroulante (Guinée par défaut) — cf.
+            // ClientVehicleController et PhoneNormalizer.
             $table->string('chauffeur_telephone', 20)->nullable();
+            $table->string('chauffeur_code_pays', 2)->nullable();
+            $table->string('chauffeur_code_phone_pays', 10)->nullable();
+            $table->string('chauffeur_pays', 100)->nullable();
             $table->timestamps();
             $table->softDeletes();
 
