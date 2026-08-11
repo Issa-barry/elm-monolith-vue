@@ -12,6 +12,7 @@ use App\Services\ProduitService;
 use App\Services\StockStatutService;
 use Database\Seeders\ProduitTypeDefaultSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 /**
@@ -144,6 +145,6 @@ class StockAlerteMultiVarianteSiteTest extends TestCase
         // Aucun seuil par variante n'existe plus (colonne supprimée, cf. migration) : les deux
         // variantes générées via options partagent implicitement le même seuil, celui du produit.
         $this->assertCount(2, $this->produit->variantes);
-        $this->assertFalse(\Illuminate\Support\Facades\Schema::hasColumn('produit_variantes', 'seuil_alerte_stock'));
+        $this->assertFalse(Schema::hasColumn('produit_variantes', 'seuil_alerte_stock'));
     }
 }
