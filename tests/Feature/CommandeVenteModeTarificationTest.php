@@ -17,14 +17,15 @@ use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 /**
- * Le montant à encaisser par l'usine varie selon que le véhicule assigné est
- * "pris en charge par l'usine" ou non :
- *  - pris en charge  : total = qte × prix_vente.
- *  - non pris en charge : total = qte × prix_usine.
+ * Le montant à encaisser par l'usine varie selon le contexte de la commande :
+ *  - un véhicule de flotte gérée (tout véhicule présent dans `vehicules`) : toujours
+ *    total = qte × prix_vente ;
+ *  - sans véhicule, pour un client PARTENAIRE : total = qte × prix_usine ;
+ *  - sans véhicule, pour un client standard/cashback (ou aucun client) : total = qte × prix_vente
+ *    (comportement historique).
  *
- * Cette notion est indépendante de l'éligibilité aux commissions
- * (Vehicule::commission_eligible) — voir CommandeVenteCommissionEligibiliteTest
- * pour les tests de génération de commission et les 4 combinaisons possibles.
+ * Cette notion est indépendante de l'éligibilité aux commissions (Vehicule::livraison_vente) —
+ * voir CommandeVenteCommissionEligibiliteTest.
  */
 class CommandeVenteModeTarificationTest extends TestCase
 {
@@ -55,7 +56,7 @@ class CommandeVenteModeTarificationTest extends TestCase
         );
     }
 
-    private function makeVehicule(bool $prisEnChargeParUsine, int $capacite = 100): Vehicule
+    private function makeVehicule(int $capacite = 100): Vehicule
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
 
@@ -63,16 +64,17 @@ class CommandeVenteModeTarificationTest extends TestCase
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
             'capacite_packs' => $capacite,
-            'pris_en_charge_par_usine' => $prisEnChargeParUsine,
         ]);
     }
 
-    // ── store : total selon pris_en_charge_par_usine ─────────────────────────
+    // ── store : total selon le contexte (véhicule / client partenaire) ──────
 
-    public function test_store_uses_prix_vente_when_vehicule_pris_en_charge(): void
+    public function test_store_avec_vehicule_utilise_toujours_prix_vente(): void
     {
+        // Un véhicule de flotte gérée facture toujours au prix de vente plein, que son
+        // livraison_vente effectif soit ou non ce qui a permis de le sélectionner.
         $produit = $this->makeProduit(prixVente: 5000, prixUsine: 3500);
-        $vehicule = $this->makeVehicule(prisEnChargeParUsine: true);
+        $vehicule = $this->makeVehicule();
 
         $this->actingAs($this->user)
             ->post(route('ventes.store'), [
@@ -95,36 +97,10 @@ class CommandeVenteModeTarificationTest extends TestCase
         ]);
     }
 
-    public function test_store_uses_prix_usine_when_vehicule_non_pris_en_charge(): void
+    public function test_store_direct_client_standard_sale_uses_prix_vente(): void
     {
         $produit = $this->makeProduit(prixVente: 5000, prixUsine: 3500);
-        $vehicule = $this->makeVehicule(prisEnChargeParUsine: false);
-
-        $this->actingAs($this->user)
-            ->post(route('ventes.store'), [
-                'vehicule_id' => $vehicule->id,
-                'lignes' => [
-                    ['produit_id' => $produit->id, 'qte' => 100, 'prix_vente' => 5000],
-                ],
-            ])
-            ->assertRedirect();
-
-        $commande = CommandeVente::where('vehicule_id', $vehicule->id)->latest()->first();
-
-        $this->assertNotNull($commande);
-        $this->assertEquals(350_000.0, (float) $commande->total_commande);
-        $this->assertSame('prix_usine', $commande->mode_tarification_snapshot->value);
-
-        $this->assertDatabaseHas('commande_vente_lignes', [
-            'commande_vente_id' => $commande->id,
-            'total_ligne' => 350_000,
-        ]);
-    }
-
-    public function test_store_direct_client_sale_always_uses_prix_vente(): void
-    {
-        $produit = $this->makeProduit(prixVente: 5000, prixUsine: 3500);
-        $client = Client::factory()->create(['organization_id' => $this->org->id]);
+        $client = Client::factory()->create(['organization_id' => $this->org->id, 'type' => 'standard']);
 
         $this->actingAs($this->user)
             ->post(route('ventes.store'), [
@@ -141,17 +117,42 @@ class CommandeVenteModeTarificationTest extends TestCase
         $this->assertSame('prix_vente', $commande->mode_tarification_snapshot->value);
     }
 
+    public function test_store_client_partenaire_sale_uses_prix_usine(): void
+    {
+        // Un partenaire (hors flotte gérée, sans véhicule renseigné) achète à prix usine —
+        // la marge lui reste, cf. VehiculeCommandeContextResolver.
+        $produit = $this->makeProduit(prixVente: 5000, prixUsine: 3500);
+        $client = Client::factory()->create(['organization_id' => $this->org->id, 'type' => 'partenaire']);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'client_id' => $client->id,
+                'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 10, 'prix_vente' => 5000],
+                ],
+            ])
+            ->assertRedirect();
+
+        $commande = CommandeVente::where('client_id', $client->id)->latest()->first();
+
+        $this->assertEquals(35_000.0, (float) $commande->total_commande);
+        $this->assertSame('prix_usine', $commande->mode_tarification_snapshot->value);
+        // Aucun véhicule de flotte impliqué : jamais de commission.
+        $this->assertFalse((bool) $commande->commission_eligible_snapshot);
+    }
+
     // ── validerChargement : recalcul sur quantité réellement chargée ─────────
 
     public function test_valider_chargement_recalcule_le_total_au_prix_usine_sur_quantite_chargee(): void
     {
         $produit = $this->makeProduit(prixVente: 5000, prixUsine: 3500);
-        $vehicule = $this->makeVehicule(prisEnChargeParUsine: false, capacite: 100);
+        $client = Client::factory()->create(['organization_id' => $this->org->id, 'type' => 'partenaire']);
 
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
             'site_id' => $this->defaultSite->id,
-            'vehicule_id' => $vehicule->id,
+            'vehicule_id' => null,
+            'client_id' => $client->id,
             'statut' => StatutCommandeVente::BROUILLON,
             'total_commande' => 350_000,
             'mode_tarification_snapshot' => 'prix_usine',
@@ -187,18 +188,18 @@ class CommandeVenteModeTarificationTest extends TestCase
         $this->assertEquals(315_000.0, (float) $commande->lignes()->first()->total_ligne);
     }
 
-    // ── update (brouillon) : le mode suit le véhicule assigné au moment de l'édition ──
+    // ── update (brouillon) : le mode suit le contexte au moment de l'édition ──
 
-    public function test_update_recalcule_le_mode_quand_le_vehicule_change(): void
+    public function test_update_recalcule_le_mode_quand_on_passe_dun_vehicule_a_un_client_partenaire(): void
     {
         $produit = $this->makeProduit(prixVente: 5000, prixUsine: 3500);
-        $vehiculePrisEnCharge = $this->makeVehicule(prisEnChargeParUsine: true, capacite: 100);
-        $vehiculeNonPrisEnCharge = $this->makeVehicule(prisEnChargeParUsine: false, capacite: 100);
+        $vehicule = $this->makeVehicule();
+        $clientPartenaire = Client::factory()->create(['organization_id' => $this->org->id, 'type' => 'partenaire']);
 
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
             'site_id' => $this->defaultSite->id,
-            'vehicule_id' => $vehiculePrisEnCharge->id,
+            'vehicule_id' => $vehicule->id,
             'statut' => StatutCommandeVente::BROUILLON,
             'total_commande' => 500_000,
             'mode_tarification_snapshot' => 'prix_vente',
@@ -213,7 +214,8 @@ class CommandeVenteModeTarificationTest extends TestCase
 
         $this->actingAs($this->user)
             ->put(route('ventes.update', $commande), [
-                'vehicule_id' => $vehiculeNonPrisEnCharge->id,
+                'vehicule_id' => null,
+                'client_id' => $clientPartenaire->id,
                 'lignes' => [
                     ['produit_id' => $produit->id, 'qte' => 100, 'prix_vente' => 5000],
                 ],

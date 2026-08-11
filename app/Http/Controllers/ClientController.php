@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\ClientType;
 use App\Features\ModuleFeature;
 use App\Models\CashbackSolde;
 use App\Models\Client;
@@ -39,11 +40,14 @@ class ClientController extends Controller
                 'code_pays' => $c->code_pays,
                 'adresse' => $c->adresse,
                 'is_active' => $c->is_active,
+                'type' => $c->type->value,
+                'type_label' => $c->type->label(),
                 'cashback_eligible' => $c->cashback_eligible,
             ]);
 
         return Inertia::render('Clients/Index', [
             'clients' => $clients,
+            'types' => ClientType::options(),
         ]);
     }
 
@@ -51,7 +55,9 @@ class ClientController extends Controller
     {
         $this->authorize('create', Client::class);
 
-        return Inertia::render('Clients/Create');
+        return Inertia::render('Clients/Create', [
+            'types' => ClientType::options(),
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -70,6 +76,7 @@ class ClientController extends Controller
             'ville' => 'nullable|string|max:100',
             'adresse' => 'nullable|string|max:500',
             'is_active' => 'boolean',
+            'type' => ['nullable', Rule::in(ClientType::values())],
             'cashback_eligible' => 'boolean',
         ], $this->validationMessages());
 
@@ -146,8 +153,11 @@ class ClientController extends Controller
                 'code_pays' => $codePays,
                 'code_phone_pays' => $codePhonePays,
                 'is_active' => $client->is_active,
+                'type' => $client->type->value,
+                'type_label' => $client->type->label(),
                 'cashback_eligible' => $client->cashback_eligible,
             ],
+            'types' => ClientType::options(),
             'cashback_solde' => $cashbackSolde,
         ]);
     }
@@ -200,8 +210,19 @@ class ClientController extends Controller
                 'code_pays' => $codePays,
                 'code_phone_pays' => $codePhonePays,
                 'is_active' => $client->is_active,
+                'type' => $client->type->value,
+                'type_label' => $client->type->label(),
                 'cashback_eligible' => $client->cashback_eligible,
             ],
+            'types' => ClientType::options(),
+            'vehicules' => $client->vehicules()->get(['id', 'libelle', 'immatriculation', 'chauffeur_nom', 'chauffeur_telephone'])
+                ->map(fn ($v) => [
+                    'id' => $v->id,
+                    'libelle' => $v->libelle,
+                    'immatriculation' => $v->immatriculation,
+                    'chauffeur_nom' => $v->chauffeur_nom,
+                    'chauffeur_telephone' => $v->chauffeur_telephone,
+                ]),
             'cashback_solde' => $cashbackSolde,
         ]);
     }
@@ -219,6 +240,7 @@ class ClientController extends Controller
             'ville' => 'nullable|string|max:100',
             'adresse' => 'nullable|string|max:500',
             'is_active' => 'boolean',
+            'type' => ['nullable', Rule::in(ClientType::values())],
             'cashback_eligible' => 'boolean',
         ], $this->validationMessages());
 

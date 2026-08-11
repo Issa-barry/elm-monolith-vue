@@ -50,7 +50,8 @@ class TransfertLogistiqueIndexFilterTest extends TestCase
     {
         return Vehicule::factory()->create([
             'organization_id' => $org->id,
-            'categorie' => 'interne',
+            'livraison_vente' => false,
+            'livraison_logistique' => true,
             'is_active' => true,
         ]);
     }

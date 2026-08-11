@@ -25,6 +25,7 @@ class CommandeVente extends Model
         'site_id',
         'vehicule_id',
         'client_id',
+        'client_vehicule_id',
         'reference',
         'total_commande',
         'mode_tarification_snapshot',
@@ -103,6 +104,11 @@ class CommandeVente extends Model
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);
+    }
+
+    public function clientVehicule(): BelongsTo
+    {
+        return $this->belongsTo(ClientVehicle::class, 'client_vehicule_id');
     }
 
     public function lignes(): HasMany

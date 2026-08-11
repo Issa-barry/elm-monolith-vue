@@ -121,14 +121,14 @@ function submit() {
                     type de véhicule s'applique.
                 </p>
                 <p class="mt-2 text-sm text-muted-foreground">
-                    <strong>vehicule_pris_en_charge_par_usine</strong>
-                    (dépenses du véhicule prises en charge par l'usine) et
-                    <strong>vehicule_commission_eligible</strong> (le véhicule
-                    génère-t-il une commission sur ses ventes) sont deux
-                    colonnes indépendantes — les 4 combinaisons Oui/Non sont
-                    possibles. <strong>vehicule_commission_eligible</strong>
-                    est facultative : si elle est omise, le véhicule importé est
-                    éligible aux commissions par défaut.
+                    <strong>vehicule_livraison_vente</strong> (sélectionnable
+                    pour une vente/PDV) et
+                    <strong>vehicule_livraison_logistique</strong>
+                    (sélectionnable pour un transfert) sont deux colonnes
+                    indépendantes — un véhicule peut être l'un, l'autre, ou
+                    les deux. Toutes deux facultatives : si omises, le
+                    véhicule importé est éligible à la vente par défaut, pas à
+                    la logistique. Au moins l'une des deux doit être "oui".
                 </p>
                 <a
                     href="/settings/imports-flotte/modele"

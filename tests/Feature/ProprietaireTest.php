@@ -135,7 +135,6 @@ class ProprietaireTest extends TestCase
         Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
-            'categorie' => 'externe',
         ]);
 
         $this->actingAs($this->user)
@@ -154,7 +153,6 @@ class ProprietaireTest extends TestCase
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
-            'categorie' => 'externe',
         ]);
 
         $this->actingAs($this->user)
@@ -171,7 +169,6 @@ class ProprietaireTest extends TestCase
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
-            'categorie' => 'externe',
         ]);
 
         $equipe = EquipeLivraison::create([

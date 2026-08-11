@@ -41,7 +41,6 @@ class VehiculeController extends Controller
             'immatriculation' => $v->immatriculation,
             'type_vehicule_id' => $v->type_vehicule_id,
             'type_label' => $v->type_label,
-            'categorie' => $v->categorie,
             // Capacité propre au véhicule si définie (override), sinon celle
             // par défaut de son type — c'est cette dernière qui est utilisée
             // en pratique tant qu'aucune capacité spécifique n'a été saisie.
@@ -94,8 +93,8 @@ class VehiculeController extends Controller
                     'capacite_max' => $c->capacite_max,
                 ])->values()->all()
                 : [],
-            'pris_en_charge_par_usine' => $v->pris_en_charge_par_usine,
-            'commission_eligible' => $v->commission_eligible,
+            'livraison_vente' => $v->livraison_vente,
+            'livraison_logistique' => $v->livraison_logistique,
             'photo_url' => $v->photo_url,
             'is_active' => $v->is_active,
         ];
@@ -191,7 +190,7 @@ class VehiculeController extends Controller
             'sites' => $this->sitesOptions($user, $orgId),
             'default_site_id' => $defaultSiteId,
             'can_change_site' => $canChangeSite,
-            'default_proprietaire_id' => $this->defaultProprietaireInterneId($orgId),
+            'default_proprietaire_id' => Proprietaire::interneParDefautId($orgId),
         ]);
     }
 
@@ -204,6 +203,7 @@ class VehiculeController extends Controller
         abort_if(! $orgId, 403, "Votre compte n'est associé à aucune organisation.");
 
         $data = $request->validate($this->validationRules($orgId), $this->messages());
+        $this->ensureAuMoinsUnUsage($data);
 
         // Non-admin : ne peut créer que sur son(ses) propre(s) site(s) — un
         // admin peut choisir n'importe quel site de l'organisation.
@@ -218,12 +218,10 @@ class VehiculeController extends Controller
 
         $data = $this->normalizeStrings($data);
 
-        // Interne : prise en charge obligatoire, propriétaire par défaut
-        // (Moussa SIDIBE) si non précisé explicitement.
-        if ($data['categorie'] === 'interne') {
-            $data['proprietaire_id'] ??= $this->defaultProprietaireInterneId($orgId);
-            $data['pris_en_charge_par_usine'] = true;
-        }
+        // Propriété (qui possède) est indépendante de l'usage (vente/logistique) : sans
+        // propriétaire tiers explicitement choisi, le véhicule est réputé appartenir à
+        // l'organisation elle-même (propriétaire par défaut).
+        $data['proprietaire_id'] ??= Proprietaire::interneParDefautId($orgId);
 
         if ($request->hasFile('photo')) {
             $data['photo_path'] = (new ImageService)->storeAsWebp($request->file('photo'), 'vehicules');
@@ -296,6 +294,7 @@ class VehiculeController extends Controller
             'equipe' => $equipeData,
             'proprietaires' => $this->proprietairesOptions(),
             'categories' => $this->categoriesOptions(),
+            'default_proprietaire_id' => Proprietaire::interneParDefautId($vehicule->organization_id),
         ]);
     }
 
@@ -404,7 +403,7 @@ class VehiculeController extends Controller
             'types' => $this->typesOptions(),
             'sites' => $this->sitesOptions($user, $orgId),
             'can_change_site' => $user->isAdmin(),
-            'default_proprietaire_id' => $this->defaultProprietaireInterneId($orgId),
+            'default_proprietaire_id' => Proprietaire::interneParDefautId($orgId),
         ]);
     }
 
@@ -416,6 +415,7 @@ class VehiculeController extends Controller
         $orgId = $user->organization_id;
 
         $data = $request->validate($this->validationRules($orgId, $vehicule), $this->messages());
+        $this->ensureAuMoinsUnUsage($data);
 
         // Non-admin : ne peut affecter le véhicule qu'à son(ses) propre(s)
         // site(s) — un admin peut choisir n'importe quel site de l'organisation.
@@ -430,10 +430,7 @@ class VehiculeController extends Controller
 
         $data = $this->normalizeStrings($data);
 
-        if ($data['categorie'] === 'interne') {
-            $data['proprietaire_id'] ??= $this->defaultProprietaireInterneId($orgId);
-            $data['pris_en_charge_par_usine'] = true;
-        }
+        $data['proprietaire_id'] ??= Proprietaire::interneParDefautId($orgId);
 
         if ($request->hasFile('photo')) {
             $imageService = new ImageService;
@@ -621,25 +618,42 @@ class VehiculeController extends Controller
                 'required', 'string',
                 Rule::exists('type_vehicules', 'id')->where('organization_id', $orgId)->whereNull('deleted_at'),
             ],
-            'categorie' => ['required', 'in:interne,externe'],
             'capacite_packs' => 'nullable|integer|min:1|max:99999',
             'capacite_bouteilles' => 'nullable|integer|min:1|max:99999',
-            // Chaque véhicule (interne ou externe) est rattaché à un site.
+            // Tout véhicule est rattaché à un site.
             'site_id' => [
                 'required', 'string',
                 Rule::exists('sites', 'id')->where('organization_id', $orgId),
             ],
+            // Propriété toujours facultative : un propriétaire par défaut représentant
+            // l'organisation est assigné automatiquement si aucun tiers n'est choisi (cf.
+            // store()/update()).
             'proprietaire_id' => [
-                Rule::requiredIf(fn () => request()->input('categorie') === 'externe'),
                 'nullable',
                 'string',
                 Rule::exists('proprietaires', 'id')->where('organization_id', $orgId),
             ],
-            'pris_en_charge_par_usine' => 'required|boolean',
-            'commission_eligible' => 'required|boolean',
+            'livraison_vente' => 'required|boolean',
+            'livraison_logistique' => 'required|boolean',
             'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
             'is_active' => 'boolean',
         ];
+    }
+
+    /**
+     * Un véhicule doit servir à quelque chose : au moins l'un des deux usages doit être
+     * autorisé, sinon il n'a pas sa place dans la flotte gérée (cf. ClientVehicle pour un
+     * véhicule partenaire sans usage flotte).
+     */
+    private function ensureAuMoinsUnUsage(array $data): void
+    {
+        if (! empty($data['livraison_vente']) || ! empty($data['livraison_logistique'])) {
+            return;
+        }
+
+        throw \Illuminate\Validation\ValidationException::withMessages([
+            'livraison_vente' => 'Le véhicule doit être autorisé pour la vente et/ou la logistique.',
+        ]);
     }
 
     private function messages(): array
@@ -650,17 +664,14 @@ class VehiculeController extends Controller
             'immatriculation.unique' => 'Ce matricule est déjà utilisé par un autre véhicule.',
             'type_vehicule_id.required' => 'Le type de véhicule est obligatoire.',
             'type_vehicule_id.exists' => 'Type de véhicule invalide.',
-            'categorie.required' => 'La catégorie est obligatoire.',
-            'categorie.in' => 'Catégorie invalide (interne ou externe).',
             'site_id.required' => 'Le site est obligatoire.',
             'site_id.exists' => 'Le site sélectionné est introuvable.',
-            'proprietaire_id.required' => 'Le propriétaire est obligatoire pour un véhicule externe.',
             'proprietaire_id.exists' => 'Le propriétaire sélectionné est introuvable.',
             'photo.image' => 'Le fichier doit être une image.',
             'photo.mimes' => 'La photo doit être au format jpg, jpeg, png ou webp.',
             'photo.max' => 'La photo ne peut pas dépasser 3 Mo.',
-            'pris_en_charge_par_usine.required' => 'Veuillez indiquer si les dépenses sont prises en charge par l\'usine (Oui ou Non).',
-            'commission_eligible.required' => 'Veuillez indiquer si ce véhicule est éligible aux commissions (Oui ou Non).',
+            'livraison_vente.required' => 'Veuillez indiquer si ce véhicule est autorisé pour la vente.',
+            'livraison_logistique.required' => 'Veuillez indiquer si ce véhicule est autorisé pour la logistique.',
         ];
     }
 }

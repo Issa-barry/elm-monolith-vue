@@ -57,7 +57,8 @@ interface Vehicule {
     equipe_membres: EquipeMembre[];
     photo_url: string | null;
     is_active: boolean;
-    categorie: 'interne' | 'externe' | null;
+    livraison_vente: boolean;
+    livraison_logistique: boolean;
 }
 
 const props = defineProps<{ vehicules: Vehicule[] }>();
@@ -74,21 +75,21 @@ const { onRowClick, bodyRowPt } = useClickableTableRow<Vehicule>(
 const mobileSearch = ref('');
 const mobileFilterType = ref('');
 const mobileFilterStatut = ref('');
-const mobileFilterCategorie = ref('');
+const mobileFilterUsage = ref('');
 const mobileFilterAgence = ref('');
 
 // Desktop
 const search = ref('');
 const filterType = ref<string | null>(null);
 const filterStatut = ref<string | null>(null);
-const filterCategorie = ref<string | null>(null);
+const filterUsage = ref<string | null>(null);
 const filterAgence = ref<string | null>(null);
 
 function resetFilters() {
     search.value = '';
     filterType.value = null;
     filterStatut.value = null;
-    filterCategorie.value = null;
+    filterUsage.value = null;
     filterAgence.value = null;
 }
 
@@ -131,12 +132,12 @@ const filterFields = computed<FilterField[]>(() => [
         options: typeOptions.value.map((t) => ({ value: t, label: t })),
     },
     {
-        key: 'categorie',
-        label: 'Catégorie',
+        key: 'usage',
+        label: 'Usage',
         type: 'select',
         options: [
-            { value: 'interne', label: 'Interne' },
-            { value: 'externe', label: 'Externe' },
+            { value: 'vente', label: 'Vente' },
+            { value: 'logistique', label: 'Logistique' },
         ],
     },
     {
@@ -172,8 +173,11 @@ const filteredVehicules = computed(() =>
             : filterStatut.value === 'actif'
               ? v.is_active
               : !v.is_active;
-        const matchCategorie =
-            !filterCategorie.value || v.categorie === filterCategorie.value;
+        const matchUsage =
+            !filterUsage.value ||
+            (filterUsage.value === 'vente'
+                ? v.livraison_vente
+                : v.livraison_logistique);
         const matchAgence =
             !filterAgence.value ||
             (filterAgence.value === '__none__'
@@ -183,7 +187,7 @@ const filteredVehicules = computed(() =>
             matchSearch &&
             matchType &&
             matchStatut &&
-            matchCategorie &&
+            matchUsage &&
             matchAgence
         );
     }),
@@ -211,9 +215,11 @@ const mobileFiltered = computed(() =>
             : mobileFilterStatut.value === 'actif'
               ? v.is_active
               : !v.is_active;
-        const matchCategorie =
-            !mobileFilterCategorie.value ||
-            v.categorie === mobileFilterCategorie.value;
+        const matchUsage =
+            !mobileFilterUsage.value ||
+            (mobileFilterUsage.value === 'vente'
+                ? v.livraison_vente
+                : v.livraison_logistique);
         const matchAgence =
             !mobileFilterAgence.value ||
             (mobileFilterAgence.value === '__none__'
@@ -223,7 +229,7 @@ const mobileFiltered = computed(() =>
             matchSearch &&
             matchType &&
             matchStatut &&
-            matchCategorie &&
+            matchUsage &&
             matchAgence
         );
     }),
@@ -323,12 +329,12 @@ function confirmDelete(v: Vehicule) {
                         </option>
                     </select>
                     <select
-                        v-model="mobileFilterCategorie"
+                        v-model="mobileFilterUsage"
                         class="flex-1 rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
                     >
-                        <option value="">Toutes catégories</option>
-                        <option value="interne">Interne</option>
-                        <option value="externe">Externe</option>
+                        <option value="">Tous usages</option>
+                        <option value="vente">Vente</option>
+                        <option value="logistique">Logistique</option>
                     </select>
                     <select
                         v-model="mobileFilterStatut"
@@ -486,7 +492,7 @@ function confirmDelete(v: Vehicule) {
                 :values="{
                     nom: search,
                     type: filterType ?? '',
-                    categorie: filterCategorie ?? '',
+                    usage: filterUsage ?? '',
                     statut: filterStatut ?? '',
                     agence: filterAgence ?? '',
                 }"
@@ -496,7 +502,7 @@ function confirmDelete(v: Vehicule) {
                     (vals) => {
                         search = (vals.nom as string) || '';
                         filterType = (vals.type as string) || null;
-                        filterCategorie = (vals.categorie as string) || null;
+                        filterUsage = (vals.usage as string) || null;
                         filterStatut = (vals.statut as string) || null;
                         filterAgence = (vals.agence as string) || null;
                     }

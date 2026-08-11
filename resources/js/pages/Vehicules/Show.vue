@@ -77,7 +77,6 @@ interface VehiculeData {
     immatriculation: string;
     type_label: string;
     type_vehicule_id: string | null;
-    categorie: string | null;
     capacite_packs: number | null;
     capacite_bouteilles: number | null;
     capacites: Array<{
@@ -93,8 +92,8 @@ interface VehiculeData {
     proprietaire_telephone: string | null;
     equipe_id: string | null;
     equipe_membres: EquipeMembre[];
-    pris_en_charge_par_usine: boolean;
-    commission_eligible: boolean;
+    livraison_vente: boolean;
+    livraison_logistique: boolean;
     photo_url: string | null;
     is_active: boolean;
 }
@@ -105,7 +104,16 @@ const props = defineProps<{
     equipe: EquipeData | null;
     proprietaires: ProprietaireOption[];
     categories: Array<{ value: string; label: string }>;
+    default_proprietaire_id: string | null;
 }>();
+
+// Propriété (tiers ou organisation) — indépendante des usages vente/logistique,
+// cf. EquipeStepperModal (détermine si un partage propriétaire est saisi).
+const proprietaireEstTiers = computed(
+    () =>
+        !!props.vehicule.proprietaire_id &&
+        props.vehicule.proprietaire_id !== props.default_proprietaire_id,
+);
 
 const { can } = usePermissions();
 const page = usePage();
@@ -406,25 +414,18 @@ function formatGNF(val: number): string {
                             </div>
                             <div class="rounded-lg border bg-background p-4">
                                 <p class="text-xs text-muted-foreground">
-                                    Catégorie
+                                    Usages
                                 </p>
-                                <p class="mt-1">
+                                <p class="mt-1 flex flex-wrap gap-1.5">
                                     <span
-                                        v-if="vehicule.categorie === 'interne'"
+                                        v-if="vehicule.livraison_vente"
                                         class="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-300"
-                                        >Interne</span
+                                        >Vente</span
                                     >
                                     <span
-                                        v-else-if="
-                                            vehicule.categorie === 'externe'
-                                        "
+                                        v-if="vehicule.livraison_logistique"
                                         class="inline-flex items-center rounded-full bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700 dark:bg-orange-950 dark:text-orange-300"
-                                        >Externe</span
-                                    >
-                                    <span
-                                        v-else
-                                        class="text-sm text-muted-foreground"
-                                        >—</span
+                                        >Logistique</span
                                     >
                                 </p>
                             </div>
@@ -486,40 +487,6 @@ function formatGNF(val: number): string {
                                         Aucun propriétaire rattaché
                                     </p>
                                 </template>
-                            </div>
-                            <div class="rounded-lg border bg-background p-4">
-                                <p class="text-xs text-muted-foreground">
-                                    Dépenses prises en charge par l'usine
-                                </p>
-                                <p class="mt-1">
-                                    <span
-                                        v-if="vehicule.pris_en_charge_par_usine"
-                                        class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700"
-                                        >Oui</span
-                                    >
-                                    <span
-                                        v-else
-                                        class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
-                                        >Non</span
-                                    >
-                                </p>
-                            </div>
-                            <div class="rounded-lg border bg-background p-4">
-                                <p class="text-xs text-muted-foreground">
-                                    Véhicule éligible aux commissions
-                                </p>
-                                <p class="mt-1">
-                                    <span
-                                        v-if="vehicule.commission_eligible"
-                                        class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700"
-                                        >Oui</span
-                                    >
-                                    <span
-                                        v-else
-                                        class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
-                                        >Non</span
-                                    >
-                                </p>
                             </div>
                         </div>
                     </div>
@@ -700,10 +667,7 @@ function formatGNF(val: number): string {
                                     </p>
                                 </div>
                                 <div
-                                    v-if="
-                                        vehicule.categorie === 'externe' &&
-                                        equipe.montant_par_pack_proprietaire
-                                    "
+                                    v-if="equipe.montant_par_pack_proprietaire"
                                 >
                                     <p class="text-xs text-muted-foreground">
                                         Part propriétaire
@@ -837,7 +801,7 @@ function formatGNF(val: number): string {
             id: vehicule.id,
             nom_vehicule: vehicule.nom_vehicule,
             immatriculation: vehicule.immatriculation,
-            categorie: vehicule.categorie,
+            proprietaire_est_tiers: proprietaireEstTiers,
             capacite_packs: vehicule.capacite_packs,
             proprietaire_id: vehicule.proprietaire_id,
             proprietaire_nom: vehicule.proprietaire_nom,

@@ -42,7 +42,8 @@ interface Equipe {
     vehicule_id: string | null;
     vehicule_nom: string | null;
     vehicule_immatriculation: string | null;
-    vehicule_categorie: 'interne' | 'externe' | null;
+    vehicule_livraison_vente: boolean;
+    vehicule_livraison_logistique: boolean;
     proprietaire_id: string | null;
     proprietaire_nom: string | null;
     membres: Membre[];
@@ -66,7 +67,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const search = ref('');
 const statut = ref<'tous' | 'actif' | 'inactif'>('tous');
-const categorie = ref<'tous' | 'interne' | 'externe'>('tous');
+const usage = ref<'tous' | 'vente' | 'logistique'>('tous');
 const proprietaire = ref('tous');
 
 const filterFields = computed<FilterField[]>(() => {
@@ -105,13 +106,13 @@ const filterFields = computed<FilterField[]>(() => {
             ],
         },
         {
-            key: 'categorie',
-            label: 'Catégorie véhicule',
+            key: 'usage',
+            label: 'Usage véhicule',
             type: 'select',
             options: [
                 { value: 'tous', label: 'Tous véhicules' },
-                { value: 'interne', label: 'Interne' },
-                { value: 'externe', label: 'Externe' },
+                { value: 'vente', label: 'Vente' },
+                { value: 'logistique', label: 'Logistique' },
             ],
         },
         {
@@ -126,14 +127,14 @@ const filterFields = computed<FilterField[]>(() => {
 function resetFilters() {
     search.value = '';
     statut.value = 'tous';
-    categorie.value = 'tous';
+    usage.value = 'tous';
     proprietaire.value = 'tous';
 }
 
 function applyFilters(vals: Record<string, unknown>) {
     search.value = (vals.search as string) || '';
     statut.value = (vals.statut as typeof statut.value) || 'tous';
-    categorie.value = (vals.categorie as typeof categorie.value) || 'tous';
+    usage.value = (vals.usage as typeof usage.value) || 'tous';
     proprietaire.value = (vals.proprietaire as string) || 'tous';
 }
 
@@ -156,10 +157,9 @@ const equipesFiltrees = computed(() => {
             e.is_active !== (statut.value === 'actif')
         )
             return false;
-        if (
-            categorie.value !== 'tous' &&
-            e.vehicule_categorie !== categorie.value
-        )
+        if (usage.value === 'vente' && !e.vehicule_livraison_vente)
+            return false;
+        if (usage.value === 'logistique' && !e.vehicule_livraison_logistique)
             return false;
         if (
             proprietaire.value !== 'tous' &&
@@ -217,7 +217,7 @@ function confirmDelete(equipe: Equipe) {
 
             <!-- Barre de recherche + filtres -->
             <DataFilters
-                :values="{ search, statut, categorie, proprietaire }"
+                :values="{ search, statut, usage, proprietaire }"
                 :fields="filterFields"
                 :result-count="equipesFiltrees.length"
                 @apply="applyFilters"

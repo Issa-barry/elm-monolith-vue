@@ -90,7 +90,6 @@ class FactureVenteTest extends TestCase
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $org->id,
             'proprietaire_id' => $proprietaire->id,
-            'categorie' => 'externe',
         ]);
 
         $equipe = EquipeLivraison::create([
@@ -146,7 +145,6 @@ class FactureVenteTest extends TestCase
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $org->id,
             'proprietaire_id' => $proprietaire->id,
-            'categorie' => 'externe',
         ]);
 
         $equipe = EquipeLivraison::create([
@@ -232,7 +230,6 @@ class FactureVenteTest extends TestCase
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $org->id,
             'proprietaire_id' => $proprietaire->id,
-            'categorie' => 'externe',
         ]);
 
         $equipe = EquipeLivraison::create([

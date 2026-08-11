@@ -6,6 +6,13 @@ import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ArrowLeft, Save } from 'lucide-vue-next';
 import ClientForm from './partials/ClientForm.vue';
 
+interface TypeOption {
+    value: string;
+    label: string;
+}
+
+const props = defineProps<{ types: TypeOption[] }>();
+
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
     { title: 'Clients', href: '/backoffice/clients' },
@@ -23,6 +30,7 @@ const form = useForm({
     code_pays: 'GN' as string | null,
     code_phone_pays: '+224' as string | null,
     is_active: true,
+    type: 'standard',
     cashback_eligible: false,
 });
 
@@ -70,6 +78,7 @@ function submit() {
                 :form="form"
                 :errors="form.errors"
                 :processing="form.processing"
+                :types="props.types"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />

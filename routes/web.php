@@ -12,6 +12,7 @@ use App\Http\Controllers\CashbackController;
 use App\Http\Controllers\CategorieController;
 use App\Http\Controllers\Client\ClientDashboardController;
 use App\Http\Controllers\ClientController;
+use App\Http\Controllers\ClientVehicleController;
 use App\Http\Controllers\CommandeAchatController;
 use App\Http\Controllers\CommandeVenteController;
 use App\Http\Controllers\CommandeVenteStatutController;
@@ -162,6 +163,13 @@ Route::prefix('backoffice')->group(function () {
 
         // Clients
         Route::resource('clients', ClientController::class);
+        // Véhicules partenaire (Client::type = PARTENAIRE) — hors flotte gérée, cf. ClientVehicle.
+        Route::post('clients/{client}/vehicules', [ClientVehicleController::class, 'store'])
+            ->name('clients.vehicules.store');
+        Route::put('clients/{client}/vehicules/{vehicule}', [ClientVehicleController::class, 'update'])
+            ->name('clients.vehicules.update');
+        Route::delete('clients/{client}/vehicules/{vehicule}', [ClientVehicleController::class, 'destroy'])
+            ->name('clients.vehicules.destroy');
 
         // ── Module : PDV ──────────────────────────────────────────────────────────
         // Module a part de Ventes : plusieurs variantes de PDV sont prevues, chacune

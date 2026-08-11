@@ -66,10 +66,13 @@ interface VehiculeOption {
     nom_vehicule: string;
     immatriculation: string;
     capacite_packs: number | null;
-    pris_en_charge_par_usine: boolean;
-    commission_eligible: boolean;
     livreur_nom: string | null;
     livreur_telephone: string | null;
+}
+
+interface ClientVehiculeOption {
+    id: number;
+    libelle_affiche: string;
 }
 
 interface ClientOption {
@@ -77,6 +80,8 @@ interface ClientOption {
     nom: string;
     prenom: string | null;
     telephone: string | null;
+    type: 'standard' | 'partenaire';
+    vehicules: ClientVehiculeOption[];
 }
 
 interface UserSite {
@@ -115,6 +120,9 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     vehicule_id: null as number | null,
     client_id: null as number | null,
+    // Véhicule partenaire — toujours facultatif, jamais un substitut au véhicule de
+    // flotte (cf. ClientVehicle). Ne s'affiche que pour un client type=partenaire.
+    client_vehicule_id: null as number | null,
     lignes: [
         { produit_id: null, qte: 1, prix_vente: 0, total: 0 },
     ] as LigneForm[],
@@ -185,6 +193,8 @@ const { modeTarification, commissionEligible } =
     useVehiculeCommandeTarification(
         () => props.vehicules,
         () => form.vehicule_id,
+        () => props.clients,
+        () => form.client_id,
     );
 
 function produitPrixUsine(produitId: number | null): number {
@@ -242,8 +252,15 @@ function searchClient(event: { query: string }) {
         : [...props.clients];
 }
 
+// Véhicule partenaire mémorisé — visible seulement pour un client type=partenaire
+// qui en a au moins un ; toujours facultatif (cf. form.client_vehicule_id).
+const selectedClientVehicules = computed(
+    () => clientSelected.value?.vehicules ?? [],
+);
+
 async function onClientSelect(c: ClientOption | null) {
     form.client_id = c?.id ?? null;
+    form.client_vehicule_id = null;
     if (c) {
         clientSolvabiliteLoading.value = true;
         clientSolvabilite.value = null;
@@ -260,6 +277,7 @@ async function onClientSelect(c: ClientOption | null) {
 
 function onClientClear() {
     form.client_id = null;
+    form.client_vehicule_id = null;
     clientSelected.value = null;
     clientSolvabilite.value = null;
 }
@@ -913,6 +931,28 @@ function confirmerEtCreer() {
                             >
                                 {{ form.errors.client_id }}
                             </p>
+
+                            <!-- Véhicule partenaire : facultatif, jamais requis pour vendre -->
+                            <div
+                                v-if="
+                                    clientSelected?.type === 'partenaire' &&
+                                    selectedClientVehicules.length > 0
+                                "
+                                class="mt-3"
+                            >
+                                <Label class="mb-1.5 block text-sm">
+                                    Véhicule partenaire (facultatif)
+                                </Label>
+                                <Dropdown
+                                    v-model="form.client_vehicule_id"
+                                    :options="selectedClientVehicules"
+                                    option-label="libelle_affiche"
+                                    option-value="id"
+                                    placeholder="Non renseigné"
+                                    class="w-full"
+                                    show-clear
+                                />
+                            </div>
 
                             <!-- Solvabilité client -->
                             <div

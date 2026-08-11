@@ -32,7 +32,7 @@ class PdvController extends Controller
         ])
             ->where('organization_id', $orgId)
             ->where('is_active', true)
-            ->where('categorie', 'externe')
+            ->livraisonVente()
             ->orderBy('nom_vehicule')
             ->get()
             ->map(function (Vehicule $v) {

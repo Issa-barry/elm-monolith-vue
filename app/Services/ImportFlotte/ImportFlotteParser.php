@@ -255,10 +255,12 @@ class ImportFlotteParser
         // ── Véhicule ─────────────────────────────────────────────────────────
         $nomVehicule = trim((string) ($ligneVehicule['vehicule_nom'] ?? ''));
         $typeNomSaisi = trim((string) ($ligneVehicule['vehicule_type'] ?? ''));
-        $categorieSaisie = trim((string) ($ligneVehicule['vehicule_categorie'] ?? ''));
-        $categorie = ImportTextNormalizer::normalize($categorieSaisie);
         $siteNomSaisi = trim((string) ($ligneVehicule['vehicule_site'] ?? ''));
-        $prisEnChargeParUsine = $this->toBool($ligneVehicule['vehicule_pris_en_charge_par_usine'] ?? null) ?? false;
+        // Colonnes facultatives — replis alignés sur les défauts du schéma (migration
+        // vehicules) pour ne pas casser d'anciens fichiers d'import qui ne les portent pas
+        // encore : livraison_vente=true, livraison_logistique=false.
+        $livraisonVente = $this->toBool($ligneVehicule['vehicule_livraison_vente'] ?? null) ?? true;
+        $livraisonLogistique = $this->toBool($ligneVehicule['vehicule_livraison_logistique'] ?? null) ?? false;
         // Facultatives : laissées vides, le repli sur la capacité par défaut du
         // type de véhicule s'applique (cf. VehiculeController::vehiculeData()).
         [$capacitePacks, $erreurCapacitePacks] = $this->toCapaciteOrNull($ligneVehicule['vehicule_capacite_sachets'] ?? null);
@@ -269,18 +271,12 @@ class ImportFlotteParser
         if ($erreurCapaciteBouteilles) {
             $erreurs[] = "Capacité bouteilles invalide : {$erreurCapaciteBouteilles}";
         }
-        // Indépendant de vehicule_pris_en_charge_par_usine — colonne facultative :
-        // repli sur "éligible" (comportement par défaut, cf. migration vehicules)
-        // si absente du fichier, pour ne pas casser d'anciens fichiers d'import.
-        $commissionEligible = $this->toBool($ligneVehicule['vehicule_commission_eligible'] ?? null) ?? true;
 
         if ($nomVehicule === '') {
             $erreurs[] = 'Nom du véhicule manquant.';
         }
-        if (! in_array($categorie, ['interne', 'externe'], true)) {
-            $erreurs[] = 'Catégorie véhicule invalide (attendu : interne ou externe).';
-        } elseif ($categorieSaisie !== $categorie) {
-            $normalisations[] = "\"{$categorieSaisie}\" → \"{$categorie}\"";
+        if (! $livraisonVente && ! $livraisonLogistique) {
+            $erreurs[] = 'Le véhicule doit être autorisé pour la vente et/ou la logistique.';
         }
 
         $type = null;
@@ -338,18 +334,23 @@ class ImportFlotteParser
             ? EquipeLivraison::where('vehicule_id', $vehiculeExistant->id)->whereNull('deleted_at')->first()
             : null;
 
-        // ── Propriétaire (uniquement si externe) ────────────────────────────
-        $proprietaireResolu = null;
-        if ($categorie === 'externe') {
-            $proprietaireResolu = $this->resoudreProprietaire($ligneVehicule, $orgId, $erreurs, $normalisations, $telephonesProprietairesVus);
-        }
+        // ── Propriétaire (facultatif — propriété indépendante de l'usage vente/logistique) ──
+        // Toute colonne proprietaire_* renseignée déclenche la résolution "tout ou rien" ;
+        // aucune renseignée → propriétaire par défaut (organisation) appliqué à la persistance,
+        // cf. ImportFlotteExecutor.
+        $aUnProprietaireSaisi = trim((string) ($ligneVehicule['proprietaire_nom'] ?? '')) !== ''
+            || trim((string) ($ligneVehicule['proprietaire_prenom'] ?? '')) !== ''
+            || trim((string) ($ligneVehicule['proprietaire_telephone'] ?? '')) !== '';
+        $proprietaireResolu = $aUnProprietaireSaisi
+            ? $this->resoudreProprietaire($ligneVehicule, $orgId, $erreurs, $normalisations, $telephonesProprietairesVus)
+            : null;
 
         // ── Équipe : commission et montant propriétaire non saisis dans le fichier.
         // Une équipe déjà existante conserve sa vraie commission (utile pour
         // calculer le taux des nouveaux membres rattachés) ; une équipe à créer
         // démarre à 0, à finaliser ensuite dans Équipes de livraison.
         $commission = $equipeExistante ? (float) $equipeExistante->commission_unitaire_par_pack : 0.0;
-        $montantProprietaire = $categorie === 'externe'
+        $montantProprietaire = $aUnProprietaireSaisi
             ? ($equipeExistante ? (float) $equipeExistante->montant_par_pack_proprietaire : 0.0)
             : null;
 
@@ -389,10 +390,9 @@ class ImportFlotteParser
                 'type_vehicule_id' => $type?->id,
                 'capacite_packs' => $capacitePacks,
                 'capacite_bouteilles' => $capaciteBouteilles,
-                'categorie' => $categorie,
+                'livraison_vente' => $livraisonVente,
+                'livraison_logistique' => $livraisonLogistique,
                 'site_id' => $site?->id,
-                'pris_en_charge_par_usine' => $prisEnChargeParUsine,
-                'commission_eligible' => $commissionEligible,
             ],
             // Pas d'équipe du tout (ni existante, ni à créer) pour un nouveau
             // véhicule sans aucun livreur dans le fichier : la création du
@@ -418,7 +418,7 @@ class ImportFlotteParser
         $paysBrut = trim((string) ($ligne['proprietaire_pays'] ?? ''));
 
         if ($nom === '' || $prenom === '' || $telephoneBrut === '') {
-            $erreurs[] = 'Propriétaire incomplet (nom, prénom et téléphone obligatoires pour un véhicule externe).';
+            $erreurs[] = 'Propriétaire incomplet : nom, prénom et téléphone sont obligatoires dès qu\'un des trois est renseigné.';
 
             return null;
         }

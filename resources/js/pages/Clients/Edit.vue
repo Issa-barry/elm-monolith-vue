@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     CheckCircle,
@@ -10,7 +11,7 @@ import {
     Save,
     TrendingUp,
 } from 'lucide-vue-next';
-import { computed, watch } from 'vue';
+import { computed, reactive, watch } from 'vue';
 import ClientForm from './partials/ClientForm.vue';
 
 interface ClientData {
@@ -25,6 +26,8 @@ interface ClientData {
     code_pays: string | null;
     code_phone_pays: string | null;
     is_active: boolean;
+    type: string;
+    type_label: string;
     cashback_eligible: boolean;
 }
 
@@ -35,8 +38,23 @@ interface CashbackSolde {
     total_cashback_verse: number;
 }
 
+interface TypeOption {
+    value: string;
+    label: string;
+}
+
+interface ClientVehicule {
+    id: number;
+    libelle: string | null;
+    immatriculation: string | null;
+    chauffeur_nom: string | null;
+    chauffeur_telephone: string | null;
+}
+
 const props = defineProps<{
     client: ClientData;
+    types: TypeOption[];
+    vehicules: ClientVehicule[];
     cashback_solde: CashbackSolde | null;
 }>();
 
@@ -65,6 +83,7 @@ const form = useForm({
     code_pays: props.client.code_pays,
     code_phone_pays: props.client.code_phone_pays,
     is_active: Boolean(props.client.is_active),
+    type: props.client.type,
     cashback_eligible: Boolean(props.client.cashback_eligible),
 });
 
@@ -82,6 +101,7 @@ watch(
             code_pays: c.code_pays,
             code_phone_pays: c.code_phone_pays,
             is_active: Boolean(c.is_active),
+            type: c.type,
             cashback_eligible: Boolean(c.cashback_eligible),
         }).reset();
     },
@@ -93,6 +113,31 @@ function submit() {
 
 function formatMontant(v: number): string {
     return new Intl.NumberFormat('fr-GN').format(v) + ' GNF';
+}
+
+// ── Véhicules partenaire — toujours facultatifs (cf. ClientVehicle) ───────────
+const isPartenaire = computed(() => props.client.type === 'partenaire');
+const showVehiculeForm = reactive({ open: false });
+const vehiculeForm = useForm({
+    libelle: '',
+    immatriculation: '',
+    chauffeur_nom: '',
+    chauffeur_telephone: '',
+});
+
+function submitVehicule() {
+    vehiculeForm.post(`/backoffice/clients/${props.client.id}/vehicules`, {
+        onSuccess: () => {
+            vehiculeForm.reset();
+            showVehiculeForm.open = false;
+        },
+    });
+}
+
+function destroyVehicule(vehiculeId: number) {
+    router.delete(
+        `/backoffice/clients/${props.client.id}/vehicules/${vehiculeId}`,
+    );
 }
 </script>
 
@@ -222,9 +267,110 @@ function formatMontant(v: number): string {
                 :form="form"
                 :errors="form.errors"
                 :processing="form.processing"
+                :types="types"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />
+
+            <!-- Véhicules partenaire : toujours facultatifs, jamais un prérequis -->
+            <div
+                v-if="isPartenaire"
+                class="mx-6 mt-4 rounded-xl border bg-card p-4 shadow-sm sm:mx-0 sm:p-6"
+            >
+                <div class="mb-4 flex items-center justify-between">
+                    <h3
+                        class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                    >
+                        Véhicules partenaire
+                    </h3>
+                    <button
+                        type="button"
+                        class="text-xs font-medium text-primary hover:underline"
+                        @click="showVehiculeForm.open = !showVehiculeForm.open"
+                    >
+                        {{ showVehiculeForm.open ? 'Annuler' : '+ Ajouter' }}
+                    </button>
+                </div>
+
+                <p
+                    v-if="vehicules.length === 0 && !showVehiculeForm.open"
+                    class="text-sm text-muted-foreground"
+                >
+                    Aucun véhicule renseigné — facultatif, ce client peut
+                    commander sans véhicule.
+                </p>
+
+                <ul v-else class="mb-3 space-y-2">
+                    <li
+                        v-for="v in vehicules"
+                        :key="v.id"
+                        class="flex items-center justify-between rounded-lg border px-3 py-2 text-sm"
+                    >
+                        <div>
+                            <span class="font-medium">{{
+                                v.libelle || 'Véhicule'
+                            }}</span>
+                            <span
+                                v-if="v.immatriculation"
+                                class="ml-2 font-mono text-xs text-muted-foreground"
+                                >{{ v.immatriculation }}</span
+                            >
+                            <span
+                                v-if="v.chauffeur_nom"
+                                class="ml-2 text-xs text-muted-foreground"
+                                >— {{ v.chauffeur_nom }}</span
+                            >
+                        </div>
+                        <button
+                            type="button"
+                            class="text-xs text-destructive hover:underline"
+                            @click="destroyVehicule(v.id)"
+                        >
+                            Retirer
+                        </button>
+                    </li>
+                </ul>
+
+                <form
+                    v-if="showVehiculeForm.open"
+                    class="grid gap-3 border-t pt-3 sm:grid-cols-2"
+                    @submit.prevent="submitVehicule"
+                >
+                    <input
+                        v-model="vehiculeForm.libelle"
+                        type="text"
+                        placeholder="Libellé (facultatif)"
+                        class="rounded-md border bg-background px-3 py-2 text-sm"
+                    />
+                    <input
+                        v-model="vehiculeForm.immatriculation"
+                        type="text"
+                        placeholder="Immatriculation (facultatif)"
+                        class="rounded-md border bg-background px-3 py-2 text-sm"
+                    />
+                    <input
+                        v-model="vehiculeForm.chauffeur_nom"
+                        type="text"
+                        placeholder="Chauffeur (facultatif)"
+                        class="rounded-md border bg-background px-3 py-2 text-sm"
+                    />
+                    <input
+                        v-model="vehiculeForm.chauffeur_telephone"
+                        type="text"
+                        placeholder="Téléphone chauffeur (facultatif)"
+                        class="rounded-md border bg-background px-3 py-2 text-sm"
+                    />
+                    <div class="sm:col-span-2">
+                        <Button
+                            type="submit"
+                            size="sm"
+                            :disabled="vehiculeForm.processing"
+                        >
+                            Enregistrer le véhicule
+                        </Button>
+                    </div>
+                </form>
+            </div>
         </div>
 
         <!-- Footer sticky mobile -->

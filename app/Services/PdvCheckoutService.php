@@ -34,7 +34,7 @@ class PdvCheckoutService
         }
 
         return DB::transaction(function () use ($data, $user, $siteId) {
-            $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null);
+            $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null);
             [$lignesData, $total, $stockTrackedVarianteIds] = $this->buildLignes($data['lignes'], $user->organization_id, (string) $siteId, $context->modeTarification);
 
             $commande = CommandeVente::create([
@@ -42,6 +42,7 @@ class PdvCheckoutService
                 'site_id' => $siteId,
                 'vehicule_id' => $data['vehicule_id'] ?? null,
                 'client_id' => $data['client_id'] ?? null,
+                'client_vehicule_id' => $data['client_vehicule_id'] ?? null,
                 'total_commande' => $total,
                 'mode_tarification_snapshot' => $context->modeTarification->value,
                 'commission_eligible_snapshot' => $context->commissionEligible,

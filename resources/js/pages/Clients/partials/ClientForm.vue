@@ -25,7 +25,13 @@ interface FormData {
     code_pays: string | null;
     code_phone_pays: string | null;
     is_active: boolean;
+    type: string;
     cashback_eligible: boolean;
+}
+
+interface TypeOption {
+    value: string;
+    label: string;
 }
 
 const props = withDefaults(
@@ -34,9 +40,14 @@ const props = withDefaults(
         errors: Partial<Record<keyof FormData, string>>;
         processing: boolean;
         readonly?: boolean;
+        types?: TypeOption[];
     }>(),
     {
         readonly: false,
+        types: () => [
+            { value: 'standard', label: 'Standard' },
+            { value: 'partenaire', label: 'Partenaire' },
+        ],
     },
 );
 
@@ -389,6 +400,36 @@ function onSubmit() {
                         {{ errors.email }}
                     </p>
                 </div>
+            </div>
+        </div>
+
+        <!-- Nature du client -->
+        <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+            <h3
+                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
+            >
+                Nature du client
+            </h3>
+            <div class="max-w-xs">
+                <Dropdown
+                    :model-value="form.type"
+                    @update:model-value="
+                        $emit('update:form', { ...form, type: $event })
+                    "
+                    :options="types"
+                    option-label="label"
+                    option-value="value"
+                    class="w-full"
+                    :disabled="isReadOnly"
+                    :class="[readonlyDropdownClass, { 'p-invalid': errors.type }]"
+                />
+                <p v-if="errors.type" class="mt-1 text-xs text-destructive">
+                    {{ errors.type }}
+                </p>
+                <p v-else class="mt-1.5 text-xs text-muted-foreground">
+                    Un client partenaire vient charger ses propres commandes,
+                    tarifées à prix usine, hors flotte gérée.
+                </p>
             </div>
         </div>
 
