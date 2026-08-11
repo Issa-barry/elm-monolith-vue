@@ -51,6 +51,7 @@ class ProduitService
      */
     public function mettreAJourSimple(Produit $produit, array $donnees): Produit
     {
+        $ancienType = $produit->type;
         $type = ProduitType::from($donnees['type'] ?? $produit->type->value);
         $variante = $produit->variantePrincipale()->first();
         $donneesVariante = Arr::only($donnees, self::CHAMPS_VARIANTE);
@@ -63,6 +64,16 @@ class ProduitService
             $donneesVariante
         );
         $this->validerPrixSelonType($type, $donneesEffectives);
+
+        // Ce formulaire ne touche que la variante principale (cf. docblock ci-dessus). Si le
+        // type change réellement, les variantes SECONDAIRES — absentes du payload, donc
+        // jamais revalidées par l'appel ci-dessus — doivent quand même rester compatibles
+        // avec le nouveau type, sinon le changement est refusé en bloc (avant toute écriture,
+        // pour ne jamais laisser le produit dans un état où sa variante principale est déjà
+        // au nouveau type mais une variante secondaire ne l'est pas).
+        if ($type !== $ancienType) {
+            $this->validerCoherenceAutresVariantesPourType($produit, $type, $variante?->id);
+        }
 
         return DB::transaction(function () use ($produit, $donnees, $donneesVariante, $variante) {
             $produit->update(Arr::except($donnees, [...self::CHAMPS_VARIANTE, 'options']));
@@ -80,9 +91,54 @@ class ProduitService
     /**
      * Centralise la dette identifiée avant refonte : ProduitType::requiredPrices() existait
      * mais n'était appliqué nulle part côté validation serveur. Un seul point d'entrée pour
-     * Web et API — non contournable via l'API.
+     * Web et API — non contournable via l'API. Vérifie la présence des prix requis pour le
+     * type, PUIS leur cohérence relationnelle (prix_vente strictement supérieur au coût de
+     * référence du type — cf. ProduitType::champPrixReference()) : un produit vendu à perte ou
+     * à marge nulle est refusé, jamais silencieusement accepté.
      */
     public function validerPrixSelonType(ProduitType $type, array $donneesPrix): void
+    {
+        $raison = $this->raisonIncoherencePrix($type, $donneesPrix);
+
+        if ($raison !== null) {
+            throw ValidationException::withMessages([$raison['champ'] => $raison['message']]);
+        }
+    }
+
+    /**
+     * Variantes secondaires d'un produit à déclinaisons — jamais présentes dans le payload du
+     * formulaire principal (celui-ci n'édite que la variante principale, cf.
+     * mettreAJourSimple()) — donc jamais couvertes par le validerPrixSelonType() ci-dessus.
+     * Sans ce contrôle, un changement de type via ce formulaire pourrait laisser des variantes
+     * secondaires incompatibles avec le nouveau type, invisibles jusqu'à leur prochaine édition
+     * individuelle.
+     */
+    private function validerCoherenceAutresVariantesPourType(Produit $produit, ProduitType $nouveauType, ?string $varianteExclueId): void
+    {
+        $autresVariantes = $produit->variantes()
+            ->when($varianteExclueId, fn ($q) => $q->where('id', '!=', $varianteExclueId))
+            ->get();
+
+        foreach ($autresVariantes as $autre) {
+            $raison = $this->raisonIncoherencePrix($nouveauType, Arr::only($autre->getAttributes(), self::CHAMPS_VARIANTE));
+            if ($raison === null) {
+                continue;
+            }
+
+            $label = $autre->libelle !== '' ? $autre->libelle : 'variante principale';
+            throw ValidationException::withMessages([
+                'type' => "Impossible de passer le produit en \"{$nouveauType->label()}\" : la variante « {$label} » n'est pas compatible avec ce type.",
+            ]);
+        }
+    }
+
+    /**
+     * @return array{champ: string, message: string}|null null si $donneesPrix est cohérent
+     *                                                    avec $type, sinon la première
+     *                                                    anomalie trouvée (présence, puis
+     *                                                    relation).
+     */
+    private function raisonIncoherencePrix(ProduitType $type, array $donneesPrix): ?array
     {
         $labels = [
             'prix_usine' => 'prix usine',
@@ -97,9 +153,28 @@ class ProduitService
 
         if (! empty($manquants)) {
             $liste = implode(', ', array_map(fn ($c) => $labels[$c] ?? $c, $manquants));
-            throw ValidationException::withMessages([
-                'type' => "Pour le type \"{$type->label()}\", les champs suivants sont obligatoires : {$liste}.",
-            ]);
+
+            return [
+                'champ' => 'type',
+                'message' => "Pour le type \"{$type->label()}\", les champs suivants sont obligatoires : {$liste}.",
+            ];
         }
+
+        $champReference = $type->champPrixReference();
+        if ($champReference === null) {
+            return null;
+        }
+
+        $vente = (float) ($donneesPrix['prix_vente'] ?? 0);
+        $reference = (float) ($donneesPrix[$champReference] ?? 0);
+
+        if ($vente <= $reference) {
+            return [
+                'champ' => 'prix_vente',
+                'message' => "Le prix de vente doit être strictement supérieur au {$labels[$champReference]}.",
+            ];
+        }
+
+        return null;
     }
 }

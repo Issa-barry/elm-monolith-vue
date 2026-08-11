@@ -11,6 +11,7 @@ interface LigneResultat {
     statut: 'nouveau' | 'existant' | 'erreur';
     erreurs: string[];
     normalisations: string[];
+    avertissements: string[];
 }
 
 interface ReponseImport {
@@ -334,11 +335,22 @@ function fermer() {
                                 v-for="l in lignesValides"
                                 :key="l.numero_ligne"
                             >
-                                <td class="px-3 py-1.5 text-muted-foreground">
+                                <td
+                                    class="px-3 py-1.5 align-top text-muted-foreground"
+                                >
                                     {{ l.numero_ligne }}
                                 </td>
-                                <td class="px-3 py-1.5">{{ l.nom }}</td>
-                                <td class="px-3 py-1.5">
+                                <td class="px-3 py-1.5 align-top">
+                                    {{ l.nom }}
+                                    <p
+                                        v-for="(a, i) in l.avertissements"
+                                        :key="i"
+                                        class="mt-0.5 text-[11px] text-amber-600 dark:text-amber-500"
+                                    >
+                                        ⚠ {{ a }}
+                                    </p>
+                                </td>
+                                <td class="px-3 py-1.5 align-top">
                                     <span
                                         v-if="l.statut === 'nouveau'"
                                         class="text-muted-foreground"

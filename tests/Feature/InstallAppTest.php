@@ -6,6 +6,7 @@ use App\Models\AppInstallation;
 use App\Models\Categorie;
 use App\Models\OptionCatalogue;
 use App\Models\Organization;
+use App\Models\TypeVehicule;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -103,6 +104,10 @@ class InstallAppTest extends TestCase
             ->expectsQuestion('Confirmer le mot de passe', 'Sup3r$ecretPwd')
             ->expectsConfirmation('Créer les catégories prédéfinies ?', 'no')
             ->expectsConfirmation('Installer la bibliothèque d\'options prédéfinies ?', 'no')
+            ->expectsConfirmation(
+                'Créer les types de véhicule prédéfinis (Tricycle, Minibus, Camionnette, Camion, Remorque) ?',
+                'no',
+            )
             ->assertExitCode(1);
 
         $this->assertDatabaseMissing('users', ['telephone' => '+224622000099']);
@@ -118,12 +123,22 @@ class InstallAppTest extends TestCase
         $this->assertSame(0, OptionCatalogue::where('organization_id', $org->id)->count());
     }
 
+    public function test_types_vehicule_est_un_choix_independant(): void
+    {
+        $this->runInstall(categories: false, options: false, typesVehicule: true)->assertExitCode(0);
+
+        $org = Organization::where('slug', 'elm-test')->firstOrFail();
+        $this->assertSame(5, TypeVehicule::where('organization_id', $org->id)->count());
+        $this->assertTrue(TypeVehicule::where('organization_id', $org->id)->where('nom', 'Minibus')->exists());
+    }
+
     public function test_installation_sans_catalogue_ne_cree_rien(): void
     {
-        $this->runInstall(categories: false, options: false)->assertExitCode(0);
+        $this->runInstall(categories: false, options: false, typesVehicule: false)->assertExitCode(0);
 
         $org = Organization::where('slug', 'elm-test')->firstOrFail();
         $this->assertSame(0, Categorie::where('organization_id', $org->id)->count());
         $this->assertSame(0, OptionCatalogue::where('organization_id', $org->id)->count());
+        $this->assertSame(0, TypeVehicule::where('organization_id', $org->id)->count());
     }
 }

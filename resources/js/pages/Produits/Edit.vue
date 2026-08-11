@@ -13,6 +13,12 @@ interface Option {
     label: string;
 }
 
+// `required_prices` (cf. ProduitType::options()) pilote l'affichage du "*" sur les champs de
+// prix obligatoires pour le type sélectionné, dans ProduitForm.vue.
+interface ProduitTypeOption extends Option {
+    required_prices: string[];
+}
+
 interface Categorie {
     id: string;
     nom: string;
@@ -75,7 +81,7 @@ interface ProduitData {
 
 const props = defineProps<{
     produit: ProduitData;
-    types: Option[];
+    types: ProduitTypeOption[];
     statuts: Option[];
     categories: Categorie[];
     fournisseurs: FournisseurOption[];
