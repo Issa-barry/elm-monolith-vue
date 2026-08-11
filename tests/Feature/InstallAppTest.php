@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\AppInstallation;
 use App\Models\Categorie;
+use App\Models\OptionCatalogue;
 use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -12,8 +14,9 @@ use Tests\Concerns\HasInstallAppHelper;
 use Tests\TestCase;
 
 /**
- * `php artisan app:install` — remplace l'ancien SuperAdminSeeder (retiré) : plus de mot de
- * passe affiché en clair, compte forcé à en redéfinir un à la première connexion.
+ * `php artisan app:install` — façade CLI de InstallationService (partagée avec /install côté
+ * web, cf. InstallWizardTest). Le Super Admin choisit directement son mot de passe (saisie
+ * masquée) : plus de mot de passe généré, plus de redéfinition forcée à la première connexion.
  */
 class InstallAppTest extends TestCase
 {
@@ -30,15 +33,24 @@ class InstallAppTest extends TestCase
         $this->assertSame('Issa', $user->prenom);
         $this->assertSame('BARRY', $user->nom);
         $this->assertSame('GN', $user->code_pays);
-        $this->assertTrue($user->must_change_password);
+        $this->assertFalse($user->must_change_password);
         $this->assertTrue($user->hasRole('super_admin'));
         $this->assertTrue($user->hasVerifiedEmail());
+    }
+
+    public function test_marque_installed_at_apres_succes(): void
+    {
+        $this->assertFalse(AppInstallation::isInstalled());
+
+        $this->runInstall()->assertExitCode(0);
+
+        $this->assertTrue(AppInstallation::isInstalled());
     }
 
     public function test_mot_de_passe_saisi_nest_jamais_affiche_en_sortie(): void
     {
         $this->runInstall(password: 'Sup3r$ecretPwd')
-            ->expectsOutputToContain('aucun mot de passe n\'est affiché')
+            ->expectsOutputToContain('jamais affiché ni conservé en clair')
             ->assertExitCode(0);
 
         $user = User::where('telephone', '+224622000000')->firstOrFail();
@@ -47,12 +59,19 @@ class InstallAppTest extends TestCase
 
     public function test_reutilise_une_organisation_existante_au_lieu_de_la_recreer(): void
     {
-        Organization::create(['name' => 'Déjà là', 'slug' => 'elm-test', 'is_active' => true]);
+        Organization::create(['name' => 'ELM Test', 'slug' => 'peu-importe', 'is_active' => true]);
 
         $this->runInstall()->assertExitCode(0);
 
-        $this->assertSame(1, Organization::where('slug', 'elm-test')->count());
-        $this->assertSame('Déjà là', Organization::where('slug', 'elm-test')->first()->name);
+        $this->assertSame(1, Organization::where('name', 'ELM Test')->count());
+        $this->assertSame('peu-importe', Organization::where('name', 'ELM Test')->first()->slug);
+    }
+
+    public function test_genere_automatiquement_un_slug_pour_une_nouvelle_organisation(): void
+    {
+        $this->runInstall()->assertExitCode(0);
+
+        $this->assertSame('elm-test', Organization::where('name', 'ELM Test')->firstOrFail()->slug);
     }
 
     public function test_refuse_de_creer_un_second_super_admin_pour_la_meme_organisation(): void
@@ -63,8 +82,7 @@ class InstallAppTest extends TestCase
         $existing->assignRole('super_admin');
 
         $this->artisan('app:install')
-            ->expectsQuestion("Nom de l'organisation", 'ELM Test')
-            ->expectsQuestion('Slug', 'elm-test')
+            ->expectsQuestion("Nom de l'entreprise", 'ELM Test')
             ->assertExitCode(1);
 
         $this->assertSame(1, User::where('organization_id', $org->id)->count());
@@ -76,37 +94,36 @@ class InstallAppTest extends TestCase
         User::factory()->create(['organization_id' => $org->id, 'telephone' => '+224622000000']);
 
         $this->artisan('app:install')
-            ->expectsQuestion("Nom de l'organisation", 'ELM Test')
-            ->expectsQuestion('Slug', 'elm-test')
+            ->expectsQuestion("Nom de l'entreprise", 'ELM Test')
             ->expectsQuestion('Prénom', 'Issa')
             ->expectsQuestion('Nom', 'BARRY')
             ->expectsQuestion('Téléphone (format international, ex: +224622000000)', '+224622000000')
-            ->expectsQuestion('Téléphone (format international, ex: +224622000000)', '+224622000099')
             ->expectsQuestion('Email (facultatif)', '')
             ->expectsQuestion('Mot de passe (min. 8 caractères, majuscule + minuscule + symbole)', 'Sup3r$ecretPwd')
             ->expectsQuestion('Confirmer le mot de passe', 'Sup3r$ecretPwd')
-            ->expectsConfirmation('Voulez-vous installer les données par défaut (catégories, options) ?', 'no')
-            ->assertExitCode(0);
+            ->expectsConfirmation('Créer les catégories prédéfinies ?', 'no')
+            ->expectsConfirmation('Installer la bibliothèque d\'options prédéfinies ?', 'no')
+            ->assertExitCode(1);
 
-        $this->assertDatabaseHas('users', ['telephone' => '+224622000099']);
+        $this->assertDatabaseMissing('users', ['telephone' => '+224622000099']);
+        $this->assertFalse(AppInstallation::isInstalled());
     }
 
-    public function test_preset_distribution_eau_cree_les_categories_attendues(): void
+    public function test_categories_et_options_sont_des_choix_independants(): void
     {
-        $this->runInstall(preset: 1)->assertExitCode(0);
+        $this->runInstall(categories: true, options: false)->assertExitCode(0);
 
         $org = Organization::where('slug', 'elm-test')->firstOrFail();
-        $boissons = Categorie::where('organization_id', $org->id)->where('nom', 'Boissons')->firstOrFail();
-        $this->assertDatabaseHas('categories', ['organization_id' => $org->id, 'nom' => 'Sachet', 'parent_id' => $boissons->id]);
-        $this->assertDatabaseHas('categories', ['organization_id' => $org->id, 'nom' => 'Bouteille', 'parent_id' => $boissons->id]);
-        $this->assertDatabaseMissing('categories', ['organization_id' => $org->id, 'nom' => 'Vêtements']);
+        $this->assertGreaterThan(0, Categorie::where('organization_id', $org->id)->count());
+        $this->assertSame(0, OptionCatalogue::where('organization_id', $org->id)->count());
     }
 
-    public function test_installation_minimale_ne_cree_aucune_categorie(): void
+    public function test_installation_sans_catalogue_ne_cree_rien(): void
     {
-        $this->runInstall(preset: 3)->assertExitCode(0);
+        $this->runInstall(categories: false, options: false)->assertExitCode(0);
 
         $org = Organization::where('slug', 'elm-test')->firstOrFail();
         $this->assertSame(0, Categorie::where('organization_id', $org->id)->count());
+        $this->assertSame(0, OptionCatalogue::where('organization_id', $org->id)->count());
     }
 }

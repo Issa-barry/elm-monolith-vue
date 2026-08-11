@@ -309,7 +309,12 @@
       "Bash(grep -n 'protected $fillable\\\\|protected function casts\\\\|protected $casts\\\\|protected $hidden' -A 25 app/Models/User.php)",
       "Bash(php -r \"require 'vendor/autoload.php'; var_dump\\(class_exists\\(\\\\libphonenumber\\\\PhoneNumberUtil::class\\)\\);\")",
       "Bash(vendor/bin/pint --dirty -v)",
-      "Bash(grep \"Tests\\\\\\\\\\\\\\\\Feature\" \"C:\\\\Users\\\\issab\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--laragon-www-eau-la-maman-elm-monolithe\\\\e8d07629-22cb-4d24-aeb5-cad1b7e19ec2\\\\tasks\\\\bsydsst5s.output\")"
+      "Bash(grep \"Tests\\\\\\\\\\\\\\\\Feature\" \"C:\\\\Users\\\\issab\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--laragon-www-eau-la-maman-elm-monolithe\\\\e8d07629-22cb-4d24-aeb5-cad1b7e19ec2\\\\tasks\\\\bsydsst5s.output\")",
+      "Bash(grep -n \"^use App\\\\\\\\\\\\\\\\Http\\\\\\\\\\\\\\\\Controllers\\\\\\\\\\\\\\\\[A-Z]\" routes/web.php)",
+      "Bash(vendor/bin/pint tests/Feature/InstallWizardTest.php)",
+      "Bash(grep -n \"use App\\\\\\\\\\\\\\\\Http\\\\\\\\\\\\\\\\Controllers\\\\\\\\\\\\\\\\SiteController;\\\\|use App\\\\\\\\\\\\\\\\Http\\\\\\\\\\\\\\\\Controllers\\\\\\\\\\\\\\\\SitemapController;\" routes/web.php)",
+      "Bash(grep -n \"^use App\\\\\\\\\\\\\\\\Http\\\\\\\\\\\\\\\\Controllers\\\\\\\\\\\\\\\\Site\" routes/web.php)",
+      "Bash(vendor/bin/pint --test tests/Feature/InstallWizardTest.php)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64",

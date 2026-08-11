@@ -472,7 +472,8 @@ function handleSubmit() {
                             v-if="selectedType?.capacite_defaut_bouteilles"
                             class="ml-1 text-xs text-muted-foreground"
                         >
-                            défaut : {{ selectedType.capacite_defaut_bouteilles }}
+                            défaut :
+                            {{ selectedType.capacite_defaut_bouteilles }}
                         </span>
                     </Label>
                     <InputNumber

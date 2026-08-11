@@ -16,29 +16,42 @@ cd ~/domains/xxx.com/public_html
 export PHP=/opt/alt/php84/usr/bin/php   # si besoin de forcer la version PHP
 composer2 install --no-dev --prefer-dist --optimize-autoloader
 
-# Configurer .env (DB, APP_ENV=production...) puis :
+# Configurer .env (DB, APP_ENV=production, APP_INSTALL_TOKEN=<clé secrète>...) puis :
 $PHP artisan key:generate
-
-# Schéma — migrate:fresh acceptable ici uniquement (base vide)
 $PHP artisan migrate --force
-
-# Données de référence (rôles, permissions, sites, catalogue de base) — jamais db:seed seul
 $PHP artisan db:seed --class=ProductionSeeder --force
-
-# Organisation + premier compte super_admin — mot de passe saisi en masqué,
-# jamais affiché en clair, à redéfinir obligatoirement à la première connexion
-$PHP artisan app:install
-
-# Lien symbolique storage (une seule fois)
 ln -s "$PWD/storage/app/public" "$PWD/public/storage" || true
 
 $PHP artisan optimize:clear
 $PHP artisan optimize
 ```
 
-`app:install` est idempotent par organisation : si le slug donné existe déjà (ex: "elm",
-créée par `ProductionSeeder`), il la réutilise au lieu d'en recréer une — il suffit donc de
-répondre avec le même nom/slug que celui déjà en base pour juste ajouter le super_admin.
+Puis, **depuis un navigateur**, ouvrir `https://ton-domaine/install` et suivre l'assistant
+(4 étapes : Entreprise, Super Admin, Catalogue initial, Résumé). C'est la façon recommandée
+de terminer la première installation : le pipeline CI/CD (`deploy-hostinger.yml`) ne lance
+**jamais** cette étape automatiquement — elle demande une saisie humaine (nom de
+l'entreprise, identité et mot de passe du Super Admin) qui n'a pas sa place dans un script
+de déploiement.
+
+L'assistant web est protégé par `APP_INSTALL_TOKEN` (variable d'environnement à définir dans
+`.env` avant le 1er accès — la clé n'est jamais stockée en base ni loguée, seule sa
+vérification est mémorisée en session) et devient automatiquement inaccessible (404) dès que
+l'installation est marquée terminée : impossible de la relancer par erreur ensuite.
+
+Pour un déploiement scripté/CI sans navigateur, la même logique reste disponible en CLI :
+
+```bash
+$PHP artisan app:install
+```
+
+CLI et web partagent exactement le même service (`InstallationService`) — les deux produisent
+un résultat identique. Aucun slug n'est demandé : il est généré automatiquement à partir du
+nom saisi, modifiable ensuite dans les paramètres de l'entreprise (backoffice). L'installation
+est idempotente par nom d'entreprise : si une entreprise du même nom existe déjà (ex: "Eau la
+maman", créée par `ProductionSeeder`), elle est réutilisée au lieu d'être recréée — il suffit
+donc de saisir le même nom que celui déjà en base pour juste ajouter le super_admin. Dans les
+deux cas, le mot de passe est choisi directement par la personne qui installe (saisie masquée
+en CLI, champ mot de passe en web) — il n'est jamais généré, affiché en clair, ni conservé.
 
 ## Déploiements suivants (uniquement)
 
@@ -60,57 +73,14 @@ git add public/build
 git commit -m "build: production"
 git push
 ```
-
-## CI/CD Hostinger (GitHub Actions)
-
-Flux de branches:
-- `dev` -> `pre-prod` -> `main`
-
-CI (qualite + tests) sur Pull Request vers `pre-prod` et `main`:
-- `.github/workflows/lint.yml`
-- `.github/workflows/tests.yml`
-  - `ci`: PHPUnit
-  - `e2e`:
-    - PR `dev -> pre-prod`: suite Playwright complete
-    - PR `pre-prod -> main`: smoke test Playwright
-
-Controle du flux de branches:
-- `.github/workflows/branch-flow.yml`
-- Autorise uniquement: `dev -> pre-prod` puis `pre-prod -> main`
  
-CD (deploiement production) sur `main`:
-- `.github/workflows/deploy-hostinger.yml`
-
-Guide complet:
-- `DEPLOY-HOSTINGER-CICD.md`
-
 ## Organisation de démonstration — Fello Demo
-
-Jeu de données de démo pour une boutique/POS (vêtements), totalement indépendant
-de l'organisation `elm` (Eau la maman) — vitrine commerciale pour présenter
-l'appli à d'autres clients (cible : `https://demo.felloconsulting.fr/`).
+ 
 
 ```bash
 php artisan db:seed --class=FelloDemoSeeder
 ```
-
-- Ne fait **pas** partie de `DatabaseSeeder` (n'est jamais lancé par
-  `migrate:fresh --seed`) — à exécuter à part, sur une base déjà migrée
-  (avec ou sans `elm`).
-- **Idempotent** : peut être relancé sans créer de doublons (organisation,
-  sites, comptes, catalogue, clients en `updateOrCreate`/`firstOrCreate` ;
-  l'historique de ventes est purgé — uniquement les données `fello-demo` —
-  puis régénéré à chaque exécution).
-- **Isolation garantie** : toutes les données créées portent
-  `organization_id = fello-demo`, jamais `elm` — vérifié par
-  `tests/Feature/FelloDemoSeederTest.php`.
-
-Crée : organisation `fello-demo`, 2 sites (Boutique Madina, Boutique Cosa),
-2 comptes staff, 21 produits (6 catégories — indiquées dans `description`,
-le projet n'ayant pas de modèle Categorie), stock différencié par boutique,
-5 clients, et ~40-65 ventes PDV historiques (40 derniers jours) avec
-factures et encaissements, générées via le vrai `PdvCheckoutService` (pas
-d'insertion brute).
+ https://demo.felloconsulting.fr/
 
 Comptes de démo (mot de passe `FelloDemo@2025`) :
 
@@ -118,11 +88,7 @@ Comptes de démo (mot de passe `FelloDemo@2025`) :
 |---|---|---|---|
 | Admin Fello Demo | +224600000101 | admin_entreprise | Boutique Madina |
 | Commercial Fello Demo | +224600000102 | commerciale | Boutique Cosa |
-
-Détail des sous-seeders : `database/seeders/Organizations/FelloDemo/`.
-Limites connues : pas de transferts de stock entre boutiques (module
-`TransfertLogistique` pas assez couvert par les tests pour ce scénario, et
-exige un véhicule interne peu naturel pour une démo boutique).
+ 
 
 ## Stack technique
 

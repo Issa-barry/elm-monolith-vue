@@ -439,7 +439,10 @@ function formatGNF(val: number): string {
                                             : '—'
                                     }}
                                     <template
-                                        v-if="vehicule.capacite_bouteilles !== null"
+                                        v-if="
+                                            vehicule.capacite_bouteilles !==
+                                            null
+                                        "
                                     >
                                         · {{ vehicule.capacite_bouteilles }}
                                         bouteilles

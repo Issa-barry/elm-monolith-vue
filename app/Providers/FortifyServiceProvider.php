@@ -217,6 +217,12 @@ class FortifyServiceProvider extends ServiceProvider
             return Limit::perMinute(5)->by($throttleKey);
         });
 
+        // Assistant d'installation web (/install) — route sensible tant qu'aucune organisation
+        // n'est marquée installée, cf. InstallWizardController.
+        RateLimiter::for('install', function (Request $request) {
+            return Limit::perMinute(10)->by($request->ip());
+        });
+
         // OTP (onboarding par invitation) : clé composite téléphone+IP, pour qu'un
         // numéro ne puisse pas être bombardé/bruteforcé depuis plusieurs IP.
         RateLimiter::for('otp-send', function (Request $request) {

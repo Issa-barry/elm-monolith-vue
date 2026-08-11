@@ -606,7 +606,9 @@ function confirmDelete(v: Vehicule) {
                                         ? `${data.capacite_packs} packs`
                                         : '—'
                                 }}
-                                <template v-if="data.capacite_bouteilles != null">
+                                <template
+                                    v-if="data.capacite_bouteilles != null"
+                                >
                                     · {{ data.capacite_bouteilles }} bout.
                                 </template>
                             </span>

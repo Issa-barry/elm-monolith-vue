@@ -43,20 +43,30 @@ Dans GitHub: `Settings` -> `Secrets and variables` -> `Actions` -> `New reposito
 
 ## Preparation serveur (une seule fois)
 
-1. Creer et configurer le fichier `.env` en production.
+1. Creer et configurer le fichier `.env` en production, y compris `APP_INSTALL_TOKEN`
+   (cle secrete qui protege l'assistant `/install`, cf. etape 3).
 2. Verifier que `storage/` et `bootstrap/cache/` sont accessibles en ecriture.
 3. Lancer une fois:
    ```bash
    php artisan key:generate
    php artisan migrate --force
    php artisan db:seed --class=ProductionSeeder --force
-   php artisan app:install
    ln -s "$PWD/storage/app/public" "$PWD/public/storage" || true
    ```
-   `app:install` cree l'organisation et le premier compte super_admin de facon
-   interactive (mot de passe saisi en masque, jamais affiche en clair — voir
-   README.md, section Deploiement). Idempotent par organisation : relancable
-   sans risque de doublon.
+   Puis, **depuis un navigateur**, ouvrir `https://ton-domaine/install` et suivre
+   l'assistant (Entreprise -> Super Admin -> Catalogue initial -> Resume). Aucun
+   slug n'est demande : il est genere automatiquement a partir du nom, modifiable
+   ensuite dans les parametres de l'entreprise. Le
+   pipeline CI/CD ne lance jamais cette etape automatiquement : elle demande une
+   saisie humaine (identite et mot de passe du Super Admin) qui n'a pas sa place
+   dans un script de deploiement. L'assistant est protege par `APP_INSTALL_TOKEN`
+   et devient inaccessible (404) des que l'installation est marquee terminee.
+
+   Pour un deploiement scripte sans navigateur, `php artisan app:install` fait
+   exactement la meme chose en CLI (meme service `InstallationService`, saisie
+   masquee). Idempotent par organisation : relancable sans risque de doublon.
+   Dans les deux cas, le mot de passe est choisi directement par la personne qui
+   installe — jamais genere ni affiche en clair.
 4. Verifier que la base de donnees de production est correcte.
 
 ## Important

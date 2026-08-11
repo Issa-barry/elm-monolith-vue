@@ -41,6 +41,7 @@ use App\Http\Controllers\EquipeLivraisonController;
 use App\Http\Controllers\FactureVenteController;
 use App\Http\Controllers\FournisseurController;
 use App\Http\Controllers\FraisCommissionPartController;
+use App\Http\Controllers\InstallWizardController;
 use App\Http\Controllers\LivreurController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\OptionCatalogueController;
@@ -60,6 +61,7 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\ScanLivraisonController;
 use App\Http\Controllers\ScanUserController;
 use App\Http\Controllers\SiteController;
+use App\Http\Controllers\SiteImportController;
 use App\Http\Controllers\SitemapController;
 use App\Http\Controllers\TransfertLogistiqueController;
 use App\Http\Controllers\TransfertStatutController;
@@ -112,6 +114,16 @@ Route::post('/invitations/accept/{token}/otp/resend', [AcceptInvitationControlle
 Route::post('/invitations/accept/{token}', [AcceptInvitationController::class, 'accept'])
     ->name('invitations.accept.store')
     ->middleware('throttle:5,1');
+
+// ── Assistant d'installation ──────────────────────────────────────────────────
+// Public (pas de middleware 'auth') mais fortement gardé côté contrôleur — voir
+// InstallWizardController pour les 3 niveaux de protection (déjà installé, token, rate limit).
+Route::middleware('throttle:install')->group(function () {
+    Route::get('install', [InstallWizardController::class, 'show'])->name('install.show');
+    Route::post('install/token', [InstallWizardController::class, 'verifyToken'])->name('install.token');
+    Route::post('install/phone-info', [InstallWizardController::class, 'resolvePhone'])->name('install.phone-info');
+    Route::post('install', [InstallWizardController::class, 'store'])->name('install.store');
+});
 
 Route::get('/', function (Request $request) {
     $user = $request->user();
@@ -320,6 +332,14 @@ Route::prefix('backoffice')->group(function () {
             Route::post('sites/{site}/invitations', [UserInvitationController::class, 'store'])
                 ->name('sites.invitations.store')
                 ->middleware('throttle:10,1');
+
+            // Import en masse — Dialog depuis Sites/Index.vue, cf. SiteImportController.
+            Route::get('sites/import/modele', [SiteImportController::class, 'modele'])
+                ->name('sites.import.modele');
+            Route::post('sites/import/analyser', [SiteImportController::class, 'analyser'])
+                ->name('sites.import.analyser');
+            Route::post('sites/import/confirmer', [SiteImportController::class, 'confirmer'])
+                ->name('sites.import.confirmer');
         });
 
         // ── Comptes (super admin) ─────────────────────────────────────────────────
