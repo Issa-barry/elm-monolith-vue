@@ -36,7 +36,7 @@ const form = useForm({
         password: '',
         password_confirmation: '',
     },
-    catalogue: { categories: true, options: true },
+    catalogue: { categories: true, options: true, types_vehicule: true },
 });
 
 function errorFor(key: string): string | undefined {
@@ -348,6 +348,27 @@ function submit() {
                             </p>
                         </div>
                     </div>
+                    <div class="flex items-start gap-3">
+                        <Checkbox
+                            id="cat-types-vehicule"
+                            :model-value="form.catalogue.types_vehicule"
+                            @update:model-value="
+                                form.catalogue.types_vehicule = $event === true
+                            "
+                        />
+                        <div>
+                            <Label
+                                for="cat-types-vehicule"
+                                class="cursor-pointer font-medium"
+                                >Créer les types de véhicule prédéfinis ?</Label
+                            >
+                            <p class="text-xs text-muted-foreground">
+                                Tricycle, Minibus, Camionnette, Camion,
+                                Remorque — requis pour l'import de flotte et la
+                                fiche véhicule, modifiable ensuite.
+                            </p>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Étape 4 : Résumé -->
@@ -403,6 +424,10 @@ function submit() {
                         <p class="text-sm">
                             Options :
                             {{ form.catalogue.options ? 'Oui' : 'Non' }}
+                        </p>
+                        <p class="text-sm">
+                            Types de véhicule :
+                            {{ form.catalogue.types_vehicule ? 'Oui' : 'Non' }}
                         </p>
                     </div>
                     <InputError :message="errorFor('organisation.nom')" />

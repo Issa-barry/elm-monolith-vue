@@ -9,6 +9,7 @@ use App\Models\User;
 use Database\Seeders\CategorieDefaultSeeder;
 use Database\Seeders\OptionCatalogueDefaultSeeder;
 use Database\Seeders\RolesAndPermissionsSeeder;
+use Database\Seeders\TypeVehiculesSeeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -106,7 +107,7 @@ class InstallationService
      *
      * @param  array{nom: string}  $organisation
      * @param  array{prenom: string, nom: string, telephone: string, email: ?string, password: string}  $admin
-     * @param  array{categories: bool, options: bool}  $catalogue
+     * @param  array{categories: bool, options: bool, types_vehicule: bool}  $catalogue
      *
      * @throws ValidationException
      */
@@ -162,6 +163,9 @@ class InstallationService
             }
             if ($catalogue['options'] ?? false) {
                 OptionCatalogueDefaultSeeder::seedPourOrganisation($org->id);
+            }
+            if ($catalogue['types_vehicule'] ?? false) {
+                TypeVehiculesSeeder::seedPourOrganisation($org->id);
             }
 
             // updateOrCreate (pas firstOrCreate) : garantit que installed_at est bien renseigné
