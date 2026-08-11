@@ -134,9 +134,9 @@ class ProduitService
 
     /**
      * @return array{champ: string, message: string}|null null si $donneesPrix est cohérent
-     *                                                      avec $type, sinon la première
-     *                                                      anomalie trouvée (présence, puis
-     *                                                      relation).
+     *                                                    avec $type, sinon la première
+     *                                                    anomalie trouvée (présence, puis
+     *                                                    relation).
      */
     private function raisonIncoherencePrix(ProduitType $type, array $donneesPrix): ?array
     {
