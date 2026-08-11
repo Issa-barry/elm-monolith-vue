@@ -15,6 +15,29 @@ use Illuminate\Support\Facades\DB;
 
 class PaieCalculService
 {
+    /**
+     * Point d'entrée unique pour obtenir la PaiePeriode d'un mois, en
+     * garantissant que ses PaieLigne existent — sans dépendre d'une visite
+     * préalable de l'écran Comptabilité > Salaires (cf. SalaireController::index()
+     * et BesoinTresorerieService, qui appellent tous les deux cette méthode
+     * plutôt que de dupliquer la logique de génération).
+     */
+    public function getOrGenererPeriode(string $orgId, int $mois, int $annee): PaiePeriode
+    {
+        $periode = PaiePeriode::firstOrCreate(
+            ['organization_id' => $orgId, 'mois' => $mois, 'annee' => $annee],
+            ['statut' => 'brouillon'],
+        );
+
+        if ($periode->lignes()->count() === 0) {
+            $this->genererLignes($periode);
+            $this->calculerPeriode($periode);
+            $periode->refresh();
+        }
+
+        return $periode;
+    }
+
     public function genererLignes(PaiePeriode $periode): void
     {
         $orgId = $periode->organization_id;
@@ -213,6 +236,9 @@ class PaieCalculService
         if ($montant > $totalDisponible + 0.01) {
             throw new \InvalidArgumentException("Le montant dépasse le reste à payer ({$totalDisponible} GNF).");
         }
+
+        $touched = PeriodePayabilityChecker::touchedUntilAmount($lignes, $montant, fn ($l) => (float) $l->reste_a_payer);
+        PeriodePayabilityChecker::assertLignesPayables($touched);
 
         $restant = $montant;
         foreach ($lignes as $ligne) {

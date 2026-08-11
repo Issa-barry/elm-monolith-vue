@@ -271,7 +271,10 @@ export async function applyDrawerFilterOption(
     fieldKey: string,
     optionName: string | RegExp,
 ): Promise<void> {
-    await page.getByRole('button', { name: /filtres/i }).first().click();
+    await page
+        .getByRole('button', { name: /filtres/i })
+        .first()
+        .click();
     const combobox = page
         .getByTestId(`filter-field-${fieldKey}`)
         .locator('[data-pc-name="multiselect"]')
@@ -284,7 +287,12 @@ export async function applyDrawerFilterOption(
 export function getVisibleSearchInput(page: Page): Locator {
     return page
         .locator(
-            '[data-testid="search-input"]:visible, [data-testid^="filter-inline-"]:visible, input[placeholder*="rechercher" i]:not([data-testid="global-search"]):visible, input[placeholder*="recherche" i]:not([data-testid="global-search"]):visible',
+            // Le testid `filter-inline-*` est aussi posé sur le wrapper <div> des filtres
+            // select/multi-select (cf. DataFilters.vue) — restreint à `input` pour ne jamais
+            // matcher autre chose qu'un vrai champ texte remplissable (ex: le filtre Statut,
+            // qui peut désormais apparaître avant "Rechercher" dans le DOM, cf. standard UI
+            // Agence → Statut → autres filtres inline).
+            '[data-testid="search-input"]:visible, input[data-testid^="filter-inline-"]:visible, input[placeholder*="rechercher" i]:not([data-testid="global-search"]):visible, input[placeholder*="recherche" i]:not([data-testid="global-search"]):visible',
         )
         .first();
 }
@@ -403,7 +411,14 @@ export async function navigateToFirstSiteVehiclesTab(
     page: Page,
 ): Promise<string> {
     await page.goto('/backoffice/sites');
-    await page.waitForLoadState('networkidle');
+    // networkidle borné explicitement et non-fatal : une connexion persistante
+    // (WebSocket/polling notifications) empêcherait sinon cette attente de se
+    // résoudre, et sans timeout propre elle se contente de consommer le budget
+    // du hook appelant (beforeAll) jusqu'à son propre timeout générique — un
+    // échec "hook timeout exceeded" opaque au lieu d'une erreur localisée ici.
+    await page
+        .waitForLoadState('networkidle', { timeout: 15_000 })
+        .catch(() => undefined);
 
     const firstRow = page
         .locator('tbody tr:not(.p-datatable-emptymessage)')
@@ -414,14 +429,14 @@ export async function navigateToFirstSiteVehiclesTab(
     await page
         .getByRole('menuitem', { name: /^voir$/i })
         .first()
-        .click();
+        .click({ timeout: 10_000 });
     await page.waitForURL(/\/sites\/[a-z0-9]+$/, { timeout: 15_000 });
 
     const siteUrl = page.url();
 
-    await page.getByTestId('site-vehicles-tab').click();
+    await page.getByTestId('site-vehicles-tab').click({ timeout: 10_000 });
     await expect(page.getByTestId('add-site-vehicle-btn')).toBeVisible({
-        timeout: 5_000,
+        timeout: 10_000,
     });
 
     return siteUrl;

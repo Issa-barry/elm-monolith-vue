@@ -4,6 +4,8 @@ namespace Tests\Feature\Comptabilite;
 
 use App\Enums\StatutCommission;
 use App\Enums\StatutDepense;
+use App\Enums\StatutPeriodePaiement;
+use App\Enums\TypePeriodePaiement;
 use App\Models\CommandeVente;
 use App\Models\CommissionPart;
 use App\Models\CommissionVente;
@@ -12,6 +14,7 @@ use App\Models\DepenseType;
 use App\Models\Livreur;
 use App\Models\Site;
 use App\Models\Vehicule;
+use App\Services\PeriodePaiementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Feature\Concerns\HasAdminSetup;
@@ -130,6 +133,13 @@ class CommissionVenteFraisTest extends TestCase
             'date_depense' => now()->toDateString(),
             'statut' => StatutDepense::VALIDE->value,
         ]);
+
+        $periode = app(PeriodePaiementService::class)->getOrCreatePeriod(
+            $this->org->id,
+            TypePeriodePaiement::LIVREUR,
+            $commission->created_at,
+        );
+        $periode->update(['statut' => StatutPeriodePaiement::VALIDEE]);
 
         return $livreur;
     }

@@ -63,6 +63,7 @@ class VehiculeCommissionsController extends Controller
             ->select([
                 'commission_parts.id',
                 'commission_parts.montant_net',
+                'commission_parts.montant_actuel',
                 'commission_parts.montant_verse',
                 'commission_parts.statut',
                 'cv.created_at AS commission_date',
@@ -81,13 +82,16 @@ class VehiculeCommissionsController extends Controller
                     default => 'en_attente',
                 };
 
+                $montantAPayer = $row->montant_actuel !== null ? (float) $row->montant_actuel : (float) $row->montant_net;
+
                 return [
                     'id' => $row->id,
                     'reference' => $row->reference ?? '—',
                     'date' => $date?->toISOString(),
                     'montant_net' => (float) $row->montant_net,
+                    'montant_a_payer' => $montantAPayer,
                     'montant_verse' => (float) $row->montant_verse,
-                    'montant_restant' => max(0.0, (float) $row->montant_net - (float) $row->montant_verse),
+                    'montant_restant' => max(0.0, $montantAPayer - (float) $row->montant_verse),
                     'statut' => $statutMobile,
                     'mois' => $date ? $this->labelMois($date) : '—',
                 ];

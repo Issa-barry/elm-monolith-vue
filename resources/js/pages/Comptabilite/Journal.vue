@@ -40,8 +40,9 @@ const props = defineProps<{
     filters: {
         sens?: string;
         categorie?: string;
-        date_from?: string;
-        date_to?: string;
+        annee?: string;
+        mois?: string;
+        quinzaine?: string;
         site_ids?: string[];
         search?: string;
     };
@@ -54,7 +55,54 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Journal financier', href: '/backoffice/comptabilite/journal' },
 ];
 
+const anneeCourante = new Date().getFullYear();
+const anneeOptions: Option[] = Array.from({ length: 5 }, (_, i) => {
+    const annee = anneeCourante + 1 - i;
+    return { value: String(annee), label: String(annee) };
+});
+
+const moisOptions: Option[] = [
+    'Janvier',
+    'Février',
+    'Mars',
+    'Avril',
+    'Mai',
+    'Juin',
+    'Juillet',
+    'Août',
+    'Septembre',
+    'Octobre',
+    'Novembre',
+    'Décembre',
+].map((label, i) => ({ value: String(i + 1), label }));
+
+const quinzaineOptions: Option[] = [
+    { value: 'P1', label: 'P1 (1 → 15)' },
+    { value: 'P2', label: 'P2 (16 → fin du mois)' },
+];
+
 const filterFields: FilterField[] = [
+    {
+        key: 'annee',
+        label: 'Année',
+        type: 'select',
+        inline: true,
+        options: anneeOptions,
+    },
+    {
+        key: 'mois',
+        label: 'Mois',
+        type: 'select',
+        inline: true,
+        options: moisOptions,
+    },
+    {
+        key: 'quinzaine',
+        label: 'Quinzaine',
+        type: 'select',
+        inline: true,
+        options: quinzaineOptions,
+    },
     {
         key: 'sens',
         label: 'Sens',
@@ -66,13 +114,6 @@ const filterFields: FilterField[] = [
         label: 'Catégorie',
         type: 'select',
         options: props.categories,
-    },
-    {
-        key: 'date',
-        label: 'Période',
-        type: 'date-range',
-        startKey: 'date_from',
-        endKey: 'date_to',
     },
 ];
 

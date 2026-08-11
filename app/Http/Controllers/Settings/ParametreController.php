@@ -72,7 +72,13 @@ class ParametreController extends Controller
                     'name' => 'produits',
                     'headers' => [
                         'nom',
-                        'code_fournisseur',
+                        'code_barres',
+                        // Nom du fournisseur (raison_sociale ou nom complet) — une seule
+                        // colonne texte, pas les coordonnées complètes : le rattachement à un
+                        // Prestataire existant (ou sa création) reste à faire par le futur
+                        // parseur d'import, pas par ce template qui ne fait qu'annoncer les
+                        // colonnes attendues.
+                        'fournisseur',
                         'type',
                         'statut',
                         'prix_usine',
@@ -133,45 +139,9 @@ class ParametreController extends Controller
                     ],
                 ]],
             ],
-            'vehicules-pack' => [
-                'template-vehicules-proprietaires-livreurs.xls',
-                [
-                    [
-                        'name' => 'proprietaires',
-                        'headers' => [
-                            'nom',
-                            'prenom',
-                            'email',
-                            'telephone',
-                            'code_pays',
-                            'ville',
-                            'adresse',
-                            'is_active',
-                        ],
-                    ],
-                    [
-                        'name' => 'livreurs',
-                        'headers' => [
-                            'nom',
-                            'prenom',
-                            'telephone',
-                        ],
-                    ],
-                    [
-                        'name' => 'vehicules',
-                        'headers' => [
-                            'nom_vehicule',
-                            'immatriculation',
-                            'type_vehicule_id',
-                            'capacite_packs',
-                            'categorie',
-                            'proprietaire_id',
-                            'pris_en_charge_par_usine',
-                            'is_active',
-                        ],
-                    ],
-                ],
-            ],
+            // Le template "vehicules-pack" (3 feuilles) a été remplacé par l'import
+            // flotte dédié — voir ImportFlotteController::template() (route
+            // imports-flotte.template), qui génère directement un .xlsx importable.
             default => [null, null],
         };
 

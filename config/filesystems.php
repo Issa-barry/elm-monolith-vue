@@ -47,6 +47,17 @@ return [
             'report' => false,
         ],
 
+        // Disque privé dédié aux pièces d'identité — jamais lié au symlink public/storage,
+        // les fichiers ne sont accessibles que via une route contrôlée par policy
+        // (voir PieceIdentiteController::showFile).
+        'pieces_identite' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private/pieces-identite'),
+            'visibility' => 'private',
+            'throw' => true,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

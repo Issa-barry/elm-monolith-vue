@@ -99,9 +99,9 @@
     <div class="info-row">
         <div class="info-block">
             <div class="info-block-title">Fournisseur</div>
-            <p class="value">{{ $commande->prestataire?->nom ?? '—' }}</p>
-            @if($commande->prestataire?->phone)
-                <p>{{ $commande->prestataire->phone }}</p>
+            <p class="value">{{ $commande->fournisseur?->nom_complet ?? '—' }}</p>
+            @if($commande->fournisseur?->phone)
+                <p>{{ $commande->fournisseur->phone }}</p>
             @endif
         </div>
         <div class="info-block">
@@ -157,7 +157,7 @@
             <tbody>
                 @foreach($commande->lignes as $ligne)
                 <tr>
-                    <td class="bold">{{ $ligne->produit?->nom ?? '—' }}</td>
+                    <td class="bold">{{ $ligne->libelle_snapshot ?? $ligne->variante?->produit?->nom ?? '—' }}</td>
                     <td class="center">{{ $ligne->qte }}</td>
                     <td class="center">{{ $commande->isReceptionnee() ? $ligne->qte_recue : 0 }}</td>
                     <td class="right">{{ number_format((float)$ligne->prix_achat_snapshot, 0, ',', ' ') }} GNF</td>

@@ -5,11 +5,13 @@ namespace App\Services;
 use App\Enums\MotifAjustementCommission;
 use App\Enums\OrigineCommissionPart;
 use App\Enums\StatutCommission;
+use App\Enums\StatutValidationEquipe;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
 use App\Models\CommissionPart;
 use App\Models\CommissionPartAdjustment;
 use App\Models\CommissionVente;
+use App\Models\EquipeLivraison;
 use App\Models\PaiementFicheLigne;
 use App\Models\PaiementPeriode;
 use App\Models\User;
@@ -146,7 +148,7 @@ class CommissionAdjustmentService
                     'ajuste' => $ajuste,
                     'ecart' => $ecart,
                     'equilibre' => abs($ecart) <= 0.01,
-                    'statut_validation' => self::statutValidationPourParts($parts),
+                    'statut_validation' => self::statutValidationPourParts($parts)->value,
                 ];
             })
             ->sortBy('vehicule_nom')
@@ -163,10 +165,10 @@ class CommissionAdjustmentService
      *
      * @param  \Illuminate\Support\Collection<int, CommissionPart|CommissionLogistiquePart>  $parts
      */
-    private static function statutValidationPourParts(\Illuminate\Support\Collection $parts): string
+    public static function statutValidationPourParts(\Illuminate\Support\Collection $parts): StatutValidationEquipe
     {
         if ($parts->isEmpty()) {
-            return 'a_verifier';
+            return StatutValidationEquipe::A_VERIFIER;
         }
 
         $total = $parts->count();
@@ -175,11 +177,61 @@ class CommissionAdjustmentService
         $enAttente = $total - $payees - $validees;
 
         return match (true) {
-            $payees === $total => 'payee',
-            $enAttente === 0 => 'validee',
-            $enAttente === $total => 'a_verifier',
-            default => 'a_reverifier',
+            $payees === $total => StatutValidationEquipe::PAYEE,
+            $enAttente === 0 => StatutValidationEquipe::VALIDEE,
+            $enAttente === $total => StatutValidationEquipe::A_VERIFIER,
+            default => StatutValidationEquipe::A_REVERIFIER,
         };
+    }
+
+    /**
+     * Rang de "sévérité" d'un statut de validation équipe — plus bas = plus bloquant.
+     * Sert à retenir le pire statut quand un bénéficiaire est réparti sur plusieurs véhicules.
+     */
+    private static function rangValidation(StatutValidationEquipe $statut): int
+    {
+        return match ($statut) {
+            StatutValidationEquipe::A_VERIFIER => 0,
+            StatutValidationEquipe::A_REVERIFIER => 1,
+            StatutValidationEquipe::VALIDEE => 2,
+            StatutValidationEquipe::PAYEE => 3,
+        };
+    }
+
+    /**
+     * Statut de validation "équipe" par bénéficiaire (vente + logistique confondues) pour une
+     * période donnée — le pire statut parmi les véhicules sur lesquels ce bénéficiaire a des
+     * parts. Utilisé par les écrans de liste de commission pour afficher, ligne par ligne,
+     * "En attente de validation" tant que sa répartition n'est pas confirmée.
+     *
+     * @return array<string, StatutValidationEquipe> indexé par "{type}:{id}" (ex: "livreur:01...")
+     */
+    public static function statutValidationParBeneficiaire(PaiementPeriode $periode): array
+    {
+        $groupesParVehicule = collect(self::groupesParCommission($periode))
+            ->groupBy(fn (array $g) => $g['vehicule_id'] ?? '__sans_vehicule__');
+
+        $result = [];
+
+        foreach ($groupesParVehicule as $groupesDuVehicule) {
+            $parts = $groupesDuVehicule->flatMap(fn (array $g) => $g['parts']);
+            $statutVehicule = self::statutValidationPourParts($parts);
+
+            foreach ($parts as $part) {
+                $type = $part->livreur_id ? 'livreur' : ($part->proprietaire_id ? 'proprietaire' : null);
+                $id = $part->livreur_id ?? $part->proprietaire_id;
+                if ($type === null || $id === null) {
+                    continue;
+                }
+
+                $cle = "{$type}:{$id}";
+                if (! isset($result[$cle]) || self::rangValidation($statutVehicule) < self::rangValidation($result[$cle])) {
+                    $result[$cle] = $statutVehicule;
+                }
+            }
+        }
+
+        return $result;
     }
 
     /** Commandes/transferts d'un véhicule donné (ou "sans véhicule" si $vehiculeId est null). */
@@ -219,9 +271,11 @@ class CommissionAdjustmentService
                 'reference' => $g['reference'],
             ]));
 
+        $designationsParLivreur = self::designationsEquipeParVehicule($vehiculeId);
+
         return $lignes
             ->groupBy(fn (array $l) => $l['part']->type_beneficiaire.':'.($l['part']->livreur_id ?? $l['part']->proprietaire_id ?? $l['part']->beneficiaire_nom))
-            ->map(function (\Illuminate\Support\Collection $lignesDuBeneficiaire, string $cle) {
+            ->map(function (\Illuminate\Support\Collection $lignesDuBeneficiaire, string $cle) use ($designationsParLivreur) {
                 $premierPart = $lignesDuBeneficiaire->first()['part'];
                 $theorique = round((float) $lignesDuBeneficiaire->sum(fn (array $l) => (float) $l['part']->montant_net), 2);
                 $ajuste = round((float) $lignesDuBeneficiaire->sum(fn (array $l) => $l['part']->montant_a_payer), 2);
@@ -229,7 +283,8 @@ class CommissionAdjustmentService
                 return [
                     'cle' => $cle,
                     'type_beneficiaire' => $premierPart->type_beneficiaire,
-                    'beneficiaire_nom' => $premierPart->beneficiaire_nom,
+                    'beneficiaire_nom' => self::beneficiaireNomAffiche($premierPart, $designationsParLivreur),
+                    'beneficiaire_telephone' => $premierPart->livreur?->telephone ?? $premierPart->proprietaire?->telephone,
                     'theorique' => $theorique,
                     'ajuste' => $ajuste,
                     'ecart' => round($ajuste - $theorique, 2),
@@ -241,6 +296,61 @@ class CommissionAdjustmentService
             ->sortBy('beneficiaire_nom')
             ->values()
             ->all();
+    }
+
+    /**
+     * Libellé "Bénéficiaire" affiché sur l'écran d'ajustement — jamais le
+     * numéro de téléphone brut : quand le livreur n'a ni nom_complet ni
+     * prenom/nom, Livreur::libelleAffichage() retombe sur le téléphone, donc
+     * on substitue ici la désignation d'équipe courante (Chauffeur-1,
+     * Convoyeur-2…), cohérente avec EquipeStepperModal::membreLabel(). Le
+     * téléphone reste affiché séparément côté Vue (Ajustements/Vehicule.vue).
+     *
+     * @param  array<string, string>  $designationsParLivreur  indexé par livreur_id
+     */
+    private static function beneficiaireNomAffiche(CommissionPart|CommissionLogistiquePart $part, array $designationsParLivreur): string
+    {
+        if ($part->type_beneficiaire !== 'livreur' || $part->livreur_id === null) {
+            return $part->beneficiaire_nom;
+        }
+
+        $livreur = $part->livreur;
+        $aUnNomSaisi = $livreur && ($livreur->nom_complet || trim("{$livreur->prenom} {$livreur->nom}") !== '');
+
+        return $aUnNomSaisi ? $part->beneficiaire_nom : ($designationsParLivreur[$part->livreur_id] ?? $part->beneficiaire_nom);
+    }
+
+    /**
+     * Désignations "Chauffeur-1"/"Convoyeur-2" de l'équipe courante d'un
+     * véhicule, indexées par livreur_id — reflète la composition ACTUELLE de
+     * l'équipe (pas celle au moment où la commission a été générée), au même
+     * titre que l'écran de configuration d'équipe.
+     *
+     * @return array<string, string>
+     */
+    private static function designationsEquipeParVehicule(?string $vehiculeId): array
+    {
+        if ($vehiculeId === null) {
+            return [];
+        }
+
+        $equipe = EquipeLivraison::where('vehicule_id', $vehiculeId)->first();
+        if (! $equipe) {
+            return [];
+        }
+
+        $roleCounts = [];
+        $designations = [];
+        foreach ($equipe->membres as $membre) {
+            if ($membre->livreur_id === null) {
+                continue;
+            }
+            $roleCounts[$membre->role] = ($roleCounts[$membre->role] ?? 0) + 1;
+            $label = $membre->role === 'chauffeur' ? 'Chauffeur' : 'Convoyeur';
+            $designations[$membre->livreur_id] = "{$label}-{$roleCounts[$membre->role]}";
+        }
+
+        return $designations;
     }
 
     /**

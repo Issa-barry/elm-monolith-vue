@@ -16,13 +16,19 @@ interface TypeOption {
     label: string;
     capacite_defaut: number;
 }
+interface SiteOption {
+    id: string;
+    nom: string;
+}
 
 const props = defineProps<{
     proprietaires: Option[];
     types: TypeOption[];
     initial_proprietaire_id: string | null;
-    initial_site_id: string | null;
-    currentSiteName: string;
+    sites: SiteOption[];
+    default_site_id: string | null;
+    can_change_site: boolean;
+    default_proprietaire_id: string | null;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -31,25 +37,23 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Nouveau véhicule', href: '#' },
 ];
 
-const lockedCategorie = !!(
-    props.initial_proprietaire_id || props.initial_site_id
-);
+// Catégorie verrouillée uniquement quand on arrive depuis la fiche d'un
+// propriétaire (implique "externe") — le site n'implique plus la catégorie :
+// un véhicule interne comme externe est désormais rattaché à un site.
+const lockedCategorie = !!props.initial_proprietaire_id;
 
 const form = useForm({
     nom_vehicule: '',
     immatriculation: '',
     type_vehicule_id: null as string | null,
-    categorie: props.initial_site_id
-        ? 'interne'
-        : props.initial_proprietaire_id
-          ? 'externe'
-          : (null as string | null),
+    categorie: props.initial_proprietaire_id
+        ? 'externe'
+        : (null as string | null),
     capacite_packs: null as number | null,
-    site_id: props.initial_site_id,
+    site_id: props.default_site_id,
     proprietaire_id: props.initial_proprietaire_id,
-    pris_en_charge_par_usine: props.initial_site_id
-        ? true
-        : (null as boolean | null),
+    pris_en_charge_par_usine: null as boolean | null,
+    commission_eligible: null as boolean | null,
     photo: null as File | null,
     is_active: true,
 });
@@ -58,11 +62,13 @@ const canSubmit = computed(() => {
     return (
         !form.processing &&
         !!form.categorie &&
-        (form.categorie === 'interne' || !!form.proprietaire_id) &&
+        !!form.proprietaire_id &&
+        !!form.site_id &&
         form.nom_vehicule.trim().length > 0 &&
         form.immatriculation.trim().length > 0 &&
         !!form.type_vehicule_id &&
-        form.pris_en_charge_par_usine !== null
+        form.pris_en_charge_par_usine !== null &&
+        form.commission_eligible !== null
     );
 });
 
@@ -112,8 +118,10 @@ function submit() {
                 :processing="form.processing"
                 :proprietaires="proprietaires"
                 :types="types"
-                :current-site-name="currentSiteName"
+                :sites="sites"
+                :can-change-site="can_change_site"
                 :locked-categorie="lockedCategorie"
+                :default-proprietaire-id="default_proprietaire_id"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />

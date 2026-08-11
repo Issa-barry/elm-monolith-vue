@@ -1,6 +1,7 @@
 ﻿<script setup lang="ts">
 import AuditDrawer from '@/components/AuditDrawer.vue';
 import ClickableTableRow from '@/components/ClickableTableRow.vue';
+import PeriodeStatusBanner from '@/components/commission/PeriodeStatusBanner.vue';
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -16,6 +17,10 @@ import {
 } from '@/components/ui/dropdown-menu';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
+import type {
+    PeriodeAffichee,
+    StatutCommissionResolu,
+} from '@/types/commission-status';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     Building2,
@@ -33,7 +38,7 @@ interface VehiculeInfo {
     immatriculation: string | null;
 }
 
-interface BeneficiaireRow {
+interface BeneficiaireRow extends StatutCommissionResolu {
     beneficiaire_id: string;
     beneficiaire_nom: string;
     telephone: string | null;
@@ -44,6 +49,7 @@ interface BeneficiaireRow {
     total_net_cumule: number;
     total_verse: number;
     solde_restant: number;
+    remaining_amount: number;
     nb_commandes: number;
     statut_global: string;
 }
@@ -70,6 +76,7 @@ const props = defineProps<{
     selected_periode: string;
     periodes_disponibles: PeriodeOption[];
     periode_courante: string;
+    periode_affichee: PeriodeAffichee | null;
     sites: { id: string; nom: string }[];
     can_payer: boolean;
 }>();
@@ -126,20 +133,6 @@ const currentFilters = computed(() => ({
     statut: props.filtre_statut ?? '',
     periode: props.selected_periode ?? '',
 }));
-
-function statutDotClass(s: string) {
-    return (
-        {
-            impaye: 'bg-red-500',
-            partiel: 'bg-amber-500',
-            paye: 'bg-emerald-500',
-        }[s] ?? 'bg-zinc-400 dark:bg-zinc-500'
-    );
-}
-
-function statutLabel(s: string) {
-    return { impaye: 'Impayé', partiel: 'Partiel', paye: 'Payé' }[s] ?? s;
-}
 
 // Dialog paiement
 const showPaiementDialog = ref(false);
@@ -269,6 +262,8 @@ function fmtTel(tel: string | null | undefined): string {
                     </button>
                 </div>
             </div>
+
+            <PeriodeStatusBanner :periode="periode_affichee" />
 
             <!-- KPIs -->
             <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
@@ -466,10 +461,8 @@ function fmtTel(tel: string | null | undefined): string {
                                 </td>
                                 <td class="px-5 py-3">
                                     <StatusDot
-                                        :label="statutLabel(b.statut_global)"
-                                        :dot-class="
-                                            statutDotClass(b.statut_global)
-                                        "
+                                        :status="b.display_status"
+                                        :label="b.display_label"
                                     />
                                 </td>
                                 <td class="px-4 py-3 text-right" @click.stop>
@@ -502,10 +495,7 @@ function fmtTel(tel: string | null | undefined): string {
                                                 Historique
                                             </DropdownMenuItem>
                                             <template
-                                                v-if="
-                                                    can_payer &&
-                                                    b.solde_restant > 0
-                                                "
+                                                v-if="can_payer && b.can_pay"
                                             >
                                                 <DropdownMenuSeparator />
                                                 <DropdownMenuItem

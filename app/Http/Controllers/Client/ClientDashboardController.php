@@ -315,7 +315,9 @@ class ClientDashboardController extends Controller
                 'immatriculation' => $vehicule->immatriculation,
                 'type_label' => $vehicule->type_label,
                 'is_active' => (bool) $vehicule->is_active,
-                'capacite_packs' => $vehicule->capacite_packs,
+                // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
+                // on retombe sur la capacité par défaut du type (cf. VehiculeController).
+                'capacite_packs' => $vehicule->capacite_packs ?? $vehicule->typeVehicule?->capacite_defaut,
                 'photo_url' => $vehicule->photo_url,
             ])
             ->values()
@@ -328,7 +330,7 @@ class ClientDashboardController extends Controller
                 'immatriculation' => $vehicule->immatriculation,
                 'type_label' => $vehicule->type_label,
                 'is_active' => (bool) $vehicule->is_active,
-                'capacite_packs' => $vehicule->capacite_packs,
+                'capacite_packs' => $vehicule->capacite_packs ?? $vehicule->typeVehicule?->capacite_defaut,
                 'photo_url' => $vehicule->photo_url,
             ])
             ->values()
@@ -483,6 +485,7 @@ class ClientDashboardController extends Controller
         }
 
         return Vehicule::query()
+            ->with('typeVehicule')
             ->where('organization_id', $organizationId)
             ->where(function ($query) use ($proprietaire, $livreur) {
                 if ($proprietaire !== null) {
@@ -506,6 +509,7 @@ class ClientDashboardController extends Controller
         }
 
         return Vehicule::query()
+            ->with('typeVehicule')
             ->where('organization_id', $organizationId)
             ->where('proprietaire_id', $proprietaire->id)
             ->orderBy('nom_vehicule')
@@ -621,7 +625,7 @@ class ClientDashboardController extends Controller
     private function calculateEarnings(Collection $partsVentes, Collection $partsLogistiques, float $fraisDepensesTotal = 0.0): array
     {
         $totalEarned = round(
-            (float) $partsVentes->sum('montant_net') + (float) $partsLogistiques->sum('montant_net'),
+            (float) $partsVentes->sum('montant_a_payer') + (float) $partsLogistiques->sum('montant_a_payer'),
             2
         );
         $totalPaid = round(
@@ -671,7 +675,7 @@ class ClientDashboardController extends Controller
                     'balance' => 0.0,
                 ];
             }
-            $stats[$vehicule->id]['total_earned'] += (float) $part->montant_net;
+            $stats[$vehicule->id]['total_earned'] += $part->montant_a_payer;
             $stats[$vehicule->id]['total_paid'] += (float) $part->montant_verse;
         }
 
@@ -691,7 +695,7 @@ class ClientDashboardController extends Controller
                     'balance' => 0.0,
                 ];
             }
-            $stats[$vehicule->id]['total_earned'] += (float) $part->montant_net;
+            $stats[$vehicule->id]['total_earned'] += $part->montant_a_payer;
             $stats[$vehicule->id]['total_paid'] += (float) $part->montant_verse;
         }
 
@@ -823,8 +827,9 @@ class ClientDashboardController extends Controller
                 'date_sort' => $date?->timestamp ?? 0,
                 'frais' => (float) $part->frais_supplementaires,
                 'montant_net' => (float) $part->montant_net,
+                'montant_a_payer' => $part->montant_a_payer,
                 'montant_verse' => (float) $part->montant_verse,
-                'montant_restant' => max(0, (float) $part->montant_net - (float) $part->montant_verse),
+                'montant_restant' => (float) $part->montant_restant,
                 'statut' => $part->statut?->value ?? (string) $part->getRawOriginal('statut'),
                 'statut_label' => $part->statut_label,
             ];
@@ -846,8 +851,9 @@ class ClientDashboardController extends Controller
                 'date_sort' => $date?->timestamp ?? 0,
                 'frais' => (float) $part->frais_supplementaires,
                 'montant_net' => (float) $part->montant_net,
+                'montant_a_payer' => $part->montant_a_payer,
                 'montant_verse' => (float) $part->montant_verse,
-                'montant_restant' => max(0, (float) $part->montant_net - (float) $part->montant_verse),
+                'montant_restant' => (float) $part->montant_restant,
                 'statut' => $part->statut?->value ?? (string) $part->getRawOriginal('statut'),
                 'statut_label' => $part->statut_label,
             ];

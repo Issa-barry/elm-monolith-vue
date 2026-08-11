@@ -24,6 +24,9 @@ class ProductionSeeder extends Seeder
 
             // ── Référentiels ──────────────────────────────────────────────────
             SitesSeeder::class,           // Sites réels (siège, usine, agences, dépôts)
+            // CategorieDefaultSeeder volontairement absent : "elm" n'a pas encore besoin de
+            // catégories (catalogue à 7 produits, cf. ProduitsSeeder).
+            OptionCatalogueDefaultSeeder::class, // Options système par défaut (Couleur, Taille, Pointure)
             ProduitsSeeder::class,        // Catalogue produits
             ParametreSeeder::class,       // Paramètres applicatifs par défaut
             TypeVehiculesSeeder::class,   // Types de véhicule par défaut

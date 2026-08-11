@@ -40,6 +40,7 @@ interface CommissionPart {
     montant_brut: number;
     frais_supplementaires: number;
     montant_net: number;
+    montant_a_payer: number;
     montant_verse: number;
     montant_restant: number;
     statut: string;
@@ -119,7 +120,7 @@ function aggregate(parts: CommissionPart[]) {
         (acc, p) => ({
             brut: acc.brut + p.montant_brut,
             frais: acc.frais + p.frais_supplementaires,
-            net: acc.net + p.montant_net,
+            net: acc.net + p.montant_a_payer,
             verse: acc.verse + p.montant_verse,
             restant: acc.restant + p.montant_restant,
         }),
@@ -437,7 +438,7 @@ function formatModePaiement(mode: string): string {
                                 <td
                                     class="px-4 py-3 text-right font-semibold tabular-nums"
                                 >
-                                    {{ formatGNF(part.montant_net) }}
+                                    {{ formatGNF(part.montant_a_payer) }}
                                 </td>
                                 <td
                                     class="px-4 py-3 text-right text-emerald-600 tabular-nums dark:text-emerald-400"
@@ -637,7 +638,7 @@ function formatModePaiement(mode: string): string {
                                 <td
                                     class="px-4 py-3 text-right font-semibold tabular-nums"
                                 >
-                                    {{ formatGNF(part.montant_net) }}
+                                    {{ formatGNF(part.montant_a_payer) }}
                                 </td>
                                 <td
                                     class="px-4 py-3 text-right text-emerald-600 tabular-nums dark:text-emerald-400"

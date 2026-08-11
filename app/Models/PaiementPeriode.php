@@ -131,6 +131,11 @@ class PaiementPeriode extends Model
         return $this->isValidee();
     }
 
+    public function peutEtrePayee(): bool
+    {
+        return $this->isValidee();
+    }
+
     // ── Scopes ────────────────────────────────────────────────────────────────
 
     public function scopeForOrg(Builder $query, string $orgId): Builder

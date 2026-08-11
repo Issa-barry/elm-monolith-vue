@@ -5,12 +5,15 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { edit } from '@/routes/user-password';
 import { Form, Head } from '@inertiajs/vue3';
+import { useToast } from 'primevue/usetoast';
 
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { type BreadcrumbItem } from '@/types';
+
+const toast = useToast();
 
 const breadcrumbItems: BreadcrumbItem[] = [
     {
@@ -44,6 +47,13 @@ const breadcrumbItems: BreadcrumbItem[] = [
                     ]"
                     class="space-y-6"
                     v-slot="{ errors, processing, recentlySuccessful }"
+                    @success="
+                        toast.add({
+                            severity: 'success',
+                            summary: 'Mot de passe mis à jour',
+                            life: 3000,
+                        })
+                    "
                 >
                     <div class="grid gap-2">
                         <Label for="current_password"

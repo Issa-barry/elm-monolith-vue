@@ -22,6 +22,15 @@ class CommissionGenerator
             return;
         }
 
+        // Éligibilité aux commissions figée au moment de la commande
+        // (commission_eligible_snapshot) — notion indépendante du mode de
+        // tarification (prix_vente/prix_usine, cf. ModeTarification) : un
+        // véhicule peut être pris en charge par l'usine sans être éligible aux
+        // commissions, et inversement. Voir VehiculeCommandeContextResolver.
+        if (! $commande->commission_eligible_snapshot) {
+            return;
+        }
+
         if (CommissionVente::where('commande_vente_id', $commande->id)->exists()) {
             return;
         }

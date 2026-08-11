@@ -52,16 +52,33 @@ class LivreurTest extends TestCase
     {
         $response = $this->actingAs($this->user)
             ->postJson(route('livreurs.store'), [
-                'nom' => 'Diallo',
-                'prenom' => 'Mamadou',
+                'nom_complet' => 'Mamadou Diallo',
                 'telephone' => '+224622000001',
             ]);
 
         $response->assertStatus(201)
-            ->assertJsonStructure(['id', 'nom', 'prenom', 'telephone', 'is_active']);
+            ->assertJsonStructure(['id', 'nom_complet', 'telephone', 'is_active']);
 
         $this->assertDatabaseHas('livreurs', [
             'organization_id' => $this->org->id,
+            'nom_complet' => 'Mamadou Diallo',
+        ]);
+    }
+
+    public function test_store_creates_livreur_avec_uniquement_un_surnom(): void
+    {
+        // nom_complet est facultatif — seul le téléphone est obligatoire.
+        $response = $this->actingAs($this->user)
+            ->postJson(route('livreurs.store'), [
+                'telephone' => '+224622000001',
+            ]);
+
+        $response->assertStatus(201);
+
+        $this->assertDatabaseHas('livreurs', [
+            'organization_id' => $this->org->id,
+            'telephone' => '+224622000001',
+            'nom_complet' => null,
         ]);
     }
 
@@ -70,7 +87,7 @@ class LivreurTest extends TestCase
         $this->actingAs($this->user)
             ->postJson(route('livreurs.store'), [])
             ->assertStatus(422)
-            ->assertJsonValidationErrors(['nom', 'prenom', 'telephone']);
+            ->assertJsonValidationErrors(['telephone']);
     }
 
     public function test_store_fails_with_duplicate_telephone(): void
@@ -82,8 +99,7 @@ class LivreurTest extends TestCase
 
         $this->actingAs($this->user)
             ->postJson(route('livreurs.store'), [
-                'nom' => 'Barry',
-                'prenom' => 'Alpha',
+                'nom_complet' => 'Alpha Barry',
                 'telephone' => '+224622000002',
             ])
             ->assertStatus(422)

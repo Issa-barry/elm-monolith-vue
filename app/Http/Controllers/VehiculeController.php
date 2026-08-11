@@ -2,15 +2,21 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Categorie;
 use App\Models\Depense;
+use App\Models\EquipeLivreur;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TypeVehicule;
+use App\Models\User;
 use App\Models\Vehicule;
+use App\Models\VehiculeCapacite;
 use App\Models\VehiculeFrais;
 use App\Services\ImageService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -36,7 +42,11 @@ class VehiculeController extends Controller
             'type_vehicule_id' => $v->type_vehicule_id,
             'type_label' => $v->type_label,
             'categorie' => $v->categorie,
-            'capacite_packs' => $v->capacite_packs,
+            // Capacité propre au véhicule si définie (override), sinon celle
+            // par défaut de son type — c'est cette dernière qui est utilisée
+            // en pratique tant qu'aucune capacité spécifique n'a été saisie
+            // (import flotte notamment : capacite_packs n'est jamais renseigné).
+            'capacite_packs' => $v->capacite_packs ?? $v->typeVehicule?->capacite_defaut,
             'site_id' => $v->site_id,
             'site_nom' => $v->relationLoaded('site') ? $v->site?->nom : null,
             'proprietaire_id' => $v->proprietaire_id,
@@ -46,15 +56,19 @@ class VehiculeController extends Controller
             'agence_nom' => $agence?->nom,
             'equipe_id' => $equipe?->id,
             'equipe_nom' => $equipe ? $v->nom_vehicule : null,
-            'livreur_principal_nom' => $membres->first()?->livreur
-                ? trim($membres->first()->livreur->prenom.' '.$membres->first()->livreur->nom)
+            'livreur_principal_nom' => $membres->first()
+                ? $this->membreLabel($membres->first())
                 : null,
-            'equipe_membres' => $membres->map(fn ($m) => [
-                'livreur_nom' => $m->livreur ? trim($m->livreur->prenom.' '.$m->livreur->nom) : null,
-                'telephone' => $m->livreur?->telephone ?? null,
-                'role' => $m->role,
-                'taux_commission' => (float) $m->taux_commission,
-                'montant_par_pack' => (int) $m->montant_par_pack,
+            // Jamais de prenom/nom affiché côté Eau La Maman : le libellé
+            // (nom_complet, ou "Chauffeur-1" en filet de sécurité pour les
+            // données historiques sans nom_complet) est déjà composé ici pour
+            // ne pas dupliquer cette logique côté frontend — voir self::membreLabel().
+            'equipe_membres' => $this->membresAvecLabel($membres)->map(fn ($m) => [
+                'livreur_nom' => $m['label'],
+                'telephone' => $m['membre']->livreur?->telephone ?? null,
+                'role' => $m['membre']->role,
+                'taux_commission' => (float) $m['membre']->taux_commission,
+                'montant_par_pack' => (int) $m['membre']->montant_par_pack,
             ])->values()->all(),
             'frais' => $v->relationLoaded('frais')
                 ? $v->frais->map(fn (VehiculeFrais $f) => [
@@ -67,17 +81,64 @@ class VehiculeController extends Controller
                 ])->values()->all()
                 : [],
             'frais_total' => $v->relationLoaded('frais') ? (float) $v->frais->sum('montant') : 0.0,
+            // Capacité par catégorie (nouveau régime, cf. VehiculeCapaciteService) — vide tant
+            // que l'organisation n'a rien configuré, auquel cas capacite_packs ci-dessus fait
+            // toujours foi seul.
+            'capacites' => $v->relationLoaded('capacites')
+                ? $v->capacites->map(fn (VehiculeCapacite $c) => [
+                    'id' => $c->id,
+                    'categorie_id' => $c->categorie_id,
+                    'categorie_nom' => $c->categorie?->nom,
+                    'capacite_max' => $c->capacite_max,
+                ])->values()->all()
+                : [],
             'pris_en_charge_par_usine' => $v->pris_en_charge_par_usine,
+            'commission_eligible' => $v->commission_eligible,
             'photo_url' => $v->photo_url,
             'is_active' => $v->is_active,
         ];
+    }
+
+    /**
+     * Libellé = nom_complet du livreur — jamais construit depuis prenom/nom,
+     * qui ne sont jamais affichés côté Eau La Maman. nom_complet est désormais
+     * toujours renseigné à la création d'un livreur (repli automatique sur une
+     * désignation "Chauffeur-1 {véhicule}", cf. Livreur::designationParDefaut()),
+     * donc PAS de préfixe "Chauffeur-1 — " ajouté ici : ça doublonnerait ce que
+     * nom_complet porte déjà. Le calcul d'ordinal ne sert plus que de filet de
+     * sécurité pour les données historiques créées avant ce repli automatique
+     * (nom_complet encore vide en base).
+     *
+     * @return Collection<int, array{membre: EquipeLivreur, label: string}>
+     */
+    private function membresAvecLabel(Collection $membres): Collection
+    {
+        $roleCounts = [];
+
+        return $membres->map(function (EquipeLivreur $m) use (&$roleCounts) {
+            $nomComplet = trim((string) ($m->livreur?->nom_complet ?? ''));
+
+            if ($nomComplet !== '') {
+                return ['membre' => $m, 'label' => $nomComplet];
+            }
+
+            $roleCounts[$m->role] = ($roleCounts[$m->role] ?? 0) + 1;
+            $ordinal = ($m->role === 'chauffeur' ? 'Chauffeur-' : 'Convoyeur-').$roleCounts[$m->role];
+
+            return ['membre' => $m, 'label' => $ordinal];
+        });
+    }
+
+    private function membreLabel(EquipeLivreur $m): string
+    {
+        return $this->membresAvecLabel(collect([$m]))->first()['label'];
     }
 
     public function index(): Response
     {
         $this->authorize('viewAny', Vehicule::class);
 
-        $vehicules = Vehicule::with(['typeVehicule', 'site', 'proprietaire.user.sites', 'equipe.membres.livreur'])
+        $vehicules = Vehicule::with(['typeVehicule', 'site', 'proprietaire.user.sites', 'equipe.membres.livreur', 'capacites.categorie'])
             ->where('organization_id', auth()->user()->organization_id)
             ->orderBy('nom_vehicule')
             ->get()
@@ -93,42 +154,42 @@ class VehiculeController extends Controller
         $this->authorize('create', Vehicule::class);
 
         $user = auth()->user();
+        $orgId = $user->organization_id;
         $initialProprietaireId = null;
-        $initialSiteId = null;
-        $currentSiteName = '';
 
         if ($request->filled('proprietaire_id')) {
             $initialProprietaireId = Proprietaire::query()
-                ->where('organization_id', $user->organization_id)
+                ->where('organization_id', $orgId)
                 ->where('is_active', true)
                 ->whereKey($request->string('proprietaire_id')->toString())
                 ->value('id');
         }
 
-        if ($request->filled('site_id')) {
-            $contextSite = Site::query()
-                ->where('organization_id', $user->organization_id)
-                ->whereKey($request->string('site_id')->toString())
-                ->first();
-            if ($contextSite) {
-                $initialSiteId = $contextSite->id;
-                $currentSiteName = $contextSite->nom;
-            }
-        }
+        $canChangeSite = $user->isAdmin();
+        $defaultSiteId = $this->defaultSiteId();
 
-        if (! $currentSiteName) {
-            $currentSiteName = ($user->sites()->wherePivot('is_default', true)->first()
-                ?? $user->sites()->first())?->nom
-                ?? $user->organization?->nom
-                ?? '';
+        // Un admin arrivant depuis une page de site (ex: ?site_id=... depuis
+        // Sites/Show) voit ce site pré-sélectionné au lieu de son propre site
+        // par défaut. Un non-admin ne peut de toute façon choisir que son site
+        // (verrouillé côté formulaire), donc ce contexte ne s'applique pas à lui.
+        if ($canChangeSite && $request->filled('site_id')) {
+            $contextSiteId = Site::query()
+                ->where('organization_id', $orgId)
+                ->whereKey($request->string('site_id')->toString())
+                ->value('id');
+            if ($contextSiteId) {
+                $defaultSiteId = $contextSiteId;
+            }
         }
 
         return Inertia::render('Vehicules/Create', [
             'proprietaires' => $this->proprietairesOptions(),
             'types' => $this->typesOptions(),
             'initial_proprietaire_id' => $initialProprietaireId,
-            'initial_site_id' => $initialSiteId,
-            'currentSiteName' => $currentSiteName,
+            'sites' => $this->sitesOptions($user, $orgId),
+            'default_site_id' => $defaultSiteId,
+            'can_change_site' => $canChangeSite,
+            'default_proprietaire_id' => $this->defaultProprietaireInterneId($orgId),
         ]);
     }
 
@@ -136,49 +197,30 @@ class VehiculeController extends Controller
     {
         $this->authorize('create', Vehicule::class);
 
-        $orgId = auth()->user()->organization_id;
+        $user = auth()->user();
+        $orgId = $user->organization_id;
         abort_if(! $orgId, 403, "Votre compte n'est associé à aucune organisation.");
 
-        $data = $request->validate([
-            'nom_vehicule' => 'required|string|max:100',
-            'immatriculation' => [
-                'required', 'string', 'max:20',
-                Rule::unique('vehicules', 'immatriculation')->where('organization_id', $orgId),
-            ],
-            'type_vehicule_id' => [
-                'required', 'string',
-                Rule::exists('type_vehicules', 'id')->where('organization_id', $orgId)->whereNull('deleted_at'),
-            ],
-            'categorie' => ['required', 'in:interne,externe'],
-            'capacite_packs' => 'nullable|integer|min:1|max:99999',
-            'site_id' => [
-                Rule::requiredIf(fn () => $request->input('categorie') === 'interne'),
-                'nullable',
-                'string',
-                Rule::exists('sites', 'id')->where('organization_id', $orgId),
-            ],
-            'proprietaire_id' => [
-                Rule::requiredIf(fn () => $request->input('categorie') === 'externe'),
-                'nullable',
-                'string',
-                Rule::exists('proprietaires', 'id')->where('organization_id', $orgId),
-            ],
-            'pris_en_charge_par_usine' => 'required|boolean',
-            'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
-            'is_active' => 'boolean',
-        ], $this->messages());
+        $data = $request->validate($this->validationRules($orgId), $this->messages());
+
+        // Non-admin : ne peut créer que sur son(ses) propre(s) site(s) — un
+        // admin peut choisir n'importe quel site de l'organisation.
+        if (! $user->isAdmin()) {
+            $allowedSiteIds = $user->sites()->pluck('sites.id')->all();
+            abort_unless(
+                in_array($data['site_id'], $allowedSiteIds, true),
+                403,
+                'Vous ne pouvez créer un véhicule que pour votre site.'
+            );
+        }
 
         $data = $this->normalizeStrings($data);
 
-        // Interne : pas de propriétaire externe, prise en charge obligatoire
+        // Interne : prise en charge obligatoire, propriétaire par défaut
+        // (Moussa SIDIBE) si non précisé explicitement.
         if ($data['categorie'] === 'interne') {
-            $data['proprietaire_id'] = null;
+            $data['proprietaire_id'] ??= $this->defaultProprietaireInterneId($orgId);
             $data['pris_en_charge_par_usine'] = true;
-        }
-
-        // Externe : pas de site
-        if ($data['categorie'] === 'externe') {
-            $data['site_id'] = null;
         }
 
         if ($request->hasFile('photo')) {
@@ -197,7 +239,7 @@ class VehiculeController extends Controller
     {
         $this->authorize('view', $vehicule);
 
-        $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'equipe.membres.livreur', 'equipe.proprietaire']);
+        $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'equipe.membres.livreur', 'equipe.proprietaire', 'capacites.categorie']);
 
         $depenses = Depense::where('beneficiaire_type', 'vehicule')
             ->where('beneficiaire_id', $vehicule->id)
@@ -224,8 +266,7 @@ class VehiculeController extends Controller
 
                 return [
                     'livreur_id' => $m->livreur_id,
-                    'nom' => $m->livreur?->nom ?? '',
-                    'prenom' => $m->livreur?->prenom ?? '',
+                    'nom_complet' => $m->livreur?->nom_complet,
                     'telephone' => $m->livreur?->telephone ?? '',
                     'role' => $role,
                     'montant_par_pack' => (float) $m->montant_par_pack,
@@ -252,6 +293,7 @@ class VehiculeController extends Controller
             'depenses' => $depenses,
             'equipe' => $equipeData,
             'proprietaires' => $this->proprietairesOptions(),
+            'categories' => $this->categoriesOptions(),
         ]);
     }
 
@@ -351,16 +393,16 @@ class VehiculeController extends Controller
         $this->authorize('update', $vehicule);
 
         $user = auth()->user();
+        $orgId = $user->organization_id;
         $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'equipe.membres.livreur']);
 
         return Inertia::render('Vehicules/Edit', [
             'vehicule' => $this->vehiculeData($vehicule),
             'proprietaires' => $this->proprietairesOptions(),
             'types' => $this->typesOptions(),
-            'currentSiteName' => ($user->sites()->wherePivot('is_default', true)->first()
-                ?? $user->sites()->first())?->nom
-                ?? $user->organization?->nom
-                ?? '',
+            'sites' => $this->sitesOptions($user, $orgId),
+            'can_change_site' => $user->isAdmin(),
+            'default_proprietaire_id' => $this->defaultProprietaireInterneId($orgId),
         ]);
     }
 
@@ -368,37 +410,26 @@ class VehiculeController extends Controller
     {
         $this->authorize('update', $vehicule);
 
-        $orgId = auth()->user()->organization_id;
+        $user = auth()->user();
+        $orgId = $user->organization_id;
 
-        $data = $request->validate([
-            'nom_vehicule' => 'required|string|max:100',
-            'immatriculation' => [
-                'required', 'string', 'max:20',
-                Rule::unique('vehicules', 'immatriculation')
-                    ->where('organization_id', $orgId)
-                    ->ignore($vehicule->id),
-            ],
-            'type_vehicule_id' => [
-                'required', 'string',
-                Rule::exists('type_vehicules', 'id')->where('organization_id', $orgId)->whereNull('deleted_at'),
-            ],
-            'categorie' => ['required', 'in:interne,externe'],
-            'capacite_packs' => 'nullable|integer|min:1|max:99999',
-            'proprietaire_id' => [
-                Rule::requiredIf(fn () => $request->input('categorie') === 'externe'),
-                'nullable',
-                'string',
-                Rule::exists('proprietaires', 'id')->where('organization_id', $orgId),
-            ],
-            'pris_en_charge_par_usine' => 'required|boolean',
-            'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
-            'is_active' => 'boolean',
-        ], $this->messages());
+        $data = $request->validate($this->validationRules($orgId, $vehicule), $this->messages());
+
+        // Non-admin : ne peut affecter le véhicule qu'à son(ses) propre(s)
+        // site(s) — un admin peut choisir n'importe quel site de l'organisation.
+        if (! $user->isAdmin()) {
+            $allowedSiteIds = $user->sites()->pluck('sites.id')->all();
+            abort_unless(
+                in_array($data['site_id'], $allowedSiteIds, true),
+                403,
+                'Vous ne pouvez pas choisir ce site.'
+            );
+        }
 
         $data = $this->normalizeStrings($data);
 
         if ($data['categorie'] === 'interne') {
-            $data['proprietaire_id'] = null;
+            $data['proprietaire_id'] ??= $this->defaultProprietaireInterneId($orgId);
             $data['pris_en_charge_par_usine'] = true;
         }
 
@@ -455,6 +486,58 @@ class VehiculeController extends Controller
             ->toArray();
     }
 
+    private function categoriesOptions(): array
+    {
+        return Categorie::where('organization_id', auth()->user()->organization_id)
+            ->orderBy('nom')
+            ->get(['id', 'nom'])
+            ->map(fn (Categorie $c) => ['value' => $c->id, 'label' => $c->nom])
+            ->toArray();
+    }
+
+    /**
+     * Synchronise intégralement les capacités par catégorie du véhicule (supprime puis
+     * recrée) — plus simple qu'un CRUD ligne à ligne pour une petite liste éditée en bloc
+     * depuis le formulaire, et évite les soucis de contrainte unique(vehicule_id, categorie_id)
+     * lors d'un remplacement de catégorie sur une ligne existante.
+     */
+    public function syncCapacites(Request $request, Vehicule $vehicule): RedirectResponse
+    {
+        $this->authorize('update', $vehicule);
+
+        $orgId = auth()->user()->organization_id;
+
+        $data = $request->validate([
+            'capacites' => 'array',
+            'capacites.*.categorie_id' => [
+                'required', 'string',
+                Rule::exists('categories', 'id')->where('organization_id', $orgId),
+                'distinct',
+            ],
+            'capacites.*.capacite_max' => 'required|integer|min:1|max:99999',
+        ], [
+            'capacites.*.categorie_id.required' => 'La catégorie est obligatoire.',
+            'capacites.*.categorie_id.exists' => 'Catégorie invalide.',
+            'capacites.*.categorie_id.distinct' => 'Chaque catégorie ne peut avoir qu\'une seule ligne de capacité.',
+            'capacites.*.capacite_max.required' => 'La capacité est obligatoire.',
+            'capacites.*.capacite_max.min' => 'La capacité doit être supérieure à 0.',
+        ]);
+
+        DB::transaction(function () use ($data, $vehicule, $orgId) {
+            $vehicule->capacites()->delete();
+            foreach ($data['capacites'] ?? [] as $ligne) {
+                $vehicule->capacites()->create([
+                    'organization_id' => $orgId,
+                    'categorie_id' => $ligne['categorie_id'],
+                    'capacite_max' => $ligne['capacite_max'],
+                ]);
+            }
+        });
+
+        return redirect()->route('vehicules.show', $vehicule)
+            ->with('success', 'Capacités mises à jour.');
+    }
+
     private function proprietairesOptions(): array
     {
         return Proprietaire::where('organization_id', auth()->user()->organization_id)
@@ -469,6 +552,42 @@ class VehiculeController extends Controller
             ->toArray();
     }
 
+    /**
+     * Sites sélectionnables pour le formulaire véhicule : un admin voit tous
+     * les sites de l'organisation (peut créer/affecter pour n'importe lequel),
+     * un non-admin ne voit que le ou les sites auxquels il est rattaché — voir
+     * self::store()/self::update() pour l'application côté serveur de cette règle.
+     *
+     * @return array<int, array{id: string, nom: string}>
+     */
+    private function sitesOptions(User $user, string $orgId): array
+    {
+        $sites = $user->isAdmin()
+            ? Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom'])
+            : $user->sites()->where('sites.organization_id', $orgId)->orderBy('sites.nom')->get(['sites.id', 'sites.nom']);
+
+        return $sites->map(fn (Site $s) => ['id' => $s->id, 'nom' => $s->nom])->values()->all();
+    }
+
+    private function defaultSiteId(): ?string
+    {
+        return auth()->user()->sites()
+            ->wherePivot('is_default', true)
+            ->select('sites.id')
+            ->first()?->id;
+    }
+
+    /**
+     * Propriétaire par défaut des véhicules "interne" (propriété de
+     * l'organisation) — voir database/seeders/ProprietairesSeeder.php.
+     */
+    private function defaultProprietaireInterneId(string $orgId): ?string
+    {
+        return Proprietaire::where('organization_id', $orgId)
+            ->where('telephone', '+224622602693')
+            ->value('id');
+    }
+
     private function normalizeStrings(array $data): array
     {
         if (! empty($data['nom_vehicule'])) {
@@ -481,6 +600,44 @@ class VehiculeController extends Controller
         return $data;
     }
 
+    /**
+     * Règles communes à store() et update() — seule la contrainte d'unicité
+     * de l'immatriculation diffère (ignore() du véhicule courant en édition).
+     */
+    private function validationRules(string $orgId, ?Vehicule $vehicule = null): array
+    {
+        $immatriculationRule = Rule::unique('vehicules', 'immatriculation')->where('organization_id', $orgId);
+        if ($vehicule) {
+            $immatriculationRule = $immatriculationRule->ignore($vehicule->id);
+        }
+
+        return [
+            'nom_vehicule' => 'required|string|max:100',
+            'immatriculation' => ['required', 'string', 'max:20', $immatriculationRule],
+            'type_vehicule_id' => [
+                'required', 'string',
+                Rule::exists('type_vehicules', 'id')->where('organization_id', $orgId)->whereNull('deleted_at'),
+            ],
+            'categorie' => ['required', 'in:interne,externe'],
+            'capacite_packs' => 'nullable|integer|min:1|max:99999',
+            // Chaque véhicule (interne ou externe) est rattaché à un site.
+            'site_id' => [
+                'required', 'string',
+                Rule::exists('sites', 'id')->where('organization_id', $orgId),
+            ],
+            'proprietaire_id' => [
+                Rule::requiredIf(fn () => request()->input('categorie') === 'externe'),
+                'nullable',
+                'string',
+                Rule::exists('proprietaires', 'id')->where('organization_id', $orgId),
+            ],
+            'pris_en_charge_par_usine' => 'required|boolean',
+            'commission_eligible' => 'required|boolean',
+            'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
+            'is_active' => 'boolean',
+        ];
+    }
+
     private function messages(): array
     {
         return [
@@ -491,7 +648,7 @@ class VehiculeController extends Controller
             'type_vehicule_id.exists' => 'Type de véhicule invalide.',
             'categorie.required' => 'La catégorie est obligatoire.',
             'categorie.in' => 'Catégorie invalide (interne ou externe).',
-            'site_id.required' => 'Le site est obligatoire pour un véhicule interne.',
+            'site_id.required' => 'Le site est obligatoire.',
             'site_id.exists' => 'Le site sélectionné est introuvable.',
             'proprietaire_id.required' => 'Le propriétaire est obligatoire pour un véhicule externe.',
             'proprietaire_id.exists' => 'Le propriétaire sélectionné est introuvable.',
@@ -499,6 +656,7 @@ class VehiculeController extends Controller
             'photo.mimes' => 'La photo doit être au format jpg, jpeg, png ou webp.',
             'photo.max' => 'La photo ne peut pas dépasser 3 Mo.',
             'pris_en_charge_par_usine.required' => 'Veuillez indiquer si les dépenses sont prises en charge par l\'usine (Oui ou Non).',
+            'commission_eligible.required' => 'Veuillez indiquer si ce véhicule est éligible aux commissions (Oui ou Non).',
         ];
     }
 }

@@ -34,22 +34,22 @@ class PaiementFicheTest extends TestCase
         return $this->user->sites()->wherePivot('is_default', true)->first();
     }
 
-    private function makePeriode(): PaiementPeriode
+    private function makePeriode(StatutPeriodePaiement $statut = StatutPeriodePaiement::VALIDEE): PaiementPeriode
     {
         return PaiementPeriode::create([
             'organization_id' => $this->org->id,
-            'reference' => 'PAY-202606-0001',
+            'reference' => 'PAY-202606-0001-'.uniqid(),
             'type' => TypePeriodePaiement::LIVREUR->value,
             'date_debut' => '2026-06-01',
             'date_fin' => '2026-06-15',
-            'statut' => StatutPeriodePaiement::VALIDEE->value,
+            'statut' => $statut->value,
             'created_by' => $this->user->id,
         ]);
     }
 
-    private function makeFiche(array $override = []): PaiementFiche
+    private function makeFiche(array $override = [], StatutPeriodePaiement $statutPeriode = StatutPeriodePaiement::VALIDEE): PaiementFiche
     {
-        $periode = $this->makePeriode();
+        $periode = $this->makePeriode($statutPeriode);
         $site = $this->defaultSite();
 
         $fiche = PaiementFiche::create(array_merge([
@@ -243,5 +243,75 @@ class PaiementFicheTest extends TestCase
 
         $fiche->refresh();
         $this->assertSame(StatutFichePaiement::A_PAYER->value, $fiche->statut->value);
+    }
+
+    // ── Verrou par statut de période ──────────────────────────────────────────
+
+    public function test_paiement_refuse_si_periode_brouillon(): void
+    {
+        $fiche = $this->makeFiche(statutPeriode: StatutPeriodePaiement::BROUILLON);
+
+        $this->actingAs($this->user)
+            ->post(route('comptabilite.fiches.paiements.store', $fiche), [
+                'montant' => 100000,
+                'mode_paiement' => 'especes',
+                'date_paiement' => '2026-06-15',
+            ])
+            ->assertStatus(422);
+
+        $this->assertDatabaseCount('paiement_fiche_paiements', 0);
+    }
+
+    public function test_paiement_refuse_si_periode_calculee(): void
+    {
+        $fiche = $this->makeFiche(statutPeriode: StatutPeriodePaiement::CALCULEE);
+
+        $this->actingAs($this->user)
+            ->post(route('comptabilite.fiches.paiements.store', $fiche), [
+                'montant' => 100000,
+                'mode_paiement' => 'especes',
+                'date_paiement' => '2026-06-15',
+            ])
+            ->assertStatus(422);
+
+        $this->assertDatabaseCount('paiement_fiche_paiements', 0);
+    }
+
+    public function test_paiement_refuse_si_periode_cloturee(): void
+    {
+        $fiche = $this->makeFiche(statutPeriode: StatutPeriodePaiement::CLOTUREE);
+
+        $this->actingAs($this->user)
+            ->post(route('comptabilite.fiches.paiements.store', $fiche), [
+                'montant' => 100000,
+                'mode_paiement' => 'especes',
+                'date_paiement' => '2026-06-15',
+            ])
+            ->assertStatus(422);
+
+        $this->assertDatabaseCount('paiement_fiche_paiements', 0);
+    }
+
+    public function test_destroy_paiement_refuse_si_periode_cloturee_apres_coup(): void
+    {
+        $fiche = $this->makeFiche();
+
+        $this->actingAs($this->user)
+            ->post(route('comptabilite.fiches.paiements.store', $fiche), [
+                'montant' => 300000,
+                'mode_paiement' => 'especes',
+                'date_paiement' => '2026-06-15',
+            ]);
+
+        $paiement = PaiementFichePaiement::where('fiche_id', $fiche->id)->first();
+
+        // La période est clôturée après coup : l'historique est figé, plus d'annulation possible.
+        $fiche->periode->update(['statut' => StatutPeriodePaiement::CLOTUREE->value]);
+
+        $this->actingAs($this->user)
+            ->delete(route('comptabilite.fiches.paiements.destroy', $paiement))
+            ->assertStatus(422);
+
+        $this->assertDatabaseHas('paiement_fiche_paiements', ['id' => $paiement->id]);
     }
 }

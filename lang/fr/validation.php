@@ -159,5 +159,6 @@ return [
         'telephone' => 'téléphone',
         'telephone_country' => 'pays',
         'telephone_local' => 'numéro local',
+        'code_barres' => 'code-barres',
     ],
 ];

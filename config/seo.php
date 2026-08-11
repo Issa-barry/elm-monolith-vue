@@ -23,10 +23,7 @@ return [
     ],
 
     // Pages publiques indexables. La vitrine (eau-la-maman.com, dépôt elm-vitrine)
-    // porte désormais tout le contenu marketing (/, /contact, /help, /privacy-policy,
-    // /delete-account) — seule /register/livreur reste ici tant qu'elle n'a pas
-    // été migrée côté vitrine.
-    'sitemap' => [
-        ['path' => '/register/livreur', 'priority' => '0.7', 'changefreq' => 'monthly'],
-    ],
+    // porte désormais tout le contenu marketing, y compris /register/livreur —
+    // fello.eau-la-maman.com ne fait plus que rediriger vers elle. Rien à indexer ici.
+    'sitemap' => [],
 ];

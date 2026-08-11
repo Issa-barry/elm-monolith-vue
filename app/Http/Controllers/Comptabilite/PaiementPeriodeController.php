@@ -345,6 +345,14 @@ class PaiementPeriodeController extends Controller
     {
         $this->authorize('cloturer', $periode);
 
+        $resteAPayer = (float) $periode->fiches()->sum('montant_net') - (float) $periode->fiches()->sum('montant_paye');
+        if ($resteAPayer > 0.009) {
+            return back()->with('error', sprintf(
+                'Impossible de clôturer : il reste %s GNF à payer sur cette période.',
+                number_format($resteAPayer, 0, ',', ' ')
+            ));
+        }
+
         $periode->update(['statut' => StatutPeriodePaiement::CLOTUREE->value]);
 
         app(AuditLogService::class)->record($periode, AuditEvent::STATUS_CHANGED, auth()->user(), null, null, [

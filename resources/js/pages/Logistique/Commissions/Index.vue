@@ -1,4 +1,5 @@
 ﻿<script setup lang="ts">
+import PeriodeStatusBanner from '@/components/commission/PeriodeStatusBanner.vue';
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
@@ -14,19 +15,24 @@ import {
 } from '@/components/ui/dropdown-menu';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
+import type {
+    PeriodeAffichee,
+    StatutCommissionResolu,
+} from '@/types/commission-status';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { HandCoins, MoreHorizontal, Truck, User } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface LivreurRow {
+interface LivreurRow extends StatutCommissionResolu {
     livreur_id: number;
     nom: string;
     telephone: string | null;
     vehicules: string | null;
     impaye: number;
     paye: number;
+    remaining_amount: number;
 }
 
 interface Kpis {
@@ -55,6 +61,7 @@ const props = defineProps<{
     filtre_site: string;
     selected_periode: string;
     periodes_disponibles: PeriodeOption[];
+    periode_affichee: PeriodeAffichee | null;
     sites: SiteOption[];
     can_payer: boolean;
 }>();
@@ -157,20 +164,6 @@ function handlePaiementSubmit(payload: {
     );
 }
 
-// ── Statuts ────────────────────────────────────────────────────────────────────
-
-interface StatutBadge {
-    label: string;
-    dotClass: string;
-}
-
-function livreurStatuts(l: LivreurRow): StatutBadge[] {
-    const badges: StatutBadge[] = [];
-    if (l.impaye > 0) badges.push({ label: 'Impayé', dotClass: 'bg-red-500' });
-    if (l.paye > 0) badges.push({ label: 'Payé', dotClass: 'bg-emerald-500' });
-    return badges;
-}
-
 // ── Formatage ─────────────────────────────────────────────────────────────────
 
 function formatGNF(val: number | null | undefined): string {
@@ -208,6 +201,8 @@ function formatPhone(tel: string | null): string {
                     </p>
                 </div>
             </div>
+
+            <PeriodeStatusBanner :periode="periode_affichee" />
 
             <!-- ── KPIs ──────────────────────────────────────────────────────── -->
             <div class="grid grid-cols-3 gap-3">
@@ -348,15 +343,11 @@ function formatPhone(tel: string | null): string {
                                 >
                             </td>
                             <td class="px-4 py-3">
-                                <div class="flex flex-col gap-1">
-                                    <StatusDot
-                                        v-for="s in livreurStatuts(l)"
-                                        :key="s.label"
-                                        :label="s.label"
-                                        :dot-class="s.dotClass"
-                                        class="text-xs text-muted-foreground"
-                                    />
-                                </div>
+                                <StatusDot
+                                    :status="l.display_status"
+                                    :label="l.display_label"
+                                    class="text-xs text-muted-foreground"
+                                />
                             </td>
                             <td class="px-4 py-3 text-right tabular-nums">
                                 {{ formatGNF(l.impaye + l.paye) }}
@@ -394,9 +385,7 @@ function formatPhone(tel: string | null): string {
                                                 Détail
                                             </Link>
                                         </DropdownMenuItem>
-                                        <template
-                                            v-if="can_payer && l.impaye > 0"
-                                        >
+                                        <template v-if="can_payer && l.can_pay">
                                             <DropdownMenuSeparator />
                                             <DropdownMenuItem
                                                 class="cursor-pointer"

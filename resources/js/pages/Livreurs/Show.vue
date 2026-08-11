@@ -25,9 +25,9 @@ interface EquipeItem {
 
 interface LivreurData {
     id: string;
-    nom: string;
-    prenom: string;
-    nom_complet: string;
+    // Identité civile jamais affichée côté Eau La Maman — voir
+    // LivreurController. nom_complet est facultatif (surnom possible).
+    nom_complet: string | null;
     telephone: string | null;
     is_active: boolean;
     has_account: boolean;
@@ -49,7 +49,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     ...(props.is_staff
         ? [{ title: 'Livreurs', href: '/backoffice/livreurs' }]
         : []),
-    { title: props.livreur.nom_complet, href: '#' },
+    { title: props.livreur.nom_complet ?? 'Livreur', href: '#' },
 ];
 
 const Layout = computed(() => (props.is_staff ? AppLayout : ClientLayout));
@@ -57,7 +57,7 @@ const showInfo = ref(false);
 </script>
 
 <template>
-    <Head :title="`${livreur.nom_complet} — Livreur`" />
+    <Head :title="`${livreur.nom_complet ?? 'Livreur'} — Livreur`" />
 
     <component
         :is="Layout"
@@ -81,7 +81,7 @@ const showInfo = ref(false);
                                 <h1
                                     class="text-xl font-semibold tracking-tight"
                                 >
-                                    {{ livreur.nom_complet }}
+                                    {{ livreur.nom_complet ?? '—' }}
                                 </h1>
                                 <StatusDot
                                     :label="
@@ -113,20 +113,6 @@ const showInfo = ref(false);
                     <!-- Détail fiche (toggle) -->
                     <div v-if="showInfo" class="mt-4 space-y-3 border-t pt-4">
                         <div class="grid grid-cols-2 gap-3">
-                            <div class="rounded-lg border bg-background p-3">
-                                <p class="text-xs text-muted-foreground">
-                                    Prénom
-                                </p>
-                                <p class="mt-0.5 text-sm font-medium">
-                                    {{ livreur.prenom }}
-                                </p>
-                            </div>
-                            <div class="rounded-lg border bg-background p-3">
-                                <p class="text-xs text-muted-foreground">Nom</p>
-                                <p class="mt-0.5 text-sm font-medium">
-                                    {{ livreur.nom }}
-                                </p>
-                            </div>
                             <div class="rounded-lg border bg-background p-3">
                                 <p class="text-xs text-muted-foreground">
                                     Compte

@@ -11,9 +11,43 @@ interface Option {
     label: string;
 }
 
+interface Categorie {
+    id: string;
+    nom: string;
+    parent_id: string | null;
+}
+
+interface FournisseurOption {
+    id: string;
+    nom_complet: string;
+    phone: string | null;
+}
+
+interface OptionCatalogueValeur {
+    id: string;
+    valeur: string;
+}
+
+interface OptionCatalogue {
+    id: string;
+    nom: string;
+    valeurs: OptionCatalogueValeur[];
+}
+
+interface Limites {
+    max_photos_produit: number;
+    max_options_produit: number;
+    max_valeurs_option: number;
+    max_variantes_produit: number;
+}
+
 defineProps<{
     types: Option[];
     statuts: Option[];
+    categories: Categorie[];
+    fournisseurs: FournisseurOption[];
+    optionsCatalogue: OptionCatalogue[];
+    limites: Limites;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -24,7 +58,9 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const form = useForm({
     nom: '',
-    code_fournisseur: null as string | null,
+    categorie_id: null as string | null,
+    fournisseur_id: null as string | null,
+    code_barres: null as string | null,
     type: 'materiel',
     statut: 'actif',
     prix_usine: null as number | null,
@@ -34,7 +70,12 @@ const form = useForm({
     seuil_alerte_stock: null as number | null,
     description: null as string | null,
     is_alerte: false,
-    image: null as File | null,
+    images: [] as File[],
+    options: [] as {
+        nom: string;
+        valeurs: string[];
+        option_catalogue_id: string | null;
+    }[],
 });
 
 function submit() {
@@ -82,7 +123,12 @@ function submit() {
                 :errors="form.errors"
                 :types="types"
                 :statuts="statuts"
+                :categories="categories"
+                :fournisseurs="fournisseurs"
+                :options-catalogue="optionsCatalogue"
+                :limites="limites"
                 :processing="form.processing"
+                :allow-declinaisons="true"
                 @update:form="Object.assign(form, $event)"
                 @submit="submit"
             />

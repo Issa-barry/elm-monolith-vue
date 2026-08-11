@@ -8,6 +8,7 @@ use App\Http\Controllers\Auth\LivreurRegistrationController;
 use App\Http\Controllers\Auth\RegisterLookupController;
 use App\Http\Controllers\Auth\RegisterOtpController;
 use App\Http\Controllers\CashbackController;
+use App\Http\Controllers\CategorieController;
 use App\Http\Controllers\Client\ClientDashboardController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\CommandeAchatController;
@@ -17,6 +18,7 @@ use App\Http\Controllers\CommissionLogistiqueController;
 use App\Http\Controllers\CommissionPaymentController;
 use App\Http\Controllers\CommissionVehiculeController;
 use App\Http\Controllers\CommissionVenteController;
+use App\Http\Controllers\Comptabilite\BesoinTresorerieController;
 use App\Http\Controllers\Comptabilite\CommissionAjustementController;
 use App\Http\Controllers\Comptabilite\CommissionLogistiqueController as ComptabiliteCommissionLogistiqueController;
 use App\Http\Controllers\Comptabilite\CommissionProprietaireController;
@@ -36,14 +38,18 @@ use App\Http\Controllers\EmployeController;
 use App\Http\Controllers\EncaissementVenteController;
 use App\Http\Controllers\EquipeLivraisonController;
 use App\Http\Controllers\FactureVenteController;
+use App\Http\Controllers\FournisseurController;
 use App\Http\Controllers\FraisCommissionPartController;
 use App\Http\Controllers\LivreurController;
+use App\Http\Controllers\MediaController;
+use App\Http\Controllers\OptionCatalogueController;
 use App\Http\Controllers\PackingController;
 use App\Http\Controllers\PaieController;
 use App\Http\Controllers\PaiementCommissionVenteController;
 use App\Http\Controllers\PaiePaiementController;
 use App\Http\Controllers\PaieVariableController;
 use App\Http\Controllers\PdvController;
+use App\Http\Controllers\PieceIdentiteController;
 use App\Http\Controllers\PrestataireController;
 use App\Http\Controllers\ProduitController;
 use App\Http\Controllers\PropositionVehiculeController;
@@ -65,6 +71,7 @@ use App\Http\Controllers\VersementCommissionLogistiqueController;
 use App\Http\Controllers\VersementController;
 use App\Support\AuthRedirects;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -74,11 +81,19 @@ Route::middleware('guest')->group(function () {
         ->name('register.lookup');
     Route::post('/register/otp/verify', RegisterOtpController::class)
         ->name('register.otp.verify');
-    Route::get('/register/livreur', [LivreurRegistrationController::class, 'create'])
-        ->name('livreur.register');
     Route::post('/register/livreur', [LivreurRegistrationController::class, 'store'])
         ->name('livreur.register.store');
 });
+
+// L'inscription livreur est désormais portée par elm-vitrine (Blade/Alpine,
+// appelle ce back-office en server-to-server via api/public/register/*).
+// On garde ce GET en simple redirection pour ne pas casser les anciens liens
+// (SMS, QR codes...) qui pointaient vers fello.eau-la-maman.com/register/livreur.
+// Les endpoints POST /register/lookup, /register/otp/verify et /register/livreur
+// restent actifs tant qu'une dépendance externe non confirmée n'est pas écartée.
+Route::get('/register/livreur', function () {
+    return redirect(rtrim(config('services.vitrine.url'), '/').'/register/livreur');
+})->name('livreur.register');
 
 // ── Onboarding via lien d'invitation ─────────────────────────────────────────
 Route::get('/invitations/accept/{token}', [AcceptInvitationController::class, 'show'])
@@ -98,11 +113,24 @@ Route::post('/invitations/accept/{token}', [AcceptInvitationController::class, '
     ->middleware('throttle:5,1');
 
 Route::get('/', function (Request $request) {
-    if (! $request->user()) {
+    $user = $request->user();
+
+    if (! $user) {
         return redirect()->route('login');
     }
 
-    return redirect(AuthRedirects::defaultPathForUser($request->user()));
+    if (! AuthRedirects::hasKnownRole($user)) {
+        // Authentifié mais sans rôle client/staff reconnu : AuthRedirects::defaultPathForUser
+        // retombe sur route('home') dans ce cas, ce qui bouclerait indéfiniment sur cette
+        // route depuis qu'elle ne rend plus la page marketing. On déconnecte proprement.
+        Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect()->route('login');
+    }
+
+    return redirect(AuthRedirects::defaultPathForUser($user));
 })->name('home');
 
 Route::get('/sitemap.xml', SitemapController::class)->name('sitemap');
@@ -166,6 +194,9 @@ Route::prefix('backoffice')->group(function () {
             Route::patch('achats/{achat}/receptionner', [CommandeAchatController::class, 'receptionner'])->name('achats.receptionner');
             Route::patch('achats/{achat}/annuler', [CommandeAchatController::class, 'annuler'])->name('achats.annuler');
             Route::get('achats/{achat}/pdf', [CommandeAchatController::class, 'pdf'])->name('achats.pdf');
+
+            // Fournisseurs — entité séparée de Prestataire, rattachée au contexte Achats.
+            Route::resource('fournisseurs', FournisseurController::class);
         });
 
         // ── Module : Packings ─────────────────────────────────────────────────────
@@ -195,11 +226,28 @@ Route::prefix('backoffice')->group(function () {
             });
 
             Route::resource('type-vehicules', TypeVehiculeController::class)->except(['show']);
+            Route::put('type-vehicules/{typeVehicule}/capacites', [TypeVehiculeController::class, 'syncCapacites'])->name('type-vehicules.capacites.sync');
             Route::resource('vehicules', VehiculeController::class);
             Route::post('vehicules/{vehicule}/frais', [VehiculeController::class, 'storeFrais'])->name('vehicules.frais.store');
             Route::patch('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'updateFrais'])->name('vehicules.frais.update');
             Route::delete('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'destroyFrais'])->name('vehicules.frais.destroy');
+            Route::put('vehicules/{vehicule}/capacites', [VehiculeController::class, 'syncCapacites'])->name('vehicules.capacites.sync');
             Route::resource('proprietaires', ProprietaireController::class);
+
+            // Pièces d'identité (propriétaires uniquement pour le moment)
+            Route::post('proprietaires/{proprietaire}/pieces-identite', [PieceIdentiteController::class, 'store'])
+                ->name('pieces-identite.store');
+            Route::put('pieces-identite/{pieceIdentite}', [PieceIdentiteController::class, 'update'])
+                ->name('pieces-identite.update');
+            Route::get('pieces-identite/{pieceIdentite}/fichiers/{face}', [PieceIdentiteController::class, 'showFile'])
+                ->name('pieces-identite.fichier');
+            Route::post('pieces-identite/{pieceIdentite}/valider', [PieceIdentiteController::class, 'valider'])
+                ->name('pieces-identite.valider');
+            Route::post('pieces-identite/{pieceIdentite}/rejeter', [PieceIdentiteController::class, 'rejeter'])
+                ->name('pieces-identite.rejeter');
+            Route::delete('pieces-identite/{pieceIdentite}', [PieceIdentiteController::class, 'destroy'])
+                ->name('pieces-identite.destroy');
+
             // Livreurs : gestion centralisée depuis les Équipes (lecture seule + API modale)
             Route::get('livreurs', [LivreurController::class, 'index'])->name('livreurs.index');
             Route::post('livreurs', [LivreurController::class, 'store'])->name('livreurs.store');
@@ -213,6 +261,31 @@ Route::prefix('backoffice')->group(function () {
 
         // ── Module : Produits ─────────────────────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::PRODUITS)->group(function () {
+            // Déclarées avant produits/{produit} par lisibilité (ULID ne collisionne jamais
+            // avec le littéral "categories", mais garde l'ordre explicite).
+            Route::get('produits/categories', [CategorieController::class, 'index'])->name('produits.categories.index');
+            Route::post('produits/categories', [CategorieController::class, 'store'])->name('produits.categories.store');
+            Route::put('produits/categories/{categorie}', [CategorieController::class, 'update'])->name('produits.categories.update');
+            Route::patch('produits/categories/{categorie}/toggle', [CategorieController::class, 'toggle'])->name('produits.categories.toggle');
+            Route::delete('produits/categories/{categorie}', [CategorieController::class, 'destroy'])->name('produits.categories.destroy');
+
+            // Catalogue d'options réutilisables — indépendant des options réellement portées
+            // par chaque produit (cf. ProduitOption), déclarées avant produits/{produit} pour
+            // la même raison de lisibilité que categories ci-dessus.
+            Route::get('produits/options', [OptionCatalogueController::class, 'index'])->name('produits.options.index');
+            Route::post('produits/options', [OptionCatalogueController::class, 'store'])->name('produits.options.store');
+            Route::put('produits/options/{option}', [OptionCatalogueController::class, 'update'])->name('produits.options.update');
+            Route::delete('produits/options/{option}', [OptionCatalogueController::class, 'destroy'])->name('produits.options.destroy');
+            Route::post('produits/options/{option}/valeurs', [OptionCatalogueController::class, 'storeValeur'])->name('produits.options.valeurs.store');
+            Route::delete('produits/options/{option}/valeurs/{valeur}', [OptionCatalogueController::class, 'destroyValeur'])->name('produits.options.valeurs.destroy');
+
+            // Création rapide d'un fournisseur (entité séparée, cf. FournisseurController) depuis
+            // le formulaire Produit — rattachée au module Produits (pas Achats) : elle doit
+            // fonctionner même si le module Achats est désactivé pour l'organisation, cf.
+            // FournisseurSelect.vue. Le CRUD complet reste sous le module Achats (route
+            // fournisseurs.* ci-dessus).
+            Route::post('produits/fournisseurs', [FournisseurController::class, 'storeRapide'])->name('produits.fournisseurs.store');
+
             Route::resource('produits', ProduitController::class);
             Route::post('produits/{produit}/ajuster-stock', [ProduitController::class, 'ajusterStock'])
                 ->name('produits.ajuster-stock');
@@ -220,6 +293,24 @@ Route::prefix('backoffice')->group(function () {
                 ->name('produits.historique');
             Route::patch('produits/{produit}/archiver', [ProduitController::class, 'archiver'])
                 ->name('produits.archiver');
+            Route::put('produits/{produit}/variantes/{variante}', [ProduitController::class, 'updateVariante'])
+                ->name('produits.variantes.update');
+            Route::get('produits/{produit}/variantes', [ProduitController::class, 'variantesIndex'])
+                ->name('produits.variantes.index');
+            Route::put('produits/{produit}/variantes', [ProduitController::class, 'variantesBulkUpdate'])
+                ->name('produits.variantes.bulk-update');
+
+            // Galerie photo produit — indépendante du formulaire principal, cf. MediaController.
+            Route::post('produits/{produit}/medias', [MediaController::class, 'store'])
+                ->name('produits.medias.store');
+            Route::patch('produits/{produit}/medias/reordonner', [MediaController::class, 'reordonner'])
+                ->name('produits.medias.reordonner');
+            Route::patch('produits/{produit}/medias/{media}/principale', [MediaController::class, 'definirPrincipale'])
+                ->name('produits.medias.principale');
+            Route::delete('produits/{produit}/medias/{media}', [MediaController::class, 'destroy'])
+                ->name('produits.medias.destroy');
+            Route::post('produits/{produit}/medias/{media}/variantes', [MediaController::class, 'assignerVariantes'])
+                ->name('produits.medias.assigner-variantes');
         });
 
         // ── Module : Sites ────────────────────────────────────────────────────────
@@ -292,6 +383,10 @@ Route::prefix('backoffice')->group(function () {
         // ── Module : Comptabilité ─────────────────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::COMPTABILITE)->prefix('comptabilite')->name('comptabilite.')->group(function () {
             Route::get('/', [ComptabiliteDashboardController::class, 'index'])->name('dashboard');
+
+            // ── Besoin de trésorerie (prévision, par agence) ────────────────────────
+            Route::get('tresorerie', [BesoinTresorerieController::class, 'index'])->name('tresorerie.index');
+            Route::get('tresorerie/{site}', [BesoinTresorerieController::class, 'show'])->name('tresorerie.show');
 
             Route::get('fiches/livreurs', [PaiementFicheController::class, 'indexLivreurs'])->name('fiches.livreurs');
             Route::get('fiches/proprietaires', [PaiementFicheController::class, 'indexProprietaires'])->name('fiches.proprietaires');

@@ -22,6 +22,10 @@ return new class extends Migration
             $table->string('commentaire_frais')->nullable();
             $table->decimal('montant_net', 12, 2)->default(0);
             $table->decimal('montant_verse', 12, 2)->default(0);
+            $table->decimal('montant_actuel', 15, 2)->nullable();
+            $table->string('origine', 20)->default('theorique');
+            $table->foreignUlid('validated_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->timestamp('validated_at')->nullable();
             $table->string('statut')->default('en_attente');
             $table->date('earned_at')->nullable();
             $table->date('unlock_at')->nullable();
@@ -33,6 +37,7 @@ return new class extends Migration
                 'parts_commission_beneficiaire_unique'
             );
             $table->index(['commission_logistique_id', 'statut'], 'comm_log_parts_id_statut_idx');
+            $table->index(['commission_logistique_id', 'validated_at'], 'comm_log_parts_id_validated_idx');
         });
     }
 

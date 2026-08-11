@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CommissionLogistiquePart;
 use App\Services\CommissionLogistiqueService;
+use App\Services\PeriodePayabilityChecker;
 use App\Services\TransfertActiviteService;
 use App\Services\TransfertLogistiqueService;
 use Illuminate\Http\RedirectResponse;
@@ -35,6 +36,10 @@ class VersementCommissionLogistiqueController extends Controller
         $this->authorize('verserCommission', $transfert);
 
         abort_if($part->isVersee(), 422, 'Cette part est déjà entièrement versée.');
+
+        if ($reason = PeriodePayabilityChecker::reasonPartNotPayable($part)) {
+            abort(422, $reason);
+        }
 
         $montantMax = (float) $part->montant_restant;
 

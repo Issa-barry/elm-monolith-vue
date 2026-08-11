@@ -5,6 +5,7 @@ import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/vue3';
 import { Layers } from 'lucide-vue-next';
+import { useToast } from 'primevue/usetoast';
 import { ref } from 'vue';
 
 interface Module {
@@ -20,17 +21,27 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Modules métier', href: '/settings/modules' },
 ];
 
+const toast = useToast();
 const processing = ref<Record<string, boolean>>({});
 
 function toggle(mod: Module) {
     if (processing.value[mod.key]) return;
     processing.value[mod.key] = true;
 
+    const nextActive = !mod.active;
+
     router.patch(
         '/settings/modules',
-        { module: mod.key, active: !mod.active },
+        { module: mod.key, active: nextActive },
         {
             preserveScroll: true,
+            onSuccess: () => {
+                toast.add({
+                    severity: 'success',
+                    summary: `Module « ${mod.label} » ${nextActive ? 'activé' : 'désactivé'}`,
+                    life: 3000,
+                });
+            },
             onFinish: () => {
                 processing.value[mod.key] = false;
             },

@@ -15,6 +15,7 @@ import {
     Save,
     Shield,
 } from 'lucide-vue-next';
+import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
 interface SiteItem {
@@ -146,6 +147,7 @@ function hasSite(entry: RoleConfig, siteId: string) {
     return entry.sites.includes(siteId);
 }
 
+const toast = useToast();
 const saving = ref(false);
 const flashSuccess = ref(false);
 
@@ -158,6 +160,11 @@ function save() {
             onSuccess: () => {
                 flashSuccess.value = true;
                 setTimeout(() => (flashSuccess.value = false), 3000);
+                toast.add({
+                    severity: 'success',
+                    summary: 'Paramètres produits mis à jour',
+                    life: 3000,
+                });
             },
             onFinish: () => (saving.value = false),
         },

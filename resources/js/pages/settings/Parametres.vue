@@ -3,13 +3,17 @@ import HeadingSmall from '@/components/HeadingSmall.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { edit } from '@/routes/parametres';
 import { type BreadcrumbItem } from '@/types';
-import { Head, useForm } from '@inertiajs/vue3';
-import { Download, Settings } from 'lucide-vue-next';
+import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Download, Settings, Upload } from 'lucide-vue-next';
+import { useToast } from 'primevue/usetoast';
 import { computed } from 'vue';
+
+const { can } = usePermissions();
 
 interface Parametre {
     id: number;
@@ -22,6 +26,8 @@ interface Parametre {
 }
 
 const props = defineProps<{ parametres: Parametre[] }>();
+
+const toast = useToast();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Paramètres', href: '/settings/profile' },
@@ -66,12 +72,6 @@ const importTemplates = [
         title: 'Template Clients',
         description: 'Champs de création des clients.',
     },
-    {
-        key: 'vehicules-pack',
-        title: 'Template Véhicules + Propriétaires + Livreurs',
-        description:
-            'Un seul fichier Excel avec 3 feuilles: propriétaires, livreurs et véhicules.',
-    },
 ];
 
 const grouped = computed(() => {
@@ -102,6 +102,13 @@ function submit(p: Parametre) {
     const form = getForm(p);
     form.put(`/settings/parametres/${p.id}`, {
         preserveScroll: true,
+        onSuccess: () => {
+            toast.add({
+                severity: 'success',
+                summary: 'Paramètre mis à jour',
+                life: 3000,
+            });
+        },
     });
 }
 
@@ -154,6 +161,40 @@ function toggleBoolean(p: Parametre) {
                                 Télécharger
                             </a>
                         </div>
+                    </div>
+                </div>
+
+                <div
+                    v-if="can('imports-flotte.create')"
+                    class="overflow-hidden rounded-xl border bg-card"
+                >
+                    <div
+                        class="flex items-center gap-2 border-b bg-muted/30 px-5 py-3"
+                    >
+                        <Upload class="h-4 w-4 text-muted-foreground" />
+                        <h3 class="text-sm font-semibold text-foreground">
+                            Import en masse
+                        </h3>
+                    </div>
+                    <div
+                        class="flex items-center justify-between gap-4 px-5 py-4"
+                    >
+                        <div class="min-w-0 flex-1">
+                            <p class="text-sm font-medium">
+                                Propriétaires, véhicules et livreurs
+                            </p>
+                            <p class="mt-0.5 text-xs text-muted-foreground">
+                                Créez plusieurs propriétaires, véhicules et
+                                équipes de livraison en une fois à partir d'un
+                                fichier Excel.
+                            </p>
+                        </div>
+                        <Link href="/settings/imports-flotte/nouveau">
+                            <Button size="sm" variant="outline">
+                                <Upload class="mr-1.5 h-3.5 w-3.5" />
+                                Importer
+                            </Button>
+                        </Link>
                     </div>
                 </div>
 

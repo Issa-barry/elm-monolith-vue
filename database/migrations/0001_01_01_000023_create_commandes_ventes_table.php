@@ -17,6 +17,15 @@ return new class extends Migration
             $table->foreignUlid('client_id')->nullable()->constrained('clients')->nullOnDelete();
             $table->string('reference', 20)->unique();
             $table->decimal('total_commande', 12, 2)->default(0);
+            // Fige le mode de tarification (prix_vente/prix_usine) applicable à la
+            // commande au moment de sa création : la prise en charge du véhicule par
+            // l'usine peut changer plus tard, sans devoir recalculer rétroactivement
+            // les commandes déjà passées — voir CommandeVenteService.
+            $table->string('mode_tarification_snapshot', 20)->default('prix_vente');
+            // Fige l'éligibilité aux commissions du véhicule au moment de la
+            // création de la commande, indépendamment du mode de tarification
+            // ci-dessus — voir VehiculeCommandeContextResolver et CommissionGenerator.
+            $table->boolean('commission_eligible_snapshot')->default(true);
             $table->string('statut', 30)->default('brouillon');
             $table->timestamp('validated_at')->nullable();
 

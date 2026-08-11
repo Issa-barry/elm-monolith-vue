@@ -10,8 +10,10 @@ import { ArrowLeft, Pencil } from 'lucide-vue-next';
 
 interface Membre {
     livreur_id: string | null;
-    nom: string;
-    prenom: string;
+    // Identité civile jamais affichée côté Eau La Maman — voir
+    // EquipeLivraisonController. Libellé = "Chauffeur-N" (+ nom_complet
+    // s'il est renseigné), jamais construit depuis prenom/nom.
+    nom_complet: string | null;
     telephone: string;
     role: string;
     taux_commission: number;
@@ -54,7 +56,18 @@ function roleLabel(role: string, numero?: number): string {
             : role === 'convoyeur'
               ? 'Convoyeur'
               : role;
-    return numero !== undefined ? `${label} ${numero}` : label;
+    return numero !== undefined ? `${label}-${numero}` : label;
+}
+
+/**
+ * Libellé "Membre" affiché côté Eau La Maman : "Chauffeur-1 — Petit Moussa"
+ * si nom_complet est renseigné, sinon "Chauffeur-1" seul — jamais construit
+ * depuis prenom/nom (identité civile non utilisée sur ce projet).
+ */
+function membreLabel(membre: Membre): string {
+    const ordinal = roleLabel(membre.role, membre.numero);
+    const nomComplet = membre.nom_complet?.trim();
+    return nomComplet ? `${ordinal} — ${nomComplet}` : ordinal;
 }
 </script>
 
@@ -203,7 +216,6 @@ function roleLabel(role: string, numero?: number): string {
                             <tr>
                                 <th class="px-6 py-3 font-medium">Membre</th>
                                 <th class="px-6 py-3 font-medium">Téléphone</th>
-                                <th class="px-6 py-3 font-medium">Rôle</th>
                                 <th class="px-6 py-3 text-right font-medium">
                                     Taux
                                 </th>
@@ -217,16 +229,13 @@ function roleLabel(role: string, numero?: number): string {
                             >
                                 <td class="px-6 py-3">
                                     <p class="text-sm font-medium">
-                                        {{ membre.prenom }} {{ membre.nom }}
+                                        {{ membreLabel(membre) }}
                                     </p>
                                 </td>
                                 <td
                                     class="px-6 py-3 text-sm text-muted-foreground"
                                 >
                                     {{ formatPhoneDisplay(membre.telephone) }}
-                                </td>
-                                <td class="px-6 py-3 text-sm">
-                                    {{ roleLabel(membre.role, membre.numero) }}
                                 </td>
                                 <td
                                     class="px-6 py-3 text-right font-mono text-sm"

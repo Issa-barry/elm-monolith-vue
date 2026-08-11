@@ -17,29 +17,53 @@ class SitesSeeder extends Seeder
         $matoto = $this->upsertSite($org->id, [
             'nom' => 'Matoto',
             'type' => SiteType::SIEGE->value,
-            'localisation' => 'Matoto',
+            'ville' => 'Conakry',
+            'quartier' => 'Matoto',
+            'telephone' => '+224664039160',
         ]);
 
         $sitesRattaches = [
             [
-                'nom' => 'Lansanaya',
+                'nom' => 'CBA',
                 'type' => SiteType::USINE->value,
-                'localisation' => 'Lansanaya Barrage',
+                'ville' => 'Conakry',
+                'quartier' => 'Lansanaya, Kountia',
+                'telephone' => '+224626078393',
             ],
             [
-                'nom' => 'Lambagny',
-                'type' => SiteType::AGENCE->value,
-                'localisation' => 'Lambagny carrefour canadien',
-            ],
-            [
-                'nom' => 'Dabompa',
+                'nom' => 'Lambanyi',
                 'type' => SiteType::DEPOT->value,
-                'localisation' => 'Tamisso',
+                'ville' => 'Conakry',
+                'quartier' => 'Lambagny',
+                'telephone' => '+224622671016',
+            ],
+            [
+                'nom' => 'Cimenterie',
+                'type' => SiteType::DEPOT->value,
+                'ville' => 'Conakry',
+                'quartier' => 'Cimenteri',
+                'telephone' => '+224622854863',
             ],
             [
                 'nom' => 'Kouria',
+                'type' => SiteType::USINE->value,
+                'ville' => 'Coya',
+                'quartier' => 'Kaka',
+                'telephone' => '+224626641466',
+            ],
+            [
+                'nom' => 'Sonfonia',
                 'type' => SiteType::DEPOT->value,
-                'localisation' => 'Kouria',
+                'ville' => 'Conakry',
+                'quartier' => 'Sonfonia',
+                'telephone' => '+224624300206',
+            ],
+            [
+                'nom' => 'Tombolia',
+                'type' => SiteType::DEPOT->value,
+                'ville' => 'Conakry',
+                'quartier' => 'Tombolia',
+                'telephone' => '+224626577425',
             ],
         ];
 
@@ -63,24 +87,18 @@ class SitesSeeder extends Seeder
             'nom' => $data['nom'],
             'type' => $data['type'],
             'statut' => SiteStatut::ACTIVE->value,
-            'ville' => 'Conakry',
+            'ville' => $data['ville'],
             'pays' => 'Guinee',
-            'localisation' => $data['localisation'],
-            'quartier' => $data['nom'],
+            'quartier' => $data['quartier'],
             'parent_id' => $parentId,
         ]);
 
         if (! $site->exists || empty($site->telephone)) {
-            $site->telephone = $this->randomGnPhone();
+            $site->telephone = $data['telephone'];
         }
 
         $site->save();
 
         return $site;
-    }
-
-    private function randomGnPhone(): string
-    {
-        return '+2246'.str_pad((string) random_int(0, 99999999), 8, '0', STR_PAD_LEFT);
     }
 }

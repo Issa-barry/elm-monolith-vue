@@ -58,7 +58,7 @@ const displayName = computed(() => {
 });
 
 const displaySite = computed(() => {
-    if (!defaultSite.value) return 'Aucun site affecte';
+    if (!defaultSite.value) return 'Aucun site affecté';
     return `${defaultSite.value.type_label} de ${defaultSite.value.nom}`;
 });
 
@@ -90,7 +90,7 @@ const initials = computed(() =>
                     <p
                         class="mt-0.5 text-xs text-muted-foreground sm:mt-1 sm:text-sm"
                     >
-                        Site : {{ displaySite }}
+                        {{ displaySite }}
                     </p>
                 </div>
             </div>

@@ -3,6 +3,7 @@ import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/composables/usePermissions';
+import { useVehiculeCommandeTarification } from '@/composables/useVehiculeCommandeTarification';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
@@ -10,6 +11,7 @@ import { Head, Link, useForm } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     ExternalLink,
+    Info,
     Lock,
     Phone,
     Plus,
@@ -20,7 +22,10 @@ import AutoComplete from 'primevue/autocomplete';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
+import Tooltip from 'primevue/tooltip';
 import { computed, onMounted, ref } from 'vue';
+
+const vTooltip = Tooltip;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface FactureDetail {
@@ -61,6 +66,8 @@ interface VehiculeOption {
     nom_vehicule: string;
     immatriculation: string;
     capacite_packs: number | null;
+    pris_en_charge_par_usine: boolean;
+    commission_eligible: boolean;
     livreur_nom: string | null;
     livreur_telephone: string | null;
 }
@@ -134,6 +141,7 @@ function searchVehicule(event: { query: string }) {
 async function onVehiculeSelect(v: VehiculeOption | null) {
     form.vehicule_id = v?.id ?? null;
     applyVehiculeCapacityOnSingleLine(v);
+    recomputeAllTotals();
     if (v) {
         vehiculeSolvabiliteLoading.value = true;
         vehiculeSolvabilite.value = null;
@@ -152,6 +160,7 @@ function onVehiculeClear() {
     form.vehicule_id = null;
     vehiculeSelected.value = null;
     vehiculeSolvabilite.value = null;
+    recomputeAllTotals();
 }
 
 function applyVehiculeCapacityOnSingleLine(vehicule: VehiculeOption | null) {
@@ -164,11 +173,55 @@ function applyVehiculeCapacityOnSingleLine(vehicule: VehiculeOption | null) {
     }
 
     form.lignes[0].qte = vehicule.capacite_packs;
-    form.lignes[0].total = form.lignes[0].prix_vente * form.lignes[0].qte;
+    form.lignes[0].total = computeLigneTotal(form.lignes[0]);
+}
+
+// ── Mode de tarification (montant à encaisser par l'usine) & éligibilité aux
+// commissions — deux notions indépendantes, jamais recalculées l'une à
+// partir de l'autre (cf. useVehiculeCommandeTarification). Source de vérité
+// côté serveur : VehiculeCommandeContextResolver — ce composable n'est qu'un
+// miroir d'affichage.
+const { modeTarification, commissionEligible } =
+    useVehiculeCommandeTarification(
+        () => props.vehicules,
+        () => form.vehicule_id,
+    );
+
+function produitPrixUsine(produitId: number | null): number {
+    if (produitId === null) return 0;
+    return props.produits.find((p) => p.id === produitId)?.prix_usine ?? 0;
+}
+
+function computeLigneTotal(ligne: LigneForm): number {
+    return modeTarification.value === 'prix_usine'
+        ? produitPrixUsine(ligne.produit_id) * ligne.qte
+        : ligne.prix_vente * ligne.qte;
+}
+
+function recomputeAllTotals() {
+    form.lignes.forEach((l) => {
+        l.total = computeLigneTotal(l);
+    });
 }
 
 function vehiculeLabel(v: VehiculeOption): string {
     return `${v.nom_vehicule} — ${v.immatriculation}`;
+}
+
+// ── Prix affiché — la règle (prix vente vs prix usine) est expliquée une
+// seule fois via le bandeau "Prix appliqué", donc les libellés de colonne
+// restent génériques. La valeur AFFICHÉE reste celle réellement utilisée
+// dans le calcul du total, sinon valeur affichée et total se contredisent.
+const prixUnitLabel = 'Prix unit.';
+const totalColumnLabel = 'Total';
+const totalCommandeLabel = 'Total commande';
+const unitPriceEditable = computed(
+    () => canUpdateUnitPrice.value && modeTarification.value !== 'prix_usine',
+);
+function ligneUnitPrice(ligne: LigneForm): number {
+    return modeTarification.value === 'prix_usine'
+        ? produitPrixUsine(ligne.produit_id)
+        : ligne.prix_vente;
 }
 
 // ── AutoComplete : Client ─────────────────────────────────────────────────────
@@ -268,9 +321,9 @@ function onProduitChange(index: number, produitId: number | null) {
     );
     if (existingIndex !== -1) {
         form.lignes[existingIndex].qte += 1;
-        form.lignes[existingIndex].total =
-            form.lignes[existingIndex].prix_vente *
-            form.lignes[existingIndex].qte;
+        form.lignes[existingIndex].total = computeLigneTotal(
+            form.lignes[existingIndex],
+        );
         form.lignes.splice(index, 1);
         return;
     }
@@ -285,13 +338,13 @@ function onProduitChange(index: number, produitId: number | null) {
             ? (capaciteVehiculeSelectionne.value ?? ligne.qte)
             : ligne.qte;
     ligne.qte = Math.max(1, qteParDefaut);
-    ligne.total = ligne.prix_vente * ligne.qte;
+    ligne.total = computeLigneTotal(ligne);
 }
 
 function onQteChange(index: number, qte: number | null) {
     const ligne = form.lignes[index];
     ligne.qte = Math.max(1, qte ?? 1);
-    ligne.total = ligne.prix_vente * ligne.qte;
+    ligne.total = computeLigneTotal(ligne);
 }
 
 function onPrixChange(index: number, prix: number | null) {
@@ -301,7 +354,7 @@ function onPrixChange(index: number, prix: number | null) {
 
     const ligne = form.lignes[index];
     ligne.prix_vente = prix ?? 0;
-    ligne.total = ligne.prix_vente * ligne.qte;
+    ligne.total = computeLigneTotal(ligne);
 }
 
 function addLigne() {
@@ -362,7 +415,7 @@ onMounted(() => {
         const first = props.produits[0];
         form.lignes[0].produit_id = first.id;
         form.lignes[0].prix_vente = first.prix_vente;
-        form.lignes[0].total = first.prix_vente * form.lignes[0].qte;
+        form.lignes[0].total = computeLigneTotal(form.lignes[0]);
     }
 });
 
@@ -555,28 +608,16 @@ function confirmerEtCreer() {
                             </div>
 
                             <!-- ✅ Aucun impayé -->
-                            <div
+                            <p
                                 v-else-if="
                                     vehiculeSolvabilite &&
                                     !vehiculeSolvabilite.has_debt
                                 "
-                                class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-950/30"
+                                class="mt-2 flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400"
                             >
-                                <div class="flex items-start gap-2.5">
-                                    <span
-                                        class="mt-0.5 text-base text-emerald-600 dark:text-emerald-400"
-                                        >✓</span
-                                    >
-                                    <div>
-                                        <p
-                                            class="text-sm font-semibold text-emerald-800 dark:text-emerald-300"
-                                        >
-                                            Ce véhicule est à jour de ses
-                                            paiements.
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
+                                <span>✓</span>
+                                Véhicule à jour
+                            </p>
 
                             <!-- ⚠ Dettes (dans les limites) -->
                             <div
@@ -901,25 +942,16 @@ function confirmerEtCreer() {
                             </div>
 
                             <!-- ✅ Aucun impayé -->
-                            <div
+                            <p
                                 v-else-if="
                                     clientSolvabilite &&
                                     !clientSolvabilite.has_debt
                                 "
-                                class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-950/30"
+                                class="mt-2 flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400"
                             >
-                                <div class="flex items-center gap-2.5">
-                                    <span
-                                        class="text-base text-emerald-600 dark:text-emerald-400"
-                                        >✓</span
-                                    >
-                                    <p
-                                        class="text-sm font-semibold text-emerald-800 dark:text-emerald-300"
-                                    >
-                                        Ce client est à jour de ses paiements.
-                                    </p>
-                                </div>
-                            </div>
+                                <span>✓</span>
+                                Client à jour
+                            </p>
 
                             <!-- ⚠ Dettes (dans les limites) -->
                             <div
@@ -1190,57 +1222,98 @@ function confirmerEtCreer() {
                         Prix unitaire verrouille pour votre profil.
                     </p>
 
-                    <p
-                        v-if="form.vehicule_id !== null"
-                        class="mb-3 text-xs"
-                        :class="
-                            capaciteVehiculeConforme
-                                ? quantiteTotale === capaciteVehiculeSelectionne
-                                    ? 'text-emerald-600 dark:text-emerald-400'
-                                    : 'text-amber-600 dark:text-amber-400'
-                                : 'text-destructive'
+                    <!-- Règle de tarification + capacité — affichées une seule fois -->
+                    <div
+                        v-if="
+                            modeTarification === 'prix_usine' ||
+                            form.vehicule_id !== null
                         "
+                        class="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs"
                     >
-                        Capacité véhicule:
-                        {{
-                            capaciteVehiculeSelectionne === null
-                                ? 'non définie'
-                                : `${capaciteVehiculeSelectionne} packs`
-                        }}
-                        · Quantité saisie: {{ quantiteTotale }} packs
-                        <template v-if="capaciteVehiculeSelectionne !== null">
-                            <span
-                                v-if="
-                                    quantiteTotale ===
-                                    capaciteVehiculeSelectionne
+                        <span
+                            v-if="modeTarification === 'prix_usine'"
+                            class="inline-flex items-center gap-1 font-medium text-amber-600 dark:text-amber-400"
+                        >
+                            Prix appliqué : Prix usine
+                            <Info
+                                v-tooltip.top="
+                                    'L\'usine encaisse uniquement le prix usine (marge non répercutée).'
                                 "
-                            >
-                                — capacité atteinte ✓</span
-                            >
-                            <span
-                                v-else-if="
-                                    quantiteTotale < capaciteVehiculeSelectionne
+                                class="h-3.5 w-3.5 cursor-help"
+                            />
+                        </span>
+                        <span
+                            v-if="
+                                form.vehicule_id !== null && !commissionEligible
+                            "
+                            class="inline-flex items-center gap-1 font-medium text-amber-600 dark:text-amber-400"
+                        >
+                            Aucune commission ne sera générée
+                            <Info
+                                v-tooltip.top="
+                                    'Ce véhicule n\'est pas éligible aux commissions (indépendamment du mode de tarification).'
                                 "
+                                class="h-3.5 w-3.5 cursor-help"
+                            />
+                        </span>
+                        <span
+                            v-if="form.vehicule_id !== null"
+                            :class="
+                                capaciteVehiculeSelectionne === null
+                                    ? 'text-muted-foreground'
+                                    : capaciteVehiculeConforme
+                                      ? quantiteTotale ===
+                                        capaciteVehiculeSelectionne
+                                          ? 'text-emerald-600 dark:text-emerald-400'
+                                          : 'text-amber-600 dark:text-amber-400'
+                                      : 'text-destructive'
+                            "
+                        >
+                            Capacité :
+                            {{ quantiteTotale }}
+                            /
+                            {{
+                                capaciteVehiculeSelectionne === null
+                                    ? '—'
+                                    : capaciteVehiculeSelectionne
+                            }}
+                            packs
+                            <template
+                                v-if="capaciteVehiculeSelectionne !== null"
                             >
-                                —
-                                {{
-                                    capaciteVehiculeSelectionne - quantiteTotale
-                                }}
-                                pack(s) manquant(s){{
-                                    !autoriser_saisie_dessous_qte_max
-                                        ? ' — chargement complet requis'
-                                        : ''
-                                }}</span
-                            >
-                            <span v-else>
-                                —
-                                {{
-                                    quantiteTotale - capaciteVehiculeSelectionne
-                                }}
-                                pack(s) en trop</span
-                            >
-                        </template>
-                    </p>
+                                <span
+                                    v-if="
+                                        quantiteTotale ===
+                                        capaciteVehiculeSelectionne
+                                    "
+                                    >✓</span
+                                >
+                                <span
+                                    v-else-if="
+                                        quantiteTotale <
+                                        capaciteVehiculeSelectionne
+                                    "
+                                >
+                                    ({{
+                                        capaciteVehiculeSelectionne -
+                                        quantiteTotale
+                                    }}
+                                    manquant(s){{
+                                        !autoriser_saisie_dessous_qte_max
+                                            ? ' — chargement complet requis'
+                                            : ''
+                                    }})</span
+                                >
+                                <span v-else>
+                                    (+{{
+                                        quantiteTotale -
+                                        capaciteVehiculeSelectionne
+                                    }}
+                                    en trop)</span
+                                >
+                            </template>
+                        </span>
+                    </div>
 
                     <!-- ── Tableau desktop ── -->
                     <div
@@ -1275,9 +1348,9 @@ function confirmerEtCreer() {
                                         <span
                                             class="inline-flex items-center justify-end gap-1"
                                         >
-                                            Prix unit.
+                                            {{ prixUnitLabel }}
                                             <Lock
-                                                v-if="!canUpdateUnitPrice"
+                                                v-if="!unitPriceEditable"
                                                 class="h-3.5 w-3.5"
                                             />
                                         </span>
@@ -1286,7 +1359,7 @@ function confirmerEtCreer() {
                                         class="px-4 py-2.5 text-right font-medium text-muted-foreground"
                                         style="width: 160px"
                                     >
-                                        Total
+                                        {{ totalColumnLabel }}
                                     </th>
                                     <th
                                         class="px-4 py-2.5"
@@ -1355,12 +1428,12 @@ function confirmerEtCreer() {
                                     </td>
                                     <td class="px-4 py-3">
                                         <InputNumber
-                                            :model-value="ligne.prix_vente"
+                                            :model-value="ligneUnitPrice(ligne)"
                                             @update:model-value="
                                                 onPrixChange(index, $event)
                                             "
                                             :min="0"
-                                            :disabled="!canUpdateUnitPrice"
+                                            :disabled="!unitPriceEditable"
                                             :use-grouping="false"
                                             suffix=" GNF"
                                             class="w-full"
@@ -1461,20 +1534,20 @@ function confirmerEtCreer() {
                                         <span
                                             class="inline-flex items-center gap-1"
                                         >
-                                            Prix unit. (GNF)
+                                            {{ prixUnitLabel }} (GNF)
                                             <Lock
-                                                v-if="!canUpdateUnitPrice"
+                                                v-if="!unitPriceEditable"
                                                 class="h-3.5 w-3.5"
                                             />
                                         </span>
                                     </p>
                                     <InputNumber
-                                        :model-value="ligne.prix_vente"
+                                        :model-value="ligneUnitPrice(ligne)"
                                         @update:model-value="
                                             onPrixChange(index, $event)
                                         "
                                         :min="0"
-                                        :disabled="!canUpdateUnitPrice"
+                                        :disabled="!unitPriceEditable"
                                         :use-grouping="false"
                                         class="w-full"
                                         input-class="w-full"
@@ -1490,7 +1563,7 @@ function confirmerEtCreer() {
                                     <p
                                         class="text-[11px] text-muted-foreground"
                                     >
-                                        Total ligne
+                                        {{ totalColumnLabel }}
                                     </p>
                                     <p
                                         class="text-sm font-semibold tabular-nums"
@@ -1532,7 +1605,7 @@ function confirmerEtCreer() {
                             <p
                                 class="text-xs tracking-wider text-muted-foreground uppercase"
                             >
-                                Total commande
+                                {{ totalCommandeLabel }}
                             </p>
                             <p class="text-2xl font-bold tabular-nums">
                                 {{ formatGNF(totalGeneral) }}
@@ -1674,12 +1747,12 @@ function confirmerEtCreer() {
                             <th
                                 class="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
                             >
-                                Prix unit.
+                                {{ prixUnitLabel }}
                             </th>
                             <th
                                 class="px-5 py-2.5 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
                             >
-                                Total
+                                {{ totalColumnLabel }}
                             </th>
                         </tr>
                     </thead>
@@ -1698,7 +1771,7 @@ function confirmerEtCreer() {
                             <td
                                 class="px-4 py-3 text-right text-muted-foreground tabular-nums"
                             >
-                                {{ formatGNF(ligne.prix_vente) }}
+                                {{ formatGNF(ligneUnitPrice(ligne)) }}
                             </td>
                             <td
                                 class="px-5 py-3 text-right font-semibold tabular-nums"
@@ -1726,7 +1799,7 @@ function confirmerEtCreer() {
                             <td
                                 class="px-4 py-3 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
                             >
-                                Total
+                                {{ totalCommandeLabel }}
                             </td>
                             <td
                                 class="px-5 py-3 text-right text-xl font-bold tabular-nums"

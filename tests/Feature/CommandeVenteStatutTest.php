@@ -12,10 +12,12 @@ use App\Models\Livreur;
 use App\Models\Produit;
 use App\Models\Proprietaire;
 use App\Models\Site;
+use App\Models\VarianteStock;
 use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
+use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
@@ -32,7 +34,7 @@ use Tests\TestCase;
  */
 class CommandeVenteStatutTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
+    use HasAdminSetup, HasOrgAndUser, HasProduitVariante, RefreshDatabase;
 
     private Site $defaultSite;
 
@@ -64,14 +66,11 @@ class CommandeVenteStatutTest extends TestCase
         $cible = $attrs['statut'] ?? StatutCommandeVente::BROUILLON;
         unset($attrs['statut']);
 
-        $produit = Produit::create([
-            'organization_id' => $this->org->id,
-            'nom' => 'Produit Test',
-            'type' => 'materiel',
-            'statut' => 'actif',
-            'prix_vente' => 2000,
-            'prix_usine' => 1500,
-        ]);
+        $produit = $this->makeProduitAvecVariante(
+            $this->org,
+            ['nom' => 'Produit Test'],
+            ['prix_vente' => 2000, 'prix_usine' => 1500],
+        );
 
         if (! $vehicule) {
             $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
@@ -91,7 +90,7 @@ class CommandeVenteStatutTest extends TestCase
         ], $attrs));
 
         $ligne = $commande->lignes()->create([
-            'produit_id' => $produit->id,
+            'variante_id' => $produit->variantePrincipale()->first()->id,
             'quantite_demandee' => 2,
             'prix_usine_snapshot' => 1500.0,
             'prix_vente_snapshot' => 2000.0,
@@ -114,6 +113,12 @@ class CommandeVenteStatutTest extends TestCase
         if ($cible === StatutCommandeVente::BROUILLON) {
             return $commande;
         }
+
+        // En production, ces transitions n'ont jamais lieu hors d'une requête
+        // authentifiée (created_by du mouvement de stock en dépend) — on
+        // s'assure donc ici d'un utilisateur courant, comme le ferait le
+        // vrai workflow HTTP.
+        $this->actingAs($this->user);
 
         CommandeVenteService::confirmer($commande);
         if ($cible === StatutCommandeVente::A_CHARGER) {
@@ -196,13 +201,13 @@ class CommandeVenteStatutTest extends TestCase
             'statut' => StatutCommandeVente::BROUILLON,
         ]);
 
-        $produit = Produit::create([
-            'organization_id' => $this->org->id,
-            'nom' => 'Produit', 'type' => 'materiel', 'statut' => 'actif',
-            'prix_vente' => 2000, 'prix_usine' => 1500,
-        ]);
+        $produit = $this->makeProduitAvecVariante(
+            $this->org,
+            ['nom' => 'Produit'],
+            ['prix_vente' => 2000, 'prix_usine' => 1500],
+        );
         $commande->lignes()->create([
-            'produit_id' => $produit->id, 'quantite_demandee' => 1,
+            'variante_id' => $produit->variantePrincipale()->first()->id, 'quantite_demandee' => 1,
             'prix_usine_snapshot' => 1500.0, 'prix_vente_snapshot' => 2000.0, 'total_ligne' => 2000.0,
         ]);
 
@@ -439,6 +444,98 @@ class CommandeVenteStatutTest extends TestCase
         $this->assertEquals(65.8, round((float) $apres['convoyeur']->montant_brut, 2));
         $this->assertEquals('impaye', $apres['chauffeur']->statut->value);
         $this->assertEquals('impaye', $apres['convoyeur']->statut->value);
+    }
+
+    public function test_valider_chargement_decremente_le_stock_du_site(): void
+    {
+        // Aucune équipe assignée sur ce véhicule (cf. makeCommandeWithLigne) :
+        // la sortie de stock doit avoir lieu même quand la commission est
+        // silencieusement ignorée faute d'équipe.
+        ['commande' => $commande, 'ligne' => $ligne, 'produit' => $produit] = $this->makeCommandeWithLigne([
+            'statut' => StatutCommandeVente::CHARGEMENT_EN_COURS,
+        ]);
+
+        $variante = $produit->variantePrincipale()->first();
+        VarianteStock::create([
+            'organization_id' => $this->org->id,
+            'produit_variante_id' => $variante->id,
+            'site_id' => $this->defaultSite->id,
+            'qte_stock' => 50,
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.statut.avancer', $commande), [
+                'lignes' => [['id' => $ligne->id, 'quantite_chargee' => 2, 'type_ecart' => 'conforme']],
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('variante_stocks', [
+            'produit_variante_id' => $variante->id,
+            'site_id' => $this->defaultSite->id,
+            'qte_stock' => 48,
+        ]);
+        $this->assertEquals(48, $produit->fresh()->qte_stock);
+
+        $this->assertDatabaseHas('mouvements_stock', [
+            'produit_variante_id' => $variante->id,
+            'site_id' => $this->defaultSite->id,
+            'type' => 'sortie',
+            'quantite' => 2,
+            'stock_avant' => 50,
+            'stock_apres' => 48,
+            'source_type' => CommandeVenteLigne::class,
+            'source_id' => $ligne->id,
+        ]);
+    }
+
+    public function test_valider_chargement_migre_le_stock_global_au_premier_mouvement_du_site(): void
+    {
+        // Produit jamais touché par un ajustement manuel de stock : le seul
+        // stock connu est l'agrégat global Produit::qte_stock (pas encore de
+        // ligne variante_stocks pour aucun site). Le premier mouvement doit
+        // migrer cette valeur plutôt que de repartir de 0 (régression : un
+        // repli à 0 y écrasait ensuite l'agrégat via le recalcul du total).
+        ['commande' => $commande, 'ligne' => $ligne, 'produit' => $produit] = $this->makeCommandeWithLigne([
+            'statut' => StatutCommandeVente::CHARGEMENT_EN_COURS,
+        ]);
+        $produit->update(['qte_stock' => 1000]);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.statut.avancer', $commande), [
+                'lignes' => [['id' => $ligne->id, 'quantite_chargee' => 80, 'type_ecart' => 'surplus']],
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('variante_stocks', [
+            'produit_variante_id' => $produit->variantePrincipale()->first()->id,
+            'site_id' => $this->defaultSite->id,
+            'qte_stock' => 920,
+        ]);
+        $this->assertEquals(920, $produit->fresh()->qte_stock);
+    }
+
+    public function test_valider_chargement_cree_le_stock_site_et_le_borne_a_zero_si_insuffisant(): void
+    {
+        ['commande' => $commande, 'ligne' => $ligne, 'produit' => $produit] = $this->makeCommandeWithLigne([
+            'statut' => StatutCommandeVente::CHARGEMENT_EN_COURS,
+        ]);
+
+        // Aucun VarianteStock existant pour cette variante/site avant validation.
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.statut.avancer', $commande), [
+                'lignes' => [['id' => $ligne->id, 'quantite_chargee' => 2, 'type_ecart' => 'conforme']],
+            ])
+            ->assertRedirect();
+
+        // Le physique passe avant la comptabilité : on ne bloque jamais le
+        // workflow pour insuffisance de stock, on borne à 0.
+        $this->assertDatabaseHas('variante_stocks', [
+            'produit_variante_id' => $produit->variantePrincipale()->first()->id,
+            'site_id' => $this->defaultSite->id,
+            'qte_stock' => 0,
+        ]);
+        $this->assertEquals(0, $produit->fresh()->qte_stock);
     }
 
     public function test_relancer_validation_chargement_ne_cree_pas_de_doublons(): void

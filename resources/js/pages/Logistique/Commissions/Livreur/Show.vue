@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import PeriodeStatusBanner from '@/components/commission/PeriodeStatusBanner.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
+import type { PeriodeAffichee } from '@/types/commission-status';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
@@ -23,6 +25,7 @@ interface PartRow {
     id: number;
     transfert_reference: string | null;
     montant_net: number;
+    montant_a_payer: number;
     earned_at: string | null;
     periode: string | null;
     periode_label: string | null;
@@ -70,6 +73,8 @@ const props = defineProps<{
     payments: PaymentRow[];
     modes_paiement: ModePaiement[];
     can_payer: boolean;
+    payable: boolean;
+    periode_affichee: PeriodeAffichee | null;
     periode_courante: string;
     periode_courante_label: string;
     selected_periode: string;
@@ -143,7 +148,7 @@ const partsGrouped = computed<PeriodeGroup[]>(() => {
         }
         const g = map.get(key)!;
         g.parts.push(part);
-        g.total_net += part.montant_net;
+        g.total_net += part.montant_a_payer;
     }
     for (const g of map.values()) {
         const s = groupStatut(g.parts);
@@ -279,7 +284,7 @@ function formatMode(mode: string): string {
                         >
                     </Button>
                     <Button
-                        v-if="can_payer && kpis.impaye > 0"
+                        v-if="can_payer && payable"
                         size="sm"
                         class="h-8 px-3 text-xs"
                         @click="openPaiement"
@@ -337,7 +342,7 @@ function formatMode(mode: string): string {
                         >
                     </Button>
                     <Button
-                        v-if="can_payer && kpis.impaye > 0"
+                        v-if="can_payer && payable"
                         size="sm"
                         @click="openPaiement"
                     >
@@ -346,6 +351,8 @@ function formatMode(mode: string): string {
                     </Button>
                 </div>
             </div>
+
+            <PeriodeStatusBanner :periode="periode_affichee" />
 
             <!-- ── KPIs ───────────────────────────────────────────────────────── -->
             <div class="grid grid-cols-3 gap-3">
@@ -539,7 +546,7 @@ function formatMode(mode: string): string {
                                 Commission nette :
                                 <span
                                     class="ml-1 font-semibold text-foreground tabular-nums"
-                                    >{{ formatGNF(part.montant_net) }}</span
+                                    >{{ formatGNF(part.montant_a_payer) }}</span
                                 >
                             </div>
                         </div>
@@ -567,7 +574,10 @@ function formatMode(mode: string): string {
                         >
                         <span class="text-sm font-bold tabular-nums">{{
                             formatGNF(
-                                parts.reduce((s, p) => s + p.montant_net, 0),
+                                parts.reduce(
+                                    (s, p) => s + p.montant_a_payer,
+                                    0,
+                                ),
                             )
                         }}</span>
                     </div>
@@ -651,7 +661,7 @@ function formatMode(mode: string): string {
                                     <td
                                         class="px-4 py-3 text-right font-semibold tabular-nums"
                                     >
-                                        {{ formatGNF(part.montant_net) }}
+                                        {{ formatGNF(part.montant_a_payer) }}
                                     </td>
                                 </tr>
                                 <!-- Sous-total (vue toutes périodes uniquement) -->
@@ -685,7 +695,7 @@ function formatMode(mode: string): string {
                                     {{
                                         formatGNF(
                                             parts.reduce(
-                                                (s, p) => s + p.montant_net,
+                                                (s, p) => s + p.montant_a_payer,
                                                 0,
                                             ),
                                         )

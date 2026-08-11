@@ -1,8 +1,10 @@
 <?php
 
+use App\Http\Controllers\ImportFlotteController;
 use App\Http\Controllers\Settings\DepenseParametrageController;
 use App\Http\Controllers\Settings\DepenseTypeController;
 use App\Http\Controllers\Settings\ModuleController;
+use App\Http\Controllers\Settings\OrganisationController;
 use App\Http\Controllers\Settings\ParametreController;
 use App\Http\Controllers\Settings\PasswordController;
 use App\Http\Controllers\Settings\ProfileController;
@@ -32,6 +34,9 @@ Route::middleware('auth')->group(function () {
     Route::get('settings/two-factor', [TwoFactorAuthenticationController::class, 'show'])
         ->name('two-factor.show');
 
+    Route::get('settings/organisation', [OrganisationController::class, 'edit'])->name('organisation.edit');
+    Route::put('settings/organisation', [OrganisationController::class, 'update'])->name('organisation.update');
+
     Route::get('settings/parametres', [ParametreController::class, 'edit'])->name('parametres.edit');
     Route::get('settings/parametres/templates/{template}', [ParametreController::class, 'downloadTemplate'])
         ->name('parametres.templates.download');
@@ -55,5 +60,15 @@ Route::middleware('auth')->group(function () {
         Route::put('/{depense_type}', [DepenseTypeController::class, 'update'])->name('update');
         Route::patch('/{depense_type}/toggle', [DepenseTypeController::class, 'toggle'])->name('toggle');
         Route::delete('/{depense_type}', [DepenseTypeController::class, 'destroy'])->name('destroy');
+    });
+
+    Route::prefix('settings/imports-flotte')->name('imports-flotte.')->group(function () {
+        Route::get('/', [ImportFlotteController::class, 'index'])->name('index');
+        Route::get('/nouveau', [ImportFlotteController::class, 'create'])->name('create');
+        Route::post('/', [ImportFlotteController::class, 'store'])->name('store');
+        Route::get('/modele', [ImportFlotteController::class, 'template'])->name('template');
+        Route::get('/{importFlotte}', [ImportFlotteController::class, 'show'])->name('show');
+        Route::post('/{importFlotte}/confirmer', [ImportFlotteController::class, 'confirm'])->name('confirm');
+        Route::post('/{importFlotte}/relancer', [ImportFlotteController::class, 'retry'])->name('retry');
     });
 });

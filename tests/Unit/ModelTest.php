@@ -21,6 +21,7 @@ use App\Models\Packing;
 use App\Models\Parametre;
 use App\Models\Prestataire;
 use App\Models\Produit;
+use App\Models\ProduitVariante;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TypeVehicule;
@@ -30,11 +31,12 @@ use App\Models\Versement;
 use App\Models\VersementCommission;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;
+use Tests\Concerns\HasProduitVariante;
 use Tests\TestCase;
 
 class ModelTest extends TestCase
 {
-    use RefreshDatabase;
+    use HasProduitVariante, RefreshDatabase;
 
     private function makeOrg(): Organization
     {
@@ -51,7 +53,7 @@ class ModelTest extends TestCase
         return Prestataire::create([
             'organization_id' => $org->id,
             'nom' => 'PREST'.uniqid(),
-            'type' => 'fournisseur',
+            'type' => 'machiniste',
         ]);
     }
 
@@ -75,7 +77,7 @@ class ModelTest extends TestCase
         $p = Prestataire::create([
             'organization_id' => $this->makeOrg()->id,
             'raison_sociale' => 'Société ABC',
-            'type' => 'fournisseur',
+            'type' => 'machiniste',
         ]);
 
         $this->assertSame('Société Abc', $p->nom_complet);
@@ -87,7 +89,7 @@ class ModelTest extends TestCase
             'organization_id' => $this->makeOrg()->id,
             'nom' => 'DIALLO',
             'prenom' => 'Mamadou',
-            'type' => 'fournisseur',
+            'type' => 'machiniste',
         ]);
 
         $this->assertNotNull($p->nom_complet);
@@ -108,8 +110,8 @@ class ModelTest extends TestCase
     public function test_prestataire_scope_actifs(): void
     {
         $org = $this->makeOrg();
-        Prestataire::create(['organization_id' => $org->id, 'nom' => 'ACTIF', 'type' => 'fournisseur', 'is_active' => true]);
-        Prestataire::create(['organization_id' => $org->id, 'nom' => 'INACTIF', 'type' => 'fournisseur', 'is_active' => false]);
+        Prestataire::create(['organization_id' => $org->id, 'nom' => 'ACTIF', 'type' => 'machiniste', 'is_active' => true]);
+        Prestataire::create(['organization_id' => $org->id, 'nom' => 'INACTIF', 'type' => 'machiniste', 'is_active' => false]);
 
         $actifs = Prestataire::actifs()->where('organization_id', $org->id)->get();
         $this->assertCount(1, $actifs);
@@ -119,12 +121,12 @@ class ModelTest extends TestCase
     public function test_prestataire_scope_par_type(): void
     {
         $org = $this->makeOrg();
-        Prestataire::create(['organization_id' => $org->id, 'nom' => 'FOUR', 'type' => 'fournisseur']);
+        Prestataire::create(['organization_id' => $org->id, 'nom' => 'MACHI', 'type' => 'machiniste']);
         Prestataire::create(['organization_id' => $org->id, 'nom' => 'MECA', 'type' => 'mecanicien']);
 
-        $fournisseurs = Prestataire::parType('fournisseur')->where('organization_id', $org->id)->get();
-        $this->assertCount(1, $fournisseurs);
-        $this->assertSame('FOUR', $fournisseurs->first()->nom);
+        $machinistes = Prestataire::parType('machiniste')->where('organization_id', $org->id)->get();
+        $this->assertCount(1, $machinistes);
+        $this->assertSame('MACHI', $machinistes->first()->nom);
     }
 
     public function test_prestataire_scope_par_type_accepts_enum(): void
@@ -188,10 +190,26 @@ class ModelTest extends TestCase
     public function test_prestataire_organization_relation(): void
     {
         $org = $this->makeOrg();
-        $p = Prestataire::create(['organization_id' => $org->id, 'nom' => 'TEST', 'type' => 'fournisseur']);
+        $p = Prestataire::create(['organization_id' => $org->id, 'nom' => 'TEST', 'type' => 'machiniste']);
 
         $this->assertInstanceOf(Organization::class, $p->organization);
         $this->assertEquals($org->id, $p->organization->id);
+    }
+
+    // ── Proprietaire ──────────────────────────────────────────────────────────
+    // Régression : nom_complet manquait sur ce modèle (présent sur Livreur/Employe),
+    // ce qui faisait planter PeriodeCalculatorService::calculerProprietaires()
+    // (TypeError: creerFiche() attend une string, recevait null).
+
+    public function test_proprietaire_nom_complet_concatenates_prenom_and_nom(): void
+    {
+        $p = Proprietaire::create([
+            'organization_id' => $this->makeOrg()->id,
+            'nom' => 'DIALLO',
+            'prenom' => 'Mamadou',
+        ]);
+
+        $this->assertSame('Mamadou DIALLO', $p->nom_complet);
     }
 
     // ── Produit ───────────────────────────────────────────────────────────────
@@ -647,15 +665,11 @@ class ModelTest extends TestCase
             'total_commande' => 2000,
             'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
         ]);
-        $produit = Produit::create([
-            'organization_id' => $org->id,
-            'nom' => 'Prod',
-            'type' => 'materiel',
-            'statut' => 'actif',
-        ]);
+        $produit = $this->makeProduitAvecVariante($org);
+        $variante = $produit->variantePrincipale()->first();
         $ligne = CommandeVenteLigne::create([
             'commande_vente_id' => $commande->id,
-            'produit_id' => $produit->id,
+            'variante_id' => $variante->id,
             'quantite_demandee' => 2,
             'prix_usine_snapshot' => 500,
             'prix_vente_snapshot' => 1000,
@@ -663,7 +677,8 @@ class ModelTest extends TestCase
         ]);
 
         $this->assertInstanceOf(CommandeVente::class, $ligne->commande);
-        $this->assertInstanceOf(Produit::class, $ligne->produit);
+        $this->assertInstanceOf(ProduitVariante::class, $ligne->variante);
+        $this->assertInstanceOf(Produit::class, $ligne->variante->produit);
     }
 
     // ── CommandeAchat ─────────────────────────────────────────────────────────
@@ -716,22 +731,19 @@ class ModelTest extends TestCase
             'total_commande' => 1000,
             'statut' => StatutCommandeAchat::EN_COURS,
         ]);
-        $produit = Produit::create([
-            'organization_id' => $org->id,
-            'nom' => 'Prod',
-            'type' => 'materiel',
-            'statut' => 'actif',
-        ]);
+        $produit = $this->makeProduitAvecVariante($org);
+        $variante = $produit->variantePrincipale()->first();
         $ligne = CommandeAchatLigne::create([
             'commande_achat_id' => $commande->id,
-            'produit_id' => $produit->id,
+            'variante_id' => $variante->id,
             'qte' => 5,
             'prix_achat_snapshot' => 200,
             'total_ligne' => 1000,
         ]);
 
         $this->assertInstanceOf(CommandeAchat::class, $ligne->commande);
-        $this->assertInstanceOf(Produit::class, $ligne->produit);
+        $this->assertInstanceOf(ProduitVariante::class, $ligne->variante);
+        $this->assertInstanceOf(Produit::class, $ligne->variante->produit);
     }
 
     // ── Site ──────────────────────────────────────────────────────────────────

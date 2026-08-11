@@ -42,7 +42,7 @@ interface Commande {
     statut: string;
     statut_label: string;
     total_commande: number;
-    prestataire_nom: string | null;
+    fournisseur_nom: string | null;
     note: string | null;
     created_at: string;
     is_annulee: boolean;
@@ -86,8 +86,8 @@ const desktopFiltered = computed(() => {
     return props.commandes.filter(
         (c) =>
             c.reference.toLowerCase().includes(q) ||
-            (c.prestataire_nom &&
-                c.prestataire_nom.toLowerCase().includes(q)) ||
+            (c.fournisseur_nom &&
+                c.fournisseur_nom.toLowerCase().includes(q)) ||
             c.statut_label.toLowerCase().includes(q) ||
             (c.note && c.note.toLowerCase().includes(q)),
     );
@@ -106,7 +106,7 @@ const mobileFiltered = computed(() => {
     return props.commandes.filter(
         (c) =>
             c.reference.toLowerCase().includes(q) ||
-            (c.prestataire_nom && c.prestataire_nom.toLowerCase().includes(q)),
+            (c.fournisseur_nom && c.fournisseur_nom.toLowerCase().includes(q)),
     );
 });
 
@@ -225,7 +225,7 @@ function confirmDelete(c: Commande) {
                             {{ c.reference }}
                         </p>
                         <p class="mt-0.5 text-xs text-muted-foreground">
-                            {{ c.prestataire_nom ?? '—' }}
+                            {{ c.fournisseur_nom ?? '—' }}
                         </p>
                         <p class="mt-1 text-sm font-medium tabular-nums">
                             {{ formatGNF(c.total_commande) }}
@@ -373,13 +373,13 @@ function confirmDelete(c: Commande) {
 
                     <!-- Fournisseur -->
                     <Column
-                        field="prestataire_nom"
+                        field="fournisseur_nom"
                         header="Fournisseur"
                         style="min-width: 150px"
                     >
                         <template #body="{ data }">
                             <span class="text-muted-foreground">{{
-                                data.prestataire_nom ?? '—'
+                                data.fournisseur_nom ?? '—'
                             }}</span>
                         </template>
                     </Column>

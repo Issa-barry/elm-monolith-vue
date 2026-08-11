@@ -19,20 +19,35 @@ class UpdateProduitRequest extends FormRequest
 
     public function rules(): array
     {
+        $orgId = $this->user()->organization_id;
+        // Variante par défaut du produit édité — exclue de la contrainte d'unicité ci-dessous
+        // (sinon une mise à jour qui ne touche pas au code-barres se rejetterait elle-même).
+        $varianteId = $this->route('produit')->variantePrincipale()->first()?->id;
+
         return [
             'nom' => ['sometimes', 'required', 'string', 'max:255'],
-            'code_fournisseur' => ['nullable', 'string', 'max:100'],
+            'categorie_id' => ['nullable', Rule::exists('categories', 'id')->where('organization_id', $orgId)],
+            'fournisseur_id' => [
+                'nullable',
+                Rule::exists('fournisseurs', 'id')->where('organization_id', $orgId),
+            ],
+            'code_barres' => [
+                'nullable', 'string', 'max:100',
+                Rule::unique('produit_variantes', 'code_barres')
+                    ->where('organization_id', $orgId)
+                    ->ignore($varianteId),
+            ],
             'type' => ['nullable', Rule::in(ProduitType::values())],
             'statut' => ['nullable', Rule::in(ProduitStatut::values())],
             'prix_usine' => ['nullable', 'integer', 'min:0'],
             'prix_vente' => ['nullable', 'integer', 'min:0'],
             'prix_achat' => ['nullable', 'integer', 'min:0'],
             'cout' => ['nullable', 'integer', 'min:0'],
-            'qte_stock' => ['nullable', 'integer', 'min:0'],
             'seuil_alerte_stock' => ['nullable', 'integer', 'min:0'],
             'description' => ['nullable', 'string'],
             'is_alerte' => ['boolean'],
-            'image' => ['nullable', 'image', 'max:2048'],
+            'images' => ['nullable', 'array'],
+            'images.*' => ['image', 'max:2048'],
         ];
     }
 
@@ -42,7 +57,9 @@ class UpdateProduitRequest extends FormRequest
             'nom.required' => 'Le nom du produit est obligatoire.',
             'nom.string' => 'Le nom doit être une chaîne de caractères.',
             'nom.max' => 'Le nom ne peut pas dépasser 255 caractères.',
-            'code_fournisseur.max' => 'Le code fournisseur ne peut pas dépasser 100 caractères.',
+            'categorie_id.exists' => 'La catégorie sélectionnée est invalide.',
+            'code_barres.max' => 'Le code-barres ne peut pas dépasser 100 caractères.',
+            'code_barres.unique' => 'Ce code-barres est déjà utilisé par un autre produit.',
             'type.in' => 'Le type sélectionné est invalide.',
             'statut.in' => 'Le statut sélectionné est invalide.',
             'prix_usine.integer' => 'Le prix usine doit être un nombre entier.',
@@ -53,13 +70,11 @@ class UpdateProduitRequest extends FormRequest
             'prix_achat.min' => 'Le prix d\'achat ne peut pas être négatif.',
             'cout.integer' => 'Le coût doit être un nombre entier.',
             'cout.min' => 'Le coût ne peut pas être négatif.',
-            'qte_stock.integer' => 'La quantité en stock doit être un nombre entier.',
-            'qte_stock.min' => 'La quantité en stock ne peut pas être négative.',
             'seuil_alerte_stock.integer' => 'Le seuil d\'alerte doit être un nombre entier.',
             'seuil_alerte_stock.min' => 'Le seuil d\'alerte ne peut pas être négatif.',
             'is_alerte.boolean' => 'Le champ alerte doit être vrai ou faux.',
-            'image.image' => 'Le fichier doit être une image.',
-            'image.max' => 'L\'image ne peut pas dépasser 2 Mo.',
+            'images.*.image' => 'Le fichier doit être une image.',
+            'images.*.max' => 'Chaque image ne peut pas dépasser 2 Mo.',
         ];
     }
 }

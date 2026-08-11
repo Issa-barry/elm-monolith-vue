@@ -6,6 +6,9 @@ use App\Enums\ProduitStatut;
 use App\Enums\ProduitType;
 use App\Models\Organization;
 use App\Models\Produit;
+use App\Models\Site;
+use App\Models\VarianteStock;
+use App\Services\ProduitService;
 use Illuminate\Database\Seeder;
 
 class ProduitsSeeder extends Seeder
@@ -13,7 +16,16 @@ class ProduitsSeeder extends Seeder
     public function run(): void
     {
         $org = Organization::where('slug', 'elm')->firstOrFail();
+        // Site par défaut pour le stock initial (avant refonte : qte_stock était un compteur
+        // global sur Produit, migré vers un site au premier ajustement manuel — désormais
+        // on l'attribue directement à un site réel dès le seed).
+        $siteParDefaut = Site::where('organization_id', $org->id)->orderBy('created_at')->first();
 
+        // Aucune catégorie : "elm" ne vend actuellement que ces 7 produits, une hiérarchie
+        // Boissons/Eau/Matériel n'apporterait rien tant que le catalogue ne se diversifie pas.
+        // categorie_id reste nullable (cf. migration produits) — le système de catégories
+        // n'est pas retiré, seulement pas utilisé ici (CategorieDefaultSeeder reste dispo pour
+        // Fello Demo via FelloDemoOrganizationSeeder, ou pour "elm" plus tard si besoin).
         $produits = [
             [
                 'nom' => 'Rouleau',
@@ -80,14 +92,31 @@ class ProduitsSeeder extends Seeder
             ],
         ];
 
+        $produitService = app(ProduitService::class);
+
         foreach ($produits as $data) {
-            Produit::firstOrCreate(
-                [
-                    'nom' => $data['nom'],
+            if (Produit::where('nom', $data['nom'])->where('organization_id', $org->id)->exists()) {
+                continue;
+            }
+
+            $qteInitiale = $data['qte_stock'] ?? 0;
+            unset($data['qte_stock']);
+
+            // Référence (sku) laissée vide : générée automatiquement par
+            // Organization::prochaineReferenceProduit() via ProduitVariante::booted(),
+            // exactement comme pour un produit créé depuis l'interface.
+            $produit = $produitService->creer([...$data, 'organization_id' => $org->id]);
+            $variante = $produit->variantePrincipale()->first();
+
+            if ($qteInitiale > 0 && $siteParDefaut && $variante) {
+                VarianteStock::create([
                     'organization_id' => $org->id,
-                ],
-                [...$data, 'organization_id' => $org->id]
-            );
+                    'produit_variante_id' => $variante->id,
+                    'site_id' => $siteParDefaut->id,
+                    'qte_stock' => $qteInitiale,
+                ]);
+                $produit->resynchroniserQteStock();
+            }
         }
     }
 }

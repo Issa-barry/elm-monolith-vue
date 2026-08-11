@@ -2,10 +2,12 @@
 
 namespace App\Services;
 
+use App\Enums\ModeTarification;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutCommission;
 use App\Enums\StatutFactureVente;
 use App\Models\CommandeVente;
+use App\Models\CommandeVenteLigne;
 use App\Models\FactureVente;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -154,6 +156,7 @@ class CommandeVenteService
         DB::transaction(function () use ($commande, $lignesData) {
             self::appliquerQuantitesChargees($commande, $lignesData);
             self::recalculerTotaux($commande);
+            self::decrementerStock($commande);
             self::recalculerCommissions($commande);
             self::validerPreconditions($commande->fresh(), StatutCommandeVente::LIVRAISON_EN_COURS);
 
@@ -275,7 +278,10 @@ class CommandeVenteService
             ]));
 
             if (array_key_exists('quantite_chargee', $update) && $update['quantite_chargee'] !== null) {
-                $update['total_ligne'] = $update['quantite_chargee'] * (float) $ligne->prix_vente_snapshot;
+                $prixUnitaire = $commande->mode_tarification_snapshot === ModeTarification::PRIX_USINE
+                    ? (float) $ligne->prix_usine_snapshot
+                    : (float) $ligne->prix_vente_snapshot;
+                $update['total_ligne'] = $update['quantite_chargee'] * $prixUnitaire;
             }
 
             if (! empty($update)) {
@@ -301,6 +307,35 @@ class CommandeVenteService
                 'montant_brut' => $totalCommande,
                 'montant_net' => $totalCommande,
             ]);
+        }
+    }
+
+    /**
+     * Décrémente le stock du site de la commande, ligne par ligne, à partir
+     * des quantités réellement chargées (repli sur la quantité demandée si
+     * aucun écart n'a été saisi — même convention que MouvementStockService
+     * pour les transferts logistiques). Indépendant du mode de tarification :
+     * la sortie physique de stock a lieu que le véhicule soit pris en charge
+     * par l'usine ou non. Idempotent : ne redécrémente jamais une ligne déjà
+     * traitée (le workflow ne repasse de toute façon jamais par ce statut).
+     */
+    private static function decrementerStock(CommandeVente $commande): void
+    {
+        $commande->load('lignes');
+        $userId = Auth::id();
+
+        foreach ($commande->lignes as $ligne) {
+            $quantite = $ligne->quantite_chargee ?? $ligne->quantite_demandee;
+
+            MouvementStockService::sortirStock(
+                varianteId: $ligne->variante_id,
+                siteId: $commande->site_id,
+                orgId: $commande->organization_id,
+                quantite: $quantite,
+                sourceType: CommandeVenteLigne::class,
+                sourceId: $ligne->id,
+                userId: $userId,
+            );
         }
     }
 
@@ -354,7 +389,26 @@ class CommandeVenteService
                     $commande->facture->update(['statut_facture' => StatutFactureVente::ANNULEE]);
                 }
             }
+
+            self::annulerCommissionsAssociees($commande);
         });
+    }
+
+    /**
+     * Annuler une commande annule ses commissions non encore soldées : une part déjà
+     * payée n'est jamais reprise (historique de paiement conservé tel quel).
+     */
+    private static function annulerCommissionsAssociees(CommandeVente $commande): void
+    {
+        foreach ($commande->commissions as $commission) {
+            $commission->parts()
+                ->whereNotIn('statut', [StatutCommission::PAYE->value, StatutCommission::ANNULEE->value])
+                ->update(['statut' => StatutCommission::ANNULEE->value]);
+
+            if ($commission->statut !== StatutCommission::PAYE) {
+                $commission->update(['statut' => StatutCommission::ANNULEE->value]);
+            }
+        }
     }
 
     // ── Pré-conditions ────────────────────────────────────────────────────────

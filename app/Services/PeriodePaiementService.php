@@ -80,6 +80,47 @@ class PeriodePaiementService
             ->first();
     }
 
+    /** Clé de regroupement (date de début de quinzaine) pour une date donnée. */
+    public static function debutKeyForDate(Carbon $date): string
+    {
+        $quinzaine = self::quinzaineForDate($date);
+
+        return self::dateRangeFor($date->year, $date->month, $quinzaine)[0]->toDateString();
+    }
+
+    /**
+     * Résout en une seule requête les `PaiementPeriode` couvrant un lot de dates —
+     * évite le N+1 de `getPeriodByDate()` appelée en boucle sur une liste de bénéficiaires.
+     *
+     * @param  iterable<mixed>  $dates
+     * @return Collection<string, PaiementPeriode> indexée par `debutKeyForDate()`
+     */
+    public function getPeriodsForDates(string $organizationId, TypePeriodePaiement $type, iterable $dates): Collection
+    {
+        $debuts = collect($dates)
+            ->filter()
+            ->map(fn ($d) => self::debutKeyForDate(Carbon::parse($d)))
+            ->unique()
+            ->values();
+
+        if ($debuts->isEmpty()) {
+            return collect();
+        }
+
+        // whereIn() compare la colonne par égalité stricte, mais date_debut est
+        // stocké avec un suffixe horaire ("2026-07-01 00:00:00") — whereDate()
+        // tronque l'heure côté SQL, comme le fait déjà getPeriodByDate().
+        return PaiementPeriode::where('organization_id', $organizationId)
+            ->where('type', $type->value)
+            ->where(function ($query) use ($debuts) {
+                foreach ($debuts as $debut) {
+                    $query->orWhereDate('date_debut', $debut);
+                }
+            })
+            ->get()
+            ->keyBy(fn (PaiementPeriode $p) => $p->date_debut->toDateString());
+    }
+
     public function getOrCreatePeriod(string $organizationId, TypePeriodePaiement $type, Carbon $date, ?string $createdBy = null): PaiementPeriode
     {
         $quinzaine = self::quinzaineForDate($date);

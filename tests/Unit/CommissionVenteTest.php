@@ -180,11 +180,14 @@ class CommissionVenteTest extends TestCase
         $this->assertFalse($commission->isPaye());
     }
 
-    public function test_statut_ne_contient_pas_annule(): void
+    public function test_statut_contient_exactement_les_valeurs_attendues(): void
     {
+        // ANNULEE existe depuis la cascade d'annulation de commande (voir
+        // CommandeVenteService::annulerCommissionsAssociees) — le statut "annule"/"cancelled"
+        // en anglais n'a en revanche jamais existé.
         $values = array_column(StatutCommission::cases(), 'value');
+        $this->assertEqualsCanonicalizing(['creee', 'impaye', 'partiel', 'paye', 'annulee'], $values);
         $this->assertNotContains('annule', $values);
-        $this->assertNotContains('annulee', $values);
         $this->assertNotContains('cancelled', $values);
     }
 }

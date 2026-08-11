@@ -11,6 +11,7 @@ import {
     PackageCheck,
     ShieldCheck,
 } from 'lucide-vue-next';
+import { useToast } from 'primevue/usetoast';
 import { computed, ref, watch } from 'vue';
 
 interface RoleQuantite {
@@ -33,6 +34,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Parametrage ventes', href: '/settings/ventes' },
 ];
 
+const toast = useToast();
 const page = usePage();
 const flashSuccess = computed(
     () => (page.props.flash as Record<string, string>)?.success ?? null,
@@ -71,7 +73,16 @@ function toggleRole(role: RoleQuantite, field: EditableRoleField) {
 }
 
 function submit() {
-    form.put('/settings/ventes', { preserveScroll: true });
+    form.put('/settings/ventes', {
+        preserveScroll: true,
+        onSuccess: () => {
+            toast.add({
+                severity: 'success',
+                summary: 'Paramétrage ventes mis à jour',
+                life: 3000,
+            });
+        },
+    });
 }
 
 // ── Formatage seuil impayés ───────────────────────────────────────────────────

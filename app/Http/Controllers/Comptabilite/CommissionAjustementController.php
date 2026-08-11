@@ -64,6 +64,7 @@ class CommissionAjustementController extends Controller
                 'cle' => $b['cle'],
                 'type_beneficiaire' => $b['type_beneficiaire'],
                 'beneficiaire_nom' => $b['beneficiaire_nom'],
+                'beneficiaire_telephone' => $b['beneficiaire_telephone'],
                 'theorique' => $b['theorique'],
                 'ajuste' => $b['ajuste'],
                 'ecart' => $b['ecart'],
@@ -101,8 +102,8 @@ class CommissionAjustementController extends Controller
             'commissions_logistique' => collect($groupesRaw)->where('type', 'logistique')
                 ->map(fn (array $g) => ['id' => $g['commission_id'], 'label' => 'Transfert '.$g['reference']])
                 ->values(),
-            'livreurs' => Livreur::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom', 'prenom'])
-                ->map(fn (Livreur $l) => ['id' => $l->id, 'nom' => $l->nom_complet]),
+            'livreurs' => Livreur::where('organization_id', $orgId)->orderBy('nom_complet')->get(['id', 'nom', 'prenom', 'nom_complet', 'telephone'])
+                ->map(fn (Livreur $l) => ['id' => $l->id, 'nom' => $l->libelleAffichage()]),
             'proprietaires' => Proprietaire::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom', 'prenom'])
                 ->map(fn (Proprietaire $p) => ['id' => $p->id, 'nom' => $p->nom_complet]),
         ]);

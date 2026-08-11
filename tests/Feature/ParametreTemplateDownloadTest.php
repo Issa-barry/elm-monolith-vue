@@ -60,22 +60,21 @@ class ParametreTemplateDownloadTest extends TestCase
             ->assertHeader('content-type', 'application/vnd.ms-excel; charset=UTF-8')
             ->assertHeader('content-disposition', 'attachment; filename="template-produits.xls"')
             ->assertSee('nom')
-            ->assertSee('code_fournisseur')
+            ->assertSee('code_barres')
+            ->assertSee('fournisseur')
             ->assertSee('seuil_alerte_stock');
     }
 
-    public function test_download_vehicules_pack_contains_3_sheets(): void
+    public function test_download_vehicules_pack_template_no_longer_exists(): void
     {
+        // Remplacé par l'import flotte dédié (voir ImportFlotteTest) — ce nom de
+        // template n'est plus servi ici.
         $org = Organization::factory()->create();
         $user = $this->userWithPermission($org);
 
         $this->actingAs($user)
             ->get(route('parametres.templates.download', ['template' => 'vehicules-pack']))
-            ->assertOk()
-            ->assertSee('Worksheet ss:Name="proprietaires"', false)
-            ->assertSee('Worksheet ss:Name="livreurs"', false)
-            ->assertSee('Worksheet ss:Name="vehicules"', false)
-            ->assertSee('categorie');
+            ->assertStatus(404);
     }
 
     public function test_download_unknown_template_returns_404(): void

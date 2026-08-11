@@ -60,16 +60,7 @@ class SalaireController extends Controller
         $siteIds = ! $isAdmin ? $this->siteScope->accessibleSiteIds($user)->all() : [];
         $filtreSiteIds = $isAdmin ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
 
-        $periode = PaiePeriode::firstOrCreate(
-            ['organization_id' => $orgId, 'mois' => $filtreMois, 'annee' => $filtreAnnee],
-            ['statut' => 'brouillon'],
-        );
-
-        if ($periode->lignes()->count() === 0) {
-            $this->paieCalc->genererLignes($periode);
-            $this->paieCalc->calculerPeriode($periode);
-            $periode->refresh();
-        }
+        $periode = $this->paieCalc->getOrGenererPeriode($orgId, $filtreMois, $filtreAnnee);
 
         $lignes = collect();
 
@@ -160,12 +151,13 @@ class SalaireController extends Controller
 
     public function payerLigne(Request $request, string $ligneId): RedirectResponse
     {
-        abort_unless(auth()->user()->can('comptabilite.payer'), 403);
-
         $orgId = auth()->user()->organization_id;
 
-        $ligne = PaieLigne::whereHas('periode', fn ($q) => $q->where('organization_id', $orgId))
+        $ligne = PaieLigne::with('periode')
+            ->whereHas('periode', fn ($q) => $q->where('organization_id', $orgId))
             ->findOrFail($ligneId);
+
+        $this->authorize('pay', $ligne->periode);
 
         $data = $request->validate([
             'montant' => ['required', 'numeric', 'min:0.01'],

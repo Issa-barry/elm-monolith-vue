@@ -4,14 +4,23 @@ namespace App\Http\Controllers\Comptabilite;
 
 use App\Enums\ModePaiement;
 use App\Enums\StatutFichePaiement;
+use App\Enums\StatutValidationEquipe;
 use App\Http\Controllers\Controller;
+use App\Models\CommissionLogistiquePart;
+use App\Models\CommissionPart;
+use App\Models\Depense;
 use App\Models\Organization;
 use App\Models\PaiementFiche;
+use App\Models\PaiementFicheLigne;
 use App\Models\PaiementPeriode;
 use App\Models\Site;
+use App\Services\CommissionAdjustmentService;
+use App\Services\CommissionStatusResolver;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -40,13 +49,28 @@ class PaiementFicheController extends Controller
         $orgId = auth()->user()->organization_id;
         $filters = $request->only(['site_id', 'statut', 'periode_id', 'search']);
 
-        $query = $this->buildQuery($orgId, $type, $filters);
+        $query = $this->buildQuery($orgId, $type, $filters)->with(['site', 'periode']);
 
-        $fiches = $query->with(['site', 'periode'])
-            ->orderByDesc('created_at')
+        // "Équipe" (véhicule) non applicable aux salariés : ni statut de validation
+        // par bénéficiaire, ni colonne "Véhicule(s)" (un salarié n'est rattaché à
+        // aucun véhicule) — on évite le eager load des lignes/source pour ce type.
+        if ($type !== 'salarie') {
+            $query->with(['lignes.source' => $this->ligneSourceEagerLoad()]);
+        }
+
+        $fiches = $query->orderByDesc('created_at')
             ->paginate(30)
-            ->withQueryString()
-            ->through(fn (PaiementFiche $f) => $this->transform($f));
+            ->withQueryString();
+
+        $teamStatusParPeriode = collect();
+        if ($type !== 'salarie') {
+            $periodesUniques = $fiches->getCollection()->pluck('periode')->filter()->unique('id');
+            foreach ($periodesUniques as $p) {
+                $teamStatusParPeriode[$p->id] = CommissionAdjustmentService::statutValidationParBeneficiaire($p);
+            }
+        }
+
+        $fiches->through(fn (PaiementFiche $f) => $this->transform($f, $teamStatusParPeriode));
 
         $statsQuery = $this->buildQuery($orgId, $type, $filters);
         $stats = (clone $statsQuery)
@@ -89,11 +113,19 @@ class PaiementFicheController extends Controller
     {
         $this->authorize('view', $fiche);
 
-        $fiche->load(['lignes', 'site', 'periode', 'payeur', 'historiquePaiements.createur']);
+        $fiche->load([
+            'lignes.source' => $this->ligneSourceEagerLoad(),
+            'site', 'periode', 'payeur', 'historiquePaiements.createur',
+        ]);
+
+        $teamStatusParPeriode = collect();
+        if ($fiche->beneficiaire_type !== 'salarie' && $fiche->periode !== null) {
+            $teamStatusParPeriode[$fiche->periode->id] = CommissionAdjustmentService::statutValidationParBeneficiaire($fiche->periode);
+        }
 
         return Inertia::render('Comptabilite/Fiches/Show', [
             'fiche' => [
-                ...$this->transform($fiche),
+                ...$this->transform($fiche, $teamStatusParPeriode),
                 'periode' => $fiche->periode ? [
                     'id' => $fiche->periode->id,
                     'reference' => $fiche->periode->reference,
@@ -110,6 +142,7 @@ class PaiementFicheController extends Controller
                     'montant' => (float) $l->montant,
                     'is_gain' => $l->isGain(),
                     'is_deduction' => $l->isDeduction(),
+                    'vehicule' => $this->vehiculeFromLigne($l),
                 ]),
                 'historique' => $fiche->historiquePaiements->map(fn ($p) => [
                     'id' => $p->id,
@@ -227,8 +260,21 @@ class PaiementFicheController extends Controller
         }
     }
 
-    private function transform(PaiementFiche $f): array
+    /** @param  Collection<string, array<string, StatutValidationEquipe>>  $teamStatusParPeriode  indexé par periode_id */
+    private function transform(PaiementFiche $f, ?Collection $teamStatusParPeriode = null): array
     {
+        $teamStatus = null;
+        if ($teamStatusParPeriode !== null && $f->periode !== null) {
+            $teamStatus = $teamStatusParPeriode[$f->periode->id]["{$f->beneficiaire_type}:{$f->beneficiaire_id}"] ?? null;
+        }
+
+        $resolved = CommissionStatusResolver::resolve(
+            $f->periode,
+            $teamStatus,
+            $f->statut?->value ?? '',
+            $f->statut?->label() ?? '',
+        );
+
         return [
             'id' => $f->id,
             'reference' => $f->reference,
@@ -242,10 +288,72 @@ class PaiementFicheController extends Controller
             'montant_net' => (float) $f->montant_net,
             'montant_paye' => (float) $f->montant_paye,
             'montant_restant' => $f->montant_restant,
+            'remaining_amount' => $f->montant_restant,
             'statut' => $f->statut?->value,
             'statut_label' => $f->statut?->label(),
             'mode_paiement' => $f->mode_paiement,
             'date_paiement' => $f->date_paiement?->toDateString(),
+            'vehicules' => $f->relationLoaded('lignes') ? $this->vehiculesFromLignes($f->lignes) : [],
+            ...$resolved,
         ];
+    }
+
+    /**
+     * Callback d'eager load pour PaiementFicheLigne::source() (morphTo) — ne
+     * charge la relation véhicule que pour les types de source qui en portent
+     * une (CommissionPart/CommissionLogistiquePart via leur commission,
+     * Depense imputée à un véhicule). Partagé entre show() et renderIndex()
+     * pour garder les deux vues cohérentes (cf. audit UX bénéficiaire/véhicule).
+     */
+    private function ligneSourceEagerLoad(): \Closure
+    {
+        return function (MorphTo $morphTo) {
+            $morphTo->morphWith([
+                CommissionPart::class => ['commission.vehicule'],
+                CommissionLogistiquePart::class => ['commission.vehicule'],
+                Depense::class => ['vehiculeBeneficiaire'],
+            ]);
+        };
+    }
+
+    /** Résout le véhicule à l'origine d'une ligne de fiche, si applicable. */
+    private function vehiculeFromLigne(PaiementFicheLigne $ligne): ?array
+    {
+        $source = $ligne->source;
+
+        $vehicule = match (true) {
+            $source instanceof CommissionPart, $source instanceof CommissionLogistiquePart => $source->commission?->vehicule,
+            $source instanceof Depense && $source->beneficiaire_type === 'vehicule' => $source->vehiculeBeneficiaire,
+            default => null,
+        };
+
+        if (! $vehicule) {
+            return null;
+        }
+
+        return [
+            'id' => $vehicule->id,
+            'nom' => $vehicule->nom_vehicule,
+            'immatriculation' => $vehicule->immatriculation,
+        ];
+    }
+
+    /**
+     * Liste des véhicules distincts référencés par les lignes d'une fiche —
+     * une fiche (bénéficiaire + période) peut agréger des gains issus de
+     * plusieurs véhicules : le bénéficiaire ne doit jamais rester ambigu
+     * quant à son véhicule de rattachement.
+     *
+     * @param  Collection<int, PaiementFicheLigne>  $lignes
+     * @return array<int, array{id: string, nom: string, immatriculation: ?string}>
+     */
+    private function vehiculesFromLignes(Collection $lignes): array
+    {
+        return $lignes
+            ->map(fn (PaiementFicheLigne $l) => $this->vehiculeFromLigne($l))
+            ->filter()
+            ->unique('id')
+            ->values()
+            ->all();
     }
 }

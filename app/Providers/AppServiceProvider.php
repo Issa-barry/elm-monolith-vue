@@ -6,10 +6,13 @@ use App\Features\ModuleFeature;
 use App\Models\CommandeVente;
 use App\Models\Depense;
 use App\Models\Organization;
+use App\Models\Proprietaire;
 use App\Observers\DepenseObserver;
 use App\Observers\VenteObserver;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
@@ -41,6 +44,13 @@ class AppServiceProvider extends ServiceProvider
             URL::forceScheme('https');
         }
 
+        // Bloque migrate:fresh, migrate:refresh, db:wipe (et apparentés) en
+        // production — même avec --force. Contrairement à la simple confirmation
+        // interactive par défaut de Laravel (contournable via --force), ceci lève
+        // une exception à coup sûr. Ne dépend que de APP_ENV=production sur le
+        // serveur, indépendant de qui/quoi lance la commande (SSH manuel, script).
+        DB::prohibitDestructiveCommands($this->app->isProduction());
+
         Password::defaults(function () {
             return Password::min(8)
                 ->mixedCase()   // maj + min
@@ -50,6 +60,19 @@ class AppServiceProvider extends ServiceProvider
         // Observers
         CommandeVente::observe(VenteObserver::class);
         Depense::observe(DepenseObserver::class);
+
+        // Morph map des relations polymorphiques — alias stables en base plutôt que
+        // des noms de classe complets (indépendant des renommages de namespace).
+        // À compléter (jamais retirer une entrée existante) quand une nouvelle
+        // entité "identifiable" est ajoutée (ex: pieces_identite sur Client, Employe...).
+        // Non-enforcing (morphMap, pas enforceMorphMap) : plusieurs relations
+        // polymorphes existantes (User via Spatie Permission model_has_roles,
+        // AuditLog::auditable, MouvementStock::source...) stockent encore le nom
+        // de classe complet et ne sont pas dans cette map — les forcer casserait
+        // ces relations non liées à cette fonctionnalité.
+        Relation::morphMap([
+            'proprietaire' => Proprietaire::class,
+        ]);
 
         // Feature flags Pennant - modules metier.
         // Scope: Organization. Valeur par defaut pilotee par ModuleFeature::defaultState().

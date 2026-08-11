@@ -132,12 +132,23 @@ const mainNavItems = computed((): NavItem[] => {
         });
     }
 
-    if (canSee('achats.read', 'achats'))
+    if (canSee('achats.read', 'achats')) {
+        const achatsSubItems = [
+            { title: 'Commandes', href: '/backoffice/achats' },
+        ];
+        if (can('fournisseurs.read')) {
+            achatsSubItems.push({
+                title: 'Fournisseurs',
+                href: '/backoffice/fournisseurs',
+            });
+        }
         items.push({
             title: 'Achats',
             href: '/backoffice/achats',
             icon: PackageCheck,
+            items: achatsSubItems,
         });
+    }
     if (canSee('packings.read', 'packings'))
         items.push({
             title: 'Packings',
@@ -168,6 +179,26 @@ const mainNavItems = computed((): NavItem[] => {
     }
 
     if (canSee('produits.read', 'produits')) {
+        const produitsSousItems = [];
+        if (can('categories.read') || can('options.read')) {
+            produitsSousItems.push({
+                title: 'Tous les produits',
+                href: '/backoffice/produits',
+            });
+        }
+        if (can('categories.read')) {
+            produitsSousItems.push({
+                title: 'Catégories',
+                href: '/backoffice/produits/categories',
+            });
+        }
+        if (can('options.read')) {
+            produitsSousItems.push({
+                title: 'Options',
+                href: '/backoffice/produits/options',
+            });
+        }
+
         items.push({
             title: 'Produits',
             href: '/backoffice/produits',
@@ -176,6 +207,7 @@ const mainNavItems = computed((): NavItem[] => {
                 stockAlertes.value.total > 0
                     ? stockAlertes.value.total
                     : undefined,
+            items: produitsSousItems.length > 0 ? produitsSousItems : undefined,
         });
     }
 
@@ -224,6 +256,10 @@ const mainNavItems = computed((): NavItem[] => {
             icon: Calculator,
             items: [
                 { title: 'Tableau de bord', href: '/backoffice/comptabilite' },
+                {
+                    title: 'Besoin de trésorerie',
+                    href: '/backoffice/comptabilite/tresorerie',
+                },
                 {
                     title: 'Commission logistique',
                     href: '/backoffice/comptabilite/commissions/logistique',

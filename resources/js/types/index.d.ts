@@ -13,9 +13,12 @@ export type Resource =
     | 'equipes-livraison'
     | 'sites'
     | 'produits'
+    | 'categories'
+    | 'options'
     | 'packings'
     | 'ventes'
     | 'achats'
+    | 'fournisseurs'
     | 'depenses'
     | 'users'
     | 'parametres'
@@ -24,7 +27,9 @@ export type CrudAction = 'create' | 'read' | 'update' | 'delete';
 export type StandalonePermission =
     | 'logistique.commission.verser'
     | 'ventes.qte.update'
-    | 'ventes.prix.update';
+    | 'ventes.prix.update'
+    | 'imports-flotte.create'
+    | 'imports-flotte.read';
 export type PermissionKey = `${Resource}.${CrudAction}` | StandalonePermission;
 export type PermissionsMap = Partial<Record<PermissionKey, boolean>>;
 export type AppRole =
@@ -95,6 +100,7 @@ export interface Organization {
     id: number;
     name: string;
     slug: string;
+    logo_url: string | null;
 }
 
 export interface User {

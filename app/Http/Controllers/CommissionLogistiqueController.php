@@ -220,6 +220,7 @@ class CommissionLogistiqueController extends Controller
                 'montant_brut' => (float) $p->montant_brut,
                 'frais_supplementaires' => (float) $p->frais_supplementaires,
                 'montant_net' => (float) $p->montant_net,
+                'montant_a_payer' => $p->montant_a_payer,
                 'montant_verse' => (float) $p->montant_verse,
                 'montant_restant' => (float) $p->montant_restant,
                 'statut' => $p->statut?->value,

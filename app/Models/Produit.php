@@ -4,36 +4,32 @@ namespace App\Models;
 
 use App\Enums\ProduitStatut;
 use App\Enums\ProduitType;
+use App\Models\Concerns\NormalizesLabel;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class Produit extends Model
 {
-    use HasFactory, HasUlids, SoftDeletes;
+    use HasFactory, HasUlids, NormalizesLabel, SoftDeletes;
 
     public ?bool $is_used_loaded = null;
 
     protected $fillable = [
         'organization_id',
+        'categorie_id',
+        'fournisseur_id',
         'nom',
-        'code_interne',
-        'code_fournisseur',
-        'prix_usine',
-        'prix_vente',
-        'prix_achat',
-        'cout',
-        'qte_stock',
-        'seuil_alerte_stock',
         'type',
         'statut',
         'description',
-        'image_url',
+        'qte_stock',
         'is_alerte',
         'archived_at',
         'created_by',
@@ -43,12 +39,7 @@ class Produit extends Model
     ];
 
     protected $casts = [
-        'prix_usine' => 'integer',
-        'prix_vente' => 'integer',
-        'prix_achat' => 'integer',
-        'cout' => 'integer',
         'qte_stock' => 'integer',
-        'seuil_alerte_stock' => 'integer',
         'is_alerte' => 'boolean',
         'archived_at' => 'datetime',
         'type' => ProduitType::class,
@@ -66,12 +57,6 @@ class Produit extends Model
             }
             if (empty($p->organization_id)) {
                 $p->organization_id = Auth::user()?->organization_id;
-            }
-            // Génération automatique du code-barres Code 128 (13 chiffres unique)
-            if (empty($p->code_interne)) {
-                do {
-                    $p->code_interne = date('Ymd').str_pad(mt_rand(1, 99999), 5, '0', STR_PAD_LEFT);
-                } while (static::withTrashed()->where('code_interne', $p->code_interne)->exists());
             }
         });
 
@@ -101,27 +86,7 @@ class Produit extends Model
 
     public function setNomAttribute(mixed $value): void
     {
-        if ($value === null || trim($value) === '') {
-            $this->attributes['nom'] = $value;
-
-            return;
-        }
-        $v = trim(preg_replace('/\s+/u', ' ', $value));
-        $this->attributes['nom'] = mb_strtoupper(mb_substr($v, 0, 1)).mb_strtolower(mb_substr($v, 1));
-    }
-
-    public function setCodeInterneAttribute(mixed $value): void
-    {
-        $this->attributes['code_interne'] = ($value !== null && $value !== '')
-            ? mb_strtoupper(trim(preg_replace('/\s+/', '', $value)))
-            : null;
-    }
-
-    public function setCodeFournisseurAttribute(mixed $value): void
-    {
-        $this->attributes['code_fournisseur'] = ($value !== null && $value !== '')
-            ? mb_strtoupper(trim(preg_replace('/\s+/', '', $value)))
-            : null;
+        $this->attributes['nom'] = static::normalizeLabel($value);
     }
 
     // ── Accesseurs ────────────────────────────────────────────────────────────
@@ -137,8 +102,16 @@ class Produit extends Model
             return $this->is_used_loaded;
         }
 
-        return DB::table('commande_vente_lignes')->where('produit_id', $this->id)->exists()
-            || DB::table('commande_achat_lignes')->where('produit_id', $this->id)->whereNotNull('produit_id')->exists();
+        $varianteIds = $this->relationLoaded('variantes')
+            ? $this->variantes->pluck('id')
+            : $this->variantes()->pluck('id');
+
+        if ($varianteIds->isEmpty()) {
+            return false;
+        }
+
+        return DB::table('commande_vente_lignes')->whereIn('variante_id', $varianteIds)->exists()
+            || DB::table('commande_achat_lignes')->whereIn('variante_id', $varianteIds)->whereNotNull('variante_id')->exists();
     }
 
     public function getInStockAttribute(): bool
@@ -155,16 +128,77 @@ class Produit extends Model
         if (! $this->type?->hasStock() || $this->qte_stock <= 0) {
             return false;
         }
-        $seuil = $this->seuil_alerte_stock ?? Parametre::getSeuilStockFaible((int) $this->organization_id);
+        // Respecte l'eager loading ('variantes' préchargée en amont) pour éviter une requête
+        // par produit — sinon variantePrincipale()->first() interroge la DB à chaque appel.
+        $variante = $this->relationLoaded('variantes')
+            ? $this->variantes->firstWhere('is_default', true)
+            : $this->variantePrincipale()->first();
+        $seuil = $variante?->seuil_alerte_stock ?? Parametre::getSeuilStockFaible((int) $this->organization_id);
 
         return $seuil > 0 && $this->qte_stock <= $seuil;
     }
 
+    /**
+     * Image principale du produit (galerie produit_medias), pour compat des affichages
+     * qui n'attendent qu'une seule image (listes, PDV, tickets).
+     */
+    public function getImageUrlAttribute(): ?string
+    {
+        $primaire = $this->relationLoaded('medias')
+            ? $this->medias->firstWhere('is_primary', true) ?? $this->medias->first()
+            : $this->medias()->orderByDesc('is_primary')->orderBy('position')->first();
+
+        return $primaire?->url;
+    }
+
     // ── Relations ─────────────────────────────────────────────────────────────
 
-    public function stocks(): HasMany
+    public function categorie(): BelongsTo
     {
-        return $this->hasMany(ProduitStock::class);
+        return $this->belongsTo(Categorie::class);
+    }
+
+    /**
+     * Fournisseur principal (0 ou 1) — entité dédiée (table fournisseurs), distincte de
+     * Prestataire (main-d'œuvre externe : machiniste, mécanicien, consultant).
+     */
+    public function fournisseur(): BelongsTo
+    {
+        return $this->belongsTo(Fournisseur::class, 'fournisseur_id');
+    }
+
+    public function variantes(): HasMany
+    {
+        return $this->hasMany(ProduitVariante::class);
+    }
+
+    /**
+     * Query builder vers la variante par défaut (is_default = true). Appeler ->first() —
+     * volontairement pas de HasOne dédiée pour ne pas dupliquer variantes().
+     */
+    public function variantePrincipale(): HasMany
+    {
+        return $this->variantes()->where('is_default', true);
+    }
+
+    public function options(): HasMany
+    {
+        return $this->hasMany(ProduitOption::class)->orderBy('position');
+    }
+
+    public function medias(): HasMany
+    {
+        return $this->hasMany(ProduitMedia::class)->orderBy('position');
+    }
+
+    public function stocks(): HasManyThrough
+    {
+        return $this->hasManyThrough(
+            VarianteStock::class,
+            ProduitVariante::class,
+            'produit_id',
+            'produit_variante_id'
+        );
     }
 
     public function organization(): BelongsTo
@@ -204,5 +238,16 @@ class Produit extends Model
         $this->statut = $nouveau;
 
         return $this->save();
+    }
+
+    /**
+     * Recalcule produits.qte_stock (cache dénormalisé) depuis variante_stocks — même pattern
+     * qu'avant (ProduitController resynchronisait Produit::qte_stock après chaque mouvement),
+     * juste déplacé d'un cran puisque le stock réel vit désormais par variante.
+     */
+    public function resynchroniserQteStock(): void
+    {
+        $total = (int) $this->stocks()->sum('qte_stock');
+        $this->updateQuietly(['qte_stock' => $total]);
     }
 }

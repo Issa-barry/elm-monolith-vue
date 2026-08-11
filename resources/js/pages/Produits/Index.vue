@@ -70,8 +70,8 @@ interface SiteStock {
 interface Produit {
     id: string;
     nom: string;
-    code_interne: string | null;
-    code_fournisseur: string | null;
+    sku: string | null;
+    code_barres: string | null;
     type: string | null;
     type_label: string | null;
     image_url: string | null;
@@ -89,6 +89,7 @@ interface Produit {
     is_low_stock: boolean;
     has_stock: boolean;
     is_used: boolean;
+    has_variantes: boolean;
     last_mouvement_type: 'entree' | 'sortie' | null;
     last_mouvement_quantite: number | null;
     stocks_par_site: SiteStock[];
@@ -283,11 +284,11 @@ function exportExcel(): void {
     }
 
     const columns = [
-        { label: 'Code interne', value: (p: Produit) => p.code_interne },
+        { label: 'Référence', value: (p: Produit) => p.sku },
         { label: 'Nom', value: (p: Produit) => p.nom },
         {
-            label: 'Code fournisseur',
-            value: (p: Produit) => p.code_fournisseur,
+            label: 'Code-barres',
+            value: (p: Produit) => p.code_barres,
         },
         { label: 'Type', value: (p: Produit) => p.type_label },
         { label: 'Statut', value: (p: Produit) => p.statut_label },
@@ -652,10 +653,10 @@ function confirmArchive(produit: Produit) {
                         </template>
                     </Column>
 
-                    <!-- Code -->
+                    <!-- Référence (sku) -->
                     <Column
-                        field="code_interne"
-                        header="Code"
+                        field="sku"
+                        header="Référence"
                         sortable
                         style="width: 160px"
                     >
@@ -663,7 +664,7 @@ function confirmArchive(produit: Produit) {
                             <span
                                 class="font-mono text-xs font-semibold whitespace-nowrap text-muted-foreground"
                             >
-                                {{ data.code_interne || '—' }}
+                                {{ data.sku || '—' }}
                             </span>
                         </template>
                     </Column>
@@ -881,13 +882,33 @@ function confirmArchive(produit: Produit) {
                                         <DropdownMenuItem
                                             v-if="
                                                 can_ajuster_stock &&
-                                                data.has_stock
+                                                data.has_stock &&
+                                                !data.has_variantes
                                             "
                                             class="cursor-pointer"
                                             @click="openStockModal(data)"
                                         >
                                             <Sliders class="h-4 w-4" />
                                             Ajuster le stock
+                                        </DropdownMenuItem>
+                                        <!-- Produit à variantes : l'ajustement se fait depuis sa fiche,
+                                        où le choix de la variante est possible (cf. Show.vue). -->
+                                        <DropdownMenuItem
+                                            v-else-if="
+                                                can_ajuster_stock &&
+                                                data.has_stock &&
+                                                data.has_variantes
+                                            "
+                                            class="cursor-pointer"
+                                            as-child
+                                        >
+                                            <Link
+                                                :href="`/backoffice/produits/${data.id}`"
+                                                class="flex items-center gap-2"
+                                            >
+                                                <Sliders class="h-4 w-4" />
+                                                Ajuster le stock (par variante)
+                                            </Link>
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator
                                             v-if="

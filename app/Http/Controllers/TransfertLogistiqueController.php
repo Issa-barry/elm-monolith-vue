@@ -9,6 +9,7 @@ use App\Jobs\NotifierLivreursTransfertJob;
 use App\Models\CommissionLogistique;
 use App\Models\EquipeLivraison;
 use App\Models\Produit;
+use App\Models\ProduitVariante;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
 use App\Models\Vehicule;
@@ -17,6 +18,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -74,8 +76,12 @@ class TransfertLogistiqueController extends Controller
             'equipeLivraison:id,vehicule_id',
             'equipeLivraison.vehicule:id,nom_vehicule',
             'commission:id,transfert_logistique_id,statut,montant_total,montant_verse',
-            'lignes:id,transfert_logistique_id,produit_id,quantite_chargee,quantite_recue,ecart_type,ecart_motif',
-            'lignes.produit:id,nom,code_interne,image_url',
+            'lignes:id,transfert_logistique_id,variante_id,quantite_chargee,quantite_recue,ecart_type,ecart_motif',
+            'lignes.variante:id,produit_id,sku',
+            // image_url est un accesseur (dérivé de produit_medias, pas une colonne) : on charge
+            // la relation medias plutôt que de la lister dans un select() limité aux colonnes.
+            'lignes.variante.produit:id,nom',
+            'lignes.variante.produit.medias',
         ])->where('organization_id', $orgId);
 
         if ($vue === 'receptions') {
@@ -218,8 +224,8 @@ class TransfertLogistiqueController extends Controller
             'vehicules' => Vehicule::where('organization_id', $orgId)
                 ->where('is_active', true)
                 ->where('categorie', 'interne')
-                ->with('equipe:id,vehicule_id')
-                ->select('id', 'nom_vehicule', 'immatriculation', 'capacite_packs')
+                ->with(['equipe:id,vehicule_id', 'typeVehicule'])
+                ->select('id', 'nom_vehicule', 'immatriculation', 'capacite_packs', 'type_vehicule_id')
                 ->get()
                 ->map(fn ($v) => [
                     'id' => $v->id,
@@ -227,7 +233,9 @@ class TransfertLogistiqueController extends Controller
                     'immatriculation' => $v->immatriculation,
                     'equipe_livraison_id' => $v->equipe?->id,
                     'equipe_nom' => $v->equipe ? $v->nom_vehicule : null,
-                    'capacite_packs' => $v->capacite_packs,
+                    // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
+                    // on retombe sur la capacité par défaut du type (cf. VehiculeController).
+                    'capacite_packs' => $v->capacite_packs ?? $v->typeVehicule?->capacite_defaut,
                 ]),
             'equipes' => EquipeLivraison::with('vehicule:id,nom_vehicule')
                 ->where('organization_id', $orgId)
@@ -262,6 +270,7 @@ class TransfertLogistiqueController extends Controller
             'notes' => ['nullable', 'string', 'max:1000'],
             'lignes' => ['required', 'array', 'min:1'],
             'lignes.*.produit_id' => ['required', 'string', Rule::exists('produits', 'id')->where('organization_id', $orgId)],
+            'lignes.*.variante_id' => ['nullable', 'string', Rule::exists('produit_variantes', 'id')->where('organization_id', $orgId)],
             'lignes.*.quantite_demandee' => ['required', 'integer', 'min:1'],
             'lignes.*.notes' => ['nullable', 'string', 'max:250'],
         ];
@@ -315,17 +324,17 @@ class TransfertLogistiqueController extends Controller
                 'notes' => $data['notes'] ?? null,
             ]);
 
-            // Lignes — dédoublonner sur produit_id
+            // Lignes — dédoublonner sur variante_id
             $seen = [];
             foreach ($data['lignes'] as $ligne) {
-                $pid = $ligne['produit_id'];
-                if (isset($seen[$pid])) {
+                $variante = $this->resolveVariante($ligne);
+                if (isset($seen[$variante->id])) {
                     continue;
                 }
-                $seen[$pid] = true;
+                $seen[$variante->id] = true;
 
                 $transfert->lignes()->create([
-                    'produit_id' => $pid,
+                    'variante_id' => $variante->id,
                     'quantite_demandee' => $ligne['quantite_demandee'],
                     'notes' => $ligne['notes'] ?? null,
                 ]);
@@ -358,7 +367,9 @@ class TransfertLogistiqueController extends Controller
             'vehicule.proprietaire:id,prenom,nom',
             'equipeLivraison:id,vehicule_id',
             'equipeLivraison.vehicule:id,nom_vehicule',
-            'lignes.produit:id,nom,code_interne,image_url',
+            'lignes.variante:id,produit_id,sku',
+            'lignes.variante.produit:id,nom',
+            'lignes.variante.produit.medias',
             'commission.parts.versements.createur:id,prenom,nom',
             'createur:id,prenom,nom',
             'validateur:id,prenom,nom',
@@ -415,7 +426,7 @@ class TransfertLogistiqueController extends Controller
 
         $orgId = auth()->user()->organization_id;
 
-        $transfert_logistique->load(['lignes.produit:id,nom', 'siteSource:id,nom', 'siteDestination:id,nom']);
+        $transfert_logistique->load(['lignes.variante.produit:id,nom', 'siteSource:id,nom', 'siteDestination:id,nom']);
 
         $siteSourceModel = $transfert_logistique->siteSource;
 
@@ -426,8 +437,8 @@ class TransfertLogistiqueController extends Controller
             'sites' => Site::where('organization_id', $orgId)->select('id', 'nom')->orderBy('nom')->get(),
             'vehicules' => Vehicule::where('organization_id', $orgId)->where('is_active', true)
                 ->where('categorie', 'interne')
-                ->with('equipe:id,vehicule_id')
-                ->select('id', 'nom_vehicule', 'immatriculation', 'capacite_packs')
+                ->with(['equipe:id,vehicule_id', 'typeVehicule'])
+                ->select('id', 'nom_vehicule', 'immatriculation', 'capacite_packs', 'type_vehicule_id')
                 ->get()
                 ->map(fn ($v) => [
                     'id' => $v->id,
@@ -435,7 +446,9 @@ class TransfertLogistiqueController extends Controller
                     'immatriculation' => $v->immatriculation,
                     'equipe_livraison_id' => $v->equipe?->id,
                     'equipe_nom' => $v->equipe ? $v->nom_vehicule : null,
-                    'capacite_packs' => $v->capacite_packs,
+                    // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
+                    // on retombe sur la capacité par défaut du type (cf. VehiculeController).
+                    'capacite_packs' => $v->capacite_packs ?? $v->typeVehicule?->capacite_defaut,
                 ]),
             'equipes' => EquipeLivraison::with('vehicule:id,nom_vehicule')
                 ->where('organization_id', $orgId)
@@ -465,6 +478,7 @@ class TransfertLogistiqueController extends Controller
             'notes' => ['nullable', 'string', 'max:1000'],
             'lignes' => ['required', 'array', 'min:1'],
             'lignes.*.produit_id' => ['required', 'string', Rule::exists('produits', 'id')->where('organization_id', $orgId)],
+            'lignes.*.variante_id' => ['nullable', 'string', Rule::exists('produit_variantes', 'id')->where('organization_id', $orgId)],
             'lignes.*.quantite_demandee' => ['required', 'integer', 'min:1'],
             'lignes.*.notes' => ['nullable', 'string', 'max:250'],
         ], [
@@ -497,14 +511,14 @@ class TransfertLogistiqueController extends Controller
 
             $seen = [];
             foreach ($data['lignes'] as $ligne) {
-                $pid = $ligne['produit_id'];
-                if (isset($seen[$pid])) {
+                $variante = $this->resolveVariante($ligne);
+                if (isset($seen[$variante->id])) {
                     continue;
                 }
-                $seen[$pid] = true;
+                $seen[$variante->id] = true;
 
                 $transfert_logistique->lignes()->create([
-                    'produit_id' => $pid,
+                    'variante_id' => $variante->id,
                     'quantite_demandee' => $ligne['quantite_demandee'],
                     'notes' => $ligne['notes'] ?? null,
                 ]);
@@ -561,7 +575,8 @@ class TransfertLogistiqueController extends Controller
             'lignes_reception' => $t->statut === StatutTransfert::TRANSIT
                 ? $t->lignes->map(fn ($l) => [
                     'id' => $l->id,
-                    'produit_nom' => $l->produit?->nom,
+                    'produit_nom' => $l->variante?->produit?->nom,
+                    'variante_libelle' => $l->variante?->libelle,
                     'quantite_chargee' => $l->quantite_chargee,
                     'quantite_recue' => $l->quantite_recue,
                     'ecart_type' => $l->ecart_type?->value,
@@ -589,10 +604,12 @@ class TransfertLogistiqueController extends Controller
 
         $base['lignes'] = $t->lignes->map(fn ($l) => [
             'id' => $l->id,
-            'produit_id' => $l->produit_id,
-            'produit_nom' => $l->produit?->nom,
-            'produit_code' => $l->produit?->code_interne,
-            'produit_image_url' => $l->produit?->image_url,
+            'variante_id' => $l->variante_id,
+            'produit_id' => $l->variante?->produit_id,
+            'produit_nom' => $l->variante?->produit?->nom,
+            'variante_libelle' => $l->variante?->libelle,
+            'sku' => $l->variante?->sku,
+            'produit_image_url' => $l->variante?->produit?->image_url,
             'quantite_demandee' => $l->quantite_demandee,
             'quantite_chargee' => $l->quantite_chargee,
             'quantite_recue' => $l->quantite_recue,
@@ -637,6 +654,7 @@ class TransfertLogistiqueController extends Controller
                 'montant_brut' => (float) $p->montant_brut,
                 'frais_supplementaires' => (float) $p->frais_supplementaires,
                 'montant_net' => (float) $p->montant_net,
+                'montant_a_payer' => $p->montant_a_payer,
                 'montant_verse' => (float) $p->montant_verse,
                 'montant_restant' => (float) $p->montant_restant,
                 'statut' => $p->statut?->value,
@@ -659,5 +677,33 @@ class TransfertLogistiqueController extends Controller
     private function statutDotClass(StatutTransfert $statut): string
     {
         return $statut->dotClass();
+    }
+
+    /**
+     * Résout la variante à transférer. Le formulaire actuel ne propose qu'un sélecteur de
+     * produit (pas encore de sélecteur de variante — Phase 3) ; si le produit n'a qu'une
+     * seule variante (cas normal), on la prend directement.
+     */
+    private function resolveVariante(array $ligne): ProduitVariante
+    {
+        if (! empty($ligne['variante_id'])) {
+            return ProduitVariante::findOrFail($ligne['variante_id']);
+        }
+
+        $produit = Produit::with('variantes')->findOrFail($ligne['produit_id']);
+
+        if ($produit->variantes->count() === 1) {
+            return $produit->variantes->first();
+        }
+
+        if ($produit->variantes->count() > 1) {
+            throw ValidationException::withMessages([
+                'lignes' => "Le produit « {$produit->nom} » a plusieurs déclinaisons — précisez la variante à transférer.",
+            ]);
+        }
+
+        throw ValidationException::withMessages([
+            'lignes' => "Le produit « {$produit->nom} » n'a aucune variante disponible.",
+        ]);
     }
 }

@@ -5,18 +5,18 @@ namespace Tests\Feature;
 use App\Enums\StatutCommandeAchat;
 use App\Features\ModuleFeature;
 use App\Models\CommandeAchat;
+use App\Models\Fournisseur;
 use App\Models\Organization;
-use App\Models\Prestataire;
-use App\Models\Produit;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Pennant\Feature;
+use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 class CommandeAchatTest extends TestCase
 {
-    use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
+    use HasAdminSetup, HasOrgAndUser, HasProduitVariante, RefreshDatabase;
 
     protected function setUp(): void
     {
@@ -28,23 +28,19 @@ class CommandeAchatTest extends TestCase
 
     private function makeContext(Organization $org): array
     {
-        $produit = Produit::create([
-            'organization_id' => $org->id,
-            'nom' => 'Produit achat test',
-            'type' => 'materiel',
-            'statut' => 'actif',
-            'prix_achat' => 1000,
-            'qte_stock' => 0,
-        ]);
+        $produit = $this->makeProduitAvecVariante(
+            $org,
+            ['nom' => 'Produit achat test', 'qte_stock' => 0],
+            ['prix_achat' => 1000],
+        );
 
-        $prestataire = Prestataire::create([
+        $fournisseur = Fournisseur::create([
             'organization_id' => $org->id,
             'nom' => 'FOURNISSEUR TEST',
-            'type' => 'fournisseur',
             'is_active' => true,
         ]);
 
-        return compact('produit', 'prestataire');
+        return compact('produit', 'fournisseur');
     }
 
     private function makeCommande(Organization $org, array $overrides = []): CommandeAchat
@@ -92,11 +88,11 @@ class CommandeAchatTest extends TestCase
 
     public function test_store_creates_commande_achat_and_redirects(): void
     {
-        ['produit' => $produit, 'prestataire' => $prestataire] = $this->makeContext($this->org);
+        ['produit' => $produit, 'fournisseur' => $fournisseur] = $this->makeContext($this->org);
 
         $response = $this->actingAs($this->user)
             ->post(route('achats.store'), [
-                'prestataire_id' => $prestataire->id,
+                'fournisseur_id' => $fournisseur->id,
                 'lignes' => [
                     [
                         'produit_id' => $produit->id,
@@ -110,7 +106,7 @@ class CommandeAchatTest extends TestCase
 
         $this->assertDatabaseHas('commandes_achats', [
             'organization_id' => $this->org->id,
-            'prestataire_id' => $prestataire->id,
+            'fournisseur_id' => $fournisseur->id,
         ]);
     }
 
@@ -156,7 +152,7 @@ class CommandeAchatTest extends TestCase
         ['produit' => $produit] = $this->makeContext($this->org);
         $commande = $this->makeCommande($this->org);
         $ligne = $commande->lignes()->create([
-            'produit_id' => $produit->id,
+            'variante_id' => $produit->variantePrincipale()->first()->id,
             'qte' => 3,
             'prix_achat_snapshot' => 1000,
             'total_ligne' => 3000,

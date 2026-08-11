@@ -12,15 +12,15 @@ return new class extends Migration
             $table->ulid('id')->primary();
             $table->foreignUlid('organization_id')->constrained('organizations')->cascadeOnDelete();
             $table->string('role_name');
-            // 'toutes' | 'sites_specifiques'
-            $table->string('perimetre')->default('toutes');
-            // JSON array of site ULIDs, null when perimetre = 'toutes'
+            // 'toutes_agences' | 'agences_selectionnees'
+            $table->string('perimetre')->default('toutes_agences');
+            // JSON array of site ULIDs, null when perimetre = 'toutes_agences'
             $table->json('sites')->nullable();
-            $table->boolean('is_actif')->default(true);
+            $table->boolean('peut_augmenter')->default(false);
+            $table->boolean('peut_diminuer')->default(false);
             $table->timestamps();
 
-            $table->index(['organization_id', 'role_name']);
-            $table->index(['organization_id', 'is_actif']);
+            $table->unique(['organization_id', 'role_name']);
         });
     }
 

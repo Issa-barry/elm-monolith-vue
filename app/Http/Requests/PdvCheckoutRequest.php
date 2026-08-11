@@ -19,6 +19,10 @@ class PdvCheckoutRequest extends FormRequest
             'vehicule_id' => ['nullable', 'exists:vehicules,id'],
             'lignes' => ['required', 'array', 'min:1'],
             'lignes.*.produit_id' => ['required', 'exists:produits,id'],
+            // Optionnel : la grille PDV actuelle ne sélectionne qu'un produit (pas encore de
+            // sélecteur de variante — Phase 3). PdvCheckoutService retombe sur la variante par
+            // défaut du produit si absent.
+            'lignes.*.variante_id' => ['nullable', 'exists:produit_variantes,id'],
             'lignes.*.quantite' => ['required', 'integer', 'min:1'],
         ];
     }

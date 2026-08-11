@@ -4,18 +4,61 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ArrowLeft, Save } from 'lucide-vue-next';
+import { computed, ref } from 'vue';
 import ProduitForm from './partials/ProduitForm.vue';
+import VarianteEditModal from './partials/VarianteEditModal.vue';
 
 interface Option {
     value: string;
     label: string;
 }
 
+interface Categorie {
+    id: string;
+    nom: string;
+    parent_id: string | null;
+}
+
+interface FournisseurOption {
+    id: string;
+    nom_complet: string;
+    phone: string | null;
+}
+
+interface Limites {
+    max_photos_produit: number;
+    max_options_produit: number;
+    max_valeurs_option: number;
+    max_variantes_produit: number;
+}
+
+interface VarianteOption {
+    option: string;
+    valeur: string;
+}
+
+interface Variante {
+    id: string;
+    libelle: string;
+    sku: string | null;
+    code_barres: string | null;
+    prix_usine: number | null;
+    prix_vente: number | null;
+    prix_achat: number | null;
+    cout: number | null;
+    seuil_alerte_stock: number | null;
+    is_default: boolean;
+    is_active: boolean;
+    options: VarianteOption[];
+}
+
 interface ProduitData {
     id: number;
     nom: string;
-    code_interne: string | null;
-    code_fournisseur: string | null;
+    categorie_id: string | null;
+    fournisseur_id: string | null;
+    sku: string | null;
+    code_barres: string | null;
     type: string;
     statut: string;
     prix_usine: number | null;
@@ -26,13 +69,27 @@ interface ProduitData {
     description: string | null;
     is_alerte: boolean;
     image_url: string | null;
+    variantes_count: number;
+    variantes: Variante[];
 }
 
 const props = defineProps<{
     produit: ProduitData;
     types: Option[];
     statuts: Option[];
+    categories: Categorie[];
+    fournisseurs: FournisseurOption[];
+    limites: Limites;
 }>();
+
+const showVarianteModal = ref(false);
+const varianteEnEdition = ref<Variante | null>(null);
+const isFabricable = computed(() => props.produit.type === 'fabricable');
+
+function editerVariante(variante: Variante) {
+    varianteEnEdition.value = variante;
+    showVarianteModal.value = true;
+}
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
@@ -42,7 +99,9 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const form = useForm({
     nom: props.produit.nom,
-    code_fournisseur: props.produit.code_fournisseur,
+    categorie_id: props.produit.categorie_id,
+    fournisseur_id: props.produit.fournisseur_id,
+    code_barres: props.produit.code_barres,
     type: props.produit.type,
     statut: props.produit.statut,
     prix_usine: props.produit.prix_usine,
@@ -52,7 +111,12 @@ const form = useForm({
     seuil_alerte_stock: props.produit.seuil_alerte_stock,
     description: props.produit.description,
     is_alerte: props.produit.is_alerte,
-    image: null as File | null,
+    images: [] as File[],
+    options: [] as {
+        nom: string;
+        valeurs: string[];
+        option_catalogue_id: string | null;
+    }[],
     _method: 'PUT',
 });
 
@@ -106,13 +170,26 @@ function submit() {
                 :errors="form.errors"
                 :types="types"
                 :statuts="statuts"
+                :categories="categories"
+                :fournisseurs="fournisseurs"
+                :limites="limites"
                 :processing="form.processing"
                 :current-image-url="produit.image_url"
-                :current-code-interne="produit.code_interne"
+                :current-sku="produit.sku"
+                :allow-declinaisons="false"
+                :existing-variantes="produit.variantes"
                 @update:form="Object.assign(form, $event)"
                 @submit="submit"
+                @edit-variante="editerVariante"
             />
         </div>
+
+        <VarianteEditModal
+            v-model:visible="showVarianteModal"
+            :produit-id="String(produit.id)"
+            :variante="varianteEnEdition"
+            :is-fabricable="isFabricable"
+        />
 
         <!-- ─── Footer sticky mobile ─── -->
         <div

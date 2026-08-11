@@ -18,7 +18,7 @@ interface ProduitOption {
     qte_stock: number;
 }
 
-interface PrestataireOption {
+interface FournisseurOption {
     id: number;
     nom: string;
 }
@@ -33,7 +33,7 @@ interface LigneForm {
 // ── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps<{
     produits: ProduitOption[];
-    prestataires: PrestataireOption[];
+    fournisseurs: FournisseurOption[];
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -44,7 +44,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 // ── Form ──────────────────────────────────────────────────────────────────────
 const form = useForm({
-    prestataire_id: null as number | null,
+    fournisseur_id: null as number | null,
     note: null as string | null,
     lignes: [
         { produit_id: null, qte: 1, prix_achat: 0, total: 0 },
@@ -56,8 +56,8 @@ const produitOptions = computed(() =>
     props.produits.map((p) => ({ value: p.id, label: p.nom })),
 );
 
-const prestataireOptions = computed(() =>
-    props.prestataires.map((p) => ({ value: p.id, label: p.nom })),
+const fournisseurOptions = computed(() =>
+    props.fournisseurs.map((f) => ({ value: f.id, label: f.nom })),
 );
 
 // ── Formatage ─────────────────────────────────────────────────────────────────
@@ -194,8 +194,8 @@ function submit() {
                                 >Fournisseur</Label
                             >
                             <Dropdown
-                                v-model="form.prestataire_id"
-                                :options="prestataireOptions"
+                                v-model="form.fournisseur_id"
+                                :options="fournisseurOptions"
                                 option-label="label"
                                 option-value="value"
                                 placeholder="— Optionnel —"

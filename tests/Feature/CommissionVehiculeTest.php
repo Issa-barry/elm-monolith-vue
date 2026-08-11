@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Enums\StatutCommission;
+use App\Enums\StatutPeriodePaiement;
+use App\Enums\TypePeriodePaiement;
 use App\Features\ModuleFeature;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
@@ -10,10 +12,13 @@ use App\Models\CommissionPayment;
 use App\Models\CommissionPaymentItem;
 use App\Models\Livreur;
 use App\Models\Organization;
+use App\Models\PaiementPeriode;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
 use App\Models\User;
 use App\Models\Vehicule;
+use App\Services\PeriodePaiementService;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Pennant\Feature;
@@ -124,6 +129,18 @@ class CommissionVehiculeTest extends TestCase
             'statut' => StatutCommission::IMPAYE,
             'earned_at' => now()->subDays(15)->toDateString(),
         ], $overrides));
+    }
+
+    private function validerPeriode(Organization $org, $earnedAt): PaiementPeriode
+    {
+        $periode = app(PeriodePaiementService::class)->getOrCreatePeriod(
+            $org->id,
+            TypePeriodePaiement::LIVREUR,
+            Carbon::parse($earnedAt),
+        );
+        $periode->update(['statut' => StatutPeriodePaiement::VALIDEE]);
+
+        return $periode->fresh();
     }
 
     // ── GET /logistique/commissions ───────────────────────────────────────────
@@ -362,6 +379,7 @@ class CommissionVehiculeTest extends TestCase
 
         $commission = $this->makeCommission($org, $vehicule);
         $part = $this->makePart($commission, $livreur, ['montant_net' => 3000]);
+        $this->validerPeriode($org, $part->earned_at);
 
         $this->actingAs($user)
             ->post("/backoffice/logistique/commissions/vehicules/{$vehicule->id}/paiements", [
@@ -398,6 +416,7 @@ class CommissionVehiculeTest extends TestCase
 
         $commission = $this->makeCommission($org, $vehicule);
         $part = $this->makePart($commission, $livreur, ['montant_net' => 2500]);
+        $this->validerPeriode($org, $part->earned_at);
 
         $this->actingAs($user)
             ->post("/backoffice/logistique/commissions/vehicules/{$vehicule->id}/paiements", [
@@ -488,6 +507,8 @@ class CommissionVehiculeTest extends TestCase
             'montant_net' => 2000,
             'earned_at' => now()->subDays(10)->toDateString(),
         ]);
+        $this->validerPeriode($org, $partA->earned_at);
+        $this->validerPeriode($org, $partB->earned_at);
 
         $this->actingAs($user)
             ->post("/backoffice/logistique/commissions/vehicules/{$vehicule->id}/paiements", [

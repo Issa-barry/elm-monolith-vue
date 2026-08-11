@@ -8,6 +8,7 @@ enum StatutCommission: string
     case IMPAYE = 'impaye';
     case PARTIEL = 'partiel';
     case PAYE = 'paye';
+    case ANNULEE = 'annulee';
 
     public function label(): string
     {
@@ -16,6 +17,7 @@ enum StatutCommission: string
             self::IMPAYE => 'Impayée',
             self::PARTIEL => 'Partiellement payée',
             self::PAYE => 'Payée',
+            self::ANNULEE => 'Annulée',
         };
     }
 
@@ -26,6 +28,7 @@ enum StatutCommission: string
             self::IMPAYE => 'bg-red-500',
             self::PARTIEL => 'bg-amber-500',
             self::PAYE => 'bg-emerald-500',
+            self::ANNULEE => 'bg-zinc-400 dark:bg-zinc-500',
         };
     }
 
@@ -36,6 +39,7 @@ enum StatutCommission: string
             self::IMPAYE => 'danger',
             self::PARTIEL => 'warn',
             self::PAYE => 'success',
+            self::ANNULEE => 'secondary',
         };
     }
 
@@ -49,9 +53,14 @@ enum StatutCommission: string
         return $this === self::PARTIEL;
     }
 
+    public function isAnnulee(): bool
+    {
+        return $this === self::ANNULEE;
+    }
+
     public function isPayable(): bool
     {
-        return $this !== self::PAYE;
+        return ! in_array($this, [self::PAYE, self::ANNULEE], true);
     }
 
     /** @return array<array{value:string,label:string}> */

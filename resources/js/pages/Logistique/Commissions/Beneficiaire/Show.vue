@@ -21,6 +21,7 @@ interface PartRow {
     montant_brut: number;
     frais_supplementaires: number;
     montant_net: number;
+    montant_a_payer: number;
     montant_verse: number;
     montant_restant: number;
     earned_at: string | null;
@@ -54,7 +55,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const totals = computed(() => ({
     brut: props.parts.reduce((s, p) => s + p.montant_brut, 0),
-    net: props.parts.reduce((s, p) => s + p.montant_net, 0),
+    net: props.parts.reduce((s, p) => s + p.montant_a_payer, 0),
     verse: props.parts.reduce((s, p) => s + p.montant_verse, 0),
     restant: props.parts.reduce((s, p) => s + p.montant_restant, 0),
 }));
@@ -227,7 +228,7 @@ function formatGNF(val: number): string {
                                     <td
                                         class="px-4 py-3 text-right font-semibold tabular-nums"
                                     >
-                                        {{ formatGNF(part.montant_net) }}
+                                        {{ formatGNF(part.montant_a_payer) }}
                                     </td>
                                     <td
                                         class="px-4 py-3 text-right text-emerald-600 tabular-nums dark:text-emerald-400"

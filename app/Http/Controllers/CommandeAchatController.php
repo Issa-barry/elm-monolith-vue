@@ -6,12 +6,19 @@ use App\Enums\ProduitStatut;
 use App\Enums\ProduitType;
 use App\Enums\StatutCommandeAchat;
 use App\Models\CommandeAchat;
-use App\Models\Prestataire;
+use App\Models\CommandeAchatLigne;
+use App\Models\Fournisseur;
+use App\Models\MouvementStock;
 use App\Models\Produit;
+use App\Models\ProduitVariante;
+use App\Models\Site;
+use App\Models\VarianteStock;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -23,7 +30,7 @@ class CommandeAchatController extends Controller
 
         $orgId = auth()->user()->organization_id;
 
-        $commandes = CommandeAchat::with(['prestataire', 'lignes'])
+        $commandes = CommandeAchat::with(['fournisseur', 'lignes'])
             ->where('organization_id', $orgId)
             ->orderByDesc('created_at')
             ->get()
@@ -33,7 +40,7 @@ class CommandeAchatController extends Controller
                 'statut' => $c->statut?->value,
                 'statut_label' => $c->statut_label,
                 'total_commande' => (float) $c->total_commande,
-                'prestataire_nom' => $c->prestataire?->nom,
+                'fournisseur_nom' => $c->fournisseur?->nom_complet,
                 'note' => $c->note,
                 'created_at' => $c->created_at?->format('d/m/Y'),
                 'is_annulee' => $c->isAnnulee(),
@@ -56,26 +63,32 @@ class CommandeAchatController extends Controller
         $produits = Produit::where('organization_id', $orgId)
             ->where('statut', ProduitStatut::ACTIF)
             ->whereIn('type', ProduitType::achetableValues())
+            ->with('variantes')
             ->orderBy('nom')
             ->get()
-            ->map(fn (Produit $p) => [
-                'id' => $p->id,
-                'nom' => $p->nom,
-                'prix_achat' => (int) $p->prix_achat,
-                'qte_stock' => $p->qte_stock,
-            ]);
+            ->map(function (Produit $p) {
+                $variante = $p->variantes->firstWhere('is_default', true) ?? $p->variantes->first();
 
-        $prestataires = Prestataire::where('organization_id', $orgId)
+                return [
+                    'id' => $p->id,
+                    'nom' => $p->nom,
+                    'prix_achat' => (int) ($variante?->prix_achat ?? 0),
+                    'qte_stock' => $p->qte_stock,
+                ];
+            });
+
+        $fournisseurs = Fournisseur::where('organization_id', $orgId)
+            ->where('is_active', true)
             ->orderBy('nom')
             ->get()
-            ->map(fn (Prestataire $p) => [
-                'id' => $p->id,
-                'nom' => $p->nom,
+            ->map(fn (Fournisseur $f) => [
+                'id' => $f->id,
+                'nom' => $f->nom_complet,
             ]);
 
         return Inertia::render('Achats/Create', [
             'produits' => $produits,
-            'prestataires' => $prestataires,
+            'fournisseurs' => $fournisseurs,
         ]);
     }
 
@@ -87,10 +100,11 @@ class CommandeAchatController extends Controller
         abort_if(! $orgId, 403, "Votre compte n'est associé à aucune organisation.");
 
         $data = $request->validate([
-            'prestataire_id' => 'nullable|exists:prestataires,id',
+            'fournisseur_id' => 'nullable|exists:fournisseurs,id',
             'note' => 'nullable|string|max:1000',
             'lignes' => 'required|array|min:1',
             'lignes.*.produit_id' => 'required|exists:produits,id',
+            'lignes.*.variante_id' => 'nullable|exists:produit_variantes,id',
             'lignes.*.qte' => 'required|integer|min:1',
             'lignes.*.prix_achat' => 'required|numeric|min:0',
         ], [
@@ -108,15 +122,19 @@ class CommandeAchatController extends Controller
         $totalCommande = 0;
 
         foreach ($data['lignes'] as $ligne) {
+            $variante = $this->resolveVariante($ligne);
             $qte = (int) $ligne['qte'];
             $prixAchat = (float) $ligne['prix_achat'];
             $totalLigne = $qte * $prixAchat;
 
             $lignesData[] = [
-                'produit_id' => $ligne['produit_id'],
+                'variante_id' => $variante->id,
                 'qte' => $qte,
                 'prix_achat_snapshot' => $prixAchat,
                 'total_ligne' => $totalLigne,
+                'libelle_snapshot' => $variante->libelle !== ''
+                    ? "{$variante->produit->nom} — {$variante->libelle}"
+                    : $variante->produit->nom,
             ];
 
             $totalCommande += $totalLigne;
@@ -124,7 +142,7 @@ class CommandeAchatController extends Controller
 
         $commande = CommandeAchat::create([
             'organization_id' => $orgId,
-            'prestataire_id' => $data['prestataire_id'] ?? null,
+            'fournisseur_id' => $data['fournisseur_id'] ?? null,
             'note' => $data['note'] ?? null,
             'total_commande' => $totalCommande,
         ]);
@@ -141,12 +159,12 @@ class CommandeAchatController extends Controller
     {
         $this->authorize('view', $achat);
 
-        $achat->load(['prestataire', 'lignes.produit', 'createdBy']);
+        $achat->load(['fournisseur', 'lignes.variante.produit', 'createdBy']);
 
         $lignes = $achat->lignes->map(fn ($l) => [
             'id' => $l->id,
-            'produit_id' => $l->produit_id,
-            'produit_nom' => $l->produit?->nom,
+            'variante_id' => $l->variante_id,
+            'produit_nom' => $l->libelle_snapshot ?? $l->variante?->produit?->nom,
             'qte' => $l->qte,
             'qte_recue' => $l->qte_recue,
             'prix_achat_snapshot' => (float) $l->prix_achat_snapshot,
@@ -160,7 +178,7 @@ class CommandeAchatController extends Controller
                 'statut' => $achat->statut?->value,
                 'statut_label' => $achat->statut_label,
                 'total_commande' => (float) $achat->total_commande,
-                'prestataire_nom' => $achat->prestataire?->nom,
+                'fournisseur_nom' => $achat->fournisseur?->nom_complet,
                 'note' => $achat->note,
                 'motif_annulation' => $achat->motif_annulation,
                 'annulee_at' => $achat->annulee_at?->toISOString(),
@@ -182,29 +200,108 @@ class CommandeAchatController extends Controller
         abort_if($achat->isAnnulee(), 422, 'Impossible de réceptionner une commande annulée.');
         abort_if($achat->isReceptionnee(), 422, 'Cette commande a déjà été réceptionnée.');
 
-        $achat->load('lignes.produit');
+        $achat->load('lignes.variante.produit');
 
         $data = $request->validate([
+            // Optionnel : par défaut, le site par défaut de l'utilisateur qui réceptionne
+            // (aucun sélecteur de site dans le formulaire actuel — Phase 3).
+            'site_id' => 'nullable|exists:sites,id',
             'lignes' => 'required|array',
             'lignes.*.id' => 'required|string',
             'lignes.*.qte_recue' => 'required|integer|min:0',
         ]);
 
+        $site = $this->resolveReceptionSite($data['site_id'] ?? null, $achat->organization_id);
         $qtesRecues = collect($data['lignes'])->keyBy('id');
+        $userId = auth()->id();
 
-        foreach ($achat->lignes as $ligne) {
-            $qteRecue = (int) ($qtesRecues[$ligne->id]['qte_recue'] ?? $ligne->qte);
-            $ligne->update(['qte_recue' => $qteRecue]);
-            if ($ligne->produit && $qteRecue > 0) {
-                $ligne->produit->increment('qte_stock', $qteRecue);
+        DB::transaction(function () use ($achat, $qtesRecues, $site, $userId) {
+            foreach ($achat->lignes as $ligne) {
+                $qteRecue = (int) ($qtesRecues[$ligne->id]['qte_recue'] ?? $ligne->qte);
+                $ligne->update(['qte_recue' => $qteRecue]);
+
+                if ($ligne->variante && $qteRecue > 0) {
+                    $this->entrerStockReception($ligne, $site, $achat->organization_id, $qteRecue, $userId);
+                }
             }
-        }
 
-        $achat->update([
-            'statut' => StatutCommandeAchat::RECEPTIONNEE,
-        ]);
+            $achat->update([
+                'statut' => StatutCommandeAchat::RECEPTIONNEE,
+            ]);
+        });
 
         return back()->with('success', 'Commande réceptionnée. Le stock a été mis à jour.');
+    }
+
+    /**
+     * Ventile l'entrée de stock sur le site de réception via VarianteStock + trace un
+     * MouvementStock — avant refonte, receptionner() incrémentait Produit::qte_stock
+     * directement, sans passer par le stock par site ni laisser de trace de mouvement
+     * (seul chemin d'ajustement du système à contourner ces deux garanties).
+     */
+    private function entrerStockReception(CommandeAchatLigne $ligne, Site $site, string $orgId, int $qte, ?string $userId): void
+    {
+        $variante = $ligne->variante;
+
+        $varianteStock = VarianteStock::firstOrCreate(
+            ['produit_variante_id' => $variante->id, 'site_id' => $site->id],
+            ['organization_id' => $orgId]
+        );
+
+        $stockAvant = $varianteStock->qte_stock;
+        $stockApres = $stockAvant + $qte;
+        $varianteStock->update(['qte_stock' => $stockApres]);
+
+        $variante->produit?->resynchroniserQteStock();
+
+        MouvementStock::create([
+            'organization_id' => $orgId,
+            'site_id' => $site->id,
+            'produit_variante_id' => $variante->id,
+            'type' => 'entree',
+            'quantite' => $qte,
+            'stock_avant' => $stockAvant,
+            'stock_apres' => $stockApres,
+            'source_type' => CommandeAchatLigne::class,
+            'source_id' => $ligne->id,
+            'created_by' => $userId,
+        ]);
+    }
+
+    private function resolveReceptionSite(?string $siteId, string $orgId): Site
+    {
+        if ($siteId) {
+            return Site::where('id', $siteId)->where('organization_id', $orgId)->firstOrFail();
+        }
+
+        $user = auth()->user();
+        $site = $user->sites()->wherePivot('is_default', true)->first() ?? $user->sites()->first();
+        abort_if(! $site, 422, "Aucun site n'est associé à votre compte pour réceptionner ce stock.");
+
+        return $site;
+    }
+
+    private function resolveVariante(array $ligne): ProduitVariante
+    {
+        if (! empty($ligne['variante_id'])) {
+            return ProduitVariante::findOrFail($ligne['variante_id']);
+        }
+
+        $produit = Produit::with('variantes')->findOrFail($ligne['produit_id']);
+
+        if ($produit->variantes->count() === 1) {
+            return $produit->variantes->first();
+        }
+
+        if ($produit->variantes->count() > 1) {
+            throw ValidationException::withMessages([
+                'lignes' => "Le produit « {$produit->nom} » a plusieurs déclinaisons — précisez la variante à acheter.",
+            ]);
+        }
+
+        throw ValidationException::withMessages([
+            'lignes' => "Le produit « {$produit->nom} » n'a aucune variante disponible.",
+        ]);
     }
 
     public function annuler(Request $request, CommandeAchat $achat): RedirectResponse
@@ -234,7 +331,7 @@ class CommandeAchatController extends Controller
     {
         $this->authorize('view', $achat);
 
-        $achat->load(['prestataire', 'lignes.produit', 'createdBy', 'organization']);
+        $achat->load(['fournisseur', 'lignes.variante.produit', 'createdBy', 'organization']);
 
         $createdBy = $achat->createdBy
             ? trim($achat->createdBy->prenom.' '.$achat->createdBy->nom)

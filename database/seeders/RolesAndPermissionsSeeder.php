@@ -15,11 +15,11 @@ class RolesAndPermissionsSeeder extends Seeder
 {
     private const RESOURCES = [
         // Personnes
-        'clients', 'prestataires', 'livreurs', 'proprietaires',
+        'clients', 'prestataires', 'livreurs', 'proprietaires', 'pieces-identite',
         // Véhicules & logistique terrain
         'vehicules', 'type-vehicules', 'equipes-livraison', 'sites',
         // Commerce
-        'produits', 'packings', 'ventes', 'achats', 'factures', 'commissions', 'cashback', 'pdv',
+        'produits', 'categories', 'options', 'packings', 'ventes', 'achats', 'fournisseurs', 'factures', 'commissions', 'cashback', 'pdv',
         // Opérations
         'logistique', 'transferts', 'receptions',
         // Finances
@@ -55,6 +55,13 @@ class RolesAndPermissionsSeeder extends Seeder
         Permission::firstOrCreate(['name' => 'rh-paie.validate']);
         Permission::firstOrCreate(['name' => 'rh-paie.pay']);
         Permission::firstOrCreate(['name' => 'rh-paie.close']);
+        // — Import flotte (propriétaires + véhicules + livreurs) —
+        Permission::firstOrCreate(['name' => 'imports-flotte.create']);
+        Permission::firstOrCreate(['name' => 'imports-flotte.read']);
+        // — Pièces d'identité (workflow de vérification — actuellement sur Proprietaire) —
+        Permission::firstOrCreate(['name' => 'pieces-identite.download']);
+        Permission::firstOrCreate(['name' => 'pieces-identite.valider']);
+        Permission::firstOrCreate(['name' => 'pieces-identite.rejeter']);
         Permission::firstOrCreate(['name' => 'comptabilite.payer']);
         // — Dépenses (workflow) —
         Permission::firstOrCreate(['name' => 'depenses.soumettre']);
@@ -98,6 +105,9 @@ class RolesAndPermissionsSeeder extends Seeder
             'prestataires.create',      'prestataires.read',      'prestataires.update',      'prestataires.delete',
             'livreurs.create',          'livreurs.read',          'livreurs.update',          'livreurs.delete',
             'proprietaires.create',     'proprietaires.read',     'proprietaires.update',     'proprietaires.delete',
+            'pieces-identite.create',   'pieces-identite.read',   'pieces-identite.update',   'pieces-identite.delete',
+            'pieces-identite.download', 'pieces-identite.valider', 'pieces-identite.rejeter',
+            'imports-flotte.create',    'imports-flotte.read',
             // Véhicules
             'vehicules.create',         'vehicules.read',         'vehicules.update',         'vehicules.delete',
             'type-vehicules.create',    'type-vehicules.read',    'type-vehicules.update',    'type-vehicules.delete',
@@ -106,11 +116,14 @@ class RolesAndPermissionsSeeder extends Seeder
             // Commerce
             'produits.create',          'produits.read',          'produits.update',          'produits.delete',
             'produits.ajuster_stock',
+            'categories.create',        'categories.read',        'categories.update',        'categories.delete',
+            'options.create',           'options.read',           'options.update',           'options.delete',
             'packings.create',          'packings.read',          'packings.update',          'packings.delete',
             'ventes.create',            'ventes.read',            'ventes.update',            'ventes.delete',
             'ventes.qte.update',        'ventes.prix.update',
             'ventes.confirmer',         'ventes.annuler',         'ventes.demarrer_chargement', 'ventes.valider_chargement',
             'achats.create',            'achats.read',            'achats.update',            'achats.delete',
+            'fournisseurs.create',      'fournisseurs.read',      'fournisseurs.update',      'fournisseurs.delete',
             'factures.create',          'factures.read',          'factures.update',          'factures.delete',
             'factures.encaisser',       'factures.annuler',
             'commissions.create',       'commissions.read',       'commissions.update',       'commissions.delete',
@@ -151,6 +164,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'prestataires.create',      'prestataires.read',      'prestataires.update',
             'livreurs.create',          'livreurs.read',          'livreurs.update',
             'proprietaires.read',
+            'pieces-identite.read',     'pieces-identite.download',
             // Véhicules
             'vehicules.create',         'vehicules.read',         'vehicules.update',
             'type-vehicules.create',    'type-vehicules.read',    'type-vehicules.update',
@@ -159,11 +173,14 @@ class RolesAndPermissionsSeeder extends Seeder
             // Commerce
             'produits.read',            'produits.create',        'produits.update',
             'produits.ajuster_stock',
+            'categories.read',          'categories.create',      'categories.update',
+            'options.read',             'options.create',         'options.update',
             'packings.read',            'packings.create',        'packings.update',
             'ventes.create',            'ventes.read',            'ventes.update',
             'ventes.qte.update',        'ventes.prix.update',
             'ventes.confirmer',         'ventes.annuler',         'ventes.demarrer_chargement', 'ventes.valider_chargement',
             'achats.create',            'achats.read',            'achats.update',
+            'fournisseurs.create',      'fournisseurs.read',      'fournisseurs.update',
             'factures.read',            'factures.create',
             'factures.encaisser',
             'commissions.read',
@@ -202,6 +219,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'equipes-livraison.read',
             'sites.read',
             'produits.read',
+            'categories.read',
+            'options.read',
             'packings.read',
             'ventes.read',         'ventes.create',
             'ventes.confirmer',    'ventes.annuler',
@@ -213,7 +232,7 @@ class RolesAndPermissionsSeeder extends Seeder
         $comptable->syncPermissions([
             'clients.read',           'prestataires.read',  'livreurs.read',
             'proprietaires.read',     'vehicules.read',     'equipes-livraison.read',
-            'sites.read',             'produits.read',      'packings.read',
+            'sites.read',             'produits.read',      'categories.read',    'options.read',    'packings.read',
             'ventes.read',
             'factures.read',          'factures.encaisser',
             'commissions.read',       'commissions.payer',  'commissions.cloturer', 'commissions.exporter',

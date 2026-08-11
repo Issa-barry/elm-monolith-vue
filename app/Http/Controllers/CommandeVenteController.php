@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AuditEvent;
+use App\Enums\ModeTarification;
 use App\Enums\MotifAnnulation;
 use App\Enums\ProduitStatut;
 use App\Enums\ProduitType;
@@ -16,11 +17,14 @@ use App\Models\CommandeVente;
 use App\Models\FactureVente;
 use App\Models\Parametre;
 use App\Models\Produit;
+use App\Models\ProduitVariante;
 use App\Models\Site;
 use App\Models\Vehicule;
 use App\Services\AuditLogService;
 use App\Services\CommandeVenteActiviteService;
 use App\Services\CommandeVenteService;
+use App\Services\VehiculeCapaciteService;
+use App\Services\VehiculeCommandeContextResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -38,7 +42,10 @@ class CommandeVenteController extends Controller
 
     private const UNIT_PRICE_UPDATE_PERMISSION = 'ventes.prix.update';
 
-    public function __construct(private readonly AuditLogService $auditService) {}
+    public function __construct(
+        private readonly AuditLogService $auditService,
+        private readonly VehiculeCapaciteService $vehiculeCapaciteService,
+    ) {}
 
     // ── Check solvabilité ─────────────────────────────────────────────────────
 
@@ -236,8 +243,12 @@ class CommandeVenteController extends Controller
         }
 
         if ($livreur) {
+            // nom/prenom conservés en recherche pour compatibilité (autres
+            // usages éventuels), mais nom_complet est le champ réellement
+            // saisi/affiché côté Eau La Maman.
             $query->whereHas('vehicule.equipe.livreurs', function ($q) use ($livreur) {
-                $q->where('livreurs.nom', 'like', "%{$livreur}%")
+                $q->where('livreurs.nom_complet', 'like', "%{$livreur}%")
+                    ->orWhere('livreurs.nom', 'like', "%{$livreur}%")
                     ->orWhere('livreurs.prenom', 'like', "%{$livreur}%")
                     ->orWhere('livreurs.telephone', 'like', "%{$livreur}%");
             });
@@ -359,7 +370,8 @@ class CommandeVenteController extends Controller
         $this->ensureQuantiteMatchesVehiculeCapacity($data);
         $this->enforcePrixVentePolicy($data, null);
 
-        [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes']);
+        $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null);
+        [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $context->modeTarification);
 
         $commande = CommandeVente::create([
             'organization_id' => $orgId,
@@ -367,6 +379,8 @@ class CommandeVenteController extends Controller
             'vehicule_id' => $data['vehicule_id'] ?? null,
             'client_id' => $data['client_id'] ?? null,
             'total_commande' => $totalCommande,
+            'mode_tarification_snapshot' => $context->modeTarification->value,
+            'commission_eligible_snapshot' => $context->commissionEligible,
             'created_by' => auth()->id(),
         ]);
 
@@ -374,7 +388,7 @@ class CommandeVenteController extends Controller
             $commande->lignes()->create($ligneDatum);
         }
 
-        $commande->load(['lignes.produit', 'vehicule', 'client']);
+        $commande->load(['lignes.variante.produit', 'vehicule', 'client']);
         $this->auditService->record($commande, AuditEvent::CREATED, auth()->user(), null, $this->commandeSnapshot($commande));
 
         if ($commande->vehicule_id && $commande->lignes->isNotEmpty()) {
@@ -398,7 +412,7 @@ class CommandeVenteController extends Controller
         $this->authorize('view', $vente);
 
         $commande = $vente;
-        $commande->load(['vehicule.proprietaire', 'vehicule.typeVehicule', 'vehicule.equipe.livreurs', 'client', 'site', 'lignes.produit', 'createdBy', 'facture.encaissements.creator', 'commissions', 'activites.user']);
+        $commande->load(['vehicule.proprietaire', 'vehicule.typeVehicule', 'vehicule.equipe.livreurs', 'client', 'site', 'lignes.variante.produit', 'createdBy', 'facture.encaissements.creator', 'commissions', 'activites.user']);
 
         $commande->cloturerSiComplete();
         $commande->refresh();
@@ -413,8 +427,8 @@ class CommandeVenteController extends Controller
 
         $lignes = $commande->lignes->map(fn ($l) => [
             'id' => $l->id,
-            'produit_id' => $l->produit_id,
-            'produit_nom' => $l->produit?->nom,
+            'variante_id' => $l->variante_id,
+            'produit_nom' => $l->libelle_snapshot ?? $l->variante?->produit?->nom,
             'quantite_demandee' => $l->quantite_demandee,
             'quantite_chargee' => $l->quantite_chargee,
             'quantite_livree' => $l->quantite_livree,
@@ -461,19 +475,22 @@ class CommandeVenteController extends Controller
                 'statut_label' => $commande->statut_label,
                 'statut_color' => $commande->statut?->color(),
                 'total_commande' => (float) $commande->total_commande,
+                'mode_tarification_snapshot' => $commande->mode_tarification_snapshot?->value,
+                'mode_tarification_label' => $commande->mode_tarification_snapshot?->label(),
+                'commission_eligible_snapshot' => (bool) $commande->commission_eligible_snapshot,
                 'vehicule_nom' => $commande->vehicule?->nom_vehicule,
                 'vehicule_detail' => $vehicule ? [
                     'nom' => $vehicule->nom_vehicule,
                     'immatriculation' => $vehicule->immatriculation,
                     'type' => $vehicule->typeVehicule?->nom,
-                    'capacite_packs' => $vehicule->capacite_packs,
+                    'capacite_packs' => $vehicule->capacite_packs ?? $vehicule->typeVehicule?->capacite_defaut,
                     'proprietaire_nom' => $vehicule->proprietaire
                         ? trim($vehicule->proprietaire->prenom.' '.$vehicule->proprietaire->nom)
                         : null,
                     'proprietaire_telephone' => $vehicule->proprietaire?->telephone,
                     'proprietaire_code_phone_pays' => $vehicule->proprietaire?->code_phone_pays,
                 ] : null,
-                'livreur_nom' => $chauffeur ? trim($chauffeur->prenom.' '.$chauffeur->nom) : null,
+                'livreur_nom' => $chauffeur?->libelleAffichage(),
                 'livreur_telephone' => $chauffeur?->telephone,
                 'equipe_detail' => $equipe ? [
                     'nom' => $vehicule->nom_vehicule,
@@ -481,11 +498,11 @@ class CommandeVenteController extends Controller
                         ? (float) $equipe->taux_commission_proprietaire
                         : null,
                     'chauffeur' => $chauffeur ? [
-                        'nom' => trim($chauffeur->prenom.' '.$chauffeur->nom),
+                        'nom' => $chauffeur->libelleAffichage(),
                         'telephone' => $chauffeur->telephone,
                     ] : null,
                     'convoyeurs' => $convoyeurs->map(fn ($l) => [
-                        'nom' => trim($l->prenom.' '.$l->nom),
+                        'nom' => $l->libelleAffichage(),
                         'telephone' => $l->telephone,
                     ])->values(),
                 ] : null,
@@ -560,7 +577,7 @@ class CommandeVenteController extends Controller
         abort_if(! $vente->isBrouillon(), 403, 'Seule une commande en brouillon peut être modifiée.');
 
         $orgId = auth()->user()->organization_id;
-        $vente->load(['lignes']);
+        $vente->load(['lignes.variante']);
 
         return Inertia::render('Ventes/Edit', [
             'commande' => [
@@ -569,7 +586,10 @@ class CommandeVenteController extends Controller
                 'vehicule_id' => $vente->vehicule_id,
                 'client_id' => $vente->client_id,
                 'lignes' => $vente->lignes->map(fn ($l) => [
-                    'produit_id' => $l->produit_id,
+                    // Bridge Phase 3 : le formulaire actuel ne sélectionne qu'un produit
+                    // (pas de sélecteur de variante), on retrouve donc le produit parent.
+                    'produit_id' => $l->variante?->produit_id,
+                    'variante_id' => $l->variante_id,
                     'qte' => (int) $l->quantite_demandee,
                     'prix_vente' => (float) $l->prix_vente_snapshot,
                 ]),
@@ -596,15 +616,18 @@ class CommandeVenteController extends Controller
         $this->ensureQuantiteMatchesVehiculeCapacity($data);
         $this->enforcePrixVentePolicy($data, $vente);
 
-        $vente->load(['lignes.produit', 'vehicule', 'client']);
+        $vente->load(['lignes.variante.produit', 'vehicule', 'client']);
         $oldSnapshot = $this->commandeSnapshot($vente);
 
-        [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes']);
+        $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null);
+        [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $context->modeTarification);
 
         $vente->update([
             'vehicule_id' => $data['vehicule_id'] ?? null,
             'client_id' => $data['client_id'] ?? null,
             'total_commande' => $totalCommande,
+            'mode_tarification_snapshot' => $context->modeTarification->value,
+            'commission_eligible_snapshot' => $context->commissionEligible,
         ]);
 
         $vente->lignes()->delete();
@@ -612,7 +635,7 @@ class CommandeVenteController extends Controller
             $vente->lignes()->create($ligneDatum);
         }
 
-        $vente->refresh()->load(['lignes.produit', 'vehicule', 'client']);
+        $vente->refresh()->load(['lignes.variante.produit', 'vehicule', 'client']);
         $newSnapshot = $this->commandeSnapshot($vente);
 
         [$oldDiff, $newDiff] = $this->auditService->diff($oldSnapshot, $newSnapshot);
@@ -818,6 +841,10 @@ class CommandeVenteController extends Controller
             'client_id' => 'nullable|exists:clients,id',
             'lignes' => 'required|array|min:1',
             'lignes.*.produit_id' => 'required|exists:produits,id',
+            // Optionnel : le formulaire actuel ne sélectionne qu'un produit (pas encore de
+            // sélecteur de variante — Phase 3). resolveVariante() retombe sur la variante
+            // par défaut du produit si absent.
+            'lignes.*.variante_id' => 'nullable|exists:produit_variantes,id',
             'lignes.*.qte' => 'required|integer|min:1',
             'lignes.*.prix_vente' => 'required|numeric|min:0',
         ];
@@ -855,32 +882,20 @@ class CommandeVenteController extends Controller
             return;
         }
 
-        $vehicule = Vehicule::query()->select(['id', 'capacite_packs'])->find($data['vehicule_id']);
+        $vehicule = Vehicule::query()->find($data['vehicule_id']);
         if (! $vehicule) {
             return;
         }
 
-        if ($vehicule->capacite_packs === null) {
-            throw ValidationException::withMessages([
-                'vehicule_id' => 'Le véhicule sélectionné n\'a pas de capacité définie.',
-            ]);
-        }
-
-        $qteTotale = collect($data['lignes'] ?? [])->sum(fn (array $ligne): int => (int) ($ligne['qte'] ?? 0));
-        $capacite = (int) $vehicule->capacite_packs;
-
-        if ($qteTotale > $capacite && ! auth()->user()->can('ventes.qte.update')) {
-            throw ValidationException::withMessages([
-                'lignes' => "La quantité totale ({$qteTotale} packs) dépasse la capacité du véhicule ({$capacite} packs maximum).",
-            ]);
-        }
-
         $orgId = auth()->user()->organization_id;
-        if (! Parametre::isVentesAutorisationSaisieDessousQteMax($orgId) && $qteTotale < $capacite) {
-            throw ValidationException::withMessages([
-                'lignes' => "La quantité totale ({$qteTotale} packs) est inférieure à la capacité du véhicule ({$capacite} packs). Le chargement complet est obligatoire.",
-            ]);
-        }
+
+        $this->vehiculeCapaciteService->verifier(
+            $vehicule,
+            $data['lignes'] ?? [],
+            'qte',
+            ! Parametre::isVentesAutorisationSaisieDessousQteMax($orgId),
+            auth()->user()->can('ventes.qte.update'),
+        );
     }
 
     private function enforcePrixVentePolicy(array $data, ?CommandeVente $commande): void
@@ -894,23 +909,13 @@ class CommandeVenteController extends Controller
             return;
         }
 
-        $produitIds = $lignes->pluck('produit_id')->filter()->unique()->values()->all();
-        $prixParProduit = Produit::query()
-            ->whereIn('id', $produitIds)
-            ->pluck('prix_vente', 'id')
-            ->map(fn (mixed $prix): float => (float) $prix)
-            ->toArray();
-
-        $existingPrixParProduit = $this->existingPrixVenteByProduit($commande);
+        $existingPrixParVariante = $this->existingPrixVenteByVariante($commande);
 
         foreach ($data['lignes'] as $index => $ligne) {
-            $produitId = $ligne['produit_id'] ?? null;
-            if (! $produitId) {
-                continue;
-            }
+            $variante = $this->resolveVariante($ligne);
 
             $prixRecu = (float) ($ligne['prix_vente'] ?? 0);
-            $prixAttendu = $existingPrixParProduit[$produitId] ?? ($prixParProduit[$produitId] ?? $prixRecu);
+            $prixAttendu = $existingPrixParVariante[$variante->id] ?? (float) ($variante->prix_vente ?? $prixRecu);
 
             if (abs($prixRecu - $prixAttendu) > 0.00001) {
                 throw ValidationException::withMessages([
@@ -920,7 +925,7 @@ class CommandeVenteController extends Controller
         }
     }
 
-    private function existingPrixVenteByProduit(?CommandeVente $commande): array
+    private function existingPrixVenteByVariante(?CommandeVente $commande): array
     {
         if (! $commande) {
             return [];
@@ -929,34 +934,72 @@ class CommandeVenteController extends Controller
         $commande->loadMissing('lignes');
 
         return $commande->lignes
-            ->groupBy('produit_id')
+            ->groupBy('variante_id')
             ->map(fn ($lignes): float => (float) $lignes->first()->prix_vente_snapshot)
             ->toArray();
     }
 
-    private function buildLignesDataAndTotal(array $lignes): array
+    private function buildLignesDataAndTotal(array $lignes, ModeTarification $mode): array
     {
         $lignesData = [];
         $totalCommande = 0;
 
         foreach ($lignes as $ligne) {
-            $produit = Produit::findOrFail($ligne['produit_id']);
+            $variante = $this->resolveVariante($ligne);
+            $produit = $variante->produit;
             $qte = (int) $ligne['qte'];
             $prixVente = (float) $ligne['prix_vente'];
-            $totalLigne = $qte * $prixVente;
+            $prixUsine = (float) ($variante->prix_usine ?? 0);
+            $totalLigne = $qte * ($mode === ModeTarification::PRIX_VENTE ? $prixVente : $prixUsine);
 
             $lignesData[] = [
-                'produit_id' => $produit->id,
+                'variante_id' => $variante->id,
                 'quantite_demandee' => $qte,
-                'prix_usine_snapshot' => (float) $produit->prix_usine,
+                'prix_usine_snapshot' => $prixUsine,
                 'prix_vente_snapshot' => $prixVente,
                 'total_ligne' => $totalLigne,
+                'libelle_snapshot' => $this->libelleSnapshot($produit, $variante),
             ];
 
             $totalCommande += $totalLigne;
         }
 
         return [$lignesData, $totalCommande];
+    }
+
+    /**
+     * Résout la variante réellement vendue à partir d'une ligne saisie. Le formulaire actuel
+     * ne propose qu'un sélecteur de produit (pas encore de sélecteur de variante — Phase 3) :
+     * si le produit n'a qu'une seule variante (cas normal, produit "simple"), on la prend
+     * directement ; sinon on exige que variante_id soit explicitement fourni plutôt que de
+     * deviner laquelle vendre.
+     */
+    private function resolveVariante(array $ligne): ProduitVariante
+    {
+        if (! empty($ligne['variante_id'])) {
+            return ProduitVariante::findOrFail($ligne['variante_id']);
+        }
+
+        $produit = Produit::with('variantes')->findOrFail($ligne['produit_id']);
+
+        if ($produit->variantes->count() === 1) {
+            return $produit->variantes->first();
+        }
+
+        if ($produit->variantes->count() > 1) {
+            throw ValidationException::withMessages([
+                'lignes' => "Le produit « {$produit->nom} » a plusieurs déclinaisons — précisez la variante à vendre.",
+            ]);
+        }
+
+        throw ValidationException::withMessages([
+            'lignes' => "Le produit « {$produit->nom} » n'a aucune variante disponible.",
+        ]);
+    }
+
+    private function libelleSnapshot(Produit $produit, ProduitVariante $variante): string
+    {
+        return $variante->libelle !== '' ? "{$produit->nom} — {$variante->libelle}" : $produit->nom;
     }
 
     private function commandeSnapshot(CommandeVente $commande): array
@@ -967,10 +1010,12 @@ class CommandeVenteController extends Controller
             'client_id' => $commande->client_id,
             'client_nom' => $commande->client ? trim($commande->client->prenom.' '.$commande->client->nom) : null,
             'total_commande' => (float) $commande->total_commande,
+            'mode_tarification_snapshot' => $commande->mode_tarification_snapshot?->value,
+            'commission_eligible_snapshot' => (bool) $commande->commission_eligible_snapshot,
             'statut' => $commande->statut?->value,
             'lignes' => $commande->lignes->map(fn ($l) => [
-                'produit_id' => $l->produit_id,
-                'produit_nom' => $l->produit?->nom,
+                'variante_id' => $l->variante_id,
+                'produit_nom' => $l->libelle_snapshot ?? $l->variante?->produit?->nom,
                 'quantite_demandee' => (int) $l->quantite_demandee,
                 'prix_vente_snapshot' => (float) $l->prix_vente_snapshot,
                 'total_ligne' => (float) $l->total_ligne,
@@ -1004,22 +1049,32 @@ class CommandeVenteController extends Controller
 
     private function produitsActifs(string $orgId): Collection
     {
+        // Le formulaire Ventes ne propose pour l'instant qu'un sélecteur de produit (pas de
+        // sélecteur de variante — Phase 3) : on affiche le prix de la variante par défaut
+        // (ou la première) comme prix représentatif. Pour un produit à déclinaisons multiples,
+        // resolveVariante() exigera un variante_id explicite au moment de la vente.
         return Produit::where('organization_id', $orgId)
             ->where('statut', ProduitStatut::ACTIF)
             ->whereIn('type', ProduitType::vendableValues())
+            ->with('variantes')
             ->orderBy('nom')
             ->get()
-            ->map(fn (Produit $p) => [
-                'id' => $p->id,
-                'nom' => $p->nom,
-                'prix_vente' => (int) $p->prix_vente,
-                'prix_usine' => (int) $p->prix_usine,
-            ]);
+            ->map(function (Produit $p) {
+                $variante = $p->variantes->firstWhere('is_default', true) ?? $p->variantes->first();
+
+                return [
+                    'id' => $p->id,
+                    'nom' => $p->nom,
+                    'prix_vente' => (int) ($variante?->prix_vente ?? 0),
+                    'prix_usine' => (int) ($variante?->prix_usine ?? 0),
+                ];
+            });
     }
 
     private function vehiculesActifs(string $orgId): Collection
     {
         return Vehicule::with([
+            'typeVehicule',
             'equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'chauffeur'),
             'equipe.membres.livreur',
         ])
@@ -1032,10 +1087,14 @@ class CommandeVenteController extends Controller
                 'id' => $v->id,
                 'nom_vehicule' => $v->nom_vehicule,
                 'immatriculation' => $v->immatriculation,
-                'capacite_packs' => $v->capacite_packs !== null ? (int) $v->capacite_packs : null,
-                'livreur_nom' => ($l = $v->equipe?->livreurs->first())
-                    ? trim($l->prenom.' '.$l->nom)
+                // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
+                // on retombe sur la capacité par défaut du type (cf. VehiculeController).
+                'capacite_packs' => ($c = $v->capacite_packs ?? $v->typeVehicule?->capacite_defaut) !== null
+                    ? (int) $c
                     : null,
+                'pris_en_charge_par_usine' => (bool) $v->pris_en_charge_par_usine,
+                'commission_eligible' => (bool) $v->commission_eligible,
+                'livreur_nom' => $v->equipe?->livreurs->first()?->libelleAffichage(),
                 'livreur_telephone' => $v->equipe?->membres
                     ->firstWhere('role', 'chauffeur')
                     ?->livreur?->telephone,

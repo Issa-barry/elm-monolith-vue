@@ -36,12 +36,26 @@ test('login + create vehicule interne via site + verify in site tab + verify glo
     const submitBtn = page.getByTestId('vehicle-form-submit');
     await expect(submitBtn).toBeDisabled();
 
-    // Step 4: Fill the form — categorie is locked to "interne", only type is a combobox
+    // Step 4: Fill the form — categorie is no longer locked by the site context,
+    // select "Interne" explicitly, then a Type.
     await page.locator('#nom_vehicule').fill(nomVehicule);
     await page.locator('#immatriculation').fill(immatriculation);
 
-    const comboboxes = page.locator('#vehicule-form').getByRole('combobox');
-    await selectOptionFromCombobox(page, comboboxes.first()); // type_vehicule (only combobox)
+    await selectOptionFromCombobox(
+        page,
+        page.locator('#categorie'),
+        /interne/i,
+    );
+    await selectOptionFromCombobox(page, page.locator('#type_vehicule'));
+
+    // Éligibilité aux commissions : indépendante de la catégorie (contrairement
+    // à "Prise en charge par l'usine", pas d'auto-sélection pour un interne).
+    await page
+        .locator(
+            '#vehicule-form input[type="radio"][name="commission_eligible"]',
+        )
+        .first()
+        .check();
 
     await expect(submitBtn).toBeEnabled();
     await submitBtn.click();
@@ -85,7 +99,9 @@ test('login + create vehicule interne via site + verify in site tab + verify glo
         .first()
         .click();
     // Le contrôleur redirige vers /edit après mise à jour (vehicules.edit, pas vehicules.show)
-    await page.waitForURL(/\/vehicules\/[a-z0-9]+(\/edit)?$/, { timeout: 15_000 });
+    await page.waitForURL(/\/vehicules\/[a-z0-9]+(\/edit)?$/, {
+        timeout: 15_000,
+    });
 
     // Step 8: Verify the modification is visible in the global list
     await page.goto('/backoffice/vehicules');
@@ -173,9 +189,12 @@ test('show — vehicule externe : bouton "Voir la fiche propriétaire" visible, 
     await page.goto('/backoffice/vehicules');
 
     // Find first show-page link in the desktop DataTable
-    await page.waitForSelector('.p-datatable-tbody a[href*="/backoffice/vehicules/"]', {
-        timeout: 15_000,
-    });
+    await page.waitForSelector(
+        '.p-datatable-tbody a[href*="/backoffice/vehicules/"]',
+        {
+            timeout: 15_000,
+        },
+    );
     const links = page.locator(
         '.p-datatable-tbody a[href*="/backoffice/vehicules/"]:not([href*="/edit"])',
     );
@@ -201,19 +220,25 @@ test('show — vehicule externe : bouton "Voir la fiche propriétaire" visible, 
         }
 
         await page.goto('/backoffice/vehicules');
-        await page.waitForSelector('.p-datatable-tbody a[href*="/backoffice/vehicules/"]', {
-            timeout: 10_000,
-        });
+        await page.waitForSelector(
+            '.p-datatable-tbody a[href*="/backoffice/vehicules/"]',
+            {
+                timeout: 10_000,
+            },
+        );
     }
 
-    expect(vehiculeHref, 'Aucun véhicule externe avec propriétaire trouvé').toBeTruthy();
+    expect(
+        vehiculeHref,
+        'Aucun véhicule externe avec propriétaire trouvé',
+    ).toBeTruthy();
 
     await page.goto(vehiculeHref!);
     await page.waitForURL(/\/vehicules\/[a-z0-9]+$/, { timeout: 10_000 });
 
-    await expect(
-        page.getByTestId('proprietaire-nom'),
-    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('proprietaire-nom')).toBeVisible({
+        timeout: 10_000,
+    });
     await expect(page.getByTestId('proprietaire-telephone')).toBeVisible();
 
     const btn = page.getByTestId('voir-fiche-proprietaire-btn');
@@ -230,7 +255,7 @@ test('show — vehicule externe : bouton "Voir la fiche propriétaire" visible, 
     await expect(page).toHaveURL(/\/proprietaires\/[a-z0-9]+$/);
 });
 
-test('show — vehicule interne : bouton "Voir la fiche propriétaire" absent', async ({
+test("show — vehicule interne : propriétaire par défaut de l'organisation affiché", async ({
     page,
 }) => {
     const unique = `${Date.now()}-${randomDigits(3)}`;
@@ -239,7 +264,7 @@ test('show — vehicule interne : bouton "Voir la fiche propriétaire" absent', 
 
     await login(page);
 
-    // Create an interne vehicule via the site tab (no proprietaire)
+    // Create an interne vehicule via the site tab
     await navigateToFirstSiteVehiclesTab(page);
     await page.getByTestId('add-site-vehicle-btn').click();
     await page.waitForURL(/\/vehicules\/create\?site_id=/, { timeout: 15_000 });
@@ -247,14 +272,27 @@ test('show — vehicule interne : bouton "Voir la fiche propriétaire" absent', 
     await page.locator('#nom_vehicule').fill(nomVehicule);
     await page.locator('#immatriculation').fill(immatriculation);
 
-    const comboboxes = page.locator('#vehicule-form').getByRole('combobox');
-    await selectOptionFromCombobox(page, comboboxes.first());
+    await selectOptionFromCombobox(
+        page,
+        page.locator('#categorie'),
+        /interne/i,
+    );
+    await selectOptionFromCombobox(page, page.locator('#type_vehicule'));
+
+    await page
+        .locator(
+            '#vehicule-form input[type="radio"][name="commission_eligible"]',
+        )
+        .first()
+        .check();
 
     await page.getByTestId('vehicle-form-submit').click();
     await page.waitForURL(/\/vehicules\/[a-z0-9]+$/, { timeout: 15_000 });
 
-    // Interne vehicule has no proprietaire — button must not be rendered
-    await expect(
-        page.getByTestId('voir-fiche-proprietaire-btn'),
-    ).not.toBeVisible({ timeout: 5_000 });
+    // Un véhicule interne se voit désormais attribuer le propriétaire par
+    // défaut de l'organisation (voir VehiculeController::defaultProprietaireInterneId)
+    // — le bouton doit donc être visible et pointer vers sa fiche.
+    await expect(page.getByTestId('voir-fiche-proprietaire-btn')).toBeVisible({
+        timeout: 5_000,
+    });
 });

@@ -188,9 +188,11 @@ class DashboardController extends Controller
         // ── CA par produit (lignes de commandes non annulées) ─────────────────
         $caParProduit = DB::table('commande_vente_lignes as cvl')
             ->join('commandes_ventes as cv', 'cv.id', '=', 'cvl.commande_vente_id')
-            ->join('produits as p', 'p.id', '=', 'cvl.produit_id')
+            ->join('produit_variantes as pv', 'pv.id', '=', 'cvl.variante_id')
+            ->join('produits as p', 'p.id', '=', 'pv.produit_id')
             ->where('cv.organization_id', $orgId)
             ->whereNull('cv.deleted_at')
+            ->whereNull('pv.deleted_at')
             ->whereNull('p.deleted_at')
             ->where('cv.statut', '!=', StatutCommandeVente::ANNULEE->value);
         if ($start && $end) {

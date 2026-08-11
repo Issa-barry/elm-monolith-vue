@@ -319,6 +319,11 @@ function saveDroits() {
             onSuccess: () => {
                 flashDroits.value = true;
                 setTimeout(() => (flashDroits.value = false), 3000);
+                toast.add({
+                    severity: 'success',
+                    summary: 'Droits de validation mis à jour',
+                    life: 3000,
+                });
             },
             onFinish: () => (savingDroits.value = false),
         },
