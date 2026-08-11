@@ -259,6 +259,16 @@ class ImportFlotteParser
         $categorie = ImportTextNormalizer::normalize($categorieSaisie);
         $siteNomSaisi = trim((string) ($ligneVehicule['vehicule_site'] ?? ''));
         $prisEnChargeParUsine = $this->toBool($ligneVehicule['vehicule_pris_en_charge_par_usine'] ?? null) ?? false;
+        // Facultatives : laissées vides, le repli sur la capacité par défaut du
+        // type de véhicule s'applique (cf. VehiculeController::vehiculeData()).
+        [$capacitePacks, $erreurCapacitePacks] = $this->toCapaciteOrNull($ligneVehicule['vehicule_capacite_sachets'] ?? null);
+        if ($erreurCapacitePacks) {
+            $erreurs[] = "Capacité sachets invalide : {$erreurCapacitePacks}";
+        }
+        [$capaciteBouteilles, $erreurCapaciteBouteilles] = $this->toCapaciteOrNull($ligneVehicule['vehicule_capacite_bouteilles'] ?? null);
+        if ($erreurCapaciteBouteilles) {
+            $erreurs[] = "Capacité bouteilles invalide : {$erreurCapaciteBouteilles}";
+        }
         // Indépendant de vehicule_pris_en_charge_par_usine — colonne facultative :
         // repli sur "éligible" (comportement par défaut, cf. migration vehicules)
         // si absente du fichier, pour ne pas casser d'anciens fichiers d'import.
@@ -377,6 +387,8 @@ class ImportFlotteParser
                 'id' => $vehiculeExistant?->id,
                 'nom_vehicule' => $nomVehicule,
                 'type_vehicule_id' => $type?->id,
+                'capacite_packs' => $capacitePacks,
+                'capacite_bouteilles' => $capaciteBouteilles,
                 'categorie' => $categorie,
                 'site_id' => $site?->id,
                 'pris_en_charge_par_usine' => $prisEnChargeParUsine,
@@ -574,6 +586,24 @@ class ImportFlotteParser
         }
 
         return [$livreurs, $erreurs, $normalisations];
+    }
+
+    /**
+     * @return array{0: int|null, 1: string|null} valeur et message d'erreur —
+     *                                            jamais les deux à la fois. Cellule vide = pas de capacité saisie (pas
+     *                                            une erreur), distinct d'une valeur invalide.
+     */
+    private function toCapaciteOrNull(mixed $valeur): array
+    {
+        $brut = trim((string) ($valeur ?? ''));
+        if ($brut === '') {
+            return [null, null];
+        }
+        if (! is_numeric($brut) || (int) $brut != $brut || (int) $brut < 1 || (int) $brut > 99999) {
+            return [null, "\"{$brut}\" (entier entre 1 et 99999 attendu)."];
+        }
+
+        return [(int) $brut, null];
     }
 
     private function normaliserImmatriculation(string $valeur): string

@@ -17,6 +17,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     nom: '',
     capacite_defaut: null as number | null,
+    capacite_defaut_bouteilles: null as number | null,
     unite_capacite: 'packs',
     description: '',
     is_active: true,
@@ -106,6 +107,37 @@ function submit() {
                             class="mt-1 text-xs text-destructive"
                         >
                             {{ form.errors.unite_capacite }}
+                        </p>
+                    </div>
+
+                    <div>
+                        <Label
+                            for="capacite_defaut_bouteilles"
+                            class="mb-1.5 block"
+                        >
+                            Capacité par défaut (bouteilles)
+                        </Label>
+                        <InputNumber
+                            id="capacite_defaut_bouteilles"
+                            v-model="form.capacite_defaut_bouteilles"
+                            :min="1"
+                            :max="99999"
+                            :use-grouping="false"
+                            class="w-full"
+                            :class="{
+                                'p-invalid':
+                                    form.errors.capacite_defaut_bouteilles,
+                            }"
+                        />
+                        <p
+                            v-if="form.errors.capacite_defaut_bouteilles"
+                            class="mt-1 text-xs text-destructive"
+                        >
+                            {{ form.errors.capacite_defaut_bouteilles }}
+                        </p>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            Laisser vide si ce type ne transporte pas de
+                            bouteilles.
                         </p>
                     </div>
                 </div>

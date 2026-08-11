@@ -15,6 +15,7 @@ interface TypeOption {
     value: string;
     label: string;
     capacite_defaut: number;
+    capacite_defaut_bouteilles: number | null;
 }
 interface SiteOption {
     id: string;
@@ -50,6 +51,7 @@ const form = useForm({
         ? 'externe'
         : (null as string | null),
     capacite_packs: null as number | null,
+    capacite_bouteilles: null as number | null,
     site_id: props.default_site_id,
     proprietaire_id: props.initial_proprietaire_id,
     pris_en_charge_par_usine: null as boolean | null,

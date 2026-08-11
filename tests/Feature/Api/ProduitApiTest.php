@@ -265,6 +265,79 @@ class ProduitApiTest extends TestCase
         $this->assertDatabaseMissing('produits', ['nom' => 'Sans prix']);
     }
 
+    // ── cohérence prix_vente / coût de référence (FABRICABLE, ACHAT_VENTE) ──────
+    // Même règle que côté Web (ProduitService::validerPrixSelonType()) : l'API ne doit jamais
+    // permettre de contourner ce que l'UI refuse (cf. spec "Prix produit & marge").
+
+    public function test_store_fabricable_accepte_prix_vente_superieur_au_prix_usine(): void
+    {
+        Sanctum::actingAs($this->user, ['*']);
+
+        $this->postJson(route('api.backoffice.produits.store'), [
+            'nom' => 'Eau minérale 500ml',
+            'type' => 'fabricable',
+            'statut' => 'actif',
+            'prix_usine' => 5100,
+            'prix_vente' => 6000,
+        ])->assertCreated();
+    }
+
+    public function test_store_fabricable_refuse_prix_vente_inferieur_ou_egal_au_prix_usine(): void
+    {
+        Sanctum::actingAs($this->user, ['*']);
+
+        $this->postJson(route('api.backoffice.produits.store'), [
+            'nom' => 'Pack bouteille 500ml',
+            'type' => 'fabricable',
+            'statut' => 'actif',
+            'prix_usine' => 18000,
+            'prix_vente' => 18000,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('prix_vente');
+
+        $this->assertDatabaseMissing('produits', ['nom' => 'Pack bouteille 500ml']);
+    }
+
+    public function test_store_achat_vente_refuse_prix_vente_inferieur_ou_egal_au_prix_achat(): void
+    {
+        Sanctum::actingAs($this->user, ['*']);
+
+        $this->postJson(route('api.backoffice.produits.store'), [
+            'nom' => 'Produit revente à perte',
+            'type' => 'achat_vente',
+            'statut' => 'actif',
+            'prix_achat' => 100000,
+            'prix_vente' => 90000,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('prix_vente');
+
+        $this->assertDatabaseMissing('produits', ['nom' => 'Produit revente à perte']);
+    }
+
+    public function test_update_fabricable_refuse_prix_vente_inferieur_ou_egal_au_prix_usine(): void
+    {
+        Sanctum::actingAs($this->user, ['*']);
+
+        $produit = app(ProduitService::class)->creer([
+            'organization_id' => $this->org->id,
+            'nom' => 'Produit fabricable',
+            'type' => 'fabricable',
+            'statut' => 'actif',
+            'prix_usine' => 5100,
+            'prix_vente' => 6000,
+        ]);
+
+        $this->putJson(route('api.backoffice.produits.update', $produit), [
+            'prix_vente' => 5000,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('prix_vente');
+
+        $this->assertSame(6000, $produit->fresh()->variantePrincipale()->first()->prix_vente);
+    }
+
     // ── update ────────────────────────────────────────────────────────────────
 
     public function test_update_updates_produit(): void

@@ -28,7 +28,7 @@ class DatabaseSeeder extends Seeder
             ParametreSeeder::class,             // Paramètres applicatifs
 
             // ── Module Véhicules ──────────────────────────────────────────────
-            TypeVehiculesSeeder::class,         // 13 types par défaut (Tricycle/Minibus/Camionette/Camion/Remorque)
+            TypeVehiculesSeeder::class,         // 5 types par défaut (Tricycle/Minibus/Camionette/Camion/Remorque)
             LivreursSeeder::class,              // 22 livreurs (10 externes + 12 internes)
             LivreurComptesSeeder::class,        // Comptes livreurs : 2 actifs + 1 pending
             ProprietairesSeeder::class,         // 4 propriétaires

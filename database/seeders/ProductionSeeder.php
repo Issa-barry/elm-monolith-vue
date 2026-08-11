@@ -9,17 +9,21 @@ use Illuminate\Database\Seeder;
  * nécessaires au démarrage, aucune donnée de démonstration (pas de clients,
  * livreurs, véhicules ou transferts fictifs).
  *
- * Les comptes utilisateurs autres que le super_admin sont ajoutés via le
- * flux d'invitation de l'application, jamais par seeder.
+ * Le compte super_admin n'est PAS créé ici — voir `php artisan app:install`
+ * (InstallApp), qui s'exécute après ce seeder : mot de passe saisi en masqué,
+ * jamais affiché en clair (contrairement à l'ancien SuperAdminSeeder, retiré).
+ * Les autres comptes utilisateurs sont ajoutés via le flux d'invitation de
+ * l'application, jamais par seeder.
  *
- *   php artisan db:seed --class=ProductionSeeder
+ *   php artisan db:seed --class=ProductionSeeder --force
+ *   php artisan app:install
  */
 class ProductionSeeder extends Seeder
 {
     public function run(): void
     {
         $this->call([
-            // Organisation, permissions, rôles (comptes de démo auto-skippés en production)
+            // Organisation "elm", permissions, rôles (comptes de démo auto-skippés en prod)
             RolesAndPermissionsSeeder::class,
 
             // ── Référentiels ──────────────────────────────────────────────────
@@ -30,9 +34,6 @@ class ProductionSeeder extends Seeder
             ProduitsSeeder::class,        // Catalogue produits
             ParametreSeeder::class,       // Paramètres applicatifs par défaut
             TypeVehiculesSeeder::class,   // Types de véhicule par défaut
-
-            // ── Compte réel ───────────────────────────────────────────────────
-            SuperAdminSeeder::class,      // Unique compte super_admin de mise en prod
         ]);
     }
 }

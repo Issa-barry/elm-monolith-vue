@@ -20,6 +20,7 @@ interface TypeOption {
     value: string;
     label: string;
     capacite_defaut: number;
+    capacite_defaut_bouteilles: number | null;
 }
 
 interface SiteOption {
@@ -38,6 +39,7 @@ interface FormData {
     type_vehicule_id: string | null;
     categorie: string | null;
     capacite_packs: number | null;
+    capacite_bouteilles: number | null;
     site_id: string | null;
     proprietaire_id: number | string | null;
     pris_en_charge_par_usine: boolean | null;
@@ -78,6 +80,9 @@ function onTypeChange(value: string) {
         ...props.form,
         type_vehicule_id: value,
         capacite_packs: type ? type.capacite_defaut : props.form.capacite_packs,
+        capacite_bouteilles: type
+            ? type.capacite_defaut_bouteilles
+            : props.form.capacite_bouteilles,
     });
 }
 
@@ -451,6 +456,33 @@ function handleSubmit() {
                             $emit('update:form', {
                                 ...form,
                                 capacite_packs: $event,
+                            })
+                        "
+                        :min="1"
+                        :max="99999"
+                        :use-grouping="false"
+                        class="w-full"
+                    />
+                </div>
+
+                <div>
+                    <Label for="capacite_bouteilles" class="mb-1.5 block">
+                        Capacité (bouteilles)
+                        <span
+                            v-if="selectedType?.capacite_defaut_bouteilles"
+                            class="ml-1 text-xs text-muted-foreground"
+                        >
+                            défaut :
+                            {{ selectedType.capacite_defaut_bouteilles }}
+                        </span>
+                    </Label>
+                    <InputNumber
+                        id="capacite_bouteilles"
+                        :model-value="form.capacite_bouteilles"
+                        @update:model-value="
+                            $emit('update:form', {
+                                ...form,
+                                capacite_bouteilles: $event,
                             })
                         "
                         :min="1"

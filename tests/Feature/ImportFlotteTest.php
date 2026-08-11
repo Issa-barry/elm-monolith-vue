@@ -27,6 +27,7 @@ class ImportFlotteTest extends TestCase
     private const HEADERS_VEHICULES = [
         'vehicule_immatriculation', 'vehicule_nom', 'vehicule_type', 'vehicule_categorie',
         'vehicule_site', 'vehicule_pris_en_charge_par_usine',
+        'vehicule_capacite_sachets', 'vehicule_capacite_bouteilles',
         'proprietaire_nom', 'proprietaire_prenom', 'proprietaire_telephone', 'proprietaire_pays',
     ];
 
@@ -312,6 +313,45 @@ class ImportFlotteTest extends TestCase
 
         $livreur = Livreur::where('organization_id', $this->org->id)->where('telephone', '+224623000001')->firstOrFail();
         $this->assertSame($livreur->id, $membre->livreur_id);
+    }
+
+    public function test_confirm_creates_vehicule_avec_capacites_sachets_et_bouteilles(): void
+    {
+        $import = $this->importerVehiculeEtChauffeur([
+            'vehicule_capacite_sachets' => '90',
+            'vehicule_capacite_bouteilles' => '40',
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
+        $this->assertSame(90, $vehicule->capacite_packs);
+        $this->assertSame(40, $vehicule->capacite_bouteilles);
+    }
+
+    public function test_confirm_vehicule_sans_capacite_saisie_reste_null(): void
+    {
+        // Capacité facultative : repli géré côté affichage (capacite_defaut du
+        // type), pas d'écriture forcée en base pour ce cas — cf. VehiculeController::vehiculeData().
+        $import = $this->importerVehiculeEtChauffeur();
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
+        $this->assertNull($vehicule->capacite_packs);
+        $this->assertNull($vehicule->capacite_bouteilles);
+    }
+
+    public function test_analyse_flags_error_for_invalid_capacite_sachets(): void
+    {
+        $import = $this->importerVehiculeEtChauffeur(['vehicule_capacite_sachets' => 'abc']);
+
+        $this->assertSame(1, $import->nb_groupes_erreur);
+        $this->assertStringContainsString('Capacité sachets invalide', $import->rapport['groupes'][0]['erreurs'][0]);
     }
 
     public function test_confirm_vehicule_interne_recoit_proprietaire_par_defaut(): void
