@@ -130,8 +130,8 @@ const isFabricable = computed(() => props.form.type === 'fabricable');
 // le backend reste la seule source de vérité, ce tableau vient directement de `types`).
 const requiredPrices = computed(
     () =>
-        props.types.find((t) => t.value === props.form.type)
-            ?.required_prices ?? [],
+        props.types.find((t) => t.value === props.form.type)?.required_prices ??
+        [],
 );
 function prixRequis(champ: string): boolean {
     return requiredPrices.value.includes(champ);

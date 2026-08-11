@@ -363,9 +363,9 @@ function submit() {
                                 >Créer les types de véhicule prédéfinis ?</Label
                             >
                             <p class="text-xs text-muted-foreground">
-                                Tricycle, Minibus, Camionnette, Camion,
-                                Remorque — requis pour l'import de flotte et la
-                                fiche véhicule, modifiable ensuite.
+                                Tricycle, Minibus, Camionnette, Camion, Remorque
+                                — requis pour l'import de flotte et la fiche
+                                véhicule, modifiable ensuite.
                             </p>
                         </div>
                     </div>
