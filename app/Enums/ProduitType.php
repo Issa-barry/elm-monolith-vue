@@ -79,10 +79,19 @@ enum ProduitType: string
         return array_column(self::cases(), 'value');
     }
 
+    /**
+     * `required_prices` expose requiredPrices() au frontend (ProduitForm.vue) pour afficher un
+     * "*" sur les champs de prix effectivement obligatoires pour le type sélectionné — sans
+     * dupliquer cette règle métier côté JS, le backend reste la seule source de vérité.
+     */
     public static function options(): array
     {
         return array_map(
-            fn (self $case) => ['value' => $case->value, 'label' => $case->label()],
+            fn (self $case) => [
+                'value' => $case->value,
+                'label' => $case->label(),
+                'required_prices' => $case->requiredPrices(),
+            ],
             self::cases()
         );
     }

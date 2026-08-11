@@ -319,7 +319,9 @@
       "Bash(vendor/bin/pint --test app/Services/ImportSites tests/Feature/SiteImportParserTest.php resources/js/pages/Sites/partials/SiteImportDialog.vue)",
       "Bash(php -l app/Services/ProduitService.php)",
       "Bash(php -l app/Enums/ProduitType.php)",
-      "Bash(php -l tests/Unit/ProduitServicePrixTest.php)"
+      "Bash(php -l tests/Unit/ProduitServicePrixTest.php)",
+      "Bash(vendor/bin/pint --test app/Enums/ProduitType.php resources/js/pages/Produits)",
+      "Bash(vendor/bin/pint --test tests/Unit/EnumsTest.php)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64",

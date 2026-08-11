@@ -25,6 +25,12 @@ interface Option {
     label: string;
 }
 
+// `required_prices` (cf. ProduitType::options() côté backend, seule source de vérité) pilote
+// le "*" affiché sur les champs de prix effectivement obligatoires pour le type sélectionné.
+interface ProduitTypeOption extends Option {
+    required_prices: string[];
+}
+
 interface Categorie {
     id: string;
     nom: string;
@@ -85,7 +91,7 @@ const props = withDefaults(
     defineProps<{
         form: FormData;
         errors: Partial<Record<string, string>>;
-        types: Option[];
+        types: ProduitTypeOption[];
         statuts: Option[];
         categories?: Categorie[];
         fournisseurs?: FournisseurOption[];
@@ -119,6 +125,27 @@ const emit = defineEmits<{
 
 const typeHasStock = computed(() => !['service'].includes(props.form.type));
 const isFabricable = computed(() => props.form.type === 'fabricable');
+
+// Champs de prix obligatoires pour le type sélectionné (cf. ProduitType::requiredPrices() —
+// le backend reste la seule source de vérité, ce tableau vient directement de `types`).
+const requiredPrices = computed(
+    () =>
+        props.types.find((t) => t.value === props.form.type)
+            ?.required_prices ?? [],
+);
+function prixRequis(champ: string): boolean {
+    return requiredPrices.value.includes(champ);
+}
+// Rouge dès qu'un champ requis est vide ET que le formulaire a déjà été refusé une fois pour
+// ce motif — le backend regroupe toutes les erreurs de prix sous la clé `type` (un seul
+// message listant les champs manquants), jamais sous le champ lui-même individuellement.
+function prixInvalide(champ: string, valeur: number | null): boolean {
+    return (
+        !!props.errors.type &&
+        prixRequis(champ) &&
+        (valeur === null || valeur === undefined)
+    );
+}
 
 const previewUrl = ref<string | null>(null);
 
@@ -666,7 +693,12 @@ const depasseLimiteVariantes = computed(
             >
                 <div v-if="isFabricable">
                     <Label for="prix_usine" class="mb-1.5 block"
-                        >Prix usine</Label
+                        >Prix usine
+                        <span
+                            v-if="prixRequis('prix_usine')"
+                            class="text-destructive"
+                            >*</span
+                        ></Label
                     >
                     <InputNumber
                         input-id="prix_usine"
@@ -682,6 +714,12 @@ const depasseLimiteVariantes = computed(
                         locale="fr-GN"
                         class="w-full"
                         input-class="w-full"
+                        :class="{
+                            'p-invalid': prixInvalide(
+                                'prix_usine',
+                                form.prix_usine,
+                            ),
+                        }"
                     />
                     <p
                         v-if="errors.prix_usine"
@@ -693,7 +731,12 @@ const depasseLimiteVariantes = computed(
 
                 <div>
                     <Label for="prix_achat" class="mb-1.5 block"
-                        >Prix achat</Label
+                        >Prix achat
+                        <span
+                            v-if="prixRequis('prix_achat')"
+                            class="text-destructive"
+                            >*</span
+                        ></Label
                     >
                     <InputNumber
                         input-id="prix_achat"
@@ -709,6 +752,12 @@ const depasseLimiteVariantes = computed(
                         locale="fr-GN"
                         class="w-full"
                         input-class="w-full"
+                        :class="{
+                            'p-invalid': prixInvalide(
+                                'prix_achat',
+                                form.prix_achat,
+                            ),
+                        }"
                     />
                     <p
                         v-if="errors.prix_achat"
@@ -720,7 +769,12 @@ const depasseLimiteVariantes = computed(
 
                 <div>
                     <Label for="prix_vente" class="mb-1.5 block"
-                        >Prix vente</Label
+                        >Prix vente
+                        <span
+                            v-if="prixRequis('prix_vente')"
+                            class="text-destructive"
+                            >*</span
+                        ></Label
                     >
                     <InputNumber
                         input-id="prix_vente"
@@ -736,6 +790,12 @@ const depasseLimiteVariantes = computed(
                         locale="fr-GN"
                         class="w-full"
                         input-class="w-full"
+                        :class="{
+                            'p-invalid': prixInvalide(
+                                'prix_vente',
+                                form.prix_vente,
+                            ),
+                        }"
                     />
                     <p
                         v-if="errors.prix_vente"
