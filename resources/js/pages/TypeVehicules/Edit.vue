@@ -13,6 +13,7 @@ interface TypeVehiculeData {
     id: string;
     nom: string;
     capacite_defaut: number;
+    capacite_defaut_bouteilles: number | null;
     unite_capacite: string;
     description: string | null;
     is_active: boolean;
@@ -39,6 +40,7 @@ const form = useForm({
     _method: 'PUT',
     nom: props.type.nom,
     capacite_defaut: props.type.capacite_defaut,
+    capacite_defaut_bouteilles: props.type.capacite_defaut_bouteilles,
     unite_capacite: props.type.unite_capacite,
     description: props.type.description ?? '',
     is_active: props.type.is_active,
@@ -126,6 +128,37 @@ function submit() {
                             class="mt-1 text-xs text-destructive"
                         >
                             {{ form.errors.unite_capacite }}
+                        </p>
+                    </div>
+
+                    <div>
+                        <Label
+                            for="capacite_defaut_bouteilles"
+                            class="mb-1.5 block"
+                        >
+                            Capacité par défaut (bouteilles)
+                        </Label>
+                        <InputNumber
+                            id="capacite_defaut_bouteilles"
+                            v-model="form.capacite_defaut_bouteilles"
+                            :min="1"
+                            :max="99999"
+                            :use-grouping="false"
+                            class="w-full"
+                            :class="{
+                                'p-invalid':
+                                    form.errors.capacite_defaut_bouteilles,
+                            }"
+                        />
+                        <p
+                            v-if="form.errors.capacite_defaut_bouteilles"
+                            class="mt-1 text-xs text-destructive"
+                        >
+                            {{ form.errors.capacite_defaut_bouteilles }}
+                        </p>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            Laisser vide si ce type ne transporte pas de
+                            bouteilles.
                         </p>
                     </div>
                 </div>

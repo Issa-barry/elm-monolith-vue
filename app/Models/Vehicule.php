@@ -24,6 +24,7 @@ class Vehicule extends Model
         'type_vehicule_id',
         'categorie',
         'capacite_packs',
+        'capacite_bouteilles',
         'proprietaire_id',
         'pris_en_charge_par_usine',
         'commission_eligible',
@@ -38,6 +39,7 @@ class Vehicule extends Model
             'pris_en_charge_par_usine' => 'boolean',
             'commission_eligible' => 'boolean',
             'capacite_packs' => 'integer',
+            'capacite_bouteilles' => 'integer',
         ];
     }
 

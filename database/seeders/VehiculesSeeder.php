@@ -15,23 +15,26 @@ use Illuminate\Database\Seeder;
  * Tout véhicule (interne ou externe) est rattaché à un site — voir
  * VehiculeController::store()/update().
  *
+ * Le type ne fixe plus la capacité (cf. TypeVehiculesSeeder) : chaque véhicule
+ * porte sa propre capacite_packs, indépendamment des autres véhicules du même type.
+ *
  * EXTERNES (appartiennent à un propriétaire privé, mais opèrent pour un site) :
- * | Véhicule         | Type         | Équipe         | Immat      | Site     |
- * |------------------|--------------|----------------|------------|----------|
- * | Nen Dow          | CAMION-1700  | Nen Dow        | RC-001-GN  | Matoto   |
- * | Kata Kata de Ali | Tricycle-80  | Auto Dogomet   | TC-001-GN  | Lambanyi |
- * | Baba Ousou       | Minibus-200  | Baba Ousou     | VN-001-GN  | Matoto   |
- * | Kaloum Express   | Minibus-200  | Kaloum Express | KX-001-GN  | Sonfonia |
- * | Conakry 2        | Tricycle-80  | Conakry 2      | TC-002-GN  | Matoto   |
+ * | Véhicule         | Type     | Équipe         | Immat      | Site     |
+ * |------------------|----------|----------------|------------|----------|
+ * | Nen Dow          | Camion   | Nen Dow        | RC-001-GN  | Matoto   |
+ * | Kata Kata de Ali | Tricycle | Auto Dogomet   | TC-001-GN  | Lambanyi |
+ * | Baba Ousou       | Minibus  | Baba Ousou     | VN-001-GN  | Matoto   |
+ * | Kaloum Express   | Minibus  | Kaloum Express | KX-001-GN  | Sonfonia |
+ * | Conakry 2        | Tricycle | Conakry 2      | TC-002-GN  | Matoto   |
  *
  * INTERNES (appartiennent à l'organisation — 100 % livreurs) :
- * | Véhicule | Type        | Équipe           | Immat      | Site   |
- * |----------|-------------|------------------|------------|--------|
- * | elm-1    | Minibus-200 | ELM Logistique 1 | ELM-001-GN | Matoto |
- * | elm-2    | Minibus-200 | ELM Logistique 2 | ELM-002-GN | Matoto |
- * | elm-3    | CAMION-1700 | ELM Logistique 3 | ELM-003-GN | Matoto |
- * | elm-4    | Minibus-200 | ELM Logistique 4 | ELM-004-GN | Matoto |
- * | Cousin   | CAMION-1700 | Cousin           | BK-4627-02 | Kouria |
+ * | Véhicule | Type     | Équipe           | Immat      | Site   |
+ * |----------|----------|------------------|------------|--------|
+ * | elm-1    | Minibus  | ELM Logistique 1 | ELM-001-GN | Matoto |
+ * | elm-2    | Minibus  | ELM Logistique 2 | ELM-002-GN | Matoto |
+ * | elm-3    | Camion   | ELM Logistique 3 | ELM-003-GN | Matoto |
+ * | elm-4    | Minibus  | ELM Logistique 4 | ELM-004-GN | Matoto |
+ * | Cousin   | Camion   | Cousin           | BK-4627-02 | Kouria |
  */
 class VehiculesSeeder extends Seeder
 {
@@ -97,7 +100,7 @@ class VehiculesSeeder extends Seeder
                 'marque' => 'Mercedes',
                 'modele' => 'Actros',
                 'immatriculation' => 'RC-001-GN',
-                'type_vehicule_id' => $type('CAMION-1700'),
+                'type_vehicule_id' => $type('Camion'),
                 'capacite_packs' => 500,
                 'categorie' => 'externe',
                 'site_id' => $matoto->id,
@@ -112,7 +115,7 @@ class VehiculesSeeder extends Seeder
                 'marque' => 'Bajaj',
                 'modele' => 'RE',
                 'immatriculation' => 'TC-001-GN',
-                'type_vehicule_id' => $type('Tricycle-80'),
+                'type_vehicule_id' => $type('Tricycle'),
                 'capacite_packs' => 80,
                 'categorie' => 'externe',
                 'site_id' => $lambanyi->id,
@@ -127,7 +130,7 @@ class VehiculesSeeder extends Seeder
                 'marque' => 'Toyota',
                 'modele' => 'HiAce',
                 'immatriculation' => 'VN-001-GN',
-                'type_vehicule_id' => $type('Minibus-200'),
+                'type_vehicule_id' => $type('Minibus'),
                 'capacite_packs' => 150,
                 'categorie' => 'externe',
                 'site_id' => $matoto->id,
@@ -142,7 +145,7 @@ class VehiculesSeeder extends Seeder
                 'marque' => 'Toyota',
                 'modele' => 'HiAce',
                 'immatriculation' => 'KX-001-GN',
-                'type_vehicule_id' => $type('Minibus-200'),
+                'type_vehicule_id' => $type('Minibus'),
                 'capacite_packs' => 120,
                 'categorie' => 'externe',
                 'site_id' => $sonfonia->id,
@@ -157,7 +160,7 @@ class VehiculesSeeder extends Seeder
                 'marque' => 'Bajaj',
                 'modele' => 'RE',
                 'immatriculation' => 'TC-002-GN',
-                'type_vehicule_id' => $type('Tricycle-80'),
+                'type_vehicule_id' => $type('Tricycle'),
                 'capacite_packs' => 60,
                 'categorie' => 'externe',
                 'site_id' => $matoto->id,
@@ -174,7 +177,7 @@ class VehiculesSeeder extends Seeder
                 'marque' => 'Toyota',
                 'modele' => 'HiLux',
                 'immatriculation' => 'ELM-001-GN',
-                'type_vehicule_id' => $type('Minibus-200'),
+                'type_vehicule_id' => $type('Minibus'),
                 'capacite_packs' => 120,
                 'categorie' => 'interne',
                 'site_id' => $matoto->id,
@@ -189,7 +192,7 @@ class VehiculesSeeder extends Seeder
                 'marque' => 'Renault',
                 'modele' => 'Kangoo',
                 'immatriculation' => 'ELM-002-GN',
-                'type_vehicule_id' => $type('Minibus-200'),
+                'type_vehicule_id' => $type('Minibus'),
                 'capacite_packs' => 80,
                 'categorie' => 'interne',
                 'site_id' => $matoto->id,
@@ -204,7 +207,7 @@ class VehiculesSeeder extends Seeder
                 'marque' => 'Mercedes',
                 'modele' => 'Sprinter',
                 'immatriculation' => 'ELM-003-GN',
-                'type_vehicule_id' => $type('CAMION-1700'),
+                'type_vehicule_id' => $type('Camion'),
                 'capacite_packs' => 300,
                 'categorie' => 'interne',
                 'site_id' => $matoto->id,
@@ -219,7 +222,7 @@ class VehiculesSeeder extends Seeder
                 'marque' => 'Toyota',
                 'modele' => 'HiLux',
                 'immatriculation' => 'ELM-004-GN',
-                'type_vehicule_id' => $type('Minibus-200'),
+                'type_vehicule_id' => $type('Minibus'),
                 'capacite_packs' => 100,
                 'categorie' => 'interne',
                 'site_id' => $matoto->id,
@@ -234,7 +237,7 @@ class VehiculesSeeder extends Seeder
                 'marque' => null,
                 'modele' => null,
                 'immatriculation' => 'BK-4627-02',
-                'type_vehicule_id' => $type('CAMION-1700'),
+                'type_vehicule_id' => $type('Camion'),
                 'capacite_packs' => 200,
                 'categorie' => 'interne',
                 'site_id' => $kouria->id,

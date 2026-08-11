@@ -4,6 +4,7 @@ use App\Features\ModuleFeature;
 use App\Http\Controllers\AccountController;
 use App\Http\Controllers\Api\Search\GlobalSearchController;
 use App\Http\Controllers\Auth\AcceptInvitationController;
+use App\Http\Controllers\Auth\ForcePasswordChangeController;
 use App\Http\Controllers\Auth\LivreurRegistrationController;
 use App\Http\Controllers\Auth\RegisterLookupController;
 use App\Http\Controllers\Auth\RegisterOtpController;
@@ -40,6 +41,7 @@ use App\Http\Controllers\EquipeLivraisonController;
 use App\Http\Controllers\FactureVenteController;
 use App\Http\Controllers\FournisseurController;
 use App\Http\Controllers\FraisCommissionPartController;
+use App\Http\Controllers\InstallWizardController;
 use App\Http\Controllers\LivreurController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\OptionCatalogueController;
@@ -59,6 +61,7 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\ScanLivraisonController;
 use App\Http\Controllers\ScanUserController;
 use App\Http\Controllers\SiteController;
+use App\Http\Controllers\SiteImportController;
 use App\Http\Controllers\SitemapController;
 use App\Http\Controllers\TransfertLogistiqueController;
 use App\Http\Controllers\TransfertStatutController;
@@ -112,6 +115,16 @@ Route::post('/invitations/accept/{token}', [AcceptInvitationController::class, '
     ->name('invitations.accept.store')
     ->middleware('throttle:5,1');
 
+// ── Assistant d'installation ──────────────────────────────────────────────────
+// Public (pas de middleware 'auth') mais fortement gardé côté contrôleur — voir
+// InstallWizardController pour les 3 niveaux de protection (déjà installé, token, rate limit).
+Route::middleware('throttle:install')->group(function () {
+    Route::get('install', [InstallWizardController::class, 'show'])->name('install.show');
+    Route::post('install/token', [InstallWizardController::class, 'verifyToken'])->name('install.token');
+    Route::post('install/phone-info', [InstallWizardController::class, 'resolvePhone'])->name('install.phone-info');
+    Route::post('install', [InstallWizardController::class, 'store'])->name('install.store');
+});
+
 Route::get('/', function (Request $request) {
     $user = $request->user();
 
@@ -138,10 +151,10 @@ Route::get('/sitemap.xml', SitemapController::class)->name('sitemap');
 // ── Espace staff (back-office) ──────────────────────────────────────────────
 Route::prefix('backoffice')->group(function () {
     Route::get('dashboard', [DashboardController::class, 'index'])
-        ->middleware(['auth', 'account.active', 'verified', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'require.site'])
+        ->middleware(['auth', 'account.active', 'password.not-expired', 'verified', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'require.site'])
         ->name('dashboard');
 
-    Route::middleware(['auth', 'account.active', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'require.site'])->group(function () {
+    Route::middleware(['auth', 'account.active', 'password.not-expired', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'require.site'])->group(function () {
 
         // Messages de contact
         Route::get('contact-messages/unread-count', [ContactController::class, 'unreadCount'])->name('contact-messages.unread-count');
@@ -319,6 +332,14 @@ Route::prefix('backoffice')->group(function () {
             Route::post('sites/{site}/invitations', [UserInvitationController::class, 'store'])
                 ->name('sites.invitations.store')
                 ->middleware('throttle:10,1');
+
+            // Import en masse — Dialog depuis Sites/Index.vue, cf. SiteImportController.
+            Route::get('sites/import/modele', [SiteImportController::class, 'modele'])
+                ->name('sites.import.modele');
+            Route::post('sites/import/analyser', [SiteImportController::class, 'analyser'])
+                ->name('sites.import.analyser');
+            Route::post('sites/import/confirmer', [SiteImportController::class, 'confirmer'])
+                ->name('sites.import.confirmer');
         });
 
         // ── Comptes (super admin) ─────────────────────────────────────────────────
@@ -550,6 +571,14 @@ Route::middleware(['auth', 'role:client|proprietaire|livreur', 'active.livreur']
     Route::get('/proposer-vehicule', [ClientDashboardController::class, 'proposals'])->name('propositions.index');
     Route::get('/profile', [ClientDashboardController::class, 'profile'])->name('profile');
     Route::post('/propositions-vehicules', [ClientDashboardController::class, 'storeVehicleProposal'])->name('propositions.store');
+});
+
+// ── Mot de passe provisoire (cf. app:install / must_change_password) ──────────
+// Volontairement hors du groupe backoffice ('role:...', 'require.site') : un compte tout
+// juste créé doit pouvoir définir son mot de passe avant même d'avoir un site rattaché.
+Route::middleware(['auth', 'account.active'])->group(function () {
+    Route::get('password/force-change', [ForcePasswordChangeController::class, 'show'])->name('password.force-change');
+    Route::post('password/force-change', [ForcePasswordChangeController::class, 'update'])->name('password.force-change.update');
 });
 
 // ── Scan QR — accessible par staff et livreur (self-view) ─────────────────────

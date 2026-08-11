@@ -20,6 +20,7 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     Building2,
+    ChevronDown,
     Download,
     Eye,
     MoreVertical,
@@ -27,12 +28,14 @@ import {
     Plus,
     Search,
     Trash2,
+    Upload,
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
+import SiteImportDialog from './partials/SiteImportDialog.vue';
 
 interface Site {
     id: number;
@@ -66,6 +69,11 @@ const { onRowClick, bodyRowPt } = useClickableTableRow<Site>(
 const type = ref<string>('');
 const search = ref('');
 const mobileSearch = ref('');
+const importDialogVisible = ref(false);
+
+function onImported() {
+    router.reload({ only: ['sites'] });
+}
 
 const typeOptions = computed(() => {
     const map = new Map<string, string>();
@@ -446,6 +454,33 @@ function confirmDelete(s: Site) {
                         <Download class="mr-2 h-4 w-4" />
                         Exporter Excel
                     </Button>
+                    <DropdownMenu v-if="can('sites.create')">
+                        <DropdownMenuTrigger as-child>
+                            <Button variant="outline">
+                                <Upload class="mr-2 h-4 w-4" />
+                                Importer
+                                <ChevronDown class="ml-2 h-3.5 w-3.5" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" class="w-56">
+                            <DropdownMenuItem
+                                class="cursor-pointer"
+                                @click="importDialogVisible = true"
+                            >
+                                <Upload class="h-4 w-4" />
+                                Importer des sites
+                            </DropdownMenuItem>
+                            <DropdownMenuItem as-child>
+                                <a
+                                    href="/backoffice/sites/import/modele"
+                                    class="flex w-full items-center gap-2"
+                                >
+                                    <Download class="h-4 w-4" />
+                                    Télécharger le modèle
+                                </a>
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                     <Link
                         v-if="can('sites.create')"
                         href="/backoffice/sites/create"
@@ -652,5 +687,10 @@ function confirmDelete(s: Site) {
                 </DataTable>
             </div>
         </div>
+
+        <SiteImportDialog
+            v-model:visible="importDialogVisible"
+            @imported="onImported"
+        />
     </AppLayout>
 </template>

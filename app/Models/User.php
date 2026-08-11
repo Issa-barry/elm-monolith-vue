@@ -47,6 +47,7 @@ class User extends Authenticatable
         'organization_id',
         'matricule',
         'expo_push_token',
+        'must_change_password',
     ];
 
     public function getNameAttribute(): string
@@ -69,6 +70,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
             'is_active' => 'boolean',
+            'must_change_password' => 'boolean',
         ];
     }
 

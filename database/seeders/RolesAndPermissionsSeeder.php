@@ -38,6 +38,32 @@ class RolesAndPermissionsSeeder extends Seeder
 
     public function run(): void
     {
+        self::seedRolesEtPermissions();
+
+        // ── 3. Organisation par défaut ────────────────────────────────────────
+        $org = Organization::firstOrCreate(
+            ['slug' => 'elm'],
+            ['name' => 'Eau la maman', 'is_active' => true]
+        );
+
+        // ── 4. Comptes staff de démonstration ─────────────────────────────────
+        // Jamais en production : ces comptes fictifs partagent un mot de passe
+        // connu (Staff@2025). Le seul compte réel de mise en prod est créé par
+        // `php artisan app:install` (cf. InstallApp), jamais par un seeder.
+        if (app()->environment('production')) {
+            return;
+        }
+
+        $this->seedComptesDemo($org);
+    }
+
+    /**
+     * Permissions + rôles + matrices — entièrement indépendant de toute organisation, donc
+     * réutilisable tel quel par `php artisan app:install` (InstallApp) pour une organisation
+     * fraîchement créée, sans dupliquer/hardcoder "elm" comme le fait run() ci-dessus.
+     */
+    public static function seedRolesEtPermissions(): void
+    {
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
         // ── 1. Permissions ────────────────────────────────────────────────────
@@ -244,21 +270,10 @@ class RolesAndPermissionsSeeder extends Seeder
             'cashback.read',
             'rh-paie.read',
         ]);
+    }
 
-        // ── 3. Organisation par défaut ────────────────────────────────────────
-        $org = Organization::firstOrCreate(
-            ['slug' => 'elm'],
-            ['name' => 'Eau la maman', 'is_active' => true]
-        );
-
-        // ── 4. Comptes staff de démonstration ─────────────────────────────────
-        // Jamais en production : ces comptes fictifs partagent un mot de passe
-        // connu (Staff@2025). Le seul compte réel de mise en prod est créé par
-        // SuperAdminSeeder (voir ProductionSeeder).
-        if (app()->environment('production')) {
-            return;
-        }
-
+    private function seedComptesDemo(Organization $org): void
+    {
         $pays = [
             'FR' => ['France',  '+33'],
             'GN' => ['Guinée',  '+224'],

@@ -17,6 +17,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Clé de protection de l'assistant d'installation web (/install)
+    |--------------------------------------------------------------------------
+    |
+    | Lue une fois côté serveur (jamais stockée en base, jamais renvoyée au
+    | client) — voir InstallWizardController. Si absente en production,
+    | /install refuse tout accès plutôt que de rester ouvert sans protection.
+    |
+    */
+
+    'install_token' => env('APP_INSTALL_TOKEN'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------
     |
