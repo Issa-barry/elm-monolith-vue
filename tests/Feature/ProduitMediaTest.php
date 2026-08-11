@@ -146,7 +146,7 @@ class ProduitMediaTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.store'), [
                 'nom' => 'Produit avec galerie',
-                'type' => 'service',
+                'produit_type_id' => ProduitType::where('organization_id', $this->org->id)->where('code', 'service')->value('id'),
                 'statut' => 'actif',
                 'images' => [UploadedFile::fake()->image('a.jpg'), UploadedFile::fake()->image('b.jpg')],
             ]);

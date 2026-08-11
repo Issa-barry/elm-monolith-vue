@@ -22,21 +22,38 @@ import {
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
+// Reprend exactement la forme de l'interface Produit de Index.vue (même objets passés tels
+// quels, cf. :produits="props.produits") — les deux interfaces doivent rester structurellement
+// identiques sur les champs communs, sinon vue-tsc traite les callbacks onDelete/onArchive
+// comme des types "Produit" incompatibles malgré le même nom.
 interface Produit {
-    id: number;
+    id: string;
     nom: string;
     sku: string | null;
+    code_barres: string | null;
     image_url: string | null;
-    statut: string;
-    statut_label: string;
+    statut: string | null;
+    statut_label: string | null;
     produit_type_id: string | null;
     type_nom: string | null;
+    prix_usine: number | null;
+    prix_vente: number | null;
+    prix_achat: number | null;
+    cout: number | null;
     qte_stock: number | null;
+    alerte_stock_active: boolean;
+    seuil_alerte_stock: number | null;
+    seuil_alerte_effectif: number;
+    description: string | null;
     in_stock: boolean;
     is_low_stock: boolean;
     is_out_of_stock: boolean;
     has_stock: boolean;
     is_used: boolean;
+    has_variantes: boolean;
+    last_mouvement_type: 'entree' | 'sortie' | null;
+    last_mouvement_quantite: number | null;
+    stocks_par_site: unknown[];
 }
 
 const props = defineProps<{

@@ -11,6 +11,7 @@ use App\Enums\SiteType;
 use App\Enums\StatutCommandeAchat;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutFactureVente;
+use App\Models\ProduitType;
 use PHPUnit\Framework\TestCase;
 
 class EnumsTest extends TestCase
@@ -253,31 +254,31 @@ class EnumsTest extends TestCase
 
     public function test_produit_type_required_prices_derivees_des_booleens(): void
     {
-        $materiel = new \App\Models\ProduitType(['prix_achat_requis' => true, 'prix_usine_requis' => false, 'prix_vente_requis' => false]);
+        $materiel = new ProduitType(['prix_achat_requis' => true, 'prix_usine_requis' => false, 'prix_vente_requis' => false]);
         $this->assertSame(['prix_achat'], $materiel->requiredPrices());
 
-        $service = new \App\Models\ProduitType(['prix_achat_requis' => false, 'prix_usine_requis' => false, 'prix_vente_requis' => false]);
+        $service = new ProduitType(['prix_achat_requis' => false, 'prix_usine_requis' => false, 'prix_vente_requis' => false]);
         $this->assertSame([], $service->requiredPrices());
 
-        $fabricable = new \App\Models\ProduitType(['prix_achat_requis' => false, 'prix_usine_requis' => true, 'prix_vente_requis' => true]);
+        $fabricable = new ProduitType(['prix_achat_requis' => false, 'prix_usine_requis' => true, 'prix_vente_requis' => true]);
         $this->assertSame(['prix_usine', 'prix_vente'], $fabricable->requiredPrices());
 
-        $achatVente = new \App\Models\ProduitType(['prix_achat_requis' => true, 'prix_usine_requis' => false, 'prix_vente_requis' => true]);
+        $achatVente = new ProduitType(['prix_achat_requis' => true, 'prix_usine_requis' => false, 'prix_vente_requis' => true]);
         $this->assertSame(['prix_achat', 'prix_vente'], $achatVente->requiredPrices());
     }
 
     public function test_produit_type_champ_prix_reference(): void
     {
-        $type = new \App\Models\ProduitType(['champ_prix_reference' => 'prix_achat']);
+        $type = new ProduitType(['champ_prix_reference' => 'prix_achat']);
         $this->assertSame('prix_achat', $type->champPrixReference());
 
-        $sansReference = new \App\Models\ProduitType(['champ_prix_reference' => null]);
+        $sansReference = new ProduitType(['champ_prix_reference' => null]);
         $this->assertNull($sansReference->champPrixReference());
     }
 
     public function test_produit_type_vendable_achetable_sont_des_booleens_stockes(): void
     {
-        $type = new \App\Models\ProduitType(['vendable' => true, 'achetable' => false]);
+        $type = new ProduitType(['vendable' => true, 'achetable' => false]);
         $this->assertTrue($type->isVendable());
         $this->assertFalse($type->isAchetable());
     }

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ProduitStatut;
+use App\Enums\StockStatut;
 use App\Models\Concerns\NormalizesLabel;
 use App\Services\StockStatutService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -137,7 +138,7 @@ class Produit extends Model
     {
         return app(StockStatutService::class)
             ->detailParVarianteEtSite($this)
-            ->contains(fn (array $d) => $d['statut'] === \App\Enums\StockStatut::STOCK_FAIBLE->value);
+            ->contains(fn (array $d) => $d['statut'] === StockStatut::STOCK_FAIBLE->value);
     }
 
     public function getIsOutOfStockAttribute(): bool
@@ -148,7 +149,7 @@ class Produit extends Model
 
         return app(StockStatutService::class)
             ->detailParVarianteEtSite($this)
-            ->contains(fn (array $d) => $d['statut'] === \App\Enums\StockStatut::RUPTURE->value);
+            ->contains(fn (array $d) => $d['statut'] === StockStatut::RUPTURE->value);
     }
 
     /**

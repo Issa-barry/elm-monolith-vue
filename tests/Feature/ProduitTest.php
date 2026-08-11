@@ -16,6 +16,7 @@ use App\Models\VarianteStock;
 use App\Services\ProduitService;
 use Database\Seeders\ProduitTypeDefaultSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\Feature\Concerns\HasAdminSetup;
@@ -501,7 +502,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.store'), [
                 'nom' => 'Test',
-                'produit_type_id' => (string) \Illuminate\Support\Str::ulid(),
+                'produit_type_id' => (string) Str::ulid(),
                 'statut' => 'actif',
             ])
             ->assertSessionHasErrors('produit_type_id');

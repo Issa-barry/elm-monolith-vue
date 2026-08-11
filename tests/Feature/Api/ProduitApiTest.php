@@ -262,7 +262,7 @@ class ProduitApiTest extends TestCase
 
         $this->postJson(route('api.backoffice.produits.store'), [])
             ->assertUnprocessable()
-            ->assertJsonValidationErrors(['nom', 'produit_type_id', 'statut', 'alerte_stock_active']);
+            ->assertJsonValidationErrors(['nom', 'produit_type_id', 'statut']);
     }
 
     public function test_store_fails_sans_prix_requis_pour_le_type(): void

@@ -154,6 +154,13 @@ const referenceOptions = computed(() => {
     return opts;
 });
 
+// 'structure' est une clé d'erreur serveur générique (garde-fou de modification structurelle,
+// cf. ProduitTypeController::update()), pas un champ du formulaire — absente du type
+// FormDataErrors généré à partir de `form`, d'où l'accès via un index générique.
+const structureError = computed(
+    () => (form.errors as Record<string, string>).structure,
+);
+
 function openCreate() {
     editingType.value = null;
     form.reset();
@@ -435,10 +442,10 @@ function destroy(type: ProduitTypeRow) {
                 modifiables.
             </div>
             <p
-                v-if="form.errors.structure"
+                v-if="structureError"
                 class="text-xs text-destructive"
             >
-                {{ form.errors.structure }}
+                {{ structureError }}
             </p>
 
             <div class="space-y-1.5">
