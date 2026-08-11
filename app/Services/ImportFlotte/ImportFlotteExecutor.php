@@ -108,6 +108,8 @@ class ImportFlotteExecutor
                 'nom_vehicule' => $vData['nom_vehicule'],
                 'immatriculation' => $groupe['immatriculation'],
                 'type_vehicule_id' => $vData['type_vehicule_id'],
+                'capacite_packs' => $vData['capacite_packs'],
+                'capacite_bouteilles' => $vData['capacite_bouteilles'],
                 'categorie' => $vData['categorie'],
                 'site_id' => $vData['site_id'],
                 'proprietaire_id' => $vData['categorie'] === 'externe'

@@ -48,8 +48,15 @@ Dans GitHub: `Settings` -> `Secrets and variables` -> `Actions` -> `New reposito
 3. Lancer une fois:
    ```bash
    php artisan key:generate
+   php artisan migrate --force
+   php artisan db:seed --class=ProductionSeeder --force
+   php artisan app:install
    ln -s "$PWD/storage/app/public" "$PWD/public/storage" || true
    ```
+   `app:install` cree l'organisation et le premier compte super_admin de facon
+   interactive (mot de passe saisi en masque, jamais affiche en clair — voir
+   README.md, section Deploiement). Idempotent par organisation : relancable
+   sans risque de doublon.
 4. Verifier que la base de donnees de production est correcte.
 
 ## Important

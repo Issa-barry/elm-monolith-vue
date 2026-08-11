@@ -4,6 +4,7 @@ use App\Features\ModuleFeature;
 use App\Http\Controllers\AccountController;
 use App\Http\Controllers\Api\Search\GlobalSearchController;
 use App\Http\Controllers\Auth\AcceptInvitationController;
+use App\Http\Controllers\Auth\ForcePasswordChangeController;
 use App\Http\Controllers\Auth\LivreurRegistrationController;
 use App\Http\Controllers\Auth\RegisterLookupController;
 use App\Http\Controllers\Auth\RegisterOtpController;
@@ -138,10 +139,10 @@ Route::get('/sitemap.xml', SitemapController::class)->name('sitemap');
 // ── Espace staff (back-office) ──────────────────────────────────────────────
 Route::prefix('backoffice')->group(function () {
     Route::get('dashboard', [DashboardController::class, 'index'])
-        ->middleware(['auth', 'account.active', 'verified', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'require.site'])
+        ->middleware(['auth', 'account.active', 'password.not-expired', 'verified', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'require.site'])
         ->name('dashboard');
 
-    Route::middleware(['auth', 'account.active', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'require.site'])->group(function () {
+    Route::middleware(['auth', 'account.active', 'password.not-expired', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'require.site'])->group(function () {
 
         // Messages de contact
         Route::get('contact-messages/unread-count', [ContactController::class, 'unreadCount'])->name('contact-messages.unread-count');
@@ -550,6 +551,14 @@ Route::middleware(['auth', 'role:client|proprietaire|livreur', 'active.livreur']
     Route::get('/proposer-vehicule', [ClientDashboardController::class, 'proposals'])->name('propositions.index');
     Route::get('/profile', [ClientDashboardController::class, 'profile'])->name('profile');
     Route::post('/propositions-vehicules', [ClientDashboardController::class, 'storeVehicleProposal'])->name('propositions.store');
+});
+
+// ── Mot de passe provisoire (cf. app:install / must_change_password) ──────────
+// Volontairement hors du groupe backoffice ('role:...', 'require.site') : un compte tout
+// juste créé doit pouvoir définir son mot de passe avant même d'avoir un site rattaché.
+Route::middleware(['auth', 'account.active'])->group(function () {
+    Route::get('password/force-change', [ForcePasswordChangeController::class, 'show'])->name('password.force-change');
+    Route::post('password/force-change', [ForcePasswordChangeController::class, 'update'])->name('password.force-change.update');
 });
 
 // ── Scan QR — accessible par staff et livreur (self-view) ─────────────────────

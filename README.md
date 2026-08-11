@@ -1,40 +1,66 @@
-# 1er deploiement 
-cd domains/xxx.com/public_html
-php artisan migrate --force^
+# Déploiement
 
-# Eau maman — Monolithe
-composer update
-PHP artisan migrate:fresh --seed
-PHP artisan optimize:clear
-PHP artisan optimize
+## ⚠️ Ne jamais faire en production
 
-composer update
-php artisan migrate:fresh --seed
-php artisan optimize:clear
-php artisan optimize
- 
-# magic 
-cd ~/domains/xxxxx/public_html
-export PHP=/opt/alt/php84/usr/bin/php
-$PHP artisan migrate:fresh --seed
+`migrate:fresh --seed` (et toute variante `migrate:fresh`) — bloqué en dur côté code
+(`DB::prohibitDestructiveCommands`, cf. `AppServiceProvider`) même avec `--force`, mais à
+ne jamais taper par réflexe : ça vide toute la base. Utiliser `migrate --force` seul.
+
+`db:seed` sans `--class=ProductionSeeder` — le seeder par défaut (`DatabaseSeeder`) crée
+des clients/livreurs/véhicules/produits fictifs, pas fait pour la production.
+
+## 1er déploiement (base vide, une seule fois)
+
+```bash
+cd ~/domains/xxx.com/public_html
+export PHP=/opt/alt/php84/usr/bin/php   # si besoin de forcer la version PHP
+composer2 install --no-dev --prefer-dist --optimize-autoloader
+
+# Configurer .env (DB, APP_ENV=production...) puis :
+$PHP artisan key:generate
+
+# Schéma — migrate:fresh acceptable ici uniquement (base vide)
+$PHP artisan migrate --force
+
+# Données de référence (rôles, permissions, sites, catalogue de base) — jamais db:seed seul
+$PHP artisan db:seed --class=ProductionSeeder --force
+
+# Organisation + premier compte super_admin — mot de passe saisi en masqué,
+# jamais affiché en clair, à redéfinir obligatoirement à la première connexion
+$PHP artisan app:install
+
+# Lien symbolique storage (une seule fois)
+ln -s "$PWD/storage/app/public" "$PWD/public/storage" || true
+
 $PHP artisan optimize:clear
-$PHP artisan optimize 
+$PHP artisan optimize
+```
 
-composer2 update
+`app:install` est idempotent par organisation : si le slug donné existe déjà (ex: "elm",
+créée par `ProductionSeeder`), il la réutilise au lieu d'en recréer une — il suffit donc de
+répondre avec le même nom/slug que celui déjà en base pour juste ajouter le super_admin.
 
-/opt/alt/php84/usr/bin/php artisan up
+## Déploiements suivants (uniquement)
 
-Pour premiere mep
-php artisan db:seed --class=ProductionSeeder --force
- 
-test3
- 
-# Sur ton PC
+```bash
+$PHP artisan migrate --force
+$PHP artisan optimize:clear
+$PHP artisan optimize
+```
+
+C'est exactement ce que fait `deploy-hostinger.yml` automatiquement sur push vers `main` —
+avec le pipeline CI/CD configuré, ces commandes n'ont normalement plus besoin d'être tapées
+à la main.
+
+## Sur ton PC (si build manuel, hors CI/CD)
+
+```bash
 npm run build
 git add public/build
 git commit -m "build: production"
-git push  
- 
+git push
+```
+
 ## CI/CD Hostinger (GitHub Actions)
 
 Flux de branches:
@@ -57,18 +83,6 @@ CD (deploiement production) sur `main`:
 
 Guide complet:
 - `DEPLOY-HOSTINGER-CICD.md`
- 
-# Sur le serveur
-
-cd ~/domains/eau-la-maman.fr/public_html
-export PHP=/opt/alt/php84/usr/bin/php
-composer2 install --no-dev --prefer-dist --optimize-autoloader
-$PHP artisan migrate --force
-$PHP artisan optimize:clear
-$PHP artisan optimize
-
-ln -s "$PWD/storage/app/public" "$PWD/public/storage" || true
-
 
 ## Organisation de démonstration — Fello Demo
 
@@ -170,17 +184,12 @@ Variables d'environnement E2E utiles (optionnelles) :
 ```bash
 ```
 
- 
-# code coverage : 
+### Divers
+
+```bash
+# Code coverage
 php -d pcov.enabled=1 vendor/bin/phpunit --coverage-text
 
-# magic 
-export PHP=/opt/alt/php84/usr/bin/php
-composer2 update
-$PHP artisan migrate:fresh --seed
-$PHP artisan optimize:clear
-$PHP artisan optimize
-
-brache feature
-
+# Serveur de dev local
 php artisan serve --port=8080
+```

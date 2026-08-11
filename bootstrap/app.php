@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureAccountIsActive;
+use App\Http\Middleware\EnsurePasswordIsNotExpired;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\RequireActiveLivreur;
@@ -39,6 +40,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'require.site' => RequireSiteAssigned::class,
             'active.livreur' => RequireActiveLivreur::class,
             'account.active' => EnsureAccountIsActive::class,
+            'password.not-expired' => EnsurePasswordIsNotExpired::class,
             'vitrine.token' => VerifyVitrineServiceToken::class,
         ]);
 

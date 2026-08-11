@@ -47,6 +47,7 @@ interface Vehicule {
     immatriculation: string;
     type_label: string;
     capacite_packs: number | null;
+    capacite_bouteilles: number | null;
     proprietaire_nom: string | null;
     proprietaire_telephone: string | null;
     proprietaire_code_phone_pays: string | null;
@@ -605,6 +606,9 @@ function confirmDelete(v: Vehicule) {
                                         ? `${data.capacite_packs} packs`
                                         : '—'
                                 }}
+                                <template v-if="data.capacite_bouteilles != null">
+                                    · {{ data.capacite_bouteilles }} bout.
+                                </template>
                             </span>
                         </template>
                     </Column>

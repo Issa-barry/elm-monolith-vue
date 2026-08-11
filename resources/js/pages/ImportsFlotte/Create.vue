@@ -115,6 +115,12 @@ function submit() {
                     convient, sans dupliquer l'information.
                 </p>
                 <p class="mt-2 text-sm text-muted-foreground">
+                    <strong>vehicule_capacite_sachets</strong> et
+                    <strong>vehicule_capacite_bouteilles</strong> sont
+                    facultatives : laissées vides, la capacité par défaut du
+                    type de véhicule s'applique.
+                </p>
+                <p class="mt-2 text-sm text-muted-foreground">
                     <strong>vehicule_pris_en_charge_par_usine</strong>
                     (dépenses du véhicule prises en charge par l'usine) et
                     <strong>vehicule_commission_eligible</strong> (le véhicule
