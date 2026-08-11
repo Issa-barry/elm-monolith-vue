@@ -143,7 +143,10 @@ function onProprietaireClear() {
     });
 }
 
-function onUsageChange(field: 'livraison_vente' | 'livraison_logistique', value: boolean) {
+function onUsageChange(
+    field: 'livraison_vente' | 'livraison_logistique',
+    value: boolean,
+) {
     emit('update:form', { ...props.form, [field]: value });
 }
 
@@ -202,7 +205,10 @@ function handleSubmit() {
                     <Checkbox
                         :model-value="form.livraison_logistique"
                         @update:model-value="
-                            onUsageChange('livraison_logistique', $event === true)
+                            onUsageChange(
+                                'livraison_logistique',
+                                $event === true,
+                            )
                         "
                     />
                     <div>
@@ -294,7 +300,9 @@ function handleSubmit() {
                         :suggestions="proprietaireSuggests"
                         option-label="label"
                         @complete="searchProprietaire"
-                        @item-select="onProprietaireSelect(proprietaireSelected)"
+                        @item-select="
+                            onProprietaireSelect(proprietaireSelected)
+                        "
                         @clear="onProprietaireClear"
                         placeholder="Nom ou téléphone… (par défaut : organisation)"
                         class="w-full"

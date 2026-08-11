@@ -612,9 +612,7 @@ const ajustements = props.mouvements.map((m) => ({
                                 <th class="pr-4 pb-2 text-right font-medium">
                                     Stock
                                 </th>
-                                <th class="pb-2 text-left font-medium">
-                                    État
-                                </th>
+                                <th class="pb-2 text-left font-medium">État</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-border/50">

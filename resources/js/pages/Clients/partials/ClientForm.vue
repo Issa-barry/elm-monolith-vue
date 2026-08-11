@@ -374,7 +374,10 @@ function onSubmit() {
                     option-value="value"
                     class="w-full"
                     :disabled="isReadOnly"
-                    :class="[readonlyDropdownClass, { 'p-invalid': errors.type }]"
+                    :class="[
+                        readonlyDropdownClass,
+                        { 'p-invalid': errors.type },
+                    ]"
                 />
                 <p v-if="errors.type" class="mt-1 text-xs text-destructive">
                     {{ errors.type }}

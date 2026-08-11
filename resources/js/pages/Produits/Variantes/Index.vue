@@ -347,9 +347,9 @@ function enregistrer() {
             <p class="text-xs text-muted-foreground">
                 Le stock ne se modifie pas ici — utilisez « Ajuster le stock »
                 depuis la fiche produit, qui trace chaque mouvement avec un
-                motif. Le seuil d'alerte de stock faible se configure au
-                niveau du produit (pas par variante) et s'applique à toutes
-                ses variantes.
+                motif. Le seuil d'alerte de stock faible se configure au niveau
+                du produit (pas par variante) et s'applique à toutes ses
+                variantes.
             </p>
         </div>
     </AppLayout>

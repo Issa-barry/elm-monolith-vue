@@ -125,10 +125,10 @@ function submit() {
                     pour une vente/PDV) et
                     <strong>vehicule_livraison_logistique</strong>
                     (sélectionnable pour un transfert) sont deux colonnes
-                    indépendantes — un véhicule peut être l'un, l'autre, ou
-                    les deux. Toutes deux facultatives : si omises, le
-                    véhicule importé est éligible à la vente par défaut, pas à
-                    la logistique. Au moins l'une des deux doit être "oui".
+                    indépendantes — un véhicule peut être l'un, l'autre, ou les
+                    deux. Toutes deux facultatives : si omises, le véhicule
+                    importé est éligible à la vente par défaut, pas à la
+                    logistique. Au moins l'une des deux doit être "oui".
                 </p>
                 <a
                     href="/settings/imports-flotte/modele"

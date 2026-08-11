@@ -53,7 +53,9 @@ export function useVehiculeCommandeTarification<T extends { id: number }>(
 
     // Aucun véhicule de flotte impliqué => jamais de commission, quel que soit le
     // client (CommissionGenerator exige un véhicule de toute façon).
-    const commissionEligible = computed<boolean>(() => !!selectedVehicule.value);
+    const commissionEligible = computed<boolean>(
+        () => !!selectedVehicule.value,
+    );
 
     return { modeTarification, commissionEligible };
 }

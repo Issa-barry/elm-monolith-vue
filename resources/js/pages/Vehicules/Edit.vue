@@ -66,7 +66,8 @@ const form = useForm({
     capacite_packs: props.vehicule.capacite_packs,
     capacite_bouteilles: props.vehicule.capacite_bouteilles,
     site_id: props.vehicule.site_id,
-    proprietaire_id: props.vehicule.proprietaire_id ?? props.default_proprietaire_id,
+    proprietaire_id:
+        props.vehicule.proprietaire_id ?? props.default_proprietaire_id,
     livraison_vente: props.vehicule.livraison_vente,
     livraison_logistique: props.vehicule.livraison_logistique,
     photo: null as File | null,

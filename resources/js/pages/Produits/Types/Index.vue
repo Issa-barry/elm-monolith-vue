@@ -9,15 +9,7 @@ import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router, useForm } from '@inertiajs/vue3';
-import {
-    Check,
-    Layers,
-    Pencil,
-    Plus,
-    Power,
-    Trash2,
-    X,
-} from 'lucide-vue-next';
+import { Check, Layers, Pencil, Plus, Power, Trash2, X } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
@@ -307,19 +299,13 @@ function destroy(type: ProduitTypeRow) {
                                 <th class="px-4 py-2.5 text-left font-medium">
                                     Nom
                                 </th>
-                                <th
-                                    class="px-4 py-2.5 text-center font-medium"
-                                >
+                                <th class="px-4 py-2.5 text-center font-medium">
                                     Gère du stock
                                 </th>
-                                <th
-                                    class="px-4 py-2.5 text-center font-medium"
-                                >
+                                <th class="px-4 py-2.5 text-center font-medium">
                                     Vendable
                                 </th>
-                                <th
-                                    class="px-4 py-2.5 text-center font-medium"
-                                >
+                                <th class="px-4 py-2.5 text-center font-medium">
                                     Achetable
                                 </th>
                                 <th class="px-4 py-2.5 text-right font-medium">
@@ -435,16 +421,15 @@ function destroy(type: ProduitTypeRow) {
                 v-if="editingType?.is_used"
                 class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-400"
             >
-                Ce type est utilisé par {{ editingType.produits_count }}
-                produit{{ editingType.produits_count > 1 ? 's' : '' }} : sa
-                structure (stock, prix requis, marge) ne peut plus être
+                Ce type est utilisé par
+                {{ editingType.produits_count }} produit{{
+                    editingType.produits_count > 1 ? 's' : ''
+                }}
+                : sa structure (stock, prix requis, marge) ne peut plus être
                 modifiée. Seuls le nom, le statut et l'ordre restent
                 modifiables.
             </div>
-            <p
-                v-if="structureError"
-                class="text-xs text-destructive"
-            >
+            <p v-if="structureError" class="text-xs text-destructive">
                 {{ structureError }}
             </p>
 
@@ -473,9 +458,7 @@ function destroy(type: ProduitTypeRow) {
                         id="type-gere-stock"
                         :model-value="form.gere_stock"
                         :disabled="editingType?.is_used"
-                        @update:model-value="
-                            form.gere_stock = $event === true
-                        "
+                        @update:model-value="form.gere_stock = $event === true"
                     />
                     <div>
                         <Label
@@ -484,8 +467,8 @@ function destroy(type: ProduitTypeRow) {
                             >Gère du stock</Label
                         >
                         <p class="text-xs text-muted-foreground">
-                            Les produits de ce type ont une quantité suivie
-                            par site et peuvent déclencher une alerte de stock
+                            Les produits de ce type ont une quantité suivie par
+                            site et peuvent déclencher une alerte de stock
                             faible.
                         </p>
                     </div>
@@ -524,7 +507,9 @@ function destroy(type: ProduitTypeRow) {
                 class="space-y-3 rounded-lg border p-3"
                 :class="{ 'opacity-60': editingType?.is_used }"
             >
-                <p class="text-xs font-semibold text-muted-foreground uppercase">
+                <p
+                    class="text-xs font-semibold text-muted-foreground uppercase"
+                >
                     Prix obligatoires
                 </p>
                 <div class="flex items-center gap-3">
@@ -536,9 +521,7 @@ function destroy(type: ProduitTypeRow) {
                             form.prix_achat_requis = $event === true
                         "
                     />
-                    <Label
-                        for="type-prix-achat"
-                        class="cursor-pointer text-sm"
+                    <Label for="type-prix-achat" class="cursor-pointer text-sm"
                         >Prix d'achat requis</Label
                     >
                 </div>
@@ -551,9 +534,7 @@ function destroy(type: ProduitTypeRow) {
                             form.prix_usine_requis = $event === true
                         "
                     />
-                    <Label
-                        for="type-prix-usine"
-                        class="cursor-pointer text-sm"
+                    <Label for="type-prix-usine" class="cursor-pointer text-sm"
                         >Prix usine requis</Label
                     >
                 </div>
@@ -566,9 +547,7 @@ function destroy(type: ProduitTypeRow) {
                             form.prix_vente_requis = $event === true
                         "
                     />
-                    <Label
-                        for="type-prix-vente"
-                        class="cursor-pointer text-sm"
+                    <Label for="type-prix-vente" class="cursor-pointer text-sm"
                         >Prix de vente requis</Label
                     >
                 </div>
@@ -589,9 +568,9 @@ function destroy(type: ProduitTypeRow) {
                         class="w-full"
                     />
                     <p class="text-xs text-muted-foreground">
-                        Si renseigné, ELM refuse tout prix de vente inférieur
-                        ou égal à ce prix de référence — garde-fou anti-vente
-                        à perte, toujours appliqué par le système.
+                        Si renseigné, ELM refuse tout prix de vente inférieur ou
+                        égal à ce prix de référence — garde-fou anti-vente à
+                        perte, toujours appliqué par le système.
                     </p>
                 </div>
             </div>

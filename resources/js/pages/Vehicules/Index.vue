@@ -184,11 +184,7 @@ const filteredVehicules = computed(() =>
                 ? !v.agence_nom
                 : v.agence_nom === filterAgence.value);
         return (
-            matchSearch &&
-            matchType &&
-            matchStatut &&
-            matchUsage &&
-            matchAgence
+            matchSearch && matchType && matchStatut && matchUsage && matchAgence
         );
     }),
 );
@@ -226,11 +222,7 @@ const mobileFiltered = computed(() =>
                 ? !v.agence_nom
                 : v.agence_nom === mobileFilterAgence.value);
         return (
-            matchSearch &&
-            matchType &&
-            matchStatut &&
-            matchUsage &&
-            matchAgence
+            matchSearch && matchType && matchStatut && matchUsage && matchAgence
         );
     }),
 );

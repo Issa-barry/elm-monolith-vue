@@ -45,7 +45,8 @@ const form = useForm({
     capacite_packs: null as number | null,
     capacite_bouteilles: null as number | null,
     site_id: props.default_site_id,
-    proprietaire_id: props.initial_proprietaire_id ?? props.default_proprietaire_id,
+    proprietaire_id:
+        props.initial_proprietaire_id ?? props.default_proprietaire_id,
     // Par défaut, un nouveau véhicule sert à la vente — l'admin coche
     // logistique en plus si besoin (cf. Vehicule::$livraison_vente par défaut).
     livraison_vente: true,

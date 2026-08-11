@@ -140,7 +140,9 @@ const typeHasStock = computed(() => selectedType.value?.gere_stock ?? true);
 
 // Champs de prix obligatoires pour le type sélectionné (cf. ProduitType::requiredPrices() —
 // le backend reste la seule source de vérité, ce tableau vient directement de `types`).
-const requiredPrices = computed(() => selectedType.value?.required_prices ?? []);
+const requiredPrices = computed(
+    () => selectedType.value?.required_prices ?? [],
+);
 function prixRequis(champ: string): boolean {
     return requiredPrices.value.includes(champ);
 }
@@ -162,7 +164,8 @@ const seuilSpecifique = computed({
         emit('update:form', {
             ...props.form,
             seuil_alerte_stock: actif
-                ? (props.form.seuil_alerte_stock ?? props.seuilOrganisationDefaut)
+                ? (props.form.seuil_alerte_stock ??
+                  props.seuilOrganisationDefaut)
                 : null,
         });
     },
@@ -717,7 +720,9 @@ const depasseLimiteVariantes = computed(
             <div
                 class="grid gap-4 sm:grid-cols-2 sm:gap-5"
                 :class="
-                    prixRequis('prix_usine') ? 'lg:grid-cols-4' : 'lg:grid-cols-3'
+                    prixRequis('prix_usine')
+                        ? 'lg:grid-cols-4'
+                        : 'lg:grid-cols-3'
                 "
             >
                 <div v-if="prixRequis('prix_usine')">
@@ -872,8 +877,7 @@ const depasseLimiteVariantes = computed(
                 <div>
                     <Label class="mb-2 block"
                         >Souhaitez-vous être alerté lorsque le stock devient
-                        faible ?
-                        <span class="text-destructive">*</span></Label
+                        faible ? <span class="text-destructive">*</span></Label
                     >
                     <div class="flex flex-wrap gap-4 sm:gap-6">
                         <label class="flex cursor-pointer items-center gap-2">
@@ -912,7 +916,10 @@ const depasseLimiteVariantes = computed(
                     </p>
                 </div>
 
-                <div v-if="form.alerte_stock_active" class="space-y-2 border-t pt-4">
+                <div
+                    v-if="form.alerte_stock_active"
+                    class="space-y-2 border-t pt-4"
+                >
                     <Label class="block">Seuil d'alerte</Label>
                     <label class="flex cursor-pointer items-center gap-2">
                         <RadioButton
@@ -931,7 +938,9 @@ const depasseLimiteVariantes = computed(
                             :value="true"
                             @update:model-value="seuilSpecifique = true"
                         />
-                        <span class="text-sm">Définir un seuil spécifique :</span>
+                        <span class="text-sm"
+                            >Définir un seuil spécifique :</span
+                        >
                         <InputNumber
                             v-if="seuilSpecifique"
                             :model-value="form.seuil_alerte_stock"
@@ -951,11 +960,12 @@ const depasseLimiteVariantes = computed(
                         atteindra
                         {{
                             seuilSpecifique
-                                ? (form.seuil_alerte_stock ?? seuilOrganisationDefaut)
+                                ? (form.seuil_alerte_stock ??
+                                  seuilOrganisationDefaut)
                                 : seuilOrganisationDefaut
                         }}
-                        unités ou moins, sur un site donné — ce seuil
-                        s'applique à toutes les variantes de ce produit.
+                        unités ou moins, sur un site donné — ce seuil s'applique
+                        à toutes les variantes de ce produit.
                     </p>
                     <p
                         v-if="errors.seuil_alerte_stock"
