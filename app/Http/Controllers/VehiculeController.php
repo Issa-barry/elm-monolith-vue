@@ -44,9 +44,11 @@ class VehiculeController extends Controller
             'categorie' => $v->categorie,
             // Capacité propre au véhicule si définie (override), sinon celle
             // par défaut de son type — c'est cette dernière qui est utilisée
-            // en pratique tant qu'aucune capacité spécifique n'a été saisie
-            // (import flotte notamment : capacite_packs n'est jamais renseigné).
+            // en pratique tant qu'aucune capacité spécifique n'a été saisie.
             'capacite_packs' => $v->capacite_packs ?? $v->typeVehicule?->capacite_defaut,
+            // Deuxième unité (bouteilles), même repli — cf. capacite_packs.
+            // Reste null si ni le véhicule ni son type n'en transportent.
+            'capacite_bouteilles' => $v->capacite_bouteilles ?? $v->typeVehicule?->capacite_defaut_bouteilles,
             'site_id' => $v->site_id,
             'site_nom' => $v->relationLoaded('site') ? $v->site?->nom : null,
             'proprietaire_id' => $v->proprietaire_id,
@@ -482,6 +484,7 @@ class VehiculeController extends Controller
                 'value' => $t->id,
                 'label' => $t->nom,
                 'capacite_defaut' => $t->capacite_defaut,
+                'capacite_defaut_bouteilles' => $t->capacite_defaut_bouteilles,
             ])
             ->toArray();
     }
@@ -620,6 +623,7 @@ class VehiculeController extends Controller
             ],
             'categorie' => ['required', 'in:interne,externe'],
             'capacite_packs' => 'nullable|integer|min:1|max:99999',
+            'capacite_bouteilles' => 'nullable|integer|min:1|max:99999',
             // Chaque véhicule (interne ou externe) est rattaché à un site.
             'site_id' => [
                 'required', 'string',

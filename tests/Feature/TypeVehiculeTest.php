@@ -85,6 +85,26 @@ class TypeVehiculeTest extends TestCase
         ]);
     }
 
+    public function test_store_creates_type_avec_capacite_defaut_bouteilles(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('type-vehicules.store'), [
+                'nom' => 'Minibus XL',
+                'capacite_defaut' => 200,
+                'capacite_defaut_bouteilles' => 50,
+                'unite_capacite' => 'packs',
+                'is_active' => true,
+            ])
+            ->assertRedirect(route('type-vehicules.index'));
+
+        $this->assertDatabaseHas('type_vehicules', [
+            'organization_id' => $this->org->id,
+            'nom' => 'Minibus XL',
+            'capacite_defaut' => 200,
+            'capacite_defaut_bouteilles' => 50,
+        ]);
+    }
+
     public function test_store_fails_with_empty_data(): void
     {
         $this->actingAs($this->user)

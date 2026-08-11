@@ -19,6 +19,7 @@ class TypeVehicule extends Model
         'organization_id',
         'nom',
         'capacite_defaut',
+        'capacite_defaut_bouteilles',
         'unite_capacite',
         'description',
         'is_active',
@@ -29,6 +30,7 @@ class TypeVehicule extends Model
         return [
             'is_active' => 'boolean',
             'capacite_defaut' => 'integer',
+            'capacite_defaut_bouteilles' => 'integer',
         ];
     }
 

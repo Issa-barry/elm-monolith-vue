@@ -79,6 +79,7 @@ interface VehiculeData {
     type_vehicule_id: string | null;
     categorie: string | null;
     capacite_packs: number | null;
+    capacite_bouteilles: number | null;
     capacites: Array<{
         id: string;
         categorie_id: string;
@@ -249,6 +250,12 @@ function formatGNF(val: number): string {
                             class="text-xs text-muted-foreground"
                         >
                             {{ vehicule.capacite_packs }} packs
+                        </span>
+                        <span
+                            v-if="vehicule.capacite_bouteilles"
+                            class="text-xs text-muted-foreground"
+                        >
+                            {{ vehicule.capacite_bouteilles }} bouteilles
                         </span>
                     </div>
                 </template>
@@ -431,6 +438,15 @@ function formatGNF(val: number): string {
                                             ? `${vehicule.capacite_packs} packs`
                                             : '—'
                                     }}
+                                    <template
+                                        v-if="
+                                            vehicule.capacite_bouteilles !==
+                                            null
+                                        "
+                                    >
+                                        · {{ vehicule.capacite_bouteilles }}
+                                        bouteilles
+                                    </template>
                                 </p>
                             </div>
                             <div class="rounded-lg border bg-background p-4">

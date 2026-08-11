@@ -15,6 +15,7 @@ interface TypeOption {
     value: string;
     label: string;
     capacite_defaut: number;
+    capacite_defaut_bouteilles: number | null;
 }
 
 interface SiteOption {
@@ -29,6 +30,7 @@ interface VehiculeData {
     type_vehicule_id: string | null;
     categorie: string | null;
     capacite_packs: number | null;
+    capacite_bouteilles: number | null;
     site_id: string | null;
     proprietaire_id: number | null;
     pris_en_charge_par_usine: boolean | null;
@@ -64,6 +66,7 @@ const form = useForm({
     type_vehicule_id: props.vehicule.type_vehicule_id,
     categorie: props.vehicule.categorie,
     capacite_packs: props.vehicule.capacite_packs,
+    capacite_bouteilles: props.vehicule.capacite_bouteilles,
     site_id: props.vehicule.site_id,
     proprietaire_id:
         props.vehicule.proprietaire_id ??

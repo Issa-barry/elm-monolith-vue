@@ -114,6 +114,28 @@ class VehiculeTest extends TestCase
             );
     }
 
+    public function test_index_falls_back_to_type_default_capacite_bouteilles_when_vehicule_has_none(): void
+    {
+        $type = TypeVehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'capacite_defaut_bouteilles' => 40,
+        ]);
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'type_vehicule_id' => $type->id,
+            'proprietaire_id' => $proprietaire->id,
+            'categorie' => 'externe',
+            'capacite_bouteilles' => null,
+        ]);
+
+        $this->actingAs($this->user)
+            ->get(route('vehicules.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('vehicules.0.capacite_bouteilles', 40)
+            );
+    }
+
     // ── create ────────────────────────────────────────────────────────────────
 
     public function test_create_returns_200_for_authorized_user(): void
@@ -157,6 +179,34 @@ class VehiculeTest extends TestCase
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
             'categorie' => 'externe',
+        ]);
+    }
+
+    public function test_store_creates_vehicule_avec_capacite_bouteilles(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $site = $this->user->sites()->first();
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Minibus 01',
+                'immatriculation' => 'MB-001-GN',
+                'type_vehicule_id' => $this->typeId(),
+                'categorie' => 'externe',
+                'proprietaire_id' => $proprietaire->id,
+                'site_id' => $site->id,
+                'capacite_packs' => 200,
+                'capacite_bouteilles' => 60,
+                'is_active' => true,
+                'pris_en_charge_par_usine' => false,
+                'commission_eligible' => true,
+            ]);
+
+        $this->assertDatabaseHas('vehicules', [
+            'organization_id' => $this->org->id,
+            'immatriculation' => 'MB-001-GN',
+            'capacite_packs' => 200,
+            'capacite_bouteilles' => 60,
         ]);
     }
 
