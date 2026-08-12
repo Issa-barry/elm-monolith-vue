@@ -28,22 +28,16 @@ interface SiteOption {
     nom: string;
 }
 
-const CATEGORIES = [
-    { value: 'interne', label: 'Interne (appartient au site)' },
-    { value: 'externe', label: 'Externe (propriétaire privé)' },
-];
-
 interface FormData {
     nom_vehicule: string;
     immatriculation: string;
     type_vehicule_id: string | null;
-    categorie: string | null;
     capacite_packs: number | null;
     capacite_bouteilles: number | null;
     site_id: string | null;
     proprietaire_id: number | string | null;
-    pris_en_charge_par_usine: boolean | null;
-    commission_eligible: boolean | null;
+    livraison_vente: boolean;
+    livraison_logistique: boolean;
     photo: File | null;
     is_active: boolean;
 }
@@ -58,7 +52,6 @@ const props = defineProps<{
     sites: SiteOption[];
     canChangeSite: boolean;
     showStatusField?: boolean;
-    lockedCategorie?: boolean;
     defaultProprietaireId?: number | string | null;
 }>();
 
@@ -86,18 +79,6 @@ function onTypeChange(value: string) {
     });
 }
 
-function onCategorieChange(value: string | null) {
-    emit('update:form', {
-        ...props.form,
-        categorie: value,
-        proprietaire_id:
-            value === 'interne'
-                ? (props.defaultProprietaireId ?? null)
-                : props.form.proprietaire_id,
-        pris_en_charge_par_usine: value === 'interne' ? true : null,
-    });
-}
-
 function onPhotoChange(event: Event) {
     const file = (event.target as HTMLInputElement).files?.[0] ?? null;
     if (file) {
@@ -112,8 +93,6 @@ function removePhoto() {
     if (fileInput.value) fileInput.value.value = '';
 }
 
-const isExterne = computed(() => props.form.categorie === 'externe');
-
 const currentSiteName = computed(
     () => props.sites.find((s) => s.id === props.form.site_id)?.nom ?? '—',
 );
@@ -122,7 +101,8 @@ const selectedType = computed(() =>
     props.types.find((t) => t.value === props.form.type_vehicule_id),
 );
 
-// ── AutoComplete : Propriétaire ───────────────────────────────────────────────
+// ── AutoComplete : Propriétaire — toujours facultatif, pré-rempli par défaut
+// (propriétaire de l'organisation) tant qu'aucun tiers n'est explicitement choisi. ──
 const proprietaireSelected = ref<Option | null>(
     props.proprietaires.find((p) => p.value === props.form.proprietaire_id) ??
         null,
@@ -157,20 +137,31 @@ function onProprietaireSelect(p: Option | null) {
 
 function onProprietaireClear() {
     proprietaireSelected.value = null;
-    emit('update:form', { ...props.form, proprietaire_id: null });
+    emit('update:form', {
+        ...props.form,
+        proprietaire_id: props.defaultProprietaireId ?? null,
+    });
 }
+
+function onUsageChange(
+    field: 'livraison_vente' | 'livraison_logistique',
+    value: boolean,
+) {
+    emit('update:form', { ...props.form, [field]: value });
+}
+
+const auMoinsUnUsage = computed(
+    () => props.form.livraison_vente || props.form.livraison_logistique,
+);
 
 const canSubmit = computed(
     () =>
         !props.processing &&
-        !!props.form.categorie &&
-        !!props.form.proprietaire_id &&
         !!props.form.site_id &&
         props.form.nom_vehicule.trim().length > 0 &&
         props.form.immatriculation.trim().length > 0 &&
         !!props.form.type_vehicule_id &&
-        props.form.pris_en_charge_par_usine !== null &&
-        props.form.commission_eligible !== null,
+        auMoinsUnUsage.value,
 );
 
 function handleSubmit() {
@@ -185,58 +176,77 @@ function handleSubmit() {
         class="flex flex-col gap-4 sm:gap-6"
         @submit.prevent="handleSubmit"
     >
-        <!-- Catégorie, Site & Propriétaire -->
+        <!-- Usages du véhicule -->
         <div class="order-1 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
                 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
             >
-                Appartenance
+                Usages du véhicule
+                <span class="text-destructive">*</span>
             </h3>
-            <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                <!-- Catégorie -->
-                <div>
-                    <Label for="categorie" class="mb-1.5 block">
-                        Catégorie
-                        <span class="text-destructive">*</span>
-                    </Label>
-                    <template v-if="lockedCategorie">
-                        <div
-                            class="flex h-10 items-center rounded-md border border-input bg-muted/60 px-3 text-sm text-muted-foreground"
-                        >
-                            {{
-                                form.categorie === 'interne'
-                                    ? 'Interne (appartient au site)'
-                                    : 'Externe (propriétaire privé)'
-                            }}
-                        </div>
-                        <p class="mt-1 text-xs text-muted-foreground">
-                            Défini par le contexte de création.
-                        </p>
-                    </template>
-                    <template v-else>
-                        <Dropdown
-                            input-id="categorie"
-                            :model-value="form.categorie"
-                            @update:model-value="onCategorieChange($event)"
-                            :options="CATEGORIES"
-                            option-label="label"
-                            option-value="value"
-                            placeholder="Sélectionner…"
-                            class="w-full"
-                            :class="{ 'p-invalid': errors.categorie }"
-                        />
-                        <p
-                            v-if="errors.categorie"
-                            class="mt-1 text-xs text-destructive"
-                        >
-                            {{ errors.categorie }}
-                        </p>
-                    </template>
-                </div>
 
-                <!-- Site : tout véhicule (interne ou externe) est rattaché à
-                     un site. Verrouillé pour un non-admin (son propre site) ;
-                     un admin peut choisir n'importe quel site de l'organisation. -->
+            <div class="flex flex-col gap-3">
+                <label class="flex cursor-pointer items-center gap-3">
+                    <Checkbox
+                        :model-value="form.livraison_vente"
+                        @update:model-value="
+                            onUsageChange('livraison_vente', $event === true)
+                        "
+                    />
+                    <div>
+                        <span class="text-sm font-medium">Livraison vente</span>
+                        <p class="text-xs text-muted-foreground">
+                            Sélectionnable pour une commande de vente ou au PDV.
+                        </p>
+                    </div>
+                </label>
+
+                <label class="flex cursor-pointer items-center gap-3">
+                    <Checkbox
+                        :model-value="form.livraison_logistique"
+                        @update:model-value="
+                            onUsageChange(
+                                'livraison_logistique',
+                                $event === true,
+                            )
+                        "
+                    />
+                    <div>
+                        <span class="text-sm font-medium"
+                            >Logistique / transfert</span
+                        >
+                        <p class="text-xs text-muted-foreground">
+                            Sélectionnable pour un transfert entre sites.
+                        </p>
+                    </div>
+                </label>
+            </div>
+
+            <p
+                v-if="errors.livraison_vente"
+                class="mt-2 text-xs text-destructive"
+            >
+                {{ errors.livraison_vente }}
+            </p>
+            <p
+                v-else-if="!auMoinsUnUsage"
+                class="mt-2 text-xs text-muted-foreground"
+            >
+                Cochez au moins un usage.
+            </p>
+        </div>
+
+        <!-- Site & Propriétaire -->
+        <div class="order-2 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+            <h3
+                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
+            >
+                Rattachement
+            </h3>
+            <div class="grid gap-5 sm:grid-cols-2">
+                <!-- Site : tout véhicule est rattaché à un site. Verrouillé pour
+                     un non-admin (son propre site) ; un admin peut choisir
+                     n'importe quel site de l'organisation. -->
                 <div>
                     <Label for="site_id" class="mb-1.5 flex items-center gap-1">
                         Site
@@ -279,86 +289,71 @@ function handleSubmit() {
                     </template>
                 </div>
 
-                <!-- Propriétaire : uniquement pour un véhicule externe -->
+                <!-- Propriétaire : toujours facultatif — un propriétaire par
+                     défaut (organisation) s'applique si laissé vide. -->
                 <div>
-                    <Label class="mb-1.5 block">
-                        Propriétaire
-                        <span v-if="isExterne" class="text-destructive">*</span>
-                    </Label>
+                    <Label class="mb-1.5 block">Propriétaire</Label>
 
-                    <!-- Externe ou interne : AutoComplete (un véhicule interne
-                         a un propriétaire par défaut, mais reste modifiable) -->
-                    <template v-if="form.categorie">
-                        <AutoComplete
-                            v-model="proprietaireSelected"
-                            input-id="proprietaire_id"
-                            :suggestions="proprietaireSuggests"
-                            option-label="label"
-                            @complete="searchProprietaire"
-                            @item-select="
-                                onProprietaireSelect(proprietaireSelected)
-                            "
-                            @clear="onProprietaireClear"
-                            placeholder="Nom ou téléphone…"
-                            class="w-full"
-                            input-class="w-full"
-                            :class="{
-                                'p-invalid': errors.proprietaire_id,
-                            }"
-                            dropdown
-                            force-selection
-                        >
-                            <template #option="{ option }">
-                                <div class="py-0.5">
-                                    <div class="leading-tight font-medium">
-                                        {{ option.label }}
-                                    </div>
-                                    <div
-                                        v-if="option.telephone"
-                                        class="mt-0.5 font-mono text-xs text-muted-foreground"
-                                    >
-                                        {{ option.telephone }}
-                                    </div>
+                    <AutoComplete
+                        v-model="proprietaireSelected"
+                        input-id="proprietaire_id"
+                        :suggestions="proprietaireSuggests"
+                        option-label="label"
+                        @complete="searchProprietaire"
+                        @item-select="
+                            onProprietaireSelect(proprietaireSelected)
+                        "
+                        @clear="onProprietaireClear"
+                        placeholder="Nom ou téléphone… (par défaut : organisation)"
+                        class="w-full"
+                        input-class="w-full"
+                        :class="{
+                            'p-invalid': errors.proprietaire_id,
+                        }"
+                        dropdown
+                        force-selection
+                    >
+                        <template #option="{ option }">
+                            <div class="py-0.5">
+                                <div class="leading-tight font-medium">
+                                    {{ option.label }}
                                 </div>
-                            </template>
-                            <template #empty>
                                 <div
-                                    class="flex items-center justify-between gap-2 px-1 py-0.5"
+                                    v-if="option.telephone"
+                                    class="mt-0.5 font-mono text-xs text-muted-foreground"
                                 >
-                                    <span class="text-sm text-muted-foreground">
-                                        Aucun résultat
-                                    </span>
-                                    <Link
-                                        href="/backoffice/proprietaires/create"
-                                        class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
-                                    >
-                                        + Créer
-                                    </Link>
+                                    {{ option.telephone }}
                                 </div>
-                            </template>
-                        </AutoComplete>
-                        <p
-                            v-if="errors.proprietaire_id"
-                            class="mt-1 text-xs text-destructive"
-                        >
-                            {{ errors.proprietaire_id }}
-                        </p>
-                    </template>
-
-                    <!-- Pas encore de catégorie sélectionnée -->
-                    <template v-else>
-                        <div
-                            class="flex h-10 items-center rounded-md border border-dashed bg-muted/30 px-3 text-sm text-muted-foreground"
-                        >
-                            Sélectionnez d'abord une catégorie
-                        </div>
-                    </template>
+                            </div>
+                        </template>
+                        <template #empty>
+                            <div
+                                class="flex items-center justify-between gap-2 px-1 py-0.5"
+                            >
+                                <span class="text-sm text-muted-foreground">
+                                    Aucun résultat
+                                </span>
+                                <Link
+                                    href="/backoffice/proprietaires/create"
+                                    class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+                                >
+                                    + Créer
+                                </Link>
+                            </div>
+                        </template>
+                    </AutoComplete>
+                    <p
+                        v-if="errors.proprietaire_id"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.proprietaire_id }}
+                    </p>
                 </div>
             </div>
         </div>
 
         <!-- Identification -->
-        <div class="order-2 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+        <div class="order-3 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
                 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
             >
@@ -494,166 +489,8 @@ function handleSubmit() {
             </div>
         </div>
 
-        <!-- Prise en charge par l'usine -->
-        <div class="order-3 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
-            <h3
-                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
-            >
-                Prise en charge par l'usine ?
-                <span class="text-destructive">*</span>
-            </h3>
-
-            <!-- Interne : verrouillé à Oui -->
-            <template v-if="form.categorie === 'interne'">
-                <div
-                    class="flex h-10 w-48 items-center justify-between rounded-md border border-input bg-muted/40 px-3 py-2 text-sm"
-                >
-                    <span class="text-foreground">Oui</span>
-                    <span class="text-xs text-muted-foreground"
-                        >(automatique)</span
-                    >
-                </div>
-                <p class="mt-1.5 text-xs text-muted-foreground">
-                    Obligatoire pour un véhicule interne.
-                </p>
-            </template>
-
-            <!-- Externe ou non défini : radio Oui / Non -->
-            <template v-else>
-                <div class="flex items-center gap-6">
-                    <label
-                        class="flex cursor-pointer items-center gap-2.5"
-                        :class="{
-                            'opacity-50': !form.categorie,
-                        }"
-                    >
-                        <input
-                            type="radio"
-                            name="pris_en_charge_par_usine"
-                            :value="true"
-                            :checked="form.pris_en_charge_par_usine === true"
-                            :disabled="!form.categorie"
-                            class="h-4 w-4 accent-primary"
-                            @change="
-                                $emit('update:form', {
-                                    ...form,
-                                    pris_en_charge_par_usine: true,
-                                })
-                            "
-                        />
-                        <span class="text-sm font-medium">Oui</span>
-                    </label>
-
-                    <label
-                        class="flex cursor-pointer items-center gap-2.5"
-                        :class="{
-                            'opacity-50': !form.categorie,
-                        }"
-                    >
-                        <input
-                            type="radio"
-                            name="pris_en_charge_par_usine"
-                            :value="false"
-                            :checked="form.pris_en_charge_par_usine === false"
-                            :disabled="!form.categorie"
-                            class="h-4 w-4 accent-primary"
-                            @change="
-                                $emit('update:form', {
-                                    ...form,
-                                    pris_en_charge_par_usine: false,
-                                })
-                            "
-                        />
-                        <span class="text-sm font-medium">Non</span>
-                    </label>
-                </div>
-
-                <p
-                    v-if="errors.pris_en_charge_par_usine"
-                    class="mt-1.5 text-xs text-destructive"
-                >
-                    {{ errors.pris_en_charge_par_usine }}
-                </p>
-                <p
-                    v-else-if="
-                        form.categorie && form.pris_en_charge_par_usine === null
-                    "
-                    class="mt-1.5 text-xs text-muted-foreground"
-                >
-                    Sélectionnez Oui ou Non.
-                </p>
-                <p
-                    v-else-if="!form.categorie"
-                    class="mt-1.5 text-xs text-muted-foreground"
-                >
-                    Sélectionnez d'abord une catégorie.
-                </p>
-            </template>
-        </div>
-
-        <!-- Éligibilité aux commissions — indépendante de la prise en charge
-             par l'usine ci-dessus : les deux notions ne doivent jamais être
-             recalculées l'une à partir de l'autre. -->
-        <div class="order-4 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
-            <h3
-                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
-            >
-                Véhicule éligible aux commissions ?
-                <span class="text-destructive">*</span>
-            </h3>
-
-            <div class="flex items-center gap-6">
-                <label class="flex cursor-pointer items-center gap-2.5">
-                    <input
-                        type="radio"
-                        name="commission_eligible"
-                        :value="true"
-                        :checked="form.commission_eligible === true"
-                        class="h-4 w-4 accent-primary"
-                        @change="
-                            $emit('update:form', {
-                                ...form,
-                                commission_eligible: true,
-                            })
-                        "
-                    />
-                    <span class="text-sm font-medium">Oui</span>
-                </label>
-
-                <label class="flex cursor-pointer items-center gap-2.5">
-                    <input
-                        type="radio"
-                        name="commission_eligible"
-                        :value="false"
-                        :checked="form.commission_eligible === false"
-                        class="h-4 w-4 accent-primary"
-                        @change="
-                            $emit('update:form', {
-                                ...form,
-                                commission_eligible: false,
-                            })
-                        "
-                    />
-                    <span class="text-sm font-medium">Non</span>
-                </label>
-            </div>
-
-            <p
-                v-if="errors.commission_eligible"
-                class="mt-1.5 text-xs text-destructive"
-            >
-                {{ errors.commission_eligible }}
-            </p>
-            <p
-                v-else-if="form.commission_eligible === null"
-                class="mt-1.5 text-xs text-muted-foreground"
-            >
-                Sélectionnez Oui ou Non.
-            </p>
-        </div>
-
         <!-- Photo -->
-        <div class="order-5 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+        <div class="order-4 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
                 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
             >
@@ -713,7 +550,7 @@ function handleSubmit() {
         </div>
 
         <!-- Statut -->
-        <div class="order-6 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+        <div class="order-5 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
                 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
             >
@@ -754,7 +591,7 @@ function handleSubmit() {
         </div>
 
         <!-- Pied de page -->
-        <div class="order-7 hidden items-center justify-between sm:flex">
+        <div class="order-6 hidden items-center justify-between sm:flex">
             <a href="/backoffice/vehicules">
                 <Button type="button" variant="outline">Retour</Button>
             </a>
@@ -767,6 +604,6 @@ function handleSubmit() {
                 {{ processing ? 'Enregistrement…' : 'Enregistrer' }}
             </Button>
         </div>
-        <div class="order-8 h-20 sm:hidden" />
+        <div class="order-7 h-20 sm:hidden" />
     </form>
 </template>

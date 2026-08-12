@@ -34,7 +34,7 @@ class PdvCheckoutService
         }
 
         return DB::transaction(function () use ($data, $user, $siteId) {
-            $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null);
+            $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null);
             [$lignesData, $total, $stockTrackedVarianteIds] = $this->buildLignes($data['lignes'], $user->organization_id, (string) $siteId, $context->modeTarification);
 
             $commande = CommandeVente::create([
@@ -42,6 +42,7 @@ class PdvCheckoutService
                 'site_id' => $siteId,
                 'vehicule_id' => $data['vehicule_id'] ?? null,
                 'client_id' => $data['client_id'] ?? null,
+                'client_vehicule_id' => $data['client_vehicule_id'] ?? null,
                 'total_commande' => $total,
                 'mode_tarification_snapshot' => $context->modeTarification->value,
                 'commission_eligible_snapshot' => $context->commissionEligible,
@@ -119,7 +120,7 @@ class PdvCheckoutService
     private function resolveVariante(array $ligne, string $orgId): ProduitVariante
     {
         if (! empty($ligne['variante_id'])) {
-            $variante = ProduitVariante::with('produit')->find($ligne['variante_id']);
+            $variante = ProduitVariante::with('produit.produitType')->find($ligne['variante_id']);
 
             if (! $variante || $variante->produit_id !== $ligne['produit_id']) {
                 throw ValidationException::withMessages([
@@ -127,7 +128,7 @@ class PdvCheckoutService
                 ]);
             }
         } else {
-            $produit = Produit::with('variantes')
+            $produit = Produit::with(['variantes', 'produitType'])
                 ->where('organization_id', $orgId)
                 ->where('statut', ProduitStatut::ACTIF)
                 ->find($ligne['produit_id']);
@@ -194,7 +195,7 @@ class PdvCheckoutService
             $produit = $variante->produit;
             $qte = $item['qte'];
 
-            if ($produit->type->hasStock()) {
+            if ($produit->produitType->gere_stock) {
                 $stockTrackedVarianteIds[] = $variante->id;
                 $disponible = $stocksSite->get($variante->id)?->qte_stock;
 

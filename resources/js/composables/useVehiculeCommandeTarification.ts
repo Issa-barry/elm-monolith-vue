@@ -1,24 +1,27 @@
 /**
  * Reflète côté client ce que VehiculeCommandeContextResolver calcule côté
  * serveur (source de vérité) : mode de tarification (prix_vente/prix_usine)
- * et éligibilité aux commissions — deux notions indépendantes dérivées du
- * véhicule sélectionné, jamais recalculées l'une à partir de l'autre.
- * Partagé entre Ventes/Create.vue et Ventes/Edit.vue pour ne pas dupliquer
+ * et éligibilité aux commissions — deux notions indépendantes.
+ *
+ * Règle : un véhicule de flotte gérée (toujours livraison_vente=true dans ce picker,
+ * cf. CommandeVenteController::vehiculesActifs()) facture toujours au prix de vente
+ * plein et est toujours éligible aux commissions. Sans véhicule, seul un client
+ * PARTENAIRE facture à prix usine (jamais de commission — aucun véhicule de flotte
+ * impliqué). Partagé entre Ventes/Create.vue et Ventes/Edit.vue pour ne pas dupliquer
  * ce calcul (et le laisser diverger silencieusement entre les deux pages).
  */
 import { computed, type ComputedRef } from 'vue';
 
-export interface VehiculeTarificationOption {
+export interface ClientTarificationOption {
     id: number;
-    pris_en_charge_par_usine: boolean;
-    commission_eligible: boolean;
+    type?: 'standard' | 'partenaire';
 }
 
-export function useVehiculeCommandeTarification<
-    T extends VehiculeTarificationOption,
->(
+export function useVehiculeCommandeTarification<T extends { id: number }>(
     getVehicules: () => T[],
     getVehiculeId: () => number | null,
+    getClients?: () => ClientTarificationOption[],
+    getClientId?: () => number | null,
 ): {
     modeTarification: ComputedRef<'prix_vente' | 'prix_usine'>;
     commissionEligible: ComputedRef<boolean>;
@@ -31,17 +34,27 @@ export function useVehiculeCommandeTarification<
             : (getVehicules().find((v) => v.id === id) ?? null);
     });
 
-    const modeTarification = computed<'prix_vente' | 'prix_usine'>(() =>
-        selectedVehicule.value &&
-        !selectedVehicule.value.pris_en_charge_par_usine
-            ? 'prix_usine'
-            : 'prix_vente',
-    );
+    const selectedClient = computed<ClientTarificationOption | null>(() => {
+        if (!getClients || !getClientId) return null;
+        const id = getClientId();
 
-    const commissionEligible = computed<boolean>(() =>
-        selectedVehicule.value
-            ? selectedVehicule.value.commission_eligible
-            : true,
+        return id === null
+            ? null
+            : (getClients().find((c) => c.id === id) ?? null);
+    });
+
+    const modeTarification = computed<'prix_vente' | 'prix_usine'>(() => {
+        if (selectedVehicule.value) return 'prix_vente';
+
+        return selectedClient.value?.type === 'partenaire'
+            ? 'prix_usine'
+            : 'prix_vente';
+    });
+
+    // Aucun véhicule de flotte impliqué => jamais de commission, quel que soit le
+    // client (CommissionGenerator exige un véhicule de toute façon).
+    const commissionEligible = computed<boolean>(
+        () => !!selectedVehicule.value,
     );
 
     return { modeTarification, commissionEligible };

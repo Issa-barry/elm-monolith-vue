@@ -7,6 +7,7 @@ import Dropdown from 'primevue/dropdown';
 import Editor from 'primevue/editor';
 import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
+import RadioButton from 'primevue/radiobutton';
 import { computed, reactive, ref } from 'vue';
 import CategorieSelect from './CategorieSelect.vue';
 import FournisseurSelect, {
@@ -25,9 +26,11 @@ interface Option {
     label: string;
 }
 
-// `required_prices` (cf. ProduitType::options() côté backend, seule source de vérité) pilote
-// le "*" affiché sur les champs de prix effectivement obligatoires pour le type sélectionné.
+// `required_prices`/`gere_stock` (cf. ProduitTypeController::typesOptions() côté backend,
+// seule source de vérité, remplace l'ancien enum figé) pilotent le "*" affiché sur les prix
+// obligatoires et l'affichage de la section Stock pour le type sélectionné.
 interface ProduitTypeOption extends Option {
+    gere_stock: boolean;
     required_prices: string[];
 }
 
@@ -61,7 +64,6 @@ interface Variante {
     prix_vente: number | null;
     prix_achat: number | null;
     cout: number | null;
-    seuil_alerte_stock: number | null;
     is_default: boolean;
     is_active: boolean;
     options: VarianteGroupee['options'];
@@ -72,15 +74,19 @@ interface FormData {
     categorie_id: string | null;
     fournisseur_id: string | null;
     code_barres: string | null;
-    type: string;
+    produit_type_id: string | null;
     statut: string;
     prix_usine: number | null;
     prix_vente: number | null;
     prix_achat: number | null;
     cout: number | null;
+    // Choix obligatoire, jamais de valeur implicite : l'utilisateur tranche explicitement
+    // s'il veut être alerté en cas de stock faible.
+    alerte_stock_active: boolean;
+    // null = hérite du seuil par défaut de l'organisation ; valeur = seuil spécifique à ce
+    // produit, appliqué à toutes ses variantes/sites (cf. StockStatutService).
     seuil_alerte_stock: number | null;
     description: string | null;
-    is_alerte: boolean;
     // Tableau (même si un seul fichier ici) : le backend attend la clé "images[]"
     // (ProduitController::validerFormulaire()), partagée avec la galerie multi-photo.
     images: File[];
@@ -104,6 +110,9 @@ const props = withDefaults(
         // ne gère que le produit simple (variante par défaut), pas l'ajout de déclinaisons après coup.
         allowDeclinaisons?: boolean;
         existingVariantes?: Variante[];
+        /** Seuil de stock faible par défaut de l'organisation (Paramètres) — affiché comme
+         * repère dans le choix "seuil par défaut / seuil spécifique" ci-dessous. */
+        seuilOrganisationDefaut?: number;
     }>(),
     {
         categories: () => [],
@@ -114,6 +123,7 @@ const props = withDefaults(
         currentSku: null,
         allowDeclinaisons: false,
         existingVariantes: () => [],
+        seuilOrganisationDefaut: 10,
     },
 );
 
@@ -123,29 +133,43 @@ const emit = defineEmits<{
     'edit-variante': [Variante];
 }>();
 
-const typeHasStock = computed(() => !['service'].includes(props.form.type));
-const isFabricable = computed(() => props.form.type === 'fabricable');
+const selectedType = computed(() =>
+    props.types.find((t) => t.value === props.form.produit_type_id),
+);
+const typeHasStock = computed(() => selectedType.value?.gere_stock ?? true);
 
 // Champs de prix obligatoires pour le type sélectionné (cf. ProduitType::requiredPrices() —
 // le backend reste la seule source de vérité, ce tableau vient directement de `types`).
 const requiredPrices = computed(
-    () =>
-        props.types.find((t) => t.value === props.form.type)?.required_prices ??
-        [],
+    () => selectedType.value?.required_prices ?? [],
 );
 function prixRequis(champ: string): boolean {
     return requiredPrices.value.includes(champ);
 }
 // Rouge dès qu'un champ requis est vide ET que le formulaire a déjà été refusé une fois pour
-// ce motif — le backend regroupe toutes les erreurs de prix sous la clé `type` (un seul
-// message listant les champs manquants), jamais sous le champ lui-même individuellement.
+// ce motif — le backend regroupe toutes les erreurs de prix sous la clé `produit_type_id` (un
+// seul message listant les champs manquants), jamais sous le champ lui-même individuellement.
 function prixInvalide(champ: string, valeur: number | null): boolean {
     return (
-        !!props.errors.type &&
+        !!props.errors.produit_type_id &&
         prixRequis(champ) &&
         (valeur === null || valeur === undefined)
     );
 }
+
+// ── Alerte de stock faible ──────────────────────────────────────────────────
+const seuilSpecifique = computed({
+    get: () => props.form.seuil_alerte_stock !== null,
+    set: (actif: boolean) => {
+        emit('update:form', {
+            ...props.form,
+            seuil_alerte_stock: actif
+                ? (props.form.seuil_alerte_stock ??
+                  props.seuilOrganisationDefaut)
+                : null,
+        });
+    },
+});
 
 const previewUrl = ref<string | null>(null);
 
@@ -324,19 +348,25 @@ const depasseLimiteVariantes = computed(
                         >Type <span class="text-destructive">*</span></Label
                     >
                     <Dropdown
-                        :model-value="form.type"
+                        :model-value="form.produit_type_id"
                         @update:model-value="
-                            $emit('update:form', { ...form, type: $event })
+                            $emit('update:form', {
+                                ...form,
+                                produit_type_id: $event,
+                            })
                         "
                         :options="types"
                         option-label="label"
                         option-value="value"
                         placeholder="Sélectionner un type"
                         class="w-full"
-                        :class="{ 'p-invalid': errors.type }"
+                        :class="{ 'p-invalid': errors.produit_type_id }"
                     />
-                    <p v-if="errors.type" class="mt-1 text-xs text-destructive">
-                        {{ errors.type }}
+                    <p
+                        v-if="errors.produit_type_id"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.produit_type_id }}
                     </p>
                 </div>
 
@@ -689,9 +719,13 @@ const depasseLimiteVariantes = computed(
 
             <div
                 class="grid gap-4 sm:grid-cols-2 sm:gap-5"
-                :class="isFabricable ? 'lg:grid-cols-4' : 'lg:grid-cols-3'"
+                :class="
+                    prixRequis('prix_usine')
+                        ? 'lg:grid-cols-4'
+                        : 'lg:grid-cols-3'
+                "
             >
-                <div v-if="isFabricable">
+                <div v-if="prixRequis('prix_usine')">
                     <Label for="prix_usine" class="mb-1.5 block"
                         >Prix usine
                         <span
@@ -833,50 +867,112 @@ const depasseLimiteVariantes = computed(
             <h3
                 class="mb-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
             >
-                Stock
+                Alerte de stock faible
             </h3>
 
-            <div class="grid gap-4 sm:grid-cols-2 sm:gap-5">
+            <!-- L'état Disponible/Stock faible/Rupture est TOUJOURS calculé automatiquement
+                 (jamais saisi) — ce bloc ne configure que : voulez-vous être alerté, et à
+                 partir de quel seuil. -->
+            <div class="space-y-4">
                 <div>
-                    <Label class="mb-1.5 block">Seuil d'alerte stock</Label>
-                    <InputNumber
-                        :model-value="form.seuil_alerte_stock"
-                        @update:model-value="
-                            $emit('update:form', {
-                                ...form,
-                                seuil_alerte_stock: $event,
-                            })
-                        "
-                        :min="0"
-                        class="w-full"
-                        input-class="w-full"
-                    />
-                    <p class="mt-1 text-xs text-muted-foreground">
-                        Laisser vide pour utiliser le seuil global
+                    <Label class="mb-2 block"
+                        >Souhaitez-vous être alerté lorsque le stock devient
+                        faible ? <span class="text-destructive">*</span></Label
+                    >
+                    <div class="flex flex-wrap gap-4 sm:gap-6">
+                        <label class="flex cursor-pointer items-center gap-2">
+                            <RadioButton
+                                :model-value="form.alerte_stock_active"
+                                :value="true"
+                                @update:model-value="
+                                    $emit('update:form', {
+                                        ...form,
+                                        alerte_stock_active: true,
+                                    })
+                                "
+                            />
+                            <span class="text-sm">Oui</span>
+                        </label>
+                        <label class="flex cursor-pointer items-center gap-2">
+                            <RadioButton
+                                :model-value="form.alerte_stock_active"
+                                :value="false"
+                                @update:model-value="
+                                    $emit('update:form', {
+                                        ...form,
+                                        alerte_stock_active: false,
+                                        seuil_alerte_stock: null,
+                                    })
+                                "
+                            />
+                            <span class="text-sm">Non</span>
+                        </label>
+                    </div>
+                    <p
+                        v-if="errors.alerte_stock_active"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.alerte_stock_active }}
                     </p>
                 </div>
 
-                <div class="flex items-center gap-3 sm:pt-6">
-                    <Checkbox
-                        id="is_alerte"
-                        :model-value="Boolean(form.is_alerte)"
-                        @update:model-value="
-                            $emit('update:form', {
-                                ...form,
-                                is_alerte: $event === true,
-                            })
-                        "
-                    />
-                    <div>
-                        <Label
-                            for="is_alerte"
-                            class="cursor-pointer font-medium"
-                            >Produit en alerte</Label
+                <div
+                    v-if="form.alerte_stock_active"
+                    class="space-y-2 border-t pt-4"
+                >
+                    <Label class="block">Seuil d'alerte</Label>
+                    <label class="flex cursor-pointer items-center gap-2">
+                        <RadioButton
+                            :model-value="seuilSpecifique"
+                            :value="false"
+                            @update:model-value="seuilSpecifique = false"
+                        />
+                        <span class="text-sm"
+                            >Utiliser le seuil par défaut de l'organisation :
+                            {{ seuilOrganisationDefaut }} unités</span
                         >
-                        <p class="text-xs text-muted-foreground">
-                            Déclenche une alerte en cas de rupture
-                        </p>
-                    </div>
+                    </label>
+                    <label class="flex cursor-pointer items-center gap-2">
+                        <RadioButton
+                            :model-value="seuilSpecifique"
+                            :value="true"
+                            @update:model-value="seuilSpecifique = true"
+                        />
+                        <span class="text-sm"
+                            >Définir un seuil spécifique :</span
+                        >
+                        <InputNumber
+                            v-if="seuilSpecifique"
+                            :model-value="form.seuil_alerte_stock"
+                            @update:model-value="
+                                $emit('update:form', {
+                                    ...form,
+                                    seuil_alerte_stock: $event,
+                                })
+                            "
+                            :min="1"
+                            class="w-32"
+                            input-class="w-full"
+                        />
+                    </label>
+                    <p class="text-xs text-muted-foreground">
+                        Le stock sera signalé comme faible lorsqu'une variante
+                        atteindra
+                        {{
+                            seuilSpecifique
+                                ? (form.seuil_alerte_stock ??
+                                  seuilOrganisationDefaut)
+                                : seuilOrganisationDefaut
+                        }}
+                        unités ou moins, sur un site donné — ce seuil s'applique
+                        à toutes les variantes de ce produit.
+                    </p>
+                    <p
+                        v-if="errors.seuil_alerte_stock"
+                        class="text-xs text-destructive"
+                    >
+                        {{ errors.seuil_alerte_stock }}
+                    </p>
                 </div>
             </div>
         </div>

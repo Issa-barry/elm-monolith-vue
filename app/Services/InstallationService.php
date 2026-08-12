@@ -8,6 +8,7 @@ use App\Models\Organization;
 use App\Models\User;
 use Database\Seeders\CategorieDefaultSeeder;
 use Database\Seeders\OptionCatalogueDefaultSeeder;
+use Database\Seeders\ProduitTypeDefaultSeeder;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Database\Seeders\TypeVehiculesSeeder;
 use Illuminate\Support\Facades\DB;
@@ -157,6 +158,11 @@ class InstallationService
             ]);
             $user->syncRoles(['super_admin']);
             app(MatriculeService::class)->assignForUser($user);
+
+            // Obligatoire et inconditionnel (contrairement aux catalogues ci-dessous) : un
+            // produit ne peut pas exister sans type, une organisation ne doit donc jamais rester
+            // sans aucun type disponible — cf. docblock de ProduitTypeDefaultSeeder.
+            ProduitTypeDefaultSeeder::seedPourOrganisation($org->id);
 
             if ($catalogue['categories'] ?? false) {
                 CategorieDefaultSeeder::seedPourOrganisation($org->id);

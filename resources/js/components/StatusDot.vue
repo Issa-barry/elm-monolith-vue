@@ -20,6 +20,7 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     receptionnee: 'bg-emerald-500',
     reception: 'bg-emerald-500',
     termine: 'bg-emerald-500',
+    disponible: 'bg-emerald-500',
 
     // Bleu — en cours
     en_cours: 'bg-blue-500',
@@ -49,6 +50,7 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     ko: 'bg-red-500',
     expiree: 'bg-red-500',
     echoue: 'bg-red-500',
+    rupture: 'bg-red-500',
 
     // Orange — partiel / en attente / soumis
     partiel: 'bg-orange-500',
@@ -60,6 +62,7 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     soumis: 'bg-orange-500',
     expire_bientot: 'bg-amber-500',
     analyse: 'bg-orange-500',
+    stock_faible: 'bg-amber-500',
 };
 
 const DEFAULT_DOT_CLASS = 'bg-zinc-400 dark:bg-zinc-500';

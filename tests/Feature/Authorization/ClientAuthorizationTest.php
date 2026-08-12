@@ -153,8 +153,7 @@ class ClientAuthorizationTest extends TestCase
 
         $this->actingAs($user)
             ->post(route('clients.store'), [
-                'nom' => 'Test',
-                'prenom' => 'Comptable',
+                'nom_complet' => 'Comptable Test',
             ])
             ->assertForbidden();
     }
@@ -165,7 +164,7 @@ class ClientAuthorizationTest extends TestCase
         $client = Client::factory()->create(['organization_id' => $this->org->id]);
 
         $this->actingAs($user)
-            ->put(route('clients.update', $client), ['nom' => 'Modif'])
+            ->put(route('clients.update', $client), ['nom_complet' => 'Modif'])
             ->assertForbidden();
     }
 

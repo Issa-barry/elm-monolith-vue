@@ -4,11 +4,11 @@ namespace Database\Seeders\Organizations\FelloDemo;
 
 use App\Enums\CategorieStatut;
 use App\Enums\ProduitStatut;
-use App\Enums\ProduitType;
 use App\Models\Categorie;
 use App\Models\OptionCatalogue;
 use App\Models\Organization;
 use App\Models\Produit;
+use App\Models\ProduitType;
 use App\Services\ProduitService;
 use Illuminate\Database\Seeder;
 
@@ -64,6 +64,9 @@ class FelloDemoCatalogSeeder extends Seeder
     {
         $org = Organization::where('slug', 'fello-demo')->firstOrFail();
         $produitService = app(ProduitService::class);
+        // Provisionné par ProduitTypeDefaultSeeder (cf. FelloDemoOrganizationSeeder) — revente,
+        // pas de fabrication, nécessite prix_achat + prix_vente.
+        $typeAchatVenteId = ProduitType::where('organization_id', $org->id)->where('code', 'achat_vente')->value('id');
         $total = 0;
 
         // Catégories parentes créées par CategorieDefaultSeeder (cf. FelloDemoOrganizationSeeder)
@@ -91,10 +94,11 @@ class FelloDemoCatalogSeeder extends Seeder
                     'organization_id' => $org->id,
                     'categorie_id' => $categorie->id,
                     'nom' => $item['nom'],
-                    'type' => ProduitType::ACHAT_VENTE->value,
+                    'produit_type_id' => $typeAchatVenteId,
                     'statut' => ProduitStatut::ACTIF->value,
                     'prix_achat' => $item['achat'],
                     'prix_vente' => $item['vente'],
+                    'alerte_stock_active' => true,
                     'seuil_alerte_stock' => 10,
                 ]);
                 $total++;
@@ -115,10 +119,11 @@ class FelloDemoCatalogSeeder extends Seeder
                 'organization_id' => $org->id,
                 'categorie_id' => $categorieTshirts->id,
                 'nom' => $nomDemo,
-                'type' => ProduitType::ACHAT_VENTE->value,
+                'produit_type_id' => $typeAchatVenteId,
                 'statut' => ProduitStatut::ACTIF->value,
                 'prix_achat' => 40000,
                 'prix_vente' => 75000,
+                'alerte_stock_active' => true,
                 'seuil_alerte_stock' => 5,
                 'options' => [
                     [

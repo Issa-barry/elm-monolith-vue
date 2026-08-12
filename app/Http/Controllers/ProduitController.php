@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\AuditEvent;
 use App\Enums\MotifAjustementStock;
 use App\Enums\ProduitStatut;
-use App\Enums\ProduitType;
+use App\Enums\StockStatut;
 use App\Models\AuditLog;
 use App\Models\Categorie;
 use App\Models\Fournisseur;
@@ -13,6 +13,7 @@ use App\Models\MouvementStock;
 use App\Models\OptionCatalogue;
 use App\Models\Parametre;
 use App\Models\Produit;
+use App\Models\ProduitType;
 use App\Models\ProduitVariante;
 use App\Models\Site;
 use App\Models\VarianteStock;
@@ -20,6 +21,7 @@ use App\Services\AuditLogService;
 use App\Services\DroitAjustementStockService;
 use App\Services\MediaService;
 use App\Services\ProduitService;
+use App\Services\StockStatutService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -38,7 +40,27 @@ class ProduitController extends Controller
         private readonly DroitAjustementStockService $droitService,
         private readonly ProduitService $produitService,
         private readonly MediaService $mediaService,
+        private readonly StockStatutService $stockStatutService,
     ) {}
+
+    /**
+     * Types actifs de l'organisation, pour peupler les sélecteurs Create/Edit/filtre — remplace
+     * l'ancien App\Enums\ProduitType::options() figé, désormais un vrai CRUD par organisation
+     * (cf. ProduitTypeController).
+     */
+    private function typesOptions(string $orgId): Collection
+    {
+        return ProduitType::where('organization_id', $orgId)
+            ->where('statut', 'actif')
+            ->orderBy('position')->orderBy('nom')
+            ->get(['id', 'nom', 'gere_stock', 'vendable', 'achetable', 'prix_achat_requis', 'prix_usine_requis', 'prix_vente_requis'])
+            ->map(fn (ProduitType $t) => [
+                'value' => $t->id,
+                'label' => $t->nom,
+                'gere_stock' => $t->gere_stock,
+                'required_prices' => $t->requiredPrices(),
+            ]);
+    }
 
     public function index(Request $request): Response
     {
@@ -48,7 +70,7 @@ class ProduitController extends Controller
         $orgId = $user->organization_id;
         $isAdmin = $user->isAdmin();
 
-        $filters = $request->only(['search', 'type', 'statut', 'categorie_id']);
+        $filters = $request->only(['search', 'produit_type_id', 'statut', 'categorie_id']);
         $siteIds = array_values(array_filter((array) $request->input('site_ids', [])));
 
         if (empty($siteIds) && ! $isAdmin) {
@@ -58,6 +80,7 @@ class ProduitController extends Controller
         $query = Produit::where('organization_id', $orgId)
             ->with([
                 'categorie:id,nom',
+                'produitType',
                 'variantes' => fn ($q) => $q->orderBy('position'),
                 // Pas de limit() ici : une contrainte LIMIT sur un eager load hasMany s'applique
                 // à l'ensemble du résultat, pas par produit. getImageUrlAttribute() prend le
@@ -74,8 +97,8 @@ class ProduitController extends Controller
                 ->orWhereHas('variantes', fn ($vq) => $vq->where('sku', 'like', "%{$s}%")
                     ->orWhere('code_barres', 'like', "%{$s}%")));
         }
-        if (! empty($filters['type'])) {
-            $query->where('type', $filters['type']);
+        if (! empty($filters['produit_type_id'])) {
+            $query->where('produit_type_id', $filters['produit_type_id']);
         }
         if (! empty($filters['statut'])) {
             $query->where('statut', $filters['statut']);
@@ -112,23 +135,37 @@ class ProduitController extends Controller
 
         $mapped = $produits->map(function (Produit $p) use ($allVarianteStocks, $siteIds, $usedProduitIds, $lastMouvementsParVariante) {
             $varianteIdsProduit = $p->variantes->pluck('id')->all();
-            $siteStocks = collect($varianteIdsProduit)->flatMap(fn ($vid) => $allVarianteStocks->get($vid, collect()));
+            $siteStocksAll = collect($varianteIdsProduit)->flatMap(fn ($vid) => $allVarianteStocks->get($vid, collect()));
             $variantePrincipale = $p->variantes->firstWhere('is_default', true) ?? $p->variantes->first();
-            $hasStock = $p->type?->hasStock() ?? true;
+            $hasStock = $p->produitType?->gere_stock ?? true;
 
-            if (! empty($siteIds)) {
-                $filteredStocks = $siteStocks->filter(fn ($s) => in_array((string) $s->site_id, $siteIds, true));
-                $qteDisplay = (int) $filteredStocks->sum('qte_stock');
-                $seuilDisplay = count($siteIds) === 1
-                    ? ($filteredStocks->first()?->seuil_alerte_stock ?? $variantePrincipale?->seuil_alerte_stock)
-                    : $variantePrincipale?->seuil_alerte_stock;
+            $siteStocksScope = empty($siteIds)
+                ? $siteStocksAll
+                : $siteStocksAll->filter(fn ($s) => in_array((string) $s->site_id, $siteIds, true));
+
+            $qteDisplay = $siteStocksScope->isNotEmpty() ? (int) $siteStocksScope->sum('qte_stock') : (int) ($p->qte_stock ?? 0);
+
+            // Seuil désormais unique au niveau PRODUIT (repli sur le seuil global de
+            // l'organisation) — appliqué à chaque ligne variante × site individuellement,
+            // jamais à un total agrégé (cf. décision produit : un stock élevé ailleurs ne doit
+            // jamais masquer une alerte locale).
+            $seuilEffectif = $this->stockStatutService->seuilEffectif($p);
+            $alerteActive = $hasStock && (bool) $p->alerte_stock_active;
+
+            if ($hasStock && $siteStocksScope->isNotEmpty()) {
+                $isRupture = $siteStocksScope->contains(fn ($s) => $s->qte_stock <= 0);
+                $isLowStock = $siteStocksScope->contains(
+                    fn ($s) => $this->stockStatutService->statutPour($s->qte_stock, $seuilEffectif, $alerteActive) === StockStatut::STOCK_FAIBLE
+                );
+            } elseif ($hasStock) {
+                $statutFallback = $this->stockStatutService->statutPour($qteDisplay, $seuilEffectif, $alerteActive);
+                $isRupture = $statutFallback === StockStatut::RUPTURE;
+                $isLowStock = $statutFallback === StockStatut::STOCK_FAIBLE;
             } else {
-                $qteDisplay = $siteStocks->isNotEmpty() ? (int) $siteStocks->sum('qte_stock') : (int) ($p->qte_stock ?? 0);
-                $seuilDisplay = $variantePrincipale?->seuil_alerte_stock;
+                $isRupture = false;
+                $isLowStock = false;
             }
-
-            $inStock = ! $hasStock || $qteDisplay > 0;
-            $isLowStock = $hasStock && $qteDisplay > 0 && $seuilDisplay !== null && $seuilDisplay > 0 && $qteDisplay <= $seuilDisplay;
+            $inStock = ! $hasStock || ! $isRupture;
 
             $lastMouvement = collect($varianteIdsProduit)
                 ->map(fn ($vid) => $lastMouvementsParVariante->get($vid))
@@ -145,8 +182,8 @@ class ProduitController extends Controller
                 'categorie_nom' => $p->categorie?->nom,
                 'sku' => $variantePrincipale?->sku,
                 'code_barres' => $variantePrincipale?->code_barres,
-                'type' => $p->type?->value,
-                'type_label' => $p->type?->label(),
+                'produit_type_id' => $p->produit_type_id,
+                'type_nom' => $p->produitType?->nom,
                 'statut' => $p->statut?->value,
                 'statut_label' => $p->statut?->label(),
                 'image_url' => $p->image_url,
@@ -155,24 +192,25 @@ class ProduitController extends Controller
                 'prix_achat' => $variantePrincipale?->prix_achat,
                 'cout' => $variantePrincipale?->cout,
                 'description' => $p->description,
-                'is_alerte' => $p->is_alerte,
+                'alerte_stock_active' => $p->alerte_stock_active,
                 'qte_stock' => $qteDisplay,
-                'seuil_alerte_stock' => $seuilDisplay,
+                'seuil_alerte_stock' => $p->seuil_alerte_stock,
+                'seuil_alerte_effectif' => $seuilEffectif,
                 'has_stock' => $hasStock,
                 'in_stock' => $inStock,
                 'is_low_stock' => $isLowStock,
+                'is_out_of_stock' => $isRupture,
                 'is_used' => $isUsed,
                 'variantes_count' => $p->variantes->count(),
                 'has_variantes' => $p->variantes->count() > 1,
                 'last_mouvement_type' => $lastMouvement?->type,
                 'last_mouvement_quantite' => $lastMouvement?->quantite,
-                'stocks_par_site' => $siteStocks->map(fn ($s) => [
+                'stocks_par_site' => $siteStocksAll->map(fn ($s) => [
                     'site_id' => $s->site_id,
                     'site_code' => $s->site?->code,
                     'site_nom' => $s->site?->nom,
                     'qte_stock' => $s->qte_stock,
-                    'seuil_alerte_stock' => $s->seuil_alerte_stock,
-                    'is_alerte' => $s->is_alerte,
+                    'statut' => ($hasStock ? $this->stockStatutService->statutPour($s->qte_stock, $seuilEffectif, $alerteActive) : StockStatut::DISPONIBLE)->value,
                     'updated_at' => $s->updated_at?->toISOString(),
                 ])->values()->all(),
             ];
@@ -194,7 +232,7 @@ class ProduitController extends Controller
             'can_augmenter_stock' => $this->droitService->canAugmenter($user, $orgId),
             'can_diminuer_stock' => $this->droitService->canDiminuer($user, $orgId),
             'sites_autorises' => $sitesAutorisesRaw->values(),
-            'types' => ProduitType::options(),
+            'types' => $this->typesOptions($orgId),
             'statuts' => ProduitStatut::options(),
             'filters' => array_merge($filters, ['site_ids' => $siteIds]),
         ]);
@@ -207,7 +245,7 @@ class ProduitController extends Controller
         $orgId = auth()->user()->organization_id;
 
         return Inertia::render('Produits/Create', [
-            'types' => ProduitType::options(),
+            'types' => $this->typesOptions($orgId),
             'statuts' => ProduitStatut::options(),
             'categories' => Categorie::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom', 'parent_id']),
             'optionsCatalogue' => OptionCatalogue::where('organization_id', $orgId)
@@ -216,6 +254,7 @@ class ProduitController extends Controller
                 ->get(['id', 'nom']),
             'fournisseurs' => $this->fournisseursOptions($orgId),
             'limites' => $this->limitesCatalogue($orgId),
+            'seuilOrganisationDefaut' => Parametre::getSeuilStockFaible($orgId),
         ]);
     }
 
@@ -245,7 +284,7 @@ class ProduitController extends Controller
             AuditEvent::CREATED,
             auth()->user(),
             null,
-            $this->produitSnapshot($produit->fresh(['variantes', 'fournisseur'])),
+            $this->produitSnapshot($produit->fresh(['variantes', 'fournisseur', 'produitType'])),
         );
 
         return redirect()->route('produits.show', $produit)->with('success', 'Produit créé avec succès.');
@@ -255,7 +294,7 @@ class ProduitController extends Controller
     {
         $this->authorize('view', $produit);
 
-        $produit->load(['categorie', 'fournisseur', 'variantes.valeurs.option', 'variantes.media', 'medias']);
+        $produit->load(['categorie', 'fournisseur', 'produitType', 'variantes.valeurs.option', 'variantes.media', 'medias']);
         $orgId = $produit->organization_id;
         $user = auth()->user();
 
@@ -286,24 +325,58 @@ class ProduitController extends Controller
             ])
             ->values();
 
+        $totalStock = $varianteStocksRaw->isNotEmpty() ? $varianteStocksRaw->sum('qte_stock') : (int) ($produit->qte_stock ?? 0);
+
+        // Seuil unique au niveau PRODUIT, évalué pour CHAQUE couple variante × site
+        // individuellement — jamais sur le total agrégé (cf. décision produit : un stock élevé
+        // ailleurs — autre variante, autre site — ne doit jamais masquer une alerte locale).
+        $hasStock = $produit->produitType?->gere_stock ?? true;
+        $seuilEffectif = $this->stockStatutService->seuilEffectif($produit);
+        $alerteActive = $hasStock && (bool) $produit->alerte_stock_active;
+        $varianteLibelleParId = $produit->variantes->pluck('libelle', 'id');
+
+        $varianteStocksDetail = $varianteStocksRaw->map(function (VarianteStock $s) use ($hasStock, $seuilEffectif, $alerteActive, $varianteLibelleParId) {
+            $statut = $hasStock ? $this->stockStatutService->statutPour($s->qte_stock, $seuilEffectif, $alerteActive) : StockStatut::DISPONIBLE;
+
+            return [
+                'variante_id' => $s->produit_variante_id,
+                'variante_libelle' => $varianteLibelleParId->get($s->produit_variante_id, ''),
+                'site_id' => $s->site_id,
+                'site_code' => $s->site?->code,
+                'site_nom' => $s->site?->nom,
+                'qte_stock' => $s->qte_stock,
+                'statut' => $statut->value,
+                'statut_label' => $statut->label(),
+            ];
+        })->values();
+
         $stocksParSite = $varianteStocksRaw
             ->groupBy('site_id')
-            ->map(function (Collection $parSite, $siteId) {
+            ->map(function (Collection $parSite, $siteId) use ($hasStock, $seuilEffectif, $alerteActive) {
                 $premier = $parSite->first();
+                // Pire statut parmi les variantes de ce site (rupture > stock faible >
+                // disponible) — un résumé par site reste utile, mais ne doit jamais faire
+                // disparaître le pire cas derrière une moyenne/somme.
+                $statuts = $hasStock
+                    ? $parSite->map(fn (VarianteStock $s) => $this->stockStatutService->statutPour($s->qte_stock, $seuilEffectif, $alerteActive))
+                    : collect();
+                $pire = match (true) {
+                    $statuts->contains(StockStatut::RUPTURE) => StockStatut::RUPTURE,
+                    $statuts->contains(StockStatut::STOCK_FAIBLE) => StockStatut::STOCK_FAIBLE,
+                    default => StockStatut::DISPONIBLE,
+                };
 
                 return [
                     'site_id' => $siteId,
                     'site_code' => $premier->site?->code,
                     'site_nom' => $premier->site?->nom,
                     'qte_stock' => $parSite->sum('qte_stock'),
-                    'seuil_alerte_stock' => $parSite->first()?->seuil_alerte_stock,
-                    'is_alerte' => $parSite->contains('is_alerte', true),
+                    'statut' => $pire->value,
+                    'statut_label' => $pire->label(),
                     'updated_at' => $parSite->max('updated_at'),
                 ];
             })
             ->values();
-
-        $totalStock = $stocksParSite->isNotEmpty() ? $stocksParSite->sum('qte_stock') : (int) ($produit->qte_stock ?? 0);
 
         $mouvements = MouvementStock::whereIn('produit_variante_id', $varianteIds)
             ->with(['createur:id,prenom,nom', 'site:id,nom,code', 'variante:id,combo_hash'])
@@ -349,9 +422,21 @@ class ProduitController extends Controller
         }
 
         $variantePrincipale = $produit->variantes->firstWhere('is_default', true) ?? $produit->variantes->first();
-        $seuilDisplay = $variantePrincipale?->seuil_alerte_stock;
-        $hasStock = $produit->type?->hasStock() ?? true;
-        $isLowStock = $hasStock && $totalStock > 0 && $seuilDisplay !== null && $seuilDisplay > 0 && $totalStock <= $seuilDisplay;
+
+        if ($hasStock && $varianteStocksDetail->isNotEmpty()) {
+            $isRupture = $varianteStocksDetail->contains(fn (array $d) => $d['statut'] === StockStatut::RUPTURE->value);
+            $isLowStock = $varianteStocksDetail->contains(fn (array $d) => $d['statut'] === StockStatut::STOCK_FAIBLE->value);
+            $nombreAlertesStock = $varianteStocksDetail->filter(fn (array $d) => $d['statut'] !== StockStatut::DISPONIBLE->value)->count();
+        } elseif ($hasStock) {
+            $statutFallback = $this->stockStatutService->statutPour($totalStock, $seuilEffectif, $alerteActive);
+            $isRupture = $statutFallback === StockStatut::RUPTURE;
+            $isLowStock = $statutFallback === StockStatut::STOCK_FAIBLE;
+            $nombreAlertesStock = ($isRupture || $isLowStock) ? 1 : 0;
+        } else {
+            $isRupture = false;
+            $isLowStock = false;
+            $nombreAlertesStock = 0;
+        }
 
         return Inertia::render('Produits/Show', [
             'produit' => [
@@ -366,8 +451,9 @@ class ProduitController extends Controller
                 'sku' => $variantePrincipale?->sku,
                 'code_barres' => $variantePrincipale?->code_barres,
                 'image_url' => $produit->image_url,
-                'type' => $produit->type?->value,
-                'type_label' => $produit->type?->label(),
+                'produit_type_id' => $produit->produit_type_id,
+                'type_nom' => $produit->produitType?->nom,
+                'prix_usine_requis' => (bool) $produit->produitType?->prix_usine_requis,
                 'statut' => $produit->statut?->value,
                 'statut_label' => $produit->statut?->label(),
                 'prix_usine' => $variantePrincipale?->prix_usine,
@@ -375,15 +461,19 @@ class ProduitController extends Controller
                 'prix_achat' => $variantePrincipale?->prix_achat,
                 'cout' => $variantePrincipale?->cout,
                 'qte_stock' => $totalStock,
-                'seuil_alerte_stock' => $seuilDisplay,
+                'alerte_stock_active' => $produit->alerte_stock_active,
+                'seuil_alerte_stock' => $produit->seuil_alerte_stock,
+                'seuil_alerte_effectif' => $seuilEffectif,
                 'description' => $produit->description,
-                'is_alerte' => $produit->is_alerte,
-                'in_stock' => ! $hasStock || $totalStock > 0,
+                'in_stock' => ! $hasStock || ! $isRupture,
                 'is_low_stock' => $isLowStock,
+                'is_out_of_stock' => $isRupture,
+                'nombre_alertes_stock' => $nombreAlertesStock,
                 'has_stock' => $hasStock,
                 'created_at' => $produit->created_at?->toISOString(),
                 'updated_at' => $produit->updated_at?->toISOString(),
                 'stocks_par_site' => $stocksParSite,
+                'variante_stocks_detail' => $varianteStocksDetail,
                 'medias' => $produit->medias->map(fn ($m) => [
                     'id' => $m->id,
                     'url' => $m->url,
@@ -464,15 +554,15 @@ class ProduitController extends Controller
                 'sku' => $variantePrincipale?->sku,
                 'code_barres' => $variantePrincipale?->code_barres,
                 'image_url' => $produit->image_url,
-                'type' => $produit->type?->value,
+                'produit_type_id' => $produit->produit_type_id,
                 'statut' => $produit->statut?->value,
                 'prix_usine' => $variantePrincipale?->prix_usine,
                 'prix_vente' => $variantePrincipale?->prix_vente,
                 'prix_achat' => $variantePrincipale?->prix_achat,
                 'cout' => $variantePrincipale?->cout,
-                'seuil_alerte_stock' => $variantePrincipale?->seuil_alerte_stock,
+                'alerte_stock_active' => $produit->alerte_stock_active,
+                'seuil_alerte_stock' => $produit->seuil_alerte_stock,
                 'description' => $produit->description,
-                'is_alerte' => $produit->is_alerte,
                 'has_variantes' => $produit->variantes->count() > 1,
                 'variantes_count' => $produit->variantes->count(),
                 'variantes' => $produit->variantes->map(fn (ProduitVariante $v) => [
@@ -484,7 +574,6 @@ class ProduitController extends Controller
                     'prix_vente' => $v->prix_vente,
                     'prix_achat' => $v->prix_achat,
                     'cout' => $v->cout,
-                    'seuil_alerte_stock' => $v->seuil_alerte_stock,
                     'is_default' => $v->is_default,
                     'is_active' => $v->is_active,
                     'options' => $this->varianteOptions($v),
@@ -497,11 +586,12 @@ class ProduitController extends Controller
                     'position' => $m->position,
                 ]),
             ],
-            'types' => ProduitType::options(),
+            'types' => $this->typesOptions($orgId),
             'statuts' => ProduitStatut::options(),
             'categories' => Categorie::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom', 'parent_id']),
             'fournisseurs' => $this->fournisseursOptions($orgId),
             'limites' => $this->limitesCatalogue($orgId),
+            'seuilOrganisationDefaut' => Parametre::getSeuilStockFaible($orgId),
         ]);
     }
 
@@ -511,7 +601,7 @@ class ProduitController extends Controller
 
         $data = $this->validerFormulaire($request, $produit);
 
-        $oldSnapshot = $this->produitSnapshot($produit->fresh(['variantes', 'fournisseur']));
+        $oldSnapshot = $this->produitSnapshot($produit->fresh(['variantes', 'fournisseur', 'produitType']));
 
         $produit = DB::transaction(function () use ($produit, $data, $request) {
             $produit = $this->produitService->mettreAJourSimple($produit, $data);
@@ -523,7 +613,7 @@ class ProduitController extends Controller
             return $produit;
         });
 
-        $newSnapshot = $this->produitSnapshot($produit->fresh(['variantes', 'fournisseur']));
+        $newSnapshot = $this->produitSnapshot($produit->fresh(['variantes', 'fournisseur', 'produitType']));
 
         [$oldDiff, $newDiff] = $this->produitDiff($oldSnapshot, $newSnapshot);
         if ($oldDiff !== null || $newDiff !== null) {
@@ -554,7 +644,7 @@ class ProduitController extends Controller
     {
         $this->authorize('delete', $produit);
 
-        $this->auditService->record($produit, AuditEvent::DELETED, auth()->user(), $this->produitSnapshot($produit->fresh(['variantes', 'fournisseur'])), null);
+        $this->auditService->record($produit, AuditEvent::DELETED, auth()->user(), $this->produitSnapshot($produit->fresh(['variantes', 'fournisseur', 'produitType'])), null);
 
         foreach ($produit->medias as $media) {
             $this->mediaService->supprimer($media);
@@ -568,7 +658,7 @@ class ProduitController extends Controller
     public function ajusterStock(Request $request, Produit $produit): RedirectResponse
     {
         $this->authorize('ajusterStock', $produit);
-        abort_unless((bool) $produit->type?->hasStock(), 422, 'Ce produit ne gère pas de stock.');
+        abort_unless((bool) $produit->produitType?->gere_stock, 422, 'Ce produit ne gère pas de stock.');
 
         $data = $request->validate([
             'site_id' => ['required', 'exists:sites,id'],
@@ -698,7 +788,6 @@ class ProduitController extends Controller
             'prix_vente' => 'nullable|integer|min:0',
             'prix_achat' => 'nullable|integer|min:0',
             'cout' => 'nullable|integer|min:0',
-            'seuil_alerte_stock' => 'nullable|integer|min:0',
             'is_active' => 'boolean',
             'media_id' => ['nullable', Rule::exists('produit_medias', 'id')->where('produit_id', $produit->id)],
         ]);
@@ -711,7 +800,7 @@ class ProduitController extends Controller
             Arr::only($variante->getAttributes(), $champsVariante),
             Arr::only($data, $champsVariante),
         );
-        $this->produitService->validerPrixSelonType($produit->type, $donneesEffectives);
+        $this->produitService->validerPrixSelonType($produit->produitType, $donneesEffectives);
 
         $variante->update($data);
 
@@ -728,13 +817,14 @@ class ProduitController extends Controller
     {
         $this->authorize('update', $produit);
 
-        $produit->load('variantes.valeurs.option');
+        $produit->load(['variantes.valeurs.option', 'produitType']);
 
         return Inertia::render('Produits/Variantes/Index', [
             'produit' => [
                 'id' => $produit->id,
                 'nom' => $produit->nom,
-                'type' => $produit->type?->value,
+                'type_nom' => $produit->produitType?->nom,
+                'prix_usine_requis' => (bool) $produit->produitType?->prix_usine_requis,
             ],
             'variantes' => $produit->variantes->map(fn (ProduitVariante $v) => [
                 'id' => $v->id,
@@ -745,7 +835,6 @@ class ProduitController extends Controller
                 'prix_vente' => $v->prix_vente,
                 'prix_achat' => $v->prix_achat,
                 'cout' => $v->cout,
-                'seuil_alerte_stock' => $v->seuil_alerte_stock,
                 'is_default' => $v->is_default,
                 'is_active' => $v->is_active,
                 'options' => $this->varianteOptions($v),
@@ -771,7 +860,6 @@ class ProduitController extends Controller
             'variantes.*.prix_vente' => ['nullable', 'integer', 'min:0'],
             'variantes.*.prix_achat' => ['nullable', 'integer', 'min:0'],
             'variantes.*.cout' => ['nullable', 'integer', 'min:0'],
-            'variantes.*.seuil_alerte_stock' => ['nullable', 'integer', 'min:0'],
             'variantes.*.is_active' => ['boolean'],
         ]);
 
@@ -787,7 +875,7 @@ class ProduitController extends Controller
                     Arr::only($variante->getAttributes(), $champsVariante),
                     Arr::only($ligne, $champsVariante),
                 );
-                $this->produitService->validerPrixSelonType($produit->type, $donneesEffectives);
+                $this->produitService->validerPrixSelonType($produit->produitType, $donneesEffectives);
 
                 $variante->update(Arr::except($ligne, ['id']));
             }
@@ -869,15 +957,21 @@ class ProduitController extends Controller
                     ->where('organization_id', $orgId)
                     ->ignore($varianteId),
             ],
-            'type' => 'required|in:'.implode(',', ProduitType::values()),
+            'produit_type_id' => [
+                'required',
+                Rule::exists('produit_types', 'id')->where('organization_id', $orgId)->where('statut', 'actif'),
+            ],
             'statut' => 'required|in:'.implode(',', ProduitStatut::values()),
             'prix_usine' => 'nullable|integer|min:0',
             'prix_vente' => 'nullable|integer|min:0',
             'prix_achat' => 'nullable|integer|min:0',
             'cout' => 'nullable|integer|min:0',
-            'seuil_alerte_stock' => 'nullable|integer|min:0',
+            // Le formulaire (ProduitForm.vue) force toujours un choix explicite Oui/Non côté
+            // UI — pas de "required" strict ici pour ne pas casser les intégrations qui
+            // omettent le champ ; absent => false (défaut colonne), jamais d'alerte implicite.
+            'alerte_stock_active' => 'boolean',
+            'seuil_alerte_stock' => 'nullable|integer|min:1',
             'description' => 'nullable|string',
-            'is_alerte' => 'boolean',
             'images' => 'nullable|array',
             'images.*' => 'image|max:2048',
             // Optionnel : déclinaisons (couleur/taille...). Absent/vide = produit simple
@@ -918,15 +1012,15 @@ class ProduitController extends Controller
 
         return array_filter([
             'nom' => $produit->nom,
-            'type' => $produit->type?->label(),
+            'type' => $produit->produitType?->nom,
             'statut' => $produit->statut?->label(),
             'prix_vente' => $variante?->prix_vente,
             'prix_achat' => $variante?->prix_achat,
             'prix_usine' => $variante?->prix_usine,
             'cout' => $variante?->cout,
             'qte_stock' => $produit->qte_stock,
-            'seuil_alerte_stock' => $variante?->seuil_alerte_stock,
-            'is_alerte' => $produit->is_alerte,
+            'seuil_alerte_stock' => $produit->seuil_alerte_stock,
+            'alerte_stock_active' => $produit->alerte_stock_active,
             'description' => $produit->description,
             'code_barres' => $variante?->code_barres,
             'fournisseur' => $produit->fournisseur?->nom_complet,

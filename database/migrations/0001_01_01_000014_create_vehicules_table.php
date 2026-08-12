@@ -18,14 +18,16 @@ return new class extends Migration
             $table->string('modele', 100)->nullable();
             $table->string('immatriculation', 20);
             $table->foreignUlid('type_vehicule_id')->nullable()->constrained('type_vehicules')->restrictOnDelete();
-            $table->string('categorie', 20)->default('interne');
             $table->integer('capacite_packs')->nullable();
             $table->foreignUlid('proprietaire_id')->nullable()->constrained('proprietaires')->restrictOnDelete();
-            $table->boolean('pris_en_charge_par_usine')->default(false);
-            // Indépendant de pris_en_charge_par_usine (financier) : détermine si
-            // les ventes réalisées avec ce véhicule génèrent une commission — voir
-            // CommissionGenerator et VehiculeCommandeContextResolver.
-            $table->boolean('commission_eligible')->default(true);
+            // Toute ligne dans `vehicules` appartient par définition à la flotte gérée : il
+            // n'existe plus de notion de "prise en charge" séparée (cf. ex-pris_en_charge_par_usine)
+            // ni de "catégorie interne/externe" — ces deux booléens indépendants décrivent
+            // uniquement à quoi le véhicule est autorisé (l'un, l'autre, ou les deux). Un véhicule
+            // qui n'appartient à aucun des deux workflows appartient à un partenaire hors flotte
+            // (cf. ClientVehicle) et n'a pas sa place dans cette table.
+            $table->boolean('livraison_vente')->default(true);
+            $table->boolean('livraison_logistique')->default(false);
             $table->string('photo_path')->nullable();
             $table->boolean('is_active')->default(true);
             $table->timestamps();

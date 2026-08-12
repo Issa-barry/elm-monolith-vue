@@ -12,6 +12,7 @@ use App\Http\Controllers\CashbackController;
 use App\Http\Controllers\CategorieController;
 use App\Http\Controllers\Client\ClientDashboardController;
 use App\Http\Controllers\ClientController;
+use App\Http\Controllers\ClientVehicleController;
 use App\Http\Controllers\CommandeAchatController;
 use App\Http\Controllers\CommandeVenteController;
 use App\Http\Controllers\CommandeVenteStatutController;
@@ -54,6 +55,7 @@ use App\Http\Controllers\PdvController;
 use App\Http\Controllers\PieceIdentiteController;
 use App\Http\Controllers\PrestataireController;
 use App\Http\Controllers\ProduitController;
+use App\Http\Controllers\ProduitTypeController;
 use App\Http\Controllers\PropositionVehiculeController;
 use App\Http\Controllers\ProprietaireController;
 use App\Http\Controllers\ReceptionValidationAdminController;
@@ -162,6 +164,13 @@ Route::prefix('backoffice')->group(function () {
 
         // Clients
         Route::resource('clients', ClientController::class);
+        // Véhicules partenaire (Client::type = PARTENAIRE) — hors flotte gérée, cf. ClientVehicle.
+        Route::post('clients/{client}/vehicules', [ClientVehicleController::class, 'store'])
+            ->name('clients.vehicules.store');
+        Route::put('clients/{client}/vehicules/{vehicule}', [ClientVehicleController::class, 'update'])
+            ->name('clients.vehicules.update');
+        Route::delete('clients/{client}/vehicules/{vehicule}', [ClientVehicleController::class, 'destroy'])
+            ->name('clients.vehicules.destroy');
 
         // ── Module : PDV ──────────────────────────────────────────────────────────
         // Module a part de Ventes : plusieurs variantes de PDV sont prevues, chacune
@@ -291,6 +300,14 @@ Route::prefix('backoffice')->group(function () {
             Route::delete('produits/options/{option}', [OptionCatalogueController::class, 'destroy'])->name('produits.options.destroy');
             Route::post('produits/options/{option}/valeurs', [OptionCatalogueController::class, 'storeValeur'])->name('produits.options.valeurs.store');
             Route::delete('produits/options/{option}/valeurs/{valeur}', [OptionCatalogueController::class, 'destroyValeur'])->name('produits.options.valeurs.destroy');
+
+            // Types de produit — CRUD par organisation (remplace l'ancien enum figé), même
+            // pattern que categories/options ci-dessus, déclarées avant produits/{produit}.
+            Route::get('produits/types', [ProduitTypeController::class, 'index'])->name('produits.types.index');
+            Route::post('produits/types', [ProduitTypeController::class, 'store'])->name('produits.types.store');
+            Route::put('produits/types/{type}', [ProduitTypeController::class, 'update'])->name('produits.types.update');
+            Route::patch('produits/types/{type}/toggle', [ProduitTypeController::class, 'toggle'])->name('produits.types.toggle');
+            Route::delete('produits/types/{type}', [ProduitTypeController::class, 'destroy'])->name('produits.types.destroy');
 
             // Création rapide d'un fournisseur (entité séparée, cf. FournisseurController) depuis
             // le formulaire Produit — rattachée au module Produits (pas Achats) : elle doit

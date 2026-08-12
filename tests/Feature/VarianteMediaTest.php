@@ -4,8 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\Organization;
 use App\Models\Produit;
+use App\Models\ProduitType;
 use App\Services\MediaService;
 use App\Services\ProduitService;
+use Database\Seeders\ProduitTypeDefaultSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -28,6 +30,15 @@ class VarianteMediaTest extends TestCase
         parent::setUp();
         Storage::fake('public');
         $this->initOrgAndUser(['produits.read', 'produits.create', 'produits.update']);
+        ProduitTypeDefaultSeeder::seedPourOrganisation($this->org->id);
+    }
+
+    private function typeId(string $code, ?Organization $org = null): string
+    {
+        $org ??= $this->org;
+        ProduitTypeDefaultSeeder::seedPourOrganisation($org->id);
+
+        return ProduitType::where('organization_id', $org->id)->where('code', $code)->value('id');
     }
 
     /** Produit à déclinaisons (2 variantes : Noir / Blanc) via le vrai chemin de création. */
@@ -36,7 +47,7 @@ class VarianteMediaTest extends TestCase
         return app(ProduitService::class)->creer([
             'organization_id' => ($org ?? $this->org)->id,
             'nom' => 'T-shirt média',
-            'type' => 'achat_vente',
+            'produit_type_id' => $this->typeId('achat_vente', $org),
             'statut' => 'actif',
             'prix_achat' => 1000,
             'prix_vente' => 2000,

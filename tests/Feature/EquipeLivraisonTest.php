@@ -646,16 +646,15 @@ class EquipeLivraisonTest extends TestCase
         return Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
-            'categorie' => 'externe',
         ]);
     }
 
+    /** Sans propriétaire tiers : EquipeLivraisonController::isVehiculeExterne() le traite comme "interne". */
     private function makeVehiculeInterne(): Vehicule
     {
         return Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'proprietaire_id' => null,
-            'categorie' => 'interne',
         ]);
     }
 

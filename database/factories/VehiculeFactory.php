@@ -21,9 +21,8 @@ class VehiculeFactory extends Factory
             'type_vehicule_id' => $typeVehicule->id,
             'capacite_packs' => $typeVehicule->capacite_defaut,
             'proprietaire_id' => Proprietaire::factory()->create(['organization_id' => $org->id])->id,
-            'categorie' => 'externe',
-            'pris_en_charge_par_usine' => true,
-            'commission_eligible' => true,
+            'livraison_vente' => true,
+            'livraison_logistique' => false,
             'is_active' => true,
         ];
     }

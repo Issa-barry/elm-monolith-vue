@@ -11,9 +11,10 @@ interface Option {
     label: string;
 }
 
-// `required_prices` (cf. ProduitType::options()) pilote l'affichage du "*" sur les champs de
-// prix obligatoires pour le type sélectionné, dans ProduitForm.vue.
+// `required_prices`/`gere_stock` (cf. ProduitTypeController::typesOptions()) pilotent
+// l'affichage du "*" sur les prix obligatoires et de la section Stock, dans ProduitForm.vue.
 interface ProduitTypeOption extends Option {
+    gere_stock: boolean;
     required_prices: string[];
 }
 
@@ -47,13 +48,14 @@ interface Limites {
     max_variantes_produit: number;
 }
 
-defineProps<{
+const props = defineProps<{
     types: ProduitTypeOption[];
     statuts: Option[];
     categories: Categorie[];
     fournisseurs: FournisseurOption[];
     optionsCatalogue: OptionCatalogue[];
     limites: Limites;
+    seuilOrganisationDefaut: number;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -67,15 +69,15 @@ const form = useForm({
     categorie_id: null as string | null,
     fournisseur_id: null as string | null,
     code_barres: null as string | null,
-    type: 'materiel',
+    produit_type_id: props.types[0]?.value ?? null,
     statut: 'actif',
     prix_usine: null as number | null,
     prix_vente: null as number | null,
     prix_achat: null as number | null,
     cout: null as number | null,
+    alerte_stock_active: false,
     seuil_alerte_stock: null as number | null,
     description: null as string | null,
-    is_alerte: false,
     images: [] as File[],
     options: [] as {
         nom: string;
@@ -133,6 +135,7 @@ function submit() {
                 :fournisseurs="fournisseurs"
                 :options-catalogue="optionsCatalogue"
                 :limites="limites"
+                :seuil-organisation-defaut="seuilOrganisationDefaut"
                 :processing="form.processing"
                 :allow-declinaisons="true"
                 @update:form="Object.assign(form, $event)"

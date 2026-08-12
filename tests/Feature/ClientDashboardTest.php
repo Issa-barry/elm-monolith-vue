@@ -142,10 +142,9 @@ class ClientDashboardTest extends TestCase
             'nom_vehicule' => 'Vehicule Test',
             'immatriculation' => 'AA-123-GN',
             'type_vehicule' => 'camion',
-            'categorie' => 'externe',
             'capacite_packs' => 120,
             'proprietaire_id' => $proprietaire->id,
-            'pris_en_charge_par_usine' => false,
+            'livraison_vente' => true,
             'is_active' => true,
         ]);
 

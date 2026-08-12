@@ -223,7 +223,7 @@ class TransfertLogistiqueController extends Controller
                 ->get(),
             'vehicules' => Vehicule::where('organization_id', $orgId)
                 ->where('is_active', true)
-                ->where('categorie', 'interne')
+                ->livraisonLogistique()
                 ->with(['equipe:id,vehicule_id', 'typeVehicule'])
                 ->select('id', 'nom_vehicule', 'immatriculation', 'capacite_packs', 'type_vehicule_id')
                 ->get()
@@ -263,7 +263,7 @@ class TransfertLogistiqueController extends Controller
 
         $rules = [
             'site_destination_id' => ['required', 'string', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
-            'vehicule_id' => ['required', 'string', Rule::exists('vehicules', 'id')->where('organization_id', $orgId)->where('categorie', 'interne')],
+            'vehicule_id' => ['required', 'string', Rule::exists('vehicules', 'id')->where('organization_id', $orgId)->where('livraison_logistique', true)],
             'equipe_livraison_id' => ['nullable', 'string', Rule::exists('equipes_livraison', 'id')->where('organization_id', $orgId)],
             'date_depart_prevue' => ['nullable', 'date'],
             'date_arrivee_prevue' => ['nullable', 'date', 'after_or_equal:date_depart_prevue'],
@@ -284,7 +284,7 @@ class TransfertLogistiqueController extends Controller
             'site_source_id.required' => 'Le site source est obligatoire.',
             'site_source_id.exists' => 'Le site source sélectionné n\'appartient pas à votre organisation.',
             'vehicule_id.required' => 'Le véhicule est obligatoire.',
-            'vehicule_id.exists' => 'Seuls les véhicules internes sont autorisés pour un transfert.',
+            'vehicule_id.exists' => 'Seuls les véhicules autorisés pour la logistique peuvent réaliser un transfert.',
             'date_arrivee_prevue.after_or_equal' => 'La date d\'arrivée doit être postérieure ou égale à la date de départ.',
             'lignes.required' => 'Au moins une ligne produit est requise.',
             'lignes.*.produit_id.required' => 'Chaque ligne doit avoir un produit.',
@@ -436,7 +436,7 @@ class TransfertLogistiqueController extends Controller
             'is_admin' => false,
             'sites' => Site::where('organization_id', $orgId)->select('id', 'nom')->orderBy('nom')->get(),
             'vehicules' => Vehicule::where('organization_id', $orgId)->where('is_active', true)
-                ->where('categorie', 'interne')
+                ->livraisonLogistique()
                 ->with(['equipe:id,vehicule_id', 'typeVehicule'])
                 ->select('id', 'nom_vehicule', 'immatriculation', 'capacite_packs', 'type_vehicule_id')
                 ->get()
@@ -471,7 +471,7 @@ class TransfertLogistiqueController extends Controller
 
         $data = $request->validate([
             'site_destination_id' => ['required', 'string', Rule::exists('sites', 'id')->where('organization_id', $orgId)],
-            'vehicule_id' => ['required', 'string', Rule::exists('vehicules', 'id')->where('organization_id', $orgId)->where('categorie', 'interne')],
+            'vehicule_id' => ['required', 'string', Rule::exists('vehicules', 'id')->where('organization_id', $orgId)->where('livraison_logistique', true)],
             'equipe_livraison_id' => ['nullable', 'string', Rule::exists('equipes_livraison', 'id')->where('organization_id', $orgId)],
             'date_depart_prevue' => ['nullable', 'date'],
             'date_arrivee_prevue' => ['nullable', 'date', 'after_or_equal:date_depart_prevue'],
@@ -483,7 +483,7 @@ class TransfertLogistiqueController extends Controller
             'lignes.*.notes' => ['nullable', 'string', 'max:250'],
         ], [
             'vehicule_id.required' => 'Le véhicule est obligatoire.',
-            'vehicule_id.exists' => 'Seuls les véhicules internes sont autorisés pour un transfert.',
+            'vehicule_id.exists' => 'Seuls les véhicules autorisés pour la logistique peuvent réaliser un transfert.',
             'lignes.*.produit_id.required' => 'Chaque ligne doit avoir un produit.',
             'lignes.*.quantite_demandee.min' => 'La quantité doit être supérieure à 0.',
         ]);

@@ -35,9 +35,20 @@ interface SiteStock {
     site_code: string | null;
     site_nom: string | null;
     qte_stock: number;
-    seuil_alerte_stock: number | null;
-    is_alerte: boolean;
+    statut: 'disponible' | 'stock_faible' | 'rupture';
+    statut_label: string;
     updated_at: string | null;
+}
+
+interface VarianteStockDetail {
+    variante_id: string;
+    variante_libelle: string;
+    site_id: string;
+    site_code: string | null;
+    site_nom: string | null;
+    qte_stock: number;
+    statut: 'disponible' | 'stock_faible' | 'rupture';
+    statut_label: string;
 }
 
 interface VarianteOption {
@@ -54,7 +65,6 @@ interface Variante {
     prix_vente: number | null;
     prix_achat: number | null;
     cout: number | null;
-    seuil_alerte_stock: number | null;
     is_default: boolean;
     is_active: boolean;
     options: VarianteOption[];
@@ -81,8 +91,9 @@ interface Produit {
     sku: string | null;
     code_barres: string | null;
     image_url: string | null;
-    type: string | null;
-    type_label: string | null;
+    produit_type_id: string | null;
+    type_nom: string | null;
+    prix_usine_requis: boolean;
     statut: string;
     statut_label: string;
     prix_usine: number | null;
@@ -90,15 +101,19 @@ interface Produit {
     prix_achat: number | null;
     cout: number | null;
     qte_stock: number | null;
+    alerte_stock_active: boolean;
     seuil_alerte_stock: number | null;
+    seuil_alerte_effectif: number;
     description: string | null;
-    is_alerte: boolean;
     in_stock: boolean;
     is_low_stock: boolean;
+    is_out_of_stock: boolean;
+    nombre_alertes_stock: number;
     has_stock: boolean;
     created_at: string | null;
     updated_at: string | null;
     stocks_par_site: SiteStock[];
+    variante_stocks_detail: VarianteStockDetail[];
     variantes: Variante[];
     medias: Media[];
 }
@@ -157,7 +172,7 @@ const showStockModal = ref(false);
 const showHistoriqueModal = ref(false);
 const showVarianteModal = ref(false);
 const varianteEnEdition = ref<Variante | null>(null);
-const isFabricable = computed(() => props.produit.type === 'fabricable');
+const prixUsineRequis = computed(() => props.produit.prix_usine_requis);
 
 function editerVariante(variante: Variante) {
     varianteEnEdition.value = variante;
@@ -201,16 +216,14 @@ function formatDateShort(iso: string | null): string {
 
 function stockColorClass(produit: Produit): string {
     if (!produit.has_stock) return 'text-muted-foreground';
-    if (produit.qte_stock !== null && produit.qte_stock <= 0)
-        return 'text-destructive';
+    if (produit.is_out_of_stock) return 'text-destructive';
     if (produit.is_low_stock) return 'text-amber-600';
     return 'text-emerald-600';
 }
 
 function siteStockColor(s: SiteStock): string {
-    if (s.qte_stock <= 0) return 'text-destructive';
-    if (s.seuil_alerte_stock && s.qte_stock <= s.seuil_alerte_stock)
-        return 'text-amber-600';
+    if (s.statut === 'rupture') return 'text-destructive';
+    if (s.statut === 'stock_faible') return 'text-amber-600';
     return 'text-emerald-600';
 }
 
@@ -355,7 +368,11 @@ const ajustements = props.mouvements.map((m) => ({
                                 produit.nom
                             }}</span>
                             <AlertTriangle
-                                v-if="produit.is_alerte"
+                                v-if="produit.is_out_of_stock"
+                                class="h-4 w-4 shrink-0 text-red-500"
+                            />
+                            <AlertTriangle
+                                v-else-if="produit.is_low_stock"
                                 class="h-4 w-4 shrink-0 text-amber-500"
                             />
                         </div>
@@ -379,15 +396,18 @@ const ajustements = props.mouvements.map((m) => ({
                             class="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium text-muted-foreground"
                         >
                             <Layers class="h-3 w-3" />
-                            {{ produit.type_label || '—' }}
+                            {{ produit.type_nom || '—' }}
                         </span>
-                        <span
-                            v-if="produit.is_alerte"
-                            class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
-                        >
-                            <AlertTriangle class="h-3 w-3" />
-                            Critique
-                        </span>
+                        <StatusDot
+                            v-if="produit.is_out_of_stock"
+                            status="rupture"
+                            :label="`Rupture — ${produit.nombre_alertes_stock} site(s)`"
+                        />
+                        <StatusDot
+                            v-else-if="produit.is_low_stock"
+                            status="stock_faible"
+                            :label="`Stock faible — ${produit.nombre_alertes_stock} alerte(s)`"
+                        />
                     </div>
 
                     <div class="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
@@ -448,10 +468,7 @@ const ajustements = props.mouvements.map((m) => ({
                             }}
                         </p>
                         <div
-                            v-if="
-                                produit.qte_stock !== null &&
-                                produit.qte_stock <= 0
-                            "
+                            v-if="produit.is_out_of_stock"
                             class="mt-1 flex items-center justify-center gap-1 text-xs text-destructive"
                         >
                             <AlertTriangle class="h-3 w-3" /> Rupture
@@ -465,18 +482,31 @@ const ajustements = props.mouvements.map((m) => ({
                     </div>
                     <div class="rounded-lg bg-muted/50 p-4 text-center">
                         <p class="mb-1 text-xs text-muted-foreground">
-                            Seuil d'alerte
+                            {{
+                                produit.alerte_stock_active
+                                    ? "Seuil d'alerte"
+                                    : 'Alerte désactivée'
+                            }}
                         </p>
                         <p
                             class="text-3xl font-bold text-foreground tabular-nums"
                         >
                             {{
-                                produit.seuil_alerte_stock != null
+                                produit.alerte_stock_active
                                     ? new Intl.NumberFormat('fr-FR').format(
-                                          produit.seuil_alerte_stock,
+                                          produit.seuil_alerte_effectif,
                                       )
                                     : '—'
                             }}
+                        </p>
+                        <p
+                            v-if="
+                                produit.alerte_stock_active &&
+                                produit.seuil_alerte_stock === null
+                            "
+                            class="mt-1 text-[11px] text-muted-foreground"
+                        >
+                            Seuil par défaut de l'organisation
                         </p>
                     </div>
                 </div>
@@ -503,8 +533,8 @@ const ajustements = props.mouvements.map((m) => ({
                                 <th class="pr-4 pb-2 text-right font-medium">
                                     Stock
                                 </th>
-                                <th class="pr-4 pb-2 text-right font-medium">
-                                    Seuil alerte
+                                <th class="pr-4 pb-2 text-left font-medium">
+                                    État
                                 </th>
                                 <th class="pb-2 text-left font-medium">
                                     Dernière mise à jour
@@ -534,19 +564,78 @@ const ajustements = props.mouvements.map((m) => ({
                                 >
                                     {{ formatQte(s.qte_stock) }}
                                 </td>
-                                <td
-                                    class="py-2.5 pr-4 text-right text-muted-foreground tabular-nums"
-                                >
-                                    {{
-                                        s.seuil_alerte_stock != null
-                                            ? formatQte(s.seuil_alerte_stock)
-                                            : '—'
-                                    }}
+                                <td class="py-2.5 pr-4">
+                                    <StatusDot
+                                        :status="s.statut"
+                                        :label="s.statut_label"
+                                    />
                                 </td>
                                 <td
                                     class="py-2.5 text-xs text-muted-foreground"
                                 >
                                     {{ formatDateShort(s.updated_at) }}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ─── Détail par variante × site ─── -->
+            <!-- Un stock élevé sur une variante/un site ne doit jamais masquer une alerte
+                 locale ailleurs (cf. décision produit) : ce détail montre précisément où se
+                 trouve le problème plutôt que le seul agrégat par agence ci-dessus. -->
+            <div
+                v-if="
+                    produit.has_stock &&
+                    produit.variantes.length > 1 &&
+                    produit.variante_stocks_detail.length > 0
+                "
+                class="rounded-xl border bg-card p-5"
+            >
+                <h2
+                    class="mb-4 flex items-center gap-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase"
+                >
+                    <Layers class="h-4 w-4" />
+                    Détail par variante
+                </h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b text-xs text-muted-foreground">
+                                <th class="pr-4 pb-2 text-left font-medium">
+                                    Variante
+                                </th>
+                                <th class="pr-4 pb-2 text-left font-medium">
+                                    Site
+                                </th>
+                                <th class="pr-4 pb-2 text-right font-medium">
+                                    Stock
+                                </th>
+                                <th class="pb-2 text-left font-medium">État</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-border/50">
+                            <tr
+                                v-for="d in produit.variante_stocks_detail"
+                                :key="`${d.variante_id}-${d.site_id}`"
+                            >
+                                <td class="py-2.5 pr-4 font-medium">
+                                    {{ d.variante_libelle || 'Par défaut' }}
+                                </td>
+                                <td class="py-2.5 pr-4 text-muted-foreground">
+                                    {{ d.site_code ?? d.site_nom ?? '—' }}
+                                </td>
+                                <td
+                                    class="py-2.5 pr-4 text-right font-semibold tabular-nums"
+                                >
+                                    {{ formatQte(d.qte_stock) }}
+                                </td>
+                                <td class="py-2.5">
+                                    <StatusDot
+                                        :status="d.statut"
+                                        :label="d.statut_label"
+                                    />
                                 </td>
                             </tr>
                         </tbody>
@@ -855,7 +944,7 @@ const ajustements = props.mouvements.map((m) => ({
             v-model:visible="showVarianteModal"
             :produit-id="produit.id"
             :variante="varianteEnEdition"
-            :is-fabricable="isFabricable"
+            :prix-usine-requis="prixUsineRequis"
             :medias="produit.medias"
         />
     </AppLayout>

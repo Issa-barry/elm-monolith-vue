@@ -10,8 +10,7 @@ import ClientForm from './partials/ClientForm.vue';
 
 interface ClientData {
     id: number;
-    nom: string;
-    prenom: string;
+    nom_complet: string;
     email: string | null;
     telephone: string | null;
     adresse: string | null;
@@ -41,14 +40,13 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
     { title: 'Clients', href: '/backoffice/clients' },
     {
-        title: `${props.client.prenom} ${props.client.nom}`,
+        title: props.client.nom_complet,
         href: '#',
     },
 ];
 
 const form = useForm({
-    nom: props.client.nom,
-    prenom: props.client.prenom,
+    nom_complet: props.client.nom_complet,
     email: props.client.email,
     telephone: props.client.telephone,
     adresse: props.client.adresse,
@@ -64,8 +62,7 @@ watch(
     () => props.client,
     (c) => {
         form.defaults({
-            nom: c.nom,
-            prenom: c.prenom,
+            nom_complet: c.nom_complet,
             email: c.email,
             telephone: c.telephone,
             adresse: c.adresse,
@@ -85,7 +82,7 @@ function formatMontant(v: number): string {
 </script>
 
 <template>
-    <Head :title="`Voir — ${client.prenom} ${client.nom}`" />
+    <Head :title="`Voir — ${client.nom_complet}`" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
         <!-- Header mobile -->
@@ -104,7 +101,7 @@ function formatMontant(v: number): string {
                         Voir
                     </h1>
                     <p class="text-[11px] text-muted-foreground">
-                        {{ client.prenom }} {{ client.nom }}
+                        {{ client.nom_complet }}
                     </p>
                 </div>
                 <Link
@@ -128,7 +125,7 @@ function formatMontant(v: number): string {
                         <p
                             class="mt-1 text-sm font-medium text-muted-foreground"
                         >
-                            {{ client.prenom }} {{ client.nom }}
+                            {{ client.nom_complet }}
                         </p>
                     </div>
                     <Link

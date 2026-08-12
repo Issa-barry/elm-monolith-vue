@@ -31,7 +31,9 @@ interface VehiculeInfo {
     id: string;
     nom_vehicule: string;
     immatriculation: string;
-    categorie: string | null;
+    // Propriété (tiers vs organisation) — indépendante des usages vente/logistique du
+    // véhicule, calculée côté serveur (cf. Vehicules/Show.vue::proprietaireEstTiers).
+    proprietaire_est_tiers: boolean;
     capacite_packs: number | null;
     proprietaire_id: string | null;
     proprietaire_nom: string | null;
@@ -120,7 +122,7 @@ const lignes = ref<LignePartage[]>([]);
 
 // ── Computed ────────────────────────────────────────────────────────────────
 
-const isExterne = computed(() => props.vehicule.categorie === 'externe');
+const isExterne = computed(() => props.vehicule.proprietaire_est_tiers);
 
 const proprietaireNom = computed(() => {
     if (!isExterne.value) return null;

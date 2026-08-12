@@ -28,13 +28,12 @@ interface VehiculeData {
     nom_vehicule: string;
     immatriculation: string;
     type_vehicule_id: string | null;
-    categorie: string | null;
     capacite_packs: number | null;
     capacite_bouteilles: number | null;
     site_id: string | null;
     proprietaire_id: number | null;
-    pris_en_charge_par_usine: boolean | null;
-    commission_eligible: boolean | null;
+    livraison_vente: boolean;
+    livraison_logistique: boolean;
     photo_url: string | null;
     is_active: boolean;
     equipe_id: number | null;
@@ -64,17 +63,13 @@ const form = useForm({
     nom_vehicule: props.vehicule.nom_vehicule,
     immatriculation: props.vehicule.immatriculation,
     type_vehicule_id: props.vehicule.type_vehicule_id,
-    categorie: props.vehicule.categorie,
     capacite_packs: props.vehicule.capacite_packs,
     capacite_bouteilles: props.vehicule.capacite_bouteilles,
     site_id: props.vehicule.site_id,
     proprietaire_id:
-        props.vehicule.proprietaire_id ??
-        (props.vehicule.categorie === 'interne'
-            ? props.default_proprietaire_id
-            : null),
-    pris_en_charge_par_usine: props.vehicule.pris_en_charge_par_usine,
-    commission_eligible: props.vehicule.commission_eligible,
+        props.vehicule.proprietaire_id ?? props.default_proprietaire_id,
+    livraison_vente: props.vehicule.livraison_vente,
+    livraison_logistique: props.vehicule.livraison_logistique,
     photo: null as File | null,
     is_active: props.vehicule.is_active,
 });
@@ -82,14 +77,11 @@ const form = useForm({
 const canSubmit = computed(() => {
     return (
         !form.processing &&
-        !!form.categorie &&
-        !!form.proprietaire_id &&
         !!form.site_id &&
         form.nom_vehicule.trim().length > 0 &&
         form.immatriculation.trim().length > 0 &&
         !!form.type_vehicule_id &&
-        form.pris_en_charge_par_usine !== null &&
-        form.commission_eligible !== null
+        (form.livraison_vente || form.livraison_logistique)
     );
 });
 

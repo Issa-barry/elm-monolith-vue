@@ -31,6 +31,7 @@ class ProductionSeeder extends Seeder
             // CategorieDefaultSeeder volontairement absent : "elm" n'a pas encore besoin de
             // catégories (catalogue à 7 produits, cf. ProduitsSeeder).
             OptionCatalogueDefaultSeeder::class, // Options système par défaut (Couleur, Taille, Pointure)
+            ProduitTypeDefaultSeeder::class, // Types de produit par défaut (obligatoire — un produit ne peut exister sans type)
             ProduitsSeeder::class,        // Catalogue produits
             ParametreSeeder::class,       // Paramètres applicatifs par défaut
             TypeVehiculesSeeder::class,   // Types de véhicule par défaut

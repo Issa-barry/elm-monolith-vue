@@ -25,8 +25,8 @@ class ImportFlotteTest extends TestCase
     use RefreshDatabase;
 
     private const HEADERS_VEHICULES = [
-        'vehicule_immatriculation', 'vehicule_nom', 'vehicule_type', 'vehicule_categorie',
-        'vehicule_site', 'vehicule_pris_en_charge_par_usine',
+        'vehicule_immatriculation', 'vehicule_nom', 'vehicule_type',
+        'vehicule_site', 'vehicule_livraison_vente', 'vehicule_livraison_logistique',
         'vehicule_capacite_sachets', 'vehicule_capacite_bouteilles',
         'proprietaire_nom', 'proprietaire_prenom', 'proprietaire_telephone', 'proprietaire_pays',
     ];
@@ -70,18 +70,17 @@ class ImportFlotteTest extends TestCase
         return $user;
     }
 
-    private function ligneVehiculeExterne(array $overrides = []): array
+    /** Véhicule vente + propriétaire tiers renseigné — le cas le plus courant du fichier. */
+    private function ligneVehicule(array $overrides = []): array
     {
-        // vehicule_site est obligatoire quelle que soit la catégorie : un
-        // véhicule externe est aussi rattaché à un site (celui pour lequel il
-        // opère) — 'Matoto' correspond au site créé dans setUp().
+        // vehicule_site est obligatoire quel que soit le propriétaire.
         return array_replace([
             'vehicule_immatriculation' => 'RC-1234-A',
             'vehicule_nom' => 'Camion 1',
             'vehicule_type' => 'Tricycle',
-            'vehicule_categorie' => 'externe',
             'vehicule_site' => 'Matoto',
-            'vehicule_pris_en_charge_par_usine' => 'oui',
+            'vehicule_livraison_vente' => 'oui',
+            'vehicule_livraison_logistique' => 'non',
             'proprietaire_nom' => 'Diallo',
             'proprietaire_prenom' => 'Mamadou',
             'proprietaire_telephone' => '622000001',
@@ -135,11 +134,11 @@ class ImportFlotteTest extends TestCase
         return ImportFlotte::firstOrFail();
     }
 
-    /** Raccourci pour le cas le plus courant : un véhicule externe + un chauffeur. */
+    /** Raccourci pour le cas le plus courant : un véhicule vente + un chauffeur. */
     private function importerVehiculeEtChauffeur(array $overridesVehicule = [], array $overridesLivreur = []): ImportFlotte
     {
         return $this->importer(
-            [$this->ligneVehiculeExterne($overridesVehicule)],
+            [$this->ligneVehicule($overridesVehicule)],
             [$this->ligneLivreurChauffeur($overridesLivreur)]
         );
     }
@@ -186,11 +185,10 @@ class ImportFlotteTest extends TestCase
         $this->assertSame(1, $import->nb_groupes_erreur);
     }
 
-    public function test_analyse_flags_error_for_interne_vehicule_without_site(): void
+    public function test_analyse_flags_error_for_vehicule_without_site(): void
     {
         $import = $this->importer(
-            [$this->ligneVehiculeExterne([
-                'vehicule_categorie' => 'interne',
+            [$this->ligneVehicule([
                 'vehicule_site' => '',
                 'proprietaire_nom' => '', 'proprietaire_prenom' => '', 'proprietaire_telephone' => '', 'proprietaire_pays' => '',
             ])],
@@ -200,9 +198,19 @@ class ImportFlotteTest extends TestCase
         $this->assertSame(1, $import->nb_groupes_erreur);
     }
 
+    public function test_analyse_flags_error_for_vehicule_sans_aucun_usage(): void
+    {
+        $import = $this->importer(
+            [$this->ligneVehicule(['vehicule_livraison_vente' => 'non', 'vehicule_livraison_logistique' => 'non'])],
+            [$this->ligneLivreurChauffeur()]
+        );
+
+        $this->assertSame(1, $import->nb_groupes_erreur);
+    }
+
     public function test_analyse_accepts_new_vehicule_without_any_livreur(): void
     {
-        $import = $this->importer([$this->ligneVehiculeExterne()], []);
+        $import = $this->importer([$this->ligneVehicule()], []);
 
         $this->assertSame('analyse', $import->statut->value);
         $this->assertSame(1, $import->nb_groupes_valides);
@@ -225,8 +233,8 @@ class ImportFlotteTest extends TestCase
         // sur la contrainte d'unicité en base.
         $import = $this->importer(
             [
-                $this->ligneVehiculeExterne(['proprietaire_telephone' => '622000001']),
-                $this->ligneVehiculeExterne(['proprietaire_telephone' => '622000002']),
+                $this->ligneVehicule(['proprietaire_telephone' => '622000001']),
+                $this->ligneVehicule(['proprietaire_telephone' => '622000002']),
             ],
             []
         );
@@ -251,8 +259,8 @@ class ImportFlotteTest extends TestCase
         // d'unicité (telephone, organization_id) de la table livreurs.
         $import = $this->importer(
             [
-                $this->ligneVehiculeExterne(['vehicule_immatriculation' => 'RC-1111-A', 'proprietaire_telephone' => '622000001']),
-                $this->ligneVehiculeExterne(['vehicule_immatriculation' => 'RC-2222-B', 'proprietaire_telephone' => '622000002']),
+                $this->ligneVehicule(['vehicule_immatriculation' => 'RC-1111-A', 'proprietaire_telephone' => '622000001']),
+                $this->ligneVehicule(['vehicule_immatriculation' => 'RC-2222-B', 'proprietaire_telephone' => '622000002']),
             ],
             [
                 $this->ligneLivreurChauffeur(['vehicule_immatriculation' => 'RC-1111-A']),
@@ -293,7 +301,8 @@ class ImportFlotteTest extends TestCase
         $proprietaire = Proprietaire::where('organization_id', $this->org->id)->where('telephone', '+224622000001')->firstOrFail();
         $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
         $this->assertSame($proprietaire->id, $vehicule->proprietaire_id);
-        $this->assertSame('externe', $vehicule->categorie);
+        $this->assertTrue($vehicule->livraison_vente);
+        $this->assertFalse($vehicule->livraison_logistique);
         $this->assertNotNull($import->termine_le);
 
         // Équipe créée à l'état "brouillon" : commission/montants à 0, à
@@ -354,20 +363,18 @@ class ImportFlotteTest extends TestCase
         $this->assertStringContainsString('Capacité sachets invalide', $import->rapport['groupes'][0]['erreurs'][0]);
     }
 
-    public function test_confirm_vehicule_interne_recoit_proprietaire_par_defaut(): void
+    public function test_confirm_vehicule_sans_proprietaire_saisi_recoit_proprietaire_par_defaut(): void
     {
-        // Cf. ImportFlotteExecutor::defaultProprietaireInterneId() : un
-        // véhicule interne importé reçoit la fiche Proprietaire "Moussa
-        // SIDIBE" (téléphone +224622602693) comme propriétaire par défaut,
-        // au lieu de rester sans propriétaire.
+        // Cf. Proprietaire::interneParDefautId() : un véhicule importé sans propriétaire
+        // renseigné reçoit la fiche Proprietaire "Moussa SIDIBE" (téléphone
+        // +224622602693) par défaut, au lieu de rester sans propriétaire.
         $defaut = Proprietaire::factory()->create([
             'organization_id' => $this->org->id,
             'telephone' => '+224622602693',
         ]);
 
         $import = $this->importer(
-            [$this->ligneVehiculeExterne([
-                'vehicule_categorie' => 'interne',
+            [$this->ligneVehicule([
                 'proprietaire_nom' => '', 'proprietaire_prenom' => '', 'proprietaire_telephone' => '', 'proprietaire_pays' => '',
             ])],
             [$this->ligneLivreurChauffeur()]
@@ -378,7 +385,6 @@ class ImportFlotteTest extends TestCase
             ->assertRedirect(route('imports-flotte.show', $import));
 
         $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
-        $this->assertSame('interne', $vehicule->categorie);
         $this->assertSame($defaut->id, $vehicule->proprietaire_id);
     }
 
@@ -403,7 +409,7 @@ class ImportFlotteTest extends TestCase
         // Deux convoyeurs sans nom sur le même véhicule → numérotés par position,
         // pas tous "Convoyeur-1".
         $import = $this->importer(
-            [$this->ligneVehiculeExterne()],
+            [$this->ligneVehicule()],
             [
                 $this->ligneLivreurChauffeur(),
                 $this->ligneLivreurChauffeur([
@@ -434,7 +440,6 @@ class ImportFlotteTest extends TestCase
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'immatriculation' => 'RC-1234-A',
-            'categorie' => 'externe',
             'type_vehicule_id' => $this->type->id,
             'is_active' => true,
         ]);
@@ -450,7 +455,7 @@ class ImportFlotteTest extends TestCase
         // La création du véhicule et celle de son équipe sont dissociées :
         // sans aucun livreur dans le fichier, aucune équipe (même brouillon)
         // ne doit être créée.
-        $import = $this->importer([$this->ligneVehiculeExterne()], []);
+        $import = $this->importer([$this->ligneVehicule()], []);
         $this->assertNull($import->rapport['groupes'][0]['equipe']);
 
         $this->actingAs($this->user)
@@ -473,8 +478,8 @@ class ImportFlotteTest extends TestCase
     {
         $import = $this->importer(
             [
-                $this->ligneVehiculeExterne(['vehicule_immatriculation' => 'RC-1111-A', 'proprietaire_telephone' => '622000001']),
-                $this->ligneVehiculeExterne(['vehicule_immatriculation' => 'RC-2222-B', 'proprietaire_telephone' => '622000002']),
+                $this->ligneVehicule(['vehicule_immatriculation' => 'RC-1111-A', 'proprietaire_telephone' => '622000001']),
+                $this->ligneVehicule(['vehicule_immatriculation' => 'RC-2222-B', 'proprietaire_telephone' => '622000002']),
             ],
             []
         );
@@ -496,11 +501,10 @@ class ImportFlotteTest extends TestCase
         Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'immatriculation' => 'RC-1234-A',
-            'categorie' => 'externe',
             'type_vehicule_id' => $this->type->id,
         ]);
 
-        $import = $this->importer([$this->ligneVehiculeExterne()], []);
+        $import = $this->importer([$this->ligneVehicule()], []);
         $this->assertNull($import->rapport['groupes'][0]['equipe']);
 
         $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
@@ -518,9 +522,9 @@ class ImportFlotteTest extends TestCase
         // Seul ce dernier groupe compte comme "équipe à créer".
         $import = $this->importer(
             [
-                $this->ligneVehiculeExterne(['vehicule_immatriculation' => 'RC-1111-A', 'proprietaire_telephone' => '622000001']),
-                $this->ligneVehiculeExterne(['vehicule_immatriculation' => 'RC-2222-B', 'proprietaire_telephone' => '622000002']),
-                $this->ligneVehiculeExterne(['vehicule_immatriculation' => 'RC-3333-C', 'proprietaire_telephone' => '622000003']),
+                $this->ligneVehicule(['vehicule_immatriculation' => 'RC-1111-A', 'proprietaire_telephone' => '622000001']),
+                $this->ligneVehicule(['vehicule_immatriculation' => 'RC-2222-B', 'proprietaire_telephone' => '622000002']),
+                $this->ligneVehicule(['vehicule_immatriculation' => 'RC-3333-C', 'proprietaire_telephone' => '622000003']),
             ],
             [$this->ligneLivreurChauffeur(['vehicule_immatriculation' => 'RC-3333-C'])]
         );
@@ -548,7 +552,6 @@ class ImportFlotteTest extends TestCase
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'immatriculation' => 'RC-1234-A',
-            'categorie' => 'externe',
             'type_vehicule_id' => $this->type->id,
         ]);
         $equipe = EquipeLivraison::create([
@@ -559,7 +562,7 @@ class ImportFlotteTest extends TestCase
         $chauffeur = Livreur::factory()->create(['organization_id' => $this->org->id, 'telephone' => '+224623000001']);
         $equipe->membres()->create(['livreur_id' => $chauffeur->id, 'role' => 'chauffeur', 'montant_par_pack' => 3000]);
 
-        $import = $this->importer([$this->ligneVehiculeExterne()], []);
+        $import = $this->importer([$this->ligneVehicule()], []);
         $this->assertSame(0, $import->nb_groupes_erreur);
 
         $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
@@ -575,7 +578,7 @@ class ImportFlotteTest extends TestCase
     public function test_confirm_with_two_livreurs_creates_both_members(): void
     {
         $import = $this->importer(
-            [$this->ligneVehiculeExterne()],
+            [$this->ligneVehicule()],
             [
                 $this->ligneLivreurChauffeur(),
                 $this->ligneLivreurChauffeur([
@@ -606,8 +609,8 @@ class ImportFlotteTest extends TestCase
         // qu'aucun des deux ne soit encore en base avant l'import.
         $import = $this->importer(
             [
-                $this->ligneVehiculeExterne(['vehicule_immatriculation' => 'RC-1111-A']),
-                $this->ligneVehiculeExterne(['vehicule_immatriculation' => 'RC-2222-B']),
+                $this->ligneVehicule(['vehicule_immatriculation' => 'RC-1111-A']),
+                $this->ligneVehicule(['vehicule_immatriculation' => 'RC-2222-B']),
             ],
             []
         );
@@ -656,7 +659,6 @@ class ImportFlotteTest extends TestCase
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'immatriculation' => 'RC-1234-A',
-            'categorie' => 'externe',
             'proprietaire_id' => $proprietaire->id,
             'type_vehicule_id' => $this->type->id,
         ]);
@@ -677,7 +679,7 @@ class ImportFlotteTest extends TestCase
         // Le véhicule (déjà existant) doit quand même figurer dans la feuille
         // "vehicules" pour servir d'ancrage — seul le convoyeur est nouveau.
         $import = $this->importer(
-            [$this->ligneVehiculeExterne()],
+            [$this->ligneVehicule()],
             [$this->ligneLivreurChauffeur([
                 'livreur_nom' => 'Soumah', 'livreur_prenom' => 'Fatoumata',
                 'livreur_telephone' => '623000002', 'livreur_role' => 'convoyeur',
@@ -762,8 +764,8 @@ class ImportFlotteTest extends TestCase
     {
         $import = $this->importer(
             [
-                $this->ligneVehiculeExterne(),
-                $this->ligneVehiculeExterne(['vehicule_immatriculation' => 'RC-9999-Z', 'proprietaire_telephone' => '622000099']),
+                $this->ligneVehicule(),
+                $this->ligneVehicule(['vehicule_immatriculation' => 'RC-9999-Z', 'proprietaire_telephone' => '622000099']),
             ],
             [
                 $this->ligneLivreurChauffeur(),
@@ -958,8 +960,7 @@ class ImportFlotteTest extends TestCase
     public function test_analyse_accepts_site_with_different_case(): void
     {
         $import = $this->importer(
-            [$this->ligneVehiculeExterne([
-                'vehicule_categorie' => 'interne',
+            [$this->ligneVehicule([
                 'vehicule_site' => 'MATOTO',
                 'proprietaire_nom' => '', 'proprietaire_prenom' => '', 'proprietaire_telephone' => '', 'proprietaire_pays' => '',
             ])],
@@ -973,8 +974,7 @@ class ImportFlotteTest extends TestCase
     {
         // Site créé dans setUp() : premier site de l'organisation, code auto "001".
         $import = $this->importer(
-            [$this->ligneVehiculeExterne([
-                'vehicule_categorie' => 'interne',
+            [$this->ligneVehicule([
                 'vehicule_site' => '1',
                 'proprietaire_nom' => '', 'proprietaire_prenom' => '', 'proprietaire_telephone' => '', 'proprietaire_pays' => '',
             ])],
@@ -987,7 +987,7 @@ class ImportFlotteTest extends TestCase
     public function test_analyse_accepts_various_true_boolean_spellings(): void
     {
         foreach (['Oui', 'OUI', '1', 'true', 'x'] as $valeur) {
-            $import = $this->importerVehiculeEtChauffeur(['vehicule_pris_en_charge_par_usine' => $valeur]);
+            $import = $this->importerVehiculeEtChauffeur(['vehicule_livraison_logistique' => $valeur]);
             $this->assertSame(0, $import->nb_groupes_erreur, "valeur testée : {$valeur}");
         }
     }
@@ -995,7 +995,7 @@ class ImportFlotteTest extends TestCase
     public function test_analyse_accepts_various_false_boolean_spellings(): void
     {
         foreach (['Non', 'NON', '0', 'false'] as $valeur) {
-            $import = $this->importerVehiculeEtChauffeur(['vehicule_pris_en_charge_par_usine' => $valeur]);
+            $import = $this->importerVehiculeEtChauffeur(['vehicule_livraison_logistique' => $valeur]);
             $this->assertSame(0, $import->nb_groupes_erreur, "valeur testée : {$valeur}");
         }
     }

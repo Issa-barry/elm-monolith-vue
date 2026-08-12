@@ -14,8 +14,15 @@ return new class extends Migration
             $table->foreignUlid('livreur_id')->constrained('livreurs')->restrictOnDelete();
             $table->string('role', 20)->default('chauffeur');
             $table->decimal('montant_par_pack', 10, 2)->default(0);
-            // Taux dérivé (calculé depuis montant_par_pack à la sauvegarde)
+            // Taux dérivé (calculé depuis montant_par_pack à la sauvegarde) — barème VENTE.
             $table->decimal('taux_commission', 5, 2)->default(0);
+            // Barème LOGISTIQUE distinct, optionnel — nul tant que non configuré explicitement,
+            // auquel cas CommissionLogistiqueService retombe sur taux_commission (barème vente)
+            // pour ne rien casser sur les équipes existantes qui n'ont jamais eu besoin de le
+            // distinguer. Cf. analyse "véhicules/partenaires/commissions" : vente et logistique
+            // sont deux opérations distinctes qui peuvent légitimement partager des taux
+            // différents pour un même livreur.
+            $table->decimal('taux_commission_logistique', 5, 2)->nullable();
             $table->unsignedSmallInteger('ordre')->default(0);
             $table->timestamps();
 
