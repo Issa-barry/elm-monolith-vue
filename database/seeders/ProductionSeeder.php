@@ -23,7 +23,8 @@ class ProductionSeeder extends Seeder
     public function run(): void
     {
         $this->call([
-            // Organisation "elm", permissions, rôles (comptes de démo auto-skippés en prod)
+            // Organisation "elm", permissions, rôles — aucun compte de démo (ce seeder n'appelle
+            // jamais ElmDemoAccountsSeeder, quelle que soit la valeur d'APP_ENV).
             RolesAndPermissionsSeeder::class,
 
             // ── Référentiels ──────────────────────────────────────────────────

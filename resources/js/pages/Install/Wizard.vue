@@ -113,7 +113,21 @@ function previousStep() {
 }
 
 function submit() {
-    form.post('/install', { preserveScroll: true });
+    form.post('/install', {
+        preserveScroll: true,
+        // Les erreurs de admin.* / catalogue.* sont validées côté serveur au moment du submit
+        // final (étape 4) mais leur <InputError> vit dans le markup des étapes 1-3, qui ne sont
+        // pas rendues à ce moment-là — sans ce renvoi, l'erreur reste invisible et le bouton
+        // "Terminer" semble ne rien faire.
+        onError: (errors) => {
+            const firstKey = Object.keys(errors)[0];
+            if (!firstKey) return;
+            if (firstKey.startsWith('admin.')) currentStep.value = 2;
+            else if (firstKey.startsWith('catalogue.')) currentStep.value = 3;
+            else if (firstKey.startsWith('organisation.'))
+                currentStep.value = 1;
+        },
+    });
 }
 </script>
 
