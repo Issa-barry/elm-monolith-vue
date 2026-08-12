@@ -266,5 +266,4 @@ class RolesAndPermissionsSeeder extends Seeder
             'rh-paie.read',
         ]);
     }
-
 }
