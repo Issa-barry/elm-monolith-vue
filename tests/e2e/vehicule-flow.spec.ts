@@ -15,7 +15,7 @@ test.setTimeout(120_000);
 
 registerCleanup('/backoffice/vehicules', E2E_VEHICULE_IMMATRICULATION_PREFIX);
 
-test('login + create vehicule interne via site + verify in site tab + verify global list + update', async ({
+test('login + create vehicule via site + verify in site tab + verify global list + update', async ({
     page,
 }) => {
     const unique = `${Date.now()}-${randomDigits(3)}`;
@@ -32,30 +32,19 @@ test('login + create vehicule interne via site + verify in site tab + verify glo
     await page.getByTestId('add-site-vehicle-btn').click();
     await page.waitForURL(/\/vehicules\/create\?site_id=/, { timeout: 15_000 });
 
-    // Step 3: The submit button is initially disabled (nom + immatriculation + type missing)
+    // Step 3: The submit button is initially disabled (nom + immatriculation + type + usage missing)
     const submitBtn = page.getByTestId('vehicle-form-submit');
     await expect(submitBtn).toBeDisabled();
 
-    // Step 4: Fill the form — categorie is no longer locked by the site context,
-    // select "Interne" explicitly, then a Type.
+    // Step 4: Fill the form — plus de champ "catégorie" (interne/externe) : tout
+    // véhicule se rattache à un site et, optionnellement, à un propriétaire
+    // (défaut : organisation). Au moins un "usage" (vente/logistique) est requis.
     await page.locator('#nom_vehicule').fill(nomVehicule);
     await page.locator('#immatriculation').fill(immatriculation);
 
-    await selectOptionFromCombobox(
-        page,
-        page.locator('#categorie'),
-        /interne/i,
-    );
     await selectOptionFromCombobox(page, page.locator('#type_vehicule'));
 
-    // Éligibilité aux commissions : indépendante de la catégorie (contrairement
-    // à "Prise en charge par l'usine", pas d'auto-sélection pour un interne).
-    await page
-        .locator(
-            '#vehicule-form input[type="radio"][name="commission_eligible"]',
-        )
-        .first()
-        .check();
+    await page.getByRole('checkbox', { name: /livraison vente/i }).check();
 
     await expect(submitBtn).toBeEnabled();
     await submitBtn.click();
@@ -118,9 +107,11 @@ test('login + create vehicule interne via site + verify in site tab + verify glo
     await expect(modifiedRow).toBeVisible({ timeout: 10_000 });
 });
 
-test('externe — radio pris_en_charge_par_usine non sélectionné bloque le formulaire', async ({
+test('aucun usage coché ne bloque le formulaire, même avec le reste rempli', async ({
     page,
 }) => {
+    const unique = `${Date.now()}-${randomDigits(3)}`;
+
     await login(page);
 
     await page.goto('/backoffice/vehicules/create');
@@ -131,55 +122,65 @@ test('externe — radio pris_en_charge_par_usine non sélectionné bloque le for
         .first();
     await expect(submitBtn).toBeDisabled();
 
-    // Select "externe" category — radio buttons appear
-    const comboboxes = page.locator('#vehicule-form').getByRole('combobox');
-    await selectOptionFromCombobox(page, comboboxes.first(), /externe/i);
-
-    // Button still disabled (no Oui/Non, no proprietaire, no type)
-    await expect(submitBtn).toBeDisabled();
-
-    // Select "Non" radio
     await page
-        .locator(
-            '#vehicule-form input[type="radio"][name="pris_en_charge_par_usine"]',
-        )
-        .nth(1)
-        .check();
+        .locator('#nom_vehicule')
+        .fill(`E2E Vehicule Sans Usage ${unique}`);
+    await page
+        .locator('#immatriculation')
+        .fill(`${E2E_VEHICULE_IMMATRICULATION_PREFIX}U-${unique.slice(-5)}`);
+    await selectOptionFromCombobox(page, page.locator('#type_vehicule'));
+    if (
+        await page
+            .locator('#site_id')
+            .isVisible()
+            .catch(() => false)
+    ) {
+        await selectOptionFromCombobox(page, page.locator('#site_id'));
+    }
 
-    await expect(
-        page
-            .locator(
-                '#vehicule-form input[type="radio"][name="pris_en_charge_par_usine"]',
-            )
-            .nth(1),
-    ).toBeChecked();
+    // Nom + immatriculation + type (+ site) remplis, mais aucun usage coché :
+    // le formulaire reste bloqué (cf. VehiculeForm.vue::canSubmit -> auMoinsUnUsage).
+    await expect(submitBtn).toBeDisabled();
 });
 
-test('externe — radio pris_en_charge_par_usine Oui sélectionnable', async ({
+test('cocher un seul usage (vente ou logistique) suffit à activer le formulaire', async ({
     page,
 }) => {
+    const unique = `${Date.now()}-${randomDigits(3)}`;
+
     await login(page);
 
     await page.goto('/backoffice/vehicules/create');
     await expect(page).toHaveURL(/\/vehicules\/create$/);
 
-    const comboboxes = page.locator('#vehicule-form').getByRole('combobox');
-    await selectOptionFromCombobox(page, comboboxes.first(), /externe/i);
+    const submitBtn = page
+        .locator('#vehicule-form button[type="submit"]:visible')
+        .first();
 
     await page
-        .locator(
-            '#vehicule-form input[type="radio"][name="pris_en_charge_par_usine"]',
-        )
-        .first()
-        .check();
+        .locator('#nom_vehicule')
+        .fill(`E2E Vehicule Logistique ${unique}`);
+    await page
+        .locator('#immatriculation')
+        .fill(`${E2E_VEHICULE_IMMATRICULATION_PREFIX}L-${unique.slice(-5)}`);
+    await selectOptionFromCombobox(page, page.locator('#type_vehicule'));
+    if (
+        await page
+            .locator('#site_id')
+            .isVisible()
+            .catch(() => false)
+    ) {
+        await selectOptionFromCombobox(page, page.locator('#site_id'));
+    }
+    await expect(submitBtn).toBeDisabled();
 
-    await expect(
-        page
-            .locator(
-                '#vehicule-form input[type="radio"][name="pris_en_charge_par_usine"]',
-            )
-            .first(),
-    ).toBeChecked();
+    // "Logistique / transfert" seul (sans "Livraison vente") suffit déjà.
+    const logistiqueCheckbox = page.getByRole('checkbox', {
+        name: /logistique.*transfert/i,
+    });
+    await logistiqueCheckbox.check();
+    await expect(logistiqueCheckbox).toBeChecked();
+    await expect(submitBtn).toBeEnabled();
 });
 
 test('show — vehicule externe : bouton "Voir la fiche propriétaire" visible, affiche nom/téléphone et navigue', async ({
@@ -255,43 +256,32 @@ test('show — vehicule externe : bouton "Voir la fiche propriétaire" visible, 
     await expect(page).toHaveURL(/\/proprietaires\/[a-z0-9]+$/);
 });
 
-test("show — vehicule interne : propriétaire par défaut de l'organisation affiché", async ({
+test("show — véhicule créé sans propriétaire choisi : propriétaire par défaut de l'organisation affiché", async ({
     page,
 }) => {
     const unique = `${Date.now()}-${randomDigits(3)}`;
-    const nomVehicule = `E2E VH Interne ${unique}`;
-    const immatriculation = `${E2E_VEHICULE_IMMATRICULATION_PREFIX}I-${unique.slice(-5)}`;
+    const nomVehicule = `E2E VH Defaut ${unique}`;
+    const immatriculation = `${E2E_VEHICULE_IMMATRICULATION_PREFIX}D-${unique.slice(-5)}`;
 
     await login(page);
 
-    // Create an interne vehicule via the site tab
+    // Créé via l'onglet Véhicules d'un site, sans jamais toucher au champ
+    // Propriétaire (facultatif) — il doit être auto-attribué au propriétaire
+    // par défaut de l'organisation (cf. VehiculeController::defaultProprietaireInterneId).
     await navigateToFirstSiteVehiclesTab(page);
     await page.getByTestId('add-site-vehicle-btn').click();
     await page.waitForURL(/\/vehicules\/create\?site_id=/, { timeout: 15_000 });
 
     await page.locator('#nom_vehicule').fill(nomVehicule);
     await page.locator('#immatriculation').fill(immatriculation);
-
-    await selectOptionFromCombobox(
-        page,
-        page.locator('#categorie'),
-        /interne/i,
-    );
     await selectOptionFromCombobox(page, page.locator('#type_vehicule'));
-
-    await page
-        .locator(
-            '#vehicule-form input[type="radio"][name="commission_eligible"]',
-        )
-        .first()
-        .check();
+    await page.getByRole('checkbox', { name: /livraison vente/i }).check();
 
     await page.getByTestId('vehicle-form-submit').click();
     await page.waitForURL(/\/vehicules\/[a-z0-9]+$/, { timeout: 15_000 });
 
-    // Un véhicule interne se voit désormais attribuer le propriétaire par
-    // défaut de l'organisation (voir VehiculeController::defaultProprietaireInterneId)
-    // — le bouton doit donc être visible et pointer vers sa fiche.
+    // Le bouton doit être visible et pointer vers la fiche du propriétaire
+    // par défaut de l'organisation.
     await expect(page.getByTestId('voir-fiche-proprietaire-btn')).toBeVisible({
         timeout: 5_000,
     });
