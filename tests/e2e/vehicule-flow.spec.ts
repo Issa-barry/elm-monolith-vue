@@ -107,7 +107,7 @@ test('login + create vehicule via site + verify in site tab + verify global list
     await expect(modifiedRow).toBeVisible({ timeout: 10_000 });
 });
 
-test('aucun usage coché ne bloque le formulaire, même avec le reste rempli', async ({
+test('décocher tous les usages bloque le formulaire, même avec le reste rempli', async ({
     page,
 }) => {
     const unique = `${Date.now()}-${randomDigits(3)}`;
@@ -138,8 +138,13 @@ test('aucun usage coché ne bloque le formulaire, même avec le reste rempli', a
         await selectOptionFromCombobox(page, page.locator('#site_id'));
     }
 
-    // Nom + immatriculation + type (+ site) remplis, mais aucun usage coché :
-    // le formulaire reste bloqué (cf. VehiculeForm.vue::canSubmit -> auMoinsUnUsage).
+    // "Livraison vente" est cochée par défaut (cf. Vehicules/Create.vue) : le
+    // formulaire est déjà valide une fois nom/immatriculation/type(+site) remplis.
+    await expect(submitBtn).toBeEnabled();
+
+    // La décocher sans rien cocher d'autre doit rebloquer le formulaire
+    // (cf. VehiculeForm.vue::canSubmit -> auMoinsUnUsage).
+    await page.getByRole('checkbox', { name: /livraison vente/i }).uncheck();
     await expect(submitBtn).toBeDisabled();
 });
 
@@ -172,6 +177,10 @@ test('cocher un seul usage (vente ou logistique) suffit à activer le formulaire
     ) {
         await selectOptionFromCombobox(page, page.locator('#site_id'));
     }
+
+    // Repartir d'un état sans aucun usage coché ("Livraison vente" décochée,
+    // elle est cochée par défaut — cf. Vehicules/Create.vue).
+    await page.getByRole('checkbox', { name: /livraison vente/i }).uncheck();
     await expect(submitBtn).toBeDisabled();
 
     // "Logistique / transfert" seul (sans "Livraison vente") suffit déjà.

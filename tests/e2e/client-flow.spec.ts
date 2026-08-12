@@ -49,7 +49,7 @@ async function createClientInApp(
     await page.waitForLoadState('networkidle');
 }
 
-test('create client -> redirected to edit page with nom_complet preserved', async ({
+test('create client -> redirected to edit page with nom_complet title-cased', async ({
     page,
 }) => {
     const uid = `${Date.now()}`.slice(-6);
@@ -65,9 +65,16 @@ test('create client -> redirected to edit page with nom_complet preserved', asyn
     });
 
     // Un seul champ "nom_complet" désormais (plus de split prenom/nom, cf.
-    // ClientForm.vue) — aucune transformation de casse, la valeur est
-    // enregistrée et réaffichée telle que saisie.
-    await expect(page.locator('#nom_complet')).toHaveValue(nomComplet);
+    // ClientForm.vue), mais toujours normalisé en Title Case côté serveur
+    // (PhoneHandlerTrait::ucTitle(), partagé avec Prestataire/Proprietaire) —
+    // jamais enregistré tel quel.
+    const expectedNomComplet = nomComplet
+        .toLowerCase()
+        .replaceAll(
+            /(^|[^a-z])([a-z])/g,
+            (_, sep, char) => sep + char.toUpperCase(),
+        );
+    await expect(page.locator('#nom_complet')).toHaveValue(expectedNomComplet);
 });
 
 test('create client with Guinea and empty ville -> defaults to Conakry', async ({
