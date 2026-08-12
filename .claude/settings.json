@@ -339,7 +339,8 @@
       "Bash(sed -i 's/'\\\\''type'\\\\'' => '\\\\''fabricable'\\\\'',/'\\\\''produit_type_id'\\\\'' => $this->typeId\\('\\\\''fabricable'\\\\''\\),/g' tests/Feature/Api/ProduitApiTest.php)",
       "Bash(sed -i 's/'\\\\''type'\\\\'' => '\\\\''achat_vente'\\\\'',/'\\\\''produit_type_id'\\\\'' => $this->typeId\\('\\\\''achat_vente'\\\\''\\),/g' tests/Feature/Api/ProduitApiTest.php)",
       "Bash(grep -oP \"Tests\\\\\\\\\\\\\\\\Feature\\\\\\\\\\\\\\\\[A-Za-z0-9_\\\\\\\\\\\\\\\\]+\\(?= >\\)\" \"C:\\\\Users\\\\issab\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--laragon-www-eau-la-maman-elm-monolithe\\\\2bac543c-2ee4-4644-b9c1-83c0f2d7157f\\\\tasks\\\\bd22si17x.output\")",
-      "Bash(grep -n \"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\[A-Z][A-Za-z]*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\" app/Http/Controllers/VehiculeController.php)"
+      "Bash(grep -n \"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\[A-Z][A-Za-z]*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\" app/Http/Controllers/VehiculeController.php)",
+      "Bash(curl -sL \"https://api.github.com/repos/Issa-barry/elm-monolith-vue/actions/jobs/93929850123/logs\" -o /c/tmp/phpunit_log.txt -w \"HTTP %{http_code}\\\\n\")"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64",

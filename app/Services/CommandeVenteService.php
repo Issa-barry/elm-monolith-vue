@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\ClientType;
 use App\Enums\ModeTarification;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutCommission;
@@ -428,16 +429,20 @@ class CommandeVenteService
         }
     }
 
-    /** BROUILLON → A_CHARGER : au moins une ligne + véhicule requis. */
+    /**
+     * BROUILLON → A_CHARGER : au moins une ligne requise. Le véhicule n'est obligatoire que
+     * hors commande partenaire — un client PARTENAIRE charge sa propre commande sans véhicule
+     * de flotte (facturée à prix usine, cf. VehiculeCommandeContextResolver).
+     */
     private static function checkConfirmer(CommandeVente $commande, array &$errors): void
     {
-        $commande->loadMissing('lignes');
+        $commande->loadMissing('lignes', 'client');
 
         if ($commande->lignes->isEmpty()) {
             $errors[] = 'La commande doit contenir au moins une ligne produit.';
         }
 
-        if (! $commande->vehicule_id) {
+        if (! $commande->vehicule_id && $commande->client?->type !== ClientType::PARTENAIRE) {
             $errors[] = 'Un véhicule doit être assigné avant de confirmer la commande.';
         }
     }
