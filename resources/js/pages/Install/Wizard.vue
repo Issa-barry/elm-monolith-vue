@@ -124,7 +124,8 @@ function submit() {
             if (!firstKey) return;
             if (firstKey.startsWith('admin.')) currentStep.value = 2;
             else if (firstKey.startsWith('catalogue.')) currentStep.value = 3;
-            else if (firstKey.startsWith('organisation.')) currentStep.value = 1;
+            else if (firstKey.startsWith('organisation.'))
+                currentStep.value = 1;
         },
     });
 }
