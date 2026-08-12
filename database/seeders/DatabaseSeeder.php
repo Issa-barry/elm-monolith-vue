@@ -24,6 +24,7 @@ class DatabaseSeeder extends Seeder
             // catégories (catalogue à 7 produits, cf. ProduitsSeeder). Toujours utilisé par
             // Fello Demo via FelloDemoOrganizationSeeder::seedPourOrganisation().
             OptionCatalogueDefaultSeeder::class, // Options système par défaut (Couleur, Taille, Pointure)
+            ProduitTypeDefaultSeeder::class,    // Types de produit par défaut (obligatoire — un produit ne peut exister sans type)
             ProduitsSeeder::class,              // Catalogue produits
             ParametreSeeder::class,             // Paramètres applicatifs
 

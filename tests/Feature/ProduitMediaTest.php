@@ -4,8 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\Parametre;
 use App\Models\Produit;
+use App\Models\ProduitType;
 use App\Services\MediaService;
 use App\Services\ProduitService;
+use Database\Seeders\ProduitTypeDefaultSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -23,6 +25,7 @@ class ProduitMediaTest extends TestCase
         parent::setUp();
         Storage::fake('public');
         $this->initOrgAndUser(['produits.read', 'produits.create', 'produits.update']);
+        ProduitTypeDefaultSeeder::seedPourOrganisation($this->org->id);
     }
 
     private function makeProduit(): Produit
@@ -30,7 +33,7 @@ class ProduitMediaTest extends TestCase
         return app(ProduitService::class)->creer([
             'organization_id' => $this->org->id,
             'nom' => 'Produit avec photos',
-            'type' => 'service',
+            'produit_type_id' => ProduitType::where('organization_id', $this->org->id)->where('code', 'service')->value('id'),
             'statut' => 'actif',
         ]);
     }
@@ -143,7 +146,7 @@ class ProduitMediaTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.store'), [
                 'nom' => 'Produit avec galerie',
-                'type' => 'service',
+                'produit_type_id' => ProduitType::where('organization_id', $this->org->id)->where('code', 'service')->value('id'),
                 'statut' => 'actif',
                 'images' => [UploadedFile::fake()->image('a.jpg'), UploadedFile::fake()->image('b.jpg')],
             ]);
@@ -159,7 +162,7 @@ class ProduitMediaTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.store'), [
                 'nom' => 'Trop de photos',
-                'type' => 'service',
+                'produit_type_id' => ProduitType::where('organization_id', $this->org->id)->where('code', 'service')->value('id'),
                 'statut' => 'actif',
                 'images' => [UploadedFile::fake()->image('a.jpg'), UploadedFile::fake()->image('b.jpg')],
             ])
@@ -179,7 +182,7 @@ class ProduitMediaTest extends TestCase
             ->post(route('produits.update', $produit), [
                 '_method' => 'PUT',
                 'nom' => $produit->nom,
-                'type' => $produit->type->value,
+                'produit_type_id' => $produit->produit_type_id,
                 'statut' => $produit->statut->value,
                 'images' => [UploadedFile::fake()->image('a.jpg')],
             ])

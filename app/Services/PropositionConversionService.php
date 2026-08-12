@@ -52,11 +52,13 @@ class PropositionConversionService
                 'modele' => $proposition->modele,
                 'immatriculation' => $immatriculation,
                 'type_vehicule_id' => $typeVehiculeId,
-                'categorie' => 'externe',
                 'capacite_packs' => $proposition->capacite_packs,
                 'proprietaire_id' => $proprietaire->id,
-                'pris_en_charge_par_usine' => false,
-                'commission_eligible' => true,
+                // Une proposition convertie rejoint la flotte gérée pour la vente (elle avait
+                // déjà commission_eligible=true dans l'ancien modèle) — jamais la logistique
+                // par défaut, l'admin l'active explicitement si besoin.
+                'livraison_vente' => true,
+                'livraison_logistique' => false,
                 'photo_path' => $proposition->photo_path,
                 'is_active' => false,
             ]);

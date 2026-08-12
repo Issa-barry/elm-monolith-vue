@@ -15,16 +15,21 @@ return new class extends Migration
             $table->foreignUlid('site_id')->nullable()->constrained('sites')->nullOnDelete();
             $table->foreignUlid('vehicule_id')->nullable()->constrained('vehicules')->nullOnDelete();
             $table->foreignUlid('client_id')->nullable()->constrained('clients')->nullOnDelete();
+            // Véhicule de partenaire éventuel (Client::type = PARTENAIRE), toujours facultatif,
+            // jamais un substitut à `vehicule_id` (flotte gérée) — cf. ClientVehicle.
+            $table->foreignUlid('client_vehicule_id')->nullable()->constrained('client_vehicules')->nullOnDelete();
             $table->string('reference', 20)->unique();
             $table->decimal('total_commande', 12, 2)->default(0);
-            // Fige le mode de tarification (prix_vente/prix_usine) applicable à la
-            // commande au moment de sa création : la prise en charge du véhicule par
-            // l'usine peut changer plus tard, sans devoir recalculer rétroactivement
-            // les commandes déjà passées — voir CommandeVenteService.
+            // Fige le mode de tarification (prix_vente/prix_usine) applicable à la commande au
+            // moment de sa création : un véhicule de flotte gérée facture toujours au prix de
+            // vente plein ; un client PARTENAIRE (avec ou sans véhicule) facture à prix usine.
+            // Le type du client peut changer plus tard sans recalculer rétroactivement les
+            // commandes déjà passées — voir VehiculeCommandeContextResolver/CommandeVenteService.
             $table->string('mode_tarification_snapshot', 20)->default('prix_vente');
-            // Fige l'éligibilité aux commissions du véhicule au moment de la
-            // création de la commande, indépendamment du mode de tarification
-            // ci-dessus — voir VehiculeCommandeContextResolver et CommissionGenerator.
+            // Fige l'éligibilité aux commissions au moment de la création de la commande,
+            // indépendamment du mode de tarification ci-dessus — dérivée de
+            // Vehicule::livraison_vente (jamais applicable à une vente partenaire, qui n'a pas
+            // de véhicule de flotte) — voir VehiculeCommandeContextResolver et CommissionGenerator.
             $table->boolean('commission_eligible_snapshot')->default(true);
             $table->string('statut', 30)->default('brouillon');
             $table->timestamp('validated_at')->nullable();

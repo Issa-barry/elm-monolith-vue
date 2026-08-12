@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\Api;
 
+use App\Services\StockStatutService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -13,6 +14,8 @@ class ProduitResource extends JsonResource
             ? $this->variantes->firstWhere('is_default', true) ?? $this->variantes->first()
             : $this->variantePrincipale()->first();
 
+        $type = $this->relationLoaded('produitType') ? $this->produitType : $this->produitType()->first();
+
         return [
             'id' => $this->id,
             'nom' => $this->nom,
@@ -22,9 +25,9 @@ class ProduitResource extends JsonResource
             'fournisseur_nom' => $this->whenLoaded('fournisseur', fn () => $this->fournisseur?->nom_complet),
             'sku' => $variante?->sku,
             'code_barres' => $variante?->code_barres,
-            'type' => $this->type?->value,
-            'type_label' => $this->type?->label(),
-            'type_has_stock' => $this->type?->hasStock() ?? true,
+            'produit_type_id' => $this->produit_type_id,
+            'type_nom' => $type?->nom,
+            'type_gere_stock' => $type?->gere_stock ?? true,
             'statut' => $this->statut?->value,
             'statut_label' => $this->statut?->label(),
             'prix_usine' => $variante?->prix_usine,
@@ -32,12 +35,14 @@ class ProduitResource extends JsonResource
             'prix_achat' => $variante?->prix_achat,
             'cout' => $variante?->cout,
             'qte_stock' => $this->qte_stock,
-            'seuil_alerte_stock' => $variante?->seuil_alerte_stock,
+            'alerte_stock_active' => $this->alerte_stock_active,
+            'seuil_alerte_stock' => $this->seuil_alerte_stock,
+            'seuil_alerte_effectif' => app(StockStatutService::class)->seuilEffectif($this->resource),
             'description' => $this->description,
             'image_url' => $this->image_url,
-            'is_alerte' => $this->is_alerte,
             'in_stock' => $this->in_stock,
             'is_low_stock' => $this->is_low_stock,
+            'is_out_of_stock' => $this->is_out_of_stock,
             'is_used' => $this->is_used,
             'has_variantes' => $this->relationLoaded('variantes') ? $this->variantes->count() > 1 : $this->variantes()->count() > 1,
             'archived_at' => $this->archived_at?->toISOString(),

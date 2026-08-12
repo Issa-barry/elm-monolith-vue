@@ -5,10 +5,12 @@ namespace Tests\Feature;
 use App\Models\DroitAjustementStock;
 use App\Models\Organization;
 use App\Models\Produit;
+use App\Models\ProduitType;
 use App\Models\Site;
 use App\Models\User;
 use App\Models\VarianteStock;
 use App\Services\ProduitService;
+use Database\Seeders\ProduitTypeDefaultSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -29,6 +31,7 @@ class ProduitAjustementScopeTest extends TestCase
         parent::setUp();
 
         $this->org = Organization::factory()->create();
+        ProduitTypeDefaultSeeder::seedPourOrganisation($this->org->id);
 
         $this->site = Site::create([
             'organization_id' => $this->org->id,
@@ -40,10 +43,9 @@ class ProduitAjustementScopeTest extends TestCase
         $this->produit = app(ProduitService::class)->creer([
             'organization_id' => $this->org->id,
             'nom' => 'Pack eau 1.5L',
-            'type' => 'materiel',
+            'produit_type_id' => ProduitType::where('organization_id', $this->org->id)->where('code', 'materiel')->value('id'),
             'statut' => 'actif',
             'prix_achat' => 500,
-            'is_alerte' => false,
         ]);
 
         VarianteStock::create([

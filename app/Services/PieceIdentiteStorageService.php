@@ -61,8 +61,17 @@ class PieceIdentiteStorageService
 
         $disk = Storage::disk(self::DISK);
 
-        if ($disk->exists($directory) && count($disk->allFiles($directory)) === 0) {
+        if (! $disk->exists($directory) || count($disk->allFiles($directory)) > 0) {
+            return;
+        }
+
+        try {
             $disk->deleteDirectory($directory);
+        } catch (\UnexpectedValueException) {
+            // Le dossier a disparu entre la vérification ci-dessus et la suppression
+            // (concurrence filesystem : un autre appel a déjà nettoyé le même dossier
+            // entre-temps) — le résultat souhaité (dossier absent) est déjà atteint,
+            // rien à faire.
         }
     }
 

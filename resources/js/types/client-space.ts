@@ -12,7 +12,8 @@ export interface VehiculeOption {
     nom_vehicule: string;
     immatriculation: string | null;
     type_label: string;
-    categorie?: 'interne' | 'externe' | null;
+    livraison_vente?: boolean;
+    livraison_logistique?: boolean;
     is_active?: boolean;
     capacite_packs: number | null;
     photo_url: string | null;

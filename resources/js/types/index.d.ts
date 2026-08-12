@@ -15,6 +15,7 @@ export type Resource =
     | 'produits'
     | 'categories'
     | 'options'
+    | 'type-produits'
     | 'packings'
     | 'ventes'
     | 'achats'

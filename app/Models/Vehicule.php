@@ -22,12 +22,11 @@ class Vehicule extends Model
         'modele',
         'immatriculation',
         'type_vehicule_id',
-        'categorie',
         'capacite_packs',
         'capacite_bouteilles',
         'proprietaire_id',
-        'pris_en_charge_par_usine',
-        'commission_eligible',
+        'livraison_vente',
+        'livraison_logistique',
         'photo_path',
         'is_active',
     ];
@@ -36,8 +35,8 @@ class Vehicule extends Model
     {
         return [
             'is_active' => 'boolean',
-            'pris_en_charge_par_usine' => 'boolean',
-            'commission_eligible' => 'boolean',
+            'livraison_vente' => 'boolean',
+            'livraison_logistique' => 'boolean',
             'capacite_packs' => 'integer',
             'capacite_bouteilles' => 'integer',
         ];
@@ -97,6 +96,26 @@ class Vehicule extends Model
     public function capacites(): HasMany
     {
         return $this->hasMany(VehiculeCapacite::class);
+    }
+
+    // ── Scopes ────────────────────────────────────────────────────────────────
+
+    /**
+     * Véhicules sélectionnables pour une vente/PDV — remplace l'ancien filtre
+     * `categorie = 'externe'` (cf. CommandeVenteController, PdvController).
+     */
+    public function scopeLivraisonVente($query)
+    {
+        return $query->where('livraison_vente', true);
+    }
+
+    /**
+     * Véhicules sélectionnables pour un transfert logistique — remplace l'ancien filtre
+     * `categorie = 'interne'` (cf. TransfertLogistiqueController).
+     */
+    public function scopeLivraisonLogistique($query)
+    {
+        return $query->where('livraison_logistique', true);
     }
 
     // ── Métier ────────────────────────────────────────────────────────────────

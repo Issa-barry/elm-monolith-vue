@@ -266,7 +266,8 @@ class PropositionVehiculeTest extends TestCase
         $this->assertDatabaseHas('vehicules', [
             'organization_id' => $this->org->id,
             'immatriculation' => 'TV-100-GN',
-            'categorie' => 'externe',
+            'livraison_vente' => true,
+            'livraison_logistique' => false,
             'is_active' => false,
         ]);
 

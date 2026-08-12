@@ -73,4 +73,17 @@ class Proprietaire extends Model
             })
             ->exists();
     }
+
+    /**
+     * Propriétaire par défaut représentant l'organisation elle-même (voir
+     * database/seeders/ProprietairesSeeder.php) — assigné automatiquement à un véhicule quand
+     * aucun propriétaire tiers n'est explicitement choisi. Centralise ce qui était dupliqué
+     * entre VehiculeController et EquipeLivraisonController.
+     */
+    public static function interneParDefautId(string $organizationId): ?string
+    {
+        return static::where('organization_id', $organizationId)
+            ->where('telephone', '+224622602693')
+            ->value('id');
+    }
 }

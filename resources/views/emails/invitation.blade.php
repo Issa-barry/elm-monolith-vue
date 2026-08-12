@@ -37,8 +37,15 @@
                     <tr>
                         <td style="padding:32px 40px;">
 
+                            @php
+                                $typeLabel = $invitation->site->type_label;
+                                $startsWithVowel = preg_match('/^[aeiouyàâéèêëîïôöûü]/i', $typeLabel);
+                                $articleLe = $startsWithVowel ? "l'" : 'le ';
+                                $articleDu = $startsWithVowel ? "de l'" : 'du ';
+                            @endphp
+
                             <h1 style="margin:0 0 20px;font-size:20px;font-weight:700;color:#111827;line-height:1.3;">
-                                Invitation à rejoindre le {{ $invitation->site->type_label }} {{ $invitation->site->nom }}
+                                Invitation à rejoindre {{ $articleLe }}{{ $typeLabel }} {{ $invitation->site->nom }}
                             </h1>
 
                             <p style="margin:0 0 12px;font-size:15px;color:#374151;line-height:1.6;">
@@ -49,7 +56,7 @@
                                 Vous avez été invité(e) à rejoindre la plateforme
                                 <strong>{{ config('app.name') }}</strong>
                                 en tant que <strong>{{ ucfirst($invitation->role) }}</strong>
-                                du {{ $invitation->site->type_label }} <strong>{{ $invitation->site->nom }}</strong>.
+                                {{ $articleDu }}{{ $typeLabel }} <strong>{{ $invitation->site->nom }}</strong>.
                             </p>
 
                             <p style="margin:0 0 28px;font-size:15px;color:#374151;line-height:1.6;">

@@ -208,7 +208,6 @@ class TypeVehiculeTest extends TestCase
             'organization_id' => $this->org->id,
             'type_vehicule_id' => $type->id,
             'proprietaire_id' => $proprietaire->id,
-            'categorie' => 'externe',
         ]);
 
         $this->actingAs($this->user)

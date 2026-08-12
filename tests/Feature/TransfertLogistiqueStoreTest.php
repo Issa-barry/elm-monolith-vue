@@ -61,11 +61,12 @@ class TransfertLogistiqueStoreTest extends TestCase
         ]);
     }
 
-    private function makeVehicule(Organization $org, string $categorie = 'interne'): Vehicule
+    private function makeVehicule(Organization $org, bool $livraisonLogistique = true): Vehicule
     {
         return Vehicule::factory()->create([
             'organization_id' => $org->id,
-            'categorie' => $categorie,
+            'livraison_vente' => ! $livraisonLogistique,
+            'livraison_logistique' => $livraisonLogistique,
             'is_active' => true,
         ]);
     }
@@ -179,12 +180,12 @@ class TransfertLogistiqueStoreTest extends TestCase
         ]);
     }
 
-    public function test_store_refuse_vehicule_externe(): void
+    public function test_store_refuse_vehicule_sans_livraison_logistique(): void
     {
         $org = $this->makeOrg();
         $siteA = $this->makeSite($org, 'Site A');
         $siteB = $this->makeSite($org, 'Site B');
-        $vehicule = $this->makeVehicule($org, 'externe');
+        $vehicule = $this->makeVehicule($org, livraisonLogistique: false);
         $produit = $this->makeProduit($org);
         $user = $this->makeUser($org, $siteA);
 

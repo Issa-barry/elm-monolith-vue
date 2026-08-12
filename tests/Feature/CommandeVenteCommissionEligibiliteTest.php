@@ -13,19 +13,17 @@ use App\Models\Site;
 use App\Models\Vehicule;
 use App\Services\CommissionGenerator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 /**
- * pris_en_charge_par_usine (mode de tarification) et commission_eligible
- * (génération de commission) sont deux notions indépendantes, portées par
- * deux colonnes distinctes sur Vehicule et figées séparément en snapshot sur
- * CommandeVente à sa création — voir VehiculeCommandeContextResolver et
- * CommissionGenerator. Ce test couvre les 4 combinaisons possibles et
- * l'immutabilité des snapshots.
+ * Éligibilité aux commissions — dérivée de Vehicule::livraison_vente et figée en snapshot sur
+ * CommandeVente à sa création (cf. VehiculeCommandeContextResolver et CommissionGenerator).
+ * Un véhicule de flotte facture toujours au prix de vente plein (mode_tarification_snapshot),
+ * indépendamment de son éligibilité aux commissions — voir CommandeVenteModeTarificationTest
+ * pour la tarification côté partenaire (sans véhicule).
  */
 class CommandeVenteCommissionEligibiliteTest extends TestCase
 {
@@ -56,7 +54,7 @@ class CommandeVenteCommissionEligibiliteTest extends TestCase
         );
     }
 
-    private function makeVehicule(bool $prisEnChargeParUsine, bool $commissionEligible, int $capacite = 100): Vehicule
+    private function makeVehicule(bool $livraisonVente, int $capacite = 100): Vehicule
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
 
@@ -64,8 +62,7 @@ class CommandeVenteCommissionEligibiliteTest extends TestCase
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
             'capacite_packs' => $capacite,
-            'pris_en_charge_par_usine' => $prisEnChargeParUsine,
-            'commission_eligible' => $commissionEligible,
+            'livraison_vente' => $livraisonVente,
         ]);
     }
 
@@ -112,44 +109,38 @@ class CommandeVenteCommissionEligibiliteTest extends TestCase
         return CommandeVente::where('vehicule_id', $vehicule->id)->latest()->first();
     }
 
-    // ── Les 4 combinaisons ────────────────────────────────────────────────────
     // CommissionCalculator base son calcul sur prix_vente_snapshot -
-    // prix_usine_snapshot (marge), indépendamment du mode de tarification
-    // effectivement encaissé : (5000-3500) × 100 = 150 000.
+    // prix_usine_snapshot (marge) : (5000-3500) × 100 = 150 000.
 
-    #[DataProvider('combinaisonsProvider')]
-    public function test_les_4_combinaisons_pris_en_charge_et_commission_eligible(
-        bool $prisEnChargeParUsine,
-        bool $commissionEligible,
-        string $modeTarificationAttendu,
-    ): void {
+    public function test_vehicule_livraison_vente_genere_la_commission(): void
+    {
         $produit = $this->makeProduit();
-        $vehicule = $this->makeVehicule($prisEnChargeParUsine, $commissionEligible);
+        $vehicule = $this->makeVehicule(livraisonVente: true);
         $this->attacherEquipe($vehicule);
 
         $commande = $this->creerCommande($vehicule, $produit);
 
-        $this->assertSame($modeTarificationAttendu, $commande->mode_tarification_snapshot->value);
-        $this->assertSame($commissionEligible, (bool) $commande->commission_eligible_snapshot);
-
-        if ($commissionEligible) {
-            $this->assertDatabaseHas('commissions_ventes', [
-                'commande_vente_id' => $commande->id,
-                'montant_commission_totale' => 150_000,
-            ]);
-        } else {
-            $this->assertDatabaseMissing('commissions_ventes', ['commande_vente_id' => $commande->id]);
-        }
+        $this->assertSame('prix_vente', $commande->mode_tarification_snapshot->value);
+        $this->assertTrue((bool) $commande->commission_eligible_snapshot);
+        $this->assertDatabaseHas('commissions_ventes', [
+            'commande_vente_id' => $commande->id,
+            'montant_commission_totale' => 150_000,
+        ]);
     }
 
-    public static function combinaisonsProvider(): array
+    public function test_vehicule_sans_livraison_vente_ne_genere_pas_de_commission(): void
     {
-        return [
-            'pris en charge + éligible' => [true, true, 'prix_vente'],
-            'pris en charge + non éligible' => [true, false, 'prix_vente'],
-            'non pris en charge + éligible' => [false, true, 'prix_usine'],
-            'non pris en charge + non éligible' => [false, false, 'prix_usine'],
-        ];
+        // Toujours facturé au prix de vente plein (véhicule de flotte gérée) mais aucune
+        // commission — le véhicule n'est pas autorisé pour la vente.
+        $produit = $this->makeProduit();
+        $vehicule = $this->makeVehicule(livraisonVente: false);
+        $this->attacherEquipe($vehicule);
+
+        $commande = $this->creerCommande($vehicule, $produit);
+
+        $this->assertSame('prix_vente', $commande->mode_tarification_snapshot->value);
+        $this->assertFalse((bool) $commande->commission_eligible_snapshot);
+        $this->assertDatabaseMissing('commissions_ventes', ['commande_vente_id' => $commande->id]);
     }
 
     // ── Immutabilité du snapshot ──────────────────────────────────────────────
@@ -157,7 +148,7 @@ class CommandeVenteCommissionEligibiliteTest extends TestCase
     public function test_commission_eligible_snapshot_ne_change_pas_retroactivement_si_le_vehicule_change(): void
     {
         $produit = $this->makeProduit();
-        $vehicule = $this->makeVehicule(prisEnChargeParUsine: true, commissionEligible: false);
+        $vehicule = $this->makeVehicule(livraisonVente: false);
         $this->attacherEquipe($vehicule);
 
         $commande = $this->creerCommande($vehicule, $produit);
@@ -165,7 +156,7 @@ class CommandeVenteCommissionEligibiliteTest extends TestCase
         $this->assertDatabaseMissing('commissions_ventes', ['commande_vente_id' => $commande->id]);
 
         // Le véhicule devient éligible aux commissions après coup.
-        $vehicule->update(['commission_eligible' => true]);
+        $vehicule->update(['livraison_vente' => true]);
 
         // Une commande déjà créée ne doit jamais être recalculée à partir de la
         // valeur courante du véhicule — seul le snapshot fait foi.
@@ -178,7 +169,7 @@ class CommandeVenteCommissionEligibiliteTest extends TestCase
     public function test_commission_vente_non_generee_meme_si_vehicule_redevient_eligible_apres_coup(): void
     {
         $produit = $this->makeProduit();
-        $vehicule = $this->makeVehicule(prisEnChargeParUsine: true, commissionEligible: true);
+        $vehicule = $this->makeVehicule(livraisonVente: true);
         $this->attacherEquipe($vehicule);
 
         $commande = $this->creerCommande($vehicule, $produit);
@@ -188,7 +179,7 @@ class CommandeVenteCommissionEligibiliteTest extends TestCase
         // générée n'est jamais supprimée rétroactivement (aucun mécanisme ne
         // le fait, et ce n'est pas le rôle de CommissionGenerator, idempotent
         // par nature).
-        $vehicule->update(['commission_eligible' => false]);
+        $vehicule->update(['livraison_vente' => false]);
         CommissionGenerator::generateForCommandeIfMissing($commande->fresh());
 
         $this->assertEquals(1, CommissionVente::where('commande_vente_id', $commande->id)->count());

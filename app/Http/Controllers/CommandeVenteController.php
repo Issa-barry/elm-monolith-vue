@@ -3,10 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AuditEvent;
+use App\Enums\ClientType;
 use App\Enums\ModeTarification;
 use App\Enums\MotifAnnulation;
 use App\Enums\ProduitStatut;
-use App\Enums\ProduitType;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutCommission;
 use App\Enums\StatutFactureVente;
@@ -30,6 +30,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -370,7 +371,7 @@ class CommandeVenteController extends Controller
         $this->ensureQuantiteMatchesVehiculeCapacity($data);
         $this->enforcePrixVentePolicy($data, null);
 
-        $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null);
+        $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null);
         [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $context->modeTarification);
 
         $commande = CommandeVente::create([
@@ -378,6 +379,7 @@ class CommandeVenteController extends Controller
             'site_id' => $userSite->id,
             'vehicule_id' => $data['vehicule_id'] ?? null,
             'client_id' => $data['client_id'] ?? null,
+            'client_vehicule_id' => $data['client_vehicule_id'] ?? null,
             'total_commande' => $totalCommande,
             'mode_tarification_snapshot' => $context->modeTarification->value,
             'commission_eligible_snapshot' => $context->commissionEligible,
@@ -585,6 +587,7 @@ class CommandeVenteController extends Controller
                 'reference' => $vente->reference,
                 'vehicule_id' => $vente->vehicule_id,
                 'client_id' => $vente->client_id,
+                'client_vehicule_id' => $vente->client_vehicule_id,
                 'lignes' => $vente->lignes->map(fn ($l) => [
                     // Bridge Phase 3 : le formulaire actuel ne sélectionne qu'un produit
                     // (pas de sélecteur de variante), on retrouve donc le produit parent.
@@ -619,12 +622,13 @@ class CommandeVenteController extends Controller
         $vente->load(['lignes.variante.produit', 'vehicule', 'client']);
         $oldSnapshot = $this->commandeSnapshot($vente);
 
-        $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null);
+        $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null);
         [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $context->modeTarification);
 
         $vente->update([
             'vehicule_id' => $data['vehicule_id'] ?? null,
             'client_id' => $data['client_id'] ?? null,
+            'client_vehicule_id' => $data['client_vehicule_id'] ?? null,
             'total_commande' => $totalCommande,
             'mode_tarification_snapshot' => $context->modeTarification->value,
             'commission_eligible_snapshot' => $context->commissionEligible,
@@ -839,6 +843,14 @@ class CommandeVenteController extends Controller
         return [
             'vehicule_id' => 'nullable|exists:vehicules,id',
             'client_id' => 'nullable|exists:clients,id',
+            // Véhicule partenaire facultatif — jamais un substitut à vehicule_id (flotte gérée),
+            // cf. ClientVehicle. Doit appartenir au client sélectionné.
+            'client_vehicule_id' => [
+                'nullable',
+                Rule::exists('client_vehicules', 'id')->where(function ($q) {
+                    $q->where('client_id', request()->input('client_id'));
+                }),
+            ],
             'lignes' => 'required|array|min:1',
             'lignes.*.produit_id' => 'required|exists:produits,id',
             // Optionnel : le formulaire actuel ne sélectionne qu'un produit (pas encore de
@@ -1055,7 +1067,7 @@ class CommandeVenteController extends Controller
         // resolveVariante() exigera un variante_id explicite au moment de la vente.
         return Produit::where('organization_id', $orgId)
             ->where('statut', ProduitStatut::ACTIF)
-            ->whereIn('type', ProduitType::vendableValues())
+            ->whereHas('produitType', fn ($q) => $q->where('vendable', true))
             ->with('variantes')
             ->orderBy('nom')
             ->get()
@@ -1080,7 +1092,7 @@ class CommandeVenteController extends Controller
         ])
             ->where('organization_id', $orgId)
             ->where('is_active', true)
-            ->where('categorie', 'externe')
+            ->livraisonVente()
             ->orderBy('nom_vehicule')
             ->get()
             ->map(fn (Vehicule $v) => [
@@ -1092,8 +1104,6 @@ class CommandeVenteController extends Controller
                 'capacite_packs' => ($c = $v->capacite_packs ?? $v->typeVehicule?->capacite_defaut) !== null
                     ? (int) $c
                     : null,
-                'pris_en_charge_par_usine' => (bool) $v->pris_en_charge_par_usine,
-                'commission_eligible' => (bool) $v->commission_eligible,
                 'livreur_nom' => $v->equipe?->livreurs->first()?->libelleAffichage(),
                 'livreur_telephone' => $v->equipe?->membres
                     ->firstWhere('role', 'chauffeur')
@@ -1105,13 +1115,21 @@ class CommandeVenteController extends Controller
     {
         return Client::where('organization_id', $orgId)
             ->where('is_active', true)
-            ->orderBy('nom')
+            ->orderBy('nom_complet')
             ->get()
             ->map(fn (Client $c) => [
                 'id' => $c->id,
-                'nom' => $c->nom,
-                'prenom' => $c->prenom,
+                'nom_complet' => $c->nom_complet,
                 'telephone' => $c->telephone,
+                'type' => $c->type->value,
+                // Véhicules partenaire mémorisés — facultatifs, jamais un prérequis pour vendre
+                // à ce client (cf. ClientVehicle).
+                'vehicules' => $c->type === ClientType::PARTENAIRE
+                    ? $c->vehicules()->get()->map(fn ($cv) => [
+                        'id' => $cv->id,
+                        'libelle_affiche' => $cv->libelle_affiche,
+                    ])->values()
+                    : [],
             ]);
     }
 }

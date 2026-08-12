@@ -62,8 +62,7 @@ interface SiteStock {
     site_code: string | null;
     site_nom: string | null;
     qte_stock: number;
-    seuil_alerte_stock: number | null;
-    is_alerte: boolean;
+    statut: 'disponible' | 'stock_faible' | 'rupture';
     updated_at: string | null;
 }
 
@@ -72,10 +71,9 @@ interface Produit {
     nom: string;
     sku: string | null;
     code_barres: string | null;
-    type: string | null;
-    type_label: string | null;
+    produit_type_id: string | null;
+    type_nom: string | null;
     image_url: string | null;
-    is_alerte: boolean;
     statut: string | null;
     statut_label: string | null;
     prix_usine: number | null;
@@ -83,10 +81,13 @@ interface Produit {
     prix_achat: number | null;
     cout: number | null;
     qte_stock: number | null;
+    alerte_stock_active: boolean;
     seuil_alerte_stock: number | null;
+    seuil_alerte_effectif: number;
     description: string | null;
     in_stock: boolean;
     is_low_stock: boolean;
+    is_out_of_stock: boolean;
     has_stock: boolean;
     is_used: boolean;
     has_variantes: boolean;
@@ -108,7 +109,7 @@ interface FilterOption {
 
 interface Filters {
     search?: string;
-    type?: string;
+    produit_type_id?: string;
     statut?: string;
     site_ids?: string[];
 }
@@ -179,7 +180,7 @@ const filterFields = computed<FilterField[]>(() => [
         placeholder: 'Rechercher...',
     },
     {
-        key: 'type',
+        key: 'produit_type_id',
         type: 'select',
         label: 'Type',
         options: [
@@ -213,9 +214,7 @@ function toggleFaibles() {
 }
 
 const ruptures = computed(() =>
-    props.produits.filter(
-        (p) => p.has_stock && p.qte_stock !== null && p.qte_stock <= 0,
-    ),
+    props.produits.filter((p) => p.has_stock && p.is_out_of_stock),
 );
 const faibles = computed(() =>
     props.produits.filter((p) => p.has_stock && p.is_low_stock),
@@ -223,9 +222,7 @@ const faibles = computed(() =>
 
 const filteredProduits = computed(() => {
     if (showOnlyRuptures.value)
-        return props.produits.filter(
-            (p) => p.has_stock && (p.qte_stock ?? 0) <= 0,
-        );
+        return props.produits.filter((p) => p.has_stock && p.is_out_of_stock);
     if (showOnlyFaibles.value)
         return props.produits.filter((p) => p.has_stock && p.is_low_stock);
     return props.produits;
@@ -290,7 +287,7 @@ function exportExcel(): void {
             label: 'Code-barres',
             value: (p: Produit) => p.code_barres,
         },
-        { label: 'Type', value: (p: Produit) => p.type_label },
+        { label: 'Type', value: (p: Produit) => p.type_nom },
         { label: 'Statut', value: (p: Produit) => p.statut_label },
         { label: 'Prix vente (GNF)', value: (p: Produit) => p.prix_vente },
         { label: "Prix d'achat (GNF)", value: (p: Produit) => p.prix_achat },
@@ -309,8 +306,8 @@ function exportExcel(): void {
             value: (_p: Produit, s?: SiteStock) => s?.qte_stock ?? '',
         },
         {
-            label: 'Seuil alerte site',
-            value: (_p: Produit, s?: SiteStock) => s?.seuil_alerte_stock ?? '',
+            label: 'État du site',
+            value: (_p: Produit, s?: SiteStock) => s?.statut ?? '',
         },
         { label: 'Description', value: (p: Produit) => p.description },
     ];
@@ -588,7 +585,7 @@ function confirmArchive(produit: Produit) {
                 url="/backoffice/produits"
                 :values="{
                     search: filters.search ?? '',
-                    type: filters.type ?? '',
+                    produit_type_id: filters.produit_type_id ?? '',
                     statut: filters.statut ?? '',
                     site_ids: filters.site_ids ?? [],
                 }"
@@ -683,7 +680,11 @@ function confirmArchive(produit: Produit) {
                             >
                                 <span class="font-medium">{{ data.nom }}</span>
                                 <AlertTriangle
-                                    v-if="data.is_alerte"
+                                    v-if="data.is_out_of_stock"
+                                    class="h-3.5 w-3.5 shrink-0 text-red-500"
+                                />
+                                <AlertTriangle
+                                    v-else-if="data.is_low_stock"
                                     class="h-3.5 w-3.5 shrink-0 text-amber-500"
                                 />
                             </Link>
@@ -692,27 +693,17 @@ function confirmArchive(produit: Produit) {
 
                     <!-- Type -->
                     <Column
-                        field="type"
+                        field="produit_type_id"
                         header="Type"
                         sortable
                         style="width: 130px"
                     >
                         <template #body="{ data }">
                             <span
-                                v-if="data.type_label"
-                                class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
-                                :class="{
-                                    'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400':
-                                        data.type === 'materiel',
-                                    'bg-violet-100 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400':
-                                        data.type === 'fabricable',
-                                    'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400':
-                                        data.type === 'achat_vente',
-                                    'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400':
-                                        data.type === 'service',
-                                }"
+                                v-if="data.type_nom"
+                                class="inline-flex items-center rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
                             >
-                                {{ data.type_label }}
+                                {{ data.type_nom }}
                             </span>
                             <span v-else class="text-xs text-muted-foreground"
                                 >—</span
@@ -768,9 +759,11 @@ function confirmArchive(produit: Produit) {
                                         <span
                                             class="text-sm font-medium tabular-nums"
                                             :class="
-                                                data.is_low_stock
-                                                    ? 'text-amber-600'
-                                                    : 'text-foreground'
+                                                data.is_out_of_stock
+                                                    ? 'text-red-600'
+                                                    : data.is_low_stock
+                                                      ? 'text-amber-600'
+                                                      : 'text-foreground'
                                             "
                                         >
                                             {{
@@ -780,7 +773,11 @@ function confirmArchive(produit: Produit) {
                                             }}
                                         </span>
                                         <AlertTriangle
-                                            v-if="data.is_low_stock"
+                                            v-if="data.is_out_of_stock"
+                                            class="h-3.5 w-3.5 text-red-500"
+                                        />
+                                        <AlertTriangle
+                                            v-else-if="data.is_low_stock"
                                             class="h-3.5 w-3.5 text-amber-500"
                                         />
                                     </div>

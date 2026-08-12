@@ -17,18 +17,19 @@ registerCleanup('/backoffice/clients', PREFIX);
 async function createClientInApp(
     page: Parameters<typeof login>[0],
     params: {
-        prenom: string;
-        nom: string;
+        nomComplet: string;
         tel: string;
         adresse?: string;
         ville?: string;
     },
 ): Promise<void> {
     await page.goto('/backoffice/clients/create');
-    await page.locator('#prenom').fill(params.prenom);
-    await page.locator('#nom').fill(params.nom);
+    await page.locator('#nom_complet').fill(params.nomComplet);
 
-    const paysCombo = page.locator('#client-form').getByRole('combobox').first();
+    const paysCombo = page
+        .locator('#client-form')
+        .getByRole('combobox')
+        .first();
     await selectOptionFromCombobox(page, paysCombo, /guin(?!.*bissau)/i);
 
     if (params.ville) {
@@ -48,49 +49,52 @@ async function createClientInApp(
     await page.waitForLoadState('networkidle');
 }
 
-test('create client -> redirected to edit page with expected prenom casing', async ({
+test('create client -> redirected to edit page with nom_complet title-cased', async ({
     page,
 }) => {
     const uid = `${Date.now()}`.slice(-6);
-    const prenom = `${PREFIX}${uid}`;
-    const nom = `Flow${uid}`;
+    const nomComplet = `${PREFIX}${uid} Flow${uid}`;
     const tel = `6${randomDigits(8)}`;
 
     await login(page);
     await createClientInApp(page, {
-        prenom,
-        nom,
+        nomComplet,
         tel,
         ville: 'Conakry',
         adresse: 'Quartier Kaloum',
     });
 
-    const expectedPrenom = prenom
+    // Un seul champ "nom_complet" désormais (plus de split prenom/nom, cf.
+    // ClientForm.vue), mais toujours normalisé en Title Case côté serveur
+    // (PhoneHandlerTrait::ucTitle(), partagé avec Prestataire/Proprietaire) —
+    // jamais enregistré tel quel.
+    const expectedNomComplet = nomComplet
         .toLowerCase()
         .replaceAll(
             /(^|[^a-z])([a-z])/g,
             (_, sep, char) => sep + char.toUpperCase(),
         );
-    await expect(page.locator('#prenom')).toHaveValue(expectedPrenom);
+    await expect(page.locator('#nom_complet')).toHaveValue(expectedNomComplet);
 });
 
 test('create client with Guinea and empty ville -> defaults to Conakry', async ({
     page,
 }) => {
     const uid = `${Date.now()}`.slice(-6);
-    const prenom = `${PREFIX}${uid}`;
-    const nom = `Guinea${uid}`;
+    const nomComplet = `${PREFIX}${uid} Guinea${uid}`;
     const tel = `6${randomDigits(8)}`;
 
     await login(page);
     await page.goto('/backoffice/clients/create');
 
-    const paysCombo = page.locator('#client-form').getByRole('combobox').first();
+    const paysCombo = page
+        .locator('#client-form')
+        .getByRole('combobox')
+        .first();
     await selectOptionFromCombobox(page, paysCombo, /guin(?!.*bissau)/i);
     await page.locator('#ville').clear();
 
-    await page.locator('#prenom').fill(prenom);
-    await page.locator('#nom').fill(nom);
+    await page.locator('#nom_complet').fill(nomComplet);
     await page.locator('#telephone').fill(tel);
 
     await page
@@ -102,16 +106,16 @@ test('create client with Guinea and empty ville -> defaults to Conakry', async (
     await expect(page.locator('#ville')).toHaveValue('Conakry');
 });
 
-test('edit client -> update ville and adresse -> persists', async ({ page }) => {
+test('edit client -> update ville and adresse -> persists', async ({
+    page,
+}) => {
     const uid = `${Date.now()}`.slice(-6);
-    const prenom = `${PREFIX}${uid}`;
-    const nom = `Edit${uid}`;
+    const nomComplet = `${PREFIX}${uid} Edit${uid}`;
     const tel = `6${randomDigits(8)}`;
 
     await login(page);
     await createClientInApp(page, {
-        prenom,
-        nom,
+        nomComplet,
         tel,
         ville: 'Conakry',
         adresse: 'Adresse initiale',
@@ -136,14 +140,12 @@ test('view client from list -> readonly form -> modifier redirects to edit', asy
     page,
 }) => {
     const uid = `${Date.now()}`.slice(-6);
-    const prenom = `${PREFIX}${uid}`;
-    const nom = `View${uid}`;
+    const nomComplet = `${PREFIX}${uid} View${uid}`;
     const tel = `6${randomDigits(8)}`;
 
     await login(page);
     await createClientInApp(page, {
-        prenom,
-        nom,
+        nomComplet,
         tel,
         ville: 'Conakry',
         adresse: 'Lecture seule',
@@ -152,7 +154,7 @@ test('view client from list -> readonly form -> modifier redirects to edit', asy
     await page.goto('/backoffice/clients');
     await page.waitForLoadState('networkidle');
 
-    const row = await findRowByName(page, prenom);
+    const row = await findRowByName(page, nomComplet);
     await openRowActions(row);
     await page
         .getByRole('menuitem', { name: /^Voir$/i })
@@ -160,8 +162,7 @@ test('view client from list -> readonly form -> modifier redirects to edit', asy
         .click();
 
     await expect(page).toHaveURL(/\/clients\/[a-z0-9]+$/);
-    await expect(page.locator('#prenom')).toBeDisabled();
-    await expect(page.locator('#nom')).toBeDisabled();
+    await expect(page.locator('#nom_complet')).toBeDisabled();
 
     const editTrigger = page
         .locator(
@@ -172,17 +173,16 @@ test('view client from list -> readonly form -> modifier redirects to edit', asy
     await editTrigger.click();
 
     await expect(page).toHaveURL(/\/clients\/[a-z0-9]+\/edit$/);
-    await expect(page.locator('#prenom')).toBeEnabled();
+    await expect(page.locator('#nom_complet')).toBeEnabled();
 });
 
 test('create client + toggle status -> inactif in list', async ({ page }) => {
     const uid = `${Date.now()}`.slice(-6);
-    const prenom = `${PREFIX}${uid}`;
-    const nom = `Status${uid}`;
+    const nomComplet = `${PREFIX}${uid} Status${uid}`;
     const tel = `6${randomDigits(8)}`;
 
     await login(page);
-    await createClientInApp(page, { prenom, nom, tel, ville: 'Conakry' });
+    await createClientInApp(page, { nomComplet, tel, ville: 'Conakry' });
 
     await page.locator('label[for="is_active"]').first().click();
     await page
@@ -194,7 +194,7 @@ test('create client + toggle status -> inactif in list', async ({ page }) => {
 
     await page.goto('/backoffice/clients');
     await page.waitForLoadState('networkidle');
-    const updated = await findRowByName(page, prenom);
+    const updated = await findRowByName(page, nomComplet);
     await expect(updated).toBeVisible();
     await expect(updated).toContainText(/inactif/i);
 });
@@ -204,17 +204,19 @@ test('create client with duplicate telephone -> stays on create with field error
 }) => {
     const uid = `${Date.now()}`.slice(-6);
     const tel = `6${randomDigits(8)}`;
-    const prenom1 = `${PREFIX}${uid}A`;
-    const prenom2 = `${PREFIX}${uid}B`;
+    const nomComplet1 = `${PREFIX}${uid}A Dup${uid}`;
+    const nomComplet2 = `${PREFIX}${uid}B Dup2${uid}`;
 
     await login(page);
-    await createClientInApp(page, { prenom: prenom1, nom: `Dup${uid}`, tel });
+    await createClientInApp(page, { nomComplet: nomComplet1, tel });
 
     await page.goto('/backoffice/clients/create');
-    await page.locator('#prenom').fill(prenom2);
-    await page.locator('#nom').fill(`Dup2${uid}`);
+    await page.locator('#nom_complet').fill(nomComplet2);
 
-    const paysCombo = page.locator('#client-form').getByRole('combobox').first();
+    const paysCombo = page
+        .locator('#client-form')
+        .getByRole('combobox')
+        .first();
     await selectOptionFromCombobox(page, paysCombo, /guin(?!.*bissau)/i);
     await page.locator('#telephone').fill(tel);
 
@@ -229,17 +231,16 @@ test('create client with duplicate telephone -> stays on create with field error
 
 test('delete client -> no longer visible in list', async ({ page }) => {
     const uid = `${Date.now()}`.slice(-6);
-    const prenom = `${PREFIX}${uid}`;
-    const nom = `Del${uid}`;
+    const nomComplet = `${PREFIX}${uid} Del${uid}`;
     const tel = `6${randomDigits(8)}`;
 
     await login(page);
-    await createClientInApp(page, { prenom, nom, tel });
+    await createClientInApp(page, { nomComplet, tel });
 
     await page.goto('/backoffice/clients');
     await page.waitForLoadState('networkidle');
 
-    const row = await findRowByName(page, prenom);
+    const row = await findRowByName(page, nomComplet);
     await openRowActions(row);
     await page
         .getByRole('menuitem', { name: /supprimer/i })
@@ -255,7 +256,7 @@ test('delete client -> no longer visible in list', async ({ page }) => {
     const rows = page.locator('table tbody tr');
     const count = await rows.count();
     for (let i = 0; i < count; i++) {
-        await expect(rows.nth(i)).not.toContainText(prenom);
+        await expect(rows.nth(i)).not.toContainText(nomComplet);
     }
 });
 
@@ -283,14 +284,13 @@ test('stat cards reflect active search filter', async ({ page }) => {
         .locator('xpath=following-sibling::p')
         .first();
 
-    const totalBefore = parseInt(
-        (await totalCard.textContent()) ?? '0',
-        10,
-    );
+    const totalBefore = parseInt((await totalCard.textContent()) ?? '0', 10);
     expect(totalBefore).toBeGreaterThan(0);
 
     const searchInput = page
-        .locator('input[placeholder*="recherch" i]:not([data-testid="global-search"]):visible')
+        .locator(
+            'input[placeholder*="recherch" i]:not([data-testid="global-search"]):visible',
+        )
         .first();
     await searchInput.fill('ZZZZNO_MATCH_9999');
     await searchInput.press('Enter');

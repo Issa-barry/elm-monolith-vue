@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Models\Categorie;
 use App\Models\Organization;
 use App\Models\Produit;
+use App\Models\ProduitType;
+use Database\Seeders\ProduitTypeDefaultSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -189,11 +191,12 @@ class CategorieTest extends TestCase
     public function test_destroy_refuse_si_categorie_utilisee_par_un_produit(): void
     {
         $categorie = $this->makeCategorie($this->org);
+        ProduitTypeDefaultSeeder::seedPourOrganisation($this->org->id);
         Produit::create([
             'organization_id' => $this->org->id,
             'categorie_id' => $categorie->id,
             'nom' => 'Produit',
-            'type' => 'service',
+            'produit_type_id' => ProduitType::where('organization_id', $this->org->id)->where('code', 'service')->value('id'),
             'statut' => 'actif',
         ]);
 

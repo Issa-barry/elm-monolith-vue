@@ -82,7 +82,8 @@ class ReceptionValidationAdminTest extends TestCase
         // Véhicule + équipe
         $this->vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
-            'categorie' => 'interne',
+            'livraison_vente' => false,
+            'livraison_logistique' => true,
             'is_active' => true,
             'capacite_packs' => 500,
         ]);

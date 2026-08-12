@@ -66,17 +66,21 @@ interface VehiculeOption {
     nom_vehicule: string;
     immatriculation: string;
     capacite_packs: number | null;
-    pris_en_charge_par_usine: boolean;
-    commission_eligible: boolean;
     livreur_nom: string | null;
     livreur_telephone: string | null;
 }
 
+interface ClientVehiculeOption {
+    id: number;
+    libelle_affiche: string;
+}
+
 interface ClientOption {
     id: number;
-    nom: string;
-    prenom: string | null;
+    nom_complet: string;
     telephone: string | null;
+    type: 'standard' | 'partenaire';
+    vehicules: ClientVehiculeOption[];
 }
 
 interface UserSite {
@@ -115,6 +119,9 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     vehicule_id: null as number | null,
     client_id: null as number | null,
+    // Véhicule partenaire — toujours facultatif, jamais un substitut au véhicule de
+    // flotte (cf. ClientVehicle). Ne s'affiche que pour un client type=partenaire.
+    client_vehicule_id: null as number | null,
     lignes: [
         { produit_id: null, qte: 1, prix_vente: 0, total: 0 },
     ] as LigneForm[],
@@ -185,6 +192,8 @@ const { modeTarification, commissionEligible } =
     useVehiculeCommandeTarification(
         () => props.vehicules,
         () => form.vehicule_id,
+        () => props.clients,
+        () => form.client_id,
     );
 
 function produitPrixUsine(produitId: number | null): number {
@@ -235,15 +244,26 @@ function searchClient(event: { query: string }) {
     clientSuggests.value = q
         ? props.clients.filter(
               (c) =>
-                  c.nom.toLowerCase().includes(q) ||
-                  (c.prenom && c.prenom.toLowerCase().includes(q)) ||
+                  c.nom_complet.toLowerCase().includes(q) ||
                   (c.telephone && c.telephone.includes(q)),
           )
         : [...props.clients];
 }
 
+// Véhicule partenaire mémorisé — visible seulement pour un client type=partenaire
+// qui en a au moins un ; toujours facultatif (cf. form.client_vehicule_id).
+const selectedClientVehicules = computed(
+    () => clientSelected.value?.vehicules ?? [],
+);
+
 async function onClientSelect(c: ClientOption | null) {
     form.client_id = c?.id ?? null;
+    form.client_vehicule_id = null;
+    // Le type de client (partenaire) peut à lui seul faire basculer modeTarification
+    // vers "prix_usine" (cf. useVehiculeCommandeTarification) — sans ce recalcul, le
+    // total des lignes déjà saisies reste figé sur l'ancien mode (prix_vente) alors
+    // que le prix unitaire affiché, lui, se met à jour immédiatement.
+    recomputeAllTotals();
     if (c) {
         clientSolvabiliteLoading.value = true;
         clientSolvabilite.value = null;
@@ -260,12 +280,14 @@ async function onClientSelect(c: ClientOption | null) {
 
 function onClientClear() {
     form.client_id = null;
+    form.client_vehicule_id = null;
     clientSelected.value = null;
     clientSolvabilite.value = null;
+    recomputeAllTotals();
 }
 
 function clientLabel(c: ClientOption): string {
-    return [c.prenom, c.nom].filter(Boolean).join(' ');
+    return c.nom_complet;
 }
 
 // ── Solvabilité — dialog ──────────────────────────────────────────────────────
@@ -883,11 +905,7 @@ function confirmerEtCreer() {
                                 <template #option="{ option }">
                                     <div class="py-0.5">
                                         <div class="leading-tight font-medium">
-                                            {{
-                                                [option.prenom, option.nom]
-                                                    .filter(Boolean)
-                                                    .join(' ')
-                                            }}
+                                            {{ option.nom_complet }}
                                         </div>
                                         <div
                                             v-if="option.telephone"
@@ -913,6 +931,28 @@ function confirmerEtCreer() {
                             >
                                 {{ form.errors.client_id }}
                             </p>
+
+                            <!-- Véhicule partenaire : facultatif, jamais requis pour vendre -->
+                            <div
+                                v-if="
+                                    clientSelected?.type === 'partenaire' &&
+                                    selectedClientVehicules.length > 0
+                                "
+                                class="mt-3"
+                            >
+                                <Label class="mb-1.5 block text-sm">
+                                    Véhicule partenaire (facultatif)
+                                </Label>
+                                <Dropdown
+                                    v-model="form.client_vehicule_id"
+                                    :options="selectedClientVehicules"
+                                    option-label="libelle_affiche"
+                                    option-value="id"
+                                    placeholder="Non renseigné"
+                                    class="w-full"
+                                    show-clear
+                                />
+                            </div>
 
                             <!-- Solvabilité client -->
                             <div

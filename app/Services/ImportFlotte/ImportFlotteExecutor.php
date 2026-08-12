@@ -110,13 +110,12 @@ class ImportFlotteExecutor
                 'type_vehicule_id' => $vData['type_vehicule_id'],
                 'capacite_packs' => $vData['capacite_packs'],
                 'capacite_bouteilles' => $vData['capacite_bouteilles'],
-                'categorie' => $vData['categorie'],
+                'livraison_vente' => $vData['livraison_vente'],
+                'livraison_logistique' => $vData['livraison_logistique'],
                 'site_id' => $vData['site_id'],
-                'proprietaire_id' => $vData['categorie'] === 'externe'
-                    ? $proprietaireId
-                    : $this->defaultProprietaireInterneId($orgId),
-                'pris_en_charge_par_usine' => $vData['pris_en_charge_par_usine'],
-                'commission_eligible' => $vData['commission_eligible'],
+                // Propriété indépendante de l'usage : propriétaire tiers si résolu depuis le
+                // fichier, sinon propriétaire par défaut (organisation).
+                'proprietaire_id' => $proprietaireId ?? Proprietaire::interneParDefautId($orgId),
                 'is_active' => false,
             ]);
             $vehiculeId = $vehicule->id;
@@ -140,19 +139,20 @@ class ImportFlotteExecutor
             if ($eData['existe']) {
                 $equipeId = $eData['id'];
             } else {
+                $aUnProprietaireTiers = $proprietaireId !== null;
                 $commission = (float) $eData['commission_unitaire_par_pack'];
-                $montantProp = $vData['categorie'] === 'externe' ? (float) $eData['montant_par_pack_proprietaire'] : 0.0;
-                $tauxProp = $vData['categorie'] === 'externe' && $commission > 0
+                $montantProp = $aUnProprietaireTiers ? (float) $eData['montant_par_pack_proprietaire'] : 0.0;
+                $tauxProp = $aUnProprietaireTiers && $commission > 0
                     ? round($montantProp / $commission * 100, 2)
                     : 0.0;
 
                 $equipe = EquipeLivraison::create([
                     'organization_id' => $orgId,
                     'vehicule_id' => $vehiculeId,
-                    'proprietaire_id' => $vData['categorie'] === 'externe' ? $proprietaireId : null,
+                    'proprietaire_id' => $aUnProprietaireTiers ? $proprietaireId : null,
                     'is_active' => false,
                     'commission_unitaire_par_pack' => $commission,
-                    'montant_par_pack_proprietaire' => $vData['categorie'] === 'externe' ? $montantProp : null,
+                    'montant_par_pack_proprietaire' => $aUnProprietaireTiers ? $montantProp : null,
                     'taux_commission_proprietaire' => $tauxProp,
                 ]);
                 $equipeId = $equipe->id;
@@ -215,17 +215,5 @@ class ImportFlotteExecutor
                 'ordre' => $ordre++,
             ]);
         }
-    }
-
-    /**
-     * Propriétaire par défaut des véhicules "interne" (propriété de
-     * l'organisation) — voir database/seeders/ProprietairesSeeder.php et
-     * VehiculeController::defaultProprietaireInterneId().
-     */
-    private function defaultProprietaireInterneId(string $orgId): ?string
-    {
-        return Proprietaire::where('organization_id', $orgId)
-            ->where('telephone', '+224622602693')
-            ->value('id');
     }
 }

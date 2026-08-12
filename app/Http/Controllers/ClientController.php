@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\ClientType;
 use App\Features\ModuleFeature;
 use App\Models\CashbackSolde;
 use App\Models\Client;
@@ -39,11 +40,14 @@ class ClientController extends Controller
                 'code_pays' => $c->code_pays,
                 'adresse' => $c->adresse,
                 'is_active' => $c->is_active,
+                'type' => $c->type->value,
+                'type_label' => $c->type->label(),
                 'cashback_eligible' => $c->cashback_eligible,
             ]);
 
         return Inertia::render('Clients/Index', [
             'clients' => $clients,
+            'types' => ClientType::options(),
         ]);
     }
 
@@ -51,7 +55,9 @@ class ClientController extends Controller
     {
         $this->authorize('create', Client::class);
 
-        return Inertia::render('Clients/Create');
+        return Inertia::render('Clients/Create', [
+            'types' => ClientType::options(),
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -62,14 +68,14 @@ class ClientController extends Controller
         abort_if(! $orgId, 403, "Votre compte n'est associé à aucune organisation.");
 
         $data = $request->validate([
-            'nom' => 'required|string|max:255',
-            'prenom' => 'required|string|max:255',
+            'nom_complet' => 'required|string|max:255',
             'email' => 'nullable|email:rfc,dns|max:255',
             'telephone' => ['required', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/'],
             'code_pays' => ['required', Rule::in(array_keys(static::supportedPays()))],
             'ville' => 'nullable|string|max:100',
             'adresse' => 'nullable|string|max:500',
             'is_active' => 'boolean',
+            'type' => ['nullable', Rule::in(ClientType::values())],
             'cashback_eligible' => 'boolean',
         ], $this->validationMessages());
 
@@ -136,8 +142,7 @@ class ClientController extends Controller
         return Inertia::render('Clients/Show', [
             'client' => [
                 'id' => $client->id,
-                'nom' => $client->nom,
-                'prenom' => $client->prenom,
+                'nom_complet' => $client->nom_complet,
                 'email' => $client->email,
                 'telephone' => $telephone,
                 'adresse' => $client->adresse,
@@ -146,8 +151,11 @@ class ClientController extends Controller
                 'code_pays' => $codePays,
                 'code_phone_pays' => $codePhonePays,
                 'is_active' => $client->is_active,
+                'type' => $client->type->value,
+                'type_label' => $client->type->label(),
                 'cashback_eligible' => $client->cashback_eligible,
             ],
+            'types' => ClientType::options(),
             'cashback_solde' => $cashbackSolde,
         ]);
     }
@@ -190,8 +198,7 @@ class ClientController extends Controller
         return Inertia::render('Clients/Edit', [
             'client' => [
                 'id' => $client->id,
-                'nom' => $client->nom,
-                'prenom' => $client->prenom,
+                'nom_complet' => $client->nom_complet,
                 'email' => $client->email,
                 'telephone' => $telephone,
                 'adresse' => $client->adresse,
@@ -200,8 +207,20 @@ class ClientController extends Controller
                 'code_pays' => $codePays,
                 'code_phone_pays' => $codePhonePays,
                 'is_active' => $client->is_active,
+                'type' => $client->type->value,
+                'type_label' => $client->type->label(),
                 'cashback_eligible' => $client->cashback_eligible,
             ],
+            'types' => ClientType::options(),
+            'vehicules' => $client->vehicules()->get(['id', 'nom_vehicule', 'immatriculation', 'chauffeur_nom', 'chauffeur_telephone', 'chauffeur_code_pays'])
+                ->map(fn ($v) => [
+                    'id' => $v->id,
+                    'nom_vehicule' => $v->nom_vehicule,
+                    'immatriculation' => $v->immatriculation,
+                    'chauffeur_nom' => $v->chauffeur_nom,
+                    'chauffeur_telephone' => $v->chauffeur_telephone,
+                    'chauffeur_code_pays' => $v->chauffeur_code_pays,
+                ]),
             'cashback_solde' => $cashbackSolde,
         ]);
     }
@@ -211,14 +230,14 @@ class ClientController extends Controller
         $this->authorize('update', $client);
 
         $data = $request->validate([
-            'nom' => 'required|string|max:255',
-            'prenom' => 'required|string|max:255',
+            'nom_complet' => 'required|string|max:255',
             'email' => 'nullable|email:rfc,dns|max:255',
             'telephone' => ['required', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/'],
             'code_pays' => ['required', Rule::in(array_keys(static::supportedPays()))],
             'ville' => 'nullable|string|max:100',
             'adresse' => 'nullable|string|max:500',
             'is_active' => 'boolean',
+            'type' => ['nullable', Rule::in(ClientType::values())],
             'cashback_eligible' => 'boolean',
         ], $this->validationMessages());
 
@@ -289,8 +308,7 @@ class ClientController extends Controller
     private function validationMessages(): array
     {
         return [
-            'nom.required' => 'Le nom est obligatoire.',
-            'prenom.required' => 'Le prénom est obligatoire.',
+            'nom_complet.required' => 'Le nom complet est obligatoire.',
             'email.email' => "L'adresse email est invalide.",
             'telephone.required' => 'Le numéro de téléphone est obligatoire.',
             'telephone.regex' => 'Le numéro de téléphone est invalide.',

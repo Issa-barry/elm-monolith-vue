@@ -16,6 +16,7 @@ use App\Models\PaiementPeriode;
 use App\Models\PaiePeriode;
 use App\Models\Prestataire;
 use App\Models\Produit;
+use App\Models\ProduitType;
 use App\Models\PropositionVehicule;
 use App\Models\Proprietaire;
 use App\Models\Site;
@@ -36,6 +37,7 @@ use App\Policies\PaiementPeriodePolicy;
 use App\Policies\PaiePolicy;
 use App\Policies\PrestatairePolicy;
 use App\Policies\ProduitPolicy;
+use App\Policies\ProduitTypePolicy;
 use App\Policies\PropositionVehiculePolicy;
 use App\Policies\ProprietairePolicy;
 use App\Policies\SitePolicy;
@@ -55,6 +57,7 @@ class AuthServiceProvider extends ServiceProvider
         Livreur::class => LivreurPolicy::class,
         Proprietaire::class => ProprietairePolicy::class,
         Produit::class => ProduitPolicy::class,
+        ProduitType::class => ProduitTypePolicy::class,
         Packing::class => PackingPolicy::class,
         User::class => UserPolicy::class,
         Vehicule::class => VehiculePolicy::class,

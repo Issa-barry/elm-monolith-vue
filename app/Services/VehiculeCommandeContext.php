@@ -5,13 +5,13 @@ namespace App\Services;
 use App\Enums\ModeTarification;
 
 /**
- * Contexte figé (snapshot) résolu depuis le véhicule d'une commande au moment
- * de sa création — voir VehiculeCommandeContextResolver. Regroupe deux
- * notions volontairement indépendantes :
- *  - modeTarification : quel prix sert de base au montant facturé (dérivé de
- *    Vehicule::pris_en_charge_par_usine, cf. ModeTarification).
+ * Contexte figé (snapshot) résolu depuis le véhicule et/ou le client d'une commande au moment
+ * de sa création — voir VehiculeCommandeContextResolver. Regroupe deux notions volontairement
+ * indépendantes :
+ *  - modeTarification : quel prix sert de base au montant facturé (véhicule de flotte → prix
+ *    de vente ; client PARTENAIRE sans véhicule → prix usine, cf. ModeTarification).
  *  - commissionEligible : la commande génère-t-elle une commission (dérivé de
- *    Vehicule::commission_eligible, cf. CommissionGenerator).
+ *    Vehicule::livraison_vente, jamais vrai sans véhicule de flotte — cf. CommissionGenerator).
  */
 final readonly class VehiculeCommandeContext
 {

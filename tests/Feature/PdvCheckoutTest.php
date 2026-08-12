@@ -279,25 +279,19 @@ class PdvCheckoutTest extends TestCase
     }
 
     // ── Snapshots mode_tarification / commission_eligible ────────────────────
-    // Les deux notions sont indépendantes — voir VehiculeCommandeContextResolver.
-    // Testées ici via le même chemin HTTP que le reste de la classe, sur 3 des
-    // 4 combinaisons possibles (la 4e — deux "non" — est couverte côté
-    // CommandeVenteCommissionEligibiliteTest) pour prouver que le mode de
-    // tarification et l'éligibilité aux commissions ne sont jamais dérivés
-    // l'un de l'autre, y compris sur le chemin PDV.
-    #[DataProvider('prisEnChargeEtCommissionEligibleProvider')]
+    // Un véhicule de flotte gérée facture toujours au prix de vente plein — seule
+    // l'éligibilité aux commissions varie selon Vehicule::livraison_vente — voir
+    // VehiculeCommandeContextResolver et CommandeVenteCommissionEligibiliteTest.
+    #[DataProvider('livraisonVenteProvider')]
     public function test_checkout_mode_livreur_snapshot_reflete_le_vehicule(
-        bool $prisEnChargeParUsine,
-        bool $commissionEligible,
-        string $modeTarificationAttendu,
+        bool $livraisonVente,
     ): void {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
             'capacite_packs' => 10,
-            'pris_en_charge_par_usine' => $prisEnChargeParUsine,
-            'commission_eligible' => $commissionEligible,
+            'livraison_vente' => $livraisonVente,
         ]);
 
         $this->actingAs($this->user)
@@ -309,16 +303,15 @@ class PdvCheckoutTest extends TestCase
             ->assertRedirect();
 
         $commande = CommandeVente::where('vehicule_id', $vehicule->id)->latest()->first();
-        $this->assertSame($modeTarificationAttendu, $commande->mode_tarification_snapshot->value);
-        $this->assertSame($commissionEligible, (bool) $commande->commission_eligible_snapshot);
+        $this->assertSame('prix_vente', $commande->mode_tarification_snapshot->value);
+        $this->assertSame($livraisonVente, (bool) $commande->commission_eligible_snapshot);
     }
 
-    public static function prisEnChargeEtCommissionEligibleProvider(): array
+    public static function livraisonVenteProvider(): array
     {
         return [
-            'pris en charge + éligible' => [true, true, 'prix_vente'],
-            'pris en charge + non éligible' => [true, false, 'prix_vente'],
-            'non pris en charge + éligible' => [false, true, 'prix_usine'],
+            'livraison_vente activée' => [true],
+            'livraison_vente désactivée' => [false],
         ];
     }
 

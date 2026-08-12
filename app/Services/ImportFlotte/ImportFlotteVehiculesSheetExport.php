@@ -22,8 +22,8 @@ class ImportFlotteVehiculesSheetExport implements FromArray, WithHeadings, WithT
             'vehicule_type',
             'vehicule_capacite_sachets',
             'vehicule_capacite_bouteilles',
-            'vehicule_categorie',
-            'vehicule_pris_en_charge_par_usine',
+            'vehicule_livraison_vente',
+            'vehicule_livraison_logistique',
             'proprietaire_nom',
             'proprietaire_prenom',
             'proprietaire_telephone',
@@ -39,11 +39,10 @@ class ImportFlotteVehiculesSheetExport implements FromArray, WithHeadings, WithT
         // ImportFlotteParser). La commission d'équipe se configure après coup
         // dans Équipes de livraison.
         //
-        // vehicule_site est obligatoire quelle que soit la catégorie : un
-        // véhicule externe est aussi rattaché à un site (celui pour lequel il
-        // opère), même s'il appartient à un propriétaire privé.
+        // vehicule_site est obligatoire pour tout véhicule, quel que soit son propriétaire.
+        // Un véhicule doit être autorisé pour la vente et/ou la logistique (au moins un "oui").
         return [
-            ['Matoto', 'Camion 1', 'RC-1234-A', 'Tricycle', '80', '', 'externe', 'oui', 'Diallo', 'Mamadou', '622000001', 'GN'],
+            ['Matoto', 'Camion 1', 'RC-1234-A', 'Tricycle', '80', '', 'oui', 'non', 'Diallo', 'Mamadou', '622000001', 'GN'],
         ];
     }
 }

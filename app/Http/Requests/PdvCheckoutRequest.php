@@ -17,6 +17,7 @@ class PdvCheckoutRequest extends FormRequest
             'mode' => ['required', 'string', 'in:Vente rapide,Client,Livreur'],
             'client_id' => ['nullable', 'exists:clients,id'],
             'vehicule_id' => ['nullable', 'exists:vehicules,id'],
+            'client_vehicule_id' => ['nullable', 'exists:client_vehicules,id'],
             'lignes' => ['required', 'array', 'min:1'],
             'lignes.*.produit_id' => ['required', 'exists:produits,id'],
             // Optionnel : la grille PDV actuelle ne sélectionne qu'un produit (pas encore de
