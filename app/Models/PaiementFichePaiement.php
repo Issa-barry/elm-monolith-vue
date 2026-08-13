@@ -20,6 +20,7 @@ class PaiementFichePaiement extends Model
         'site_id',
         'montant',
         'mode_paiement',
+        'moyen_paiement_detail',
         'date_paiement',
         'note',
         'created_by',

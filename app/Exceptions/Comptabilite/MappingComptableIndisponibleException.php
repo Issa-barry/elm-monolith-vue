@@ -17,6 +17,6 @@ class MappingComptableIndisponibleException extends RuntimeException
     {
         $suffixe = $moyenPaiement ? " (moyen de paiement: {$moyenPaiement})" : '';
 
-        return new self("Aucun compte mappé pour l'événement « {$evenement} », rôle « {$role} »{$suffixe} (organisation {$organizationId}). Configurez compte_mappings avant de comptabiliser cet événement.");
+        return new self("Aucun compte mappé pour l'événement « {$evenement} », rôle « {$role} »{$suffixe} (organisation {$organizationId}). Configurez compta_mappings avant de comptabiliser cet événement.");
     }
 }

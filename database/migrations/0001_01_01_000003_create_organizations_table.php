@@ -16,6 +16,13 @@ return new class extends Migration
             $table->char('siret', 14)->nullable()->unique();
             $table->string('logo_path')->nullable();
             $table->boolean('is_active')->default(true);
+            // Compteur de séquence par organisation pour les références produit
+            // (ProduitVariante.sku) — style numéro d'article IKEA : un entier stable,
+            // qui n'encode ni le nom, ni la catégorie, ni le prix, ni la date.
+            // Porté par l'organisation (pas une table globale) pour garantir une
+            // numérotation indépendante par tenant, cohérente avec l'unicité
+            // ['organization_id', 'sku'] de produit_variantes.
+            $table->unsignedInteger('next_produit_reference')->default(100001);
             $table->timestamps();
             $table->softDeletes();
         });

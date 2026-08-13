@@ -12,7 +12,7 @@ class PeriodeComptable extends Model
 {
     use HasUlids;
 
-    protected $table = 'periodes_comptables';
+    protected $table = 'compta_periodes';
 
     protected $fillable = [
         'organization_id',

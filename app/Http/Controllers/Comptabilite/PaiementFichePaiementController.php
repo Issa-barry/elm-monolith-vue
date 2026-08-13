@@ -30,6 +30,10 @@ class PaiementFichePaiementController extends Controller
         $data = $request->validate([
             'montant' => ['required', 'numeric', 'min:1', 'max:'.$restant],
             'mode_paiement' => ['required', 'in:'.implode(',', array_column(ModePaiement::cases(), 'value'))],
+            // Étiquette libre du wallet Mobile Money (ex: "orange", "mtn", "djomy") —
+            // jamais un enum fermé : chaque organisation nomme ses propres wallets.
+            // Ignoré si mode_paiement != mobile_money.
+            'moyen_paiement_detail' => ['nullable', 'string', 'max:30'],
             'date_paiement' => ['required', 'date'],
             'note' => ['nullable', 'string'],
         ]);
@@ -40,6 +44,9 @@ class PaiementFichePaiementController extends Controller
             'site_id' => $fiche->site_id,
             'montant' => $data['montant'],
             'mode_paiement' => $data['mode_paiement'],
+            'moyen_paiement_detail' => $data['mode_paiement'] === ModePaiement::MOBILE_MONEY->value
+                ? ($data['moyen_paiement_detail'] ?? null)
+                : null,
             'date_paiement' => $data['date_paiement'],
             'note' => $data['note'] ?? null,
         ]);
