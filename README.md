@@ -29,7 +29,13 @@ ln -s "$PWD/storage/app/public" "$PWD/public/storage" || true
 
 $PHP artisan optimize:clear
 $PHP artisan optimize
+
 ```
+
+
+
+
+
 
 Puis, **depuis un navigateur**, ouvrir `https://ton-domaine/install` et suivre l'assistant
 (4 étapes : Entreprise, Super Admin, Catalogue initial, Résumé). C'est la façon recommandée
