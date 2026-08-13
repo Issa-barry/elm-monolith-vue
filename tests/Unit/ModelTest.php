@@ -220,7 +220,7 @@ class ModelTest extends TestCase
         $p = Produit::create([
             'organization_id' => $org->id,
             'nom' => 'Test',
-            'type' => 'materiel',
+            'produit_type_id' => $this->produitTypeId($org, 'materiel'),
             'statut' => 'archive',
         ]);
 
@@ -233,7 +233,7 @@ class ModelTest extends TestCase
         $p = Produit::create([
             'organization_id' => $org->id,
             'nom' => 'Service test',
-            'type' => 'service',
+            'produit_type_id' => $this->produitTypeId($org, 'service'),
             'statut' => 'actif',
             'qte_stock' => 0,
         ]);
@@ -247,7 +247,7 @@ class ModelTest extends TestCase
         $p = Produit::create([
             'organization_id' => $org->id,
             'nom' => 'Materiel test',
-            'type' => 'materiel',
+            'produit_type_id' => $this->produitTypeId($org, 'materiel'),
             'statut' => 'actif',
             'qte_stock' => 0,
         ]);
@@ -261,7 +261,7 @@ class ModelTest extends TestCase
         $p = Produit::create([
             'organization_id' => $org->id,
             'nom' => 'Service',
-            'type' => 'service',
+            'produit_type_id' => $this->produitTypeId($org, 'service'),
             'statut' => 'actif',
             'qte_stock' => 5,
         ]);
@@ -275,7 +275,7 @@ class ModelTest extends TestCase
         $p = Produit::create([
             'organization_id' => $org->id,
             'nom' => 'Materiel',
-            'type' => 'materiel',
+            'produit_type_id' => $this->produitTypeId($org, 'materiel'),
             'statut' => 'actif',
             'qte_stock' => 0,
         ]);
@@ -289,7 +289,7 @@ class ModelTest extends TestCase
         $p = Produit::create([
             'organization_id' => $org->id,
             'nom' => 'Materiel',
-            'type' => 'materiel',
+            'produit_type_id' => $this->produitTypeId($org, 'materiel'),
             'statut' => 'actif',
         ]);
 
@@ -304,7 +304,7 @@ class ModelTest extends TestCase
         $p = Produit::create([
             'organization_id' => $org->id,
             'nom' => 'Materiel',
-            'type' => 'materiel',
+            'produit_type_id' => $this->produitTypeId($org, 'materiel'),
             'statut' => 'actif',
         ]);
 
@@ -315,8 +315,8 @@ class ModelTest extends TestCase
     public function test_produit_scope_actifs(): void
     {
         $org = $this->makeOrg();
-        Produit::create(['organization_id' => $org->id, 'nom' => 'Actif', 'type' => 'materiel', 'statut' => 'actif']);
-        Produit::create(['organization_id' => $org->id, 'nom' => 'Inactif', 'type' => 'materiel', 'statut' => 'inactif']);
+        Produit::create(['organization_id' => $org->id, 'nom' => 'Actif', 'produit_type_id' => $this->produitTypeId($org, 'materiel'), 'statut' => 'actif']);
+        Produit::create(['organization_id' => $org->id, 'nom' => 'Inactif', 'produit_type_id' => $this->produitTypeId($org, 'materiel'), 'statut' => 'inactif']);
 
         $actifs = Produit::actifs()->where('organization_id', $org->id)->get();
         $this->assertCount(1, $actifs);
@@ -325,8 +325,8 @@ class ModelTest extends TestCase
     public function test_produit_scope_non_archives(): void
     {
         $org = $this->makeOrg();
-        Produit::create(['organization_id' => $org->id, 'nom' => 'Normal', 'type' => 'materiel', 'statut' => 'actif']);
-        Produit::create(['organization_id' => $org->id, 'nom' => 'Archive', 'type' => 'materiel', 'statut' => 'archive']);
+        Produit::create(['organization_id' => $org->id, 'nom' => 'Normal', 'produit_type_id' => $this->produitTypeId($org, 'materiel'), 'statut' => 'actif']);
+        Produit::create(['organization_id' => $org->id, 'nom' => 'Archive', 'produit_type_id' => $this->produitTypeId($org, 'materiel'), 'statut' => 'archive']);
 
         $nonArchives = Produit::nonArchives()->where('organization_id', $org->id)->get();
         $this->assertCount(1, $nonArchives);
@@ -341,7 +341,7 @@ class ModelTest extends TestCase
         $p = Produit::create([
             'organization_id' => $org->id,
             'nom' => 'Prod',
-            'type' => 'materiel',
+            'produit_type_id' => $this->produitTypeId($org, 'materiel'),
             'statut' => 'actif',
         ]);
 
@@ -358,7 +358,7 @@ class ModelTest extends TestCase
         $p = Produit::create([
             'organization_id' => $org->id,
             'nom' => 'Prod',
-            'type' => 'materiel',
+            'produit_type_id' => $this->produitTypeId($org, 'materiel'),
             'statut' => 'archive',
         ]);
         $p->archived_at = now();
@@ -377,7 +377,7 @@ class ModelTest extends TestCase
         $p = Produit::create([
             'organization_id' => $org->id,
             'nom' => 'Prod',
-            'type' => 'materiel',
+            'produit_type_id' => $this->produitTypeId($org, 'materiel'),
             'statut' => 'actif',
         ]);
 

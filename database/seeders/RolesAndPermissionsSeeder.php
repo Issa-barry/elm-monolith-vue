@@ -3,10 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Organization;
-use App\Models\User;
-use App\Services\MatriculeService;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
@@ -19,7 +16,7 @@ class RolesAndPermissionsSeeder extends Seeder
         // Véhicules & logistique terrain
         'vehicules', 'type-vehicules', 'equipes-livraison', 'sites',
         // Commerce
-        'produits', 'categories', 'options', 'packings', 'ventes', 'achats', 'fournisseurs', 'factures', 'commissions', 'cashback', 'pdv',
+        'produits', 'categories', 'options', 'type-produits', 'packings', 'ventes', 'achats', 'fournisseurs', 'factures', 'commissions', 'cashback', 'pdv',
         // Opérations
         'logistique', 'transferts', 'receptions',
         // Finances
@@ -34,27 +31,22 @@ class RolesAndPermissionsSeeder extends Seeder
 
     private const ACTIONS = ['create', 'read', 'update', 'delete'];
 
-    private const PASSWORD = 'Staff@2025';
-
+    /**
+     * Ne crée JAMAIS de compte de démo — sécurité indépendante d'APP_ENV, garantie par le seul
+     * fait que ce seeder n'appelle plus ElmDemoAccountsSeeder (cf. son docblock pour le contexte).
+     * Le seul compte réel de mise en prod est créé par `php artisan app:install` (cf. InstallApp),
+     * jamais par un seeder. Les comptes de démo "elm", eux, sont ajoutés explicitement par
+     * DatabaseSeeder (dev local / CI) via ElmDemoAccountsSeeder, jamais ici.
+     */
     public function run(): void
     {
         self::seedRolesEtPermissions();
 
         // ── 3. Organisation par défaut ────────────────────────────────────────
-        $org = Organization::firstOrCreate(
+        Organization::firstOrCreate(
             ['slug' => 'elm'],
             ['name' => 'Eau la maman', 'is_active' => true]
         );
-
-        // ── 4. Comptes staff de démonstration ─────────────────────────────────
-        // Jamais en production : ces comptes fictifs partagent un mot de passe
-        // connu (Staff@2025). Le seul compte réel de mise en prod est créé par
-        // `php artisan app:install` (cf. InstallApp), jamais par un seeder.
-        if (app()->environment('production')) {
-            return;
-        }
-
-        $this->seedComptesDemo($org);
     }
 
     /**
@@ -144,6 +136,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'produits.ajuster_stock',
             'categories.create',        'categories.read',        'categories.update',        'categories.delete',
             'options.create',           'options.read',           'options.update',           'options.delete',
+            'type-produits.create',     'type-produits.read',     'type-produits.update',     'type-produits.delete',
             'packings.create',          'packings.read',          'packings.update',          'packings.delete',
             'ventes.create',            'ventes.read',            'ventes.update',            'ventes.delete',
             'ventes.qte.update',        'ventes.prix.update',
@@ -201,6 +194,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'produits.ajuster_stock',
             'categories.read',          'categories.create',      'categories.update',
             'options.read',             'options.create',         'options.update',
+            'type-produits.read',       'type-produits.create',   'type-produits.update',
             'packings.read',            'packings.create',        'packings.update',
             'ventes.create',            'ventes.read',            'ventes.update',
             'ventes.qte.update',        'ventes.prix.update',
@@ -247,6 +241,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'produits.read',
             'categories.read',
             'options.read',
+            'type-produits.read',
             'packings.read',
             'ventes.read',         'ventes.create',
             'ventes.confirmer',    'ventes.annuler',
@@ -258,7 +253,7 @@ class RolesAndPermissionsSeeder extends Seeder
         $comptable->syncPermissions([
             'clients.read',           'prestataires.read',  'livreurs.read',
             'proprietaires.read',     'vehicules.read',     'equipes-livraison.read',
-            'sites.read',             'produits.read',      'categories.read',    'options.read',    'packings.read',
+            'sites.read',             'produits.read',      'categories.read',    'options.read',    'type-produits.read',    'packings.read',
             'ventes.read',
             'factures.read',          'factures.encaisser',
             'commissions.read',       'commissions.payer',  'commissions.cloturer', 'commissions.exporter',
@@ -270,119 +265,5 @@ class RolesAndPermissionsSeeder extends Seeder
             'cashback.read',
             'rh-paie.read',
         ]);
-    }
-
-    private function seedComptesDemo(Organization $org): void
-    {
-        $pays = [
-            'FR' => ['France',  '+33'],
-            'GN' => ['Guinée',  '+224'],
-        ];
-
-        $staff = [
-            [
-                'prenom' => 'Issa',
-                'nom' => 'BARRY',
-                'telephone' => '+33758855039',
-                'code_pays' => 'FR',
-                'role' => 'super_admin',
-            ],
-            [
-                'prenom' => 'Abdoulaye',
-                'nom' => 'DIALLO',
-                'telephone' => '+33769442565',
-                'code_pays' => 'FR',
-                'role' => 'admin_entreprise',
-            ],
-            [
-                'prenom' => 'Moussa',
-                'nom' => 'SIDIBÉ',
-                'telephone' => '+224656555520',
-                'code_pays' => 'GN',
-                'role' => 'admin_entreprise',
-            ],
-            [
-                'prenom' => 'Thierno Oumar',
-                'nom' => 'DIALLO',
-                'telephone' => '+224622176056',
-                'code_pays' => 'GN',
-                'role' => 'manager',
-            ],
-            [
-                'prenom' => 'Aminata',
-                'nom' => 'DIALLO',
-                'telephone' => null,
-                'code_pays' => null,
-                'role' => 'comptable',
-            ],
-            [
-                'prenom' => 'Alpha Oumar',
-                'nom' => 'CAMARA',
-                'telephone' => null,
-                'code_pays' => null,
-                'role' => 'commerciale',
-            ],
-            [
-                'prenom' => 'Elhadj Oumar',
-                'nom' => 'TALL',
-                'telephone' => '+33605751596',
-                'code_pays' => 'FR',
-                'role' => 'super_admin',
-            ],
-
-        ];
-
-        foreach ($staff as $data) {
-            $codePays = $data['code_pays'];
-            $paysNom = $codePays ? $pays[$codePays][0] : null;
-            $codePhone = $codePays ? $pays[$codePays][1] : null;
-
-            $lookup = $data['telephone']
-                ? ['telephone' => $data['telephone']]
-                : ['prenom' => $data['prenom'], 'nom' => $data['nom']];
-
-            // updateOrCreate garantit que le mot de passe est toujours réinitialisé
-            // lors d'un re-seed, même si le compte existe déjà.
-            $user = User::updateOrCreate($lookup, [
-                'prenom' => $data['prenom'],
-                'nom' => $data['nom'],
-                'telephone' => $data['telephone'],
-                'code_pays' => $codePays,
-                'pays' => $paysNom,
-                'code_phone_pays' => $codePhone,
-                'email' => null,
-                'email_verified_at' => now(),
-                'password' => Hash::make(self::PASSWORD),
-                'organization_id' => $org->id,
-            ]);
-
-            $user->syncRoles([$data['role']]);
-            app(MatriculeService::class)->assignForUser($user);
-        }
-
-        // ── 5. Résumé console ─────────────────────────────────────────────────
-        $this->command->newLine();
-        $this->command->info('✓ Rôles, permissions et comptes créés avec succès.');
-        $this->command->newLine();
-        $this->command->table(
-            ['Prénom Nom', 'Téléphone', 'Rôle', 'Mot de passe'],
-            [
-                ['Issa BARRY',          '+33758855039',  'super_admin',      self::PASSWORD],
-                ['Abdoulaye DIALLO',    '+33769442565',  'admin_entreprise', self::PASSWORD],
-                ['Moussa SIDIBÉ',       '+224656555520', 'admin_entreprise', self::PASSWORD],
-                ['Thierno Oumar DIALLO', '+224622176056', 'manager',          self::PASSWORD],
-                ['Aminata DIALLO',      '— (à définir)',  'comptable',        self::PASSWORD],
-                ['Alpha Oumar CAMARA',  '— (à définir)',  'commerciale',      self::PASSWORD],
-                ['Elhadj Oumar TALL',   '+33605751596',   'super_admin',      self::PASSWORD],
-            ]
-        );
-        $this->command->newLine();
-        $this->command->table(
-            ['Rôle', 'Permissions'],
-            Role::with('permissions')->get()->map(fn ($r) => [
-                $r->name,
-                $r->name === 'super_admin' ? 'Toutes ('.$r->permissions->count().')' : $r->permissions->count(),
-            ])->toArray()
-        );
     }
 }

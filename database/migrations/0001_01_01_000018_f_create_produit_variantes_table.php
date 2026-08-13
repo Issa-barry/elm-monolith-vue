@@ -27,7 +27,6 @@ return new class extends Migration
             $table->unsignedBigInteger('prix_vente')->nullable();
             $table->unsignedBigInteger('prix_achat')->nullable();
             $table->unsignedBigInteger('cout')->nullable();
-            $table->unsignedInteger('seuil_alerte_stock')->nullable();
 
             $table->boolean('is_default')->default(false);
             $table->boolean('is_active')->default(true);

@@ -180,7 +180,10 @@ class CommissionLogistiqueService
         if ($equipe) {
             $membres = $equipe->membres()->with('livreur')->get();
             foreach ($membres as $membre) {
-                $taux = (float) ($membre->taux_commission ?? 0);
+                // Barème logistique distinct du barème vente (taux_commission), cf.
+                // EquipeLivreur::tauxCommissionLogistiqueEffectif() — repli sur le barème vente
+                // tant qu'aucun barème logistique n'a été configuré explicitement.
+                $taux = $membre->tauxCommissionLogistiqueEffectif();
                 $brut = round($montantTotal * $taux / 100, 2);
                 $nomLivreur = $membre->livreur
                     ? $membre->livreur->libelleAffichage()

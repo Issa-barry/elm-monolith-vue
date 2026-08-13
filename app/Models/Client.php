@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use App\Enums\ClientType;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Client extends Model
@@ -17,6 +19,7 @@ class Client extends Model
         'user_id',
         'nom',
         'prenom',
+        'nom_complet',
         'email',
         'telephone',
         'code_phone_pays',
@@ -25,6 +28,7 @@ class Client extends Model
         'ville',
         'adresse',
         'is_active',
+        'type',
         'cashback_eligible',
     ];
 
@@ -32,13 +36,26 @@ class Client extends Model
     {
         return [
             'is_active' => 'boolean',
+            'type' => ClientType::class,
             'cashback_eligible' => 'boolean',
         ];
     }
 
+    /**
+     * Comme Livreur : nom_complet est le champ réellement saisi/affiché dans l'interface.
+     * nom/prenom ne sont conservés que pour compat avec d'anciennes données (fallback ici,
+     * jamais redemandés dans le formulaire).
+     */
     public function getNomCompletAttribute(): string
     {
-        return trim("{$this->prenom} {$this->nom}");
+        $saisi = trim((string) ($this->attributes['nom_complet'] ?? ''));
+
+        return $saisi !== '' ? $saisi : trim("{$this->prenom} {$this->nom}");
+    }
+
+    public function isPartenaire(): bool
+    {
+        return $this->type === ClientType::PARTENAIRE;
     }
 
     public function organization(): BelongsTo
@@ -49,5 +66,10 @@ class Client extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function vehicules(): HasMany
+    {
+        return $this->hasMany(ClientVehicle::class);
     }
 }

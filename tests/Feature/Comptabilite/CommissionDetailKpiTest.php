@@ -56,7 +56,7 @@ class CommissionDetailKpiTest extends TestCase
     {
         return Vehicule::factory()->create([
             'organization_id' => $this->org->id,
-            'categorie' => 'interne',
+            'livraison_logistique' => true,
             'is_active' => true,
         ]);
     }
@@ -638,7 +638,6 @@ class CommissionDetailKpiTest extends TestCase
         $proprio = $this->makeProprietaire();
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
-            'categorie' => 'externe',
             'proprietaire_id' => $proprio->id,
             'is_active' => true,
         ]);

@@ -322,7 +322,28 @@
       "Bash(php -l tests/Unit/ProduitServicePrixTest.php)",
       "Bash(vendor/bin/pint --test app/Enums/ProduitType.php resources/js/pages/Produits)",
       "Bash(vendor/bin/pint --test tests/Unit/EnumsTest.php)",
-      "Bash(vendor/bin/pint app/Services/ProduitService.php)"
+      "Bash(vendor/bin/pint app/Services/ProduitService.php)",
+      "Bash(rm \"c:\\\\laragon\\\\www\\\\eau-la-maman\\\\elm-monolithe\\\\.claude\\\\scratch-todo.md\")",
+      "Bash(grep -n \"produitType\\\\|ProduitType \\\\$\" app/Http/Controllers/ProduitTypeController.php)",
+      "Bash(DB_CONNECTION=sqlite DB_DATABASE=:memory: php artisan migrate:fresh --env=testing)",
+      "Bash(grep -n 'is_alerte\\\\|->type\\\\b\\\\|ProduitType::\\\\|$v->seuil_alerte_stock\\\\|variante.*seuil_alerte' app/Http/Controllers/ProduitController.php)",
+      "Bash(sed -i \"s/fresh\\(\\\\['variantes', 'categorie', 'fournisseur', 'medias'\\\\]\\)/fresh\\(['variantes', 'categorie', 'fournisseur', 'medias', 'produitType']\\)/g\" app/Http/Controllers/Api/Produits/ProduitController.php)",
+      "Bash(sed -i \"s/fresh\\(\\\\['variantes', 'fournisseur'\\\\]\\)/fresh\\(['variantes', 'fournisseur', 'produitType']\\)/g\" app/Http/Controllers/Api/Produits/ProduitController.php)",
+      "Bash(grep -n ''\\\\''produit_type_id'\\\\'' => $produit->produit_type_id,' app/Http/Controllers/ProduitController.php)",
+      "Bash(uniq -c -f1)",
+      "Bash(sed -i 's/'\\\\''type'\\\\'' => '\\\\''materiel'\\\\'',/'\\\\''produit_type_id'\\\\'' => $this->typeId\\('\\\\''materiel'\\\\''\\),/g' tests/Feature/ProduitTest.php)",
+      "Bash(sed -i 's/'\\\\''type'\\\\'' => '\\\\''achat_vente'\\\\'',/'\\\\''produit_type_id'\\\\'' => $this->typeId\\('\\\\''achat_vente'\\\\''\\),/g' tests/Feature/ProduitTest.php)",
+      "Bash(sed -i 's/'\\\\''type'\\\\'' => '\\\\''fabricable'\\\\'',/'\\\\''produit_type_id'\\\\'' => $this->typeId\\('\\\\''fabricable'\\\\''\\),/g' tests/Feature/ProduitTest.php)",
+      "Bash(sed -i 's/'\\\\''type'\\\\'' => '\\\\''service'\\\\'',/'\\\\''produit_type_id'\\\\'' => $this->typeId\\('\\\\''service'\\\\''\\),/g' tests/Feature/ProduitTest.php)",
+      "Bash(sed -i 's/'\\\\''type'\\\\'' => '\\\\''materiel'\\\\'',/'\\\\''produit_type_id'\\\\'' => $this->typeId\\('\\\\''materiel'\\\\''\\),/g' tests/Feature/Api/ProduitApiTest.php)",
+      "Bash(sed -i 's/'\\\\''type'\\\\'' => '\\\\''fabricable'\\\\'',/'\\\\''produit_type_id'\\\\'' => $this->typeId\\('\\\\''fabricable'\\\\''\\),/g' tests/Feature/Api/ProduitApiTest.php)",
+      "Bash(sed -i 's/'\\\\''type'\\\\'' => '\\\\''achat_vente'\\\\'',/'\\\\''produit_type_id'\\\\'' => $this->typeId\\('\\\\''achat_vente'\\\\''\\),/g' tests/Feature/Api/ProduitApiTest.php)",
+      "Bash(grep -oP \"Tests\\\\\\\\\\\\\\\\Feature\\\\\\\\\\\\\\\\[A-Za-z0-9_\\\\\\\\\\\\\\\\]+\\(?= >\\)\" \"C:\\\\Users\\\\issab\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--laragon-www-eau-la-maman-elm-monolithe\\\\2bac543c-2ee4-4644-b9c1-83c0f2d7157f\\\\tasks\\\\bd22si17x.output\")",
+      "Bash(grep -n \"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\[A-Z][A-Za-z]*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\" app/Http/Controllers/VehiculeController.php)",
+      "Bash(curl -sL \"https://api.github.com/repos/Issa-barry/elm-monolith-vue/actions/jobs/93929850123/logs\" -o /c/tmp/phpunit_log.txt -w \"HTTP %{http_code}\\\\n\")",
+      "Bash(php -r \"echo date\\('Y-m-d H:i:s'\\);\")",
+      "Bash(taskkill //F //IM php.exe)",
+      "Bash(powershell -command \"Start-Sleep -Seconds 2\")"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64",
@@ -331,7 +352,8 @@
       "C:\\laragon\\www\\eau-la-maman\\elm-mobile-client\\features\\auth\\validation",
       "C:\\laragon\\www\\eau-la-maman\\elm-mobile-client\\features\\auth\\services",
       "C:\\laragon\\www\\eau-la-maman\\elm-mobile-client\\features\\auth\\screens",
-      "\\tmp"
+      "\\tmp",
+      "c:\\laragon\\www\\eau-la-maman\\elm-monolithe\\.claude"
     ]
   }
 }

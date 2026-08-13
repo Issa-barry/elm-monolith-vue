@@ -20,14 +20,12 @@ use Illuminate\Database\Seeder;
  * Depuis la refonte variant-first, le stock est porté par la variante (ici la variante
  * par défaut de chaque produit simple — aucun produit de cette liste n'a de déclinaisons).
  *
- * NB : VarianteStock.is_alerte n'est jamais recalculé automatiquement dans le
- * projet (vérifié — aucun observer/job ne le fait) : calculé ici une seule
- * fois à la création, à partir du seuil.
+ * Le seuil d'alerte (10, cf. FelloDemoCatalogSeeder) vit désormais sur le PRODUIT, pas sur
+ * VarianteStock — ce seeder ne fait que ventiler la quantité par site, l'état
+ * disponible/faible/rupture est recalculé automatiquement à l'affichage (StockStatutService).
  */
 class FelloDemoStockSeeder extends Seeder
 {
-    private const SEUIL_ALERTE = 10;
-
     /** @var array<string, array{0: int, 1: int}> nom_produit => [qte_madina, qte_cosa] */
     private const STOCKS = [
         'T-shirt coton homme' => [45, 18],
@@ -93,8 +91,6 @@ class FelloDemoStockSeeder extends Seeder
             [
                 'organization_id' => $orgId,
                 'qte_stock' => $qte,
-                'seuil_alerte_stock' => self::SEUIL_ALERTE,
-                'is_alerte' => $qte <= self::SEUIL_ALERTE,
             ]
         );
 

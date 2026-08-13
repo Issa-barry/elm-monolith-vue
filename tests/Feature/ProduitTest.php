@@ -9,11 +9,14 @@ use App\Models\OptionCatalogue;
 use App\Models\Organization;
 use App\Models\Prestataire;
 use App\Models\Produit;
+use App\Models\ProduitType;
 use App\Models\Site;
 use App\Models\User;
 use App\Models\VarianteStock;
 use App\Services\ProduitService;
+use Database\Seeders\ProduitTypeDefaultSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\Feature\Concerns\HasAdminSetup;
@@ -28,6 +31,18 @@ class ProduitTest extends TestCase
     {
         parent::setUp();
         $this->initOrgAndUser(['produits.read', 'produits.create', 'produits.update', 'produits.delete']);
+        ProduitTypeDefaultSeeder::seedPourOrganisation($this->org->id);
+    }
+
+    /** Résout l'id du type par défaut (code stable) pour une organisation — la provisionne
+     * au passage si besoin (idempotent, cf. ProduitTypeDefaultSeeder::seedPourOrganisation()),
+     * pour couvrir aussi les tests qui créent une "autre organisation" à la volée. */
+    private function typeId(string $code, ?Organization $org = null): string
+    {
+        $org ??= $this->org;
+        ProduitTypeDefaultSeeder::seedPourOrganisation($org->id);
+
+        return ProduitType::where('organization_id', $org->id)->where('code', $code)->value('id');
     }
 
     private function defaultSite(): Site
@@ -61,10 +76,9 @@ class ProduitTest extends TestCase
         $produit = app(ProduitService::class)->creer([
             'organization_id' => $org->id,
             'nom' => 'Produit test',
-            'type' => 'materiel',
+            'produit_type_id' => $this->typeId('materiel', $org),
             'statut' => 'actif',
             'prix_achat' => 500,
-            'is_alerte' => false,
         ]);
 
         if ($qteStock !== 0) {
@@ -119,20 +133,18 @@ class ProduitTest extends TestCase
         Produit::create([
             'organization_id' => $this->org->id,
             'nom' => 'Produit materiel',
-            'type' => 'materiel',
+            'produit_type_id' => $this->typeId('materiel'),
             'statut' => 'actif',
-            'is_alerte' => false,
         ]);
         Produit::create([
             'organization_id' => $this->org->id,
             'nom' => 'Produit service',
-            'type' => 'service',
+            'produit_type_id' => $this->typeId('service'),
             'statut' => 'actif',
-            'is_alerte' => false,
         ]);
 
         $response = $this->actingAs($this->user)
-            ->get(route('produits.index', ['type' => 'materiel']));
+            ->get(route('produits.index', ['produit_type_id' => $this->typeId('materiel')]));
 
         $response->assertStatus(200);
         $produits = $response->original->getData()['page']['props']['produits'];
@@ -145,16 +157,14 @@ class ProduitTest extends TestCase
         Produit::create([
             'organization_id' => $this->org->id,
             'nom' => 'Actif',
-            'type' => 'materiel',
+            'produit_type_id' => $this->typeId('materiel'),
             'statut' => 'actif',
-            'is_alerte' => false,
         ]);
         Produit::create([
             'organization_id' => $this->org->id,
             'nom' => 'Archivé',
-            'type' => 'materiel',
+            'produit_type_id' => $this->typeId('materiel'),
             'statut' => 'archive',
-            'is_alerte' => false,
         ]);
 
         $response = $this->actingAs($this->user)
@@ -171,7 +181,7 @@ class ProduitTest extends TestCase
         $cible = app(ProduitService::class)->creer([
             'organization_id' => $this->org->id,
             'nom' => 'Produit cible',
-            'type' => 'materiel',
+            'produit_type_id' => $this->typeId('materiel'),
             'statut' => 'actif',
             'prix_achat' => 100,
             'prix_vente' => 200,
@@ -179,7 +189,7 @@ class ProduitTest extends TestCase
         app(ProduitService::class)->creer([
             'organization_id' => $this->org->id,
             'nom' => 'Autre produit',
-            'type' => 'materiel',
+            'produit_type_id' => $this->typeId('materiel'),
             'statut' => 'actif',
             'prix_achat' => 100,
             'prix_vente' => 200,
@@ -200,7 +210,7 @@ class ProduitTest extends TestCase
         $cible = app(ProduitService::class)->creer([
             'organization_id' => $this->org->id,
             'nom' => 'Produit scanné',
-            'type' => 'materiel',
+            'produit_type_id' => $this->typeId('materiel'),
             'statut' => 'actif',
             'prix_achat' => 100,
             'prix_vente' => 200,
@@ -209,7 +219,7 @@ class ProduitTest extends TestCase
         app(ProduitService::class)->creer([
             'organization_id' => $this->org->id,
             'nom' => 'Autre produit scanné',
-            'type' => 'materiel',
+            'produit_type_id' => $this->typeId('materiel'),
             'statut' => 'actif',
             'prix_achat' => 100,
             'prix_vente' => 200,
@@ -254,10 +264,9 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.store'), [
                 'nom' => 'Rouleau plastique',
-                'type' => 'materiel',
+                'produit_type_id' => $this->typeId('materiel'),
                 'statut' => 'actif',
                 'prix_achat' => 1000,
-                'is_alerte' => false,
             ]);
 
         $this->assertDatabaseHas('produits', [
@@ -275,7 +284,7 @@ class ProduitTest extends TestCase
         $response = $this->actingAs($this->user)
             ->post(route('produits.store'), [
                 'nom' => 'Rouleau plastique redirection',
-                'type' => 'materiel',
+                'produit_type_id' => $this->typeId('materiel'),
                 'statut' => 'actif',
                 'prix_achat' => 1000,
             ]);
@@ -289,7 +298,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.store'), [
                 'nom' => 'Eau minerale',
-                'type' => 'achat_vente',
+                'produit_type_id' => $this->typeId('achat_vente'),
                 'statut' => 'actif',
                 'prix_achat' => 3000,
                 'prix_vente' => 5000,
@@ -308,7 +317,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.store'), [
                 'nom' => 'Produit avec code-barres',
-                'type' => 'materiel',
+                'produit_type_id' => $this->typeId('materiel'),
                 'statut' => 'actif',
                 'prix_achat' => 1000,
                 'code_barres' => '3274080005003',
@@ -324,7 +333,7 @@ class ProduitTest extends TestCase
         app(ProduitService::class)->creer([
             'organization_id' => $this->org->id,
             'nom' => 'Premier produit',
-            'type' => 'materiel',
+            'produit_type_id' => $this->typeId('materiel'),
             'statut' => 'actif',
             'prix_achat' => 1000,
             'code_barres' => '3274080005003',
@@ -333,7 +342,7 @@ class ProduitTest extends TestCase
         $response = $this->actingAs($this->user)
             ->post(route('produits.store'), [
                 'nom' => 'Deuxième produit',
-                'type' => 'materiel',
+                'produit_type_id' => $this->typeId('materiel'),
                 'statut' => 'actif',
                 'prix_achat' => 1000,
                 'code_barres' => '3274080005003',
@@ -349,7 +358,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.store'), [
                 'nom' => 'Produit sans fournisseur',
-                'type' => 'materiel',
+                'produit_type_id' => $this->typeId('materiel'),
                 'statut' => 'actif',
                 'prix_achat' => 1000,
             ]);
@@ -365,7 +374,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.store'), [
                 'nom' => 'Produit avec fournisseur',
-                'type' => 'materiel',
+                'produit_type_id' => $this->typeId('materiel'),
                 'statut' => 'actif',
                 'prix_achat' => 1000,
                 'fournisseur_id' => $fournisseur->id,
@@ -383,7 +392,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.store'), [
                 'nom' => 'Produit test isolation',
-                'type' => 'materiel',
+                'produit_type_id' => $this->typeId('materiel'),
                 'statut' => 'actif',
                 'prix_achat' => 1000,
                 'fournisseur_id' => $fournisseurAilleurs->id,
@@ -407,7 +416,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.store'), [
                 'nom' => 'Produit test type',
-                'type' => 'materiel',
+                'produit_type_id' => $this->typeId('materiel'),
                 'statut' => 'actif',
                 'prix_achat' => 1000,
                 'fournisseur_id' => $machiniste->id,
@@ -426,7 +435,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->put(route('produits.update', $produit), [
                 'nom' => $produit->nom,
-                'type' => 'materiel',
+                'produit_type_id' => $this->typeId('materiel'),
                 'statut' => 'actif',
                 'fournisseur_id' => $nouveau->id,
             ]);
@@ -443,7 +452,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->put(route('produits.update', $produit), [
                 'nom' => $produit->nom,
-                'type' => 'materiel',
+                'produit_type_id' => $this->typeId('materiel'),
                 'statut' => 'actif',
                 'fournisseur_id' => null,
             ]);
@@ -485,7 +494,7 @@ class ProduitTest extends TestCase
     {
         $this->actingAs($this->user)
             ->post(route('produits.store'), [])
-            ->assertSessionHasErrors(['nom', 'type', 'statut']);
+            ->assertSessionHasErrors(['nom', 'produit_type_id', 'statut']);
     }
 
     public function test_store_fails_with_invalid_type(): void
@@ -493,10 +502,10 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.store'), [
                 'nom' => 'Test',
-                'type' => 'type_invalide',
+                'produit_type_id' => (string) Str::ulid(),
                 'statut' => 'actif',
             ])
-            ->assertSessionHasErrors('type');
+            ->assertSessionHasErrors('produit_type_id');
     }
 
     public function test_store_fails_sans_prix_requis_pour_le_type(): void
@@ -506,10 +515,10 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.store'), [
                 'nom' => 'Sans prix',
-                'type' => 'materiel',
+                'produit_type_id' => $this->typeId('materiel'),
                 'statut' => 'actif',
             ])
-            ->assertSessionHasErrors('type');
+            ->assertSessionHasErrors('produit_type_id');
 
         $this->assertDatabaseMissing('produits', ['nom' => 'Sans prix']);
     }
@@ -519,7 +528,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.store'), [
                 'nom' => 'T-shirt test',
-                'type' => 'achat_vente',
+                'produit_type_id' => $this->typeId('achat_vente'),
                 'statut' => 'actif',
                 'prix_achat' => 40000,
                 'prix_vente' => 75000,
@@ -542,7 +551,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.store'), [
                 'nom' => 'T-shirt catalogue',
-                'type' => 'achat_vente',
+                'produit_type_id' => $this->typeId('achat_vente'),
                 'statut' => 'actif',
                 'prix_achat' => 40000,
                 'prix_vente' => 75000,
@@ -565,7 +574,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.store'), [
                 'nom' => 'T-shirt test',
-                'type' => 'achat_vente',
+                'produit_type_id' => $this->typeId('achat_vente'),
                 'statut' => 'actif',
                 'prix_achat' => 40000,
                 'prix_vente' => 75000,
@@ -638,9 +647,8 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->put(route('produits.update', $produit), [
                 'nom' => 'Nouveau nom produit',
-                'type' => 'materiel',
+                'produit_type_id' => $this->typeId('materiel'),
                 'statut' => 'actif',
-                'is_alerte' => false,
             ])
             ->assertRedirect(route('produits.show', $produit));
 
@@ -660,7 +668,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->put(route('produits.update', $produit), [
                 'nom' => 'Nom modifié',
-                'type' => 'materiel',
+                'produit_type_id' => $this->typeId('materiel'),
                 'statut' => 'actif',
             ])
             ->assertSessionDoesntHaveErrors();
@@ -680,7 +688,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->put(route('produits.update', $produit), [
                 'nom' => 'Produit test',
-                'type' => 'materiel',
+                'produit_type_id' => $this->typeId('materiel'),
                 'statut' => 'actif',
                 'code_barres' => '3274080005003',
             ])
@@ -695,7 +703,7 @@ class ProduitTest extends TestCase
         $produit = app(ProduitService::class)->creer([
             'organization_id' => $this->org->id,
             'nom' => 'Deuxième produit',
-            'type' => 'materiel',
+            'produit_type_id' => $this->typeId('materiel'),
             'statut' => 'actif',
             'prix_achat' => 500,
         ]);
@@ -703,7 +711,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->put(route('produits.update', $produit), [
                 'nom' => 'Deuxième produit',
-                'type' => 'materiel',
+                'produit_type_id' => $this->typeId('materiel'),
                 'statut' => 'actif',
                 'code_barres' => '3274080005003',
             ])
@@ -716,7 +724,7 @@ class ProduitTest extends TestCase
 
         $this->actingAs($this->user)
             ->put(route('produits.update', $produit), [])
-            ->assertSessionHasErrors(['nom', 'type', 'statut']);
+            ->assertSessionHasErrors(['nom', 'produit_type_id', 'statut']);
     }
 
     public function test_update_refuse_prix_vente_inferieur_ou_egal_au_prix_achat(): void
@@ -724,7 +732,7 @@ class ProduitTest extends TestCase
         $produit = app(ProduitService::class)->creer([
             'organization_id' => $this->org->id,
             'nom' => 'Produit achat_vente',
-            'type' => 'achat_vente',
+            'produit_type_id' => $this->typeId('achat_vente'),
             'statut' => 'actif',
             'prix_achat' => 100000,
             'prix_vente' => 120000,
@@ -733,7 +741,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->put(route('produits.update', $produit), [
                 'nom' => $produit->nom,
-                'type' => 'achat_vente',
+                'produit_type_id' => $this->typeId('achat_vente'),
                 'statut' => 'actif',
                 'prix_achat' => 100000,
                 'prix_vente' => 90000,
@@ -755,7 +763,7 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.store'), [
                 'nom' => 'T-shirt multi-variantes',
-                'type' => 'achat_vente',
+                'produit_type_id' => $this->typeId('achat_vente'),
                 'statut' => 'actif',
                 'prix_achat' => 8000,
                 'prix_vente' => 10000,
@@ -771,15 +779,15 @@ class ProduitTest extends TestCase
         $this->actingAs($this->user)
             ->put(route('produits.update', $produit), [
                 'nom' => $produit->nom,
-                'type' => 'fabricable',
+                'produit_type_id' => $this->typeId('fabricable'),
                 'statut' => 'actif',
                 'prix_usine' => 8000,
                 'prix_vente' => 10000,
             ])
-            ->assertSessionHasErrors('type');
+            ->assertSessionHasErrors('produit_type_id');
 
         $produit->refresh();
-        $this->assertSame('achat_vente', $produit->type->value);
+        $this->assertSame($this->typeId('achat_vente'), $produit->produit_type_id);
         $this->assertCount(2, $produit->variantes);
         $this->assertTrue($produit->variantes->every(fn ($v) => (int) $v->prix_achat === 8000));
     }
@@ -1483,7 +1491,7 @@ class ProduitTest extends TestCase
         return app(ProduitService::class)->creer([
             'organization_id' => $org->id,
             'nom' => 'T-shirt test',
-            'type' => 'achat_vente',
+            'produit_type_id' => $this->typeId('achat_vente', $org),
             'statut' => 'actif',
             'prix_achat' => 1000,
             'prix_vente' => 2000,
@@ -1568,7 +1576,7 @@ class ProduitTest extends TestCase
                 'prix_vente' => null,
                 'prix_achat' => null,
             ])
-            ->assertSessionHasErrors('type');
+            ->assertSessionHasErrors('produit_type_id');
     }
 
     public function test_update_variante_refuse_prix_vente_inferieur_ou_egal_au_prix_achat(): void
@@ -1696,7 +1704,7 @@ class ProduitTest extends TestCase
                     ['id' => $variante->id, 'prix_vente' => null, 'prix_achat' => null],
                 ],
             ])
-            ->assertSessionHasErrors('type');
+            ->assertSessionHasErrors('produit_type_id');
     }
 
     public function test_bulk_update_refuse_prix_vente_inferieur_ou_egal_au_prix_achat(): void

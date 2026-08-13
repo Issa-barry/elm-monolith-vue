@@ -76,23 +76,12 @@ test.beforeAll(async ({ browser }) => {
         await page
             .locator('#immatriculation')
             .fill(`${SETUP_VH_PREFIX}${unique}`, { timeout: 10_000 });
-        // Catégorie n'est plus verrouillée par le site (voir Vehicules/Create.vue) :
-        // il faut sélectionner explicitement Interne puis un Type.
-        await selectOptionFromCombobox(
-            page,
-            page.locator('#categorie'),
-            /interne/i,
-        );
         await selectOptionFromCombobox(page, page.locator('#type_vehicule'));
-        // Éligibilité aux commissions : indépendante de la catégorie (contrairement
-        // à "Prise en charge par l'usine", pas d'auto-sélection pour un interne) —
-        // sans ce check le bouton submit reste désactivé indéfiniment (canSubmit
-        // exige commission_eligible !== null), voir vehicule-flow.spec.ts.
+        // Plus de champ "catégorie" (interne/externe) ni de radio commission_eligible
+        // (voir VehiculeForm.vue) — au moins un "usage" est requis pour activer le
+        // bouton submit (canSubmit -> auMoinsUnUsage).
         await page
-            .locator(
-                '#vehicule-form input[type="radio"][name="commission_eligible"]',
-            )
-            .first()
+            .getByRole('checkbox', { name: /livraison vente/i })
             .check({ timeout: 10_000 });
         await page
             .locator('#vehicule-form button[type="submit"]:visible')

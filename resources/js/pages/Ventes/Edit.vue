@@ -26,16 +26,20 @@ interface VehiculeOption {
     nom_vehicule: string;
     immatriculation: string;
     capacite_packs: number | null;
-    pris_en_charge_par_usine: boolean;
-    commission_eligible: boolean;
     livreur_nom: string | null;
+}
+
+interface ClientVehiculeOption {
+    id: number;
+    libelle_affiche: string;
 }
 
 interface ClientOption {
     id: number;
-    nom: string;
-    prenom: string | null;
+    nom_complet: string;
     telephone: string | null;
+    type: 'standard' | 'partenaire';
+    vehicules: ClientVehiculeOption[];
 }
 
 interface UserSite {
@@ -56,6 +60,7 @@ interface CommandeExistante {
     reference: string;
     vehicule_id: number | null;
     client_id: number | null;
+    client_vehicule_id: number | null;
     lignes: { produit_id: number; qte: number; prix_vente: number }[];
 }
 
@@ -92,17 +97,21 @@ function produitPrixUsineFrom(
     return produits.find((p) => p.id === produitId)?.prix_usine ?? 0;
 }
 
-const initialVehicule = props.vehicules.find(
-    (v) => v.id === props.commande.vehicule_id,
+// Un véhicule de flotte (toujours livraison_vente=true dans ce picker) facture
+// toujours au prix de vente plein ; sans véhicule, seul un client partenaire
+// facture à prix usine — cf. useVehiculeCommandeTarification.
+const initialClient = props.clients.find(
+    (c) => c.id === props.commande.client_id,
 );
 const initialModeTarification: 'prix_vente' | 'prix_usine' =
-    initialVehicule && !initialVehicule.pris_en_charge_par_usine
+    !props.commande.vehicule_id && initialClient?.type === 'partenaire'
         ? 'prix_usine'
         : 'prix_vente';
 
 const form = useForm({
     vehicule_id: props.commande.vehicule_id as number | null,
     client_id: props.commande.client_id as number | null,
+    client_vehicule_id: props.commande.client_vehicule_id as number | null,
     lignes: props.commande.lignes.map((l) => ({
         produit_id: l.produit_id,
         qte: l.qte,
@@ -165,6 +174,8 @@ const { modeTarification, commissionEligible } =
     useVehiculeCommandeTarification(
         () => props.vehicules,
         () => form.vehicule_id,
+        () => props.clients,
+        () => form.client_id,
     );
 
 // ── Libellés de prix — explicites (prix vente vs prix usine) ──────────────────
@@ -218,24 +229,35 @@ function searchClient(event: { query: string }) {
     clientSuggests.value = q
         ? props.clients.filter(
               (c) =>
-                  c.nom.toLowerCase().includes(q) ||
-                  (c.prenom && c.prenom.toLowerCase().includes(q)) ||
+                  c.nom_complet.toLowerCase().includes(q) ||
                   (c.telephone && c.telephone.includes(q)),
           )
         : [...props.clients];
 }
 
+const selectedClientVehicules = computed(
+    () => clientSelected.value?.vehicules ?? [],
+);
+
 function onClientSelect(c: ClientOption | null) {
     form.client_id = c?.id ?? null;
+    form.client_vehicule_id = null;
+    // Le type de client (partenaire) peut à lui seul faire basculer modeTarification
+    // vers "prix_usine" (cf. useVehiculeCommandeTarification) — sans ce recalcul, le
+    // total des lignes déjà saisies reste figé sur l'ancien mode (prix_vente) alors
+    // que le prix unitaire affiché, lui, se met à jour immédiatement.
+    recomputeAllTotals();
 }
 
 function onClientClear() {
     form.client_id = null;
+    form.client_vehicule_id = null;
     clientSelected.value = null;
+    recomputeAllTotals();
 }
 
 function clientLabel(c: ClientOption): string {
-    return [c.prenom, c.nom].filter(Boolean).join(' ');
+    return c.nom_complet;
 }
 
 // ── Dropdown : Produit ────────────────────────────────────────────────────────
@@ -525,11 +547,7 @@ function submit() {
                                 <template #option="{ option }">
                                     <div class="py-0.5">
                                         <div class="leading-tight font-medium">
-                                            {{
-                                                [option.prenom, option.nom]
-                                                    .filter(Boolean)
-                                                    .join(' ')
-                                            }}
+                                            {{ option.nom_complet }}
                                         </div>
                                         <div
                                             v-if="option.telephone"
@@ -555,6 +573,28 @@ function submit() {
                             >
                                 {{ form.errors.client_id }}
                             </p>
+
+                            <!-- Véhicule partenaire : facultatif, jamais requis pour vendre -->
+                            <div
+                                v-if="
+                                    clientSelected?.type === 'partenaire' &&
+                                    selectedClientVehicules.length > 0
+                                "
+                                class="mt-3"
+                            >
+                                <Label class="mb-1.5 block text-sm">
+                                    Véhicule partenaire (facultatif)
+                                </Label>
+                                <Dropdown
+                                    v-model="form.client_vehicule_id"
+                                    :options="selectedClientVehicules"
+                                    option-label="libelle_affiche"
+                                    option-value="id"
+                                    placeholder="Non renseigné"
+                                    class="w-full"
+                                    show-clear
+                                />
+                            </div>
                         </div>
                     </div>
 

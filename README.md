@@ -61,6 +61,12 @@ $PHP artisan optimize:clear
 $PHP artisan optimize
 ```
 
+```bash
+php artisan migrate --force
+php artisan optimize:clear
+php artisan optimize
+```
+
 C'est exactement ce que fait `deploy-hostinger.yml` automatiquement sur push vers `main` —
 avec le pipeline CI/CD configuré, ces commandes n'ont normalement plus besoin d'être tapées
 à la main.

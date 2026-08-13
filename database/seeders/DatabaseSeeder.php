@@ -10,7 +10,8 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             // ── Système ───────────────────────────────────────────────────────
-            RolesAndPermissionsSeeder::class,   // Organisation, comptes staff, rôles, permissions
+            RolesAndPermissionsSeeder::class,   // Organisation "elm", rôles, permissions
+            ElmDemoAccountsSeeder::class,       // Comptes staff de démo "elm" (Staff@2025) — jamais dans ProductionSeeder
 
             // ── Référentiels ──────────────────────────────────────────────────
             ClientSeeder::class,                // Comptes clients (utilisateurs)
@@ -24,6 +25,7 @@ class DatabaseSeeder extends Seeder
             // catégories (catalogue à 7 produits, cf. ProduitsSeeder). Toujours utilisé par
             // Fello Demo via FelloDemoOrganizationSeeder::seedPourOrganisation().
             OptionCatalogueDefaultSeeder::class, // Options système par défaut (Couleur, Taille, Pointure)
+            ProduitTypeDefaultSeeder::class,    // Types de produit par défaut (obligatoire — un produit ne peut exister sans type)
             ProduitsSeeder::class,              // Catalogue produits
             ParametreSeeder::class,             // Paramètres applicatifs
 

@@ -38,24 +38,19 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Nouveau véhicule', href: '#' },
 ];
 
-// Catégorie verrouillée uniquement quand on arrive depuis la fiche d'un
-// propriétaire (implique "externe") — le site n'implique plus la catégorie :
-// un véhicule interne comme externe est désormais rattaché à un site.
-const lockedCategorie = !!props.initial_proprietaire_id;
-
 const form = useForm({
     nom_vehicule: '',
     immatriculation: '',
     type_vehicule_id: null as string | null,
-    categorie: props.initial_proprietaire_id
-        ? 'externe'
-        : (null as string | null),
     capacite_packs: null as number | null,
     capacite_bouteilles: null as number | null,
     site_id: props.default_site_id,
-    proprietaire_id: props.initial_proprietaire_id,
-    pris_en_charge_par_usine: null as boolean | null,
-    commission_eligible: null as boolean | null,
+    proprietaire_id:
+        props.initial_proprietaire_id ?? props.default_proprietaire_id,
+    // Par défaut, un nouveau véhicule sert à la vente — l'admin coche
+    // logistique en plus si besoin (cf. Vehicule::$livraison_vente par défaut).
+    livraison_vente: true,
+    livraison_logistique: false,
     photo: null as File | null,
     is_active: true,
 });
@@ -63,14 +58,11 @@ const form = useForm({
 const canSubmit = computed(() => {
     return (
         !form.processing &&
-        !!form.categorie &&
-        !!form.proprietaire_id &&
         !!form.site_id &&
         form.nom_vehicule.trim().length > 0 &&
         form.immatriculation.trim().length > 0 &&
         !!form.type_vehicule_id &&
-        form.pris_en_charge_par_usine !== null &&
-        form.commission_eligible !== null
+        (form.livraison_vente || form.livraison_logistique)
     );
 });
 
@@ -122,7 +114,6 @@ function submit() {
                 :types="types"
                 :sites="sites"
                 :can-change-site="can_change_site"
-                :locked-categorie="lockedCategorie"
                 :default-proprietaire-id="default_proprietaire_id"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"

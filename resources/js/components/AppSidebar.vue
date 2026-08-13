@@ -198,6 +198,12 @@ const mainNavItems = computed((): NavItem[] => {
                 href: '/backoffice/produits/options',
             });
         }
+        if (can('type-produits.read')) {
+            produitsSousItems.push({
+                title: 'Types',
+                href: '/backoffice/produits/types',
+            });
+        }
 
         items.push({
             title: 'Produits',

@@ -86,9 +86,10 @@ class ParametreController extends Controller
                         'prix_achat',
                         'cout',
                         'qte_stock',
+                        // Vide = hérite du seuil par défaut de l'organisation ; valeur = seuil
+                        // spécifique à ce produit (s'applique à toutes ses variantes/sites).
                         'seuil_alerte_stock',
                         'description',
-                        'is_alerte',
                     ],
                 ]],
             ],

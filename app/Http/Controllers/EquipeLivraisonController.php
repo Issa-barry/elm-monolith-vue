@@ -67,10 +67,14 @@ class EquipeLivraisonController extends Controller
             'membres.*.telephone' => ['required', 'string', 'regex:/^\+224\d{9}$/'],
             'membres.*.role' => ['required', Rule::in(['chauffeur', 'convoyeur'])],
             'membres.*.montant_par_pack' => 'required|numeric|min:0',
+            // Barème logistique distinct du barème vente ci-dessus (montant_par_pack), optionnel
+            // — laissé vide, le membre reçoit le même taux en transfert qu'en vente (cf.
+            // EquipeLivreur::tauxCommissionLogistiqueEffectif()).
+            'membres.*.taux_commission_logistique' => 'nullable|numeric|min:0|max:100',
             'membres.*.ordre' => 'nullable|integer|min:0',
         ], $this->messages());
 
-        if ($vehiculeSelectionne?->categorie === 'interne') {
+        if (! $this->isVehiculeExterne($vehiculeSelectionne)) {
             $data['proprietaire_id'] = null;
             $data['montant_par_pack_proprietaire'] = null;
         }
@@ -114,6 +118,7 @@ class EquipeLivraisonController extends Controller
                     'role' => $m['role'],
                     'montant_par_pack' => $montant,
                     'taux_commission' => $taux,
+                    'taux_commission_logistique' => $m['taux_commission_logistique'] ?? null,
                     'ordre' => $m['ordre'] ?? $index,
                 ]);
             }
@@ -169,10 +174,14 @@ class EquipeLivraisonController extends Controller
             'membres.*.telephone' => ['required', 'string', 'regex:/^\+224\d{9}$/'],
             'membres.*.role' => ['required', Rule::in(['chauffeur', 'convoyeur'])],
             'membres.*.montant_par_pack' => 'required|numeric|min:0',
+            // Barème logistique distinct du barème vente ci-dessus (montant_par_pack), optionnel
+            // — laissé vide, le membre reçoit le même taux en transfert qu'en vente (cf.
+            // EquipeLivreur::tauxCommissionLogistiqueEffectif()).
+            'membres.*.taux_commission_logistique' => 'nullable|numeric|min:0|max:100',
             'membres.*.ordre' => 'nullable|integer|min:0',
         ], $this->messages());
 
-        if ($vehiculeSelectionne?->categorie === 'interne') {
+        if (! $this->isVehiculeExterne($vehiculeSelectionne)) {
             $data['proprietaire_id'] = null;
             $data['montant_par_pack_proprietaire'] = null;
         }
@@ -220,6 +229,7 @@ class EquipeLivraisonController extends Controller
                     'role' => $m['role'],
                     'montant_par_pack' => $montant,
                     'taux_commission' => $taux,
+                    'taux_commission_logistique' => $m['taux_commission_logistique'] ?? null,
                     'ordre' => $m['ordre'] ?? $index,
                 ]);
             }
@@ -275,6 +285,7 @@ class EquipeLivraisonController extends Controller
                 'role' => $role,
                 'montant_par_pack' => $montant,
                 'taux_commission' => (float) $m->taux_commission,
+                'taux_commission_logistique' => $m->taux_commission_logistique !== null ? (float) $m->taux_commission_logistique : null,
                 'ordre' => $m->ordre,
                 'numero' => $roleCounts[$role],
             ];
@@ -287,7 +298,8 @@ class EquipeLivraisonController extends Controller
             'vehicule_immatriculation' => $e->vehicule?->immatriculation,
             'vehicule_nom' => $e->vehicule?->nom_vehicule,
             'vehicule_type_label' => $e->vehicule?->type_label,
-            'vehicule_categorie' => $e->vehicule?->categorie,
+            'vehicule_livraison_vente' => $e->vehicule?->livraison_vente,
+            'vehicule_livraison_logistique' => $e->vehicule?->livraison_logistique,
             // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
             // on retombe sur la capacité par défaut du type (cf. VehiculeController).
             'vehicule_capacite_packs' => $e->vehicule?->capacite_packs ?? $e->vehicule?->typeVehicule?->capacite_defaut,
@@ -330,7 +342,8 @@ class EquipeLivraisonController extends Controller
                 'value' => $v->id,
                 'label' => $v->nom_vehicule,
                 'immatriculation' => $v->immatriculation,
-                'categorie' => $v->categorie,
+                'livraison_vente' => $v->livraison_vente,
+                'livraison_logistique' => $v->livraison_logistique,
                 'type_label' => $v->type_label,
                 'proprietaire_id' => $v->proprietaire_id,
                 'proprietaire_nom' => $v->proprietaire ? trim("{$v->proprietaire->prenom} {$v->proprietaire->nom}") : null,
@@ -365,9 +378,18 @@ class EquipeLivraisonController extends Controller
             ->find($vehiculeId);
     }
 
+    /**
+     * "Externe" ici veut dire : propriété d'un tiers (pas l'organisation elle-même) — notion
+     * de propriété, indépendante de l'usage (vente/logistique). Détermine si un propriétaire
+     * réel et un partage montant_par_pack_proprietaire doivent être saisis pour cette équipe.
+     */
     private function isVehiculeExterne(?Vehicule $vehicule): bool
     {
-        return $vehicule?->categorie === 'externe';
+        if (! $vehicule?->proprietaire_id) {
+            return false;
+        }
+
+        return $vehicule->proprietaire_id !== Proprietaire::interneParDefautId($vehicule->organization_id);
     }
 
     private function currentSiteName(): string

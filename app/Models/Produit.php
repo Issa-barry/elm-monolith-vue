@@ -3,8 +3,9 @@
 namespace App\Models;
 
 use App\Enums\ProduitStatut;
-use App\Enums\ProduitType;
+use App\Enums\StockStatut;
 use App\Models\Concerns\NormalizesLabel;
+use App\Services\StockStatutService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -25,12 +26,13 @@ class Produit extends Model
         'organization_id',
         'categorie_id',
         'fournisseur_id',
+        'produit_type_id',
         'nom',
-        'type',
         'statut',
         'description',
         'qte_stock',
-        'is_alerte',
+        'alerte_stock_active',
+        'seuil_alerte_stock',
         'archived_at',
         'created_by',
         'updated_by',
@@ -40,9 +42,9 @@ class Produit extends Model
 
     protected $casts = [
         'qte_stock' => 'integer',
-        'is_alerte' => 'boolean',
+        'alerte_stock_active' => 'boolean',
+        'seuil_alerte_stock' => 'integer',
         'archived_at' => 'datetime',
-        'type' => ProduitType::class,
         'statut' => ProduitStatut::class,
     ];
 
@@ -116,26 +118,38 @@ class Produit extends Model
 
     public function getInStockAttribute(): bool
     {
-        if ($this->type === ProduitType::SERVICE) {
+        if (! $this->produitType?->gere_stock) {
             return true;
         }
 
         return $this->qte_stock > 0;
     }
 
+    /**
+     * Vrai si au moins un couple variante × site de ce produit est actuellement en stock
+     * faible ou en rupture — délègue à StockStatutService (source unique de la règle, cf.
+     * son docblock) plutôt que de réimplémenter la comparaison qte/seuil ici. Nécessite
+     * $this chargé avec ['produitType', 'variantes.stocks'] pour éviter un N+1 ; sinon
+     * déclenche un chargement paresseux (acceptable pour un accès isolé, ex: Show d'un
+     * seul produit — à éviter en boucle sur une liste, cf. ProduitController@index qui
+     * calcule ceci autrement pour cette raison).
+     */
     public function getIsLowStockAttribute(): bool
     {
-        if (! $this->type?->hasStock() || $this->qte_stock <= 0) {
+        return app(StockStatutService::class)
+            ->detailParVarianteEtSite($this)
+            ->contains(fn (array $d) => $d['statut'] === StockStatut::STOCK_FAIBLE->value);
+    }
+
+    public function getIsOutOfStockAttribute(): bool
+    {
+        if (! $this->produitType?->gere_stock) {
             return false;
         }
-        // Respecte l'eager loading ('variantes' préchargée en amont) pour éviter une requête
-        // par produit — sinon variantePrincipale()->first() interroge la DB à chaque appel.
-        $variante = $this->relationLoaded('variantes')
-            ? $this->variantes->firstWhere('is_default', true)
-            : $this->variantePrincipale()->first();
-        $seuil = $variante?->seuil_alerte_stock ?? Parametre::getSeuilStockFaible((int) $this->organization_id);
 
-        return $seuil > 0 && $this->qte_stock <= $seuil;
+        return app(StockStatutService::class)
+            ->detailParVarianteEtSite($this)
+            ->contains(fn (array $d) => $d['statut'] === StockStatut::RUPTURE->value);
     }
 
     /**
@@ -156,6 +170,11 @@ class Produit extends Model
     public function categorie(): BelongsTo
     {
         return $this->belongsTo(Categorie::class);
+    }
+
+    public function produitType(): BelongsTo
+    {
+        return $this->belongsTo(ProduitType::class);
     }
 
     /**

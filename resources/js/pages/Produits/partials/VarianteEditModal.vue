@@ -18,7 +18,6 @@ interface Variante {
     prix_vente: number | null;
     prix_achat: number | null;
     cout: number | null;
-    seuil_alerte_stock: number | null;
     is_active: boolean;
     media_id?: string | null;
     image_url?: string | null;
@@ -35,7 +34,8 @@ const props = withDefaults(
         visible: boolean;
         produitId: string;
         variante: Variante | null;
-        isFabricable: boolean;
+        /** Le type du produit exige-t-il un prix usine ? (cf. ProduitType.prix_usine_requis) */
+        prixUsineRequis: boolean;
         /** Galerie du produit — absente si l'appelant ne gère pas encore les médias. */
         medias?: MediaOption[];
     }>(),
@@ -57,7 +57,6 @@ const form = useForm({
     prix_vente: null as number | null,
     prix_achat: null as number | null,
     cout: null as number | null,
-    seuil_alerte_stock: null as number | null,
     is_active: true,
     media_id: null as string | null,
 });
@@ -73,7 +72,6 @@ watch(
         form.prix_vente = v.prix_vente;
         form.prix_achat = v.prix_achat;
         form.cout = v.cout;
-        form.seuil_alerte_stock = v.seuil_alerte_stock;
         form.is_active = v.is_active;
         form.media_id = v.media_id ?? null;
     },
@@ -162,11 +160,8 @@ function submit() {
                 </div>
             </div>
 
-            <div
-                class="grid gap-4"
-                :class="isFabricable ? 'grid-cols-2' : 'grid-cols-2'"
-            >
-                <div v-if="isFabricable" class="space-y-1.5">
+            <div class="grid grid-cols-2 gap-4">
+                <div v-if="prixUsineRequis" class="space-y-1.5">
                     <Label class="block">Prix usine</Label>
                     <InputNumber
                         v-model="form.prix_usine"
@@ -243,19 +238,6 @@ function submit() {
                     class="w-full font-mono"
                     :class="form.errors.code_barres ? 'p-invalid' : ''"
                 />
-            </div>
-
-            <div class="space-y-1.5">
-                <Label class="block">Seuil d'alerte stock</Label>
-                <InputNumber
-                    v-model="form.seuil_alerte_stock"
-                    :min="0"
-                    class="w-full"
-                    input-class="w-full"
-                />
-                <p class="text-xs text-muted-foreground">
-                    Laisser vide pour utiliser le seuil global
-                </p>
             </div>
 
             <div class="flex items-center gap-3">

@@ -23,7 +23,8 @@ class ProductionSeeder extends Seeder
     public function run(): void
     {
         $this->call([
-            // Organisation "elm", permissions, rôles (comptes de démo auto-skippés en prod)
+            // Organisation "elm", permissions, rôles — aucun compte de démo (ce seeder n'appelle
+            // jamais ElmDemoAccountsSeeder, quelle que soit la valeur d'APP_ENV).
             RolesAndPermissionsSeeder::class,
 
             // ── Référentiels ──────────────────────────────────────────────────
@@ -31,6 +32,7 @@ class ProductionSeeder extends Seeder
             // CategorieDefaultSeeder volontairement absent : "elm" n'a pas encore besoin de
             // catégories (catalogue à 7 produits, cf. ProduitsSeeder).
             OptionCatalogueDefaultSeeder::class, // Options système par défaut (Couleur, Taille, Pointure)
+            ProduitTypeDefaultSeeder::class, // Types de produit par défaut (obligatoire — un produit ne peut exister sans type)
             ProduitsSeeder::class,        // Catalogue produits
             ParametreSeeder::class,       // Paramètres applicatifs par défaut
             TypeVehiculesSeeder::class,   // Types de véhicule par défaut
