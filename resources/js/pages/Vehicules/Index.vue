@@ -189,6 +189,30 @@ const filteredVehicules = computed(() =>
     }),
 );
 
+// Mini stats — calculées sur l'ensemble des véhicules (indépendantes des filtres actifs),
+// pour donner une vue d'ensemble constante pendant qu'on filtre la liste en dessous.
+const vehiculeStats = computed(() => {
+    const total = props.vehicules.length;
+    const actifs = props.vehicules.filter((v) => v.is_active).length;
+    const sansEquipe = props.vehicules.filter((v) => !v.equipe_nom).length;
+
+    const parTypeMap = new Map<string, number>();
+    for (const v of props.vehicules) {
+        parTypeMap.set(v.type_label, (parTypeMap.get(v.type_label) ?? 0) + 1);
+    }
+    const parType = [...parTypeMap.entries()]
+        .map(([label, count]) => ({ label, count }))
+        .sort((a, b) => b.count - a.count);
+
+    return {
+        total,
+        actifs,
+        inactifs: total - actifs,
+        sansEquipe,
+        parType,
+    };
+});
+
 const mobileFiltered = computed(() =>
     props.vehicules.filter((v) => {
         const q = mobileSearch.value.trim().toLowerCase();
@@ -477,6 +501,89 @@ function confirmDelete(v: Vehicule) {
                         }}
                     </p>
                 </div>
+            </div>
+
+            <!-- Mini stats — vue d'ensemble indépendante des filtres -->
+            <div class="grid grid-cols-4 gap-3">
+                <div
+                    class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                >
+                    <p class="mt-0.5 text-base font-semibold tabular-nums">
+                        {{ vehiculeStats.total }}
+                    </p>
+                    <p
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Total
+                    </p>
+                </div>
+                <div
+                    class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                >
+                    <p
+                        class="mt-0.5 text-base font-semibold text-emerald-600 tabular-nums dark:text-emerald-400"
+                    >
+                        {{ vehiculeStats.actifs }}
+                    </p>
+                    <p
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Actifs
+                    </p>
+                </div>
+                <div
+                    class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                >
+                    <p
+                        class="mt-0.5 text-base font-semibold text-muted-foreground tabular-nums"
+                    >
+                        {{ vehiculeStats.inactifs }}
+                    </p>
+                    <p
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Inactifs
+                    </p>
+                </div>
+                <div
+                    class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                >
+                    <p
+                        class="mt-0.5 text-base font-semibold tabular-nums"
+                        :class="
+                            vehiculeStats.sansEquipe > 0
+                                ? 'text-amber-600 dark:text-amber-400'
+                                : 'text-foreground'
+                        "
+                    >
+                        {{ vehiculeStats.sansEquipe }}
+                    </p>
+                    <p
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Sans équipe
+                    </p>
+                </div>
+            </div>
+
+            <!-- Répartition par type -->
+            <div
+                v-if="vehiculeStats.parType.length"
+                class="flex flex-wrap items-center gap-2 rounded-lg border bg-card px-3 py-2.5"
+            >
+                <span
+                    class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                >
+                    Par type
+                </span>
+                <span
+                    v-for="t in vehiculeStats.parType"
+                    :key="t.label"
+                    class="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium"
+                >
+                    {{ t.label }}
+                    <span class="text-muted-foreground">{{ t.count }}</span>
+                </span>
             </div>
 
             <!-- Filtres -->
