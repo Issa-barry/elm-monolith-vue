@@ -9,6 +9,11 @@ use Illuminate\Support\Facades\Schema;
  * loyer, fournitures...) à son compte de charge SYSCOHADA — nécessaire car
  * aucun mapping generique unique ne peut deviner le bon compte de charge
  * pour un depense_type donné (contrairement aux autres événements).
+ *
+ * Reste une migration séparée (pas fusionnée dans create_depense_types_table,
+ * antérieure de plusieurs mois) : depense_types est créée bien avant
+ * compta_comptes dans l'ordre des migrations, la FK ne peut donc être posée
+ * qu'ici, une fois compta_comptes existante.
  */
 return new class extends Migration
 {
@@ -18,7 +23,7 @@ return new class extends Migration
             $table->foreignUlid('compte_comptable_id')
                 ->nullable()
                 ->after('categorie')
-                ->constrained('comptes_comptables')
+                ->constrained('compta_comptes')
                 ->nullOnDelete();
         });
     }

@@ -16,7 +16,7 @@ class EcritureComptable extends Model
 {
     use HasUlids;
 
-    protected $table = 'ecritures_comptables';
+    protected $table = 'compta_ecritures';
 
     protected $fillable = [
         'piece_comptable_id',

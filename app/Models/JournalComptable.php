@@ -10,7 +10,7 @@ class JournalComptable extends Model
 {
     use HasUlids;
 
-    protected $table = 'journaux_comptables';
+    protected $table = 'compta_journaux';
 
     protected $fillable = [
         'organization_id',

@@ -8,7 +8,7 @@ use App\Models\CompteMapping;
 
 /**
  * Résout un (compte, journal) configurés pour un événement+rôle donné.
- * Aucun numéro de compte n'est codé en dur : tout vient de compte_mappings,
+ * Aucun numéro de compte n'est codé en dur : tout vient de compta_mappings,
  * une table de données paramétrable par organisation (règle #16 de la spec).
  */
 class CompteMappingResolver

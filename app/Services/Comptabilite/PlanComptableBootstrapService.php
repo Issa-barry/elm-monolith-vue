@@ -68,7 +68,7 @@ class PlanComptableBootstrapService
             '521000' => 'Banque',
             '561000' => 'Mobile Money (générique)',
             // Exemples de wallets Mobile Money dédiés — à adapter/compléter librement
-            // par organisation (compte_mappings.moyen_paiement accepte n'importe quelle
+            // par organisation (compta_mappings.moyen_paiement accepte n'importe quelle
             // étiquette "mobile_money:xxx", aucun opérateur n'est codé en dur dans le
             // moteur). Ceux-ci ne sont que des points de départ raisonnables.
             '561100' => 'Mobile Money — Orange Money',

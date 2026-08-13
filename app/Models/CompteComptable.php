@@ -11,7 +11,7 @@ class CompteComptable extends Model
 {
     use HasUlids;
 
-    protected $table = 'comptes_comptables';
+    protected $table = 'compta_comptes';
 
     protected $fillable = [
         'organization_id',

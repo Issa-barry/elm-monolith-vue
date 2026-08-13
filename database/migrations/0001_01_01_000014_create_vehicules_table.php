@@ -19,6 +19,9 @@ return new class extends Migration
             $table->string('immatriculation', 20);
             $table->foreignUlid('type_vehicule_id')->nullable()->constrained('type_vehicules')->restrictOnDelete();
             $table->integer('capacite_packs')->nullable();
+            // Nullable, comme capacite_packs : la plupart des véhicules ne transportent
+            // pas de bouteilles (cf. type_vehicules.capacite_defaut_bouteilles).
+            $table->unsignedInteger('capacite_bouteilles')->nullable();
             $table->foreignUlid('proprietaire_id')->nullable()->constrained('proprietaires')->restrictOnDelete();
             // Toute ligne dans `vehicules` appartient par définition à la flotte gérée : il
             // n'existe plus de notion de "prise en charge" séparée (cf. ex-pris_en_charge_par_usine)

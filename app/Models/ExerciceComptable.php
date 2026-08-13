@@ -12,7 +12,7 @@ class ExerciceComptable extends Model
 {
     use HasUlids;
 
-    protected $table = 'exercices_comptables';
+    protected $table = 'compta_exercices';
 
     protected $fillable = [
         'organization_id',
