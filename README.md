@@ -1,3 +1,8 @@
+# en DEV 
+php artisan migrate:fresh --seed
+php artisan optimize:clear
+php artisan optimize
+
 # Déploiement
 
 ## ⚠️ Ne jamais faire en production

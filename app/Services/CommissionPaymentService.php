@@ -52,6 +52,7 @@ class CommissionPaymentService
 
         $touched = PeriodePayabilityChecker::touchedUntilAmount($parts, $montant, fn ($p) => (float) $p->montant_restant);
         PeriodePayabilityChecker::assertPartsPayable($touched);
+        PeriodePayabilityChecker::assertPartsNotClaimedByFiche($touched, $beneficiaryType, $beneficiaryId);
 
         $beneficiaryNom = $parts->first()?->beneficiaire_nom ?? 'Inconnu';
 
@@ -206,6 +207,7 @@ class CommissionPaymentService
 
         $touched = PeriodePayabilityChecker::touchedUntilAmount($parts, $montant, fn ($p) => (float) $p->montant_restant);
         PeriodePayabilityChecker::assertPartsPayable($touched);
+        PeriodePayabilityChecker::assertPartsNotClaimedByFiche($touched, 'livreur', $livreurId);
 
         $beneficiaryNom = $parts->first()?->beneficiaire_nom ?? 'Inconnu';
 
