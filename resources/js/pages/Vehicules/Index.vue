@@ -505,31 +505,49 @@ function confirmDelete(v: Vehicule) {
 
             <!-- Mini stats — vue d'ensemble indépendante des filtres -->
             <div class="grid grid-cols-4 gap-3">
-                <div class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4">
+                <div
+                    class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                >
                     <p class="mt-0.5 text-base font-semibold tabular-nums">
                         {{ vehiculeStats.total }}
                     </p>
-                    <p class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                    <p
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                    >
                         Total
                     </p>
                 </div>
-                <div class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4">
-                    <p class="mt-0.5 text-base font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                <div
+                    class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                >
+                    <p
+                        class="mt-0.5 text-base font-semibold text-emerald-600 tabular-nums dark:text-emerald-400"
+                    >
                         {{ vehiculeStats.actifs }}
                     </p>
-                    <p class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                    <p
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                    >
                         Actifs
                     </p>
                 </div>
-                <div class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4">
-                    <p class="mt-0.5 text-base font-semibold tabular-nums text-muted-foreground">
+                <div
+                    class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                >
+                    <p
+                        class="mt-0.5 text-base font-semibold text-muted-foreground tabular-nums"
+                    >
                         {{ vehiculeStats.inactifs }}
                     </p>
-                    <p class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                    <p
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                    >
                         Inactifs
                     </p>
                 </div>
-                <div class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4">
+                <div
+                    class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                >
                     <p
                         class="mt-0.5 text-base font-semibold tabular-nums"
                         :class="
@@ -540,7 +558,9 @@ function confirmDelete(v: Vehicule) {
                     >
                         {{ vehiculeStats.sansEquipe }}
                     </p>
-                    <p class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                    <p
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                    >
                         Sans équipe
                     </p>
                 </div>
@@ -551,7 +571,9 @@ function confirmDelete(v: Vehicule) {
                 v-if="vehiculeStats.parType.length"
                 class="flex flex-wrap items-center gap-2 rounded-lg border bg-card px-3 py-2.5"
             >
-                <span class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                <span
+                    class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                >
                     Par type
                 </span>
                 <span
