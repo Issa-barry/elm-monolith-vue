@@ -10,8 +10,8 @@ use App\Models\CommissionLogistiquePart;
 use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\PaiementFiche;
-use App\Models\PaiementPeriode;
 use App\Models\Site;
+use App\Models\TransfertLogistique;
 use App\Models\User;
 use App\Models\Vehicule;
 use App\Services\CommissionPaymentService;
@@ -45,7 +45,7 @@ class DoublePaiementLockTest extends TestCase
         );
         $sysUser = User::factory()->create(['organization_id' => $org->id]);
 
-        $transfert = \App\Models\TransfertLogistique::create([
+        $transfert = TransfertLogistique::create([
             'organization_id' => $org->id,
             'reference' => 'TRF-'.uniqid(),
             'site_source_id' => $site->id,
