@@ -7,15 +7,18 @@ use App\Models\Depense;
 use App\Models\JournalTresorerie;
 use App\Models\PaieLigne;
 use App\Models\PaiePeriode;
+use App\Services\Comptabilite\DepenseComptabilisationService;
 use App\Services\JournalTresorerieService;
 use App\Services\PaieCalculService;
 use App\Services\PeriodeCalculatorService;
+use Illuminate\Support\Facades\Log;
 
 class DepenseObserver
 {
     public function __construct(
         private PaieCalculService $paieCalc,
         private PeriodeCalculatorService $periodeCalculator,
+        private DepenseComptabilisationService $depenseComptabilisation,
     ) {}
 
     public function updated(Depense $depense): void
@@ -41,6 +44,24 @@ class DepenseObserver
             null => $this->syncJournalDepenseInterne($depense, $isValide),
             default => null,
         };
+
+        if ($isValide) {
+            $this->comptabiliser($depense);
+        }
+    }
+
+    private function comptabiliser(Depense $depense): void
+    {
+        // Comptabilité générale, en aval — ne doit jamais empêcher une dépense
+        // métier d'être validée (mode shadow, règle #26 de la spec).
+        try {
+            $this->depenseComptabilisation->comptabiliserDepenseValidee($depense);
+        } catch (\Throwable $e) {
+            Log::error('Comptabilisation dépense validée échouée', [
+                'depense_id' => $depense->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     private function recalculerPeriodePaiement(Depense $depense): void
