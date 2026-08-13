@@ -17,7 +17,7 @@ class TiersComptable extends Model
 {
     use HasUlids;
 
-    protected $table = 'tiers_comptables';
+    protected $table = 'compta_tiers';
 
     protected $fillable = [
         'organization_id',

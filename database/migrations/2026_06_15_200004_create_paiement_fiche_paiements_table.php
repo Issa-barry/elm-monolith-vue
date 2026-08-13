@@ -15,6 +15,11 @@ return new class extends Migration
             $table->foreignUlid('site_id')->nullable()->constrained('sites')->nullOnDelete();
             $table->decimal('montant', 15, 2);
             $table->string('mode_paiement', 20);
+            // Distingue le wallet Mobile Money utilisé (Orange Money, MTN MoMo, Djomy, ou tout
+            // autre) sans jamais coder un opérateur en dur : simple étiquette libre saisie par
+            // l'organisation, reprise telle quelle comme suffixe de moyen_paiement
+            // ("mobile_money:orange") pour router vers le bon compte via compta_mappings.
+            $table->string('moyen_paiement_detail', 30)->nullable();
             $table->date('date_paiement');
             $table->text('note')->nullable();
             $table->foreignUlid('created_by')->nullable()->constrained('users')->nullOnDelete();

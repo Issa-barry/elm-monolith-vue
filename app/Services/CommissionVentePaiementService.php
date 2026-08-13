@@ -49,6 +49,7 @@ class CommissionVentePaiementService
             fn ($p) => (float) $p->montant_restant
         );
         PeriodePayabilityChecker::assertPartsPayable($touched);
+        PeriodePayabilityChecker::assertPartsNotClaimedByFiche($touched, $type, $beneficiaireId);
 
         $beneficiaireNom = $parts->first()?->beneficiaire_nom ?? 'Inconnu';
 

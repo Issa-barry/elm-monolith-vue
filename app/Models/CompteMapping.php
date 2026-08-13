@@ -10,7 +10,7 @@ class CompteMapping extends Model
 {
     use HasUlids;
 
-    protected $table = 'compte_mappings';
+    protected $table = 'compta_mappings';
 
     protected $fillable = [
         'organization_id',

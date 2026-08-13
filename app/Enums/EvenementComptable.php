@@ -8,7 +8,7 @@ namespace App\Enums;
  * Ce sont des noms de contrat entre le métier et la comptabilité — pas des
  * numéros de compte. Chaque événement a besoin d'un jeu de "rôles" (voir
  * EcritureComptableService::ROLES_PAR_EVENEMENT) que l'organisation doit
- * mapper vers de vrais comptes via compte_mappings avant de pouvoir être
+ * mapper vers de vrais comptes via compta_mappings avant de pouvoir être
  * comptabilisé (sinon MappingComptableIndisponibleException).
  */
 enum EvenementComptable: string

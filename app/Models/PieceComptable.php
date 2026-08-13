@@ -13,7 +13,7 @@ class PieceComptable extends Model
 {
     use HasUlids;
 
-    protected $table = 'pieces_comptables';
+    protected $table = 'compta_pieces';
 
     protected $fillable = [
         'organization_id',

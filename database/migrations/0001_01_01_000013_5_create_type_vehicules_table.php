@@ -20,6 +20,11 @@ return new class extends Migration
             $table->foreignUlid('organization_id')->constrained()->cascadeOnDelete();
             $table->string('nom', 100);
             $table->integer('capacite_defaut');
+            // Deuxième unité de capacité, en miroir de capacite_defaut (sachets) — un même
+            // véhicule peut transporter des sachets ET des bouteilles, avec un plafond
+            // différent pour chacun. Nullable : contrairement à capacite_defaut (obligatoire),
+            // la plupart des types de véhicules ne transportent pas de bouteilles.
+            $table->unsignedInteger('capacite_defaut_bouteilles')->nullable();
             $table->string('unite_capacite', 20)->default('packs');
             $table->text('description')->nullable();
             $table->boolean('is_active')->default(true);

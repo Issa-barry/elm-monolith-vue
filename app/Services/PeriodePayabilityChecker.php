@@ -6,6 +6,7 @@ use App\Enums\TypePeriodePaiement;
 use App\Models\CommissionLogistiquePart;
 use App\Models\CommissionPart;
 use App\Models\PaieLigne;
+use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
 use App\Models\PaiePeriode;
 use Carbon\Carbon;
@@ -79,6 +80,44 @@ class PeriodePayabilityChecker
     {
         foreach ($lignes as $ligne) {
             self::assertPeriodePayable($ligne->periode);
+        }
+    }
+
+    // ── Verrou double paiement : fiche vs paiement direct ──────────────────────────
+
+    /**
+     * Empêche le paiement DIRECT (FIFO sur CommissionPart/CommissionLogistiquePart) d'une
+     * part dont la période a déjà une PaiementFiche générée pour ce bénéficiaire.
+     *
+     * Raison : PaiementFiche.montant_paye ne dérive QUE de son historique de paiements
+     * propre (PaiementFichePaiement) — un paiement direct ne le met jamais à jour. Une
+     * fois qu'une fiche existe pour une période, c'est donc le SEUL canal sûr : sans ce
+     * verrou, payer directement puis payer à nouveau via la fiche double-paierait le
+     * bénéficiaire sans que rien ne le détecte (montant_net de la fiche resterait "dû").
+     *
+     * @param  Collection<int, CommissionLogistiquePart|CommissionPart>  $parts  déjà réduites aux items réellement touchés (cf. touchedUntilAmount)
+     */
+    public static function assertPartsNotClaimedByFiche(Collection $parts, string $type, string $beneficiaireId): void
+    {
+        $periodes = $parts
+            ->map(fn ($part) => self::periodeForCommissionPart($part))
+            ->filter()
+            ->unique('id');
+
+        foreach ($periodes as $periode) {
+            $ficheExiste = PaiementFiche::query()
+                ->where('periode_id', $periode->id)
+                ->where('beneficiaire_type', $type)
+                ->where('beneficiaire_id', $beneficiaireId)
+                ->exists();
+
+            if ($ficheExiste) {
+                throw new InvalidArgumentException(
+                    "Une fiche de paiement existe déjà pour la période {$periode->reference} de ce bénéficiaire. ".
+                    'Le paiement direct est bloqué pour cette période — utilisez la fiche '.
+                    '(Comptabilité > Fiches de paiement) pour éviter un double paiement.'
+                );
+            }
         }
     }
 

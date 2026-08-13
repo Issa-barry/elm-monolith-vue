@@ -33,6 +33,7 @@ interface LivreurRow extends StatutCommissionResolu {
     impaye: number;
     paye: number;
     remaining_amount: number;
+    fiche_id: string | null;
 }
 
 interface Kpis {
@@ -395,6 +396,24 @@ function formatPhone(tel: string | null): string {
                                                     class="mr-2 h-4 w-4"
                                                 />
                                                 Payer
+                                            </DropdownMenuItem>
+                                        </template>
+                                        <template v-else-if="l.fiche_id">
+                                            <!-- Une fiche existe déjà pour ce livreur : le paiement
+                                            direct est verrouillé côté backend
+                                            (PeriodePayabilityChecker::assertPartsNotClaimedByFiche),
+                                            seule la fiche permet encore de payer/consulter le solde. -->
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem as-child>
+                                                <Link
+                                                    :href="`/backoffice/comptabilite/fiches/${l.fiche_id}`"
+                                                    class="flex w-full cursor-pointer items-center"
+                                                >
+                                                    <HandCoins
+                                                        class="mr-2 h-4 w-4"
+                                                    />
+                                                    Voir la fiche de paiement
+                                                </Link>
                                             </DropdownMenuItem>
                                         </template>
                                     </DropdownMenuContent>

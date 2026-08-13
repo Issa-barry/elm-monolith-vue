@@ -18,6 +18,32 @@ use Inertia\Inertia;
 use Spatie\Permission\Middleware\RoleMiddleware;
 use Symfony\Component\HttpFoundation\Response;
 
+// Garde de sécurité irrévocable : un run de tests (APP_ENV=testing, positionné par
+// phpunit.xml) ne doit JAMAIS pouvoir démarrer contre autre chose que SQLite en
+// mémoire — même si bootstrap/cache/config.php est périmé et fait mentir
+// config()/app()->environment() (ils lisent le cache, pas l'environnement réel).
+// On vérifie donc les variables d'environnement BRUTES, immunisées au cache config,
+// avant même que Laravel ne construise le conteneur. Incident du 12/08/2026 : un
+// `php artisan test` a tourné contre le MySQL de dev (à cause d'un config cache
+// périmé) et RefreshDatabase a vidé toute la base — cf. tests/TestCase.php.
+if (getenv('APP_ENV') === 'testing') {
+    $driver = getenv('DB_CONNECTION');
+    $database = getenv('DB_DATABASE');
+    $safe = $driver === 'sqlite' && $database === ':memory:';
+
+    if (! $safe) {
+        fwrite(STDERR, sprintf(
+            "\n[GARDE SECURITE TESTS] APP_ENV=testing mais DB_CONNECTION=%s DB_DATABASE=%s ".
+            "(attendu : sqlite / :memory:). Tests bloqués pour ne pas risquer de toucher une base réelle.\n".
+            "Cause probable : config Laravel mise en cache (bootstrap/cache/config.php) qui ignore les\n".
+            "surcharges d'environnement de phpunit.xml. Corrigez avec : php artisan config:clear\n\n",
+            $driver !== false && $driver !== '' ? $driver : '(vide)',
+            $database !== false && $database !== '' ? $database : '(vide)',
+        ));
+        exit(1);
+    }
+}
+
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
