@@ -11,6 +11,7 @@ use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
 use App\Services\AuditLogService;
 use App\Services\CommissionAdjustmentService;
+use App\Services\Comptabilite\FicheComptabilisationService;
 use App\Services\PeriodeCalculatorService;
 use App\Services\PeriodePaiementService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -18,6 +19,7 @@ use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -27,6 +29,7 @@ class PaiementPeriodeController extends Controller
     public function __construct(
         private PeriodeCalculatorService $calculator,
         private PeriodePaiementService $periodes,
+        private FicheComptabilisationService $ficheComptabilisation,
     ) {}
 
     public function index(Request $request): Response
@@ -337,6 +340,22 @@ class PaiementPeriodeController extends Controller
             'site_id' => $periode->site_id,
             'description' => "Période {$periode->reference} validée",
         ]);
+
+        // Comptabilité générale : engagement de la dette envers chaque bénéficiaire,
+        // en aval — ne doit jamais faire échouer la validation métier (mode shadow,
+        // cf. règle #26 de la spec). Une pièce déjà comptabilisée (idempotence) ou un
+        // mapping non configuré ne bloque pas la validation de la période.
+        foreach ($periode->fiches as $fiche) {
+            try {
+                $this->ficheComptabilisation->comptabiliserFicheValidee($fiche);
+            } catch (\Throwable $e) {
+                Log::error('Comptabilisation fiche validée échouée', [
+                    'fiche_id' => $fiche->id,
+                    'periode_id' => $periode->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
 
         return back()->with('success', 'Période validée.');
     }

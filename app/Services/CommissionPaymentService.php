@@ -6,6 +6,8 @@ use App\Enums\StatutCommission;
 use App\Models\CommissionLogistiquePart;
 use App\Models\CommissionPayment;
 use App\Models\CommissionPaymentItem;
+use App\Models\PaiementFiche;
+use App\Models\PaiementFicheLigne;
 use App\Models\Vehicule;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -52,6 +54,7 @@ class CommissionPaymentService
 
         $touched = PeriodePayabilityChecker::touchedUntilAmount($parts, $montant, fn ($p) => (float) $p->montant_restant);
         PeriodePayabilityChecker::assertPartsPayable($touched);
+        PeriodePayabilityChecker::assertPartsNotClaimedByFiche($touched, $beneficiaryType, $beneficiaryId);
 
         $beneficiaryNom = $parts->first()?->beneficiaire_nom ?? 'Inconnu';
 
@@ -96,28 +99,24 @@ class CommissionPaymentService
 
     /**
      * Soldes agrégés par livreur pour toute une organisation.
-     * Retourne les colonnes : livreur_id, beneficiaire_nom, impaye, paye.
+     * Retourne les colonnes : livreur_id, beneficiaire_nom, impaye, paye, premiere_echeance, fiche_id.
+     *
+     * Dès qu'une PaiementFiche a repris une part (PeriodeCalculatorService::creerFiche), le
+     * paiement direct de cette part est verrouillé (PeriodePayabilityChecker::assertPartsNotClaimedByFiche)
+     * et son solde ne se lit plus sur montant_verse/statut — jamais mis à jour par un paiement
+     * de fiche (PaiementFichePaiementController ne touche que PaiementFiche/PaiementFichePaiement).
+     * Pour ces parts, on relit le solde côté fiche : celle-ci n'expose qu'un montant_paye global
+     * (aucune allocation par ligne, contrairement au FIFO du paiement direct), on répartit donc sa
+     * fraction payée uniformément sur les lignes issues de commissions logistiques.
      *
      * @param  string|array<int, string>|null  $siteId  Un ID de site (rétro-compat) ou un tableau d'IDs.
      */
-    public static function soldesParLivreur(string $orgId, ?string $periode = null, string|array|null $siteId = null): Collection
+    public static function soldesParLivreur(string $orgId, ?string $periode = null, string|array|null $siteId = null): \Illuminate\Support\Collection
     {
         $siteIds = array_values(array_filter((array) $siteId));
 
-        return CommissionLogistiquePart::query()
-            ->selectRaw(
-                'livreur_id,
-                 MAX(beneficiaire_nom) AS beneficiaire_nom,
-                 SUM(CASE WHEN statut IN (?,?) THEN CASE WHEN COALESCE(montant_actuel, montant_net) - montant_verse > 0 THEN COALESCE(montant_actuel, montant_net) - montant_verse ELSE 0 END ELSE 0 END) AS impaye,
-                 SUM(montant_verse) AS paye,
-                 MIN(CASE WHEN statut IN (?,?) THEN earned_at END) AS premiere_echeance',
-                [
-                    StatutCommission::IMPAYE->value,
-                    StatutCommission::PARTIEL->value,
-                    StatutCommission::IMPAYE->value,
-                    StatutCommission::PARTIEL->value,
-                ]
-            )
+        $parts = CommissionLogistiquePart::query()
+            ->select(['id', 'livreur_id', 'beneficiaire_nom', 'statut', 'montant_actuel', 'montant_net', 'montant_verse', 'earned_at'])
             ->where('type_beneficiaire', 'livreur')
             ->whereNotNull('livreur_id')
             ->when($periode, fn ($q) => $q->where('periode', $periode))
@@ -127,9 +126,77 @@ class CommissionPaymentService
                     $q->whereHas('transfert', fn ($t) => $t->whereIn('site_source_id', $siteIds)->orWhereIn('site_destination_id', $siteIds));
                 }
             })
-            ->groupBy('livreur_id')
-            ->orderByRaw('impaye DESC')
             ->get();
+
+        if ($parts->isEmpty()) {
+            return collect();
+        }
+
+        $lignesParPartId = PaiementFicheLigne::query()
+            ->where('source_type', CommissionLogistiquePart::class)
+            ->whereIn('source_id', $parts->pluck('id'))
+            ->get(['fiche_id', 'source_id', 'montant'])
+            ->keyBy('source_id');
+
+        $fiches = PaiementFiche::query()
+            ->whereIn('id', $lignesParPartId->pluck('fiche_id')->unique())
+            ->get(['id', 'montant_net', 'montant_paye'])
+            ->keyBy('id');
+
+        return $parts->groupBy('livreur_id')->map(function (Collection $livreurParts, string $livreurId) use ($lignesParPartId, $fiches) {
+            $impaye = 0.0;
+            $paye = 0.0;
+            $ficheId = null;
+            $ligneMontantParFiche = [];
+
+            foreach ($livreurParts as $part) {
+                $ligne = $lignesParPartId->get($part->id);
+
+                if ($ligne === null) {
+                    // Circuit direct classique (part pas encore reprise par une fiche).
+                    $aPayer = (float) ($part->montant_actuel ?? $part->montant_net);
+                    if (in_array($part->statut?->value, [StatutCommission::IMPAYE->value, StatutCommission::PARTIEL->value], true)) {
+                        $impaye += max(0.0, $aPayer - (float) $part->montant_verse);
+                    }
+                    $paye += (float) $part->montant_verse;
+
+                    continue;
+                }
+
+                $ligneMontantParFiche[$ligne->fiche_id] = ($ligneMontantParFiche[$ligne->fiche_id] ?? 0.0) + (float) $ligne->montant;
+            }
+
+            foreach ($ligneMontantParFiche as $id => $netLogistique) {
+                $fiche = $fiches->get($id);
+                if ($fiche === null) {
+                    continue;
+                }
+
+                $ficheId ??= $id;
+
+                $netFiche = (float) $fiche->montant_net;
+                $fraction = $netFiche > 0.009 ? min(1.0, (float) $fiche->montant_paye / $netFiche) : 0.0;
+                $payeLogistique = round($netLogistique * $fraction, 2);
+
+                $paye += $payeLogistique;
+                $impaye += max(0.0, round($netLogistique - $payeLogistique, 2));
+            }
+
+            $premiereEcheance = $livreurParts
+                ->whereIn('statut', [StatutCommission::IMPAYE, StatutCommission::PARTIEL])
+                ->min('earned_at');
+
+            return (object) [
+                'livreur_id' => $livreurId,
+                'beneficiaire_nom' => $livreurParts->first()->beneficiaire_nom,
+                'impaye' => $impaye,
+                'paye' => $paye,
+                'premiere_echeance' => $premiereEcheance,
+                'fiche_id' => $ficheId,
+            ];
+        })
+            ->sortByDesc('impaye')
+            ->values();
     }
 
     /**
@@ -206,6 +273,7 @@ class CommissionPaymentService
 
         $touched = PeriodePayabilityChecker::touchedUntilAmount($parts, $montant, fn ($p) => (float) $p->montant_restant);
         PeriodePayabilityChecker::assertPartsPayable($touched);
+        PeriodePayabilityChecker::assertPartsNotClaimedByFiche($touched, 'livreur', $livreurId);
 
         $beneficiaryNom = $parts->first()?->beneficiaire_nom ?? 'Inconnu';
 

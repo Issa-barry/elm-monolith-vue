@@ -26,6 +26,7 @@ class DepenseType extends Model
         'justificatif_obligatoire',
         'type_paie',
         'is_active',
+        'compte_comptable_id',
     ];
 
     protected function casts(): array
@@ -60,5 +61,10 @@ class DepenseType extends Model
     public function depenses(): HasMany
     {
         return $this->hasMany(Depense::class);
+    }
+
+    public function compteComptable(): BelongsTo
+    {
+        return $this->belongsTo(CompteComptable::class, 'compte_comptable_id');
     }
 }

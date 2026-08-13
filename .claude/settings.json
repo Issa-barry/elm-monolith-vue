@@ -343,7 +343,9 @@
       "Bash(curl -sL \"https://api.github.com/repos/Issa-barry/elm-monolith-vue/actions/jobs/93929850123/logs\" -o /c/tmp/phpunit_log.txt -w \"HTTP %{http_code}\\\\n\")",
       "Bash(php -r \"echo date\\('Y-m-d H:i:s'\\);\")",
       "Bash(taskkill //F //IM php.exe)",
-      "Bash(powershell -command \"Start-Sleep -Seconds 2\")"
+      "Bash(powershell -command \"Start-Sleep -Seconds 2\")",
+      "Bash(vendor/bin/pint --test tests/Feature/Comptabilite/DoublePaiementLockTest.php)",
+      "Bash(vendor/bin/pint tests/Feature/Comptabilite/DoublePaiementLockTest.php)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\bin\\php\\php-8.5.1-nts-Win32-vs17-x64",

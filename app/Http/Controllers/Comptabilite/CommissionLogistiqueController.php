@@ -182,6 +182,13 @@ class CommissionLogistiqueController extends Controller
 
             $resolved = CommissionStatusResolver::resolve($periode, $teamStatus, $paymentValue, $paymentLabel);
 
+            // Dès qu'une fiche existe pour ce livreur, le paiement direct est verrouillé
+            // (PeriodePayabilityChecker::assertPartsNotClaimedByFiche) quel que soit le
+            // solde restant : can_pay reste false, et "Payer" doit renvoyer vers la fiche.
+            if ($row->fiche_id !== null) {
+                $resolved['can_pay'] = false;
+            }
+
             return [
                 'livreur_id' => $row->livreur_id,
                 'nom' => $row->beneficiaire_nom,
@@ -192,6 +199,7 @@ class CommissionLogistiqueController extends Controller
                 'impaye' => $impaye,
                 'paye' => $paye,
                 'remaining_amount' => $impaye,
+                'fiche_id' => $row->fiche_id,
                 ...$resolved,
             ];
         });
