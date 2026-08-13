@@ -2,11 +2,13 @@
 
 namespace App\Models;
 
+use App\Services\Comptabilite\FicheComptabilisationService;
 use App\Services\JournalTresorerieService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class PaiementFichePaiement extends Model
 {
@@ -42,6 +44,17 @@ class PaiementFichePaiement extends Model
         static::created(function (self $p) {
             $p->fiche?->recalculStatut();
             JournalTresorerieService::enregistrerPaiementFiche($p);
+
+            // Comptabilité générale, en aval — ne doit jamais empêcher un paiement
+            // métier de passer (mode shadow, règle #26 de la spec).
+            try {
+                app(FicheComptabilisationService::class)->comptabiliserPaiementFiche($p);
+            } catch (\Throwable $e) {
+                Log::error('Comptabilisation paiement fiche échouée', [
+                    'paiement_id' => $p->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         });
 
         static::deleted(function (self $p) {

@@ -2,6 +2,8 @@
 
 namespace App\Enums;
 
+use App\Services\PeriodeComptableService;
+
 enum TypePeriodePaiement: string
 {
     case LIVREUR = 'livreur';
@@ -17,9 +19,15 @@ enum TypePeriodePaiement: string
         };
     }
 
+    /**
+     * Délègue à PeriodeComptableService::periodicityFor() — source unique de
+     * vérité. Avant correction, cette méthode renvoyait 'quinzaine' pour tous
+     * les types (y compris PROPRIETAIRE), incohérent avec PeriodeComptableService
+     * qui applique déjà du mensuel pour PROPRIETAIRE/SALARIE.
+     */
     public function periodicity(): string
     {
-        return 'quinzaine';
+        return PeriodeComptableService::periodicityFor($this->value);
     }
 
     /** Abréviation utilisée dans la référence auto-générée (ex: PAY-202607-P1-LIV). */

@@ -26,6 +26,16 @@ class PeriodeComptableService
 
     public const PART_M = 'M';
 
+    /**
+     * Source unique de vérité pour la périodicité par type de bénéficiaire.
+     * Toute autre partie du code (ex: TypePeriodePaiement::periodicity()) doit
+     * déléguer ici plutôt que de dupliquer la règle.
+     */
+    public static function periodicityFor(string $typeBeneficiaire): string
+    {
+        return $typeBeneficiaire === 'livreur' ? 'quinzaine' : 'mensuelle';
+    }
+
     // ── Calcul du code ────────────────────────────────────────────────────────
 
     /**
