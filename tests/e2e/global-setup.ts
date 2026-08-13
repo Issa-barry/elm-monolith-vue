@@ -277,9 +277,20 @@ async function payFullCommission(
         timeout: 20_000,
     });
 
+    // waitForURL ne garantit que le changement d'URL, pas le remplacement du DOM
+    // (transition Inertia) : sans cette attente, un combobox non scopé peut encore
+    // matcher le filtre Agence de la page liste précédente (Fiches/Index.vue,
+    // DataFilters) au lieu du "Mode de paiement" de cette page.
+    await page
+        .getByRole('heading', { name: /enregistrer un paiement/i })
+        .waitFor({ state: 'visible', timeout: 15_000 });
+
     // Montant pré-rempli au solde restant de la fiche — seul le mode de paiement
     // (obligatoire, sans valeur par défaut) doit être renseigné avant de soumettre.
-    const modeCombobox = page.getByRole('combobox').first();
+    // Scopé au <form> (comme les autres combobox de ce fichier de tests) : DataFilters,
+    // utilisé sur la page liste précédente, ne rend jamais de <form>, donc ce scope
+    // exclut aussi son filtre Agence par construction, indépendamment du timing.
+    const modeCombobox = page.locator('form').getByRole('combobox').first();
     await modeCombobox.waitFor({ state: 'visible', timeout: 10_000 });
     await selectOptionFromCombobox(page, modeCombobox, /esp[eè]ces/i);
 
