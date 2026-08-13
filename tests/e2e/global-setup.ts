@@ -255,32 +255,41 @@ async function validerPeriodeLivreurCourante(page: Page): Promise<void> {
 }
 
 /**
- * Navigue vers /logistique/commissions et paie intégralement la commission
- * du livreur correspondant au regex (le dialog est pré-rempli avec le solde
- * total — pas besoin de saisir un montant).
+ * Paie intégralement la commission du livreur correspondant au regex, via sa fiche
+ * de paiement (Comptabilité > Fiches). Le paiement DIRECT (page /logistique/commissions)
+ * est désormais bloqué par PeriodePayabilityChecker::assertPartsNotClaimedByFiche dès
+ * qu'une fiche existe pour la période du bénéficiaire — et valerPeriodeLivreurCourante
+ * ci-dessus a déjà déclenché la génération automatique des fiches de tous les livreurs
+ * de la période (PeriodeCalculatorService::creerFiche, appelé par le show() de la page
+ * période). La fiche est donc le seul canal de paiement encore ouvert ici.
  */
 async function payFullCommission(
     page: Page,
     livreurRegex: RegExp,
 ): Promise<void> {
-    await page.goto('/backoffice/logistique/commissions');
+    await page.goto('/backoffice/comptabilite/fiches/livreurs');
 
-    const row = page.locator('tbody tr', { hasText: livreurRegex }).first();
-    await row.waitFor({ state: 'visible', timeout: 20_000 });
-    await row.locator('button').last().click();
+    const ficheLink = page.getByRole('link', { name: livreurRegex }).first();
+    await ficheLink.waitFor({ state: 'visible', timeout: 20_000 });
+    await ficheLink.click();
 
-    const payerItem = page.getByRole('menuitem', { name: /payer/i }).first();
-    await payerItem.waitFor({ state: 'visible', timeout: 5_000 });
-    await payerItem.click();
-
-    const dialog = page.locator('[role="dialog"]').first();
-    await dialog.waitFor({ state: 'visible', timeout: 10_000 });
-
-    const confirmerBtn = dialog.getByRole('button', {
-        name: /confirmer le paiement/i,
+    await page.waitForURL(/\/comptabilite\/fiches\/[a-z0-9]+$/, {
+        timeout: 20_000,
     });
-    await confirmerBtn.waitFor({ state: 'visible', timeout: 5_000 });
-    await confirmerBtn.click();
 
-    await dialog.waitFor({ state: 'hidden', timeout: 20_000 });
+    // Montant pré-rempli au solde restant de la fiche — seul le mode de paiement
+    // (obligatoire, sans valeur par défaut) doit être renseigné avant de soumettre.
+    const modeCombobox = page.getByRole('combobox').first();
+    await modeCombobox.waitFor({ state: 'visible', timeout: 10_000 });
+    await selectOptionFromCombobox(page, modeCombobox, /esp[eè]ces/i);
+
+    const submitBtn = page.getByRole('button', {
+        name: /enregistrer le paiement/i,
+    });
+    await submitBtn.waitFor({ state: 'visible', timeout: 10_000 });
+    await submitBtn.click();
+
+    // La fiche est intégralement soldée : le formulaire de paiement disparaît
+    // (can_pay redevient false côté backend une fois montant_restant à 0).
+    await submitBtn.waitFor({ state: 'hidden', timeout: 20_000 });
 }
