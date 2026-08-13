@@ -66,7 +66,14 @@ class PlanComptableBootstrapService
             '467160' => 'Livreurs — charges à payer (provision de clôture)',
             '571000' => 'Caisse',
             '521000' => 'Banque',
-            '561000' => 'Mobile Money',
+            '561000' => 'Mobile Money (générique)',
+            // Exemples de wallets Mobile Money dédiés — à adapter/compléter librement
+            // par organisation (compte_mappings.moyen_paiement accepte n'importe quelle
+            // étiquette "mobile_money:xxx", aucun opérateur n'est codé en dur dans le
+            // moteur). Ceux-ci ne sont que des points de départ raisonnables.
+            '561100' => 'Mobile Money — Orange Money',
+            '561200' => 'Mobile Money — MTN MoMo',
+            '561300' => 'Mobile Money — Djomy',
             '628800' => 'Charges diverses de gestion courante',
         ];
 
@@ -106,7 +113,14 @@ class PlanComptableBootstrapService
             ['paiement_proprietaire', 'dette_tiers', null, '467110', null],
             ['paiement_proprietaire', 'tresorerie', null, '571000', 'CA'],
             ['paiement_proprietaire', 'tresorerie', 'especes', '571000', 'CA'],
+            // Générique (repli si aucun wallet précis n'est renseigné/configuré) + trois
+            // wallets d'exemple : CompteMappingResolver essaie d'abord "mobile_money:xxx"
+            // puis retombe sur "mobile_money" tout court — libre à l'organisation d'en
+            // ajouter/retirer sans toucher au moteur.
             ['paiement_proprietaire', 'tresorerie', 'mobile_money', '561000', 'MM'],
+            ['paiement_proprietaire', 'tresorerie', 'mobile_money:orange', '561100', 'MM'],
+            ['paiement_proprietaire', 'tresorerie', 'mobile_money:mtn', '561200', 'MM'],
+            ['paiement_proprietaire', 'tresorerie', 'mobile_money:djomy', '561300', 'MM'],
             ['paiement_proprietaire', 'tresorerie', 'virement', '521000', 'BQ'],
             ['paiement_proprietaire', 'tresorerie', 'cheque', '521000', 'BQ'],
 
@@ -115,6 +129,9 @@ class PlanComptableBootstrapService
             ['paiement_livreur', 'tresorerie', null, '571000', 'CA'],
             ['paiement_livreur', 'tresorerie', 'especes', '571000', 'CA'],
             ['paiement_livreur', 'tresorerie', 'mobile_money', '561000', 'MM'],
+            ['paiement_livreur', 'tresorerie', 'mobile_money:orange', '561100', 'MM'],
+            ['paiement_livreur', 'tresorerie', 'mobile_money:mtn', '561200', 'MM'],
+            ['paiement_livreur', 'tresorerie', 'mobile_money:djomy', '561300', 'MM'],
             ['paiement_livreur', 'tresorerie', 'virement', '521000', 'BQ'],
             ['paiement_livreur', 'tresorerie', 'cheque', '521000', 'BQ'],
 

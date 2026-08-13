@@ -123,7 +123,12 @@ class FicheComptabilisationService
                 'role' => 'tresorerie',
                 'sens' => 'credit',
                 'montant' => (float) $paiement->montant,
-                'moyen_paiement' => $paiement->mode_paiement,
+                // "mobile_money:orange" si un wallet précis est renseigné, sinon
+                // "mobile_money" tout court — CompteMappingResolver sait retomber du
+                // premier vers le second si aucun mapping dédié n'est configuré.
+                'moyen_paiement' => $paiement->moyen_paiement_detail
+                    ? $paiement->mode_paiement.':'.$paiement->moyen_paiement_detail
+                    : $paiement->mode_paiement,
             ],
         ];
 

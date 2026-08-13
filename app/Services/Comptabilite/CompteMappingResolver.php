@@ -13,6 +13,20 @@ use App\Models\CompteMapping;
  */
 class CompteMappingResolver
 {
+    /**
+     * Chaîne de repli sur moyen_paiement, du plus précis au plus générique.
+     *
+     * Ex: moyen_paiement = "mobile_money:orange" (un wallet précis, ex: Orange
+     * Money) essaie dans l'ordre :
+     *   1. "mobile_money:orange"  → compte Orange Money dédié si configuré
+     *   2. "mobile_money"         → compte Mobile Money générique de repli
+     *   3. NULL                   → compte de trésorerie par défaut de l'événement
+     *
+     * Aucun opérateur n'est codé en dur ici : "orange"/"mtn"/"djomy" ne sont que
+     * des étiquettes libres saisies côté métier (cf. PaiementFichePaiement.
+     * moyen_paiement_detail) — le resolver ne fait que suivre le pattern
+     * "type:detail", quel que soit le detail.
+     */
     public function resolve(string $organizationId, EvenementComptable $evenement, string $role, ?string $moyenPaiement = null): CompteMapping
     {
         $query = CompteMapping::query()
@@ -21,18 +35,34 @@ class CompteMappingResolver
             ->where('role', $role)
             ->where('actif', true);
 
-        $mapping = (clone $query)->where('moyen_paiement', $moyenPaiement)->first();
+        foreach ($this->candidats($moyenPaiement) as $candidat) {
+            $mapping = (clone $query)
+                ->where(fn ($q) => $candidat === null ? $q->whereNull('moyen_paiement') : $q->where('moyen_paiement', $candidat))
+                ->first();
 
-        // Pas de mapping spécifique à ce moyen de paiement : repli sur le mapping
-        // par défaut (moyen_paiement NULL) de ce rôle, s'il existe.
-        if (! $mapping && $moyenPaiement !== null) {
-            $mapping = (clone $query)->whereNull('moyen_paiement')->first();
+            if ($mapping) {
+                return $mapping;
+            }
         }
 
-        if (! $mapping) {
-            throw MappingComptableIndisponibleException::pourRole($organizationId, $evenement->value, $role, $moyenPaiement);
+        throw MappingComptableIndisponibleException::pourRole($organizationId, $evenement->value, $role, $moyenPaiement);
+    }
+
+    /** @return list<string|null> */
+    private function candidats(?string $moyenPaiement): array
+    {
+        if ($moyenPaiement === null) {
+            return [null];
         }
 
-        return $mapping;
+        $candidats = [$moyenPaiement];
+
+        if (str_contains($moyenPaiement, ':')) {
+            $candidats[] = strstr($moyenPaiement, ':', true);
+        }
+
+        $candidats[] = null;
+
+        return $candidats;
     }
 }
