@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test';
-import { login } from './helpers';
+import { expect, test, type Page } from '@playwright/test';
+import { login, selectOptionFromCombobox } from './helpers';
 
 test.setTimeout(120_000);
 
@@ -12,7 +12,45 @@ test.setTimeout(120_000);
  *   - Aissatou BALDÉ  : 11 200 GNF impayé  (elm-2, 80 packs × 200 × 70 %)
  *   - Thierno SALL    : 4 800 GNF impayé   (elm-2, 80 packs × 200 × 30 %)
  *   - Boubacar KONATÉ : 24 000 GNF payé    (elm-1, 120 packs × 200 × 100 %)
+ *
+ * Depuis le verrou anti-double-paiement (PeriodePayabilityChecker::assertPartsNotClaimedByFiche),
+ * le paiement DIRECT (dialog "Payer" de cette page) est bloqué dès qu'une fiche existe pour la
+ * période — et global-setup.ts valide déjà la période partagée des 3 livreurs ci-dessus, ce qui
+ * génère leur fiche automatiquement (PeriodeCalculatorService::creerFiche). Les paiements de ce
+ * test passent donc par la fiche (Comptabilité > Fiches) ; seules les colonnes « Reste à payer »/
+ * « Déjà payé » de CETTE page (logistique/commissions) sont encore vérifiées ici, pour couvrir
+ * CommissionPaymentService::soldesParLivreur() qui doit relire le solde côté fiche.
  */
+async function payViaFiche(
+    page: Page,
+    livreurRegex: RegExp,
+    montant?: string,
+): Promise<void> {
+    await page.goto('/backoffice/comptabilite/fiches/livreurs');
+
+    const ficheLink = page.getByRole('link', { name: livreurRegex }).first();
+    await ficheLink.waitFor({ state: 'visible', timeout: 20_000 });
+    await ficheLink.click();
+
+    await page.waitForURL(/\/comptabilite\/fiches\/[a-z0-9]+$/, {
+        timeout: 20_000,
+    });
+    await page
+        .getByRole('heading', { name: /enregistrer un paiement/i })
+        .waitFor({ state: 'visible', timeout: 15_000 });
+
+    if (montant) {
+        const montantInput = page.locator('form input[type="number"]').first();
+        await montantInput.fill(montant);
+    }
+
+    const modeCombobox = page.locator('form').getByRole('combobox').first();
+    await modeCombobox.waitFor({ state: 'visible', timeout: 10_000 });
+    await selectOptionFromCombobox(page, modeCombobox, /esp[eè]ces/i);
+
+    await page.getByRole('button', { name: /enregistrer le paiement/i }).click();
+}
+
 test('paiement partiel commission logistique — Déjà payé et Reste à payer se mettent à jour', async ({
     page,
 }) => {
@@ -38,46 +76,29 @@ test('paiement partiel commission logistique — Déjà payé et Reste à payer 
     await expect(colReste).toContainText(/11[\s ]200/);
     await expect(colPaye).toContainText(/0\s*GNF/);
 
-    // ── 2. Ouvrir le menu et cliquer « Payer » ─────────────────────────────────
-    await row.locator('button').last().click();
-    const payerItem = page.getByRole('menuitem', { name: /payer/i }).first();
-    await expect(payerItem).toBeVisible({ timeout: 5_000 });
-    await payerItem.click();
+    // ── 2. Paiement partiel de 2 000 GNF via la fiche ──────────────────────────
+    await payViaFiche(page, /Aissatou\s+BALD/i, '2000');
+    // Le formulaire reste affiché (solde non nul) : on attend la mise à jour du
+    // libellé "Reste :" de la barre de progression comme signal de fin de paiement.
+    await expect(
+        page.getByText(/reste\s*:\s*9[\s ]200/i),
+    ).toBeVisible({ timeout: 20_000 });
 
-    // ── 3. Remplir le dialog — paiement partiel de 2 000 GNF ──────────────────
-    const dialog = page.locator('[role="dialog"]').filter({ hasText: /Aissatou/i });
-    await expect(dialog).toBeVisible({ timeout: 10_000 });
-
-    const montantInput = dialog.locator('input').first();
-    await expect(montantInput).toBeVisible({ timeout: 10_000 });
-    await montantInput.fill('2000');
-    await montantInput.press('Tab');
-
-    const confirmerBtn = dialog.getByRole('button', { name: /confirmer le paiement/i });
-    await expect(confirmerBtn).toBeEnabled({ timeout: 5_000 });
-    await confirmerBtn.click();
-
-    // ── 4. Vérifier après paiement partiel ────────────────────────────────────
+    // ── 3. Vérifier sur /logistique/commissions après paiement partiel ────────
+    await page.goto('/backoffice/logistique/commissions');
     // « Déjà payé » doit afficher 2 000 GNF (régression : restait à 0 GNF avant fix)
     await expect(colPaye).toContainText(/2[\s ]000/, { timeout: 20_000 });
     // « Reste à payer » doit afficher 9 200 GNF
     await expect(colReste).toContainText(/9[\s ]200/);
 
-    // ── 5. Payer le solde restant ──────────────────────────────────────────────
-    await row.locator('button').last().click();
-    const payerItem2 = page.getByRole('menuitem', { name: /payer/i }).first();
-    await expect(payerItem2).toBeVisible({ timeout: 5_000 });
-    await payerItem2.click();
+    // ── 4. Payer le solde restant via la fiche (montant pré-rempli) ───────────
+    await payViaFiche(page, /Aissatou\s+BALD/i);
+    await page
+        .getByRole('button', { name: /enregistrer le paiement/i })
+        .waitFor({ state: 'hidden', timeout: 20_000 });
 
-    const dialog2 = page.locator('[role="dialog"]').filter({ hasText: /Aissatou/i });
-    await expect(dialog2).toBeVisible({ timeout: 10_000 });
-
-    // Le solde pre-rempli doit être 9 200 GNF — laisser tel quel et confirmer
-    const confirmerBtn2 = dialog2.getByRole('button', { name: /confirmer le paiement/i });
-    await expect(confirmerBtn2).toBeEnabled({ timeout: 5_000 });
-    await confirmerBtn2.click();
-
-    // ── 6. Vérifier que tout est payé ─────────────────────────────────────────
+    // ── 5. Vérifier que tout est payé ─────────────────────────────────────────
+    await page.goto('/backoffice/logistique/commissions');
     // « Reste à payer » doit être 0 GNF
     await expect(colReste).toContainText(/0\s*GNF/, { timeout: 20_000 });
     // « Déjà payé » doit afficher 11 200 GNF
