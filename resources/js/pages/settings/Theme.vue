@@ -159,8 +159,8 @@ function save() {
                                 v-if="locked.primary"
                                 class="text-xs text-muted-foreground"
                             >
-                                Verrouillé par la politique de cet
-                                environnement ({{ allowed.primaries[0] }}
+                                Verrouillé par la politique de cet environnement
+                                ({{ allowed.primaries[0] }}
                                 uniquement).
                             </p>
                         </div>

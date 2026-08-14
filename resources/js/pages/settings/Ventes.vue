@@ -346,18 +346,23 @@ function onSeuilBlur() {
                             Ce paramètre détermine à quel moment la commission
                             de vente devient générable.
                         </p>
-                        <div class="flex flex-col gap-3 pt-1 sm:flex-row sm:gap-6">
+                        <div
+                            class="flex flex-col gap-3 pt-1 sm:flex-row sm:gap-6"
+                        >
                             <label
                                 v-for="option in declencheurs_commission_vente_options"
                                 :key="`vente-${option.value}`"
                                 class="flex cursor-pointer items-center gap-2"
                             >
                                 <RadioButton
-                                    :model-value="form.declencheur_commission_vente"
+                                    :model-value="
+                                        form.declencheur_commission_vente
+                                    "
                                     :value="option.value"
                                     :disabled="form.processing"
                                     @update:model-value="
-                                        form.declencheur_commission_vente = option.value
+                                        form.declencheur_commission_vente =
+                                            option.value
                                     "
                                 />
                                 <span class="text-sm">{{ option.label }}</span>
@@ -373,18 +378,23 @@ function onSeuilBlur() {
                             Ce paramètre détermine à quel moment la commission
                             logistique devient générable.
                         </p>
-                        <div class="flex flex-col gap-3 pt-1 sm:flex-row sm:gap-6">
+                        <div
+                            class="flex flex-col gap-3 pt-1 sm:flex-row sm:gap-6"
+                        >
                             <label
                                 v-for="option in declencheurs_commission_logistique_options"
                                 :key="`logistique-${option.value}`"
                                 class="flex cursor-pointer items-center gap-2"
                             >
                                 <RadioButton
-                                    :model-value="form.declencheur_commission_logistique"
+                                    :model-value="
+                                        form.declencheur_commission_logistique
+                                    "
                                     :value="option.value"
                                     :disabled="form.processing"
                                     @update:model-value="
-                                        form.declencheur_commission_logistique = option.value
+                                        form.declencheur_commission_logistique =
+                                            option.value
                                     "
                                 />
                                 <span class="text-sm">{{ option.label }}</span>

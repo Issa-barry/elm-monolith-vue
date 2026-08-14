@@ -44,8 +44,9 @@ createInertiaApp({
         // HandleInertiaRequests) — jamais localStorage/VITE_* pour ces 3 axes,
         // cf. docs/theming.md. `props` contient déjà la page initiale ici, donc
         // ceci est synchrone, pas de flash lié à un aller-retour réseau.
-        const initialTheme = (props.initialPage.props as { theme: ThemeSharedProps })
-            .theme.active;
+        const initialTheme = (
+            props.initialPage.props as { theme: ThemeSharedProps }
+        ).theme.active;
         const { preset: primeVuePreset } = getPrimeVueThemePreset(
             initialTheme.preset,
         );

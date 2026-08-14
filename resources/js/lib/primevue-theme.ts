@@ -371,9 +371,7 @@ export function normalizePrimeVuePrimary(
 ): PrimeVuePrimaryName {
     const normalized = value?.toLowerCase() as PrimeVuePrimaryName | undefined;
 
-    return normalized && normalized in PRIMARY_PALETTES
-        ? normalized
-        : 'blue';
+    return normalized && normalized in PRIMARY_PALETTES ? normalized : 'blue';
 }
 
 export function normalizePrimeVueSurface(
