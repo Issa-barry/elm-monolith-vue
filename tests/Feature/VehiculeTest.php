@@ -34,7 +34,7 @@ class VehiculeTest extends TestCase
         return TypeVehicule::where('organization_id', $this->org->id)->value('id');
     }
 
-    private function makeVehicule(Organization $org): Vehicule
+    private function makeVehicule(Organization $org, ?bool $livraisonVente = null, ?bool $livraisonLogistique = null): Vehicule
     {
         $typeVehicule = TypeVehicule::factory()->create(['organization_id' => $org->id]);
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id]);
@@ -49,6 +49,8 @@ class VehiculeTest extends TestCase
             'type_vehicule_id' => $typeVehicule->id,
             'proprietaire_id' => $proprietaire->id,
             'site_id' => $site->id,
+            ...($livraisonVente !== null ? ['livraison_vente' => $livraisonVente] : []),
+            ...($livraisonLogistique !== null ? ['livraison_logistique' => $livraisonLogistique] : []),
         ]);
     }
 
@@ -796,5 +798,66 @@ class VehiculeTest extends TestCase
                 'proprietaire_id' => $vehicule->proprietaire_id,
             ])
             ->assertSessionHasErrors('immatriculation');
+    }
+
+    // ── usage vente/logistique — règle métier centralisée (Vehicule::usage_label / ────
+    // aAuMoinsUnUsage()) et exclusion des sélecteurs opérationnels (scopes) ───────────
+
+    public function test_usage_label_reflects_livraison_flags(): void
+    {
+        $this->assertSame('Vente', $this->makeVehicule($this->org, true, false)->usage_label);
+        $this->assertSame('Logistique', $this->makeVehicule($this->org, false, true)->usage_label);
+        $this->assertSame('Vente + Logistique', $this->makeVehicule($this->org, true, true)->usage_label);
+        $this->assertSame('Usage non défini', $this->makeVehicule($this->org, false, false)->usage_label);
+    }
+
+    public function test_a_au_moins_un_usage_helper(): void
+    {
+        $this->assertTrue($this->makeVehicule($this->org, true, false)->aAuMoinsUnUsage());
+        $this->assertTrue($this->makeVehicule($this->org, false, true)->aAuMoinsUnUsage());
+        $this->assertFalse($this->makeVehicule($this->org, false, false)->aAuMoinsUnUsage());
+    }
+
+    /**
+     * Les scopes ci-dessous sont le mécanisme réel utilisé par tous les sélecteurs
+     * opérationnels (CommandeVenteController::vehiculesActifs(), PdvController,
+     * TransfertLogistiqueController, RessourcesController) — les tester directement
+     * couvre donc l'exclusion effective d'un véhicule sans usage (ou avec un usage
+     * différent de celui demandé) de ces sélecteurs.
+     */
+    public function test_scope_livraison_vente_exclut_vehicule_sans_aucun_usage(): void
+    {
+        $sansUsage = $this->makeVehicule($this->org, false, false);
+
+        $this->assertFalse(Vehicule::livraisonVente()->whereKey($sansUsage->id)->exists());
+    }
+
+    public function test_scope_livraison_logistique_exclut_vehicule_sans_aucun_usage(): void
+    {
+        $sansUsage = $this->makeVehicule($this->org, false, false);
+
+        $this->assertFalse(Vehicule::livraisonLogistique()->whereKey($sansUsage->id)->exists());
+    }
+
+    public function test_scope_livraison_logistique_exclut_vehicule_vente_uniquement(): void
+    {
+        $venteUniquement = $this->makeVehicule($this->org, true, false);
+
+        $this->assertFalse(Vehicule::livraisonLogistique()->whereKey($venteUniquement->id)->exists());
+    }
+
+    public function test_scope_livraison_vente_exclut_vehicule_logistique_uniquement(): void
+    {
+        $logistiqueUniquement = $this->makeVehicule($this->org, false, true);
+
+        $this->assertFalse(Vehicule::livraisonVente()->whereKey($logistiqueUniquement->id)->exists());
+    }
+
+    public function test_scope_livraison_vente_et_logistique_incluent_vehicule_avec_les_deux_usages(): void
+    {
+        $vehicule = $this->makeVehicule($this->org, true, true);
+
+        $this->assertTrue(Vehicule::livraisonVente()->whereKey($vehicule->id)->exists());
+        $this->assertTrue(Vehicule::livraisonLogistique()->whereKey($vehicule->id)->exists());
     }
 }

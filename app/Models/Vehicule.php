@@ -42,7 +42,7 @@ class Vehicule extends Model
         ];
     }
 
-    protected $appends = ['photo_url', 'type_label'];
+    protected $appends = ['photo_url', 'type_label', 'usage_label'];
 
     public function getPhotoUrlAttribute(): ?string
     {
@@ -54,6 +54,34 @@ class Vehicule extends Model
         return $this->relationLoaded('typeVehicule') && $this->typeVehicule
             ? $this->typeVehicule->nom
             : '';
+    }
+
+    /**
+     * Libellé d'usage affiché dans la gestion des véhicules (Index/Show) — dérivé des deux
+     * booléens plutôt que stocké, pour une seule source de vérité. "Usage non défini" est
+     * le cas d'un véhicule créé par import flotte sans qu'aucun usage n'ait été saisi dans
+     * le fichier (cf. ImportFlotteParser) — jamais possible via le formulaire manuel, qui
+     * exige toujours au moins un usage (cf. VehiculeController::ensureAuMoinsUnUsage()).
+     */
+    public function getUsageLabelAttribute(): string
+    {
+        return match (true) {
+            $this->livraison_vente && $this->livraison_logistique => 'Vente + Logistique',
+            $this->livraison_vente => 'Vente',
+            $this->livraison_logistique => 'Logistique',
+            default => 'Usage non défini',
+        };
+    }
+
+    /**
+     * Un véhicule sans aucun usage n'a pas sa place dans les opérations métier — déjà
+     * garanti par scopeLivraisonVente()/scopeLivraisonLogistique() ci-dessous (qui
+     * l'excluent tous les deux), cette méthode ne fait que centraliser la lecture de cet
+     * état pour l'UI et les contrôles applicatifs.
+     */
+    public function aAuMoinsUnUsage(): bool
+    {
+        return $this->livraison_vente || $this->livraison_logistique;
     }
 
     // ── Relations ─────────────────────────────────────────────────────────────

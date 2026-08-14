@@ -24,9 +24,14 @@ class RessourcesController extends Controller
             ->orderBy('nom')
             ->get();
 
+        // Ressource "logistique" : uniquement les véhicules autorisés pour ce workflow (cf.
+        // Vehicule::scopeLivraisonLogistique(), même filtre que TransfertLogistiqueController)
+        // — un véhicule vente-only (ou sans aucun usage, cf. import flotte) n'a pas sa place
+        // dans ce sélecteur mobile.
         $vehicules = Vehicule::query()
             ->when($user->organization_id, fn ($q) => $q->where('organization_id', $user->organization_id))
             ->where('is_active', true)
+            ->livraisonLogistique()
             ->orderBy('nom_vehicule')
             ->get(['id', 'nom_vehicule', 'immatriculation']);
 

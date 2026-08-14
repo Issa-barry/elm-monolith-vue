@@ -143,9 +143,7 @@ class FactureVenteController extends Controller
                 'reference' => $f->reference,
                 'commande_id' => $f->commande_vente_id,
                 'vehicule_nom' => $f->commande?->vehicule?->nom_vehicule,
-                'client_nom' => $f->commande?->client
-                    ? trim($f->commande->client->prenom.' '.$f->commande->client->nom)
-                    : null,
+                'client_nom' => $f->commande?->client?->nom_complet,
                 'site_nom' => $f->commande?->site?->nom,
                 'montant_net' => (float) $f->montant_net,
                 'montant_encaisse' => (float) $f->montant_encaisse,

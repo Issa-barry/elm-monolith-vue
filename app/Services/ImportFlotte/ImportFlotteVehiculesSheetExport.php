@@ -40,7 +40,11 @@ class ImportFlotteVehiculesSheetExport implements FromArray, WithHeadings, WithT
         // dans Équipes de livraison.
         //
         // vehicule_site est obligatoire pour tout véhicule, quel que soit son propriétaire.
-        // Un véhicule doit être autorisé pour la vente et/ou la logistique (au moins un "oui").
+        // vehicule_livraison_vente / vehicule_livraison_logistique : oui/non (yes/no, 1/0,
+        // true/false acceptés) — une cellule vide vaut "non" (aucun usage par défaut,
+        // jamais un usage vente implicite), cf. ImportFlotteParser::toUsageBool(). Un
+        // véhicule sans aucun des deux reste importé mais non exploitable tant qu'un usage
+        // n'est pas défini (cf. Vehicule::aAuMoinsUnUsage()).
         return [
             ['Matoto', 'Camion 1', 'RC-1234-A', 'Tricycle', '80', '', 'oui', 'non', 'Diallo', 'Mamadou', '622000001', 'GN'],
         ];

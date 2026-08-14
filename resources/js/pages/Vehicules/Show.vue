@@ -19,6 +19,7 @@ import {
     Plus,
     Receipt,
     Settings,
+    TriangleAlert,
     Users,
 } from 'lucide-vue-next';
 import Toast from 'primevue/toast';
@@ -427,6 +428,27 @@ function formatGNF(val: number): string {
                                         class="inline-flex items-center rounded-full bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700 dark:bg-orange-950 dark:text-orange-300"
                                         >Logistique</span
                                     >
+                                    <span
+                                        v-if="
+                                            !vehicule.livraison_vente &&
+                                            !vehicule.livraison_logistique
+                                        "
+                                        class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+                                    >
+                                        <TriangleAlert class="h-3 w-3" />
+                                        Usage non défini
+                                    </span>
+                                </p>
+                                <p
+                                    v-if="
+                                        !vehicule.livraison_vente &&
+                                        !vehicule.livraison_logistique
+                                    "
+                                    class="mt-1.5 text-xs text-muted-foreground"
+                                >
+                                    Ce véhicule existe mais ne peut être utilisé
+                                    pour aucune opération tant qu'un usage n'est
+                                    pas défini.
                                 </p>
                             </div>
                             <div class="rounded-lg border bg-background p-4">

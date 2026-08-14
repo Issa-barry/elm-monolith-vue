@@ -1,13 +1,17 @@
-import { useAppearance } from '@/composables/useAppearance';
+import { useEnvironmentTheme } from '@/composables/useEnvironmentTheme';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 
 /**
- * Thin wrapper around useAppearance that exposes `getPrimary`, `getSurface`,
- * and `isDarkTheme` as reactive refs — the same shape that Apollo dashboard
- * widgets expect from `useLayout`, which doesn't exist in this project.
+ * Thin wrapper around useEnvironmentTheme that exposes `getPrimary`,
+ * `getSurface`, and `isDarkTheme` as reactive refs — the same shape that
+ * Apollo dashboard widgets expect from `useLayout`, which doesn't exist in
+ * this project. Primary/surface come from the environment theme (global,
+ * admin-set — cf. useEnvironmentTheme.ts), not useAppearance() (personal
+ * light/dark preference only): that's the reactive trigger these widgets
+ * need to recompute their colors when the theme changes.
  */
 export function useChartTheme() {
-    const { primeVuePrimary, primeVueSurface } = useAppearance();
+    const { active } = useEnvironmentTheme();
 
     const isDark = ref(false);
 
@@ -33,8 +37,8 @@ export function useChartTheme() {
     });
 
     return {
-        getPrimary: computed(() => primeVuePrimary.value),
-        getSurface: computed(() => primeVueSurface.value),
+        getPrimary: computed(() => active.value.primary),
+        getSurface: computed(() => active.value.surface),
         isDarkTheme: isDark,
     };
 }
