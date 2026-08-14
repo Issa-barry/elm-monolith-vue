@@ -25,7 +25,7 @@ class ImportFlotteExecutor
         // Ré-analyse à l'instant T (et non réutilisation du rapport d'aperçu) pour
         // éviter tout écart avec un changement survenu entre l'aperçu et la confirmation.
         $absolutePath = Storage::disk('local')->path($import->fichier_path);
-        $analyse = $this->parser->analyser($absolutePath, $import->organization_id);
+        $analyse = $this->parser->analyser($absolutePath, $import->organization_id, $import->type);
 
         $groupesErreur = array_filter($analyse['groupes'], fn ($g) => $g['statut'] === 'erreur');
 

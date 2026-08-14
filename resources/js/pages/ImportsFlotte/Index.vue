@@ -11,6 +11,8 @@ interface ImportRow {
     fichier_original: string;
     statut: string;
     statut_label: string;
+    type: string;
+    type_label: string;
     nb_groupes_valides: number;
     nb_groupes_erreur: number;
     nb_vehicules_crees: number | null;
@@ -75,6 +77,7 @@ function ouvrir(id: string) {
                     <thead class="bg-muted/30 text-left text-muted-foreground">
                         <tr>
                             <th class="px-4 py-3 font-medium">Fichier</th>
+                            <th class="px-4 py-3 font-medium">Type</th>
                             <th class="px-4 py-3 font-medium">Statut</th>
                             <th class="px-4 py-3 font-medium">Groupes</th>
                             <th class="px-4 py-3 font-medium">
@@ -93,6 +96,13 @@ function ouvrir(id: string) {
                         >
                             <td class="px-4 py-3 font-medium">
                                 {{ i.fichier_original }}
+                            </td>
+                            <td class="px-4 py-3">
+                                <span
+                                    class="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium"
+                                >
+                                    {{ i.type_label }}
+                                </span>
                             </td>
                             <td class="px-4 py-3">
                                 <StatusDot
