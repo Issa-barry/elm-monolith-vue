@@ -33,6 +33,13 @@ export default defineConfig({
         url: baseURL,
         reuseExistingServer: !process.env.CI,
         timeout: 120 * 1000,
+        // 'pipe' plutôt que le défaut ('ignore') : si le boot échoue (config
+        // invalide, extension PHP manquante, migration non appliquée...), le
+        // timeout webServer ne dit que "Timed out" sans raison — avec 'pipe',
+        // la vraie sortie de `php artisan serve` (erreur fatale PHP incluse)
+        // apparaît dans les logs CI au lieu de rester invisible.
+        stdout: 'pipe',
+        stderr: 'pipe',
     },
 });
 
