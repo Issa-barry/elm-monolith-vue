@@ -253,18 +253,135 @@ technique.
 
 ---
 
-## Points d'attention pour toute modification
+## Direction retenue (suite à l'échange avec Codex)
 
-- **Ajouter une couleur** primaire/surface = ajouter une entrée dans `PRIMARY_PALETTES` /
-  `SURFACE_PALETTES` (11 nuances) **et** dans le type `PrimeVuePrimaryName`/`PrimeVueSurfaceName` dans
-  [primevue-theme.ts](../resources/js/lib/primevue-theme.ts) — rien d'autre à toucher, tout le reste
-  (UI de sélection, résolution, application) est générique.
-- **`starter` est spécial** : ne pas oublier le verrouillage primaire=blue/surface=slate dans
-  `updatePrimeVueTheme()` si on touche à cette logique.
-- Le cookie `appearance` est ce qui permet un premier rendu correct côté serveur (pas de flash) ; si on
-  ajoute un state persistant similaire, il faut le même pattern (cookie + localStorage), pas juste
-  localStorage seul.
-- Il n'existe **pas** de fichier de config Tailwind listant les couleurs du thème — tout part des
-  palettes hardcodées dans `primevue-theme.ts`. Toute divergence entre l'UI PrimeVue et l'UI
-  shadcn/Tailwind vient forcément d'un défaut de synchro entre `applyPrimeVue*Color()` et
-  `applyAppThemeColors()`.
+Décision produit tranchée : **le preset/couleur primaire/couleur de surface deviennent une
+politique administrée par environnement (verrouillable en prod), `light/dark/system` reste une
+préférence personnelle inchangée.** Ce qui suit corrige un point factuel erroné soulevé pendant
+l'échange et fixe la direction technique cible.
+
+### Correctif factuel : `APP_ENV` ne distingue toujours pas prod/preprod
+
+Une proposition intermédiaire suggérait de s'appuyer sur `APP_ENV=production` vs `APP_ENV=preprod`
+pour identifier l'environnement, en affirmant que c'est déjà le cas en production actuellement.
+**C'est faux, vérifié contre le repo, pas contre un souvenir :**
+- [README.md:24](../README.md#L24) documente `APP_ENV=production` pour la prod.
+- [.env.preprod.example](../.env.preprod.example) documente **le même** `APP_ENV=production` pour
+  la preprod, explicitement pour garantir qu'aucun `app()->environment('production')` ne diverge.
+- `environment: production_elm` dans
+  [.github/workflows/deploy-hostinger-admin.yml](../.github/workflows/deploy-hostinger-admin.yml)
+  est un **environnement GitHub Actions** (scope de secrets CI/CD) — un espace de noms totalement
+  différent d'`APP_ENV`, à ne pas confondre.
+- `formation.eau-la-maman.com` (la preprod) n'est même pas encore déployée à ce jour — il n'existe
+  donc aucune config Hostinger réelle à observer qui contredirait `.env.preprod.example`.
+
+**`APP_ENV` reste donc hors-jeu comme signal d'identification de l'environnement.** Le point resté
+valable de l'analyse initiale (section 4 ci-dessus) est la bonne base : chaque environnement a de
+toute façon sa **propre base de données**, donc un réglage qui vit en base est déjà, mécaniquement,
+scopé par environnement — sans qu'aucune colonne `environment` ni comparaison `APP_ENV` ne soit
+nécessaire.
+
+### Séparation retenue : politique (fichier) vs valeur active (base)
+
+Deux choses distinctes, à ne pas mélanger dans un seul mécanisme :
+
+1. **La politique** (le preset/liste de couleurs autorisées pour *cet* environnement, et si c'est
+   verrouillé) — c'est de la config d'infra, pas de la donnée métier. Elle doit vivre dans le
+   `.env` de chaque déploiement, comme `SENTRY_ENVIRONMENT` ou `MAIL_MAILER` le font déjà pour
+   d'autres différences preprod/prod. **Important : pas en `VITE_*`** (ces variables-là sont figées
+   au build JS, cf. section 2) — une variable serveur classique, lue via `config()`/`env()` côté
+   Laravel à chaque requête, exposée au frontend via `HandleInertiaRequests::share()`. Ça reste
+   changeable sans rebuild JS (juste `.env` + redéploiement backend), et ne nécessite toujours
+   aucune notion d'`environment` en base : c'est le fichier `.env` propre à chaque déploiement qui
+   joue ce rôle, exactement comme aujourd'hui pour les autres variables qui diffèrent par
+   environnement.
+2. **La valeur active choisie par l'admin** (parmi la liste autorisée, si non verrouillé) — ça,
+   c'est une donnée administrée, qui doit vivre en base pour être modifiable depuis l'UI sans
+   déploiement. Le pattern `Parametre` (section 4) est la bonne base à réutiliser : scopé
+   organisation, déjà typé/admin/cache, déjà protégé par la permission `parametres.update`. Comme
+   la base est déjà propre à l'environnement, aucune colonne `environment` n'y est nécessaire non
+   plus.
+
+### Ce que ça change concrètement (sans détail de code)
+
+- `HandleInertiaRequests::share()` gagnerait un prop de politique de thème (verrouillé ou non,
+  liste des couleurs autorisées, valeurs actives) — aujourd'hui il ne partage rien sur le thème.
+- Toute tentative de changer preset/primary/surface devrait être **validée côté serveur** contre la
+  liste autorisée de l'environnement — aujourd'hui `updatePrimeVueTheme`/`updatePrimeVuePrimary` ne
+  passent par aucune requête serveur (section 3), c'est le vrai trou à combler.
+- `useAppearance.ts` n'utiliserait plus `localStorage` comme source de vérité pour ces 3 axes
+  (seulement pour `appearance` = light/dark/system, qui reste personnel) — le state initial
+  viendrait du prop partagé par le serveur.
+- `VITE_PRIMEVUE_*` redescend au rang de **filet de secours ultime** (si le nouveau mécanisme
+  n'a rien à proposer), plus la "source principale" qu'il est aujourd'hui — cohérent avec le fait
+  que ces valeurs sont déjà identiques entre prod et preprod actuellement (section 2).
+- "Bleu et ses voisins" reste une constante à curer à la main (`blue`, `sky`, `indigo`, `cyan` a
+  minima) — aucune donnée existante ne permet de la déduire automatiquement (section 5).
+- Repère visuel "hors prod" (bandeau FORMATION/PRÉPRODUCTION évoqué dans l'échange) : pas besoin de
+  nouvelle variable — `APP_NAME` porte déjà ce signal aujourd'hui (`"Eau-la-maman [PREPROD]"` dans
+  `.env.preprod.example`, `"Eau-la-maman [E2E]"` dans `.env.e2e`) et `HandleInertiaRequests` le
+  partage déjà à chaque page via le prop `name`. Un bandeau peut se dériver de ce prop existant
+  sans rien ajouter côté config.
+- Rappel opérationnel (déjà vécu sur ce projet, cf. mémoire `project_env_test_isolation`) : toute
+  valeur lue via `config()`/`env()` est invalidée par un `config:cache` figé — un
+  `config:clear` après tout changement de `.env` reste impératif, sans quoi la politique appliquée
+  peut silencieusement rester l'ancienne.
+
+---
+
+## État implémenté (2026-08-14)
+
+La direction ci-dessus est implémentée. Ce qui suit remplace l'ancienne section "Points
+d'attention" (obsolète : elle décrivait l'architecture 100% client d'avant cette implémentation).
+
+### Backend
+
+| Fichier | Rôle |
+|---|---|
+| [config/theming.php](../config/theming.php) | Politique par déploiement (`THEME_ALLOWED_*` / `THEME_DEFAULT_*` en `.env`, jamais administrable) |
+| [app/Support/Theming/ThemeCatalog.php](../app/Support/Theming/ThemeCatalog.php) | Source unique des valeurs valides + `BLUE_FAMILY` (miroir des unions TS) |
+| [app/Services/ThemePolicyService.php](../app/Services/ThemePolicyService.php) | Autorité serveur : `allowed*()`, `is*Locked()`, `resolveActiveTheme()` (cascade DB → défaut déploiement → 1ère valeur autorisée) |
+| [app/Models/Parametre.php](../app/Models/Parametre.php) | `GROUPE_THEME` + `getTheme*()`/`setTheme()` — persistance de la valeur active, scopée `organization_id` |
+| [app/Http/Requests/Settings/UpdateThemeRequest.php](../app/Http/Requests/Settings/UpdateThemeRequest.php) | `Rule::in()` contre `ThemePolicyService` — seule porte d'écriture validée |
+| [app/Http/Controllers/Settings/ThemeController.php](../app/Http/Controllers/Settings/ThemeController.php) | `edit`/`update`, permissions `parametres.read`/`update` |
+| [app/Http/Middleware/HandleInertiaRequests.php](../app/Http/Middleware/HandleInertiaRequests.php) | Partage `theme` (actif + autorisé + verrouillé) à **chaque page**, y compris invité (fallback `ModuleService::publicOrganization()`) |
+
+**Garde-fou important** : `ParametreController` (formulaire générique) refuse explicitement
+`GROUPE_THEME` (édition → 404, listing → exclu) — sans ça, son typage générique
+(`string|max:1000`) accepterait n'importe quelle couleur et court-circuiterait
+`ThemePolicyService`. Un seul chemin d'écriture validée doit exister.
+
+### Frontend
+
+| Fichier | Rôle |
+|---|---|
+| [resources/js/composables/useEnvironmentTheme.ts](../resources/js/composables/useEnvironmentTheme.ts) | Lit `usePage().props.theme` (jamais localStorage), `update()` fait le round-trip serveur, `watchEnvironmentTheme()` réapplique les couleurs à chaque changement du prop |
+| [resources/js/composables/useAppearance.ts](../resources/js/composables/useAppearance.ts) | Réduit à `light/dark/system` uniquement — appelle `applyEnvironmentTheme()` au toggle pour resynchroniser le pont shadcn avec le thème actif |
+| [resources/js/lib/primevue-theme.ts](../resources/js/lib/primevue-theme.ts) | Mécanique pure (palettes, `apply*()`) — plus aucune fonction de résolution localStorage/`VITE_*` |
+| [resources/js/pages/settings/Theme.vue](../resources/js/pages/settings/Theme.vue) | Écran admin : swatches limités à `allowed.*`, verrouillage visuel si `locked.*`, brouillon + bouton "Enregistrer" explicite |
+| [resources/js/components/EnvironmentBadge.vue](../resources/js/components/EnvironmentBadge.vue) | Bandeau hors-prod dérivé du suffixe `[...]` déjà présent dans `APP_NAME` — aucune nouvelle variable |
+| [resources/js/components/AppearanceTabs.vue](../resources/js/components/AppearanceTabs.vue) | Réduit à light/dark/system (le picker PrimeVue a déménagé vers `settings/Theme.vue`) |
+
+### `.env*` — politique par environnement
+
+- `.env` / `.env.example` : `THEME_DEFAULT_*` seuls (pas de `THEME_ALLOWED_*` → tout le catalogue
+  autorisé, comportement local inchangé).
+- `.env.production.example` : `THEME_ALLOWED_PRESETS/PRIMARIES/SURFACES` à une seule valeur chacun
+  (`starter`/`blue`/`slate`) → verrouillé de facto (`count(allowed) <= 1`, pas de flag séparé).
+- `.env.preprod.example` : whitelist excluant `blue`/`sky`/`cyan`/`indigo` — 3ᵉ dérogation
+  documentée en tête de fichier (les 2 précédentes : URL/DB/nom, `MAIL_MAILER=log`).
+- `.env.e2e` : défaut `orange` (repère visuel uniquement, aucun test n'affirme sur une couleur).
+
+### Comment étendre
+
+- **Ajouter une couleur/preset au catalogue** (nouvelle valeur PrimeVue) : ajouter dans
+  `ThemeCatalog` (PHP) **et** les unions + palettes de `primevue-theme.ts` (TS) — les deux listes
+  sont volontairement séparées (langages différents), tout le reste (validation, UI) est générique
+  une fois ces deux entrées posées.
+- **Changer la politique d'un environnement** : éditer son `.env` (`THEME_ALLOWED_*`/`THEME_DEFAULT_*`),
+  puis `php artisan config:clear` (la politique est lue par `config()`, un cache figé la rendrait
+  invisible — cf. mémoire `project_env_test_isolation`, déjà vécu sur ce projet).
+- **`light/dark/system`** reste géré par `useAppearance.ts`/localStorage, complètement indépendant.
+- Tests : [tests/Feature/ThemeSettingsTest.php](../tests/Feature/ThemeSettingsTest.php) (permissions,
+  validation serveur, partage inter-utilisateurs, retombée sur valeur devenue interdite, invité) et
+  [tests/Unit/ThemeCatalogTest.php](../tests/Unit/ThemeCatalogTest.php) (parsing de la politique).

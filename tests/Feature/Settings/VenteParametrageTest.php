@@ -67,6 +67,8 @@ class VenteParametrageTest extends TestCase
                 'autoriser_saisie_dessous_qte_max' => true,
                 'controle_impayes_actif' => false,
                 'seuil_impayes_max' => 0,
+                'declencheur_commission_vente' => 'chargement_valide',
+                'declencheur_commission_logistique' => 'reception_effectuee',
             ])
             ->assertRedirect()
             ->assertSessionHas('success');
@@ -105,6 +107,8 @@ class VenteParametrageTest extends TestCase
                 'autoriser_saisie_dessous_qte_max' => false,
                 'controle_impayes_actif' => false,
                 'seuil_impayes_max' => 0,
+                'declencheur_commission_vente' => 'chargement_valide',
+                'declencheur_commission_logistique' => 'reception_effectuee',
             ])
             ->assertRedirect()
             ->assertSessionHas('success');
@@ -129,6 +133,8 @@ class VenteParametrageTest extends TestCase
                 'autoriser_saisie_dessous_qte_max' => true,
                 'controle_impayes_actif' => false,
                 'seuil_impayes_max' => 0,
+                'declencheur_commission_vente' => 'chargement_valide',
+                'declencheur_commission_logistique' => 'reception_effectuee',
             ])
             ->assertRedirect()
             ->assertSessionHas('success');
@@ -150,5 +156,67 @@ class VenteParametrageTest extends TestCase
                 // autoriser_saisie_dessous_qte_max absent intentionnellement
             ])
             ->assertSessionHasErrors('autoriser_saisie_dessous_qte_max');
+    }
+
+    public function test_edit_exposes_declencheurs_commission_par_defaut(): void
+    {
+        $this->createRoles();
+        $user = $this->createAuthorizedUser('parametres.read');
+
+        // Aucun Parametre::set... appelé : défauts alignés sur le comportement historique.
+        $this->actingAs($user)
+            ->get(route('settings.ventes.edit'))
+            ->assertStatus(200)
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('settings/Ventes')
+                ->where('declencheur_commission_vente', 'chargement_valide')
+                ->where('declencheur_commission_logistique', 'reception_effectuee')
+            );
+    }
+
+    public function test_update_persists_declencheurs_commission(): void
+    {
+        $this->createRoles();
+        $user = $this->createAuthorizedUser('parametres.update');
+
+        $this->actingAs($user)
+            ->put(route('settings.ventes.update'), [
+                'quantity_edit_role_names' => [],
+                'price_edit_role_names' => [],
+                'autoriser_saisie_dessous_qte_max' => true,
+                'controle_impayes_actif' => false,
+                'seuil_impayes_max' => 0,
+                'declencheur_commission_vente' => 'facture_encaissee',
+                'declencheur_commission_logistique' => 'chargement_valide',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertEquals(
+            'facture_encaissee',
+            Parametre::getDeclencheurCommissionVente($user->organization_id)->value,
+        );
+        $this->assertEquals(
+            'chargement_valide',
+            Parametre::getDeclencheurCommissionLogistique($user->organization_id)->value,
+        );
+    }
+
+    public function test_update_rejette_une_valeur_de_declencheur_invalide(): void
+    {
+        $this->createRoles();
+        $user = $this->createAuthorizedUser('parametres.update');
+
+        $this->actingAs($user)
+            ->put(route('settings.ventes.update'), [
+                'quantity_edit_role_names' => [],
+                'price_edit_role_names' => [],
+                'autoriser_saisie_dessous_qte_max' => true,
+                'controle_impayes_actif' => false,
+                'seuil_impayes_max' => 0,
+                'declencheur_commission_vente' => 'valeur_invalide',
+                'declencheur_commission_logistique' => 'reception_effectuee',
+            ])
+            ->assertSessionHasErrors('declencheur_commission_vente');
     }
 }

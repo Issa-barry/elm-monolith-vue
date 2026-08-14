@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\StatutFactureVente;
+use App\Services\CommissionTriggerService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -115,6 +116,8 @@ class FactureVente extends Model
             return false;
         }
 
+        $etaitPayee = $this->statut_facture === StatutFactureVente::PAYEE;
+
         $encaisse = (float) $this->encaissements()->sum('montant');
         $net = (float) $this->montant_net;
 
@@ -124,6 +127,17 @@ class FactureVente extends Model
             default => StatutFactureVente::PARTIEL,
         };
 
-        return $this->saveQuietly();
+        $saved = $this->saveQuietly();
+
+        // Point unique de la transition métier réelle « facture encaissée » (jamais un
+        // simple clic contrôleur) : ce point est traversé aussi bien par le contrôleur
+        // que par les events du modèle EncaissementVente, donc jamais manqué. Ne se
+        // déclenche que sur l'entrée dans PAYEE (pas sur PARTIEL, pas si déjà payée) —
+        // cf. CommissionTriggerService::onFactureVenteEncaissee(), idempotent.
+        if (! $etaitPayee && $this->statut_facture === StatutFactureVente::PAYEE) {
+            CommissionTriggerService::onFactureVenteEncaissee($this);
+        }
+
+        return $saved;
     }
 }

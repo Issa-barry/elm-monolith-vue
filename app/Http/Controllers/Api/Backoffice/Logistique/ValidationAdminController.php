@@ -8,7 +8,7 @@ use App\Http\Requests\Api\Logistique\ValidationAdminRequest;
 use App\Http\Resources\Api\Logistique\TransfertResource;
 use App\Models\TransfertLogistique;
 use App\Models\User;
-use App\Services\CommissionLogistiqueService;
+use App\Services\CommissionTriggerService;
 use App\Services\MouvementStockService;
 use App\Services\TransfertActiviteService;
 use Illuminate\Http\JsonResponse;
@@ -65,7 +65,10 @@ class ValidationAdminController extends Controller
                 'validated_at' => now(),
             ]);
 
-            CommissionLogistiqueService::genererAutomatique($transfert);
+            // Déclencheur configurable (cf. CommissionTriggerService) : ne génère que
+            // si le paramètre organisation est RECEPTION_EFFECTUEE (défaut, comportement
+            // historique) — sous CHARGEMENT_VALIDE, la commission existe déjà.
+            CommissionTriggerService::onTransfertReceptionEffectuee($transfert);
         });
 
         TransfertActiviteService::log($transfert, 'validation_accord', [], $user->id);

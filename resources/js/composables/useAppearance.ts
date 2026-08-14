@@ -1,24 +1,12 @@
-import {
-    applyAppThemeColors,
-    applyPrimeVuePrimaryColor,
-    applyPrimeVueSurfaceColor,
-    applyPrimeVueThemePreset,
-    getDefaultPrimeVuePrimary,
-    getDefaultPrimeVueSurface,
-    getStoredPrimeVuePrimary,
-    getStoredPrimeVueSurface,
-    getStoredPrimeVueTheme,
-    resolvePrimeVuePrimaryFromEnv,
-    resolvePrimeVueSurfaceFromEnv,
-    resolvePrimeVueThemeFromEnv,
-    setStoredPrimeVuePrimary,
-    setStoredPrimeVueSurface,
-    setStoredPrimeVueTheme,
-    type PrimeVuePrimaryName,
-    type PrimeVueSurfaceName,
-    type PrimeVueThemeName,
-} from '@/lib/primevue-theme';
+import { applyEnvironmentTheme } from '@/composables/useEnvironmentTheme';
+import { usePage } from '@inertiajs/vue3';
 import { onMounted, ref } from 'vue';
+
+// Préférence PERSONNELLE (light/dark/system) — stockée en localStorage/cookie,
+// propre à chaque utilisateur. Ne pas confondre avec le thème global
+// (preset/couleur principale/surface), décidé par un admin et partagé par
+// tout l'environnement : cf. composables/useEnvironmentTheme.ts et
+// docs/theming.md.
 
 type Appearance = 'light' | 'dark' | 'system';
 
@@ -29,6 +17,24 @@ const updateFavicon = (isDark: boolean) => {
 
     if (favicon) {
         favicon.href = isDark ? '/favicon-dark.svg' : '/favicon.svg';
+    }
+};
+
+/**
+ * Réapplique le thème global (couleurs de l'environnement) pour l'état
+ * light/dark courant. Best-effort : au tout premier appel (avant que les
+ * props Inertia ne soient hydratées), `theme` peut être absent — le prochain
+ * changement d'apparence ou la synchro de useEnvironmentTheme() prendra le
+ * relais.
+ */
+const reapplyEnvironmentTheme = () => {
+    // Optional chaining volontaire malgré le typage non-optionnel de `props` :
+    // avant que `createInertiaApp` n'ait hydraté `page.value` (tout premier
+    // appel, déclenché par initializeTheme() dans app.ts), `props` est
+    // réellement `undefined` au runtime.
+    const theme = usePage().props?.theme;
+    if (theme) {
+        applyEnvironmentTheme(theme.active);
     }
 };
 
@@ -50,6 +56,7 @@ export function updateTheme(value: Appearance) {
 
     document.documentElement.classList.toggle('dark', isDark);
     updateFavicon(isDark);
+    reapplyEnvironmentTheme();
 }
 
 const setCookie = (name: string, value: string, days = 365) => {
@@ -78,31 +85,10 @@ const getStoredAppearance = () => {
     return localStorage.getItem('appearance') as Appearance | null;
 };
 
-const resolveCurrentPrimeVueColors = () => {
-    const theme = getStoredPrimeVueTheme() ?? resolvePrimeVueThemeFromEnv();
-    const primary =
-        getStoredPrimeVuePrimary() ?? resolvePrimeVuePrimaryFromEnv(theme);
-    const surface =
-        getStoredPrimeVueSurface() ?? resolvePrimeVueSurfaceFromEnv(theme);
-
-    return { theme, primary, surface };
-};
-
 const handleSystemThemeChange = () => {
     const currentAppearance = getStoredAppearance();
 
     updateTheme(currentAppearance || 'light');
-
-    if (typeof document === 'undefined') {
-        return;
-    }
-
-    const { primary, surface } = resolveCurrentPrimeVueColors();
-    applyAppThemeColors(
-        primary,
-        surface,
-        document.documentElement.classList.contains('dark'),
-    );
 };
 
 export function initializeTheme() {
@@ -114,39 +100,13 @@ export function initializeTheme() {
     const savedAppearance = getStoredAppearance();
     updateTheme(savedAppearance || 'light');
 
-    const { primary, surface } = resolveCurrentPrimeVueColors();
-    applyAppThemeColors(
-        primary,
-        surface,
-        document.documentElement.classList.contains('dark'),
-    );
-
     // Set up system theme change listener...
     mediaQuery()?.addEventListener('change', handleSystemThemeChange);
 }
 
 const appearance = ref<Appearance>('light');
-const primeVueTheme = ref<PrimeVueThemeName>(resolvePrimeVueThemeFromEnv());
-const primeVuePrimary = ref<PrimeVuePrimaryName>(
-    resolvePrimeVuePrimaryFromEnv(primeVueTheme.value),
-);
-const primeVueSurface = ref<PrimeVueSurfaceName>(
-    resolvePrimeVueSurfaceFromEnv(primeVueTheme.value),
-);
 
 export function useAppearance() {
-    const syncAppThemeColors = () => {
-        if (typeof document === 'undefined') {
-            return;
-        }
-
-        applyAppThemeColors(
-            primeVuePrimary.value,
-            primeVueSurface.value,
-            document.documentElement.classList.contains('dark'),
-        );
-    };
-
     onMounted(() => {
         const savedAppearance = localStorage.getItem(
             'appearance',
@@ -155,22 +115,6 @@ export function useAppearance() {
         if (savedAppearance) {
             appearance.value = savedAppearance;
         }
-
-        const savedPrimeVueTheme = getStoredPrimeVueTheme();
-        primeVueTheme.value =
-            savedPrimeVueTheme ?? resolvePrimeVueThemeFromEnv();
-
-        const savedPrimeVuePrimary = getStoredPrimeVuePrimary();
-        primeVuePrimary.value =
-            savedPrimeVuePrimary ??
-            resolvePrimeVuePrimaryFromEnv(primeVueTheme.value);
-
-        const savedPrimeVueSurface = getStoredPrimeVueSurface();
-        primeVueSurface.value =
-            savedPrimeVueSurface ??
-            resolvePrimeVueSurfaceFromEnv(primeVueTheme.value);
-
-        syncAppThemeColors();
     });
 
     function updateAppearance(value: Appearance) {
@@ -183,59 +127,10 @@ export function useAppearance() {
         setCookie('appearance', value);
 
         updateTheme(value);
-        syncAppThemeColors();
-    }
-
-    function updatePrimeVueTheme(value: PrimeVueThemeName) {
-        primeVueTheme.value = value;
-
-        setStoredPrimeVueTheme(value);
-        setCookie('primevue_theme', value);
-        applyPrimeVueThemePreset(value);
-
-        if (value === 'starter') {
-            const starterPrimary = getDefaultPrimeVuePrimary(value);
-            const starterSurface = getDefaultPrimeVueSurface(value);
-
-            primeVuePrimary.value = starterPrimary;
-            primeVueSurface.value = starterSurface;
-            setStoredPrimeVuePrimary(starterPrimary);
-            setStoredPrimeVueSurface(starterSurface);
-            setCookie('primevue_primary', starterPrimary);
-            setCookie('primevue_surface', starterSurface);
-        }
-
-        applyPrimeVuePrimaryColor(primeVuePrimary.value);
-        applyPrimeVueSurfaceColor(primeVueSurface.value);
-        syncAppThemeColors();
-    }
-
-    function updatePrimeVuePrimary(value: PrimeVuePrimaryName) {
-        primeVuePrimary.value = value;
-
-        setStoredPrimeVuePrimary(value);
-        setCookie('primevue_primary', value);
-        applyPrimeVuePrimaryColor(value);
-        syncAppThemeColors();
-    }
-
-    function updatePrimeVueSurface(value: PrimeVueSurfaceName) {
-        primeVueSurface.value = value;
-
-        setStoredPrimeVueSurface(value);
-        setCookie('primevue_surface', value);
-        applyPrimeVueSurfaceColor(value);
-        syncAppThemeColors();
     }
 
     return {
         appearance,
         updateAppearance,
-        primeVueTheme,
-        updatePrimeVueTheme,
-        primeVuePrimary,
-        updatePrimeVuePrimary,
-        primeVueSurface,
-        updatePrimeVueSurface,
     };
 }
