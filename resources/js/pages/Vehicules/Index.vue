@@ -20,11 +20,14 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     Car,
+    ChevronDown,
+    Download,
     Eye,
     MoreVertical,
     Pencil,
     Search,
     Trash2,
+    Upload,
     X,
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
@@ -501,6 +504,35 @@ function confirmDelete(v: Vehicule) {
                         }}
                     </p>
                 </div>
+                <DropdownMenu v-if="can('imports-flotte.create')">
+                    <DropdownMenuTrigger as-child>
+                        <Button variant="outline">
+                            <Upload class="mr-2 h-4 w-4" />
+                            Importer
+                            <ChevronDown class="ml-2 h-3.5 w-3.5" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" class="w-56">
+                        <DropdownMenuItem as-child>
+                            <Link
+                                href="/settings/imports-flotte/nouveau"
+                                class="flex w-full items-center gap-2"
+                            >
+                                <Upload class="h-4 w-4" />
+                                Importer
+                            </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem as-child>
+                            <a
+                                href="/settings/imports-flotte/modele"
+                                class="flex w-full items-center gap-2"
+                            >
+                                <Download class="h-4 w-4" />
+                                Télécharger le modèle
+                            </a>
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
             </div>
 
             <!-- Mini stats — vue d'ensemble indépendante des filtres -->

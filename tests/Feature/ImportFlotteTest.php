@@ -300,11 +300,20 @@ class ImportFlotteTest extends TestCase
             ]
         );
 
-        $this->assertSame(0, $import->nb_groupes_valides);
-        $this->assertSame(2, $import->nb_groupes_erreur);
-        $erreur = collect($import->rapport['groupes'])->flatMap(fn ($g) => $g['erreurs'])->first();
+        // Un seul groupe d'erreur pour le conflit (pas un par véhicule concerné —
+        // cf. groupesConflitLivreurMultiVehicules) : les deux véhicules restent
+        // par ailleurs des groupes valides (simplement sans le livreur litigieux,
+        // ni équipe puisqu'aucun autre livreur ne leur est rattaché).
+        $this->assertSame(2, $import->nb_groupes_valides);
+        $this->assertSame(1, $import->nb_groupes_erreur);
+
+        $groupeErreur = collect($import->rapport['groupes'])->firstWhere('statut', 'erreur');
+        $erreur = $groupeErreur['erreurs'][0];
         $this->assertStringContainsString('+224623000001', $erreur);
         $this->assertStringContainsString('plusieurs véhicules différents', $erreur);
+        $this->assertStringContainsString('RC-1111-A', $erreur);
+        $this->assertStringContainsString('RC-2222-B', $erreur);
+        $this->assertStringContainsString('RC-1111-A, RC-2222-B', $groupeErreur['immatriculation']);
 
         $this->actingAs($this->user)
             ->post(route('imports-flotte.confirm', $import))
@@ -1147,6 +1156,30 @@ class ImportFlotteTest extends TestCase
         ]);
 
         $this->assertSame(1, $import->nb_groupes_erreur);
+    }
+
+    public function test_livreurs_seul_analyse_consolidates_multi_vehicule_conflict_into_one_group(): void
+    {
+        Vehicule::factory()->create(['organization_id' => $this->org->id, 'immatriculation' => 'RC-1111-A', 'type_vehicule_id' => $this->type->id]);
+        Vehicule::factory()->create(['organization_id' => $this->org->id, 'immatriculation' => 'RC-2222-B', 'type_vehicule_id' => $this->type->id]);
+
+        $import = $this->importerLivreursSeul([
+            $this->ligneLivreurChauffeur(['vehicule_immatriculation' => 'RC-1111-A']),
+            $this->ligneLivreurChauffeur(['vehicule_immatriculation' => 'RC-2222-B']),
+        ]);
+
+        // Comme en mode "flotte" : un seul groupe d'erreur pour le conflit, pas
+        // un par véhicule concerné. Contrairement au mode "flotte" (où le
+        // véhicule reste un groupe valide séparé, ancré par sa propre ligne
+        // "vehicules"), ici les deux véhicules n'ont plus aucune ligne "livreurs"
+        // à eux une fois la ligne litigieuse exclue — il n'y a donc rien d'autre
+        // à rapporter pour eux.
+        $this->assertSame(0, $import->nb_groupes_valides);
+        $this->assertSame(1, $import->nb_groupes_erreur);
+
+        $groupeErreur = collect($import->rapport['groupes'])->firstWhere('statut', 'erreur');
+        $this->assertStringContainsString('RC-1111-A', $groupeErreur['erreurs'][0]);
+        $this->assertStringContainsString('RC-2222-B', $groupeErreur['erreurs'][0]);
     }
 
     public function test_livreurs_seul_ignores_vehicules_sheet_if_present(): void

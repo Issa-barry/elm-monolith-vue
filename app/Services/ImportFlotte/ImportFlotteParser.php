@@ -86,10 +86,14 @@ class ImportFlotteParser
             return $erreur;
         }
 
-        // Regroupe les lignes de la feuille "livreurs" par immatriculation.
-        $livreursParImmat = $lignesLivreurs
-            ->map(fn ($ligne, $index) => ['numero_ligne' => $index + 2, 'donnees' => $ligne])
-            ->groupBy(fn ($l) => $this->normaliserImmatriculation((string) ($l['donnees']['vehicule_immatriculation'] ?? '')));
+        $immatsParTelephoneLivreur = $this->immatsParTelephoneLivreurEnDoublon($lignesLivreurs);
+
+        // Regroupe les lignes de la feuille "livreurs" par immatriculation — les
+        // lignes en conflit (même livreur sur plusieurs véhicules) en sont
+        // exclues : elles sont remontées une seule fois, globalement, plutôt que
+        // dupliquées dans chacun des groupes véhicule concernés — voir
+        // groupesConflitLivreurMultiVehicules().
+        $livreursParImmat = $this->livreursParImmatSansConflit($lignesLivreurs, $immatsParTelephoneLivreur);
 
         $groupes = [];
         $immatsTraitees = [];
@@ -111,8 +115,6 @@ class ImportFlotteParser
             ->filter(fn ($immat) => $immat !== '')
             ->countBy();
 
-        $immatsParTelephoneLivreur = $this->immatsParTelephoneLivreurEnDoublon($lignesLivreurs);
-
         foreach ($lignesVehicules as $index => $ligneVehicule) {
             $immat = $this->normaliserImmatriculation((string) ($ligneVehicule['vehicule_immatriculation'] ?? ''));
             $immatsTraitees[$immat] = true;
@@ -133,7 +135,7 @@ class ImportFlotteParser
                 continue;
             }
 
-            $groupes[] = $this->analyserGroupe($immat, $index + 2, $ligneVehicule, $lignesLivreursGroupe, $organizationId, $telephonesProprietairesVus, $immatsParTelephoneLivreur);
+            $groupes[] = $this->analyserGroupe($immat, $index + 2, $ligneVehicule, $lignesLivreursGroupe, $organizationId, $telephonesProprietairesVus);
         }
 
         // Lignes de la feuille "livreurs" dont l'immatriculation n'existe dans
@@ -156,6 +158,8 @@ class ImportFlotteParser
             ];
         }
 
+        $groupes = array_merge($groupes, $this->groupesConflitLivreurMultiVehicules($lignesLivreurs, $immatsParTelephoneLivreur));
+
         return [
             'nb_lignes_total' => $nbLignesTotal,
             'groupes' => $groupes,
@@ -175,11 +179,8 @@ class ImportFlotteParser
             return $erreur;
         }
 
-        $livreursParImmat = $lignesLivreurs
-            ->map(fn ($ligne, $index) => ['numero_ligne' => $index + 2, 'donnees' => $ligne])
-            ->groupBy(fn ($l) => $this->normaliserImmatriculation((string) ($l['donnees']['vehicule_immatriculation'] ?? '')));
-
         $immatsParTelephoneLivreur = $this->immatsParTelephoneLivreurEnDoublon($lignesLivreurs);
+        $livreursParImmat = $this->livreursParImmatSansConflit($lignesLivreurs, $immatsParTelephoneLivreur);
 
         $groupes = [];
         foreach ($livreursParImmat as $immat => $lignes) {
@@ -220,7 +221,7 @@ class ImportFlotteParser
 
             $equipeExistante = EquipeLivraison::where('vehicule_id', $vehicule->id)->whereNull('deleted_at')->first();
 
-            [$livreurs, $erreurs, $normalisations] = $this->resoudreLivreurs($lignes->all(), $orgId, $equipeExistante, $immat, $immatsParTelephoneLivreur);
+            [$livreurs, $erreurs, $normalisations] = $this->resoudreLivreurs($lignes->all(), $orgId, $equipeExistante);
 
             if (! empty($erreurs)) {
                 $groupes[] = [
@@ -275,6 +276,8 @@ class ImportFlotteParser
                 'livreurs' => $livreurs,
             ];
         }
+
+        $groupes = array_merge($groupes, $this->groupesConflitLivreurMultiVehicules($lignesLivreurs, $immatsParTelephoneLivreur));
 
         return [
             'nb_lignes_total' => $nbLignesTotal,
@@ -353,6 +356,74 @@ class ImportFlotteParser
             ->filter(fn ($immats) => $immats->count() > 1);
     }
 
+    /**
+     * Regroupe les lignes "livreurs" par immatriculation, en excluant celles
+     * dont le téléphone est en conflit (cf. immatsParTelephoneLivreurEnDoublon) :
+     * ces lignes-là ne doivent être rattachées à AUCUN groupe véhicule tant que
+     * le conflit n'est pas résolu — elles sont remontées séparément par
+     * groupesConflitLivreurMultiVehicules().
+     *
+     * @return Collection<string, Collection<int, array{numero_ligne: int, donnees: Collection}>>
+     */
+    private function livreursParImmatSansConflit(Collection $lignesLivreurs, Collection $immatsParTelephoneLivreur): Collection
+    {
+        return $lignesLivreurs
+            ->map(fn ($ligne, $index) => ['numero_ligne' => $index + 2, 'donnees' => $ligne])
+            ->reject(function ($l) use ($immatsParTelephoneLivreur) {
+                $phone = (new PhoneNormalizer)->normalize(trim((string) ($l['donnees']['livreur_telephone'] ?? '')), 'GN');
+
+                return $phone['telephone'] && $immatsParTelephoneLivreur->has($phone['telephone']);
+            })
+            ->groupBy(fn ($l) => $this->normaliserImmatriculation((string) ($l['donnees']['vehicule_immatriculation'] ?? '')));
+    }
+
+    /**
+     * Un groupe d'erreur par téléphone en conflit (plutôt qu'un par véhicule
+     * concerné, cf. livreursParImmatSansConflit) : un même problème rattaché à
+     * deux véhicules n'affichait sinon rien qu'un doublon quasi-identique du
+     * même message dans deux groupes distincts — trompeur (donne l'impression
+     * de deux problèmes indépendants alors qu'il n'y en a qu'un).
+     *
+     * @return array<int, array> groupes d'erreur prêts à ajouter au rapport
+     */
+    private function groupesConflitLivreurMultiVehicules(Collection $lignesLivreurs, Collection $immatsParTelephoneLivreur): array
+    {
+        if ($immatsParTelephoneLivreur->isEmpty()) {
+            return [];
+        }
+
+        $lignesIndexees = $lignesLivreurs->map(fn ($ligne, $index) => ['numero_ligne' => $index + 2, 'donnees' => $ligne]);
+
+        $groupes = [];
+        foreach ($immatsParTelephoneLivreur as $telephone => $immats) {
+            $lignesDuTelephone = $lignesIndexees->filter(function ($l) use ($telephone) {
+                $phone = (new PhoneNormalizer)->normalize(trim((string) ($l['donnees']['livreur_telephone'] ?? '')), 'GN');
+
+                return $phone['telephone'] === $telephone;
+            });
+
+            $detailParImmat = $immats->map(function ($immat) use ($lignesDuTelephone) {
+                $numeros = $lignesDuTelephone
+                    ->filter(fn ($l) => $this->normaliserImmatriculation((string) ($l['donnees']['vehicule_immatriculation'] ?? '')) === $immat)
+                    ->pluck('numero_ligne');
+
+                return sprintf('%s (ligne%s %s)', $immat, $numeros->count() > 1 ? 's' : '', $numeros->implode(', '));
+            })->implode(', ');
+
+            $groupes[] = [
+                'immatriculation' => $immats->implode(', '),
+                'ligne_vehicule' => null,
+                'lignes_livreurs' => $lignesDuTelephone->pluck('numero_ligne')->sort()->values()->all(),
+                'statut' => 'erreur',
+                'erreurs' => ["Le livreur {$telephone} est rattaché à plusieurs véhicules différents dans ce fichier : {$detailParImmat} — un livreur ne peut appartenir qu'à une seule équipe."],
+                'normalisations' => [],
+                'avertissements' => [],
+            ];
+        }
+
+        return $groupes;
+    }
+
     private function lireFeuille(Spreadsheet $spreadsheet, string $nom): Collection
     {
         $sheet = $this->trouverFeuille($spreadsheet, $nom);
@@ -401,7 +472,7 @@ class ImportFlotteParser
         return null;
     }
 
-    private function analyserGroupe(string $immatriculation, int $numeroLigneVehicule, Collection $ligneVehicule, array $lignesLivreursGroupe, string $orgId, array &$telephonesProprietairesVus, Collection $immatsParTelephoneLivreur): array
+    private function analyserGroupe(string $immatriculation, int $numeroLigneVehicule, Collection $ligneVehicule, array $lignesLivreursGroupe, string $orgId, array &$telephonesProprietairesVus): array
     {
         $numerosLignesLivreurs = array_column($lignesLivreursGroupe, 'numero_ligne');
         $erreurs = [];
@@ -527,7 +598,7 @@ class ImportFlotteParser
         // créé sans aucun livreur, auquel cas aucune équipe n'est créée du tout
         // (voir construction de 'equipe' plus bas). Un véhicule existant sans
         // ligne livreur ne touche pas non plus à ses membres actuels.
-        [$livreurs, $erreursLivreurs, $normalisationsLivreurs] = $this->resoudreLivreurs($lignesLivreursGroupe, $orgId, $equipeExistante, $immatriculation, $immatsParTelephoneLivreur);
+        [$livreurs, $erreursLivreurs, $normalisationsLivreurs] = $this->resoudreLivreurs($lignesLivreursGroupe, $orgId, $equipeExistante);
         $erreurs = array_merge($erreurs, $erreursLivreurs);
         $normalisations = array_merge($normalisations, $normalisationsLivreurs);
 
@@ -643,9 +714,13 @@ class ImportFlotteParser
     }
 
     /**
+     * @param  array<int, array{numero_ligne: int, donnees: Collection}>  $lignesGroupe  jamais de
+     *         ligne dont le téléphone est en conflit multi-véhicules (déjà exclues en amont,
+     *         cf. livreursParImmatSansConflit) — remontées séparément par
+     *         groupesConflitLivreurMultiVehicules().
      * @return array{0: array, 1: string[], 2: string[]}
      */
-    private function resoudreLivreurs(array $lignesGroupe, string $orgId, ?EquipeLivraison $equipeExistante, string $immatriculationGroupe, Collection $immatsParTelephoneLivreur): array
+    private function resoudreLivreurs(array $lignesGroupe, string $orgId, ?EquipeLivraison $equipeExistante): array
     {
         $livreurs = [];
         $erreurs = [];
@@ -690,15 +765,6 @@ class ImportFlotteParser
             $telephone = $phone['telephone'];
             if ($telephone !== $telephoneBrut) {
                 $normalisations[] = "\"{$telephoneBrut}\" → \"{$telephone}\"";
-            }
-
-            if ($immatsParTelephoneLivreur->has($telephone)) {
-                $autresImmats = $immatsParTelephoneLivreur->get($telephone)
-                    ->reject(fn ($immat) => $immat === $immatriculationGroupe)
-                    ->implode(', ');
-                $erreurs[] = "Ligne {$numero} : le livreur {$telephone} est rattaché à plusieurs véhicules différents dans ce fichier ({$immatriculationGroupe}, {$autresImmats}) — un livreur ne peut appartenir qu'à une seule équipe.";
-
-                continue;
             }
 
             if (! in_array($role, ['chauffeur', 'convoyeur'], true)) {
