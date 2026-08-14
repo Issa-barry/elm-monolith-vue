@@ -885,8 +885,8 @@ class ImportFlotteParser
      *                         un booléen PHP natif si PhpSpreadsheet a interprété la cellule
      *                         Excel comme telle (case à cocher / type booléen de la feuille).
      * @param  bool  $valeurParDefaut  appliquée si la cellule est vide/absente — jamais
-     *                                  utilisée quand une valeur est présente mais non reconnue
-     *                                  (cf. $erreur en retour dans ce cas).
+     *                                 utilisée quand une valeur est présente mais non reconnue
+     *                                 (cf. $erreur en retour dans ce cas).
      * @return array{0: bool, 1: string|null} valeur et message d'erreur — jamais les deux à
      *                                        la fois.
      */
