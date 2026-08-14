@@ -515,7 +515,7 @@ function formatGNF(val: number): string {
 
                     <VehiculeCapacitesCard
                         v-if="can('vehicules.update')"
-                        class="mt-6"
+                        class="mt-6 lg:col-start-2"
                         :capacites="vehicule.capacites"
                         :categories="categories"
                         :capacite-legacy="vehicule.capacite_packs"
