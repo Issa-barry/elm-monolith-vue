@@ -39,9 +39,7 @@ class ScanCommandeController extends Controller
         }
 
         $client = $commande->client;
-        $clientNom = $client
-            ? trim(($client->prenom ?? '').' '.($client->nom ?? ''))
-            : 'Vente directe';
+        $clientNom = $client?->nom_complet ?? 'Vente directe';
 
         return response()->json([
             'type' => 'commande',

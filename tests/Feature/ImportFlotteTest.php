@@ -230,14 +230,161 @@ class ImportFlotteTest extends TestCase
         $this->assertSame(1, $import->nb_groupes_erreur);
     }
 
-    public function test_analyse_flags_error_for_vehicule_sans_aucun_usage(): void
+    // ── usage vente/logistique : vide/absent = "non", jamais un usage par défaut ───────
+
+    public function test_analyse_accepts_vehicule_sans_aucun_usage(): void
     {
+        // Un véhicule sans aucun usage n'est plus une erreur d'analyse (cf.
+        // ImportFlotteParser) : il est simplement importé sans usage, non exploitable
+        // tant qu'un usage n'est pas défini — voir test_confirm_creates_vehicule_sans_usage_quand_colonnes_a_non.
         $import = $this->importer(
             [$this->ligneVehicule(['vehicule_livraison_vente' => 'non', 'vehicule_livraison_logistique' => 'non'])],
             [$this->ligneLivreurChauffeur()]
         );
 
+        $this->assertSame(0, $import->nb_groupes_erreur);
+        $this->assertSame(1, $import->nb_groupes_valides);
+    }
+
+    public function test_confirm_creates_vehicule_sans_usage_quand_colonnes_a_non(): void
+    {
+        $import = $this->importerVehiculeEtChauffeur(['vehicule_livraison_vente' => 'non', 'vehicule_livraison_logistique' => 'non']);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
+        $this->assertFalse($vehicule->livraison_vente);
+        $this->assertFalse($vehicule->livraison_logistique);
+        $this->assertFalse($vehicule->aAuMoinsUnUsage());
+        $this->assertSame('Usage non défini', $vehicule->usage_label);
+    }
+
+    public function test_confirm_creates_vehicule_sans_usage_quand_colonnes_vides(): void
+    {
+        // Cellules vides (jamais renseignées) : même comportement qu'un "non" explicite —
+        // jamais un repli sur un usage vente par défaut, contrairement à l'ancien comportement.
+        $import = $this->importerVehiculeEtChauffeur(['vehicule_livraison_vente' => '', 'vehicule_livraison_logistique' => '']);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
+        $this->assertFalse($vehicule->livraison_vente);
+        $this->assertFalse($vehicule->livraison_logistique);
+    }
+
+    public function test_confirm_creates_vehicule_logistique_uniquement(): void
+    {
+        $import = $this->importerVehiculeEtChauffeur(['vehicule_livraison_vente' => 'non', 'vehicule_livraison_logistique' => 'oui']);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
+        $this->assertFalse($vehicule->livraison_vente);
+        $this->assertTrue($vehicule->livraison_logistique);
+    }
+
+    public function test_confirm_creates_vehicule_vente_et_logistique(): void
+    {
+        $import = $this->importerVehiculeEtChauffeur(['vehicule_livraison_vente' => 'oui', 'vehicule_livraison_logistique' => 'oui']);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
+        $this->assertTrue($vehicule->livraison_vente);
+        $this->assertTrue($vehicule->livraison_logistique);
+    }
+
+    public function test_analyse_accepts_yes_no_spellings_for_usage(): void
+    {
+        $import = $this->importer(
+            [$this->ligneVehicule(['vehicule_livraison_vente' => 'yes', 'vehicule_livraison_logistique' => 'no'])],
+            [$this->ligneLivreurChauffeur()]
+        );
+
+        $this->assertSame(0, $import->nb_groupes_erreur);
+        $this->assertTrue($import->rapport['groupes'][0]['vehicule']['livraison_vente']);
+        $this->assertFalse($import->rapport['groupes'][0]['vehicule']['livraison_logistique']);
+    }
+
+    public function test_analyse_flags_error_for_unrecognized_usage_value(): void
+    {
+        $import = $this->importer(
+            [$this->ligneVehicule(['vehicule_livraison_vente' => 'peut-etre'])],
+            [$this->ligneLivreurChauffeur()]
+        );
+
         $this->assertSame(1, $import->nb_groupes_erreur);
+        $this->assertStringContainsString('Usage vente invalide', $import->rapport['groupes'][0]['erreurs'][0]);
+        $this->assertStringContainsString('peut-etre', $import->rapport['groupes'][0]['erreurs'][0]);
+    }
+
+    public function test_analyse_flags_error_for_unrecognized_usage_logistique_value(): void
+    {
+        $import = $this->importer(
+            [$this->ligneVehicule(['vehicule_livraison_logistique' => 'X-invalide'])],
+            [$this->ligneLivreurChauffeur()]
+        );
+
+        $this->assertSame(1, $import->nb_groupes_erreur);
+        $this->assertStringContainsString('Usage logistique invalide', $import->rapport['groupes'][0]['erreurs'][0]);
+    }
+
+    /**
+     * Un véhicule déjà en base (immatriculation déjà connue) n'est jamais réécrit par
+     * l'import (cf. ImportFlotteExecutor::executerGroupe(), qui ne fait que réutiliser son
+     * id) — une colonne d'usage vide sur une ligne "vehicules" qui sert d'ancrage à des
+     * livreurs supplémentaires ne doit donc jamais désactiver un usage déjà configuré.
+     */
+    public function test_confirm_ne_modifie_pas_les_usages_dun_vehicule_deja_existant(): void
+    {
+        $vehiculeExistant = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'immatriculation' => 'RC-1234-A',
+            'type_vehicule_id' => $this->type->id,
+            'site_id' => $this->site->id,
+            'livraison_vente' => true,
+            'livraison_logistique' => true,
+        ]);
+
+        $import = $this->importerVehiculeEtChauffeur(['vehicule_livraison_vente' => '', 'vehicule_livraison_logistique' => '']);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $vehiculeExistant->refresh();
+        $this->assertTrue($vehiculeExistant->livraison_vente);
+        $this->assertTrue($vehiculeExistant->livraison_logistique);
+    }
+
+    /** L'aperçu (avant confirmation) reste cohérent avec ce qui sera réellement appliqué. */
+    public function test_analyse_previews_existing_vehicule_usage_sur_colonnes_vides(): void
+    {
+        Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'immatriculation' => 'RC-1234-A',
+            'type_vehicule_id' => $this->type->id,
+            'site_id' => $this->site->id,
+            'livraison_vente' => false,
+            'livraison_logistique' => true,
+        ]);
+
+        $import = $this->importer(
+            [$this->ligneVehicule(['vehicule_livraison_vente' => '', 'vehicule_livraison_logistique' => ''])],
+            [$this->ligneLivreurChauffeur()]
+        );
+
+        $this->assertSame(0, $import->nb_groupes_erreur);
+        $this->assertFalse($import->rapport['groupes'][0]['vehicule']['livraison_vente']);
+        $this->assertTrue($import->rapport['groupes'][0]['vehicule']['livraison_logistique']);
     }
 
     public function test_analyse_accepts_new_vehicule_without_any_livreur(): void
@@ -1039,6 +1186,22 @@ class ImportFlotteTest extends TestCase
             $import = $this->importerVehiculeEtChauffeur(['vehicule_livraison_logistique' => $valeur]);
             $this->assertSame(0, $import->nb_groupes_erreur, "valeur testée : {$valeur}");
         }
+    }
+
+    /**
+     * Cas d'une cellule Excel de type booléen natif (pas du texte "oui"/"1") — cf.
+     * ImportFlotteParser::toBool(), qui gère explicitement is_bool() pour ce cas.
+     */
+    public function test_analyse_accepts_native_boolean_cell_value(): void
+    {
+        $import = $this->importerVehiculeEtChauffeur([
+            'vehicule_livraison_vente' => true,
+            'vehicule_livraison_logistique' => false,
+        ]);
+
+        $this->assertSame(0, $import->nb_groupes_erreur);
+        $this->assertTrue($import->rapport['groupes'][0]['vehicule']['livraison_vente']);
+        $this->assertFalse($import->rapport['groupes'][0]['vehicule']['livraison_logistique']);
     }
 
     // ── mode "livreurs seulement" (TypeImportFlotte::LIVREURS) ─────────────────
