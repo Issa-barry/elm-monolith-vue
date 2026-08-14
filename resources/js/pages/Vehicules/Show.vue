@@ -446,9 +446,9 @@ function formatGNF(val: number): string {
                                     "
                                     class="mt-1.5 text-xs text-muted-foreground"
                                 >
-                                    Ce véhicule existe mais ne peut être
-                                    utilisé pour aucune opération tant qu'un
-                                    usage n'est pas défini.
+                                    Ce véhicule existe mais ne peut être utilisé
+                                    pour aucune opération tant qu'un usage n'est
+                                    pas défini.
                                 </p>
                             </div>
                             <div class="rounded-lg border bg-background p-4">

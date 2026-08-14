@@ -26,8 +26,8 @@ import {
     MoreVertical,
     Pencil,
     Search,
-    TriangleAlert,
     Trash2,
+    TriangleAlert,
     Upload,
     X,
 } from 'lucide-vue-next';
@@ -184,7 +184,8 @@ const filteredVehicules = computed(() =>
             : filterStatut.value === 'actif'
               ? v.is_active
               : !v.is_active;
-        const matchUsage = !filterUsage.value || matchesUsageFilter(v, filterUsage.value);
+        const matchUsage =
+            !filterUsage.value || matchesUsageFilter(v, filterUsage.value);
         const matchAgence =
             !filterAgence.value ||
             (filterAgence.value === '__none__'
@@ -818,7 +819,10 @@ function confirmDelete(v: Vehicule) {
                     >
                         <template #body="{ data }">
                             <span
-                                v-if="data.livraison_vente || data.livraison_logistique"
+                                v-if="
+                                    data.livraison_vente ||
+                                    data.livraison_logistique
+                                "
                                 class="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium"
                             >
                                 {{ data.usage_label }}
