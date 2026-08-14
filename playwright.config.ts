@@ -26,7 +26,10 @@ export default defineConfig({
         },
     ],
     webServer: {
-        command: 'php artisan serve --host=127.0.0.1 --port=8080',
+        // --env=e2e : charge .env.e2e (BDD elm_monolithe_e2e), jamais la BDD de
+        // dev — sans ce flag Laravel retombe sur .env et les tests écrivent
+        // dans la base de dev (cf. `npm run e2e:db:reset` dans package.json).
+        command: 'php artisan serve --host=127.0.0.1 --port=8080 --env=e2e',
         url: baseURL,
         reuseExistingServer: !process.env.CI,
         timeout: 120 * 1000,
