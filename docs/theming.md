@@ -149,6 +149,110 @@ Requête HTTP
       → écrit localStorage + cookie, ré-applique tout immédiatement (pas de reload)
 ```
 
+## Gouvernance des thèmes par environnement — analyse de l'existant
+
+**Contexte de cette section** : idée évoquée — un admin choisit/impose le thème par environnement
+(prod = bleu chez Eau-la-maman, preprod/autres = tout sauf bleu ou une couleur proche du bleu).
+Ce qui suit est une analyse de **l'état actuel du code face à ce besoin**, pas une proposition
+d'implémentation (rien n'est codé, rien n'est tranché).
+
+### 1. "Environnement" n'est pas une notion que le code modélise nulle part
+
+Chaque environnement (prod `usine-eau-front.eu`, preprod `formation.eau-la-maman.com` à venir,
+local, `.env.e2e`) est un **déploiement physiquement séparé** : sa propre base MySQL, son propre
+`.env`, son propre build front. Il n'y a ni colonne `environment`, ni table, ni service qui
+représente "l'environnement courant" quelque part dans `app/`.
+
+Plus précis : `APP_ENV` **ne distingue pas** prod et preprod — il vaut `production` dans les deux
+cas, **volontairement** (cf. commentaire en tête de
+[.env.preprod.example](../.env.preprod.example)) pour qu'aucun `app()->environment('production')`
+ne se comporte différemment entre les deux. La seule variable qui distingue preprod de prod
+aujourd'hui est `SENTRY_ENVIRONMENT`, utilisée uniquement par Sentry (monitoring), lue nulle part
+ailleurs dans le code applicatif. Donc un futur mécanisme "par environnement" ne peut pas
+s'accrocher à `app()->environment()` sans casser cette garantie d'iso prod/preprod — il faudrait
+soit une nouvelle variable dédiée (même famille que `SENTRY_ENVIRONMENT`), soit s'appuyer sur autre
+chose (voir point 4).
+
+### 2. `VITE_PRIMEVUE_*` : des constantes figées au build, pas une config runtime
+
+`VITE_PRIMEVUE_THEME` / `_PRIMARY` / `_SURFACE` (lues via `import.meta.env.*` dans
+[primevue-theme.ts](../resources/js/lib/primevue-theme.ts)) sont des variables **Vite**, donc
+inlinées en dur dans le bundle JS **au moment du `npm run build`** (étape 2 du déploiement, cf.
+[DEPLOY-HOSTINGER-CICD.md](../DEPLOY-HOSTINGER-CICD.md)) — pas lues dynamiquement par le serveur à
+chaque requête. Chaque environnement les fige déjà à sa propre valeur par ce mécanisme naturel
+(un build = un `.env` = un bundle par déploiement), mais :
+- ça ne peut changer qu'en refaisant un build + déploiement (pas de bascule à chaud par un admin) ;
+- aujourd'hui `.env.preprod.example` et `.env.production.example` ont **exactement les mêmes**
+  valeurs (`starter` / `blue` / `slate`) — le doc en tête de fichier dit explicitement que preprod
+  est iso à 100% avec prod *sauf* 2 dérogations volontaires (URL/DB/nom, `MAIL_MAILER=log`), donc
+  une différence de thème serait une **3ᵉ dérogation à ajouter consciemment** à cette liste documentée.
+
+### 3. Aucune validation ni persistance serveur du thème choisi — c'est 100% client
+
+Le point le plus important : `updatePrimeVueTheme` / `updatePrimeVuePrimary` /
+`updatePrimeVueSurface` (dans [useAppearance.ts](../resources/js/composables/useAppearance.ts))
+écrivent uniquement en `localStorage` + cookie, côté navigateur. **Aucune requête serveur, aucune
+table, aucune validation** — le typage TypeScript (`PrimeVuePrimaryName`, union de 17 valeurs) est
+la seule "restriction", et elle est purement compile-time : n'importe qui peut poser une valeur
+arbitraire dans `localStorage['primevue_primary']` via les devtools, elle sera appliquée telle
+quelle par `applyPrimeVuePrimaryColor()`. Il n'y a donc **aucun point d'accroche existant** pour
+imposer/restreindre une liste de couleurs autorisées — ce mécanisme est entièrement à construire,
+il ne s'agit pas de brancher quelque chose sur un contrôle qui existerait déjà.
+
+`HandleInertiaRequests::share()` (le point central qui partage des données serveur → frontend à
+chaque page, cf. [HandleInertiaRequests.php](../app/Http/Middleware/HandleInertiaRequests.php))
+ne transmet aujourd'hui **rien** sur le thème ni sur l'environnement.
+
+### 4. Le pattern existant le plus proche : Module (Pennant) et Parametre — tous deux scopés *organisation*, pas *environnement*
+
+Deux mécanismes "admin décide, c'est persisté et appliqué" existent déjà dans le code, tous deux
+**scopés par organisation** (multi-tenant), pas par environnement :
+
+- **Modules** (feature flags Laravel Pennant) : [ModuleFeature.php](../app/Features/ModuleFeature.php)
+  (liste + libellés) → [ModuleService.php](../app/Services/ModuleService.php) → 
+  [Settings/ModuleController.php](../app/Http/Controllers/Settings/ModuleController.php)
+  (`edit`/`toggle`, gardé par la permission `parametres.update`) →
+  [settings/Modules.vue](../resources/js/pages/settings/Modules.vue). Persisté en base (table
+  `features` de Pennant), exposé au frontend via le prop partagé `module_flags`.
+- **Parametre** ([Parametre.php](../app/Models/Parametre.php)) : table clé/valeur générique
+  scopée `organization_id`, typée (string/int/bool/json/decimal), cache 1h, éditable via
+  [Settings/ParametreController.php](../app/Http/Controllers/Settings/ParametreController.php)
+  (même permission `parametres.update`) → [settings/Parametres.vue](../resources/js/pages/settings/Parametres.vue).
+
+**Point non-évident** : comme chaque environnement a sa **propre base de données** entièrement
+séparée (prod et preprod ne partagent aucune table), un réglage stocké dans `Parametre` (ou un
+Pennant feature) **est déjà, de facto, "par environnement"** sans qu'aucun champ `environment` ne
+soit nécessaire — modifier ce réglage sur formation.eau-la-maman.com (preprod) ne peut
+techniquement pas toucher la ligne équivalente dans la base de prod, ce sont deux lignes dans deux
+bases physiquement distinctes. C'est différent de "par organisation" au sens multi-tenant classique
+(plusieurs organisations dans une même base) : ici chaque environnement n'a de toute façon qu'un
+sous-ensemble d'organisations qui lui est propre.
+
+### 5. La contrainte "pas bleu, ni une couleur proche du bleu" n'a aucun support dans les données actuelles
+
+`PrimeVuePrimaryName` ([primevue-theme.ts](../resources/js/lib/primevue-theme.ts)) est une liste
+plate de 17 noms (`zinc, emerald, green, lime, yellow, sky, blue, indigo, violet, purple, fuchsia,
+pink, rose, orange, amber, teal, cyan`) — chacun avec sa palette de 11 nuances codée en dur, mais
+**aucune métadonnée de famille de teinte**. Rien dans le code ne sait aujourd'hui que `sky`,
+`indigo` ou `cyan` sont visuellement "proches du bleu" — c'est une notion perceptuelle absente des
+données, elle n'est déductible d'aucune structure existante (il n'y a pas de valeur de teinte HSL
+stockée, seulement des hex bruts par nuance). Exclure "le bleu et ses voisins" suppose donc de
+définir à la main quel sous-ensemble de la liste compte comme "famille bleue" — ce n'est calculable
+automatiquement à partir de rien de ce qui existe.
+
+### 6. Ambiguïté de fond non tranchée par l'existant
+
+Le système actuel est une **préférence par utilisateur** (chaque compte choisit sa propre couleur,
+persistée dans son navigateur). "L'admin décide le thème de l'environnement" est un changement de
+philosophie : est-ce que ça devient une valeur **imposée** (plus aucun choix utilisateur, ou choix
+limité à une liste blanche), ou juste un **défaut par environnement** que l'utilisateur peut
+toujours changer ensuite ? Les deux se recodent différemment (whitelist appliquée à la validation +
+au picker UI, vs. simple valeur par défaut) et rien dans le code actuel ne penche vers l'un ou
+l'autre — c'est une décision produit à prendre avant toute implémentation, pas une question
+technique.
+
+---
+
 ## Points d'attention pour toute modification
 
 - **Ajouter une couleur** primaire/surface = ajouter une entrée dans `PRIMARY_PALETTES` /
