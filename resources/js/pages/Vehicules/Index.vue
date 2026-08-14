@@ -26,6 +26,7 @@ import {
     MoreVertical,
     Pencil,
     Search,
+    TriangleAlert,
     Trash2,
     Upload,
     X,
@@ -62,6 +63,7 @@ interface Vehicule {
     is_active: boolean;
     livraison_vente: boolean;
     livraison_logistique: boolean;
+    usage_label: string;
 }
 
 const props = defineProps<{ vehicules: Vehicule[] }>();
@@ -141,6 +143,7 @@ const filterFields = computed<FilterField[]>(() => [
         options: [
             { value: 'vente', label: 'Vente' },
             { value: 'logistique', label: 'Logistique' },
+            { value: 'aucun', label: 'Usage non défini' },
         ],
     },
     {
@@ -153,6 +156,11 @@ const filterFields = computed<FilterField[]>(() => [
         ],
     },
 ]);
+
+function matchesUsageFilter(v: Vehicule, value: string): boolean {
+    if (value === 'aucun') return !v.livraison_vente && !v.livraison_logistique;
+    return value === 'vente' ? v.livraison_vente : v.livraison_logistique;
+}
 
 const filteredVehicules = computed(() =>
     props.vehicules.filter((v) => {
@@ -176,11 +184,7 @@ const filteredVehicules = computed(() =>
             : filterStatut.value === 'actif'
               ? v.is_active
               : !v.is_active;
-        const matchUsage =
-            !filterUsage.value ||
-            (filterUsage.value === 'vente'
-                ? v.livraison_vente
-                : v.livraison_logistique);
+        const matchUsage = !filterUsage.value || matchesUsageFilter(v, filterUsage.value);
         const matchAgence =
             !filterAgence.value ||
             (filterAgence.value === '__none__'
@@ -240,9 +244,7 @@ const mobileFiltered = computed(() =>
               : !v.is_active;
         const matchUsage =
             !mobileFilterUsage.value ||
-            (mobileFilterUsage.value === 'vente'
-                ? v.livraison_vente
-                : v.livraison_logistique);
+            matchesUsageFilter(v, mobileFilterUsage.value);
         const matchAgence =
             !mobileFilterAgence.value ||
             (mobileFilterAgence.value === '__none__'
@@ -354,6 +356,7 @@ function confirmDelete(v: Vehicule) {
                         <option value="">Tous usages</option>
                         <option value="vente">Vente</option>
                         <option value="logistique">Logistique</option>
+                        <option value="aucun">Usage non défini</option>
                     </select>
                     <select
                         v-model="mobileFilterStatut"
@@ -418,6 +421,13 @@ function confirmDelete(v: Vehicule) {
                         >
                             {{ v.type_label }}
                         </span>
+                        <div
+                            v-if="!v.livraison_vente && !v.livraison_logistique"
+                            class="mt-1 flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400"
+                        >
+                            <TriangleAlert class="h-3 w-3" />
+                            Usage non défini
+                        </div>
                     </div>
 
                     <!-- Status dot -->
@@ -796,6 +806,30 @@ function confirmDelete(v: Vehicule) {
                                     {{ data.livreur_principal_nom }}
                                 </div>
                             </div>
+                        </template>
+                    </Column>
+
+                    <!-- Usage -->
+                    <Column
+                        field="usage_label"
+                        header="Usage"
+                        sortable
+                        style="width: 160px"
+                    >
+                        <template #body="{ data }">
+                            <span
+                                v-if="data.livraison_vente || data.livraison_logistique"
+                                class="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium"
+                            >
+                                {{ data.usage_label }}
+                            </span>
+                            <span
+                                v-else
+                                class="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400"
+                            >
+                                <TriangleAlert class="h-3.5 w-3.5" />
+                                {{ data.usage_label }}
+                            </span>
                         </template>
                     </Column>
 

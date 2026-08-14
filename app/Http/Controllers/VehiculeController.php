@@ -96,6 +96,7 @@ class VehiculeController extends Controller
                 : [],
             'livraison_vente' => $v->livraison_vente,
             'livraison_logistique' => $v->livraison_logistique,
+            'usage_label' => $v->usage_label,
             'photo_url' => $v->photo_url,
             'is_active' => $v->is_active,
         ];

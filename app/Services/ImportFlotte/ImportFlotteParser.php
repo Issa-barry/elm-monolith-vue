@@ -53,6 +53,20 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
  * d'usage le plus courant une fois la flotte initiale importée : ajouter ou
  * mettre à jour des livreurs sans avoir à retaper toute la ligne véhicule
  * (nom, type, site, capacité...) juste pour l'utiliser comme ancrage.
+ *
+ * Usages livraison_vente/livraison_logistique (colonnes vehicule_livraison_vente /
+ * vehicule_livraison_logistique, cf. toUsageBool()) : une cellule vide/absente vaut
+ * "non" — aucun usage saisi = aucun usage attribué, jamais un usage vente par défaut.
+ * Un véhicule sans aucun des deux usages est importé quand même (pas une erreur) mais
+ * reste alors non exploitable dans les opérations métier tant qu'un usage n'est pas défini
+ * (cf. Vehicule::aAuMoinsUnUsage(), scopes livraisonVente()/livraisonLogistique()). Sur un
+ * véhicule déjà existant (immatriculation déjà en base), une colonne vide reprend la
+ * valeur déjà enregistrée plutôt que de la remettre à "non" — un import ne doit jamais
+ * effacer silencieusement un usage déjà configuré. Ceci dit, l'exécuteur
+ * (ImportFlotteExecutor) ne réécrit de toute façon aucun champ d'un véhicule déjà
+ * existant : cette ligne ne sert alors que d'ancrage pour ses livreurs/son équipe, comme
+ * documenté plus haut — le repli ci-dessus ne fait que garder l'aperçu cohérent avec ce
+ * qui sera réellement appliqué.
  */
 class ImportFlotteParser
 {
@@ -495,11 +509,35 @@ class ImportFlotteParser
         $nomVehicule = trim((string) ($ligneVehicule['vehicule_nom'] ?? ''));
         $typeNomSaisi = trim((string) ($ligneVehicule['vehicule_type'] ?? ''));
         $siteNomSaisi = trim((string) ($ligneVehicule['vehicule_site'] ?? ''));
-        // Colonnes facultatives — replis alignés sur les défauts du schéma (migration
-        // vehicules) pour ne pas casser d'anciens fichiers d'import qui ne les portent pas
-        // encore : livraison_vente=true, livraison_logistique=false.
-        $livraisonVente = $this->toBool($ligneVehicule['vehicule_livraison_vente'] ?? null) ?? true;
-        $livraisonLogistique = $this->toBool($ligneVehicule['vehicule_livraison_logistique'] ?? null) ?? false;
+
+        // Résolu ici (avant les colonnes d'usage ci-dessous, qui en ont besoin pour leur
+        // repli) plutôt que plus bas dans la méthode comme avant — même requête, juste
+        // remontée.
+        $vehiculeExistant = Vehicule::where('organization_id', $orgId)
+            ->where('immatriculation', $immatriculation)
+            ->whereNull('deleted_at')
+            ->first();
+
+        // Colonnes facultatives — cellule vide/absente : "false" à la création d'un
+        // nouveau véhicule (aucun usage saisi = aucun usage attribué, jamais un usage
+        // vente par défaut comme avant), ou la valeur déjà en base à la mise à jour d'un
+        // véhicule existant (une ligne sans cette colonne ne doit jamais effacer un usage
+        // déjà configuré — cf. docblock de classe). Une valeur non vide mais non reconnue
+        // (ni oui/non) est signalée en erreur plutôt qu'interprétée arbitrairement.
+        [$livraisonVente, $erreurLivraisonVente] = $this->toUsageBool(
+            $ligneVehicule['vehicule_livraison_vente'] ?? null,
+            $vehiculeExistant?->livraison_vente ?? false
+        );
+        if ($erreurLivraisonVente) {
+            $erreurs[] = "Usage vente invalide : {$erreurLivraisonVente}";
+        }
+        [$livraisonLogistique, $erreurLivraisonLogistique] = $this->toUsageBool(
+            $ligneVehicule['vehicule_livraison_logistique'] ?? null,
+            $vehiculeExistant?->livraison_logistique ?? false
+        );
+        if ($erreurLivraisonLogistique) {
+            $erreurs[] = "Usage logistique invalide : {$erreurLivraisonLogistique}";
+        }
         // Facultatives : laissées vides, le repli sur la capacité par défaut du
         // type de véhicule s'applique (cf. VehiculeController::vehiculeData()).
         [$capacitePacks, $erreurCapacitePacks] = $this->toCapaciteOrNull($ligneVehicule['vehicule_capacite_sachets'] ?? null);
@@ -514,9 +552,10 @@ class ImportFlotteParser
         if ($nomVehicule === '') {
             $erreurs[] = 'Nom du véhicule manquant.';
         }
-        if (! $livraisonVente && ! $livraisonLogistique) {
-            $erreurs[] = 'Le véhicule doit être autorisé pour la vente et/ou la logistique.';
-        }
+        // Un véhicule sans aucun usage n'est plus une erreur de saisie : il est
+        // simplement créé/laissé sans usage, donc non exploitable tant qu'un usage n'est
+        // pas défini (cf. Vehicule::aAuMoinsUnUsage() et les scopes livraisonVente()/
+        // livraisonLogistique(), qui l'excluent déjà de tous les sélecteurs opérationnels).
 
         $type = null;
         if ($typeNomSaisi === '') {
@@ -564,11 +603,7 @@ class ImportFlotteParser
             }
         }
 
-        $vehiculeExistant = Vehicule::where('organization_id', $orgId)
-            ->where('immatriculation', $immatriculation)
-            ->whereNull('deleted_at')
-            ->first();
-
+        // $vehiculeExistant déjà résolu plus haut (nécessaire au repli des colonnes d'usage).
         $equipeExistante = $vehiculeExistant
             ? EquipeLivraison::where('vehicule_id', $vehiculeExistant->id)->whereNull('deleted_at')->first()
             : null;
@@ -845,10 +880,44 @@ class ImportFlotteParser
         return mb_strtoupper(trim($valeur), 'UTF-8');
     }
 
+    /**
+     * @param  mixed  $valeur  cellule brute — vide/absente, une chaîne ("oui"/"1"/...), ou
+     *                         un booléen PHP natif si PhpSpreadsheet a interprété la cellule
+     *                         Excel comme telle (case à cocher / type booléen de la feuille).
+     * @param  bool  $valeurParDefaut  appliquée si la cellule est vide/absente — jamais
+     *                                  utilisée quand une valeur est présente mais non reconnue
+     *                                  (cf. $erreur en retour dans ce cas).
+     * @return array{0: bool, 1: string|null} valeur et message d'erreur — jamais les deux à
+     *                                        la fois.
+     */
+    private function toUsageBool(mixed $valeur, bool $valeurParDefaut): array
+    {
+        if ($valeur === null || $valeur === '') {
+            return [$valeurParDefaut, null];
+        }
+
+        $bool = $this->toBool($valeur);
+        if ($bool === null) {
+            return [$valeurParDefaut, sprintf(
+                '"%s" non reconnu (attendu : oui/non, yes/no, 1/0, true/false).',
+                trim((string) $valeur)
+            )];
+        }
+
+        return [$bool, null];
+    }
+
     private function toBool(mixed $valeur): ?bool
     {
         if ($valeur === null || $valeur === '') {
             return null;
+        }
+        // PhpSpreadsheet peut retourner un booléen PHP natif pour une cellule Excel de
+        // type booléen (formatData désactivé ou cellule sans format d'affichage) — sans ce
+        // cas, (string) false ci-dessous donnerait "" et ferait passer un "non"/"faux"
+        // légitime pour une valeur non reconnue.
+        if (is_bool($valeur)) {
+            return $valeur;
         }
         $v = ImportTextNormalizer::normalize((string) $valeur);
 
