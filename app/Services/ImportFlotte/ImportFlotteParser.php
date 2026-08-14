@@ -287,7 +287,7 @@ class ImportFlotteParser
 
     /**
      * @return array|null l'erreur "fichier vide"/"trop de lignes" prête à retourner
-     *                     telle quelle par analyser(), ou null si le volume est valide.
+     *                    telle quelle par analyser(), ou null si le volume est valide.
      */
     private function erreurVolumetrie(int $nbLignesTotal, string $messageVide): ?array
     {
@@ -339,7 +339,7 @@ class ImportFlotteParser
      * confirmation.
      *
      * @return Collection<string, Collection<int, string>> immatriculations en
-     *                                                      conflit, indexées par téléphone canonique.
+     *                                                     conflit, indexées par téléphone canonique.
      */
     private function immatsParTelephoneLivreurEnDoublon(Collection $lignesLivreurs): Collection
     {
@@ -715,9 +715,9 @@ class ImportFlotteParser
 
     /**
      * @param  array<int, array{numero_ligne: int, donnees: Collection}>  $lignesGroupe  jamais de
-     *         ligne dont le téléphone est en conflit multi-véhicules (déjà exclues en amont,
-     *         cf. livreursParImmatSansConflit) — remontées séparément par
-     *         groupesConflitLivreurMultiVehicules().
+     *                                                                                   ligne dont le téléphone est en conflit multi-véhicules (déjà exclues en amont,
+     *                                                                                   cf. livreursParImmatSansConflit) — remontées séparément par
+     *                                                                                   groupesConflitLivreurMultiVehicules().
      * @return array{0: array, 1: string[], 2: string[]}
      */
     private function resoudreLivreurs(array $lignesGroupe, string $orgId, ?EquipeLivraison $equipeExistante): array
