@@ -508,9 +508,9 @@ class CommandeVenteController extends Controller
                         'telephone' => $l->telephone,
                     ])->values(),
                 ] : null,
-                'client_nom' => $commande->client ? trim($commande->client->prenom.' '.$commande->client->nom) : null,
+                'client_nom' => $commande->client?->nom_complet,
                 'client_detail' => $commande->client ? [
-                    'nom' => trim($commande->client->prenom.' '.$commande->client->nom),
+                    'nom' => $commande->client->nom_complet,
                     'telephone' => $commande->client->telephone,
                     'code_phone_pays' => $commande->client->code_phone_pays,
                     'ville' => $commande->client->ville,
@@ -810,7 +810,7 @@ class CommandeVenteController extends Controller
             'chauffeur_nom' => $c->vehicule?->equipe?->livreurs
                 ?->first(fn ($l) => ($l->pivot->role ?? null) === 'chauffeur')
                 ?->nom_complet,
-            'client_nom' => $c->client ? trim($c->client->prenom.' '.$c->client->nom) : null,
+            'client_nom' => $c->client?->nom_complet,
             'client_telephone' => $c->client?->telephone,
             'site_nom' => $c->site?->nom,
             'facture_id' => $c->facture?->id,
@@ -1020,7 +1020,7 @@ class CommandeVenteController extends Controller
             'vehicule_id' => $commande->vehicule_id,
             'vehicule_nom' => $commande->vehicule?->nom_vehicule,
             'client_id' => $commande->client_id,
-            'client_nom' => $commande->client ? trim($commande->client->prenom.' '.$commande->client->nom) : null,
+            'client_nom' => $commande->client?->nom_complet,
             'total_commande' => (float) $commande->total_commande,
             'mode_tarification_snapshot' => $commande->mode_tarification_snapshot?->value,
             'commission_eligible_snapshot' => (bool) $commande->commission_eligible_snapshot,

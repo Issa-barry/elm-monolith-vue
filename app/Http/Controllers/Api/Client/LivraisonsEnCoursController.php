@@ -126,9 +126,7 @@ class LivraisonsEnCoursController extends Controller
     private function formatCommande(CommandeVente $c): array
     {
         $client = $c->client;
-        $clientNom = $client
-            ? trim(($client->prenom ?? '').' '.($client->nom ?? ''))
-            : 'Vente directe';
+        $clientNom = $client?->nom_complet ?? 'Vente directe';
 
         return [
             'id' => $c->id,
