@@ -47,6 +47,12 @@ class TransfertLogistiqueService
             // Sortie stock source : marchandises physiquement parties (TRANSIT)
             if ($suivant === StatutTransfert::TRANSIT) {
                 MouvementStockService::enregistrerSortieSource($transfert);
+
+                // Chargement validé — génère la commission logistique si le paramètre
+                // organisation est CHARGEMENT_VALIDE (cf. CommissionTriggerService).
+                // Sous RECEPTION_EFFECTUEE (défaut), n'a aucun effet : la génération
+                // reste portée par la validation admin de la réception.
+                CommissionTriggerService::onTransfertChargementValide($transfert);
             }
 
             // Entrée stock destination : marchandises reçues (RECEPTION)

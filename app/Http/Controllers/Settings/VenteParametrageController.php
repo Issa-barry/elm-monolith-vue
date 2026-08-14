@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Settings;
 
+use App\Enums\DeclencheurCommissionLogistique;
+use App\Enums\DeclencheurCommissionVente;
 use App\Http\Controllers\Controller;
 use App\Models\Parametre;
 use Illuminate\Http\RedirectResponse;
@@ -47,6 +49,10 @@ class VenteParametrageController extends Controller
             'autoriser_saisie_dessous_qte_max' => Parametre::isVentesAutorisationSaisieDessousQteMax($orgId),
             'controle_impayes_actif' => Parametre::isVentesControleImpayesActif($orgId),
             'seuil_impayes_max' => Parametre::getVentesSeuilImpayesMax($orgId),
+            'declencheur_commission_vente' => Parametre::getDeclencheurCommissionVente($orgId)->value,
+            'declencheur_commission_logistique' => Parametre::getDeclencheurCommissionLogistique($orgId)->value,
+            'declencheurs_commission_vente_options' => DeclencheurCommissionVente::options(),
+            'declencheurs_commission_logistique_options' => DeclencheurCommissionLogistique::options(),
         ]);
     }
 
@@ -64,6 +70,8 @@ class VenteParametrageController extends Controller
             'autoriser_saisie_dessous_qte_max' => ['required', 'boolean'],
             'controle_impayes_actif' => ['required', 'boolean'],
             'seuil_impayes_max' => ['required', 'integer', 'min:0'],
+            'declencheur_commission_vente' => ['required', Rule::in(array_column(DeclencheurCommissionVente::cases(), 'value'))],
+            'declencheur_commission_logistique' => ['required', Rule::in(array_column(DeclencheurCommissionLogistique::cases(), 'value'))],
         ]);
 
         $enabledQuantityRoleNames = collect($validated['quantity_edit_role_names'] ?? [])
@@ -97,6 +105,15 @@ class VenteParametrageController extends Controller
             $orgId,
             (bool) $validated['controle_impayes_actif'],
             (int) $validated['seuil_impayes_max'],
+        );
+
+        Parametre::setDeclencheurCommissionVente(
+            $orgId,
+            DeclencheurCommissionVente::from($validated['declencheur_commission_vente']),
+        );
+        Parametre::setDeclencheurCommissionLogistique(
+            $orgId,
+            DeclencheurCommissionLogistique::from($validated['declencheur_commission_logistique']),
         );
 
         app()[PermissionRegistrar::class]->forgetCachedPermissions();

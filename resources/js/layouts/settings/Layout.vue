@@ -44,6 +44,7 @@ const sidebarNavItems = computed((): NavItem[] => {
             { title: 'Paramètres dépenses', href: '/settings/depenses' },
             { title: 'Paramètres ventes', href: '/settings/ventes' },
             { title: 'Modules metier', href: '/settings/modules' },
+            { title: 'Thème', href: '/settings/theme' },
         );
     }
 

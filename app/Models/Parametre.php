@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Enums\DeclencheurCommissionLogistique;
+use App\Enums\DeclencheurCommissionVente;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -36,6 +38,8 @@ class Parametre extends Model
 
     public const GROUPE_CATALOGUE = 'catalogue';
 
+    public const GROUPE_THEME = 'theme';
+
     // ── Bornes système (indépendantes de l'organisation, non contournables) ────
     public const MAX_PHOTOS_PRODUIT_SYSTEME = 50;
 
@@ -66,6 +70,16 @@ class Parametre extends Model
 
     public const CLE_VENTES_SEUIL_IMPAYES_MAX = 'ventes_seuil_impayes_max';
 
+    /**
+     * Déclencheurs de génération des commissions — cf. DeclencheurCommissionVente /
+     * DeclencheurCommissionLogistique et CommissionTriggerService. Valeur par défaut
+     * (absence de ligne en base) alignée sur le comportement historique de chaque
+     * politique, jamais choisie arbitrairement — voir les accesseurs ci-dessous.
+     */
+    public const CLE_DECLENCHEUR_COMMISSION_VENTE = 'ventes_declencheur_commission_vente';
+
+    public const CLE_DECLENCHEUR_COMMISSION_LOGISTIQUE = 'ventes_declencheur_commission_logistique';
+
     public const CLE_MAX_PHOTOS_PRODUIT = 'max_photos_produit';
 
     public const CLE_MAX_OPTIONS_PRODUIT = 'max_options_produit';
@@ -73,6 +87,17 @@ class Parametre extends Model
     public const CLE_MAX_VALEURS_OPTION = 'max_valeurs_option';
 
     public const CLE_MAX_VARIANTES_PRODUIT = 'max_variantes_produit';
+
+    // ── Thème global (preset PrimeVue / couleur principale / surface) ──────────
+    // Administré via ThemeController, jamais via ParametreController générique
+    // (cf. ParametreController::update() qui refuse explicitement ce groupe) —
+    // la validation contre la politique de l'environnement (ThemePolicyService)
+    // ne doit avoir qu'un seul point d'entrée.
+    public const CLE_THEME_PRESET = 'theme_preset';
+
+    public const CLE_THEME_PRIMARY = 'theme_primary';
+
+    public const CLE_THEME_SURFACE = 'theme_surface';
 
     protected $fillable = [
         'organization_id',
@@ -138,10 +163,15 @@ class Parametre extends Model
             self::CLE_VENTES_AUTORISER_SAISIE_DESSOUS_QTE_MAX,
             self::CLE_VENTES_CONTROLE_IMPAYES_ACTIF,
             self::CLE_VENTES_SEUIL_IMPAYES_MAX,
+            self::CLE_DECLENCHEUR_COMMISSION_VENTE,
+            self::CLE_DECLENCHEUR_COMMISSION_LOGISTIQUE,
             self::CLE_MAX_PHOTOS_PRODUIT,
             self::CLE_MAX_OPTIONS_PRODUIT,
             self::CLE_MAX_VALEURS_OPTION,
             self::CLE_MAX_VARIANTES_PRODUIT,
+            self::CLE_THEME_PRESET,
+            self::CLE_THEME_PRIMARY,
+            self::CLE_THEME_SURFACE,
         ] as $cle) {
             Cache::forget(self::cacheKey($orgId, $cle));
         }
@@ -241,6 +271,62 @@ class Parametre extends Model
         Cache::forget(self::cacheKey($orgId, self::CLE_VENTES_SEUIL_IMPAYES_MAX));
     }
 
+    // ── Déclencheurs de génération des commissions ──────────────────────────────
+
+    /**
+     * Défaut CHARGEMENT_VALIDE : comportement historique de CommissionGenerator
+     * (commission activée dès la validation du chargement, cf. CommandeVenteService).
+     * Ne pas changer cette valeur par défaut sans mettre à jour les organisations
+     * existantes en conséquence — cf. CommissionTriggerService.
+     */
+    public static function getDeclencheurCommissionVente(string $orgId): DeclencheurCommissionVente
+    {
+        $valeur = self::get($orgId, self::CLE_DECLENCHEUR_COMMISSION_VENTE, DeclencheurCommissionVente::CHARGEMENT_VALIDE->value);
+
+        return DeclencheurCommissionVente::tryFrom($valeur) ?? DeclencheurCommissionVente::CHARGEMENT_VALIDE;
+    }
+
+    public static function setDeclencheurCommissionVente(string $orgId, DeclencheurCommissionVente $declencheur): void
+    {
+        static::updateOrCreate(
+            ['organization_id' => $orgId, 'cle' => self::CLE_DECLENCHEUR_COMMISSION_VENTE],
+            [
+                'valeur' => $declencheur->value,
+                'type' => self::TYPE_STRING,
+                'groupe' => self::GROUPE_VENTES,
+                'description' => 'Événement métier déclenchant la génération de la commission de vente',
+            ],
+        );
+        Cache::forget(self::cacheKey($orgId, self::CLE_DECLENCHEUR_COMMISSION_VENTE));
+    }
+
+    /**
+     * Défaut RECEPTION_EFFECTUEE : comportement historique de
+     * CommissionLogistiqueService::genererAutomatique(), déclenché uniquement par
+     * la validation admin de la réception (ValidationAdminController::handleAccord).
+     * Volontairement différent du défaut vente — cf. CommissionTriggerService.
+     */
+    public static function getDeclencheurCommissionLogistique(string $orgId): DeclencheurCommissionLogistique
+    {
+        $valeur = self::get($orgId, self::CLE_DECLENCHEUR_COMMISSION_LOGISTIQUE, DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE->value);
+
+        return DeclencheurCommissionLogistique::tryFrom($valeur) ?? DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE;
+    }
+
+    public static function setDeclencheurCommissionLogistique(string $orgId, DeclencheurCommissionLogistique $declencheur): void
+    {
+        static::updateOrCreate(
+            ['organization_id' => $orgId, 'cle' => self::CLE_DECLENCHEUR_COMMISSION_LOGISTIQUE],
+            [
+                'valeur' => $declencheur->value,
+                'type' => self::TYPE_STRING,
+                'groupe' => self::GROUPE_VENTES,
+                'description' => 'Événement métier déclenchant la génération de la commission logistique',
+            ],
+        );
+        Cache::forget(self::cacheKey($orgId, self::CLE_DECLENCHEUR_COMMISSION_LOGISTIQUE));
+    }
+
     public static function getMaxPhotosProduit(string $orgId): int
     {
         return (int) self::get($orgId, self::CLE_MAX_PHOTOS_PRODUIT, 6);
@@ -282,6 +368,51 @@ class Parametre extends Model
                     'valeur' => (string) max(1, $valeur),
                     'type' => self::TYPE_INTEGER,
                     'groupe' => self::GROUPE_CATALOGUE,
+                    'description' => $description,
+                ],
+            );
+            Cache::forget(self::cacheKey($orgId, $cle));
+        }
+    }
+
+    // ── Thème global ──────────────────────────────────────────────────────────
+
+    public static function getThemePreset(string $orgId): ?string
+    {
+        return self::get($orgId, self::CLE_THEME_PRESET);
+    }
+
+    public static function getThemePrimary(string $orgId): ?string
+    {
+        return self::get($orgId, self::CLE_THEME_PRIMARY);
+    }
+
+    public static function getThemeSurface(string $orgId): ?string
+    {
+        return self::get($orgId, self::CLE_THEME_SURFACE);
+    }
+
+    /**
+     * Enregistre les 3 axes du thème global en une fois. Ne valide PAS contre
+     * la politique de l'environnement — c'est la responsabilité de l'appelant
+     * (ThemeController, via UpdateThemeRequest) : ce modèle reste un mécanisme
+     * de persistance générique, pas le porteur de la règle métier.
+     */
+    public static function setTheme(string $orgId, string $preset, string $primary, string $surface): void
+    {
+        $entrees = [
+            self::CLE_THEME_PRESET => [$preset, 'Preset PrimeVue du thème global'],
+            self::CLE_THEME_PRIMARY => [$primary, 'Couleur principale du thème global'],
+            self::CLE_THEME_SURFACE => [$surface, 'Couleur de surface du thème global'],
+        ];
+
+        foreach ($entrees as $cle => [$valeur, $description]) {
+            static::updateOrCreate(
+                ['organization_id' => $orgId, 'cle' => $cle],
+                [
+                    'valeur' => $valeur,
+                    'type' => self::TYPE_STRING,
+                    'groupe' => self::GROUPE_THEME,
                     'description' => $description,
                 ],
             );

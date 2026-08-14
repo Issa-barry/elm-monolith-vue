@@ -3,12 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Enums\StatutImportFlotte;
+use App\Enums\TypeImportFlotte;
 use App\Http\Requests\StoreImportFlotteRequest;
 use App\Models\ImportFlotte;
 use App\Services\ImportFlotte\ImportFlotteExecutor;
+use App\Services\ImportFlotte\ImportFlotteLivreursSheetExport;
 use App\Services\ImportFlotte\ImportFlotteParser;
 use App\Services\ImportFlotte\ImportFlotteTemplateExport;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -58,6 +61,7 @@ class ImportFlotteController extends Controller
             'fichier_original' => $nomOriginal,
             'fichier_path' => $chemin,
             'statut' => StatutImportFlotte::ANALYSE->value,
+            'type' => $request->typeImport()->value,
         ]);
 
         $this->analyser($import);
@@ -124,9 +128,13 @@ class ImportFlotteController extends Controller
             ->with('success', 'Nouvelle tentative terminée.');
     }
 
-    public function template()
+    public function template(Request $request)
     {
         abort_if(! auth()->user()->can('imports-flotte.create'), 403);
+
+        if ($request->string('type')->value() === TypeImportFlotte::LIVREURS->value) {
+            return Excel::download(new ImportFlotteLivreursSheetExport, 'template-import-livreurs.xlsx');
+        }
 
         return Excel::download(new ImportFlotteTemplateExport, 'template-import-flotte.xlsx');
     }
@@ -134,7 +142,7 @@ class ImportFlotteController extends Controller
     private function analyser(ImportFlotte $import): void
     {
         $absolutePath = Storage::disk('local')->path($import->fichier_path);
-        $analyse = app(ImportFlotteParser::class)->analyser($absolutePath, $import->organization_id);
+        $analyse = app(ImportFlotteParser::class)->analyser($absolutePath, $import->organization_id, $import->type);
 
         $groupes = $analyse['groupes'];
         $nbErreur = count(array_filter($groupes, fn ($g) => $g['statut'] === 'erreur'));
@@ -202,6 +210,8 @@ class ImportFlotteController extends Controller
             'fichier_original' => $i->fichier_original,
             'statut' => $i->statut->value,
             'statut_label' => $i->statut->label(),
+            'type' => $i->type->value,
+            'type_label' => $i->type->label(),
             'nb_groupes_valides' => $i->nb_groupes_valides,
             'nb_groupes_erreur' => $i->nb_groupes_erreur,
             'nb_proprietaires_crees' => $i->nb_proprietaires_crees,

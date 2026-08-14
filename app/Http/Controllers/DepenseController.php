@@ -287,7 +287,7 @@ class DepenseController extends Controller
 
         $vehicule = Vehicule::where('organization_id', $orgId)
             ->with(['typeVehicule:id,nom', 'proprietaire:id,nom,prenom,telephone', 'site:id,nom'])
-            ->find($id, ['id', 'nom_vehicule', 'immatriculation', 'type_vehicule_id', 'proprietaire_id', 'site_id', 'categorie']);
+            ->find($id, ['id', 'nom_vehicule', 'immatriculation', 'type_vehicule_id', 'proprietaire_id', 'site_id', 'livraison_logistique']);
 
         if (! $vehicule) {
             return response()->json(['error' => 'Not found'], 404);
@@ -301,7 +301,9 @@ class DepenseController extends Controller
                 ? trim("{$vehicule->proprietaire->prenom} {$vehicule->proprietaire->nom}")
                 : '—',
             'site' => $vehicule->site?->nom ?? '—',
-            'categorie' => $vehicule->categorie,
+            // Cf. loadVehicules() : équivalence 'interne'/'externe' reconstruite
+            // depuis livraison_logistique, `categorie` n'existant plus en base.
+            'categorie' => $vehicule->livraison_logistique ? 'interne' : 'externe',
         ]);
     }
 
@@ -1101,12 +1103,17 @@ class DepenseController extends Controller
             ->where('is_active', true)
             ->with(['site:id,nom', 'proprietaire:id,nom,prenom'])
             ->orderBy('nom_vehicule')
-            ->get(['id', 'nom_vehicule', 'immatriculation', 'categorie', 'site_id', 'proprietaire_id'])
+            ->get(['id', 'nom_vehicule', 'immatriculation', 'livraison_logistique', 'site_id', 'proprietaire_id'])
             ->map(fn ($v) => [
                 'id' => $v->id,
                 'nom_vehicule' => $v->nom_vehicule,
                 'immatriculation' => $v->immatriculation,
-                'categorie' => $v->categorie,
+                // La colonne `categorie` ('interne'/'externe') a été retirée de
+                // `vehicules` au profit de livraison_vente/livraison_logistique
+                // (cf. Vehicule::scopeLivraisonLogistique) — équivalence conservée
+                // ici uniquement pour ne pas casser le contrat JSON déjà consommé
+                // par Depenses/Create.vue et Edit.vue (vehiculeContext).
+                'categorie' => $v->livraison_logistique ? 'interne' : 'externe',
                 'site_nom' => $v->site?->nom,
                 'proprietaire_nom' => $v->proprietaire
                     ? trim("{$v->proprietaire->prenom} {$v->proprietaire->nom}")

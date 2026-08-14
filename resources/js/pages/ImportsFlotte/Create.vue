@@ -13,12 +13,37 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Import flotte', href: '/settings/imports-flotte/nouveau' },
 ];
 
-const form = useForm<{ fichier: File | null }>({
+type TypeImport = 'flotte' | 'livreurs';
+
+// 'flotte' : fichier à deux feuilles, pour créer une flotte neuve (ou
+// rattacher des livreurs en reportant toute la ligne véhicule en ancrage).
+// 'livreurs' : une seule feuille, pour ajouter/mettre à jour des livreurs sur
+// des véhicules déjà en base — sans avoir à retaper leur ligne véhicule.
+const typeImport = ref<TypeImport>('flotte');
+
+const form = useForm<{ fichier: File | null; type: TypeImport }>({
     fichier: null,
+    type: 'flotte',
 });
 
 const fileInput = ref<HTMLInputElement | null>(null);
 const fileName = ref<string | null>(null);
+
+function selectType(type: TypeImport) {
+    typeImport.value = type;
+    form.type = type;
+    // Le modèle change de forme selon le mode : un fichier déjà choisi pour
+    // l'autre mode n'a plus de sens, on évite la confusion en le réinitialisant.
+    form.fichier = null;
+    fileName.value = null;
+    if (fileInput.value) fileInput.value.value = '';
+}
+
+const templateUrl = computed(() =>
+    typeImport.value === 'livreurs'
+        ? '/settings/imports-flotte/modele?type=livreurs'
+        : '/settings/imports-flotte/modele',
+);
 
 function onFileChange(e: Event) {
     const file = (e.target as HTMLInputElement).files?.[0] ?? null;
@@ -66,11 +91,18 @@ function submit() {
             <div class="flex items-center justify-between gap-2">
                 <div>
                     <h1 class="text-lg font-semibold">
-                        Import Propriétaires, véhicules et livreurs
+                        {{
+                            typeImport === 'livreurs'
+                                ? 'Import Livreurs'
+                                : 'Import Propriétaires, véhicules et livreurs'
+                        }}
                     </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        Créez plusieurs propriétaires, véhicules et équipes de
-                        livraison en une fois à partir d'un fichier Excel.
+                        {{
+                            typeImport === 'livreurs'
+                                ? 'Ajoutez ou mettez à jour des livreurs sur des véhicules déjà en base, sans retaper leur ligne véhicule.'
+                                : "Créez plusieurs propriétaires, véhicules et équipes de livraison en une fois à partir d'un fichier Excel."
+                        }}
                     </p>
                 </div>
                 <div class="flex gap-2">
@@ -89,49 +121,117 @@ function submit() {
                 </div>
             </div>
 
+            <!-- Mode d'import -->
+            <div class="rounded-xl border bg-card p-5 sm:p-6">
+                <h2
+                    class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                >
+                    Que voulez-vous importer ?
+                </h2>
+                <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                    <button
+                        type="button"
+                        class="rounded-lg border p-3 text-left transition-colors"
+                        :class="
+                            typeImport === 'flotte'
+                                ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                                : 'hover:bg-muted/40'
+                        "
+                        @click="selectType('flotte')"
+                    >
+                        <p class="text-sm font-medium">
+                            Nouvelle flotte (véhicules + livreurs)
+                        </p>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            Crée des propriétaires, véhicules et équipes.
+                            Fichier à deux feuilles.
+                        </p>
+                    </button>
+                    <button
+                        type="button"
+                        class="rounded-lg border p-3 text-left transition-colors"
+                        :class="
+                            typeImport === 'livreurs'
+                                ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                                : 'hover:bg-muted/40'
+                        "
+                        @click="selectType('livreurs')"
+                    >
+                        <p class="text-sm font-medium">Livreurs seulement</p>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            Rattache des livreurs à des véhicules déjà
+                            existants. Fichier à une seule feuille.
+                        </p>
+                    </button>
+                </div>
+            </div>
+
             <div class="rounded-xl border bg-card p-5 sm:p-6">
                 <h2
                     class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
                 >
                     1. Télécharger le modèle
                 </h2>
-                <p class="mt-2 text-sm text-muted-foreground">
-                    Le modèle contient deux feuilles :
-                    <strong>vehicules</strong>
-                    (une ligne par véhicule + son propriétaire) et
-                    <strong>livreurs</strong> (une ligne par livreur, reliée au
-                    véhicule par l'immatriculation). Pas besoin de répéter les
-                    infos du véhicule pour chaque livreur — seule
-                    l'immatriculation est à reporter sur chaque ligne de la
-                    feuille livreurs. La commission et la répartition par
-                    livreur se configurent après coup dans Équipes de livraison.
-                </p>
-                <p class="mt-2 text-sm text-muted-foreground">
-                    Le nom d'un livreur est facultatif (seul le téléphone est
-                    obligatoire) et peut être renseigné soit en un seul champ
-                    (<strong>livreur_nom_complet</strong>), soit en deux champs
-                    séparés (<strong>livreur_nom</strong> +
-                    <strong>livreur_prenom</strong>) — utilisez celui qui vous
-                    convient, sans dupliquer l'information.
-                </p>
-                <p class="mt-2 text-sm text-muted-foreground">
-                    <strong>vehicule_capacite_sachets</strong> et
-                    <strong>vehicule_capacite_bouteilles</strong> sont
-                    facultatives : laissées vides, la capacité par défaut du
-                    type de véhicule s'applique.
-                </p>
-                <p class="mt-2 text-sm text-muted-foreground">
-                    <strong>vehicule_livraison_vente</strong> (sélectionnable
-                    pour une vente/PDV) et
-                    <strong>vehicule_livraison_logistique</strong>
-                    (sélectionnable pour un transfert) sont deux colonnes
-                    indépendantes — un véhicule peut être l'un, l'autre, ou les
-                    deux. Toutes deux facultatives : si omises, le véhicule
-                    importé est éligible à la vente par défaut, pas à la
-                    logistique. Au moins l'une des deux doit être "oui".
-                </p>
+
+                <template v-if="typeImport === 'livreurs'">
+                    <p class="mt-2 text-sm text-muted-foreground">
+                        Le modèle contient une seule feuille
+                        <strong>livreurs</strong> : une ligne par livreur,
+                        reliée au véhicule par
+                        <strong>vehicule_immatriculation</strong>. Chaque
+                        immatriculation doit déjà correspondre à un véhicule
+                        existant — aucun véhicule ni propriétaire n'est créé
+                        dans ce mode.
+                    </p>
+                    <p class="mt-2 text-sm text-muted-foreground">
+                        Le nom d'un livreur est facultatif (seul le téléphone
+                        est obligatoire) et peut être renseigné soit en un seul
+                        champ (<strong>livreur_nom_complet</strong>), soit en
+                        deux champs séparés (<strong>livreur_nom</strong> +
+                        <strong>livreur_prenom</strong>).
+                    </p>
+                </template>
+                <template v-else>
+                    <p class="mt-2 text-sm text-muted-foreground">
+                        Le modèle contient deux feuilles :
+                        <strong>vehicules</strong>
+                        (une ligne par véhicule + son propriétaire) et
+                        <strong>livreurs</strong> (une ligne par livreur, reliée
+                        au véhicule par l'immatriculation). Pas besoin de
+                        répéter les infos du véhicule pour chaque livreur —
+                        seule l'immatriculation est à reporter sur chaque ligne
+                        de la feuille livreurs. La commission et la répartition
+                        par livreur se configurent après coup dans Équipes de
+                        livraison.
+                    </p>
+                    <p class="mt-2 text-sm text-muted-foreground">
+                        Le nom d'un livreur est facultatif (seul le téléphone
+                        est obligatoire) et peut être renseigné soit en un seul
+                        champ (<strong>livreur_nom_complet</strong>), soit en
+                        deux champs séparés (<strong>livreur_nom</strong> +
+                        <strong>livreur_prenom</strong>) — utilisez celui qui
+                        vous convient, sans dupliquer l'information.
+                    </p>
+                    <p class="mt-2 text-sm text-muted-foreground">
+                        <strong>vehicule_capacite_sachets</strong> et
+                        <strong>vehicule_capacite_bouteilles</strong> sont
+                        facultatives : laissées vides, la capacité par défaut du
+                        type de véhicule s'applique.
+                    </p>
+                    <p class="mt-2 text-sm text-muted-foreground">
+                        <strong>vehicule_livraison_vente</strong>
+                        (sélectionnable pour une vente/PDV) et
+                        <strong>vehicule_livraison_logistique</strong>
+                        (sélectionnable pour un transfert) sont deux colonnes
+                        indépendantes — un véhicule peut être l'un, l'autre, ou
+                        les deux. Toutes deux facultatives : si omises, le
+                        véhicule importé est éligible à la vente par défaut, pas
+                        à la logistique. Au moins l'une des deux doit être
+                        "oui".
+                    </p>
+                </template>
                 <a
-                    href="/settings/imports-flotte/modele"
+                    :href="templateUrl"
                     class="mt-4 inline-flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
                 >
                     <Download class="h-4 w-4" />

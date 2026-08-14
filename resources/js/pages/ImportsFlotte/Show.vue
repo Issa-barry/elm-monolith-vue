@@ -95,6 +95,10 @@ const aperçu = computed(() => {
     const proprietaires = { creer: 0, existants: 0 };
     const livreurs = { creer: 0, existants: 0 };
     let equipes = 0;
+    // Groupe véhicule sans aucun livreur dans le fichier (nouveau véhicule
+    // livré "nu", ou véhicule existant dont on ne touche pas l'équipe) — cf.
+    // docblock ImportFlotteParser : `equipe: null` en est le signal univoque.
+    let vehiculesSansLivreur = 0;
 
     for (const g of groupesValides.value) {
         if (g.vehicule) {
@@ -105,6 +109,7 @@ const aperçu = computed(() => {
             }
         }
         if (g.equipe && !g.equipe.existe) equipes++;
+        if (g.vehicule && !(g.livreurs?.length ?? 0)) vehiculesSansLivreur++;
         if (g.proprietaire) {
             if (g.proprietaire.existe) {
                 proprietaires.existants++;
@@ -124,7 +129,13 @@ const aperçu = computed(() => {
         }
     }
 
-    return { vehicules, proprietaires, livreurs, equipes };
+    return {
+        vehicules,
+        proprietaires,
+        livreurs,
+        equipes,
+        vehiculesSansLivreur,
+    };
 });
 
 function formatLignes(g: Groupe): string {
@@ -191,7 +202,7 @@ onBeforeUnmount(() => {
                             Historique
                         </Button>
                     </Link>
-                    <Link href="/settings/parametres">
+                    <Link href="/settings/imports-flotte/nouveau">
                         <Button size="sm" variant="outline">
                             <ArrowLeft class="mr-1.5 h-4 w-4" />
                             Retour
@@ -202,7 +213,7 @@ onBeforeUnmount(() => {
 
             <!-- Aperçu (analyse) -->
             <template v-if="record.statut === 'analyse'">
-                <div class="grid gap-4 sm:grid-cols-4">
+                <div class="grid gap-4 sm:grid-cols-5">
                     <div class="rounded-xl border bg-card p-4">
                         <p class="text-xs text-muted-foreground">
                             Propriétaires à créer
@@ -245,6 +256,24 @@ onBeforeUnmount(() => {
                         </p>
                         <p class="text-xs text-muted-foreground">
                             {{ groupesErreur.length }} groupe(s) en erreur
+                        </p>
+                    </div>
+                    <div class="rounded-xl border bg-card p-4">
+                        <p class="text-xs text-muted-foreground">
+                            Véhicules sans livreur
+                        </p>
+                        <p
+                            class="mt-1 text-2xl font-semibold"
+                            :class="
+                                aperçu.vehiculesSansLivreur > 0
+                                    ? 'text-amber-600 dark:text-amber-400'
+                                    : ''
+                            "
+                        >
+                            {{ aperçu.vehiculesSansLivreur }}
+                        </p>
+                        <p class="text-xs text-muted-foreground">
+                            sur {{ groupesValides.length }} groupe(s) valide(s)
                         </p>
                     </div>
                 </div>

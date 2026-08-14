@@ -2,6 +2,7 @@
 
 namespace App\Services\ImportFlotte;
 
+use App\Enums\TypeImportFlotte;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
@@ -44,6 +45,14 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
  * Ne modifie jamais la base : c'est un composant de lecture seule, réutilisé
  * à la fois pour l'aperçu (analyse) et juste avant l'exécution réelle (pour
  * éviter tout écart entre ce qui a été affiché et ce qui est enregistré).
+ *
+ * Second mode, TypeImportFlotte::LIVREURS (voir analyserLivreursSeuls()) :
+ * fichier à une seule feuille "livreurs", sans feuille "vehicules" — chaque
+ * immatriculation est résolue directement contre les véhicules déjà en base
+ * (jamais de création de véhicule/propriétaire dans ce mode). Sert le cas
+ * d'usage le plus courant une fois la flotte initiale importée : ajouter ou
+ * mettre à jour des livreurs sans avoir à retaper toute la ligne véhicule
+ * (nom, type, site, capacité...) juste pour l'utiliser comme ancrage.
  */
 class ImportFlotteParser
 {
@@ -60,14 +69,228 @@ class ImportFlotteParser
      */
     private const MAX_LIGNES = 500;
 
-    public function analyser(string $absolutePath, string $organizationId): array
+    public function analyser(string $absolutePath, string $organizationId, TypeImportFlotte $type = TypeImportFlotte::FLOTTE): array
     {
         $spreadsheet = IOFactory::load($absolutePath);
-        $lignesVehicules = $this->lireFeuille($spreadsheet, 'vehicules');
         $lignesLivreurs = $this->lireFeuille($spreadsheet, 'livreurs');
+
+        if ($type === TypeImportFlotte::LIVREURS) {
+            return $this->analyserLivreursSeuls($lignesLivreurs, $organizationId);
+        }
+
+        $lignesVehicules = $this->lireFeuille($spreadsheet, 'vehicules');
 
         $nbLignesTotal = $lignesVehicules->count() + $lignesLivreurs->count();
 
+        if ($erreur = $this->erreurVolumetrie($nbLignesTotal, 'Fichier vide, ou feuilles "vehicules"/"livreurs" introuvables.')) {
+            return $erreur;
+        }
+
+        $immatsParTelephoneLivreur = $this->immatsParTelephoneLivreurEnDoublon($lignesLivreurs);
+
+        // Regroupe les lignes de la feuille "livreurs" par immatriculation — les
+        // lignes en conflit (même livreur sur plusieurs véhicules) en sont
+        // exclues : elles sont remontées une seule fois, globalement, plutôt que
+        // dupliquées dans chacun des groupes véhicule concernés — voir
+        // groupesConflitLivreurMultiVehicules().
+        $livreursParImmat = $this->livreursParImmatSansConflit($lignesLivreurs, $immatsParTelephoneLivreur);
+
+        $groupes = [];
+        $immatsTraitees = [];
+        // Un même propriétaire (même téléphone canonique) peut apparaître sur
+        // plusieurs lignes "vehicules" (plusieurs véhicules). Suivi à travers
+        // tout le fichier pour ne le proposer en création qu'une seule fois —
+        // voir resoudreProprietaire().
+        $telephonesProprietairesVus = [];
+
+        // Une même immatriculation ne doit apparaître qu'une seule fois dans
+        // la feuille "vehicules" (contrairement au propriétaire, un véhicule
+        // n'a normalement qu'une ligne). Sans ce contrôle, deux lignes
+        // dupliquées passeraient toutes deux l'analyse ("valide") puis
+        // provoqueraient une violation de contrainte d'unicité en base au
+        // moment de la confirmation — plantage tardif et peu clair au lieu
+        // d'une erreur d'analyse explicite.
+        $occurrencesParImmat = $lignesVehicules
+            ->map(fn ($ligne) => $this->normaliserImmatriculation((string) ($ligne['vehicule_immatriculation'] ?? '')))
+            ->filter(fn ($immat) => $immat !== '')
+            ->countBy();
+
+        foreach ($lignesVehicules as $index => $ligneVehicule) {
+            $immat = $this->normaliserImmatriculation((string) ($ligneVehicule['vehicule_immatriculation'] ?? ''));
+            $immatsTraitees[$immat] = true;
+
+            $lignesLivreursGroupe = ($livreursParImmat->get($immat) ?? collect())->all();
+
+            if ($immat !== '' && ($occurrencesParImmat[$immat] ?? 0) > 1) {
+                $groupes[] = [
+                    'immatriculation' => $immat,
+                    'ligne_vehicule' => $index + 2,
+                    'lignes_livreurs' => array_column($lignesLivreursGroupe, 'numero_ligne'),
+                    'statut' => 'erreur',
+                    'erreurs' => ["Immatriculation \"{$immat}\" présente sur {$occurrencesParImmat[$immat]} lignes de la feuille \"vehicules\" — une seule ligne par véhicule est autorisée."],
+                    'normalisations' => [],
+                    'avertissements' => [],
+                ];
+
+                continue;
+            }
+
+            $groupes[] = $this->analyserGroupe($immat, $index + 2, $ligneVehicule, $lignesLivreursGroupe, $organizationId, $telephonesProprietairesVus);
+        }
+
+        // Lignes de la feuille "livreurs" dont l'immatriculation n'existe dans
+        // aucune ligne de la feuille "vehicules".
+        foreach ($livreursParImmat as $immat => $lignes) {
+            if (isset($immatsTraitees[$immat])) {
+                continue;
+            }
+
+            $groupes[] = [
+                'immatriculation' => $immat !== '' ? $immat : null,
+                'ligne_vehicule' => null,
+                'lignes_livreurs' => array_column($lignes->all(), 'numero_ligne'),
+                'statut' => 'erreur',
+                'erreurs' => [$immat !== ''
+                    ? "Aucun véhicule avec l'immatriculation \"{$immat}\" dans la feuille \"vehicules\"."
+                    : 'Immatriculation manquante sur une ligne de la feuille "livreurs".'],
+                'normalisations' => [],
+                'avertissements' => [],
+            ];
+        }
+
+        $groupes = array_merge($groupes, $this->groupesConflitLivreurMultiVehicules($lignesLivreurs, $immatsParTelephoneLivreur));
+
+        return [
+            'nb_lignes_total' => $nbLignesTotal,
+            'groupes' => $groupes,
+        ];
+    }
+
+    /**
+     * Mode TypeImportFlotte::LIVREURS : aucune feuille "vehicules" — chaque
+     * immatriculation de la feuille "livreurs" est résolue directement contre
+     * les véhicules déjà en base (jamais de création de véhicule/propriétaire).
+     */
+    private function analyserLivreursSeuls(Collection $lignesLivreurs, string $orgId): array
+    {
+        $nbLignesTotal = $lignesLivreurs->count();
+
+        if ($erreur = $this->erreurVolumetrie($nbLignesTotal, 'Fichier vide, ou feuille "livreurs" introuvable.')) {
+            return $erreur;
+        }
+
+        $immatsParTelephoneLivreur = $this->immatsParTelephoneLivreurEnDoublon($lignesLivreurs);
+        $livreursParImmat = $this->livreursParImmatSansConflit($lignesLivreurs, $immatsParTelephoneLivreur);
+
+        $groupes = [];
+        foreach ($livreursParImmat as $immat => $lignes) {
+            $numerosLignesLivreurs = array_column($lignes->all(), 'numero_ligne');
+
+            if ($immat === '') {
+                $groupes[] = [
+                    'immatriculation' => null,
+                    'ligne_vehicule' => null,
+                    'lignes_livreurs' => $numerosLignesLivreurs,
+                    'statut' => 'erreur',
+                    'erreurs' => ['Immatriculation manquante sur une ligne de la feuille "livreurs".'],
+                    'normalisations' => [],
+                    'avertissements' => [],
+                ];
+
+                continue;
+            }
+
+            $vehicule = Vehicule::where('organization_id', $orgId)
+                ->where('immatriculation', $immat)
+                ->whereNull('deleted_at')
+                ->first();
+
+            if (! $vehicule) {
+                $groupes[] = [
+                    'immatriculation' => $immat,
+                    'ligne_vehicule' => null,
+                    'lignes_livreurs' => $numerosLignesLivreurs,
+                    'statut' => 'erreur',
+                    'erreurs' => ["Aucun véhicule avec l'immatriculation \"{$immat}\" en base. Importez-le d'abord via l'import \"".TypeImportFlotte::FLOTTE->label().'".'],
+                    'normalisations' => [],
+                    'avertissements' => [],
+                ];
+
+                continue;
+            }
+
+            $equipeExistante = EquipeLivraison::where('vehicule_id', $vehicule->id)->whereNull('deleted_at')->first();
+
+            [$livreurs, $erreurs, $normalisations] = $this->resoudreLivreurs($lignes->all(), $orgId, $equipeExistante);
+
+            if (! empty($erreurs)) {
+                $groupes[] = [
+                    'immatriculation' => $immat,
+                    'ligne_vehicule' => null,
+                    'lignes_livreurs' => $numerosLignesLivreurs,
+                    'statut' => 'erreur',
+                    'erreurs' => $erreurs,
+                    'normalisations' => $normalisations,
+                    'avertissements' => [],
+                ];
+
+                continue;
+            }
+
+            $commission = $equipeExistante ? (float) $equipeExistante->commission_unitaire_par_pack : 0.0;
+
+            $groupes[] = [
+                'immatriculation' => $immat,
+                'ligne_vehicule' => null,
+                'lignes_livreurs' => $numerosLignesLivreurs,
+                'statut' => 'valide',
+                'erreurs' => [],
+                'normalisations' => $normalisations,
+                'avertissements' => [],
+                'vehicule' => [
+                    'existe' => true,
+                    'id' => $vehicule->id,
+                    'nom_vehicule' => $vehicule->nom_vehicule,
+                    // Champs de création non applicables (véhicule déjà en base, jamais
+                    // recréé/modifié dans ce mode) — jamais lus par ImportFlotteExecutor
+                    // quand existe=true.
+                    'type_vehicule_id' => null,
+                    'capacite_packs' => null,
+                    'capacite_bouteilles' => null,
+                    'livraison_vente' => null,
+                    'livraison_logistique' => null,
+                    'site_id' => null,
+                ],
+                // Cf. docblock de classe : null = "aucune équipe pour ce groupe"
+                // (pas de nouveaux livreurs et véhicule sans équipe existante).
+                'equipe' => ($equipeExistante || count($livreurs) > 0) ? [
+                    'existe' => (bool) $equipeExistante,
+                    'id' => $equipeExistante?->id,
+                    'commission_unitaire_par_pack' => $commission,
+                    // Jamais de propriétaire tiers saisi dans ce mode (aucune feuille
+                    // "vehicules") : le montant propriétaire d'une équipe existante
+                    // n'est jamais touché ici.
+                    'montant_par_pack_proprietaire' => null,
+                ] : null,
+                'proprietaire' => null,
+                'livreurs' => $livreurs,
+            ];
+        }
+
+        $groupes = array_merge($groupes, $this->groupesConflitLivreurMultiVehicules($lignesLivreurs, $immatsParTelephoneLivreur));
+
+        return [
+            'nb_lignes_total' => $nbLignesTotal,
+            'groupes' => $groupes,
+        ];
+    }
+
+    /**
+     * @return array|null l'erreur "fichier vide"/"trop de lignes" prête à retourner
+     *                    telle quelle par analyser(), ou null si le volume est valide.
+     */
+    private function erreurVolumetrie(int $nbLignesTotal, string $messageVide): ?array
+    {
         if ($nbLignesTotal === 0) {
             return [
                 'nb_lignes_total' => 0,
@@ -76,7 +299,7 @@ class ImportFlotteParser
                     'ligne_vehicule' => null,
                     'lignes_livreurs' => [],
                     'statut' => 'erreur',
-                    'erreurs' => ['Fichier vide, ou feuilles "vehicules"/"livreurs" introuvables.'],
+                    'erreurs' => [$messageVide],
                     'normalisations' => [],
                     'avertissements' => [],
                 ]],
@@ -102,40 +325,25 @@ class ImportFlotteParser
             ];
         }
 
-        // Regroupe les lignes de la feuille "livreurs" par immatriculation.
-        $livreursParImmat = $lignesLivreurs
-            ->map(fn ($ligne, $index) => ['numero_ligne' => $index + 2, 'donnees' => $ligne])
-            ->groupBy(fn ($l) => $this->normaliserImmatriculation((string) ($l['donnees']['vehicule_immatriculation'] ?? '')));
+        return null;
+    }
 
-        $groupes = [];
-        $immatsTraitees = [];
-        // Un même propriétaire (même téléphone canonique) peut apparaître sur
-        // plusieurs lignes "vehicules" (plusieurs véhicules). Suivi à travers
-        // tout le fichier pour ne le proposer en création qu'une seule fois —
-        // voir resoudreProprietaire().
-        $telephonesProprietairesVus = [];
-
-        // Une même immatriculation ne doit apparaître qu'une seule fois dans
-        // la feuille "vehicules" (contrairement au propriétaire, un véhicule
-        // n'a normalement qu'une ligne). Sans ce contrôle, deux lignes
-        // dupliquées passeraient toutes deux l'analyse ("valide") puis
-        // provoqueraient une violation de contrainte d'unicité en base au
-        // moment de la confirmation — plantage tardif et peu clair au lieu
-        // d'une erreur d'analyse explicite.
-        $occurrencesParImmat = $lignesVehicules
-            ->map(fn ($ligne) => $this->normaliserImmatriculation((string) ($ligne['vehicule_immatriculation'] ?? '')))
-            ->filter(fn ($immat) => $immat !== '')
-            ->countBy();
-
-        // Un même livreur (même téléphone canonique) ne peut pas être rattaché
-        // à deux véhicules différents dans le même fichier — contrairement au
-        // propriétaire, un livreur n'appartient qu'à une seule équipe (règle
-        // déjà appliquée pour les livreurs déjà en base, cf. $dejaAffecte dans
-        // resoudreLivreurs()). Sans ce contrôle, un livreur pas encore en base
-        // et présent sur deux lignes "livreurs" de véhicules différents
-        // passerait l'analyse puis violerait la contrainte d'unicité
-        // (telephone, organization_id) de la table livreurs à la confirmation.
-        $immatsParTelephoneLivreur = $lignesLivreurs
+    /**
+     * Un même livreur (même téléphone canonique) ne peut pas être rattaché à
+     * deux véhicules différents dans le même fichier — un livreur n'appartient
+     * qu'à une seule équipe (règle déjà appliquée pour les livreurs déjà en
+     * base, cf. $dejaAffecte dans resoudreLivreurs()). Sans ce contrôle, un
+     * livreur pas encore en base et présent sur deux lignes "livreurs" de
+     * véhicules différents passerait l'analyse puis violerait la contrainte
+     * d'unicité (telephone, organization_id) de la table livreurs à la
+     * confirmation.
+     *
+     * @return Collection<string, Collection<int, string>> immatriculations en
+     *                                                     conflit, indexées par téléphone canonique.
+     */
+    private function immatsParTelephoneLivreurEnDoublon(Collection $lignesLivreurs): Collection
+    {
+        return $lignesLivreurs
             ->map(function ($ligne) {
                 $phone = (new PhoneNormalizer)->normalize(trim((string) ($ligne['livreur_telephone'] ?? '')), 'GN');
                 $immat = $this->normaliserImmatriculation((string) ($ligne['vehicule_immatriculation'] ?? ''));
@@ -146,54 +354,74 @@ class ImportFlotteParser
             ->groupBy(fn ($paire) => $paire[0])
             ->map(fn ($paires) => $paires->pluck(1)->unique()->values())
             ->filter(fn ($immats) => $immats->count() > 1);
+    }
 
-        foreach ($lignesVehicules as $index => $ligneVehicule) {
-            $immat = $this->normaliserImmatriculation((string) ($ligneVehicule['vehicule_immatriculation'] ?? ''));
-            $immatsTraitees[$immat] = true;
+    /**
+     * Regroupe les lignes "livreurs" par immatriculation, en excluant celles
+     * dont le téléphone est en conflit (cf. immatsParTelephoneLivreurEnDoublon) :
+     * ces lignes-là ne doivent être rattachées à AUCUN groupe véhicule tant que
+     * le conflit n'est pas résolu — elles sont remontées séparément par
+     * groupesConflitLivreurMultiVehicules().
+     *
+     * @return Collection<string, Collection<int, array{numero_ligne: int, donnees: Collection}>>
+     */
+    private function livreursParImmatSansConflit(Collection $lignesLivreurs, Collection $immatsParTelephoneLivreur): Collection
+    {
+        return $lignesLivreurs
+            ->map(fn ($ligne, $index) => ['numero_ligne' => $index + 2, 'donnees' => $ligne])
+            ->reject(function ($l) use ($immatsParTelephoneLivreur) {
+                $phone = (new PhoneNormalizer)->normalize(trim((string) ($l['donnees']['livreur_telephone'] ?? '')), 'GN');
 
-            $lignesLivreursGroupe = ($livreursParImmat->get($immat) ?? collect())->all();
+                return $phone['telephone'] && $immatsParTelephoneLivreur->has($phone['telephone']);
+            })
+            ->groupBy(fn ($l) => $this->normaliserImmatriculation((string) ($l['donnees']['vehicule_immatriculation'] ?? '')));
+    }
 
-            if ($immat !== '' && ($occurrencesParImmat[$immat] ?? 0) > 1) {
-                $groupes[] = [
-                    'immatriculation' => $immat,
-                    'ligne_vehicule' => $index + 2,
-                    'lignes_livreurs' => array_column($lignesLivreursGroupe, 'numero_ligne'),
-                    'statut' => 'erreur',
-                    'erreurs' => ["Immatriculation \"{$immat}\" présente sur {$occurrencesParImmat[$immat]} lignes de la feuille \"vehicules\" — une seule ligne par véhicule est autorisée."],
-                    'normalisations' => [],
-                    'avertissements' => [],
-                ];
-
-                continue;
-            }
-
-            $groupes[] = $this->analyserGroupe($immat, $index + 2, $ligneVehicule, $lignesLivreursGroupe, $organizationId, $telephonesProprietairesVus, $immatsParTelephoneLivreur);
+    /**
+     * Un groupe d'erreur par téléphone en conflit (plutôt qu'un par véhicule
+     * concerné, cf. livreursParImmatSansConflit) : un même problème rattaché à
+     * deux véhicules n'affichait sinon rien qu'un doublon quasi-identique du
+     * même message dans deux groupes distincts — trompeur (donne l'impression
+     * de deux problèmes indépendants alors qu'il n'y en a qu'un).
+     *
+     * @return array<int, array> groupes d'erreur prêts à ajouter au rapport
+     */
+    private function groupesConflitLivreurMultiVehicules(Collection $lignesLivreurs, Collection $immatsParTelephoneLivreur): array
+    {
+        if ($immatsParTelephoneLivreur->isEmpty()) {
+            return [];
         }
 
-        // Lignes de la feuille "livreurs" dont l'immatriculation n'existe dans
-        // aucune ligne de la feuille "vehicules".
-        foreach ($livreursParImmat as $immat => $lignes) {
-            if (isset($immatsTraitees[$immat])) {
-                continue;
-            }
+        $lignesIndexees = $lignesLivreurs->map(fn ($ligne, $index) => ['numero_ligne' => $index + 2, 'donnees' => $ligne]);
+
+        $groupes = [];
+        foreach ($immatsParTelephoneLivreur as $telephone => $immats) {
+            $lignesDuTelephone = $lignesIndexees->filter(function ($l) use ($telephone) {
+                $phone = (new PhoneNormalizer)->normalize(trim((string) ($l['donnees']['livreur_telephone'] ?? '')), 'GN');
+
+                return $phone['telephone'] === $telephone;
+            });
+
+            $detailParImmat = $immats->map(function ($immat) use ($lignesDuTelephone) {
+                $numeros = $lignesDuTelephone
+                    ->filter(fn ($l) => $this->normaliserImmatriculation((string) ($l['donnees']['vehicule_immatriculation'] ?? '')) === $immat)
+                    ->pluck('numero_ligne');
+
+                return sprintf('%s (ligne%s %s)', $immat, $numeros->count() > 1 ? 's' : '', $numeros->implode(', '));
+            })->implode(', ');
 
             $groupes[] = [
-                'immatriculation' => $immat !== '' ? $immat : null,
+                'immatriculation' => $immats->implode(', '),
                 'ligne_vehicule' => null,
-                'lignes_livreurs' => array_column($lignes->all(), 'numero_ligne'),
+                'lignes_livreurs' => $lignesDuTelephone->pluck('numero_ligne')->sort()->values()->all(),
                 'statut' => 'erreur',
-                'erreurs' => [$immat !== ''
-                    ? "Aucun véhicule avec l'immatriculation \"{$immat}\" dans la feuille \"vehicules\"."
-                    : 'Immatriculation manquante sur une ligne de la feuille "livreurs".'],
+                'erreurs' => ["Le livreur {$telephone} est rattaché à plusieurs véhicules différents dans ce fichier : {$detailParImmat} — un livreur ne peut appartenir qu'à une seule équipe."],
                 'normalisations' => [],
                 'avertissements' => [],
             ];
         }
 
-        return [
-            'nb_lignes_total' => $nbLignesTotal,
-            'groupes' => $groupes,
-        ];
+        return $groupes;
     }
 
     private function lireFeuille(Spreadsheet $spreadsheet, string $nom): Collection
@@ -222,10 +450,21 @@ class ImportFlotteParser
             ->values();
     }
 
+    /**
+     * Comparaison tolérante à la casse ET aux accents (via ImportTextNormalizer,
+     * comme pour tous les autres libellés de ce parseur) : un onglet renommé
+     * "Véhicules" (accentué, comme partout ailleurs dans l'UI de l'appli) doit
+     * être reconnu au même titre que "vehicules" — sans ça, la feuille semble
+     * introuvable et toutes les lignes "livreurs" échouent avec un message
+     * d'immatriculation "introuvable" trompeur (la feuille "vehicules" n'a
+     * simplement jamais été lue).
+     */
     private function trouverFeuille(Spreadsheet $spreadsheet, string $nom): ?Worksheet
     {
+        $cible = ImportTextNormalizer::normalize($nom);
+
         foreach ($spreadsheet->getAllSheets() as $sheet) {
-            if (mb_strtolower(trim($sheet->getTitle()), 'UTF-8') === $nom) {
+            if (ImportTextNormalizer::normalize($sheet->getTitle()) === $cible) {
                 return $sheet;
             }
         }
@@ -233,7 +472,7 @@ class ImportFlotteParser
         return null;
     }
 
-    private function analyserGroupe(string $immatriculation, int $numeroLigneVehicule, Collection $ligneVehicule, array $lignesLivreursGroupe, string $orgId, array &$telephonesProprietairesVus, Collection $immatsParTelephoneLivreur): array
+    private function analyserGroupe(string $immatriculation, int $numeroLigneVehicule, Collection $ligneVehicule, array $lignesLivreursGroupe, string $orgId, array &$telephonesProprietairesVus): array
     {
         $numerosLignesLivreurs = array_column($lignesLivreursGroupe, 'numero_ligne');
         $erreurs = [];
@@ -359,7 +598,7 @@ class ImportFlotteParser
         // créé sans aucun livreur, auquel cas aucune équipe n'est créée du tout
         // (voir construction de 'equipe' plus bas). Un véhicule existant sans
         // ligne livreur ne touche pas non plus à ses membres actuels.
-        [$livreurs, $erreursLivreurs, $normalisationsLivreurs] = $this->resoudreLivreurs($lignesLivreursGroupe, $orgId, $equipeExistante, $immatriculation, $immatsParTelephoneLivreur);
+        [$livreurs, $erreursLivreurs, $normalisationsLivreurs] = $this->resoudreLivreurs($lignesLivreursGroupe, $orgId, $equipeExistante);
         $erreurs = array_merge($erreurs, $erreursLivreurs);
         $normalisations = array_merge($normalisations, $normalisationsLivreurs);
 
@@ -475,9 +714,13 @@ class ImportFlotteParser
     }
 
     /**
+     * @param  array<int, array{numero_ligne: int, donnees: Collection}>  $lignesGroupe  jamais de
+     *                                                                                   ligne dont le téléphone est en conflit multi-véhicules (déjà exclues en amont,
+     *                                                                                   cf. livreursParImmatSansConflit) — remontées séparément par
+     *                                                                                   groupesConflitLivreurMultiVehicules().
      * @return array{0: array, 1: string[], 2: string[]}
      */
-    private function resoudreLivreurs(array $lignesGroupe, string $orgId, ?EquipeLivraison $equipeExistante, string $immatriculationGroupe, Collection $immatsParTelephoneLivreur): array
+    private function resoudreLivreurs(array $lignesGroupe, string $orgId, ?EquipeLivraison $equipeExistante): array
     {
         $livreurs = [];
         $erreurs = [];
@@ -522,15 +765,6 @@ class ImportFlotteParser
             $telephone = $phone['telephone'];
             if ($telephone !== $telephoneBrut) {
                 $normalisations[] = "\"{$telephoneBrut}\" → \"{$telephone}\"";
-            }
-
-            if ($immatsParTelephoneLivreur->has($telephone)) {
-                $autresImmats = $immatsParTelephoneLivreur->get($telephone)
-                    ->reject(fn ($immat) => $immat === $immatriculationGroupe)
-                    ->implode(', ');
-                $erreurs[] = "Ligne {$numero} : le livreur {$telephone} est rattaché à plusieurs véhicules différents dans ce fichier ({$immatriculationGroupe}, {$autresImmats}) — un livreur ne peut appartenir qu'à une seule équipe.";
-
-                continue;
             }
 
             if (! in_array($role, ['chauffeur', 'convoyeur'], true)) {
