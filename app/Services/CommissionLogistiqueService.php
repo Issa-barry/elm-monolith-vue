@@ -16,7 +16,8 @@ use InvalidArgumentException;
 class CommissionLogistiqueService
 {
     /**
-     * Créer ou recalculer la commission d'un transfert réceptionné/clôturé.
+     * Créer ou recalculer la commission d'un transfert en transit (chargement
+     * validé), réceptionné ou clôturé.
      *
      * @throws InvalidArgumentException si le transfert n'est pas éligible
      */
@@ -26,9 +27,11 @@ class CommissionLogistiqueService
         float $valeurBase,
         ?int $quantiteReference = null
     ): CommissionLogistique {
-        if (! $transfert->isReception() && ! $transfert->isCloture()) {
+        // TRANSIT : déclencheur CHARGEMENT_VALIDE (cf. genererDepuisChargement()) — le
+        // transfert vient de quitter CHARGEMENT, avant que la quantité reçue existe.
+        if (! $transfert->isTransit() && ! $transfert->isReception() && ! $transfert->isCloture()) {
             throw new InvalidArgumentException(
-                'La commission ne peut être générée que sur un transfert réceptionné ou clôturé.'
+                'La commission ne peut être générée que sur un transfert en transit, réceptionné ou clôturé.'
             );
         }
 
@@ -100,6 +103,31 @@ class CommissionLogistiqueService
             BaseCalculLogistique::PAR_PACK->value,
             200.0,
             $quantiteRecue > 0 ? $quantiteRecue : 0,
+        );
+    }
+
+    /**
+     * Génération automatique au chargement validé (départ, CHARGEMENT → TRANSIT) :
+     * 200 FG × packs **chargés** — la quantité reçue n'existe pas encore à ce stade.
+     * Idempotente : si une commission existe déjà, ne rien faire. Le montant est figé
+     * à cet instant ; un écart constaté à la réception (quantite_recue) ne déclenche
+     * jamais de recalcul rétroactif de cette commission.
+     */
+    public static function genererDepuisChargement(TransfertLogistique $transfert): CommissionLogistique
+    {
+        $existing = $transfert->commission()->first();
+        if ($existing) {
+            return $existing->load('parts');
+        }
+
+        $transfert->loadMissing('lignes');
+        $quantiteChargee = (int) $transfert->lignes->sum('quantite_chargee');
+
+        return self::genererPourTransfert(
+            $transfert,
+            BaseCalculLogistique::PAR_PACK->value,
+            200.0,
+            $quantiteChargee > 0 ? $quantiteChargee : 0,
         );
     }
 

@@ -85,7 +85,13 @@ class CommandeVenteService
         }
 
         if ($commande->vehicule_id && $commande->vehicule) {
-            CommissionGenerator::generateForCommandeIfMissing($commande);
+            // Génération conditionnée au paramètre organisation (déclencheur
+            // CHARGEMENT_VALIDE vs FACTURE_ENCAISSEE) — cf. CommissionTriggerService.
+            // Sous FACTURE_ENCAISSEE, la commission n'est créée qu'à l'encaissement
+            // (CommissionTriggerService::onFactureVenteEncaissee()) : les étapes
+            // suivantes du workflow (recalculerCommissions, activerFactureEtCommissions)
+            // n'ont donc simplement rien à activer tant qu'aucune commande n'existe.
+            CommissionTriggerService::onCommandeVenteConfirmee($commande);
         }
     }
 

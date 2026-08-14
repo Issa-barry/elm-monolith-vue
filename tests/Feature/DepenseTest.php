@@ -88,6 +88,39 @@ class DepenseTest extends TestCase
             );
     }
 
+    /**
+     * Régression : DepenseController::loadVehicules() sélectionnait une colonne
+     * `categorie` retirée de `vehicules` (remplacée par livraison_vente/
+     * livraison_logistique, cf. Vehicule::scopeLivraisonLogistique) — la page
+     * plantait avec "Unknown column 'categorie'" dès qu'un véhicule actif
+     * existait. `categorie` ('interne'/'externe') est reconstruite depuis
+     * livraison_logistique pour préserver le contrat déjà consommé par
+     * Depenses/Create.vue et Edit.vue (vehiculeContext).
+     */
+    public function test_create_expose_la_categorie_reconstruite_des_vehicules(): void
+    {
+        Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom_vehicule' => 'Camion interne',
+            'livraison_logistique' => true,
+        ]);
+        Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom_vehicule' => 'Camion externe',
+            'livraison_logistique' => false,
+        ]);
+
+        $this->get('/backoffice/depenses/create')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('vehicules', fn ($vehicules) => collect($vehicules)
+                    ->firstWhere('nom_vehicule', 'Camion interne')['categorie'] === 'interne'
+                    && collect($vehicules)
+                        ->firstWhere('nom_vehicule', 'Camion externe')['categorie'] === 'externe'
+                )
+            );
+    }
+
     public function test_store_creates_interne_depense(): void
     {
         $this->post('/backoffice/depenses', [
@@ -1147,14 +1180,18 @@ class DepenseTest extends TestCase
             'organization_id' => $this->org->id,
             'nom_vehicule' => 'Camion ELM 12',
             'immatriculation' => 'ELM-001-GN',
+            'livraison_logistique' => true,
         ]);
 
         $response = $this->getJson("/backoffice/depenses/vehicule-detail?id={$vehicule->id}");
 
+        // `categorie` reconstruite depuis livraison_logistique — cf. régression
+        // test_create_expose_la_categorie_reconstruite_des_vehicules ci-dessus.
         $response->assertOk()
             ->assertJson([
                 'nom' => 'Camion ELM 12',
                 'immatriculation' => 'ELM-001-GN',
+                'categorie' => 'interne',
             ]);
     }
 

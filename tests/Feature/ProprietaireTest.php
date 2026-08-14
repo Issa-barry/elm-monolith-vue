@@ -163,6 +163,32 @@ class ProprietaireTest extends TestCase
             );
     }
 
+    /**
+     * Régression : `vehicule->categorie` était lu directement sur le modèle
+     * alors que la colonne a été retirée de `vehicules` (remplacée par
+     * livraison_vente/livraison_logistique) — silencieux (pas de crash, `get()`
+     * sans colonnes explicites ici), mais la fiche propriétaire affichait
+     * toujours "-" à la place de "interne"/"externe". Reconstruite depuis
+     * livraison_logistique, cf. DepenseController::loadVehicules().
+     */
+    public function test_show_expose_la_categorie_reconstruite_du_vehicule(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $interne = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'proprietaire_id' => $proprietaire->id,
+            'livraison_logistique' => true,
+        ]);
+
+        $this->actingAs($this->user)
+            ->get(route('proprietaires.show', $proprietaire))
+            ->assertStatus(200)
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('vehicules.0.id', $interne->id)
+                ->where('vehicules.0.categorie', 'interne')
+            );
+    }
+
     public function test_show_expose_le_detail_equipe_avec_chauffeur_et_convoyeurs(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);

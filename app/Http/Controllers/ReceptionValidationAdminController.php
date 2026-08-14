@@ -2,10 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\BaseCalculLogistique;
 use App\Enums\StatutTransfert;
 use App\Models\TransfertLogistique;
-use App\Services\CommissionLogistiqueService;
+use App\Services\CommissionTriggerService;
 use App\Services\MouvementStockService;
 use App\Services\TransfertActiviteService;
 use Illuminate\Http\RedirectResponse;
@@ -45,22 +44,24 @@ class ReceptionValidationAdminController extends Controller
                 'validation_motif' => null,
             ]);
 
-            $transfert_logistique->loadMissing('lignes');
-            $quantiteRecue = (int) $transfert_logistique->lignes->sum('quantite_recue');
             $montantParPack = (float) $data['montant_par_pack'];
 
             try {
-                $commission = CommissionLogistiqueService::genererPourTransfert(
-                    $transfert_logistique,
-                    BaseCalculLogistique::PAR_PACK->value,
-                    $montantParPack,
-                    $quantiteRecue > 0 ? $quantiteRecue : 0,
-                );
-                TransfertActiviteService::log($transfert_logistique, 'validation_admin_accord', [
-                    'commission_id' => $commission->id,
-                    'montant_total' => $commission->montant_total,
-                    'quantite_packs' => $commission->quantite_reference,
-                ]);
+                // Déclencheur configurable (cf. CommissionTriggerService) : ne génère que
+                // si le paramètre organisation est RECEPTION_EFFECTUEE (défaut, comportement
+                // historique) — sous CHARGEMENT_VALIDE, la commission existe déjà depuis le
+                // départ du transfert et $commission vaut alors null (aucune régénération).
+                $commission = CommissionTriggerService::onTransfertReceptionEffectuee($transfert_logistique, $montantParPack);
+
+                if ($commission) {
+                    TransfertActiviteService::log($transfert_logistique, 'validation_admin_accord', [
+                        'commission_id' => $commission->id,
+                        'montant_total' => $commission->montant_total,
+                        'quantite_packs' => $commission->quantite_reference,
+                    ]);
+                } else {
+                    TransfertActiviteService::log($transfert_logistique, 'validation_admin_accord');
+                }
             } catch (\InvalidArgumentException $e) {
                 TransfertActiviteService::log($transfert_logistique, 'validation_admin_accord');
 

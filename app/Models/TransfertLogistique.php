@@ -167,6 +167,11 @@ class TransfertLogistique extends Model
         return $this->statut instanceof StatutTransfert && $this->statut->isEditable();
     }
 
+    public function isTransit(): bool
+    {
+        return $this->statut === StatutTransfert::TRANSIT;
+    }
+
     public function isReception(): bool
     {
         return $this->statut === StatutTransfert::RECEPTION;

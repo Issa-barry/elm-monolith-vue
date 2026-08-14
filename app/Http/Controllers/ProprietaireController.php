@@ -146,7 +146,11 @@ class ProprietaireController extends Controller
                     // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
                     // on retombe sur la capacité par défaut du type (cf. VehiculeController).
                     'capacite_packs' => $vehicule->capacite_packs ?? $vehicule->typeVehicule?->capacite_defaut,
-                    'categorie' => $vehicule->categorie,
+                    // `categorie` ('interne'/'externe') n'existe plus en colonne sur
+                    // `vehicules` (remplacée par livraison_vente/livraison_logistique,
+                    // cf. Vehicule::scopeLivraisonLogistique) — reconstruite ici pour
+                    // ne pas casser ce contrat JSON déjà affiché par Proprietaires/Show.vue.
+                    'categorie' => $vehicule->livraison_logistique ? 'interne' : 'externe',
                     'is_active' => $vehicule->is_active,
                     'equipe_detail' => $equipe ? [
                         'nom' => $vehicule->nom_vehicule,

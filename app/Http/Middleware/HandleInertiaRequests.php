@@ -9,6 +9,7 @@ use App\Models\Site;
 use App\Models\TransfertLogistique;
 use App\Services\ModuleService;
 use App\Services\StockStatutService;
+use App\Services\ThemePolicyService;
 use App\Support\AppVersion;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
@@ -44,6 +45,21 @@ class HandleInertiaRequests extends Middleware
         }
 
         return app(StockStatutService::class)->compterAlertesPourOrganisation($user->organization_id);
+    }
+
+    /**
+     * Thème global (preset PrimeVue / couleur principale / surface), partagé à
+     * chaque page — pas seulement l'écran de réglages, cf. docs/theming.md.
+     * Résolu même pour un visiteur non authentifié (page de login) en retombant
+     * sur la première organisation du déploiement, comme ModuleService le fait
+     * déjà pour les flags publics.
+     */
+    private function theme(Request $request): array
+    {
+        $orgId = $request->user()?->organization_id
+            ?? ModuleService::publicOrganization()?->id;
+
+        return app(ThemePolicyService::class)->sharedPayload($orgId);
     }
 
     private function moduleFlags(Request $request): array
@@ -228,6 +244,7 @@ class HandleInertiaRequests extends Middleware
             'transferts_a_receptionner' => $this->transfertsAReceptionner($request),
             'propositions_a_traiter' => $this->propositionsATraiter($request),
             'module_flags' => $this->moduleFlags($request),
+            'theme' => $this->theme($request),
             'org_sites' => $this->orgSites($request),
             'seoDefaults' => $this->seoDefaults(),
             'flash' => [

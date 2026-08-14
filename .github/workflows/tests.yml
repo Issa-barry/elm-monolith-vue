@@ -70,6 +70,24 @@ jobs:
     # was canceled." à ~53-55 min sur chaque run). Marge généreuse plutôt qu'un ajustement
     # fin, en attendant un éventuel découpage en shards parallèles.
     timeout-minutes: 90
+    # .env.e2e (chargé par `php artisan serve --env=e2e`, cf. playwright.config.ts) pointe
+    # sur une vraie base MySQL isolée (elm_monolithe_e2e), pas sqlite — sans ce service le
+    # serveur E2E n'a aucune base à joindre : soit 500 immédiat sur /login (connexion
+    # refusée), soit timeout webServer (tentative de connexion qui traîne). Miroir CI du
+    # flow local `npm run e2e:db:reset` (voir package.json).
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: elm_monolithe_e2e
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
 
     steps:
       - name: Checkout
@@ -137,6 +155,15 @@ jobs:
           php artisan key:generate
           touch database/database.sqlite
           php artisan migrate --seed --force
+
+      # Base dédiée à `php artisan serve --env=e2e` (cf. .env.e2e) — le service
+      # mysql ci-dessus est vide au démarrage à part la DB elm_monolithe_e2e créée
+      # par MYSQL_DATABASE ; il faut encore la migrer/seeder avant que Playwright
+      # ne boot le serveur, exactement comme `npm run e2e:db:reset` en local.
+      - name: Prepare E2E database (.env.e2e)
+        run: |
+          php artisan config:clear
+          php artisan migrate:fresh --seed --env=e2e --force
 
       - name: Build assets
         env:
