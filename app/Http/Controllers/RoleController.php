@@ -2,14 +2,30 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\RoleNamingService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 
+/**
+ * CRUD de rôles en self-service, par organisation. Règle unique et centralisée pour toute la
+ * classe : **seul `super_admin` est un rôle système protégé** (jamais renommable, jamais
+ * supprimable, ses permissions restent gérées par le bypass Gate::before —
+ * cf. AuthServiceProvider). Tout autre rôle — y compris `admin_entreprise` et les rôles créés par
+ * RolesAndPermissionsSeeder — est un rôle métier ordinaire, entièrement CRUDable : rien n'est
+ * jamais protégé simplement parce qu'il vient d'un seeder.
+ *
+ * `name` (technique Spatie) n'est généré qu'une seule fois, à la création, et n'est plus jamais
+ * réécrit ensuite — même si le libellé change. Choix délibéré : `model_has_roles` référence les
+ * rôles par id (renommer `name` ne casserait aucune affectation), mais plusieurs Policies
+ * (CommandeVentePolicy, TransfertLogistiquePolicy, CashbackTransactionPolicy) et le middleware de
+ * route `role:...` testent `admin_entreprise` en toutes lettres — renommer son `name` technique
+ * romprait silencieusement ces vérifications. `label` (affiché) reste, lui, librement modifiable.
+ */
 class RoleController extends Controller
 {
     private const RESOURCES = [
@@ -33,19 +49,25 @@ class RoleController extends Controller
 
     private const ACTIONS = ['create', 'read', 'update', 'delete'];
 
+    public function __construct(private readonly RoleNamingService $naming) {}
+
     public function index(): Response
     {
         abort_unless(auth()->user()->isAdmin(), 403);
 
-        $roles = Role::withCount(['users', 'permissions'])->get()->map(fn (Role $role) => [
-            'id' => $role->id,
-            'name' => $role->name,
-            'code' => $role->code,
-            'is_system' => $role->is_system,
-            'users_count' => $role->users_count,
-            'permissions_count' => $role->permissions_count,
-            'updated_at' => $role->updated_at?->toISOString(),
-        ]);
+        $roles = $this->visibleRoles()
+            ->withCount(['users', 'permissions'])
+            ->get()
+            ->map(fn (Role $role) => [
+                'id' => $role->id,
+                'name' => $role->name,
+                'label' => $role->label ?? $role->name,
+                'code' => $role->code,
+                'is_system' => $this->isProtected($role),
+                'users_count' => $role->users_count,
+                'permissions_count' => $role->permissions_count,
+                'updated_at' => $role->updated_at?->toISOString(),
+            ]);
 
         return Inertia::render('Roles/Index', [
             'roles' => $roles,
@@ -63,28 +85,48 @@ class RoleController extends Controller
     /**
      * Un rôle créé ici démarre toujours sans aucune permission (jamais une copie d'un rôle
      * existant) — principe du moindre privilège : l'admin les accorde ensuite explicitement
-     * depuis l'écran d'édition (même matrice que pour les rôles système), plutôt que de risquer
-     * d'hériter silencieusement de droits non voulus.
+     * depuis l'écran d'édition. `name` (technique) et `code` (trinôme, si non saisi) sont générés
+     * automatiquement depuis le libellé par RoleNamingService — l'utilisateur ne réfléchit
+     * jamais aux contraintes techniques (cf. docblock de classe).
      */
     public function store(Request $request): RedirectResponse
     {
         abort_unless($this->canManageRoles(), 403);
 
         $data = $request->validate([
-            'name' => [
-                'required', 'string', 'max:50',
-                'regex:/^[a-z][a-z0-9_]*$/',
-                Rule::unique('roles', 'name'),
-            ],
+            'label' => ['required', 'string', 'max:100'],
             'code' => ['nullable', 'string', 'max:10'],
-        ], [
-            'name.regex' => 'Le nom technique doit être en minuscules, sans espace ni accent (ex: chef_agence).',
         ]);
 
-        $role = Role::create([
-            'name' => $data['name'],
-            'code' => $data['code'] ?? null,
-            'is_system' => false,
+        $orgId = auth()->user()->organization_id;
+
+        $name = $this->naming->technicalName($data['label']);
+        if ($this->naming->technicalNameTaken($name, $orgId)) {
+            throw ValidationException::withMessages([
+                'label' => "Un rôle équivalent existe déjà (« {$data['label']} ») — choisissez un libellé différent.",
+            ]);
+        }
+
+        $code = filled($data['code'] ?? null)
+            ? $this->naming->normalizeTrinome($data['code'])
+            : null;
+
+        if ($code !== null && $this->naming->trinomeTaken($code, $orgId)) {
+            throw ValidationException::withMessages([
+                'code' => "Ce trinôme est déjà utilisé par un autre rôle (« {$code} »).",
+            ]);
+        }
+
+        // Role::query()->create() plutôt que Role::create() : le create() statique de Spatie
+        // vérifie lui-même l'unicité (name, guard_name) de façon globale, ignorant
+        // organization_id — il bloquerait à tort deux organisations différentes qui créent
+        // chacune un rôle "chef_agence". La contrainte DB (roles_org_name_guard_unique, cf.
+        // migration) reste le vrai garde-fou, scopée correctement par organisation.
+        $role = Role::query()->create([
+            'organization_id' => $orgId,
+            'name' => $name,
+            'label' => $data['label'],
+            'code' => $code ?? $this->naming->uniqueTrinome($data['label'], $orgId),
         ]);
 
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
@@ -95,6 +137,7 @@ class RoleController extends Controller
     public function edit(Role $role): Response
     {
         abort_unless(auth()->user()->isAdmin(), 403);
+        $this->authorizeSameOrganization($role);
 
         $user = auth()->user();
         $isSuperAdmin = $user->isSuperAdmin();
@@ -106,8 +149,9 @@ class RoleController extends Controller
             'role' => [
                 'id' => $role->id,
                 'name' => $role->name,
+                'label' => $role->label ?? $role->name,
                 'code' => $role->code,
-                'is_system' => $role->is_system,
+                'is_system' => $this->isProtected($role),
                 'permissions' => $role->permissions->pluck('name')->values(),
                 'users_count' => $role->users()->count(),
             ],
@@ -121,29 +165,40 @@ class RoleController extends Controller
         $user = auth()->user();
 
         abort_unless($this->canManageRoles(), 403);
+        $this->authorizeSameOrganization($role);
 
-        // Le trinôme (et, pour un rôle non-système, le nom) sont indépendants de la matrice de
-        // permissions — traités avant, jamais bloqués par la protection super_admin ci-dessous
-        // (qui ne porte que sur les permissions).
+        $protected = $this->isProtected($role);
+
+        // Libellé et trinôme sont indépendants de la matrice de permissions — traités avant,
+        // jamais bloqués par la protection ci-dessous (qui ne porte que sur les permissions et,
+        // pour super_admin, sur le libellé/trinôme eux-mêmes).
         $identite = $request->validate([
-            'code' => ['nullable', 'string', 'max:10'],
-            'name' => [
-                $role->is_system ? 'prohibited' : 'sometimes',
-                'string', 'max:50',
-                'regex:/^[a-z][a-z0-9_]*$/',
-                Rule::unique('roles', 'name')->ignore($role->id),
-            ],
+            'label' => [$protected ? 'prohibited' : 'sometimes', 'string', 'max:100'],
+            'code' => [$protected ? 'prohibited' : 'nullable', 'string', 'max:10'],
         ], [
-            'name.prohibited' => 'Le nom d\'un rôle système ne peut pas être modifié.',
-            'name.regex' => 'Le nom technique doit être en minuscules, sans espace ni accent (ex: chef_agence).',
+            'label.prohibited' => "Le libellé du rôle système n'est pas modifiable.",
+            'code.prohibited' => "Le trinôme du rôle système n'est pas modifiable.",
         ]);
-        $role->code = $identite['code'] ?? null;
-        if (array_key_exists('name', $identite)) {
-            $role->name = $identite['name'];
+
+        if (array_key_exists('label', $identite)) {
+            $role->label = $identite['label'];
         }
+
+        if (array_key_exists('code', $identite)) {
+            $code = filled($identite['code']) ? $this->naming->normalizeTrinome($identite['code']) : null;
+
+            if ($code !== null && $this->naming->trinomeTaken($code, $role->organization_id, $role->id)) {
+                throw ValidationException::withMessages([
+                    'code' => "Ce trinôme est déjà utilisé par un autre rôle (« {$code} »).",
+                ]);
+            }
+
+            $role->code = $code;
+        }
+
         $role->save();
 
-        if ($role->name === 'super_admin') {
+        if ($protected) {
             return back()->with('success', 'Rôle mis à jour — ses permissions restent gérées automatiquement.');
         }
 
@@ -184,17 +239,16 @@ class RoleController extends Controller
     }
 
     /**
-     * Un rôle système (créé par RolesAndPermissionsSeeder) n'est jamais supprimable — son name
-     * est référencé en dur ailleurs (middleware `role:` des routes, quelques Policies), le
-     * supprimer casserait ces endroits pour tous les clients, pas seulement celui qui l'a fait.
-     * Un rôle custom encore rattaché à des utilisateurs est refusé pour ne jamais les laisser
-     * silencieusement sans rôle — l'appelant doit d'abord les réaffecter.
+     * `super_admin` n'est jamais supprimable. Tout autre rôle l'est, y compris `admin_entreprise`
+     * — mais jamais aveuglément : un rôle encore attribué à des utilisateurs est refusé pour ne
+     * jamais les laisser silencieusement sans rôle, l'appelant doit d'abord les réaffecter.
      */
     public function destroy(Role $role): RedirectResponse
     {
         abort_unless($this->canManageRoles(), 403);
+        $this->authorizeSameOrganization($role);
 
-        if ($role->is_system) {
+        if ($this->isProtected($role)) {
             return back()->with('error', 'Ce rôle est un rôle système — il ne peut pas être supprimé.');
         }
 
@@ -208,6 +262,42 @@ class RoleController extends Controller
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
         return redirect()->route('roles.index')->with('success', 'Rôle supprimé.');
+    }
+
+    /**
+     * Seule définition de "rôle système protégé" de toute l'application — jamais redupliquée
+     * ailleurs (cf. docblock de classe).
+     */
+    private function isProtected(Role $role): bool
+    {
+        return $role->name === 'super_admin';
+    }
+
+    /**
+     * Rôles visibles pour l'utilisateur courant : les rôles système (partagés, organization_id
+     * null) + les rôles métier de sa propre organisation — jamais ceux d'une autre organisation.
+     */
+    private function visibleRoles()
+    {
+        $orgId = auth()->user()->organization_id;
+
+        return Role::where(function ($q) use ($orgId) {
+            $q->whereNull('organization_id')->orWhere('organization_id', $orgId);
+        });
+    }
+
+    /**
+     * Un rôle système (organization_id null) est visible/éditable par tous les admins ; un rôle
+     * métier n'appartient qu'à sa propre organisation — jamais accessible à une autre, même en
+     * lecture, pour ne jamais laisser fuiter la matrice de permissions d'une organisation vers
+     * une autre (cf. migration add_code_and_is_system_to_roles_table).
+     */
+    private function authorizeSameOrganization(Role $role): void
+    {
+        abort_if(
+            $role->organization_id !== null && $role->organization_id !== auth()->user()->organization_id,
+            403
+        );
     }
 
     private function canManageRoles(): bool

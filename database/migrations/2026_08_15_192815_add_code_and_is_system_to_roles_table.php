@@ -6,37 +6,57 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Prépare le CRUD de rôles :
- *  - `code` : trinôme/abréviation métier (ex: "PDG", "DG"), purement informatif — jamais lu par
- *    une Policy/Gate, aucune logique n'en dépend. Laissé null pour les rôles déjà en base ; la
- *    valeur est un choix métier, pas quelque chose que cette migration doit deviner.
- *  - `is_system` : distingue les rôles créés par RolesAndPermissionsSeeder (protégés — jamais
- *    renommables ni supprimables, cf. RoleController) des rôles créés ensuite via le CRUD par un
- *    client (renommables/supprimables tant qu'aucun utilisateur n'y est rattaché). Sans cette
- *    colonne, un CRUD de rôles pourrait supprimer 'manager' ou 'comptable' et casser le
- *    middleware `role:` des routes (routes/web.php) qui les nomme en dur.
+ * Prépare le CRUD de rôles en self-service, par organisation :
+ *  - `label` : nom affiché, librement modifiable — distinct de `name` (technique Spatie, généré
+ *    une seule fois à la création et jamais réécrit ensuite, cf. RoleNamingService). Backfillé à
+ *    `name` pour les rôles déjà en base, puis affiné par RolesAndPermissionsSeeder pour les 8
+ *    rôles système.
+ *  - `code` : trinôme/abréviation métier (ex: "PDG"), unique par organisation.
+ *  - `organization_id` : null pour les 8 rôles système partagés (créés par
+ *    RolesAndPermissionsSeeder, jamais dupliqués) ; rempli pour tout rôle créé via le CRUD
+ *    (RoleController) — chaque organisation a ses propres rôles métier, jamais partagés entre
+ *    elles (la table `roles` de Spatie est globale par défaut, sans cette colonne deux
+ *    organisations SaaS se partageraient silencieusement les mêmes rôles/permissions).
+ *
+ * "Rôle système protégé" n'est plus une colonne (l'ancien `is_system`, retiré) : c'est désormais
+ * une règle unique, centralisée dans RoleController — `name === 'super_admin'` — cf. sa docblock.
+ *
+ * La contrainte unique d'origine de Spatie (`name`, `guard_name`, globale) est remplacée par une
+ * contrainte scopée par organisation : deux organisations peuvent avoir un rôle de même nom
+ * technique, jamais deux fois la même organisation.
  */
 return new class extends Migration
 {
     public function up(): void
     {
         Schema::table('roles', function (Blueprint $table) {
-            $table->string('code', 10)->nullable()->after('name');
-            $table->boolean('is_system')->default(false)->after('code');
+            $table->foreignUlid('organization_id')->nullable()->after('id')->constrained()->cascadeOnDelete();
+            $table->string('label')->nullable()->after('name');
+            $table->string('code', 10)->nullable()->after('label');
         });
 
-        DB::table('roles')
-            ->whereIn('name', [
-                'super_admin', 'admin_entreprise', 'manager',
-                'commerciale', 'comptable', 'client', 'proprietaire', 'livreur',
-            ])
-            ->update(['is_system' => true]);
+        // Backfill universel avant que RolesAndPermissionsSeeder n'affine les 8 rôles système
+        // avec un libellé français propre — évite qu'un rôle déjà en base reste sans libellé.
+        DB::table('roles')->update(['label' => DB::raw('name')]);
+
+        Schema::table('roles', function (Blueprint $table) {
+            $table->dropUnique('roles_name_guard_name_unique');
+            $table->unique(['organization_id', 'name', 'guard_name'], 'roles_org_name_guard_unique');
+            $table->unique(['organization_id', 'code'], 'roles_org_code_unique');
+        });
     }
 
     public function down(): void
     {
         Schema::table('roles', function (Blueprint $table) {
-            $table->dropColumn(['code', 'is_system']);
+            $table->dropUnique('roles_org_code_unique');
+            $table->dropUnique('roles_org_name_guard_unique');
+            $table->unique(['name', 'guard_name'], 'roles_name_guard_name_unique');
+        });
+
+        Schema::table('roles', function (Blueprint $table) {
+            $table->dropConstrainedForeignId('organization_id');
+            $table->dropColumn(['label', 'code']);
         });
     }
 };

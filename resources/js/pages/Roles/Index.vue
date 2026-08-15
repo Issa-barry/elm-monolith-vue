@@ -18,6 +18,7 @@ import { MoreHorizontal, Plus, ShieldCheck, Trash2 } from 'lucide-vue-next';
 interface Role {
     id: number;
     name: string;
+    label: string;
     code: string | null;
     is_system: boolean;
     users_count: number;
@@ -36,17 +37,6 @@ const breadcrumbItems: BreadcrumbItem[] = [
         href: '/backoffice/roles',
     },
 ];
-
-const roleLabels: Record<string, string> = {
-    super_admin: 'Super Admin',
-    admin_entreprise: 'Admin Entreprise',
-    commerciale: 'Commerciale',
-    comptable: 'Comptable',
-};
-
-function displayRoleName(name: string): string {
-    return roleLabels[name] ?? name;
-}
 
 function roleDotClass(name: string): string {
     if (name === 'super_admin') return 'bg-violet-500';
@@ -80,7 +70,7 @@ function destroyRole(role: Role) {
 
     if (
         confirm(
-            `Supprimer le rôle « ${displayRoleName(role.name)} » ? Cette action est irréversible.`,
+            `Supprimer le rôle « ${role.label} » ? Cette action est irréversible.`,
         )
     ) {
         router.delete(`/backoffice/roles/${role.id}`);
@@ -150,11 +140,7 @@ function destroyRole(role: Role) {
                                                 <p
                                                     class="flex items-center gap-2 font-medium"
                                                 >
-                                                    {{
-                                                        displayRoleName(
-                                                            role.name,
-                                                        )
-                                                    }}
+                                                    {{ role.label }}
                                                     <span
                                                         v-if="role.code"
                                                         class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] tracking-wide text-muted-foreground uppercase"
@@ -279,7 +265,7 @@ function destroyRole(role: Role) {
                         />
                         <div>
                             <p class="text-sm font-medium">
-                                {{ displayRoleName(role.name) }}
+                                {{ role.label }}
                             </p>
                             <p class="text-xs text-muted-foreground">
                                 {{ usersLabel(role.users_count) }}

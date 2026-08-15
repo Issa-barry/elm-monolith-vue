@@ -13,7 +13,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const form = useForm({
-    name: '',
+    label: '',
     code: '',
 });
 
@@ -42,27 +42,25 @@ function submit() {
                 @submit.prevent="submit"
             >
                 <div>
-                    <Label for="name" class="mb-1.5 block"
-                        >Nom technique
+                    <Label for="label" class="mb-1.5 block"
+                        >Nom du rôle
                         <span class="text-destructive">*</span></Label
                     >
                     <InputText
-                        id="name"
-                        v-model="form.name"
+                        id="label"
+                        v-model="form.label"
                         class="w-full"
-                        :class="{ 'p-invalid': form.errors.name }"
-                        placeholder="Ex: chef_agence"
+                        :class="{ 'p-invalid': form.errors.label }"
+                        placeholder="Ex: Président directeur Général"
                     />
                     <p
-                        v-if="form.errors.name"
+                        v-if="form.errors.label"
                         class="mt-1 text-xs text-destructive"
                     >
-                        {{ form.errors.name }}
+                        {{ form.errors.label }}
                     </p>
                     <p v-else class="mt-1 text-xs text-muted-foreground">
-                        Minuscules, sans espace ni accent — utilisé partout
-                        dans le code, ne pourra plus être changé une fois des
-                        utilisateurs rattachés.
+                        Le nom technique est généré automatiquement.
                     </p>
                 </div>
 
@@ -75,7 +73,7 @@ function submit() {
                         v-model="form.code"
                         class="w-full max-w-[10rem]"
                         :class="{ 'p-invalid': form.errors.code }"
-                        placeholder="Ex: CA"
+                        placeholder="Ex: PDG"
                         maxlength="10"
                     />
                     <p
@@ -85,8 +83,8 @@ function submit() {
                         {{ form.errors.code }}
                     </p>
                     <p v-else class="mt-1 text-xs text-muted-foreground">
-                        Optionnel — affiché à côté du nom du rôle, purement
-                        informatif.
+                        Optionnel — s'il est vide, il sera généré
+                        automatiquement.
                     </p>
                 </div>
 
