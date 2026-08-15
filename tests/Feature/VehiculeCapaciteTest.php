@@ -9,6 +9,7 @@ use App\Models\Produit;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TypeVehicule;
+use App\Models\User;
 use App\Models\VarianteStock;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -69,6 +70,22 @@ class VehiculeCapaciteTest extends TestCase
             'organization_id' => $org->id,
             'proprietaire_id' => $proprietaire->id,
         ], $overrides));
+    }
+
+    /**
+     * Utilisateur avec la permission ventes.qte.update — ne doit plus avoir aucun effet sur le
+     * contrôle de capacité (décision produit du 15/08/2026, cf. VehiculeCapaciteService).
+     */
+    private function makeUserAvecQteUpdate(): User
+    {
+        $user = $this->makeUserWithPermissions($this->org, [
+            'ventes.read', 'ventes.create', 'ventes.update', 'ventes.delete',
+            'vehicules.read', 'vehicules.create', 'vehicules.update', 'vehicules.delete',
+            'ventes.qte.update',
+        ]);
+        $user->sites()->attach($this->defaultSite->id, ['role' => 'employe', 'is_default' => true]);
+
+        return $user;
     }
 
     // ── Vente web — régime "par catégorie" ───────────────────────────────────────
@@ -245,6 +262,45 @@ class VehiculeCapaciteTest extends TestCase
                 ],
             ])
             ->assertSessionHasErrors('lignes');
+    }
+
+    // ── Aucun bypass de capacité, quel que soit le rôle ──────────────────────────
+
+    public function test_permission_qte_update_ne_permet_plus_de_depasser_le_regime_legacy(): void
+    {
+        $categorie = $this->makeCategorie($this->org, 'Divers');
+        $vehicule = $this->makeVehicule($this->org, ['capacite_packs' => 5]);
+        $produit = $this->makeProduitAvecVariante($this->org, ['nom' => 'Produit', 'categorie_id' => $categorie->id], ['prix_vente' => 1000]);
+
+        $this->actingAs($this->makeUserAvecQteUpdate())
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 6, 'prix_vente' => 1000],
+                ],
+            ])
+            ->assertSessionHasErrors('lignes');
+
+        $this->assertDatabaseMissing('commandes_ventes', ['vehicule_id' => $vehicule->id]);
+    }
+
+    public function test_permission_qte_update_ne_permet_plus_de_depasser_le_regime_par_categorie(): void
+    {
+        $sachet = $this->makeCategorie($this->org, 'Sachet');
+        $vehicule = $this->makeVehicule($this->org, ['capacite_packs' => null]);
+        $vehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachet->id, 'capacite_max' => 70]);
+        $produitSachet = $this->makeProduitAvecVariante($this->org, ['nom' => 'Sachet 500ml', 'categorie_id' => $sachet->id], ['prix_vente' => 1000]);
+
+        $this->actingAs($this->makeUserAvecQteUpdate())
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $produitSachet->id, 'qte' => 71, 'prix_vente' => 1000],
+                ],
+            ])
+            ->assertSessionHasErrors('lignes');
+
+        $this->assertDatabaseMissing('commandes_ventes', ['vehicule_id' => $vehicule->id]);
     }
 
     // ── PDV ───────────────────────────────────────────────────────────────────────

@@ -991,6 +991,25 @@ class VehiculeTest extends TestCase
             ->assertSessionHasErrors('immatriculation');
     }
 
+    /** Même plaque, écrite différemment (espaces/points/casse) : doit rester un doublon détecté. */
+    public function test_store_fails_si_immatriculation_correspond_apres_normalisation(): void
+    {
+        Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'immatriculation' => 'BK-4627-02',
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Camion Doublon',
+                'immatriculation' => 'bk 4627.02',
+                'type_vehicule_id' => $this->typeId(),
+            ])
+            ->assertSessionHasErrors('immatriculation');
+
+        $this->assertSame(1, Vehicule::where('organization_id', $this->org->id)->count());
+    }
+
     public function test_update_fails_si_immatriculation_utilisee_par_autre_vehicule(): void
     {
         $vehicule = $this->makeVehicule($this->org);

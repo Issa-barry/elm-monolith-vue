@@ -432,6 +432,63 @@ class ImportFlotteTest extends TestCase
         $this->assertSame(0, Vehicule::where('organization_id', $this->org->id)->count());
     }
 
+    /**
+     * Même plaque déjà en base, écrite différemment dans le fichier (espaces/points/tirets/casse)
+     * : doit retrouver le véhicule existant, jamais en créer un doublon écrit différemment.
+     */
+    public function test_analyse_retrouve_vehicule_existant_malgre_un_format_dimmatriculation_different(): void
+    {
+        $existant = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'immatriculation' => 'BK-4627-02',
+        ]);
+
+        $import = $this->importer(
+            [$this->ligneVehicule(['vehicule_immatriculation' => 'bk 4627.02'])],
+            [$this->ligneLivreurChauffeur(['vehicule_immatriculation' => 'bk 4627.02'])]
+        );
+
+        $this->assertSame(0, $import->nb_groupes_erreur);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $this->assertSame(1, Vehicule::where('organization_id', $this->org->id)->count());
+        $this->assertSame('BK-4627-02', $existant->fresh()->immatriculation);
+    }
+
+    /**
+     * Immatriculation proche d'un véhicule déjà en base, mais pas identique même après
+     * normalisation (ex : suffixe manquant) — jamais fusionné automatiquement, mais signalé
+     * pour que l'utilisateur confirme/corrige au lieu de créer silencieusement un doublon.
+     */
+    public function test_analyse_signale_une_immatriculation_proche_dun_vehicule_existant(): void
+    {
+        Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom_vehicule' => 'Cousin',
+            'immatriculation' => 'BK-4627-02',
+        ]);
+
+        $import = $this->importer(
+            [$this->ligneVehicule(['vehicule_immatriculation' => 'BK4627'])],
+            [$this->ligneLivreurChauffeur(['vehicule_immatriculation' => 'BK4627'])]
+        );
+
+        $this->assertSame(1, $import->nb_groupes_erreur);
+        $erreur = $import->rapport['groupes'][0]['erreurs'][0];
+        $this->assertStringContainsString("Immatriculation proche d'un véhicule existant", $erreur);
+        $this->assertStringContainsString('Cousin', $erreur);
+        $this->assertStringContainsString('BK-4627-02', $erreur);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertStatus(422);
+
+        $this->assertSame(1, Vehicule::where('organization_id', $this->org->id)->count());
+    }
+
     public function test_analyse_flags_error_for_livreur_attached_to_two_different_vehicules(): void
     {
         // Un livreur pas encore en base, rattaché à deux véhicules différents

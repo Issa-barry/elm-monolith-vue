@@ -33,6 +33,36 @@ class Vehicule extends Model
         'is_active',
     ];
 
+    /**
+     * `immatriculation_normalisee` n'est jamais dans $fillable : elle est recalculée
+     * automatiquement à chaque sauvegarde (cf. booted() ci-dessous), jamais confiée à
+     * l'appelant — un seul endroit peut la faire diverger de `immatriculation`, jamais aucun.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (self $vehicule) {
+            $vehicule->immatriculation_normalisee = self::normaliserImmatriculation($vehicule->immatriculation);
+        });
+    }
+
+    /**
+     * Clé de comparaison stricte pour détecter les doublons "même plaque, saisie différemment"
+     * (tirets/espaces/points/casse ignorés) — ex : "BK-4627-02", "bk 4627 02" et "BK.4627.02"
+     * normalisent tous vers "BK462702". Utilisée pour l'unicité par organisation (cf. migration
+     * add_immatriculation_normalisee_to_vehicules_table) et par ImportFlotteParser pour
+     * retrouver un véhicule existant quel que soit le format saisi dans le fichier.
+     */
+    public static function normaliserImmatriculation(?string $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $value = mb_strtoupper(trim($value), 'UTF-8');
+
+        return preg_replace('/[^A-Z0-9]/u', '', $value) ?? '';
+    }
+
     protected function casts(): array
     {
         return [

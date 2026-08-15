@@ -115,6 +115,7 @@ class FactureVenteTest extends TestCase
         $commande->lignes()->create([
             'variante_id' => $produit->variantePrincipale()->first()->id,
             'quantite_demandee' => 1,
+            'quantite_chargee' => 1,
             'prix_vente_snapshot' => 10000,
             'prix_usine_snapshot' => 0,
             'total_ligne' => 10000,
@@ -177,6 +178,7 @@ class FactureVenteTest extends TestCase
         $commande->lignes()->create([
             'variante_id' => $produit->variantePrincipale()->first()->id,
             'quantite_demandee' => 1,
+            'quantite_chargee' => 1,
             'prix_vente_snapshot' => 100000,
             'prix_usine_snapshot' => 0,
             'total_ligne' => 100000,
@@ -255,6 +257,7 @@ class FactureVenteTest extends TestCase
         $commande->lignes()->create([
             'variante_id' => $produit->variantePrincipale()->first()->id,
             'quantite_demandee' => 1,
+            'quantite_chargee' => 1,
             'prix_vente_snapshot' => 5000,
             'prix_usine_snapshot' => 0,
             'total_ligne' => 5000,

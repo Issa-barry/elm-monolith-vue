@@ -24,6 +24,12 @@ use Illuminate\Validation\ValidationException;
  *   plafonds des différentes catégories sont indépendants (cumulables), pas partagés — décision
  *   produit du 10/08/2026 : un véhicule à 70 sachets + 100 bouteilles peut partir chargé des
  *   deux à la fois.
+ *
+ * Contrôle strict, sans exception de rôle (décision produit du 15/08/2026) : la capacité d'un
+ * véhicule ne peut jamais être dépassée, quel que soit l'utilisateur. Il n'existe plus de
+ * paramètre de bypass — l'ancien mécanisme reposait sur la permission ventes.qte.update, qui
+ * ne sert plus qu'à autoriser la saisie manuelle du champ quantité côté formulaire, sans aucun
+ * effet sur ce service.
  */
 class VehiculeCapaciteService
 {
@@ -66,6 +72,9 @@ class VehiculeCapaciteService
      * tableau brut de la requête ([['produit_id' => ..., $qteKey => ...], ...]) — $qteKey vaut
      * 'qte' côté vente web, 'quantite' côté PDV, seule différence entre les deux appelants.
      *
+     * Aucun dépassement n'est jamais toléré, pour aucun rôle : le seul levier disponible est
+     * $exigerChargementComplet (paramètre organisationnel, borne basse uniquement).
+     *
      * @param  array<int, array<string, mixed>>  $lignes
      *
      * @throws ValidationException
@@ -75,12 +84,11 @@ class VehiculeCapaciteService
         array $lignes,
         string $qteKey,
         bool $exigerChargementComplet,
-        bool $peutDepasserCapacite,
     ): void {
         $capacitesParCategorie = $this->capacitesParCategorie($vehicule);
 
         if ($capacitesParCategorie->isEmpty()) {
-            $this->verifierGlobalLegacy($vehicule, $lignes, $qteKey, $exigerChargementComplet, $peutDepasserCapacite);
+            $this->verifierGlobalLegacy($vehicule, $lignes, $qteKey, $exigerChargementComplet);
 
             return;
         }
@@ -108,7 +116,7 @@ class VehiculeCapaciteService
 
             $nom = Categorie::find($categorieId)?->nom ?? 'catégorie';
 
-            if ($qte > $max && ! $peutDepasserCapacite) {
+            if ($qte > $max) {
                 throw ValidationException::withMessages([
                     'lignes' => "La quantité « {$nom} » ({$qte}) dépasse la capacité du véhicule pour cette catégorie ({$max} maximum).",
                 ]);
@@ -127,7 +135,6 @@ class VehiculeCapaciteService
         array $lignes,
         string $qteKey,
         bool $exigerChargementComplet,
-        bool $peutDepasserCapacite,
     ): void {
         $capacite = $this->capaciteGlobaleLegacy($vehicule);
 
@@ -139,7 +146,7 @@ class VehiculeCapaciteService
 
         $qteTotale = collect($lignes)->sum(fn (array $ligne): int => (int) ($ligne[$qteKey] ?? 0));
 
-        if ($qteTotale > $capacite && ! $peutDepasserCapacite) {
+        if ($qteTotale > $capacite) {
             throw ValidationException::withMessages([
                 'lignes' => "La quantité totale ({$qteTotale} packs) dépasse la capacité du véhicule ({$capacite} packs maximum).",
             ]);

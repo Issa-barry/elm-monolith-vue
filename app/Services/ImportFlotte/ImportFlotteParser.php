@@ -516,10 +516,38 @@ class ImportFlotteParser
         // Résolu ici (avant les colonnes d'usage ci-dessous, qui en ont besoin pour leur
         // repli) plutôt que plus bas dans la méthode comme avant — même requête, juste
         // remontée.
+        //
+        // Sur immatriculation_normalisee (tirets/espaces/points/casse ignorés), pas sur la
+        // colonne affichée : "BK-4627-02" et "bk 4627 02" doivent retrouver le même véhicule
+        // déjà en base, jamais en créer un doublon simplement écrit différemment (cf.
+        // Vehicule::normaliserImmatriculation()).
+        $immatriculationNormalisee = Vehicule::normaliserImmatriculation($immatriculation);
         $vehiculeExistant = Vehicule::where('organization_id', $orgId)
-            ->where('immatriculation', $immatriculation)
+            ->where('immatriculation_normalisee', $immatriculationNormalisee)
             ->whereNull('deleted_at')
             ->first();
+
+        // Aucune correspondance exacte (même normalisée) : avant de conclure "nouveau
+        // véhicule", on vérifie qu'il ne s'agit pas d'une plaque mal ressaisie désignant en
+        // réalité un véhicule déjà en base (ex : "BK4627" au lieu de "BK-4627-02", suffixe
+        // oublié) — même mécanique "valeur proche, à confirmer" que pour le type/site
+        // (ReferenceValueResolver::suggestClosest()), jamais une fusion automatique.
+        if (! $vehiculeExistant) {
+            $vehiculesOrg = Vehicule::where('organization_id', $orgId)->whereNull('deleted_at')->with('proprietaire')->get();
+            $procheImmatNormalisee = ReferenceValueResolver::suggestClosest(
+                $immatriculationNormalisee,
+                $vehiculesOrg,
+                fn ($v) => (string) $v->immatriculation_normalisee,
+            );
+
+            if ($procheImmatNormalisee !== null) {
+                $procheVehicule = $vehiculesOrg->first(fn ($v) => $v->immatriculation_normalisee === $procheImmatNormalisee);
+                $avertissements[] = "\"{$immatriculation}\" ressemble à un véhicule déjà existant : \"{$procheVehicule->nom_vehicule}\" ({$procheVehicule->immatriculation}).";
+                $erreurs[] = "Immatriculation proche d'un véhicule existant : \"{$procheVehicule->nom_vehicule}\" ({$procheVehicule->immatriculation}"
+                    .($procheVehicule->proprietaire ? ", propriétaire {$procheVehicule->proprietaire->nom_complet}" : '')
+                    .'). Vérifiez qu\'il ne s\'agit pas du même véhicule avant de continuer, ou corrigez l\'immatriculation si c\'est bien un véhicule différent.';
+            }
+        }
 
         // Colonnes facultatives — cellule vide/absente : "false" à la création d'un
         // nouveau véhicule (aucun usage saisi = aucun usage attribué, jamais un usage

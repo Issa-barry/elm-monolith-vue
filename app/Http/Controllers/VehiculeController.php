@@ -599,6 +599,26 @@ class VehiculeController extends Controller
             ->value('id');
     }
 
+    /**
+     * Compare sur `immatriculation_normalisee` (tirets/espaces/points/casse ignorés, cf.
+     * Vehicule::normaliserImmatriculation()) plutôt que sur `immatriculation` brut : deux
+     * saisies qui désignent la même plaque ("BK-4627-02" vs "bk 4627 02") doivent être
+     * rejetées comme un doublon, pas seulement une chaîne strictement identique.
+     */
+    private function immatriculationUniqueRule(string $orgId, ?Vehicule $vehicule): \Closure
+    {
+        return function (string $attribute, mixed $value, \Closure $fail) use ($orgId, $vehicule) {
+            $conflit = Vehicule::where('organization_id', $orgId)
+                ->where('immatriculation_normalisee', Vehicule::normaliserImmatriculation((string) $value))
+                ->when($vehicule, fn ($q) => $q->where('id', '!=', $vehicule->id))
+                ->first();
+
+            if ($conflit) {
+                $fail("Ce matricule correspond déjà au véhicule \"{$conflit->nom_vehicule}\" ({$conflit->immatriculation}).");
+            }
+        };
+    }
+
     private function normalizeStrings(array $data): array
     {
         if (! empty($data['nom_vehicule'])) {
@@ -617,14 +637,9 @@ class VehiculeController extends Controller
      */
     private function validationRules(string $orgId, ?Vehicule $vehicule = null): array
     {
-        $immatriculationRule = Rule::unique('vehicules', 'immatriculation')->where('organization_id', $orgId);
-        if ($vehicule) {
-            $immatriculationRule = $immatriculationRule->ignore($vehicule->id);
-        }
-
         return [
             'nom_vehicule' => 'required|string|max:100',
-            'immatriculation' => ['required', 'string', 'max:20', $immatriculationRule],
+            'immatriculation' => ['required', 'string', 'max:20', $this->immatriculationUniqueRule($orgId, $vehicule)],
             'type_vehicule_id' => [
                 'required', 'string',
                 Rule::exists('type_vehicules', 'id')->where('organization_id', $orgId)->whereNull('deleted_at'),
@@ -696,7 +711,6 @@ class VehiculeController extends Controller
         return [
             'nom_vehicule.required' => 'Le nom du véhicule est obligatoire.',
             'immatriculation.required' => "L'immatriculation est obligatoire.",
-            'immatriculation.unique' => 'Ce matricule est déjà utilisé par un autre véhicule.',
             'type_vehicule_id.required' => 'Le type de véhicule est obligatoire.',
             'type_vehicule_id.exists' => 'Type de véhicule invalide.',
             'site_id.required' => 'Le site est obligatoire.',

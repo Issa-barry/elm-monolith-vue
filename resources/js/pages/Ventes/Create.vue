@@ -57,8 +57,15 @@ interface SolvabiliteResult {
 interface ProduitOption {
     id: number;
     nom: string;
+    categorie_id: number | null;
     prix_vente: number;
     prix_usine: number;
+}
+
+interface CapaciteCategorie {
+    categorie_id: number;
+    categorie_nom: string;
+    capacite_max: number;
 }
 
 interface VehiculeOption {
@@ -66,6 +73,7 @@ interface VehiculeOption {
     nom_vehicule: string;
     immatriculation: string;
     capacite_packs: number | null;
+    capacites_categorie: CapaciteCategorie[];
     livreur_nom: string | null;
     livreur_telephone: string | null;
 }
@@ -410,21 +418,70 @@ const capaciteVehiculeSelectionne = computed(
     () => vehiculeSelectionne.value?.capacite_packs ?? null,
 );
 
+// Plafonds par catégorie du véhicule sélectionné (Sachet, Bouteille, ...) — vide tant que
+// l'organisation n'a rien configuré, auquel cas on retombe sur capaciteVehiculeSelectionne
+// (régime legacy), exactement comme VehiculeCapaciteService côté serveur.
+const capacitesParCategorieSelectionnee = computed(
+    () => vehiculeSelectionne.value?.capacites_categorie ?? [],
+);
+
+// Quantité commandée par catégorie effectivement vendue (les catégories absentes de la
+// commande ne sont pas remontées ici — même logique que le regroupement backend).
+const usageParCategorie = computed(() => {
+    const capacites = capacitesParCategorieSelectionnee.value;
+    if (capacites.length === 0) return [];
+
+    const qteParCategorie = new Map<number, number>();
+    for (const ligne of form.lignes) {
+        if (ligne.produit_id === null) continue;
+        const categorieId =
+            props.produits.find((p) => p.id === ligne.produit_id)
+                ?.categorie_id ?? null;
+        if (categorieId === null) continue;
+        qteParCategorie.set(
+            categorieId,
+            (qteParCategorie.get(categorieId) ?? 0) + (ligne.qte ?? 0),
+        );
+    }
+
+    return [...qteParCategorie.entries()]
+        .map(([categorieId, qte]) => {
+            const cap = capacites.find((c) => c.categorie_id === categorieId);
+            return cap ? { ...cap, qte } : null;
+        })
+        .filter((c): c is CapaciteCategorie & { qte: number } => c !== null);
+});
+
+// Aucun dépassement n'est jamais toléré, pour aucun rôle (décision produit du 15/08/2026) —
+// can_modifier_qte n'autorise que la saisie manuelle du champ quantité, plus aucun bypass de
+// capacité. Seul autoriser_saisie_dessous_qte_max reste un levier, et uniquement à la baisse.
 const capaciteVehiculeConforme = computed(() => {
     if (form.vehicule_id === null) return true;
-    if (capaciteVehiculeSelectionne.value === null) return false;
 
+    // Régime par catégorie : chaque famille vendue doit rester sous SON propre plafond,
+    // indépendamment des autres (cumulable, jamais un plafond global partagé).
+    if (capacitesParCategorieSelectionnee.value.length > 0) {
+        return usageParCategorie.value.every((c) => {
+            if (c.qte > c.capacite_max) return false;
+            if (c.qte < c.capacite_max) return props.autoriser_saisie_dessous_qte_max;
+            return true;
+        });
+    }
+
+    // Régime legacy : un seul plafond global, toutes catégories confondues.
+    if (capaciteVehiculeSelectionne.value === null) return false;
     const qte = quantiteTotale.value;
     const cap = capaciteVehiculeSelectionne.value;
-
-    // Dépassement : admin (can_modifier_qte) peut dépasser la capacité
-    if (qte > cap) return props.can_modifier_qte;
-
-    // En dessous → paramètre organisationnel, s'applique à tous
+    if (qte > cap) return false;
     if (qte < cap) return props.autoriser_saisie_dessous_qte_max;
-
     return true;
 });
+
+function capaciteLigneClass(qte: number, max: number): string {
+    if (qte > max) return 'text-destructive';
+    if (qte < max) return 'text-amber-600 dark:text-amber-400';
+    return 'text-emerald-600 dark:text-emerald-400';
+}
 
 // ── Reset au montage (évite la persistance SPA entre navigations) ─────────────
 onMounted(() => {
@@ -1296,63 +1353,86 @@ function confirmerEtCreer() {
                                 class="h-3.5 w-3.5 cursor-help"
                             />
                         </span>
-                        <span
-                            v-if="form.vehicule_id !== null"
-                            :class="
-                                capaciteVehiculeSelectionne === null
-                                    ? 'text-muted-foreground'
-                                    : capaciteVehiculeConforme
-                                      ? quantiteTotale ===
-                                        capaciteVehiculeSelectionne
-                                          ? 'text-emerald-600 dark:text-emerald-400'
-                                          : 'text-amber-600 dark:text-amber-400'
-                                      : 'text-destructive'
-                            "
-                        >
-                            Capacité :
-                            {{ quantiteTotale }}
-                            /
-                            {{
-                                capaciteVehiculeSelectionne === null
-                                    ? '—'
-                                    : capaciteVehiculeSelectionne
-                            }}
-                            packs
-                            <template
-                                v-if="capaciteVehiculeSelectionne !== null"
+                        <template v-if="form.vehicule_id !== null">
+                            <!-- Régime par catégorie : un plafond indépendant par famille -->
+                            <span
+                                v-for="c in usageParCategorie"
+                                :key="c.categorie_id"
+                                :class="capaciteLigneClass(c.qte, c.capacite_max)"
                             >
-                                <span
-                                    v-if="
-                                        quantiteTotale ===
-                                        capaciteVehiculeSelectionne
-                                    "
-                                    >✓</span
-                                >
-                                <span
-                                    v-else-if="
-                                        quantiteTotale <
-                                        capaciteVehiculeSelectionne
-                                    "
-                                >
-                                    ({{
-                                        capaciteVehiculeSelectionne -
-                                        quantiteTotale
-                                    }}
-                                    manquant(s){{
+                                {{ c.categorie_nom }} : {{ c.qte }} /
+                                {{ c.capacite_max }}
+                                <span v-if="c.qte === c.capacite_max">✓</span>
+                                <span v-else-if="c.qte < c.capacite_max">
+                                    ({{ c.capacite_max - c.qte }} manquant(s){{
                                         !autoriser_saisie_dessous_qte_max
                                             ? ' — chargement complet requis'
                                             : ''
                                     }})</span
                                 >
                                 <span v-else>
-                                    (+{{
-                                        quantiteTotale -
-                                        capaciteVehiculeSelectionne
-                                    }}
-                                    en trop)</span
+                                    (+{{ c.qte - c.capacite_max }} en
+                                    trop)</span
                                 >
-                            </template>
-                        </span>
+                            </span>
+
+                            <!-- Régime legacy : un seul plafond global (aucune catégorie configurée) -->
+                            <span
+                                v-if="capacitesParCategorieSelectionnee.length === 0"
+                                :class="
+                                    capaciteVehiculeSelectionne === null
+                                        ? 'text-muted-foreground'
+                                        : capaciteLigneClass(
+                                              quantiteTotale,
+                                              capaciteVehiculeSelectionne,
+                                          )
+                                "
+                            >
+                                Capacité :
+                                {{ quantiteTotale }}
+                                /
+                                {{
+                                    capaciteVehiculeSelectionne === null
+                                        ? '—'
+                                        : capaciteVehiculeSelectionne
+                                }}
+                                packs
+                                <template
+                                    v-if="capaciteVehiculeSelectionne !== null"
+                                >
+                                    <span
+                                        v-if="
+                                            quantiteTotale ===
+                                            capaciteVehiculeSelectionne
+                                        "
+                                        >✓</span
+                                    >
+                                    <span
+                                        v-else-if="
+                                            quantiteTotale <
+                                            capaciteVehiculeSelectionne
+                                        "
+                                    >
+                                        ({{
+                                            capaciteVehiculeSelectionne -
+                                            quantiteTotale
+                                        }}
+                                        manquant(s){{
+                                            !autoriser_saisie_dessous_qte_max
+                                                ? ' — chargement complet requis'
+                                                : ''
+                                        }})</span
+                                    >
+                                    <span v-else>
+                                        (+{{
+                                            quantiteTotale -
+                                            capaciteVehiculeSelectionne
+                                        }}
+                                        en trop)</span
+                                    >
+                                </template>
+                            </span>
+                        </template>
                     </div>
 
                     <!-- ── Tableau desktop ── -->
