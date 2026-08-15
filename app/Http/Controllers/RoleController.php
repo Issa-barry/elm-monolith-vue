@@ -214,6 +214,6 @@ class RoleController extends Controller
     {
         $user = auth()->user();
 
-        return $user->isSuperAdmin() || $user->hasRole('admin_entreprise');
+        return $user && ($user->isSuperAdmin() || $user->hasRole('admin_entreprise'));
     }
 }
