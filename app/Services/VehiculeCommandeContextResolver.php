@@ -15,10 +15,10 @@ use App\Models\Vehicule;
  * recalculer rétroactivement une commande déjà passée si le véhicule ou le client change ensuite.
  *
  * Règle métier (cf. analyse du modèle véhicules/partenaires/commissions) :
- *  - un véhicule de flotte gérée (toute ligne présente dans `vehicules`) facture toujours au
- *    prix de vente plein, et n'est éligible aux commissions que s'il est autorisé
- *    `livraison_vente` ;
- *  - une vente sans véhicule de flotte pour un client PARTENAIRE facture à prix usine, jamais
+ *  - un véhicule de flotte gérée (toute ligne présente dans `vehicules`, quelle que soit sa
+ *    catégorie INTERNE/PARTENAIRE) facture toujours au prix de vente plein, et n'est éligible
+ *    aux commissions que s'il est autorisé `livraison_vente` ;
+ *  - une vente sans véhicule de flotte pour un client EXTERNE facture à prix usine, jamais
  *    de commission (aucun véhicule de flotte impliqué) ;
  *  - une vente sans véhicule de flotte pour un client standard/cashback facture au prix de
  *    vente plein, comportement historique inchangé.
@@ -46,7 +46,7 @@ class VehiculeCommandeContextResolver
         // commissionEligible est toujours false ici — seule la tarification varie selon le
         // client.
         $client = $clientId ? Client::query()->select(['id', 'type'])->find($clientId) : null;
-        $modeTarification = $client?->type === ClientType::PARTENAIRE
+        $modeTarification = $client?->type === ClientType::EXTERNE
             ? ModeTarification::PRIX_USINE
             : ModeTarification::PRIX_VENTE;
 

@@ -48,7 +48,7 @@ const props = withDefaults(
         readonly: false,
         types: () => [
             { value: 'standard', label: 'Standard' },
-            { value: 'partenaire', label: 'Partenaire' },
+            { value: 'externe', label: 'Externe' },
         ],
     },
 );
@@ -383,7 +383,7 @@ function onSubmit() {
                     {{ errors.type }}
                 </p>
                 <p v-else class="mt-1.5 text-xs text-muted-foreground">
-                    Un client partenaire vient charger ses propres commandes,
+                    Un client externe vient charger ses propres commandes,
                     tarifées à prix usine, hors flotte gérée.
                 </p>
             </div>

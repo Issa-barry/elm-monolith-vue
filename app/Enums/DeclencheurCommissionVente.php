@@ -3,14 +3,16 @@
 namespace App\Enums;
 
 /**
- * Détermine QUAND une commission de vente est générée — jamais comment elle
- * est calculée (cf. CommissionCalculator, seule source de vérité du calcul).
- * Paramétrable par organisation via Parametre::CLE_VENTES_DECLENCHEUR_COMMISSION_VENTE,
+ * Détermine QUAND une commission de vente naît — jamais dans quel statut :
+ * dans les deux cas elle naît toujours CREEE (cf. CommissionGenerator), et ne
+ * devient IMPAYE(E) qu'à la validation de la période de paiement qui la
+ * couvre (cf. CommissionAdjustmentService::activerCommissionsCreees()).
+ * Paramétrable par organisation via Parametre::CLE_DECLENCHEUR_COMMISSION_VENTE,
  * lu et appliqué par CommissionTriggerService.
  */
 enum DeclencheurCommissionVente: string
 {
-    /** Dès que le chargement de la commande est validé (comportement historique). */
+    /** À la validation réelle du chargement, sur les quantités chargées (comportement historique). */
     case CHARGEMENT_VALIDE = 'chargement_valide';
 
     /** Uniquement lorsque la facture atteint le statut « Payée » (encaissement complet). */

@@ -156,7 +156,7 @@ function removeRow(index: number): void {
             class="mt-4 rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground"
         >
             Aucune capacité par catégorie définie — la capacité globale du
-            véhicule ({{ capaciteLegacy }} packs) s'applique à toutes les
+            véhicule ({{ capaciteLegacy }} sachets) s'applique à toutes les
             catégories.
         </p>
 
@@ -179,7 +179,9 @@ function removeRow(index: number): void {
                             class="w-28"
                             autofocus
                         />
-                        <span class="text-xs text-muted-foreground">packs</span>
+                        <span class="text-xs text-muted-foreground"
+                            >sachets</span
+                        >
                         <Button
                             type="button"
                             variant="ghost"
@@ -208,7 +210,7 @@ function removeRow(index: number): void {
                     }}</span>
                     <div class="flex items-center gap-1">
                         <span class="text-sm text-muted-foreground"
-                            >{{ row.capacite_max }} packs</span
+                            >{{ row.capacite_max }} sachets</span
                         >
                         <Button
                             type="button"

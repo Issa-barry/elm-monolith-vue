@@ -202,7 +202,7 @@ class VenteParametrageTest extends TestCase
         );
     }
 
-    public function test_update_rejette_une_valeur_de_declencheur_invalide(): void
+    public function test_update_rejette_une_valeur_de_declencheur_vente_invalide(): void
     {
         $this->createRoles();
         $user = $this->createAuthorizedUser('parametres.update');
@@ -218,5 +218,23 @@ class VenteParametrageTest extends TestCase
                 'declencheur_commission_logistique' => 'reception_effectuee',
             ])
             ->assertSessionHasErrors('declencheur_commission_vente');
+    }
+
+    public function test_update_rejette_une_valeur_de_declencheur_logistique_invalide(): void
+    {
+        $this->createRoles();
+        $user = $this->createAuthorizedUser('parametres.update');
+
+        $this->actingAs($user)
+            ->put(route('settings.ventes.update'), [
+                'quantity_edit_role_names' => [],
+                'price_edit_role_names' => [],
+                'autoriser_saisie_dessous_qte_max' => true,
+                'controle_impayes_actif' => false,
+                'seuil_impayes_max' => 0,
+                'declencheur_commission_vente' => 'chargement_valide',
+                'declencheur_commission_logistique' => 'valeur_invalide',
+            ])
+            ->assertSessionHasErrors('declencheur_commission_logistique');
     }
 }

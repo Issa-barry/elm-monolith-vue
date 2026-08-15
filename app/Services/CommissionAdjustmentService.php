@@ -60,6 +60,60 @@ class CommissionAdjustmentService
     }
 
     /**
+     * Bascule CREEE→IMPAYE (ou PAYE direct si montant nul) toutes les
+     * commissions (vente ET logistique) encore CREEE rattachées à cette
+     * période — seul moment où une commission sort de CREEE (cf.
+     * CommandeVenteService::validerChargement() / CommissionLogistiqueService,
+     * qui la créent toujours en CREEE). Appelée depuis
+     * PaiementPeriodeController::valider(), juste après le passage
+     * CALCULEE→VALIDEE. Idempotente : sans effet sur une part déjà sortie de
+     * CREEE. Retourne le nombre de commissions activées, tous types confondus
+     * (pour l'audit log).
+     */
+    public static function activerCommissionsCreees(PaiementPeriode $periode): int
+    {
+        $parts = self::partsPourPeriode($periode);
+
+        return self::activerGroupe($parts['vente'], 'commission_vente_id', 'montant_commission_totale')
+            + self::activerGroupe($parts['logistique'], 'commission_logistique_id', 'montant_total');
+    }
+
+    /**
+     * @param  Collection<int, CommissionPart|CommissionLogistiquePart>  $parts
+     */
+    private static function activerGroupe(Collection $parts, string $groupByKey, string $montantTotalField): int
+    {
+        $creees = $parts->filter(fn ($part) => $part->statut === StatutCommission::CREEE);
+
+        $count = 0;
+
+        foreach ($creees->groupBy($groupByKey) as $groupe) {
+            $commission = $groupe->first()->commission;
+            if (! $commission || $commission->statut !== StatutCommission::CREEE) {
+                continue;
+            }
+
+            $commission->update([
+                'statut' => ((float) $commission->{$montantTotalField} > 0
+                    ? StatutCommission::IMPAYE
+                    : StatutCommission::PAYE)->value,
+            ]);
+
+            foreach ($groupe as $part) {
+                $part->update([
+                    'statut' => ((float) $part->montant_net > 0
+                        ? StatutCommission::IMPAYE
+                        : StatutCommission::PAYE)->value,
+                ]);
+            }
+
+            $count++;
+        }
+
+        return $count;
+    }
+
+    /**
      * Regroupe les parts par commission (= véhicule + commande/transfert + équipe présente).
      * Le métier raisonne par véhicule/commande, pas par bénéficiaire isolé : c'est le
      * niveau auquel l'enveloppe théorique doit rester intacte après ajustement.

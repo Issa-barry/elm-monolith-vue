@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
- * Véhicule d'un partenaire (Client::type = PARTENAIRE) — volontairement léger et hors flotte
+ * Véhicule d'un client externe (Client::type = EXTERNE) — volontairement léger et hors flotte
  * gérée. Ne porte jamais d'équipe, de propriétaire, de capacités, de dépenses ni de
  * commissions : c'est une simple information de transport facultative, jamais un `Vehicule`.
  * Tous les champs métier sont nullable, seul client_id est requis — cf. migration
@@ -52,6 +52,6 @@ class ClientVehicle extends Model
     {
         $parts = array_filter([$this->nom_vehicule, $this->immatriculation]);
 
-        return $parts ? implode(' — ', $parts) : 'Véhicule partenaire';
+        return $parts ? implode(' — ', $parts) : 'Véhicule externe';
     }
 }

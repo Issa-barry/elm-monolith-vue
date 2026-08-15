@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\CategorieVehicule;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
@@ -164,19 +165,20 @@ class ProprietaireTest extends TestCase
     }
 
     /**
-     * Régression : `vehicule->categorie` était lu directement sur le modèle
-     * alors que la colonne a été retirée de `vehicules` (remplacée par
-     * livraison_vente/livraison_logistique) — silencieux (pas de crash, `get()`
-     * sans colonnes explicites ici), mais la fiche propriétaire affichait
-     * toujours "-" à la place de "interne"/"externe". Reconstruite depuis
-     * livraison_logistique, cf. DepenseController::loadVehicules().
+     * `categorie` est une vraie colonne de propriété (INTERNE/PARTENAIRE), totalement
+     * indépendante de l'usage vente/logistique — contrairement à l'ancien modèle où elle était
+     * reconstruite depuis livraison_logistique ('interne' si logistique, 'externe' sinon,
+     * confusion usage/propriété). Un véhicule PARTENAIRE utilisé pour la logistique reste
+     * PARTENAIRE, jamais requalifié en "interne" — cf. Vehicule::categorie.
      */
-    public function test_show_expose_la_categorie_reconstruite_du_vehicule(): void
+    public function test_show_expose_la_vraie_categorie_du_vehicule_independamment_de_lusage(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
-        $interne = Vehicule::factory()->create([
+        $vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
+            'categorie' => CategorieVehicule::PARTENAIRE,
+            'livraison_vente' => false,
             'livraison_logistique' => true,
         ]);
 
@@ -184,8 +186,8 @@ class ProprietaireTest extends TestCase
             ->get(route('proprietaires.show', $proprietaire))
             ->assertStatus(200)
             ->assertInertia(fn (Assert $page) => $page
-                ->where('vehicules.0.id', $interne->id)
-                ->where('vehicules.0.categorie', 'interne')
+                ->where('vehicules.0.id', $vehicule->id)
+                ->where('vehicules.0.categorie', 'partenaire')
             );
     }
 

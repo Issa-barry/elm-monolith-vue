@@ -188,7 +188,7 @@ class CommissionVentePaiementService
         $nbAutres = $partsQuery->clone()->where('statut', '!=', StatutCommission::CREEE->value)->count();
 
         if ($nbCreee > 0 && $nbAutres === 0) {
-            return 'Aucune commission n\'est encore due : les commandes correspondantes n\'ont pas encore validé leur chargement.';
+            return 'Aucune commission n\'est encore due : la ou les périodes de paiement correspondantes ne sont pas encore validées.';
         }
 
         $fraisDepenses = $type === 'livreur'

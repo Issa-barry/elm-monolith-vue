@@ -53,9 +53,9 @@ class Client extends Model
         return $saisi !== '' ? $saisi : trim("{$this->prenom} {$this->nom}");
     }
 
-    public function isPartenaire(): bool
+    public function isExterne(): bool
     {
-        return $this->type === ClientType::PARTENAIRE;
+        return $this->type === ClientType::EXTERNE;
     }
 
     public function organization(): BelongsTo

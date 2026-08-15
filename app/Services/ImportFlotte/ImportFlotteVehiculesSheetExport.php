@@ -20,6 +20,7 @@ class ImportFlotteVehiculesSheetExport implements FromArray, WithHeadings, WithT
             'vehicule_nom',
             'vehicule_immatriculation',
             'vehicule_type',
+            'vehicule_categorie',
             'vehicule_capacite_sachets',
             'vehicule_capacite_bouteilles',
             'vehicule_livraison_vente',
@@ -40,13 +41,18 @@ class ImportFlotteVehiculesSheetExport implements FromArray, WithHeadings, WithT
         // dans Équipes de livraison.
         //
         // vehicule_site est obligatoire pour tout véhicule, quel que soit son propriétaire.
+        // vehicule_categorie : interne ou partenaire, obligatoire sur chaque ligne (même une
+        // ligne d'ancrage pour un véhicule déjà existant) — jamais devinée silencieusement, cf.
+        // ImportFlotteParser. "partenaire" exige les colonnes proprietaire_* renseignées ;
+        // "interne" exige qu'elles restent vides.
         // vehicule_livraison_vente / vehicule_livraison_logistique : oui/non (yes/no, 1/0,
         // true/false acceptés) — une cellule vide vaut "non" (aucun usage par défaut,
         // jamais un usage vente implicite), cf. ImportFlotteParser::toUsageBool(). Un
         // véhicule sans aucun des deux reste importé mais non exploitable tant qu'un usage
         // n'est pas défini (cf. Vehicule::aAuMoinsUnUsage()).
         return [
-            ['Matoto', 'Camion 1', 'RC-1234-A', 'Tricycle', '80', '', 'oui', 'non', 'Diallo', 'Mamadou', '622000001', 'GN'],
+            ['Matoto', 'Camion 1', 'RC-1234-A', 'Tricycle', 'interne', '80', '', 'oui', 'non', '', '', '', ''],
+            ['Matoto', 'Camion 2', 'RC-5678-B', 'Tricycle', 'partenaire', '80', '', 'oui', 'non', 'Diallo', 'Mamadou', '622000001', 'GN'],
         ];
     }
 }

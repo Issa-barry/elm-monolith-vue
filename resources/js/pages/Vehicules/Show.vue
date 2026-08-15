@@ -88,6 +88,8 @@ interface VehiculeData {
     }>;
     site_id: string | null;
     site_nom: string | null;
+    categorie: 'interne' | 'partenaire';
+    categorie_label: string;
     proprietaire_id: string | null;
     proprietaire_nom: string | null;
     proprietaire_telephone: string | null;
@@ -109,11 +111,10 @@ const props = defineProps<{
 }>();
 
 // Propriété (tiers ou organisation) — indépendante des usages vente/logistique,
-// cf. EquipeStepperModal (détermine si un partage propriétaire est saisi).
+// cf. EquipeStepperModal (détermine si un partage propriétaire est saisi). Source de vérité :
+// vehicule.categorie (jamais re-déduit de proprietaire_id, cf. CategorieVehicule côté backend).
 const proprietaireEstTiers = computed(
-    () =>
-        !!props.vehicule.proprietaire_id &&
-        props.vehicule.proprietaire_id !== props.default_proprietaire_id,
+    () => props.vehicule.categorie === 'partenaire',
 );
 
 const { can } = usePermissions();
@@ -258,7 +259,7 @@ function formatGNF(val: number): string {
                             v-if="vehicule.capacite_packs"
                             class="text-xs text-muted-foreground"
                         >
-                            {{ vehicule.capacite_packs }} packs
+                            {{ vehicule.capacite_packs }} sachets
                         </span>
                         <span
                             v-if="vehicule.capacite_bouteilles"
@@ -415,6 +416,14 @@ function formatGNF(val: number): string {
                             </div>
                             <div class="rounded-lg border bg-background p-4">
                                 <p class="text-xs text-muted-foreground">
+                                    Catégorie
+                                </p>
+                                <p class="mt-1 text-sm font-medium">
+                                    {{ vehicule.categorie_label }}
+                                </p>
+                            </div>
+                            <div class="rounded-lg border bg-background p-4">
+                                <p class="text-xs text-muted-foreground">
                                     Usages
                                 </p>
                                 <p class="mt-1 flex flex-wrap gap-1.5">
@@ -458,7 +467,7 @@ function formatGNF(val: number): string {
                                 <p class="mt-1 text-sm font-medium">
                                     {{
                                         vehicule.capacite_packs !== null
-                                            ? `${vehicule.capacite_packs} packs`
+                                            ? `${vehicule.capacite_packs} sachets`
                                             : '—'
                                     }}
                                     <template

@@ -72,9 +72,14 @@ class Parametre extends Model
 
     /**
      * Déclencheurs de génération des commissions — cf. DeclencheurCommissionVente /
-     * DeclencheurCommissionLogistique et CommissionTriggerService. Valeur par défaut
-     * (absence de ligne en base) alignée sur le comportement historique de chaque
-     * politique, jamais choisie arbitrairement — voir les accesseurs ci-dessous.
+     * DeclencheurCommissionLogistique et CommissionTriggerService. Choisissent
+     * uniquement QUAND la commission naît, jamais dans quel statut : elle naît
+     * toujours CREEE, quel que soit le déclencheur (cf. CommissionGenerator /
+     * CommissionLogistiqueService) — seule la validation de la période de
+     * paiement la fait passer CREEE→IMPAYE (cf. CommissionAdjustmentService::
+     * activerCommissionsCreees()). Valeur par défaut (absence de ligne en base)
+     * alignée sur le comportement historique de chaque politique, jamais
+     * choisie arbitrairement — voir les accesseurs ci-dessous.
      */
     public const CLE_DECLENCHEUR_COMMISSION_VENTE = 'ventes_declencheur_commission_vente';
 
@@ -275,7 +280,7 @@ class Parametre extends Model
 
     /**
      * Défaut CHARGEMENT_VALIDE : comportement historique de CommissionGenerator
-     * (commission activée dès la validation du chargement, cf. CommandeVenteService).
+     * (commission créée dès la validation du chargement, cf. CommandeVenteService).
      * Ne pas changer cette valeur par défaut sans mettre à jour les organisations
      * existantes en conséquence — cf. CommissionTriggerService.
      */
@@ -294,7 +299,7 @@ class Parametre extends Model
                 'valeur' => $declencheur->value,
                 'type' => self::TYPE_STRING,
                 'groupe' => self::GROUPE_VENTES,
-                'description' => 'Événement métier déclenchant la génération de la commission de vente',
+                'description' => 'Événement métier déclenchant la naissance de la commission de vente',
             ],
         );
         Cache::forget(self::cacheKey($orgId, self::CLE_DECLENCHEUR_COMMISSION_VENTE));

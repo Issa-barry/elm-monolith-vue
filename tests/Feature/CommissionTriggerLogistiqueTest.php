@@ -265,6 +265,42 @@ class CommissionTriggerLogistiqueTest extends TestCase
         $this->assertEquals(1, CommissionLogistique::where('transfert_logistique_id', $transfert->id)->count());
     }
 
+    // ── Statut de naissance ──────────────────────────────────────────────────
+    // Le déclencheur ne choisit que QUAND la commission naît, jamais son statut
+    // initial : elle naît toujours CREEE, quel que soit le déclencheur — cf.
+    // CommissionAdjustmentService::activerCommissionsCreees(), seul point
+    // d'entrée qui la fait passer IMPAYE à la validation de la période.
+
+    public function test_chargement_valide_cree_toujours_en_statut_creee(): void
+    {
+        Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::CHARGEMENT_VALIDE);
+
+        $transfert = $this->makeTransfertEnChargement(qteChargee: 100);
+        $this->actingAs($this->admin);
+        TransfertLogistiqueService::avancerStatut($transfert);
+
+        $commission = CommissionLogistique::where('transfert_logistique_id', $transfert->id)->first();
+        $this->assertNotNull($commission);
+        $this->assertEquals('creee', $commission->statut->value);
+        $this->assertTrue($commission->parts()->where('statut', '!=', 'creee')->doesntExist());
+    }
+
+    public function test_reception_effectuee_cree_toujours_en_statut_creee(): void
+    {
+        Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE);
+
+        $transfert = $this->makeTransfertEnReception(qteRecue: 100);
+
+        $this->actingAs($this->admin)
+            ->post($this->urlValidation($transfert), ['decision' => 'accord', 'montant_par_pack' => 200])
+            ->assertRedirect();
+
+        $commission = CommissionLogistique::where('transfert_logistique_id', $transfert->id)->first();
+        $this->assertNotNull($commission);
+        $this->assertEquals('creee', $commission->statut->value);
+        $this->assertTrue($commission->parts()->where('statut', '!=', 'creee')->doesntExist());
+    }
+
     // ── Multi-tenant ─────────────────────────────────────────────────────────
 
     public function test_parametre_organisation_est_independant(): void

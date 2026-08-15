@@ -6,9 +6,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * Singleton — une seule ligne, jamais plus. Voir InstallationService::install() pour l'unique
- * point d'écriture de installed_at, et la migration pour pourquoi ce n'est pas juste un champ
- * dérivé de "une organisation existe".
+ * En on_premise : singleton, une seule ligne jamais plus (cf. InstallationService::isLocked()
+ * qui ferme /install dès la première). En saas : une ligne par organisation installée via
+ * /install — sert d'historique/audit, jamais de verrou. Voir InstallationService::install()
+ * pour l'unique point d'écriture de installed_at, et la migration pour pourquoi ce n'est pas
+ * juste un champ dérivé de "une organisation existe".
  */
 class AppInstallation extends Model
 {

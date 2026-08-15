@@ -52,6 +52,8 @@ interface Vehicule {
     type_label: string;
     capacite_packs: number | null;
     capacite_bouteilles: number | null;
+    categorie: 'interne' | 'partenaire';
+    categorie_label: string;
     proprietaire_nom: string | null;
     proprietaire_telephone: string | null;
     proprietaire_code_phone_pays: string | null;
@@ -751,7 +753,7 @@ function confirmDelete(v: Vehicule) {
                             >
                                 {{
                                     data.capacite_packs != null
-                                        ? `${data.capacite_packs} packs`
+                                        ? `${data.capacite_packs} sachets`
                                         : '—'
                                 }}
                                 <template
@@ -771,6 +773,11 @@ function confirmDelete(v: Vehicule) {
                     >
                         <template #body="{ data }">
                             <div class="leading-tight">
+                                <div
+                                    class="text-[11px] font-medium tracking-wide text-muted-foreground/70 uppercase"
+                                >
+                                    {{ data.categorie_label }}
+                                </div>
                                 <div class="text-muted-foreground">
                                     {{ data.proprietaire_nom ?? '—' }}
                                 </div>

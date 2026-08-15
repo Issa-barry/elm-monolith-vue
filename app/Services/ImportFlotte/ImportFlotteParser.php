@@ -2,6 +2,7 @@
 
 namespace App\Services\ImportFlotte;
 
+use App\Enums\CategorieVehicule;
 use App\Enums\TypeImportFlotte;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
@@ -274,6 +275,7 @@ class ImportFlotteParser
                     'livraison_vente' => null,
                     'livraison_logistique' => null,
                     'site_id' => null,
+                    'categorie' => null,
                 ],
                 // Cf. docblock de classe : null = "aucune équipe pour ce groupe"
                 // (pas de nouveaux livreurs et véhicule sans équipe existante).
@@ -509,14 +511,43 @@ class ImportFlotteParser
         $nomVehicule = trim((string) ($ligneVehicule['vehicule_nom'] ?? ''));
         $typeNomSaisi = trim((string) ($ligneVehicule['vehicule_type'] ?? ''));
         $siteNomSaisi = trim((string) ($ligneVehicule['vehicule_site'] ?? ''));
+        $categorieNomSaisi = trim((string) ($ligneVehicule['vehicule_categorie'] ?? ''));
 
         // Résolu ici (avant les colonnes d'usage ci-dessous, qui en ont besoin pour leur
         // repli) plutôt que plus bas dans la méthode comme avant — même requête, juste
         // remontée.
+        //
+        // Sur immatriculation_normalisee (tirets/espaces/points/casse ignorés), pas sur la
+        // colonne affichée : "BK-4627-02" et "bk 4627 02" doivent retrouver le même véhicule
+        // déjà en base, jamais en créer un doublon simplement écrit différemment (cf.
+        // Vehicule::normaliserImmatriculation()).
+        $immatriculationNormalisee = Vehicule::normaliserImmatriculation($immatriculation);
         $vehiculeExistant = Vehicule::where('organization_id', $orgId)
-            ->where('immatriculation', $immatriculation)
+            ->where('immatriculation_normalisee', $immatriculationNormalisee)
             ->whereNull('deleted_at')
             ->first();
+
+        // Aucune correspondance exacte (même normalisée) : avant de conclure "nouveau
+        // véhicule", on vérifie qu'il ne s'agit pas d'une plaque mal ressaisie désignant en
+        // réalité un véhicule déjà en base (ex : "BK4627" au lieu de "BK-4627-02", suffixe
+        // oublié) — même mécanique "valeur proche, à confirmer" que pour le type/site
+        // (ReferenceValueResolver::suggestClosest()), jamais une fusion automatique.
+        if (! $vehiculeExistant) {
+            $vehiculesOrg = Vehicule::where('organization_id', $orgId)->whereNull('deleted_at')->with('proprietaire')->get();
+            $procheImmatNormalisee = ReferenceValueResolver::suggestClosest(
+                $immatriculationNormalisee,
+                $vehiculesOrg,
+                fn ($v) => (string) $v->immatriculation_normalisee,
+            );
+
+            if ($procheImmatNormalisee !== null) {
+                $procheVehicule = $vehiculesOrg->first(fn ($v) => $v->immatriculation_normalisee === $procheImmatNormalisee);
+                $avertissements[] = "\"{$immatriculation}\" ressemble à un véhicule déjà existant : \"{$procheVehicule->nom_vehicule}\" ({$procheVehicule->immatriculation}).";
+                $erreurs[] = "Immatriculation proche d'un véhicule existant : \"{$procheVehicule->nom_vehicule}\" ({$procheVehicule->immatriculation}"
+                    .($procheVehicule->proprietaire ? ", propriétaire {$procheVehicule->proprietaire->nom_complet}" : '')
+                    .'). Vérifiez qu\'il ne s\'agit pas du même véhicule avant de continuer, ou corrigez l\'immatriculation si c\'est bien un véhicule différent.';
+            }
+        }
 
         // Colonnes facultatives — cellule vide/absente : "false" à la création d'un
         // nouveau véhicule (aucun usage saisi = aucun usage attribué, jamais un usage
@@ -556,6 +587,25 @@ class ImportFlotteParser
         // simplement créé/laissé sans usage, donc non exploitable tant qu'un usage n'est
         // pas défini (cf. Vehicule::aAuMoinsUnUsage() et les scopes livraisonVente()/
         // livraisonLogistique(), qui l'excluent déjà de tous les sélecteurs opérationnels).
+
+        // Contrairement aux usages vente/logistique, la catégorie n'a pas de repli sur la
+        // valeur déjà en base pour un véhicule existant : elle est obligatoire sur CHAQUE ligne
+        // (nouvelle ou déjà en base), même si l'exécuteur ne l'applique de toute façon jamais à
+        // un véhicule déjà existant (ligne = simple ancrage pour ses livreurs/équipe, cf.
+        // docblock de classe) — un fichier d'import doit rester une description explicite et
+        // complète de la flotte, jamais une devinette silencieuse (cf. CategorieVehicule).
+        $categorie = null;
+        if ($categorieNomSaisi === '') {
+            $erreurs[] = 'Catégorie du véhicule manquante (interne ou partenaire).';
+        } else {
+            $categorieNormalisee = ImportTextNormalizer::normalize($categorieNomSaisi);
+            $categorie = CategorieVehicule::tryFrom($categorieNormalisee);
+            if (! $categorie) {
+                $erreurs[] = "Catégorie du véhicule invalide : \"{$categorieNomSaisi}\" (attendu : interne ou partenaire).";
+            } elseif ($categorie->value !== $categorieNomSaisi) {
+                $normalisations[] = "\"{$categorieNomSaisi}\" → \"{$categorie->value}\"";
+            }
+        }
 
         $type = null;
         if ($typeNomSaisi === '') {
@@ -619,6 +669,34 @@ class ImportFlotteParser
             ? $this->resoudreProprietaire($ligneVehicule, $orgId, $erreurs, $normalisations, $telephonesProprietairesVus)
             : null;
 
+        // ── Cohérence catégorie ↔ propriétaire — même règle que VehiculeController
+        // (CategorieVehicule::coherentAvecProprietaireTiers()), appliquée dès l'analyse pour ne
+        // jamais laisser passer une ligne incohérente jusqu'à l'exécution.
+        //
+        // "Tiers" veut dire : différent du propriétaire interne par défaut de l'organisation
+        // (cf. VehiculeController::ensureCategorieCoherente(), qui compare exactement de la même
+        // façon $data['proprietaire_id'] à Proprietaire::interneParDefautId()). Une ligne
+        // "interne" peut donc légitimement documenter explicitement ce propriétaire par défaut
+        // (mêmes nom/prénom/téléphone) dans les colonnes proprietaire_* sans être rejetée — seul
+        // un véritable tiers (propriétaire différent) est incohérent avec "interne".
+        //
+        // Un propriétaire pas encore en base (nouveau, créé seulement à l'exécution) a un 'id'
+        // à null à ce stade de l'analyse — jamais à confondre avec "correspond au défaut" même si
+        // Proprietaire::interneParDefautId() est lui aussi null (organisation sans défaut
+        // configuré) : comparer directement les deux null se solderait, à tort, par "coïncident".
+        $interneDefautId = Proprietaire::interneParDefautId($orgId);
+        $estLeProprietaireInterneParDefaut = $proprietaireResolu !== null
+            && $proprietaireResolu['id'] !== null
+            && $interneDefautId !== null
+            && $proprietaireResolu['id'] === $interneDefautId;
+        $proprietaireEstTiers = $aUnProprietaireSaisi && ! $estLeProprietaireInterneParDefaut;
+
+        if ($categorie && ! $categorie->coherentAvecProprietaireTiers($proprietaireEstTiers)) {
+            $erreurs[] = $categorie === CategorieVehicule::PARTENAIRE
+                ? 'Véhicule partenaire sans propriétaire renseigné (proprietaire_nom/proprietaire_prenom/proprietaire_telephone obligatoires).'
+                : 'Véhicule interne : le propriétaire renseigné doit être le propriétaire interne par défaut de l\'organisation, pas un véritable tiers (colonnes proprietaire_* doivent rester vides ou correspondre exactement à ce propriétaire).';
+        }
+
         // ── Équipe : commission et montant propriétaire non saisis dans le fichier.
         // Une équipe déjà existante conserve sa vraie commission (utile pour
         // calculer le taux des nouveaux membres rattachés) ; une équipe à créer
@@ -667,6 +745,9 @@ class ImportFlotteParser
                 'livraison_vente' => $livraisonVente,
                 'livraison_logistique' => $livraisonLogistique,
                 'site_id' => $site?->id,
+                // Garanti non-null ici : $erreurs serait non vide sinon (retour anticipé
+                // ci-dessus), donc ce point n'est atteint que si $categorie a été résolue.
+                'categorie' => $categorie->value,
             ],
             // Pas d'équipe du tout (ni existante, ni à créer) pour un nouveau
             // véhicule sans aucun livreur dans le fichier : la création du

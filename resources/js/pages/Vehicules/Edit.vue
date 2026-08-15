@@ -22,6 +22,10 @@ interface SiteOption {
     id: string;
     nom: string;
 }
+interface CategorieOption {
+    value: string;
+    label: string;
+}
 
 interface VehiculeData {
     id: number;
@@ -32,6 +36,7 @@ interface VehiculeData {
     capacite_bouteilles: number | null;
     site_id: string | null;
     proprietaire_id: number | null;
+    categorie: string | null;
     livraison_vente: boolean;
     livraison_logistique: boolean;
     photo_url: string | null;
@@ -43,6 +48,7 @@ const props = defineProps<{
     vehicule: VehiculeData;
     proprietaires: Option[];
     types: TypeOption[];
+    categories_vehicule: CategorieOption[];
     sites: SiteOption[];
     can_change_site: boolean;
     default_proprietaire_id: string | null;
@@ -68,6 +74,7 @@ const form = useForm({
     site_id: props.vehicule.site_id,
     proprietaire_id:
         props.vehicule.proprietaire_id ?? props.default_proprietaire_id,
+    categorie: props.vehicule.categorie as string | null,
     livraison_vente: props.vehicule.livraison_vente,
     livraison_logistique: props.vehicule.livraison_logistique,
     photo: null as File | null,
@@ -81,6 +88,7 @@ const canSubmit = computed(() => {
         form.nom_vehicule.trim().length > 0 &&
         form.immatriculation.trim().length > 0 &&
         !!form.type_vehicule_id &&
+        !!form.categorie &&
         (form.livraison_vente || form.livraison_logistique)
     );
 });
@@ -152,6 +160,7 @@ function submit() {
                 :processing="form.processing"
                 :proprietaires="proprietaires"
                 :types="types"
+                :categories-vehicule="categories_vehicule"
                 :photo-url="vehicule.photo_url"
                 :sites="sites"
                 :can-change-site="can_change_site"

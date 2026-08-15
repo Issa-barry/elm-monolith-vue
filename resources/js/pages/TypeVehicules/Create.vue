@@ -18,7 +18,7 @@ const form = useForm({
     nom: '',
     capacite_defaut: null as number | null,
     capacite_defaut_bouteilles: null as number | null,
-    unite_capacite: 'packs',
+    unite_capacite: 'sachets',
     description: '',
     is_active: true,
 });
@@ -100,7 +100,7 @@ function submit() {
                             v-model="form.unite_capacite"
                             class="w-full"
                             :class="{ 'p-invalid': form.errors.unite_capacite }"
-                            placeholder="packs"
+                            placeholder="sachets"
                         />
                         <p
                             v-if="form.errors.unite_capacite"
