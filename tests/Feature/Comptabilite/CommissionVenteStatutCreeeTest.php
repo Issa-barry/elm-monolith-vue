@@ -15,10 +15,10 @@ use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
-// ── Régression : une CommissionPart au statut "creee" (commande dont le
-// chargement n'a pas encore été validé — CommandeVenteService::
-// activerFactureEtCommissions() ne l'a pas encore activée) n'est PAS payable
-// (CommissionVentePaiementService::partsDisponibles() l'exclut explicitement).
+// ── Régression : une CommissionPart au statut "creee" (période de paiement
+// pas encore validée — cf. CommissionAdjustmentService::activerCommissionsCreees())
+// n'est PAS payable (CommissionVentePaiementService::partsDisponibles() l'exclut
+// explicitement).
 // L'index/le détail ne doivent donc pas la compter dans le "reste à payer",
 // sous peine de promettre à l'écran un solde que le paiement va ensuite
 // rejeter ("solde disponible : 0.00 GNF"). ────────────────────────────────────
@@ -152,10 +152,10 @@ class CommissionVenteStatutCreeeTest extends TestCase
             ])
             ->assertSessionHasErrors('montant');
 
-        // Le message doit expliquer la cause (chargement non validé), pas
-        // juste afficher "solde disponible : 0.00 GNF".
+        // Le message doit expliquer la cause (période de paiement pas encore
+        // validée), pas juste afficher "solde disponible : 0.00 GNF".
         $this->assertStringContainsString(
-            'chargement',
+            'période',
             mb_strtolower($response->getSession()->get('errors')->get('montant')[0])
         );
     }

@@ -133,7 +133,8 @@ class FactureVente extends Model
         // simple clic contrôleur) : ce point est traversé aussi bien par le contrôleur
         // que par les events du modèle EncaissementVente, donc jamais manqué. Ne se
         // déclenche que sur l'entrée dans PAYEE (pas sur PARTIEL, pas si déjà payée) —
-        // cf. CommissionTriggerService::onFactureVenteEncaissee(), idempotent.
+        // cf. CommissionTriggerService::onFactureVenteEncaissee(), idempotent, sans
+        // effet sous le déclencheur CHARGEMENT_VALIDE (défaut).
         if (! $etaitPayee && $this->statut_facture === StatutFactureVente::PAYEE) {
             CommissionTriggerService::onFactureVenteEncaissee($this);
         }

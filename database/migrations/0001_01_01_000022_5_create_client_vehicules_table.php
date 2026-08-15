@@ -5,12 +5,12 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Véhicule d'un partenaire (Client::type = PARTENAIRE), volontairement léger et hors flotte
+ * Véhicule d'un client externe (Client::type = EXTERNE), volontairement léger et hors flotte
  * gérée : jamais d'équipe, de propriétaire de flotte, de capacités, de dépenses ni de
  * commissions. Sert uniquement à mémoriser une information de transport facultative — tous
  * les champs métier sont nullable, seul client_id est requis. Ne réutilise pas `Vehicule`, qui
  * porte des responsabilités de flotte incompatibles avec ce besoin (cf. analyse du modèle
- * véhicules/partenaires).
+ * véhicules/partenaires/clients externes).
  */
 return new class extends Migration
 {

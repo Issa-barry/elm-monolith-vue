@@ -8,8 +8,8 @@ namespace App\Enums;
  *  - PRIX_VENTE : véhicule de flotte gérée (toute ligne présente dans `vehicules` l'est par
  *    définition) → l'usine encaisse le plein prix de vente, la marge lui revient et alimente
  *    les commissions.
- *  - PRIX_USINE : vente PARTENAIRE (Client::type = PARTENAIRE, avec ou sans véhicule) →
- *    l'usine ne récupère que son prix usine, la marge reste au partenaire qui revend,
+ *  - PRIX_USINE : vente client EXTERNE (Client::type = EXTERNE, avec ou sans véhicule) →
+ *    l'usine ne récupère que son prix usine, la marge reste au client externe qui revend,
  *    aucune commission n'est générée sur cette commande (pas de véhicule de flotte).
  *
  * La dérivation elle-même vit dans VehiculeCommandeContextResolver — cet enum ne fait que

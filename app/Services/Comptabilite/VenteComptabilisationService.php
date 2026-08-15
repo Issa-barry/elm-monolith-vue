@@ -19,7 +19,7 @@ use Illuminate\Support\Carbon;
  *
  *  - VENTE_FACTUREE : la facture quitte le statut CREEE (montant encore une
  *    estimation) pour IMPAYEE/PARTIEL/PAYEE (montant définitif, sur quantités
- *    réellement chargées) — cf. CommandeVenteService::activerFactureEtCommissions()
+ *    réellement chargées) — cf. CommandeVenteService::activerFacture()
  *    et ::creerFactureDirecte(). Créance client constatée : débit Client,
  *    crédit Ventes.
  *  - ENCAISSEMENT_VENTE_RECU : chaque EncaissementVente créé (partiel ou
@@ -48,8 +48,8 @@ class VenteComptabilisationService
     {
         $montant = round((float) $facture->montant_net, 2);
         // Facture soldée d'office à 0 (ex: commande entièrement annulée au chargement,
-        // cf. activerFactureEtCommissions()) : rien à comptabiliser, comme pour les
-        // fiches/commissions à montant nul.
+        // cf. CommandeVenteService::activerFacture()) : rien à comptabiliser, comme
+        // pour les fiches/commissions à montant nul.
         if ($montant <= 0) {
             return null;
         }

@@ -94,6 +94,11 @@ class CommissionLogistique extends Model
         return $this->statut === StatutCommission::IMPAYE;
     }
 
+    public function isCreee(): bool
+    {
+        return $this->statut === StatutCommission::CREEE;
+    }
+
     /** @deprecated use isPaye() */
     public function isVersee(): bool
     {
@@ -116,7 +121,11 @@ class CommissionLogistique extends Model
      */
     public function recalculStatutGlobal(): bool
     {
-        if ($this->statut === StatutCommission::ANNULEE) {
+        // CREEE : tant que la période de paiement n'est pas validée, rien ne doit
+        // la faire dériver vers IMPAYE/PARTIEL/PAYE — cf.
+        // CommissionAdjustmentService::activerCommissionsCreees(), seul point
+        // d'entrée autorisé à la sortir de CREEE.
+        if (in_array($this->statut, [StatutCommission::CREEE, StatutCommission::ANNULEE], true)) {
             return false;
         }
 

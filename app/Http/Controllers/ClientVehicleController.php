@@ -12,9 +12,10 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 /**
- * CRUD minimal des véhicules d'un partenaire — jamais un `Vehicule` de flotte : pas d'équipe,
- * pas de propriétaire, pas de capacités, pas de commissions. Tous les champs métier sont
- * facultatifs (cf. ClientVehicle) : un partenaire peut exister sans aucun véhicule renseigné.
+ * CRUD minimal des véhicules d'un client externe — jamais un `Vehicule` de flotte : pas
+ * d'équipe, pas de propriétaire, pas de capacités, pas de commissions. Tous les champs métier
+ * sont facultatifs (cf. ClientVehicle) : un client externe peut exister sans aucun véhicule
+ * renseigné.
  */
 class ClientVehicleController extends Controller
 {
@@ -29,7 +30,7 @@ class ClientVehicleController extends Controller
         $client->vehicules()->create([...$data, 'organization_id' => $client->organization_id]);
 
         return redirect()->route('clients.edit', $client)
-            ->with('success', 'Véhicule partenaire ajouté.');
+            ->with('success', 'Véhicule externe ajouté.');
     }
 
     public function update(Request $request, Client $client, ClientVehicle $vehicule): RedirectResponse
@@ -40,7 +41,7 @@ class ClientVehicleController extends Controller
         $vehicule->update($this->validated($request));
 
         return redirect()->route('clients.edit', $client)
-            ->with('success', 'Véhicule partenaire mis à jour.');
+            ->with('success', 'Véhicule externe mis à jour.');
     }
 
     public function destroy(Client $client, ClientVehicle $vehicule): RedirectResponse
@@ -51,12 +52,12 @@ class ClientVehicleController extends Controller
         $vehicule->delete();
 
         return redirect()->route('clients.edit', $client)
-            ->with('success', 'Véhicule partenaire supprimé.');
+            ->with('success', 'Véhicule externe supprimé.');
     }
 
     /**
-     * Aucun champ requis, y compris la plaque — cf. règle métier "le transport d'un partenaire
-     * est une information facultative, pas une condition métier". Le téléphone chauffeur suit
+     * Aucun champ requis, y compris la plaque — cf. règle métier "le transport d'un client
+     * externe est une information facultative, pas une condition métier". Le téléphone chauffeur suit
      * la même règle : facultatif, mais normalisé/validé selon le pays choisi (Guinée par défaut)
      * dès qu'il est renseigné.
      */

@@ -20,7 +20,7 @@ use Tests\TestCase;
  * Le montant à encaisser par l'usine varie selon le contexte de la commande :
  *  - un véhicule de flotte gérée (tout véhicule présent dans `vehicules`) : toujours
  *    total = qte × prix_vente ;
- *  - sans véhicule, pour un client PARTENAIRE : total = qte × prix_usine ;
+ *  - sans véhicule, pour un client EXTERNE : total = qte × prix_usine ;
  *  - sans véhicule, pour un client standard/cashback (ou aucun client) : total = qte × prix_vente
  *    (comportement historique).
  *
@@ -117,12 +117,12 @@ class CommandeVenteModeTarificationTest extends TestCase
         $this->assertSame('prix_vente', $commande->mode_tarification_snapshot->value);
     }
 
-    public function test_store_client_partenaire_sale_uses_prix_usine(): void
+    public function test_store_client_externe_sale_uses_prix_usine(): void
     {
-        // Un partenaire (hors flotte gérée, sans véhicule renseigné) achète à prix usine —
+        // Un client externe (hors flotte gérée, sans véhicule renseigné) achète à prix usine —
         // la marge lui reste, cf. VehiculeCommandeContextResolver.
         $produit = $this->makeProduit(prixVente: 5000, prixUsine: 3500);
-        $client = Client::factory()->create(['organization_id' => $this->org->id, 'type' => 'partenaire']);
+        $client = Client::factory()->create(['organization_id' => $this->org->id, 'type' => 'externe']);
 
         $this->actingAs($this->user)
             ->post(route('ventes.store'), [
@@ -146,7 +146,7 @@ class CommandeVenteModeTarificationTest extends TestCase
     public function test_valider_chargement_recalcule_le_total_au_prix_usine_sur_quantite_chargee(): void
     {
         $produit = $this->makeProduit(prixVente: 5000, prixUsine: 3500);
-        $client = Client::factory()->create(['organization_id' => $this->org->id, 'type' => 'partenaire']);
+        $client = Client::factory()->create(['organization_id' => $this->org->id, 'type' => 'externe']);
 
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
@@ -190,11 +190,11 @@ class CommandeVenteModeTarificationTest extends TestCase
 
     // ── update (brouillon) : le mode suit le contexte au moment de l'édition ──
 
-    public function test_update_recalcule_le_mode_quand_on_passe_dun_vehicule_a_un_client_partenaire(): void
+    public function test_update_recalcule_le_mode_quand_on_passe_dun_vehicule_a_un_client_externe(): void
     {
         $produit = $this->makeProduit(prixVente: 5000, prixUsine: 3500);
         $vehicule = $this->makeVehicule();
-        $clientPartenaire = Client::factory()->create(['organization_id' => $this->org->id, 'type' => 'partenaire']);
+        $clientExterne = Client::factory()->create(['organization_id' => $this->org->id, 'type' => 'externe']);
 
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
@@ -215,7 +215,7 @@ class CommandeVenteModeTarificationTest extends TestCase
         $this->actingAs($this->user)
             ->put(route('ventes.update', $commande), [
                 'vehicule_id' => null,
-                'client_id' => $clientPartenaire->id,
+                'client_id' => $clientExterne->id,
                 'lignes' => [
                     ['produit_id' => $produit->id, 'qte' => 100, 'prix_vente' => 5000],
                 ],

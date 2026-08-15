@@ -67,11 +67,14 @@ class CommissionLogistiqueService
                     'quantite_reference' => $quantiteReference,
                     'montant_total' => $montantTotal,
                     'montant_verse' => 0,
-                    'statut' => StatutCommission::IMPAYE,
+                    // Toujours CREEE : ne devient IMPAYE(E) qu'à la validation de la
+                    // période de paiement qui la couvre — cf.
+                    // CommissionAdjustmentService::activerCommissionsCreees().
+                    'statut' => StatutCommission::CREEE,
                 ]
             );
 
-            if ($commission->wasRecentlyCreated || $commission->isImpaye()) {
+            if ($commission->wasRecentlyCreated || $commission->isCreee() || $commission->isImpaye()) {
                 $commission->parts()->delete();
                 self::creerParts($commission, $transfert, $montantTotal, $earnedAt);
             }
@@ -228,7 +231,7 @@ class CommissionLogistiqueService
                     'frais_supplementaires' => 0,
                     'montant_net' => $brut,
                     'montant_verse' => 0,
-                    'statut' => StatutCommission::IMPAYE,
+                    'statut' => StatutCommission::CREEE,
                     'earned_at' => $earnedAt->toDateString(),
                     'periode' => PeriodeComptableService::codeForLivreur($earnedAt),
                 ]);

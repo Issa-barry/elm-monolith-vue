@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\CategorieVehicule;
 use App\Models\Categorie;
 use App\Models\Depense;
 use App\Models\EquipeLivreur;
@@ -51,6 +52,8 @@ class VehiculeController extends Controller
             'capacite_bouteilles' => $v->capacite_bouteilles ?? $v->typeVehicule?->capacite_defaut_bouteilles,
             'site_id' => $v->site_id,
             'site_nom' => $v->relationLoaded('site') ? $v->site?->nom : null,
+            'categorie' => $v->categorie?->value,
+            'categorie_label' => $v->categorie_label,
             'proprietaire_id' => $v->proprietaire_id,
             'proprietaire_nom' => $v->proprietaire ? trim($v->proprietaire->prenom.' '.$v->proprietaire->nom) : null,
             'proprietaire_telephone' => $v->proprietaire?->telephone,
@@ -188,6 +191,7 @@ class VehiculeController extends Controller
         return Inertia::render('Vehicules/Create', [
             'proprietaires' => $this->proprietairesOptions(),
             'types' => $this->typesOptions(),
+            'categories_vehicule' => CategorieVehicule::options(),
             'initial_proprietaire_id' => $initialProprietaireId,
             'sites' => $this->sitesOptions($user, $orgId),
             'default_site_id' => $defaultSiteId,

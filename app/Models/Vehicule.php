@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\CategorieVehicule;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -25,6 +26,7 @@ class Vehicule extends Model
         'capacite_packs',
         'capacite_bouteilles',
         'proprietaire_id',
+        'categorie',
         'livraison_vente',
         'livraison_logistique',
         'photo_path',
@@ -35,6 +37,7 @@ class Vehicule extends Model
     {
         return [
             'is_active' => 'boolean',
+            'categorie' => CategorieVehicule::class,
             'livraison_vente' => 'boolean',
             'livraison_logistique' => 'boolean',
             'capacite_packs' => 'integer',
@@ -42,7 +45,7 @@ class Vehicule extends Model
         ];
     }
 
-    protected $appends = ['photo_url', 'type_label', 'usage_label'];
+    protected $appends = ['photo_url', 'type_label', 'usage_label', 'categorie_label'];
 
     public function getPhotoUrlAttribute(): ?string
     {
@@ -54,6 +57,11 @@ class Vehicule extends Model
         return $this->relationLoaded('typeVehicule') && $this->typeVehicule
             ? $this->typeVehicule->nom
             : '';
+    }
+
+    public function getCategorieLabelAttribute(): string
+    {
+        return $this->categorie?->label() ?? '';
     }
 
     /**

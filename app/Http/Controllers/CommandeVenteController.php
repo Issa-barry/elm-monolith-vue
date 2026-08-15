@@ -1122,9 +1122,9 @@ class CommandeVenteController extends Controller
                 'nom_complet' => $c->nom_complet,
                 'telephone' => $c->telephone,
                 'type' => $c->type->value,
-                // Véhicules partenaire mémorisés — facultatifs, jamais un prérequis pour vendre
+                // Véhicules externes mémorisés — facultatifs, jamais un prérequis pour vendre
                 // à ce client (cf. ClientVehicle).
-                'vehicules' => $c->type === ClientType::PARTENAIRE
+                'vehicules' => $c->type === ClientType::EXTERNE
                     ? $c->vehicules()->get()->map(fn ($cv) => [
                         'id' => $cv->id,
                         'libelle_affiche' => $cv->libelle_affiche,

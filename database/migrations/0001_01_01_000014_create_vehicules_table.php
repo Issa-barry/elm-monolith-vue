@@ -23,12 +23,20 @@ return new class extends Migration
             // pas de bouteilles (cf. type_vehicules.capacite_defaut_bouteilles).
             $table->unsignedInteger('capacite_bouteilles')->nullable();
             $table->foreignUlid('proprietaire_id')->nullable()->constrained('proprietaires')->restrictOnDelete();
-            // Toute ligne dans `vehicules` appartient par définition à la flotte gérée : il
-            // n'existe plus de notion de "prise en charge" séparée (cf. ex-pris_en_charge_par_usine)
-            // ni de "catégorie interne/externe" — ces deux booléens indépendants décrivent
-            // uniquement à quoi le véhicule est autorisé (l'un, l'autre, ou les deux). Un véhicule
-            // qui n'appartient à aucun des deux workflows appartient à un partenaire hors flotte
-            // (cf. ClientVehicle) et n'a pas sa place dans cette table.
+            // Propriété du véhicule — INTERNE (organisation) ou PARTENAIRE (tiers réel, mais
+            // pleinement intégré à la flotte gérée) — cf. App\Enums\CategorieVehicule. Source de
+            // vérité explicite et obligatoire : jamais dérivée en cachette de `proprietaire_id`
+            // (l'inverse : c'est `proprietaire_id` qui doit rester cohérent avec `categorie`, cf.
+            // CategorieVehicule::coherentAvecProprietaireTiers()). Volontairement sans défaut
+            // DB : un appelant qui oublie de la fournir doit échouer plutôt que de faire passer
+            // silencieusement un véhicule partenaire pour un véhicule interne.
+            $table->string('categorie', 20);
+            // Toute ligne dans `vehicules` appartient par définition à la flotte gérée, quelle
+            // que soit sa catégorie ci-dessus : il n'existe plus de notion de "prise en charge"
+            // séparée (cf. ex-pris_en_charge_par_usine). Ces deux booléens indépendants décrivent
+            // uniquement à quoi le véhicule est autorisé (l'un, l'autre, ou les deux) — jamais qui
+            // le possède. Un véhicule hors flotte gérée (client externe) n'a pas sa place dans
+            // cette table, cf. ClientVehicule.
             $table->boolean('livraison_vente')->default(true);
             $table->boolean('livraison_logistique')->default(false);
             $table->string('photo_path')->nullable();

@@ -17,6 +17,12 @@ use App\Models\TransfertLogistique;
  * seule couche qui lit le paramètre organisation (Parametre::getDeclencheurXxx)
  * et décide si l'événement reçu correspond au déclencheur configuré.
  *
+ * Le déclencheur ne choisit QUE le moment de naissance de la commission,
+ * jamais son statut initial : dans tous les cas elle naît CREEE (cf.
+ * CommissionGenerator / CommissionLogistiqueService) et ne devient IMPAYE(E)
+ * qu'à la validation de la période de paiement qui la couvre (cf.
+ * CommissionAdjustmentService::activerCommissionsCreees()).
+ *
  * Ne recalcule jamais rien elle-même : délègue systématiquement à
  * CommissionGenerator / CommissionLogistiqueService, seules sources de vérité du
  * calcul (CommissionCalculator, barèmes, parts). Chaque méthode est idempotente
@@ -32,19 +38,18 @@ class CommissionTriggerService
     // ── Vente ─────────────────────────────────────────────────────────────────
 
     /**
-     * Appelé quand la commande est confirmée / passe en chargement (cf.
-     * CommandeVenteService::creerFactureEtCommissionsInitiales()).
+     * Appelé à la validation réelle du chargement (cf.
+     * CommandeVenteService::validerChargement()), une fois les quantités
+     * réellement chargées connues.
      *
-     * Sous CHARGEMENT_VALIDE : crée le brouillon de commission dès maintenant,
-     * exactement comme avant l'introduction de ce paramètre — il reste en statut
-     * CREEE (invisible des listings/paiements) jusqu'à ce que le chargement soit
-     * réellement validé (cf. CommandeVenteService::validerChargement() →
-     * activerFactureEtCommissions(), inchangé).
+     * Sous CHARGEMENT_VALIDE : génère la commission maintenant, en CREEE, sur
+     * la base des quantités chargées.
      *
-     * Sous FACTURE_ENCAISSEE : ne fait rien. Aucune ligne de commission n'existe
-     * tant que la facture n'est pas payée — cf. onFactureVenteEncaissee().
+     * Sous FACTURE_ENCAISSEE : ne fait rien. Aucune ligne de commission
+     * n'existe tant que la facture n'est pas payée — cf.
+     * onFactureVenteEncaissee().
      */
-    public static function onCommandeVenteConfirmee(CommandeVente $commande): void
+    public static function onChargementValide(CommandeVente $commande): void
     {
         if (self::declencheurVente($commande->organization_id) !== DeclencheurCommissionVente::CHARGEMENT_VALIDE) {
             return;
@@ -58,14 +63,14 @@ class CommissionTriggerService
      * FactureVente::recalculStatut()) — jamais sur un simple clic contrôleur, et
      * jamais sur un encaissement partiel (PARTIEL).
      *
-     * Sous FACTURE_ENCAISSEE : génère la commission maintenant. La commande est
-     * nécessairement déjà "encaissable" à ce stade (chargement validé au
-     * préalable, cf. CommandeVente::isEncaissable()), donc CommissionGenerator la
-     * crée directement en statut IMPAYE (ou PAYE si montant nul), avec les
-     * quantités réellement chargées — pas de phase CREEE intermédiaire.
+     * Sous FACTURE_ENCAISSEE : génère la commission maintenant, en CREEE. La
+     * commande est nécessairement déjà passée par la validation du chargement
+     * à ce stade (une facture ne devient encaissable qu'après, cf.
+     * CommandeVente::isEncaissable()), donc les quantités chargées sont
+     * garanties disponibles pour le calcul.
      *
-     * Sous CHARGEMENT_VALIDE : ne fait rien, la commission existe déjà depuis le
-     * chargement.
+     * Sous CHARGEMENT_VALIDE : ne fait rien, la commission existe déjà depuis
+     * le chargement.
      */
     public static function onFactureVenteEncaissee(FactureVente $facture): void
     {
@@ -75,32 +80,6 @@ class CommissionTriggerService
         }
 
         if (self::declencheurVente($commande->organization_id) !== DeclencheurCommissionVente::FACTURE_ENCAISSEE) {
-            return;
-        }
-
-        CommissionGenerator::generateForCommandeIfMissing($commande);
-    }
-
-    /**
-     * Filet de sécurité appelé à la validation réelle du chargement (cf.
-     * CommandeVenteService::activerFactureEtCommissions()), en complément de
-     * onCommandeVenteConfirmee().
-     *
-     * onCommandeVenteConfirmee() est évalué tôt (confirmation / passage en
-     * chargement) : si le paramètre organisation valait FACTURE_ENCAISSEE à ce
-     * moment-là puis a été changé en CHARGEMENT_VALIDE avant que le chargement
-     * ne soit validé, aucune commission CREEE n'a été créée et il n'existe
-     * jusqu'ici aucun autre point d'entrée pour la générer — elle serait perdue
-     * définitivement pour cette commande. generateForCommandeIfMissing() est
-     * idempotent : sans effet si la commission existe déjà (cas normal, créée
-     * dès la confirmation).
-     *
-     * Sous FACTURE_ENCAISSEE : ne fait rien, comme onCommandeVenteConfirmee() —
-     * la génération reste réservée à onFactureVenteEncaissee().
-     */
-    public static function onChargementValide(CommandeVente $commande): void
-    {
-        if (self::declencheurVente($commande->organization_id) !== DeclencheurCommissionVente::CHARGEMENT_VALIDE) {
             return;
         }
 
