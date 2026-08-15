@@ -10,8 +10,10 @@ use App\Enums\StatutFactureVente;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
 use App\Models\FactureVente;
+use App\Services\Comptabilite\VenteComptabilisationService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 
@@ -117,7 +119,7 @@ class CommandeVenteService
                 'statut' => StatutCommandeVente::FACTURATION,
             ]);
 
-            FactureVente::create([
+            $facture = FactureVente::create([
                 'organization_id' => $commande->organization_id,
                 'site_id' => $commande->site_id,
                 'vehicule_id' => null,
@@ -127,7 +129,25 @@ class CommandeVenteService
                 'montant_net' => $commande->total_commande,
                 'statut_facture' => StatutFactureVente::IMPAYEE,
             ]);
+
+            self::comptabiliserVenteFacturee($facture);
         });
+    }
+
+    /**
+     * Comptabilité générale, en aval — ne doit jamais empêcher une vente d'être
+     * facturée (mode shadow, même principe que DepenseObserver/FicheComptabilisationService).
+     */
+    private static function comptabiliserVenteFacturee(FactureVente $facture): void
+    {
+        try {
+            app(VenteComptabilisationService::class)->comptabiliserVenteFacturee($facture);
+        } catch (\Throwable $e) {
+            Log::error('Comptabilisation vente facturée échouée', [
+                'facture_id' => $facture->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -237,6 +257,8 @@ class CommandeVenteService
                     ? StatutFactureVente::IMPAYEE
                     : StatutFactureVente::PAYEE,
             ]);
+
+            self::comptabiliserVenteFacturee($commande->facture);
         }
 
         foreach ($commande->commissions as $commission) {
@@ -394,11 +416,30 @@ class CommandeVenteService
                 $commande->loadMissing('facture');
                 if ($commande->facture && ! $commande->facture->isAnnulee() && ! $commande->facture->isPayee()) {
                     $commande->facture->update(['statut_facture' => StatutFactureVente::ANNULEE]);
+                    self::contrepasserVenteFactureeSiExistante($commande->facture, $motif);
                 }
             }
 
             self::annulerCommissionsAssociees($commande);
         });
+    }
+
+    /**
+     * Contrepasse la pièce comptable d'une facture déjà comptabilisée (statut IMPAYEE
+     * atteint, cf. comptabiliserVenteFacturee()) puis annulée — sans effet si elle
+     * n'avait jamais été comptabilisée (montant nul, ou échec de comptabilisation en
+     * amont). Mode shadow, même principe que comptabiliserVenteFacturee().
+     */
+    private static function contrepasserVenteFactureeSiExistante(FactureVente $facture, string $motif): void
+    {
+        try {
+            app(VenteComptabilisationService::class)->contrepasserVenteFactureeSiExistante($facture, 'Facture annulée — '.$motif);
+        } catch (\Throwable $e) {
+            Log::error('Contrepassation vente facturée (annulation) échouée', [
+                'facture_id' => $facture->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**

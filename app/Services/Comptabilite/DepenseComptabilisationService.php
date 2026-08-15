@@ -33,6 +33,24 @@ class DepenseComptabilisationService
         private readonly EcritureComptableService $ecritures,
     ) {}
 
+    /**
+     * Événement applicable à cette dépense, sans rien comptabiliser — utilisé par le
+     * rattrapage historique (ComptabiliteRattrapageCommand) pour vérifier l'idempotence
+     * (compta_pieces_idempotency_unique) avant de rejouer comptabiliserDepenseValidee(),
+     * sans dupliquer la règle de catégorie ci-dessous à deux endroits. Null = catégorie
+     * hors périmètre (EMPLOYE) ou DepenseType manquant.
+     */
+    public function evenementPour(Depense $depense): ?EvenementComptable
+    {
+        $depense->loadMissing('depenseType');
+
+        return match ($depense->depenseType?->categorie) {
+            CategorieDepense::INTERNE => EvenementComptable::DEPENSE_INTERNE_VALIDEE,
+            CategorieDepense::VEHICULE, CategorieDepense::PROPRIETAIRE, CategorieDepense::LIVREUR => EvenementComptable::DEPENSE_AVANCE_TIERS_VALIDEE,
+            default => null,
+        };
+    }
+
     public function comptabiliserDepenseValidee(Depense $depense): ?PieceComptable
     {
         $depense->loadMissing('depenseType');

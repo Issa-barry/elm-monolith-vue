@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use App\Services\Comptabilite\PlanComptableBootstrapService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class Organization extends Model
 {
@@ -24,6 +26,25 @@ class Organization extends Model
         static::creating(function (Organization $org) {
             if (empty($org->code)) {
                 $org->code = self::generateCode($org->name);
+            }
+        });
+
+        // Provisionne le plan comptable minimal dès la création de l'organisation —
+        // sans ça, toute tentative de comptabilisation ultérieure (dépense validée,
+        // fiche validée, vente facturée...) échoue faute de compte/journal/mapping.
+        // Idempotent (PlanComptableBootstrapService::bootstrap() ne fait que des
+        // firstOrCreate) et non bloquant (mode shadow, même principe que le reste du
+        // module comptable) : ne doit jamais empêcher la création d'une organisation.
+        // Pour les organisations déjà existantes avant l'introduction de ce hook, voir
+        // `php artisan comptabilite:bootstrap` / `comptabilite:rattraper`.
+        static::created(function (Organization $org) {
+            try {
+                app(PlanComptableBootstrapService::class)->bootstrap($org->id);
+            } catch (\Throwable $e) {
+                Log::error('Bootstrap comptable automatique échoué', [
+                    'organization_id' => $org->id,
+                    'error' => $e->getMessage(),
+                ]);
             }
         });
     }
