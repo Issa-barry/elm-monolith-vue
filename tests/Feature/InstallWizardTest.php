@@ -55,13 +55,44 @@ class InstallWizardTest extends TestCase
         $this->get('/install')->assertOk();
     }
 
-    public function test_install_inaccessible_apres_installation(): void
+    public function test_install_redirige_vers_login_apres_installation_en_on_premise(): void
     {
+        config(['app.deployment_mode' => 'on_premise']);
+
         $this->post('/install', $this->payload())->assertOk();
 
-        $this->get('/install')->assertStatus(404);
+        $this->get('/install')->assertRedirect(route('login'));
         $this->post('/install/token', ['token' => 'whatever'])->assertStatus(404);
         $this->post('/install', $this->payload())->assertStatus(404);
+    }
+
+    public function test_install_reste_accessible_apres_installation_en_saas(): void
+    {
+        config(['app.deployment_mode' => 'saas', 'app.install_token' => 'ma-cle-secrete']);
+
+        $this->withSession(['install_token_verified' => true])
+            ->post('/install', $this->payload())
+            ->assertOk();
+
+        $this->get('/install')->assertInertia(fn ($page) => $page->component('Install/Token'));
+
+        $this->withSession(['install_token_verified' => true])
+            ->post('/install', $this->payload([
+                'organisation' => ['nom' => 'ELM Test 2'],
+                'admin' => ['telephone' => '+224622000001'],
+            ]))
+            ->assertOk();
+
+        $this->assertSame(2, Organization::whereIn('name', ['ELM Test', 'ELM Test 2'])->count());
+        $this->assertSame(2, AppInstallation::count());
+    }
+
+    public function test_install_saas_sans_token_configure_refuse_avec_erreur_serveur(): void
+    {
+        config(['app.deployment_mode' => 'saas', 'app.install_token' => null]);
+
+        $this->get('/install')->assertStatus(500);
+        $this->post('/install', $this->payload())->assertStatus(500);
     }
 
     // ── Token ─────────────────────────────────────────────────────────────────────

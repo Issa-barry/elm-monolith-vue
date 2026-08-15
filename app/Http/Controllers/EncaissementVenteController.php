@@ -56,7 +56,7 @@ class EncaissementVenteController extends Controller
         $data['date_encaissement'] ??= now()->toDateString();
 
         // Transaction : l'encaissement, la transition de statut de la facture (donc la
-        // génération éventuelle de la commission de vente sous FACTURE_ENCAISSEE — cf.
+        // naissance éventuelle de la commission de vente sous FACTURE_ENCAISSEE — cf.
         // FactureVente::recalculStatut()/CommissionTriggerService) et les effets en
         // cascade (auto-clôture, cashback) doivent réussir ou échouer ensemble : un
         // échec en cours de route ne doit jamais laisser une commission générée pour un

@@ -21,10 +21,15 @@ interface SiteOption {
     id: string;
     nom: string;
 }
+interface CategorieOption {
+    value: string;
+    label: string;
+}
 
 const props = defineProps<{
     proprietaires: Option[];
     types: TypeOption[];
+    categories_vehicule: CategorieOption[];
     initial_proprietaire_id: string | null;
     sites: SiteOption[];
     default_site_id: string | null;
@@ -47,6 +52,13 @@ const form = useForm({
     site_id: props.default_site_id,
     proprietaire_id:
         props.initial_proprietaire_id ?? props.default_proprietaire_id,
+    // Cohérent avec le propriétaire pré-rempli ci-dessus : "Partenaire" seulement quand on
+    // arrive avec un propriétaire tiers déjà choisi (ex: depuis la fiche Propriétaire),
+    // "Interne" sinon (organisation par défaut) — l'admin peut toujours corriger.
+    categorie: (props.initial_proprietaire_id &&
+    props.initial_proprietaire_id !== props.default_proprietaire_id
+        ? 'partenaire'
+        : 'interne') as string | null,
     // Par défaut, un nouveau véhicule sert à la vente — l'admin coche
     // logistique en plus si besoin (cf. Vehicule::$livraison_vente par défaut).
     livraison_vente: true,
@@ -62,6 +74,7 @@ const canSubmit = computed(() => {
         form.nom_vehicule.trim().length > 0 &&
         form.immatriculation.trim().length > 0 &&
         !!form.type_vehicule_id &&
+        !!form.categorie &&
         (form.livraison_vente || form.livraison_logistique)
     );
 });
@@ -112,6 +125,7 @@ function submit() {
                 :processing="form.processing"
                 :proprietaires="proprietaires"
                 :types="types"
+                :categories-vehicule="categories_vehicule"
                 :sites="sites"
                 :can-change-site="can_change_site"
                 :default-proprietaire-id="default_proprietaire_id"

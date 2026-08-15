@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\CategorieVehicule;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
@@ -49,14 +50,14 @@ class EquipeLivraisonController extends Controller
                 Rule::unique('equipes_livraison', 'vehicule_id')->whereNull('deleted_at'),
             ],
             'proprietaire_id' => [
-                Rule::requiredIf(fn () => $this->isVehiculeExterne($vehiculeSelectionne)),
+                Rule::requiredIf(fn () => $this->isVehiculePartenaire($vehiculeSelectionne)),
                 'nullable',
                 'string',
                 Rule::exists('proprietaires', 'id')->where('organization_id', $orgId),
             ],
             'commission_unitaire_par_pack' => 'required|numeric|min:1',
             'montant_par_pack_proprietaire' => [
-                Rule::requiredIf(fn () => $this->isVehiculeExterne($vehiculeSelectionne)),
+                Rule::requiredIf(fn () => $this->isVehiculePartenaire($vehiculeSelectionne)),
                 'nullable', 'numeric', 'min:0',
             ],
             'membres' => 'required|array|min:1',
@@ -74,23 +75,23 @@ class EquipeLivraisonController extends Controller
             'membres.*.ordre' => 'nullable|integer|min:0',
         ], $this->messages());
 
-        if (! $this->isVehiculeExterne($vehiculeSelectionne)) {
+        if (! $this->isVehiculePartenaire($vehiculeSelectionne)) {
             $data['proprietaire_id'] = null;
             $data['montant_par_pack_proprietaire'] = null;
         }
 
         $commission = (float) $data['commission_unitaire_par_pack'];
-        $isExterne = $this->isVehiculeExterne($vehiculeSelectionne);
-        $montantProp = $isExterne ? (float) ($data['montant_par_pack_proprietaire'] ?? 0) : 0.0;
+        $isPartenaire = $this->isVehiculePartenaire($vehiculeSelectionne);
+        $montantProp = $isPartenaire ? (float) ($data['montant_par_pack_proprietaire'] ?? 0) : 0.0;
 
-        $this->validatePartage($data['membres'], $commission, $montantProp, $isExterne);
+        $this->validatePartage($data['membres'], $commission, $montantProp, $isPartenaire);
         $this->validateUniquePhones($data['membres']);
         $this->validateMembresExclusivite($data['membres'], $orgId);
 
         $nomVehicule = $vehiculeSelectionne?->nom_vehicule ?? '';
 
         $equipe = null;
-        DB::transaction(function () use ($data, $orgId, $commission, $montantProp, $isExterne, $nomVehicule, &$equipe) {
+        DB::transaction(function () use ($data, $orgId, $commission, $montantProp, $isPartenaire, $nomVehicule, &$equipe) {
             $tauxProp = $commission > 0 ? round($montantProp / $commission * 100, 2) : 0.0;
 
             $equipe = EquipeLivraison::create([
@@ -99,8 +100,8 @@ class EquipeLivraisonController extends Controller
                 'proprietaire_id' => $data['proprietaire_id'],
                 'is_active' => $data['is_active'] ?? true,
                 'commission_unitaire_par_pack' => $commission,
-                'montant_par_pack_proprietaire' => $isExterne ? $montantProp : null,
-                'taux_commission_proprietaire' => $isExterne ? $tauxProp : 0.0,
+                'montant_par_pack_proprietaire' => $isPartenaire ? $montantProp : null,
+                'taux_commission_proprietaire' => $isPartenaire ? $tauxProp : 0.0,
             ]);
 
             Vehicule::whereKey($data['vehicule_id'])->update(['is_active' => true]);
@@ -156,14 +157,14 @@ class EquipeLivraisonController extends Controller
                 Rule::unique('equipes_livraison', 'vehicule_id')->whereNull('deleted_at')->ignore($equipes_livraison->id),
             ],
             'proprietaire_id' => [
-                Rule::requiredIf(fn () => $this->isVehiculeExterne($vehiculeSelectionne)),
+                Rule::requiredIf(fn () => $this->isVehiculePartenaire($vehiculeSelectionne)),
                 'nullable',
                 'string',
                 Rule::exists('proprietaires', 'id')->where('organization_id', $orgId),
             ],
             'commission_unitaire_par_pack' => 'required|numeric|min:1',
             'montant_par_pack_proprietaire' => [
-                Rule::requiredIf(fn () => $this->isVehiculeExterne($vehiculeSelectionne)),
+                Rule::requiredIf(fn () => $this->isVehiculePartenaire($vehiculeSelectionne)),
                 'nullable', 'numeric', 'min:0',
             ],
             'membres' => 'required|array|min:1',
@@ -181,23 +182,23 @@ class EquipeLivraisonController extends Controller
             'membres.*.ordre' => 'nullable|integer|min:0',
         ], $this->messages());
 
-        if (! $this->isVehiculeExterne($vehiculeSelectionne)) {
+        if (! $this->isVehiculePartenaire($vehiculeSelectionne)) {
             $data['proprietaire_id'] = null;
             $data['montant_par_pack_proprietaire'] = null;
         }
 
         $commission = (float) $data['commission_unitaire_par_pack'];
-        $isExterne = $this->isVehiculeExterne($vehiculeSelectionne);
-        $montantProp = $isExterne ? (float) ($data['montant_par_pack_proprietaire'] ?? 0) : 0.0;
+        $isPartenaire = $this->isVehiculePartenaire($vehiculeSelectionne);
+        $montantProp = $isPartenaire ? (float) ($data['montant_par_pack_proprietaire'] ?? 0) : 0.0;
 
-        $this->validatePartage($data['membres'], $commission, $montantProp, $isExterne);
+        $this->validatePartage($data['membres'], $commission, $montantProp, $isPartenaire);
         $this->validateUniquePhones($data['membres']);
         $this->validateMembresExclusivite($data['membres'], $orgId, $equipes_livraison->id);
 
         $oldVehiculeId = $equipes_livraison->vehicule_id;
         $nomVehicule = $vehiculeSelectionne?->nom_vehicule ?? '';
 
-        DB::transaction(function () use ($data, $orgId, $commission, $montantProp, $isExterne, $equipes_livraison, $oldVehiculeId, $nomVehicule) {
+        DB::transaction(function () use ($data, $orgId, $commission, $montantProp, $isPartenaire, $equipes_livraison, $oldVehiculeId, $nomVehicule) {
             $tauxProp = $commission > 0 ? round($montantProp / $commission * 100, 2) : 0.0;
 
             $equipes_livraison->update([
@@ -205,8 +206,8 @@ class EquipeLivraisonController extends Controller
                 'proprietaire_id' => $data['proprietaire_id'],
                 'is_active' => $data['is_active'] ?? $equipes_livraison->is_active,
                 'commission_unitaire_par_pack' => $commission,
-                'montant_par_pack_proprietaire' => $isExterne ? $montantProp : null,
-                'taux_commission_proprietaire' => $isExterne ? $tauxProp : 0.0,
+                'montant_par_pack_proprietaire' => $isPartenaire ? $montantProp : null,
+                'taux_commission_proprietaire' => $isPartenaire ? $tauxProp : 0.0,
             ]);
 
             if ($oldVehiculeId && $oldVehiculeId !== $data['vehicule_id']) {
@@ -379,17 +380,14 @@ class EquipeLivraisonController extends Controller
     }
 
     /**
-     * "Externe" ici veut dire : propriété d'un tiers (pas l'organisation elle-même) — notion
-     * de propriété, indépendante de l'usage (vente/logistique). Détermine si un propriétaire
-     * réel et un partage montant_par_pack_proprietaire doivent être saisis pour cette équipe.
+     * Détermine si un propriétaire réel et un partage montant_par_pack_proprietaire doivent
+     * être saisis pour cette équipe — source de vérité unique : Vehicule::categorie
+     * (PARTENAIRE = propriétaire tiers intégré à la flotte gérée), jamais re-dérivé depuis
+     * proprietaire_id (cf. CategorieVehicule).
      */
-    private function isVehiculeExterne(?Vehicule $vehicule): bool
+    private function isVehiculePartenaire(?Vehicule $vehicule): bool
     {
-        if (! $vehicule?->proprietaire_id) {
-            return false;
-        }
-
-        return $vehicule->proprietaire_id !== Proprietaire::interneParDefautId($vehicule->organization_id);
+        return $vehicule?->categorie === CategorieVehicule::PARTENAIRE;
     }
 
     private function currentSiteName(): string
@@ -460,7 +458,7 @@ class EquipeLivraisonController extends Controller
     /**
      * Vérifie que la somme des montants bénéficiaires = commission_unitaire_par_pack.
      */
-    private function validatePartage(array $membres, float $commission, float $montantProp, bool $isExterne): void
+    private function validatePartage(array $membres, float $commission, float $montantProp, bool $isPartenaire): void
     {
         $totalMembres = array_reduce(
             $membres,
@@ -468,7 +466,7 @@ class EquipeLivraisonController extends Controller
             0.0
         );
 
-        $total = $totalMembres + ($isExterne ? $montantProp : 0.0);
+        $total = $totalMembres + ($isPartenaire ? $montantProp : 0.0);
 
         if (abs($total - $commission) > 0.01) {
             abort(422, sprintf(

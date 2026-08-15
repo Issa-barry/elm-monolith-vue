@@ -9,6 +9,8 @@ use App\Enums\TypePeriodePaiement;
 use App\Features\ModuleFeature;
 use App\Models\Client;
 use App\Models\CommandeVente;
+use App\Models\CommissionLogistique;
+use App\Models\CommissionLogistiquePart;
 use App\Models\CommissionPart;
 use App\Models\CommissionVente;
 use App\Models\EquipeLivraison;
@@ -16,9 +18,11 @@ use App\Models\EquipeLivreur;
 use App\Models\Livreur;
 use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
+use App\Models\TransfertLogistique;
 use App\Models\User;
 use App\Models\Vehicule;
 use App\Services\CommissionAdjustmentService;
+use App\Services\PeriodeComptableService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Pennant\Feature;
@@ -797,5 +801,170 @@ class CommissionAjustementTest extends TestCase
 
         $this->assertSame(0.0, (float) $partsA['Kadiatou']->refresh()->montant_actuel);
         $this->assertSame(0.0, (float) $partsB['Kadiatou']->refresh()->montant_actuel);
+    }
+
+    // ── Bascule CREEE→IMPAYE à la validation de période ─────────────────────────
+    // cf. CommissionAdjustmentService::activerCommissionsCreees(), seul moment où
+    // une commission de vente sort de CREEE (CommandeVenteService::validerChargement()
+    // la crée toujours en CREEE).
+
+    public function test_validation_periode_bascule_commission_creee_vers_impaye(): void
+    {
+        $this->travelTo('2026-06-10 12:00:00');
+
+        $livreur = $this->makeLivreur();
+        $commission = CommissionVente::create([
+            'organization_id' => $this->org->id,
+            'commande_vente_id' => $this->makeCommande()->id,
+            'vehicule_id' => null,
+            'montant_commande' => 1000000,
+            'montant_commission_totale' => 300000.0,
+            'montant_verse' => 0,
+            'statut' => 'creee',
+        ]);
+        $part = CommissionPart::create([
+            'commission_vente_id' => $commission->id,
+            'type_beneficiaire' => 'livreur',
+            'livreur_id' => $livreur->id,
+            'beneficiaire_nom' => $livreur->nom_complet,
+            'taux_commission' => 100,
+            'montant_brut' => 300000.0,
+            'frais_supplementaires' => 0,
+            'montant_net' => 300000.0,
+            'montant_verse' => 0,
+            'statut' => 'creee',
+        ]);
+
+        $periode = $this->makePeriode(StatutPeriodePaiement::BROUILLON->value);
+
+        $this->actingAs($this->user)->post(route('comptabilite.periodes.calculer', $periode));
+        $this->assertDatabaseHas('paiement_fiches', ['periode_id' => $periode->id]);
+
+        // Une commission CREEE reste CREEE tant que la période n'est pas validée,
+        // même une fois reprise dans une fiche calculée.
+        $this->assertEquals('creee', $part->fresh()->statut->value);
+
+        $this->actingAs($this->user)
+            ->post(route('comptabilite.ajustements.valider', ['type' => 'vente', 'partId' => $part->id]))
+            ->assertRedirect();
+
+        $this->actingAs($this->user)
+            ->post(route('comptabilite.periodes.valider', $periode))
+            ->assertRedirect();
+
+        $periode->refresh();
+        $this->assertSame(StatutPeriodePaiement::VALIDEE->value, $periode->statut->value);
+        $this->assertEquals('impaye', $commission->fresh()->statut->value);
+        $this->assertEquals('impaye', $part->fresh()->statut->value);
+    }
+
+    public function test_commission_creee_hors_periode_reste_creee_apres_validation(): void
+    {
+        $this->travelTo('2026-06-10 12:00:00');
+        ['part' => $partDansPeriode] = $this->makeCommissionAvecPart();
+
+        // Commission créée en dehors de la fenêtre de la période (01→15/06) validée
+        // plus bas : ne doit jamais être touchée par cette validation.
+        $this->travelTo('2026-07-05 12:00:00');
+        $livreurHorsPeriode = $this->makeLivreur('HorsPeriode');
+        $commissionHorsPeriode = CommissionVente::create([
+            'organization_id' => $this->org->id,
+            'commande_vente_id' => $this->makeCommande()->id,
+            'vehicule_id' => null,
+            'montant_commande' => 500000,
+            'montant_commission_totale' => 150000.0,
+            'montant_verse' => 0,
+            'statut' => 'creee',
+        ]);
+        $partHorsPeriode = CommissionPart::create([
+            'commission_vente_id' => $commissionHorsPeriode->id,
+            'type_beneficiaire' => 'livreur',
+            'livreur_id' => $livreurHorsPeriode->id,
+            'beneficiaire_nom' => $livreurHorsPeriode->nom_complet,
+            'taux_commission' => 100,
+            'montant_brut' => 150000.0,
+            'frais_supplementaires' => 0,
+            'montant_net' => 150000.0,
+            'montant_verse' => 0,
+            'statut' => 'creee',
+        ]);
+        $this->travelTo('2026-06-10 12:00:00');
+
+        $periode = $this->makePeriode(StatutPeriodePaiement::BROUILLON->value);
+        $this->actingAs($this->user)->post(route('comptabilite.periodes.calculer', $periode));
+
+        $this->actingAs($this->user)
+            ->post(route('comptabilite.ajustements.valider', ['type' => 'vente', 'partId' => $partDansPeriode->id]))
+            ->assertRedirect();
+
+        $this->actingAs($this->user)
+            ->post(route('comptabilite.periodes.valider', $periode))
+            ->assertRedirect();
+
+        $periode->refresh();
+        $this->assertSame(StatutPeriodePaiement::VALIDEE->value, $periode->statut->value);
+        $this->assertEquals('creee', $commissionHorsPeriode->fresh()->statut->value);
+        $this->assertEquals('creee', $partHorsPeriode->fresh()->statut->value);
+    }
+
+    public function test_validation_periode_bascule_aussi_les_commissions_logistiques_creees(): void
+    {
+        $this->travelTo('2026-06-10 12:00:00');
+
+        $livreur = $this->makeLivreur('Sylla');
+        $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id]);
+        $site = $this->user->sites()->wherePivot('is_default', true)->first();
+
+        $transfert = TransfertLogistique::create([
+            'organization_id' => $this->org->id,
+            'reference' => 'TRF-TEST-'.uniqid(),
+            'site_source_id' => $site->id,
+            'site_destination_id' => $site->id,
+            'vehicule_id' => $vehicule->id,
+            'statut' => 'reception',
+            'date_arrivee_reelle' => now(),
+            'created_by' => $this->user->id,
+        ]);
+
+        $commission = CommissionLogistique::create([
+            'organization_id' => $this->org->id,
+            'transfert_logistique_id' => $transfert->id,
+            'vehicule_id' => $vehicule->id,
+            'base_calcul' => 'forfait',
+            'valeur_base' => 20000,
+            'montant_total' => 20000,
+            'montant_verse' => 0,
+            'statut' => 'creee',
+        ]);
+        $part = CommissionLogistiquePart::create([
+            'commission_logistique_id' => $commission->id,
+            'type_beneficiaire' => 'livreur',
+            'livreur_id' => $livreur->id,
+            'beneficiaire_nom' => $livreur->nom_complet,
+            'taux_commission' => 100,
+            'montant_brut' => 20000,
+            'frais_supplementaires' => 0,
+            'montant_net' => 20000,
+            'montant_verse' => 0,
+            'statut' => 'creee',
+            'earned_at' => now(),
+            'periode' => PeriodeComptableService::codeForLivreur(now()),
+        ]);
+
+        $periode = $this->makePeriode(StatutPeriodePaiement::BROUILLON->value);
+        $this->actingAs($this->user)->post(route('comptabilite.periodes.calculer', $periode));
+
+        $this->actingAs($this->user)
+            ->post(route('comptabilite.ajustements.valider', ['type' => 'logistique', 'partId' => $part->id]))
+            ->assertRedirect();
+
+        $this->actingAs($this->user)
+            ->post(route('comptabilite.periodes.valider', $periode))
+            ->assertRedirect();
+
+        $periode->refresh();
+        $this->assertSame(StatutPeriodePaiement::VALIDEE->value, $periode->statut->value);
+        $this->assertEquals('impaye', $commission->fresh()->statut->value);
+        $this->assertEquals('impaye', $part->fresh()->statut->value);
     }
 }

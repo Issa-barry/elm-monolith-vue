@@ -28,6 +28,11 @@ interface SiteOption {
     nom: string;
 }
 
+interface CategorieOption {
+    value: string;
+    label: string;
+}
+
 interface FormData {
     nom_vehicule: string;
     immatriculation: string;
@@ -36,6 +41,7 @@ interface FormData {
     capacite_bouteilles: number | null;
     site_id: string | null;
     proprietaire_id: number | string | null;
+    categorie: string | null;
     livraison_vente: boolean;
     livraison_logistique: boolean;
     photo: File | null;
@@ -48,6 +54,7 @@ const props = defineProps<{
     processing: boolean;
     proprietaires: Option[];
     types: TypeOption[];
+    categoriesVehicule: CategorieOption[];
     photoUrl?: string | null;
     sites: SiteOption[];
     canChangeSite: boolean;
@@ -161,6 +168,7 @@ const canSubmit = computed(
         props.form.nom_vehicule.trim().length > 0 &&
         props.form.immatriculation.trim().length > 0 &&
         !!props.form.type_vehicule_id &&
+        !!props.form.categorie &&
         auMoinsUnUsage.value,
 );
 
@@ -287,6 +295,45 @@ function handleSubmit() {
                             Votre site (non modifiable).
                         </p>
                     </template>
+                </div>
+
+                <!-- Catégorie : propriété du véhicule, indépendante de l'usage
+                     vente/logistique ci-dessus — INTERNE (organisation) ou
+                     PARTENAIRE (tiers réel, mais géré comme tout véhicule de
+                     flotte). Détermine si un propriétaire tiers est requis. -->
+                <div>
+                    <Label
+                        for="categorie"
+                        class="mb-1.5 flex items-center gap-1"
+                    >
+                        Catégorie
+                        <span class="text-destructive">*</span>
+                    </Label>
+                    <Dropdown
+                        input-id="categorie"
+                        :model-value="form.categorie"
+                        @update:model-value="
+                            $emit('update:form', {
+                                ...form,
+                                categorie: $event,
+                            })
+                        "
+                        :options="categoriesVehicule"
+                        option-label="label"
+                        option-value="value"
+                        placeholder="Sélectionner…"
+                        class="w-full"
+                        :class="{ 'p-invalid': errors.categorie }"
+                    />
+                    <p
+                        v-if="errors.categorie"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.categorie }}
+                    </p>
+                    <p v-else class="mt-1 text-xs text-muted-foreground">
+                        Partenaire = propriétaire tiers obligatoire ci-contre.
+                    </p>
                 </div>
 
                 <!-- Propriétaire : toujours facultatif — un propriétaire par
@@ -436,7 +483,7 @@ function handleSubmit() {
 
                 <div>
                     <Label for="capacite_packs" class="mb-1.5 block">
-                        Capacité (packs)
+                        Capacité (sachets)
                         <span
                             v-if="selectedType"
                             class="ml-1 text-xs text-muted-foreground"

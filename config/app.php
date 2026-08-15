@@ -21,12 +21,32 @@ return [
     |--------------------------------------------------------------------------
     |
     | Lue une fois côté serveur (jamais stockée en base, jamais renvoyée au
-    | client) — voir InstallWizardController. Si absente en production,
-    | /install refuse tout accès plutôt que de rester ouvert sans protection.
+    | client) — voir InstallWizardController. En on_premise, optionnelle mais
+    | recommandée dès la production (sans elle, /install reste ouvert jusqu'à
+    | la 1ère installation, qui le referme définitivement via isLocked()). En
+    | saas, OBLIGATOIRE : /install y reste accessible indéfiniment, donc sans
+    | cette clé l'app refuse tout accès à /install (500) plutôt que de rester
+    | ouverte sans protection.
     |
     */
 
     'install_token' => env('APP_INSTALL_TOKEN'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Mode de déploiement : on_premise (défaut) ou saas
+    |--------------------------------------------------------------------------
+    |
+    | Fixé une fois par déploiement (un .env par client on-premise, un .env pour
+    | le SaaS) — jamais déduit du domaine, qui peut changer. Gouverne le verrou
+    | de /install (InstallationService::isLocked()) : en on_premise, une seule
+    | organisation jamais plus ; en saas, /install reste ouvert indéfiniment
+    | pour créer de nouvelles organisations (APP_INSTALL_TOKEN y est alors
+    | obligatoire, cf. InstallWizardController).
+    |
+    */
+
+    'deployment_mode' => env('APP_DEPLOYMENT_MODE', 'on_premise'),
 
     /*
     |--------------------------------------------------------------------------

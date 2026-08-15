@@ -183,7 +183,7 @@ function submitProposal() {
                             <div>
                                 <label
                                     class="text-sm font-medium text-foreground"
-                                    >Capacite (packs)</label
+                                    >Capacite (sachets)</label
                                 >
                                 <input
                                     v-model.number="form.capacite_packs"

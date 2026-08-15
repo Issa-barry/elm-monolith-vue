@@ -25,7 +25,7 @@ class ImportFlotteTest extends TestCase
     use RefreshDatabase;
 
     private const HEADERS_VEHICULES = [
-        'vehicule_immatriculation', 'vehicule_nom', 'vehicule_type',
+        'vehicule_immatriculation', 'vehicule_nom', 'vehicule_type', 'vehicule_categorie',
         'vehicule_site', 'vehicule_livraison_vente', 'vehicule_livraison_logistique',
         'vehicule_capacite_sachets', 'vehicule_capacite_bouteilles',
         'proprietaire_nom', 'proprietaire_prenom', 'proprietaire_telephone', 'proprietaire_pays',
@@ -78,6 +78,7 @@ class ImportFlotteTest extends TestCase
             'vehicule_immatriculation' => 'RC-1234-A',
             'vehicule_nom' => 'Camion 1',
             'vehicule_type' => 'Tricycle',
+            'vehicule_categorie' => 'partenaire',
             'vehicule_site' => 'Matoto',
             'vehicule_livraison_vente' => 'oui',
             'vehicule_livraison_logistique' => 'non',
@@ -222,6 +223,7 @@ class ImportFlotteTest extends TestCase
         $import = $this->importer(
             [$this->ligneVehicule([
                 'vehicule_site' => '',
+                'vehicule_categorie' => 'interne',
                 'proprietaire_nom' => '', 'proprietaire_prenom' => '', 'proprietaire_telephone' => '', 'proprietaire_pays' => '',
             ])],
             [$this->ligneLivreurChauffeur()]
@@ -430,6 +432,63 @@ class ImportFlotteTest extends TestCase
         $this->assertSame(0, Vehicule::where('organization_id', $this->org->id)->count());
     }
 
+    /**
+     * Même plaque déjà en base, écrite différemment dans le fichier (espaces/points/tirets/casse)
+     * : doit retrouver le véhicule existant, jamais en créer un doublon écrit différemment.
+     */
+    public function test_analyse_retrouve_vehicule_existant_malgre_un_format_dimmatriculation_different(): void
+    {
+        $existant = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'immatriculation' => 'BK-4627-02',
+        ]);
+
+        $import = $this->importer(
+            [$this->ligneVehicule(['vehicule_immatriculation' => 'bk 4627.02'])],
+            [$this->ligneLivreurChauffeur(['vehicule_immatriculation' => 'bk 4627.02'])]
+        );
+
+        $this->assertSame(0, $import->nb_groupes_erreur);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $this->assertSame(1, Vehicule::where('organization_id', $this->org->id)->count());
+        $this->assertSame('BK-4627-02', $existant->fresh()->immatriculation);
+    }
+
+    /**
+     * Immatriculation proche d'un véhicule déjà en base, mais pas identique même après
+     * normalisation (ex : suffixe manquant) — jamais fusionné automatiquement, mais signalé
+     * pour que l'utilisateur confirme/corrige au lieu de créer silencieusement un doublon.
+     */
+    public function test_analyse_signale_une_immatriculation_proche_dun_vehicule_existant(): void
+    {
+        Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom_vehicule' => 'Cousin',
+            'immatriculation' => 'BK-4627-02',
+        ]);
+
+        $import = $this->importer(
+            [$this->ligneVehicule(['vehicule_immatriculation' => 'BK4627'])],
+            [$this->ligneLivreurChauffeur(['vehicule_immatriculation' => 'BK4627'])]
+        );
+
+        $this->assertSame(1, $import->nb_groupes_erreur);
+        $erreur = $import->rapport['groupes'][0]['erreurs'][0];
+        $this->assertStringContainsString("Immatriculation proche d'un véhicule existant", $erreur);
+        $this->assertStringContainsString('Cousin', $erreur);
+        $this->assertStringContainsString('BK-4627-02', $erreur);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertStatus(422);
+
+        $this->assertSame(1, Vehicule::where('organization_id', $this->org->id)->count());
+    }
+
     public function test_analyse_flags_error_for_livreur_attached_to_two_different_vehicules(): void
     {
         // Un livreur pas encore en base, rattaché à deux véhicules différents
@@ -563,6 +622,7 @@ class ImportFlotteTest extends TestCase
 
         $import = $this->importer(
             [$this->ligneVehicule([
+                'vehicule_categorie' => 'interne',
                 'proprietaire_nom' => '', 'proprietaire_prenom' => '', 'proprietaire_telephone' => '', 'proprietaire_pays' => '',
             ])],
             [$this->ligneLivreurChauffeur()]
@@ -574,6 +634,59 @@ class ImportFlotteTest extends TestCase
 
         $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
         $this->assertSame($defaut->id, $vehicule->proprietaire_id);
+    }
+
+    /**
+     * Une ligne "interne" peut documenter explicitement le propriétaire interne par défaut
+     * (mêmes nom/prénom/téléphone) au lieu de laisser les colonnes proprietaire_* vides — même
+     * règle de cohérence que VehiculeController::ensureCategorieCoherente() côté formulaire.
+     */
+    public function test_analyse_accepte_vehicule_interne_dont_le_proprietaire_saisi_est_le_defaut(): void
+    {
+        $defaut = Proprietaire::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom' => 'SIDIBE',
+            'prenom' => 'Moussa',
+            'telephone' => '+224622602693',
+        ]);
+
+        $import = $this->importer(
+            [$this->ligneVehicule([
+                'vehicule_categorie' => 'interne',
+                'proprietaire_nom' => 'SIDIBE', 'proprietaire_prenom' => 'Moussa',
+                'proprietaire_telephone' => '622602693', 'proprietaire_pays' => 'GN',
+            ])],
+            [$this->ligneLivreurChauffeur()]
+        );
+
+        $this->assertSame(0, $import->nb_groupes_erreur);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
+        $this->assertSame($defaut->id, $vehicule->proprietaire_id);
+    }
+
+    /** Un véritable tiers (propriétaire différent du défaut) reste incohérent avec "interne". */
+    public function test_analyse_refuse_vehicule_interne_avec_un_veritable_proprietaire_tiers(): void
+    {
+        Proprietaire::factory()->create([
+            'organization_id' => $this->org->id,
+            'telephone' => '+224622602693',
+        ]);
+
+        $import = $this->importer(
+            [$this->ligneVehicule(['vehicule_categorie' => 'interne'])], // proprietaire_telephone => 622000001, un autre numéro
+            [$this->ligneLivreurChauffeur()]
+        );
+
+        $this->assertSame(1, $import->nb_groupes_erreur);
+        $this->assertStringContainsString(
+            'Véhicule interne : le propriétaire renseigné doit être le propriétaire interne par défaut',
+            $import->rapport['groupes'][0]['erreurs'][0]
+        );
     }
 
     public function test_confirm_creates_livreur_sans_nom_avec_designation_par_defaut(): void
@@ -1150,6 +1263,7 @@ class ImportFlotteTest extends TestCase
         $import = $this->importer(
             [$this->ligneVehicule([
                 'vehicule_site' => 'MATOTO',
+                'vehicule_categorie' => 'interne',
                 'proprietaire_nom' => '', 'proprietaire_prenom' => '', 'proprietaire_telephone' => '', 'proprietaire_pays' => '',
             ])],
             [$this->ligneLivreurChauffeur()]
@@ -1164,6 +1278,7 @@ class ImportFlotteTest extends TestCase
         $import = $this->importer(
             [$this->ligneVehicule([
                 'vehicule_site' => '1',
+                'vehicule_categorie' => 'interne',
                 'proprietaire_nom' => '', 'proprietaire_prenom' => '', 'proprietaire_telephone' => '', 'proprietaire_pays' => '',
             ])],
             [$this->ligneLivreurChauffeur()]

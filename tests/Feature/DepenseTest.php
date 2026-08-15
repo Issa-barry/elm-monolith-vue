@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\CategorieDepense;
+use App\Enums\CategorieVehicule;
 use App\Enums\StatutDepense;
 use App\Models\Depense;
 use App\Models\DepenseType;
@@ -89,25 +90,27 @@ class DepenseTest extends TestCase
     }
 
     /**
-     * Régression : DepenseController::loadVehicules() sélectionnait une colonne
-     * `categorie` retirée de `vehicules` (remplacée par livraison_vente/
-     * livraison_logistique, cf. Vehicule::scopeLivraisonLogistique) — la page
-     * plantait avec "Unknown column 'categorie'" dès qu'un véhicule actif
-     * existait. `categorie` ('interne'/'externe') est reconstruite depuis
-     * livraison_logistique pour préserver le contrat déjà consommé par
-     * Depenses/Create.vue et Edit.vue (vehiculeContext).
+     * `categorie` (INTERNE/PARTENAIRE, cf. Vehicule::categorie) est la vraie propriété du
+     * véhicule — totalement indépendante de l'usage vente/logistique. Contrairement à
+     * l'ancien modèle où elle était reconstruite depuis livraison_logistique ('interne' si
+     * logistique, 'externe' sinon, confusion usage/propriété), un véhicule PARTENAIRE utilisé
+     * pour la logistique reste PARTENAIRE : DepenseController::loadVehicules() doit exposer la
+     * vraie colonne, pas un proxy d'usage.
      */
-    public function test_create_expose_la_categorie_reconstruite_des_vehicules(): void
+    public function test_create_expose_la_vraie_categorie_des_vehicules_independamment_de_lusage(): void
     {
         Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'nom_vehicule' => 'Camion interne',
+            'categorie' => CategorieVehicule::INTERNE,
+            'proprietaire_id' => null,
             'livraison_logistique' => true,
         ]);
         Vehicule::factory()->create([
             'organization_id' => $this->org->id,
-            'nom_vehicule' => 'Camion externe',
-            'livraison_logistique' => false,
+            'nom_vehicule' => 'Camion partenaire',
+            'categorie' => CategorieVehicule::PARTENAIRE,
+            'livraison_logistique' => true,
         ]);
 
         $this->get('/backoffice/depenses/create')
@@ -116,7 +119,7 @@ class DepenseTest extends TestCase
                 ->where('vehicules', fn ($vehicules) => collect($vehicules)
                     ->firstWhere('nom_vehicule', 'Camion interne')['categorie'] === 'interne'
                     && collect($vehicules)
-                        ->firstWhere('nom_vehicule', 'Camion externe')['categorie'] === 'externe'
+                        ->firstWhere('nom_vehicule', 'Camion partenaire')['categorie'] === 'partenaire'
                 )
             );
     }
@@ -1180,13 +1183,15 @@ class DepenseTest extends TestCase
             'organization_id' => $this->org->id,
             'nom_vehicule' => 'Camion ELM 12',
             'immatriculation' => 'ELM-001-GN',
+            'categorie' => CategorieVehicule::INTERNE,
+            'proprietaire_id' => null,
             'livraison_logistique' => true,
         ]);
 
         $response = $this->getJson("/backoffice/depenses/vehicule-detail?id={$vehicule->id}");
 
-        // `categorie` reconstruite depuis livraison_logistique — cf. régression
-        // test_create_expose_la_categorie_reconstruite_des_vehicules ci-dessus.
+        // `categorie` = vraie propriété du véhicule (INTERNE ici), indépendante de l'usage
+        // logistique — cf. test_create_expose_la_vraie_categorie_des_vehicules_independamment_de_lusage.
         $response->assertOk()
             ->assertJson([
                 'nom' => 'Camion ELM 12',

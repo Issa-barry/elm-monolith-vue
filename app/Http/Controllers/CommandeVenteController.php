@@ -906,7 +906,6 @@ class CommandeVenteController extends Controller
             $data['lignes'] ?? [],
             'qte',
             ! Parametre::isVentesAutorisationSaisieDessousQteMax($orgId),
-            auth()->user()->can('ventes.qte.update'),
         );
     }
 
@@ -1077,6 +1076,7 @@ class CommandeVenteController extends Controller
                 return [
                     'id' => $p->id,
                     'nom' => $p->nom,
+                    'categorie_id' => $p->categorie_id,
                     'prix_vente' => (int) ($variante?->prix_vente ?? 0),
                     'prix_usine' => (int) ($variante?->prix_usine ?? 0),
                 ];
@@ -1087,6 +1087,8 @@ class CommandeVenteController extends Controller
     {
         return Vehicule::with([
             'typeVehicule',
+            'capacites.categorie',
+            'typeVehicule.capacites.categorie',
             'equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'chauffeur'),
             'equipe.membres.livreur',
         ])
@@ -1104,11 +1106,40 @@ class CommandeVenteController extends Controller
                 'capacite_packs' => ($c = $v->capacite_packs ?? $v->typeVehicule?->capacite_defaut) !== null
                     ? (int) $c
                     : null,
+                // Plafonds par catégorie (Sachet, Bouteille, ...) — même calcul que le contrôle
+                // serveur (VehiculeCapaciteService::capacitesParCategorie), pour que le
+                // frontend affiche exactement ce que le backend va vérifier. Vide tant que
+                // l'organisation n'a rien configuré : le formulaire retombe alors sur
+                // capacite_packs (régime legacy).
+                'capacites_categorie' => $this->capacitesCategorieProps($v),
                 'livreur_nom' => $v->equipe?->livreurs->first()?->libelleAffichage(),
                 'livreur_telephone' => $v->equipe?->membres
                     ->firstWhere('role', 'chauffeur')
                     ?->livreur?->telephone,
             ]);
+    }
+
+    /**
+     * @return array<int, array{categorie_id: string, categorie_nom: string, capacite_max: int}>
+     */
+    private function capacitesCategorieProps(Vehicule $v): array
+    {
+        $noms = [];
+        foreach ($v->typeVehicule?->capacites ?? [] as $c) {
+            $noms[$c->categorie_id] = $c->categorie?->nom ?? 'Catégorie';
+        }
+        foreach ($v->capacites as $c) {
+            $noms[$c->categorie_id] = $c->categorie?->nom ?? 'Catégorie';
+        }
+
+        return $this->vehiculeCapaciteService->capacitesParCategorie($v)
+            ->map(fn (int $max, string $categorieId) => [
+                'categorie_id' => $categorieId,
+                'categorie_nom' => $noms[$categorieId] ?? 'Catégorie',
+                'capacite_max' => $max,
+            ])
+            ->values()
+            ->all();
     }
 
     private function clientsActifs(string $orgId): Collection
@@ -1122,9 +1153,9 @@ class CommandeVenteController extends Controller
                 'nom_complet' => $c->nom_complet,
                 'telephone' => $c->telephone,
                 'type' => $c->type->value,
-                // Véhicules partenaire mémorisés — facultatifs, jamais un prérequis pour vendre
+                // Véhicules externes mémorisés — facultatifs, jamais un prérequis pour vendre
                 // à ce client (cf. ClientVehicle).
-                'vehicules' => $c->type === ClientType::PARTENAIRE
+                'vehicules' => $c->type === ClientType::EXTERNE
                     ? $c->vehicules()->get()->map(fn ($cv) => [
                         'id' => $cv->id,
                         'libelle_affiche' => $cv->libelle_affiche,

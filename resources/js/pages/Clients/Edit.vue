@@ -117,8 +117,8 @@ function formatMontant(v: number): string {
     return new Intl.NumberFormat('fr-GN').format(v) + ' GNF';
 }
 
-// ── Véhicules partenaire — toujours facultatifs (cf. ClientVehicle) ───────────
-const isPartenaire = computed(() => props.client.type === 'partenaire');
+// ── Véhicules externes — toujours facultatifs (cf. ClientVehicle) ───────────
+const isExterne = computed(() => props.client.type === 'externe');
 const showVehiculeForm = reactive({ open: false });
 const vehiculeForm = useForm({
     nom_vehicule: '',
@@ -275,16 +275,16 @@ function destroyVehicule(vehiculeId: number) {
                 @update:form="Object.assign(form, $event)"
             />
 
-            <!-- Véhicules partenaire : toujours facultatifs, jamais un prérequis -->
+            <!-- Véhicules externes : toujours facultatifs, jamais un prérequis -->
             <div
-                v-if="isPartenaire"
+                v-if="isExterne"
                 class="mx-6 mt-4 rounded-xl border bg-card p-4 shadow-sm sm:mx-0 sm:p-6"
             >
                 <div class="mb-4 flex items-center justify-between">
                     <h3
                         class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
                     >
-                        Véhicules partenaire
+                        Véhicules externes
                     </h3>
                     <button
                         type="button"

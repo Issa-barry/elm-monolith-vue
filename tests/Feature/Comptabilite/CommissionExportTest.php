@@ -56,6 +56,7 @@ class CommissionExportTest extends TestCase
             'immatriculation' => 'GN-'.uniqid(),
             'site_id' => $site->id,
             'proprietaire_id' => $proprietaireId,
+            'categorie' => $proprietaireId ? 'partenaire' : 'interne',
             'capacite_packs' => 500,
             'is_active' => true,
         ]);

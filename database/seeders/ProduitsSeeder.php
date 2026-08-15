@@ -2,7 +2,9 @@
 
 namespace Database\Seeders;
 
+use App\Enums\CategorieStatut;
 use App\Enums\ProduitStatut;
+use App\Models\Categorie;
 use App\Models\Organization;
 use App\Models\Produit;
 use App\Models\ProduitType;
@@ -27,11 +29,23 @@ class ProduitsSeeder extends Seeder
             ->whereIn('code', ['materiel', 'fabricable'])
             ->pluck('id', 'code');
 
-        // Aucune catégorie : "elm" ne vend actuellement que ces 7 produits, une hiérarchie
-        // Boissons/Eau/Matériel n'apporterait rien tant que le catalogue ne se diversifie pas.
-        // categorie_id reste nullable (cf. migration produits) — le système de catégories
-        // n'est pas retiré, seulement pas utilisé ici (CategorieDefaultSeeder reste dispo pour
-        // Fello Demo via FelloDemoOrganizationSeeder, ou pour "elm" plus tard si besoin).
+        // Deux catégories seulement (décision produit du 15/08/2026) : "elm" ne vend que de
+        // l'eau en sachet et en bouteille — c'est aussi ce qui permet à VehiculeCapaciteService
+        // d'appliquer un plafond de chargement indépendant par famille (cf.
+        // vehicule_capacites/type_vehicule_capacites), au lieu d'un seul plafond global qui
+        // mélangeait les deux. Pas de hiérarchie "Boissons" parente : inutile tant qu'il n'y a
+        // que ces deux familles.
+        $sachet = Categorie::firstOrCreate(
+            ['organization_id' => $org->id, 'nom' => 'Sachet', 'parent_id' => null],
+            ['statut' => CategorieStatut::ACTIF]
+        );
+        $bouteille = Categorie::firstOrCreate(
+            ['organization_id' => $org->id, 'nom' => 'Bouteille', 'parent_id' => null],
+            ['statut' => CategorieStatut::ACTIF]
+        );
+
+        // categorie_id reste null pour "Rouleau" : c'est un consommable d'usine (matériel),
+        // jamais chargé sur un véhicule de livraison — non concerné par le contrôle de capacité.
         $produits = [
             [
                 'nom' => 'Rouleau',
@@ -45,6 +59,7 @@ class ProduitsSeeder extends Seeder
             [
                 'nom' => 'Pack de 6 bouteilles',
                 'produit_type_id' => $typeIds['fabricable'],
+                'categorie_id' => $bouteille->id,
                 'statut' => ProduitStatut::ACTIF->value,
                 'prix_usine' => 4100,
                 'prix_vente' => 5000,
@@ -54,6 +69,7 @@ class ProduitsSeeder extends Seeder
             [
                 'nom' => 'Pack de 8 bouteilles',
                 'produit_type_id' => $typeIds['fabricable'],
+                'categorie_id' => $bouteille->id,
                 'statut' => ProduitStatut::ACTIF->value,
                 'prix_usine' => 4500,
                 'prix_vente' => 5000,
@@ -63,6 +79,7 @@ class ProduitsSeeder extends Seeder
             [
                 'nom' => 'Pack de 350ml',
                 'produit_type_id' => $typeIds['fabricable'],
+                'categorie_id' => $sachet->id,
                 'statut' => ProduitStatut::ACTIF->value,
                 'prix_usine' => 18000,
                 'prix_vente' => 20000,
@@ -74,6 +91,7 @@ class ProduitsSeeder extends Seeder
             [
                 'nom' => 'Packs de 1.500ml',
                 'produit_type_id' => $typeIds['fabricable'],
+                'categorie_id' => $sachet->id,
                 'statut' => ProduitStatut::ACTIF->value,
                 'prix_usine' => 22000,
                 'prix_vente' => 25000,
@@ -85,6 +103,7 @@ class ProduitsSeeder extends Seeder
             [
                 'nom' => 'Packs de 500ml',
                 'produit_type_id' => $typeIds['fabricable'],
+                'categorie_id' => $sachet->id,
                 'statut' => ProduitStatut::ACTIF->value,
                 'prix_usine' => 18000,
                 'prix_vente' => 20000,
@@ -96,6 +115,7 @@ class ProduitsSeeder extends Seeder
             [
                 'nom' => 'Packs de 50ml',
                 'produit_type_id' => $typeIds['fabricable'],
+                'categorie_id' => $sachet->id,
                 'statut' => ProduitStatut::ACTIF->value,
                 'prix_usine' => 18000,
                 'prix_vente' => 20000,

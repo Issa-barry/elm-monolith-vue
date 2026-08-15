@@ -186,7 +186,7 @@ function membreLabel(membre: Membre): string {
                         {{
                             equipe.vehicule_capacite_packs === null
                                 ? '—'
-                                : `${equipe.vehicule_capacite_packs} packs`
+                                : `${equipe.vehicule_capacite_packs} sachets`
                         }}
                     </p>
                 </div>

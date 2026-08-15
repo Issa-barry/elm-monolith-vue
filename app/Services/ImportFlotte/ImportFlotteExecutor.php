@@ -113,6 +113,7 @@ class ImportFlotteExecutor
                 'livraison_vente' => $vData['livraison_vente'],
                 'livraison_logistique' => $vData['livraison_logistique'],
                 'site_id' => $vData['site_id'],
+                'categorie' => $vData['categorie'],
                 // Propriété indépendante de l'usage : propriétaire tiers si résolu depuis le
                 // fichier, sinon propriétaire par défaut (organisation).
                 'proprietaire_id' => $proprietaireId ?? Proprietaire::interneParDefautId($orgId),

@@ -58,11 +58,11 @@ class CommissionCalculator
             ? $commande->lignes
             : $commande->load('lignes')->lignes;
 
-        // Tant que le chargement n'est pas validé, quantite_chargee est null
-        // et on se base sur la quantité demandée ; une fois chargée, c'est
-        // cette quantité réelle qui doit déterminer la commission.
-        $prixVente = $lignes->sum(fn ($l) => ($l->quantite_chargee ?? $l->quantite_demandee) * (float) $l->prix_vente_snapshot);
-        $prixUsine = $lignes->sum(fn ($l) => ($l->quantite_chargee ?? $l->quantite_demandee) * (float) $l->prix_usine_snapshot);
+        // La commission n'existe qu'à partir de la validation du chargement
+        // (cf. CommandeVenteService::validerChargement()) : quantite_chargee
+        // est donc garantie renseignée à ce stade, jamais la quantité demandée.
+        $prixVente = $lignes->sum(fn ($l) => (float) $l->quantite_chargee * (float) $l->prix_vente_snapshot);
+        $prixUsine = $lignes->sum(fn ($l) => (float) $l->quantite_chargee * (float) $l->prix_usine_snapshot);
 
         return self::fromVehiculeEtMontants($vehicule, $prixVente, $prixUsine);
     }
