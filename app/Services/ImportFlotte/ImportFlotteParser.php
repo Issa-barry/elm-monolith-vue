@@ -644,10 +644,29 @@ class ImportFlotteParser
         // ── Cohérence catégorie ↔ propriétaire — même règle que VehiculeController
         // (CategorieVehicule::coherentAvecProprietaireTiers()), appliquée dès l'analyse pour ne
         // jamais laisser passer une ligne incohérente jusqu'à l'exécution.
-        if ($categorie && ! $categorie->coherentAvecProprietaireTiers($aUnProprietaireSaisi)) {
+        //
+        // "Tiers" veut dire : différent du propriétaire interne par défaut de l'organisation
+        // (cf. VehiculeController::ensureCategorieCoherente(), qui compare exactement de la même
+        // façon $data['proprietaire_id'] à Proprietaire::interneParDefautId()). Une ligne
+        // "interne" peut donc légitimement documenter explicitement ce propriétaire par défaut
+        // (mêmes nom/prénom/téléphone) dans les colonnes proprietaire_* sans être rejetée — seul
+        // un véritable tiers (propriétaire différent) est incohérent avec "interne".
+        //
+        // Un propriétaire pas encore en base (nouveau, créé seulement à l'exécution) a un 'id'
+        // à null à ce stade de l'analyse — jamais à confondre avec "correspond au défaut" même si
+        // Proprietaire::interneParDefautId() est lui aussi null (organisation sans défaut
+        // configuré) : comparer directement les deux null se solderait, à tort, par "coïncident".
+        $interneDefautId = Proprietaire::interneParDefautId($orgId);
+        $estLeProprietaireInterneParDefaut = $proprietaireResolu !== null
+            && $proprietaireResolu['id'] !== null
+            && $interneDefautId !== null
+            && $proprietaireResolu['id'] === $interneDefautId;
+        $proprietaireEstTiers = $aUnProprietaireSaisi && ! $estLeProprietaireInterneParDefaut;
+
+        if ($categorie && ! $categorie->coherentAvecProprietaireTiers($proprietaireEstTiers)) {
             $erreurs[] = $categorie === CategorieVehicule::PARTENAIRE
                 ? 'Véhicule partenaire sans propriétaire renseigné (proprietaire_nom/proprietaire_prenom/proprietaire_telephone obligatoires).'
-                : 'Véhicule interne : aucun propriétaire tiers ne doit être renseigné (colonnes proprietaire_* doivent rester vides).';
+                : 'Véhicule interne : le propriétaire renseigné doit être le propriétaire interne par défaut de l\'organisation, pas un véritable tiers (colonnes proprietaire_* doivent rester vides ou correspondre exactement à ce propriétaire).';
         }
 
         // ── Équipe : commission et montant propriétaire non saisis dans le fichier.

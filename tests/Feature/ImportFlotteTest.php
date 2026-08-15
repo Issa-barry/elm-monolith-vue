@@ -579,6 +579,59 @@ class ImportFlotteTest extends TestCase
         $this->assertSame($defaut->id, $vehicule->proprietaire_id);
     }
 
+    /**
+     * Une ligne "interne" peut documenter explicitement le propriétaire interne par défaut
+     * (mêmes nom/prénom/téléphone) au lieu de laisser les colonnes proprietaire_* vides — même
+     * règle de cohérence que VehiculeController::ensureCategorieCoherente() côté formulaire.
+     */
+    public function test_analyse_accepte_vehicule_interne_dont_le_proprietaire_saisi_est_le_defaut(): void
+    {
+        $defaut = Proprietaire::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom' => 'SIDIBE',
+            'prenom' => 'Moussa',
+            'telephone' => '+224622602693',
+        ]);
+
+        $import = $this->importer(
+            [$this->ligneVehicule([
+                'vehicule_categorie' => 'interne',
+                'proprietaire_nom' => 'SIDIBE', 'proprietaire_prenom' => 'Moussa',
+                'proprietaire_telephone' => '622602693', 'proprietaire_pays' => 'GN',
+            ])],
+            [$this->ligneLivreurChauffeur()]
+        );
+
+        $this->assertSame(0, $import->nb_groupes_erreur);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
+        $this->assertSame($defaut->id, $vehicule->proprietaire_id);
+    }
+
+    /** Un véritable tiers (propriétaire différent du défaut) reste incohérent avec "interne". */
+    public function test_analyse_refuse_vehicule_interne_avec_un_veritable_proprietaire_tiers(): void
+    {
+        Proprietaire::factory()->create([
+            'organization_id' => $this->org->id,
+            'telephone' => '+224622602693',
+        ]);
+
+        $import = $this->importer(
+            [$this->ligneVehicule(['vehicule_categorie' => 'interne'])], // proprietaire_telephone => 622000001, un autre numéro
+            [$this->ligneLivreurChauffeur()]
+        );
+
+        $this->assertSame(1, $import->nb_groupes_erreur);
+        $this->assertStringContainsString(
+            'Véhicule interne : le propriétaire renseigné doit être le propriétaire interne par défaut',
+            $import->rapport['groupes'][0]['erreurs'][0]
+        );
+    }
+
     public function test_confirm_creates_livreur_sans_nom_avec_designation_par_defaut(): void
     {
         // Ni livreur_nom_complet ni livreur_nom/livreur_prenom renseignés : jamais
