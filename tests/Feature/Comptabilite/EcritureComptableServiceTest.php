@@ -6,6 +6,7 @@ use App\Enums\EvenementComptable;
 use App\Exceptions\Comptabilite\EcritureDesequilibreeException;
 use App\Exceptions\Comptabilite\MappingComptableIndisponibleException;
 use App\Exceptions\Comptabilite\PeriodeComptableClotureeException;
+use App\Models\CompteMapping;
 use App\Models\Depense;
 use App\Models\Organization;
 use App\Models\PaiementFiche;
@@ -28,7 +29,15 @@ class EcritureComptableServiceTest extends TestCase
     {
         $org = Organization::factory()->create();
         if ($bootstrap) {
+            // Idempotent — déjà bootstrapé automatiquement par Organization::created(),
+            // appelé explicitement pour ne pas dépendre de ce hook dans ce test.
             app(PlanComptableBootstrapService::class)->bootstrap($org->id);
+        } else {
+            // Le hook Organization::created() bootstrape désormais toute organisation
+            // créée : pour simuler un plan comptable non configuré (scénario que la
+            // création normale ne permet plus d'atteindre), on retire volontairement
+            // les mappings auto-provisionnés plutôt que de sauter le bootstrap.
+            CompteMapping::where('organization_id', $org->id)->delete();
         }
 
         return $org;
