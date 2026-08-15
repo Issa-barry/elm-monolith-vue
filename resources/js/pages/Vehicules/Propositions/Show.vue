@@ -276,7 +276,7 @@ function valider() {
                         </div>
                         <div>
                             <dt class="text-xs text-muted-foreground">
-                                Capacité (packs)
+                                Capacité (sachets)
                             </dt>
                             <dd class="mt-0.5">
                                 {{ proposition.capacite_packs ?? '—' }}

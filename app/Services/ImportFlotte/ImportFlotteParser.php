@@ -2,6 +2,7 @@
 
 namespace App\Services\ImportFlotte;
 
+use App\Enums\CategorieVehicule;
 use App\Enums\TypeImportFlotte;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
@@ -274,6 +275,7 @@ class ImportFlotteParser
                     'livraison_vente' => null,
                     'livraison_logistique' => null,
                     'site_id' => null,
+                    'categorie' => null,
                 ],
                 // Cf. docblock de classe : null = "aucune équipe pour ce groupe"
                 // (pas de nouveaux livreurs et véhicule sans équipe existante).
@@ -509,6 +511,7 @@ class ImportFlotteParser
         $nomVehicule = trim((string) ($ligneVehicule['vehicule_nom'] ?? ''));
         $typeNomSaisi = trim((string) ($ligneVehicule['vehicule_type'] ?? ''));
         $siteNomSaisi = trim((string) ($ligneVehicule['vehicule_site'] ?? ''));
+        $categorieNomSaisi = trim((string) ($ligneVehicule['vehicule_categorie'] ?? ''));
 
         // Résolu ici (avant les colonnes d'usage ci-dessous, qui en ont besoin pour leur
         // repli) plutôt que plus bas dans la méthode comme avant — même requête, juste
@@ -556,6 +559,25 @@ class ImportFlotteParser
         // simplement créé/laissé sans usage, donc non exploitable tant qu'un usage n'est
         // pas défini (cf. Vehicule::aAuMoinsUnUsage() et les scopes livraisonVente()/
         // livraisonLogistique(), qui l'excluent déjà de tous les sélecteurs opérationnels).
+
+        // Contrairement aux usages vente/logistique, la catégorie n'a pas de repli sur la
+        // valeur déjà en base pour un véhicule existant : elle est obligatoire sur CHAQUE ligne
+        // (nouvelle ou déjà en base), même si l'exécuteur ne l'applique de toute façon jamais à
+        // un véhicule déjà existant (ligne = simple ancrage pour ses livreurs/équipe, cf.
+        // docblock de classe) — un fichier d'import doit rester une description explicite et
+        // complète de la flotte, jamais une devinette silencieuse (cf. CategorieVehicule).
+        $categorie = null;
+        if ($categorieNomSaisi === '') {
+            $erreurs[] = 'Catégorie du véhicule manquante (interne ou partenaire).';
+        } else {
+            $categorieNormalisee = ImportTextNormalizer::normalize($categorieNomSaisi);
+            $categorie = CategorieVehicule::tryFrom($categorieNormalisee);
+            if (! $categorie) {
+                $erreurs[] = "Catégorie du véhicule invalide : \"{$categorieNomSaisi}\" (attendu : interne ou partenaire).";
+            } elseif ($categorie->value !== $categorieNomSaisi) {
+                $normalisations[] = "\"{$categorieNomSaisi}\" → \"{$categorie->value}\"";
+            }
+        }
 
         $type = null;
         if ($typeNomSaisi === '') {
@@ -619,6 +641,15 @@ class ImportFlotteParser
             ? $this->resoudreProprietaire($ligneVehicule, $orgId, $erreurs, $normalisations, $telephonesProprietairesVus)
             : null;
 
+        // ── Cohérence catégorie ↔ propriétaire — même règle que VehiculeController
+        // (CategorieVehicule::coherentAvecProprietaireTiers()), appliquée dès l'analyse pour ne
+        // jamais laisser passer une ligne incohérente jusqu'à l'exécution.
+        if ($categorie && ! $categorie->coherentAvecProprietaireTiers($aUnProprietaireSaisi)) {
+            $erreurs[] = $categorie === CategorieVehicule::PARTENAIRE
+                ? 'Véhicule partenaire sans propriétaire renseigné (proprietaire_nom/proprietaire_prenom/proprietaire_telephone obligatoires).'
+                : 'Véhicule interne : aucun propriétaire tiers ne doit être renseigné (colonnes proprietaire_* doivent rester vides).';
+        }
+
         // ── Équipe : commission et montant propriétaire non saisis dans le fichier.
         // Une équipe déjà existante conserve sa vraie commission (utile pour
         // calculer le taux des nouveaux membres rattachés) ; une équipe à créer
@@ -667,6 +698,9 @@ class ImportFlotteParser
                 'livraison_vente' => $livraisonVente,
                 'livraison_logistique' => $livraisonLogistique,
                 'site_id' => $site?->id,
+                // Garanti non-null ici : $erreurs serait non vide sinon (retour anticipé
+                // ci-dessus), donc ce point n'est atteint que si $categorie a été résolue.
+                'categorie' => $categorie->value,
             ],
             // Pas d'équipe du tout (ni existante, ni à créer) pour un nouveau
             // véhicule sans aucun livreur dans le fichier : la création du

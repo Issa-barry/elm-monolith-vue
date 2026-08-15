@@ -25,7 +25,7 @@ class ImportFlotteTest extends TestCase
     use RefreshDatabase;
 
     private const HEADERS_VEHICULES = [
-        'vehicule_immatriculation', 'vehicule_nom', 'vehicule_type',
+        'vehicule_immatriculation', 'vehicule_nom', 'vehicule_type', 'vehicule_categorie',
         'vehicule_site', 'vehicule_livraison_vente', 'vehicule_livraison_logistique',
         'vehicule_capacite_sachets', 'vehicule_capacite_bouteilles',
         'proprietaire_nom', 'proprietaire_prenom', 'proprietaire_telephone', 'proprietaire_pays',
@@ -78,6 +78,7 @@ class ImportFlotteTest extends TestCase
             'vehicule_immatriculation' => 'RC-1234-A',
             'vehicule_nom' => 'Camion 1',
             'vehicule_type' => 'Tricycle',
+            'vehicule_categorie' => 'partenaire',
             'vehicule_site' => 'Matoto',
             'vehicule_livraison_vente' => 'oui',
             'vehicule_livraison_logistique' => 'non',
@@ -222,6 +223,7 @@ class ImportFlotteTest extends TestCase
         $import = $this->importer(
             [$this->ligneVehicule([
                 'vehicule_site' => '',
+                'vehicule_categorie' => 'interne',
                 'proprietaire_nom' => '', 'proprietaire_prenom' => '', 'proprietaire_telephone' => '', 'proprietaire_pays' => '',
             ])],
             [$this->ligneLivreurChauffeur()]
@@ -563,6 +565,7 @@ class ImportFlotteTest extends TestCase
 
         $import = $this->importer(
             [$this->ligneVehicule([
+                'vehicule_categorie' => 'interne',
                 'proprietaire_nom' => '', 'proprietaire_prenom' => '', 'proprietaire_telephone' => '', 'proprietaire_pays' => '',
             ])],
             [$this->ligneLivreurChauffeur()]
@@ -1150,6 +1153,7 @@ class ImportFlotteTest extends TestCase
         $import = $this->importer(
             [$this->ligneVehicule([
                 'vehicule_site' => 'MATOTO',
+                'vehicule_categorie' => 'interne',
                 'proprietaire_nom' => '', 'proprietaire_prenom' => '', 'proprietaire_telephone' => '', 'proprietaire_pays' => '',
             ])],
             [$this->ligneLivreurChauffeur()]
@@ -1164,6 +1168,7 @@ class ImportFlotteTest extends TestCase
         $import = $this->importer(
             [$this->ligneVehicule([
                 'vehicule_site' => '1',
+                'vehicule_categorie' => 'interne',
                 'proprietaire_nom' => '', 'proprietaire_prenom' => '', 'proprietaire_telephone' => '', 'proprietaire_pays' => '',
             ])],
             [$this->ligneLivreurChauffeur()]

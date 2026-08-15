@@ -144,6 +144,7 @@ class ClientDashboardTest extends TestCase
             'type_vehicule' => 'camion',
             'capacite_packs' => 120,
             'proprietaire_id' => $proprietaire->id,
+            'categorie' => 'partenaire',
             'livraison_vente' => true,
             'is_active' => true,
         ]);

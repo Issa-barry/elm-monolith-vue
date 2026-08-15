@@ -50,6 +50,7 @@ class CommissionVenteStatutCreeeTest extends TestCase
             'nom_vehicule' => 'Camion Abdoulaye',
             'immatriculation' => 'GN-'.uniqid(),
             'site_id' => $site->id,
+            'categorie' => 'interne',
             'capacite_packs' => 500,
             'is_active' => true,
         ]);

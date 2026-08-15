@@ -837,7 +837,7 @@ const hasStep1Errors = computed(() =>
                         v-if="vehicule.capacite_packs"
                         class="text-xs text-muted-foreground"
                     >
-                        {{ vehicule.capacite_packs }} packs
+                        {{ vehicule.capacite_packs }} sachets
                     </p>
                 </div>
 

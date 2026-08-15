@@ -77,6 +77,7 @@ class GlobalSearchTest extends TestCase
             'site_id' => $this->site->id,
             'nom_vehicule' => 'Camion Test',
             'immatriculation' => 'GN-001-AA',
+            'categorie' => 'interne',
             'is_active' => true,
         ], $overrides));
     }
@@ -257,7 +258,7 @@ class GlobalSearchTest extends TestCase
             'user_id' => $proprietaireUser->id,
         ]);
 
-        $this->makeVehicule(['nom_vehicule' => 'Truck-Alpha', 'proprietaire_id' => $proprietaire->id]);
+        $this->makeVehicule(['nom_vehicule' => 'Truck-Alpha', 'proprietaire_id' => $proprietaire->id, 'categorie' => 'partenaire']);
         $this->makeVehicule(['nom_vehicule' => 'Truck-Beta', 'immatriculation' => 'GN-002-BB']);
 
         Sanctum::actingAs($proprietaireUser, ['*']);

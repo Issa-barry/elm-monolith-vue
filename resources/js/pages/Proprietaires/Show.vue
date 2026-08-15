@@ -546,7 +546,7 @@ function closeLightbox() {
                                     <td class="px-4 py-3">
                                         {{
                                             vehicule.capacite_packs !== null
-                                                ? `${vehicule.capacite_packs} packs`
+                                                ? `${vehicule.capacite_packs} sachets`
                                                 : '-'
                                         }}
                                     </td>

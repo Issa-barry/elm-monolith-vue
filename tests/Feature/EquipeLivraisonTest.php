@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\CategorieVehicule;
 use App\Models\EquipeLivraison;
 use App\Models\Livreur;
 use App\Models\Organization;
@@ -649,12 +650,13 @@ class EquipeLivraisonTest extends TestCase
         ]);
     }
 
-    /** Sans propriétaire tiers : EquipeLivraisonController::isVehiculeExterne() le traite comme "interne". */
+    /** Source de vérité = categorie (jamais proprietaire_id) : EquipeLivraisonController::isVehiculePartenaire(). */
     private function makeVehiculeInterne(): Vehicule
     {
         return Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'proprietaire_id' => null,
+            'categorie' => CategorieVehicule::INTERNE,
         ]);
     }
 
