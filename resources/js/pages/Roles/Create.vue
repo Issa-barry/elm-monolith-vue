@@ -32,8 +32,8 @@ function submit() {
                     Nouveau rôle
                 </h1>
                 <p class="mt-1 text-sm text-muted-foreground">
-                    Le rôle démarre sans aucune permission — vous les
-                    accorderez juste après, à l'écran suivant.
+                    Le rôle démarre sans aucune permission — vous les accorderez
+                    juste après, à l'écran suivant.
                 </p>
             </div>
 

@@ -212,12 +212,13 @@ function destroyRole(role: Role) {
                                                     </Link>
                                                 </DropdownMenuItem>
 
-                                                <template v-if="!role.is_system">
+                                                <template
+                                                    v-if="!role.is_system"
+                                                >
                                                     <DropdownMenuSeparator />
                                                     <DropdownMenuItem
                                                         :disabled="
-                                                            role.users_count >
-                                                            0
+                                                            role.users_count > 0
                                                         "
                                                         variant="destructive"
                                                         @click="
@@ -228,8 +229,7 @@ function destroyRole(role: Role) {
                                                             class="mr-2 h-4 w-4"
                                                         />
                                                         {{
-                                                            role.users_count >
-                                                            0
+                                                            role.users_count > 0
                                                                 ? 'Supprimer (réaffectez les utilisateurs)'
                                                                 : 'Supprimer'
                                                         }}
