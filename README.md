@@ -176,3 +176,15 @@ php -d pcov.enabled=1 vendor/bin/phpunit --coverage-text
 # Serveur de dev local
 php artisan serve --port=8080
 ```
+
+Procédure complète pour repartir à zéro sur formation
+Déployer ce commit sur pre-prod (le nouveau code doit être en place avant de pouvoir lancer la commande via SSH).
+En SSH sur formation :
+
+php artisan accounts:purge --organization=elm
+(tapez SUPPRIMER après avoir vérifié l'URL/l'environnement affichés)
+Recréer le premier compte, toujours via SSH :
+
+php artisan app:install
+Au prompt "Nom de l'entreprise", tapez exactement Eau la maman (correspondance exacte, insensible à la casse) — ça réutilise l'organisation existante (avec son catalogue/sites/etc. intacts) plutôt que d'en créer une nouvelle, puisqu'elle n'a plus de super_admin après la purge.
+Vous êtes de nouveau super_admin, vous invitez ensuite vos comptes de recette normalement via l'app.

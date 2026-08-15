@@ -184,6 +184,41 @@ class CommissionTriggerVenteTest extends TestCase
         );
     }
 
+    /**
+     * Repro du bug signalé : la commande est confirmée pendant que
+     * l'organisation est en FACTURE_ENCAISSEE (aucune commission CREEE à ce
+     * moment-là), puis l'admin bascule le paramètre sur CHARGEMENT_VALIDE
+     * avant que le chargement ne soit validé. La commission doit malgré tout
+     * être générée à la validation — cf. CommissionTriggerService::onChargementValide(),
+     * le filet de sécurité qui couvre ce cas.
+     */
+    public function test_parametre_change_en_cours_de_workflow_genere_quand_meme_a_la_validation(): void
+    {
+        Parametre::setDeclencheurCommissionVente($this->org->id, DeclencheurCommissionVente::FACTURE_ENCAISSEE);
+
+        $vehicule = $this->makeVehiculeAvecEquipe();
+        $produit = $this->makeProduit();
+        ['commande' => $commande, 'ligne' => $ligne] = $this->creerCommandeAvecLigne($vehicule, $produit);
+
+        $this->actingAs($this->user);
+        CommandeVenteService::confirmer($commande);
+        CommandeVenteService::demarrerChargement($commande);
+
+        $this->assertDatabaseMissing('commissions_ventes', ['commande_vente_id' => $commande->id]);
+
+        Parametre::setDeclencheurCommissionVente($this->org->id, DeclencheurCommissionVente::CHARGEMENT_VALIDE);
+
+        CommandeVenteService::validerChargement($commande, [[
+            'id' => $ligne->id,
+            'quantite_chargee' => $ligne->quantite_demandee,
+            'type_ecart' => 'conforme',
+        ]]);
+
+        $commission = CommissionVente::where('commande_vente_id', $commande->id)->first();
+        $this->assertNotNull($commission);
+        $this->assertEquals(StatutCommission::IMPAYE, $commission->statut);
+    }
+
     // ── FACTURE_ENCAISSEE ────────────────────────────────────────────────────
 
     public function test_facture_encaissee_la_validation_du_chargement_ne_genere_aucune_commission(): void

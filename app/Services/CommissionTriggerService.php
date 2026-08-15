@@ -81,6 +81,32 @@ class CommissionTriggerService
         CommissionGenerator::generateForCommandeIfMissing($commande);
     }
 
+    /**
+     * Filet de sécurité appelé à la validation réelle du chargement (cf.
+     * CommandeVenteService::activerFactureEtCommissions()), en complément de
+     * onCommandeVenteConfirmee().
+     *
+     * onCommandeVenteConfirmee() est évalué tôt (confirmation / passage en
+     * chargement) : si le paramètre organisation valait FACTURE_ENCAISSEE à ce
+     * moment-là puis a été changé en CHARGEMENT_VALIDE avant que le chargement
+     * ne soit validé, aucune commission CREEE n'a été créée et il n'existe
+     * jusqu'ici aucun autre point d'entrée pour la générer — elle serait perdue
+     * définitivement pour cette commande. generateForCommandeIfMissing() est
+     * idempotent : sans effet si la commission existe déjà (cas normal, créée
+     * dès la confirmation).
+     *
+     * Sous FACTURE_ENCAISSEE : ne fait rien, comme onCommandeVenteConfirmee() —
+     * la génération reste réservée à onFactureVenteEncaissee().
+     */
+    public static function onChargementValide(CommandeVente $commande): void
+    {
+        if (self::declencheurVente($commande->organization_id) !== DeclencheurCommissionVente::CHARGEMENT_VALIDE) {
+            return;
+        }
+
+        CommissionGenerator::generateForCommandeIfMissing($commande);
+    }
+
     // ── Logistique ────────────────────────────────────────────────────────────
 
     /**

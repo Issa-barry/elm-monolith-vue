@@ -249,6 +249,12 @@ class CommandeVenteService
      */
     private static function activerFactureEtCommissions(CommandeVente $commande): void
     {
+        // Filet de sécurité : génère la commission si elle n'a pas pu l'être à
+        // la confirmation (paramètre organisation différent à ce moment-là,
+        // cf. CommissionTriggerService::onChargementValide()). Idempotent —
+        // sans effet si elle existe déjà (cas normal).
+        CommissionTriggerService::onChargementValide($commande);
+
         $commande->load('facture', 'commissions.parts');
 
         if ($commande->facture && $commande->facture->statut_facture === StatutFactureVente::CREEE) {
