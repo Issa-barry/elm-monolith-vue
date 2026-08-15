@@ -161,4 +161,131 @@ class RoleTest extends TestCase
 
         $this->assertTrue($role->fresh()->hasPermissionTo('users.read'));
     }
+
+    public function test_update_sets_code_and_name_for_a_custom_role(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->userWithPermission($org);
+        $role = Role::create(['name' => 'chef_agence', 'guard_name' => 'web', 'is_system' => false]);
+
+        $this->actingAs($user)
+            ->put(route('roles.update', $role), [
+                'code' => 'CA',
+                'name' => 'chef_agence_v2',
+                'permissions' => [],
+            ])
+            ->assertRedirect();
+
+        $role->refresh();
+        $this->assertSame('CA', $role->code);
+        $this->assertSame('chef_agence_v2', $role->name);
+    }
+
+    public function test_update_cannot_rename_a_system_role(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->userWithPermission($org);
+        $role = Role::create(['name' => 'comptable', 'guard_name' => 'web', 'is_system' => true]);
+
+        $this->actingAs($user)
+            ->put(route('roles.update', $role), [
+                'name' => 'comptable_v2',
+                'permissions' => [],
+            ])
+            ->assertSessionHasErrors('name');
+
+        $this->assertSame('comptable', $role->fresh()->name);
+    }
+
+    // ── store ─────────────────────────────────────────────────────────────────
+
+    public function test_store_creates_a_role_without_any_permission(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->userWithPermission($org);
+
+        $this->actingAs($user)
+            ->post(route('roles.store'), ['name' => 'chef_agence', 'code' => 'CA'])
+            ->assertRedirect();
+
+        $role = Role::where('name', 'chef_agence')->firstOrFail();
+        $this->assertSame('CA', $role->code);
+        $this->assertFalse((bool) $role->is_system);
+        $this->assertSame(0, $role->permissions()->count());
+    }
+
+    public function test_store_returns_403_if_not_admin_entreprise(): void
+    {
+        $org = Organization::factory()->create();
+        Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
+        $user = User::factory()->create(['organization_id' => $org->id]);
+        $user->assignRole('manager');
+
+        $this->actingAs($user)
+            ->post(route('roles.store'), ['name' => 'chef_agence'])
+            ->assertStatus(403);
+    }
+
+    public function test_store_rejects_invalid_name_format(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->userWithPermission($org);
+
+        $this->actingAs($user)
+            ->post(route('roles.store'), ['name' => 'Chef Agence'])
+            ->assertSessionHasErrors('name');
+    }
+
+    public function test_store_rejects_duplicate_name(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->userWithPermission($org);
+        Role::firstOrCreate(['name' => 'commerciale', 'guard_name' => 'web']);
+
+        $this->actingAs($user)
+            ->post(route('roles.store'), ['name' => 'commerciale'])
+            ->assertSessionHasErrors('name');
+    }
+
+    // ── destroy ───────────────────────────────────────────────────────────────
+
+    public function test_destroy_deletes_a_custom_role_without_users(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->userWithPermission($org);
+        $role = Role::create(['name' => 'chef_agence', 'guard_name' => 'web', 'is_system' => false]);
+
+        $this->actingAs($user)
+            ->delete(route('roles.destroy', $role))
+            ->assertRedirect(route('roles.index'));
+
+        $this->assertNull(Role::find($role->id));
+    }
+
+    public function test_destroy_refuses_a_system_role(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->userWithPermission($org);
+        $role = Role::create(['name' => 'caissier', 'guard_name' => 'web', 'is_system' => true]);
+
+        $this->actingAs($user)
+            ->delete(route('roles.destroy', $role))
+            ->assertRedirect();
+
+        $this->assertNotNull(Role::find($role->id));
+    }
+
+    public function test_destroy_refuses_a_role_still_assigned_to_users(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->userWithPermission($org);
+        $role = Role::create(['name' => 'chef_agence', 'guard_name' => 'web', 'is_system' => false]);
+        User::factory()->create(['organization_id' => $org->id])->assignRole($role);
+
+        $this->actingAs($user)
+            ->delete(route('roles.destroy', $role))
+            ->assertRedirect();
+
+        $this->assertNotNull(Role::find($role->id));
+    }
 }

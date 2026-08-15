@@ -12,12 +12,14 @@ import {
 import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link } from '@inertiajs/vue3';
-import { MoreHorizontal, ShieldCheck } from 'lucide-vue-next';
+import { Head, Link, router } from '@inertiajs/vue3';
+import { MoreHorizontal, Plus, ShieldCheck, Trash2 } from 'lucide-vue-next';
 
 interface Role {
     id: number;
     name: string;
+    code: string | null;
+    is_system: boolean;
     users_count: number;
     permissions_count: number;
     updated_at: string | null;
@@ -72,6 +74,18 @@ function formatLastEdit(value: string | null): string {
 function usersLabel(count: number): string {
     return `${count} ${count > 1 ? 'utilisateurs' : 'utilisateur'}`;
 }
+
+function destroyRole(role: Role) {
+    if (role.is_system) return;
+
+    if (
+        confirm(
+            `Supprimer le rôle « ${displayRoleName(role.name)} » ? Cette action est irréversible.`,
+        )
+    ) {
+        router.delete(`/backoffice/roles/${role.id}`);
+    }
+}
 </script>
 
 <template>
@@ -81,10 +95,18 @@ function usersLabel(count: number): string {
         <SettingsLayout>
             <!-- Desktop table -->
             <div class="hidden space-y-6 sm:block">
-                <HeadingSmall
-                    title="Roles"
-                    description="Liste des roles du projet"
-                />
+                <div class="flex items-center justify-between gap-4">
+                    <HeadingSmall
+                        title="Roles"
+                        description="Liste des roles du projet"
+                    />
+                    <Link href="/backoffice/roles/create">
+                        <Button size="sm">
+                            <Plus class="mr-2 h-4 w-4" />
+                            Nouveau rôle
+                        </Button>
+                    </Link>
+                </div>
 
                 <div class="overflow-hidden rounded-xl border bg-card">
                     <div class="overflow-x-auto">
@@ -125,12 +147,20 @@ function usersLabel(count: number): string {
                                                 :class="roleDotClass(role.name)"
                                             />
                                             <div>
-                                                <p class="font-medium">
+                                                <p
+                                                    class="flex items-center gap-2 font-medium"
+                                                >
                                                     {{
                                                         displayRoleName(
                                                             role.name,
                                                         )
                                                     }}
+                                                    <span
+                                                        v-if="role.code"
+                                                        class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] tracking-wide text-muted-foreground uppercase"
+                                                    >
+                                                        {{ role.code }}
+                                                    </span>
                                                 </p>
                                                 <p
                                                     class="text-xs text-muted-foreground"
@@ -195,6 +225,30 @@ function usersLabel(count: number): string {
                                                         }}
                                                     </Link>
                                                 </DropdownMenuItem>
+
+                                                <template v-if="!role.is_system">
+                                                    <DropdownMenuSeparator />
+                                                    <DropdownMenuItem
+                                                        :disabled="
+                                                            role.users_count >
+                                                            0
+                                                        "
+                                                        variant="destructive"
+                                                        @click="
+                                                            destroyRole(role)
+                                                        "
+                                                    >
+                                                        <Trash2
+                                                            class="mr-2 h-4 w-4"
+                                                        />
+                                                        {{
+                                                            role.users_count >
+                                                            0
+                                                                ? 'Supprimer (réaffectez les utilisateurs)'
+                                                                : 'Supprimer'
+                                                        }}
+                                                    </DropdownMenuItem>
+                                                </template>
                                             </DropdownMenuContent>
                                         </DropdownMenu>
                                     </td>
@@ -206,7 +260,13 @@ function usersLabel(count: number): string {
             </div>
 
             <!-- Mobile list -->
-            <div class="space-y-2 sm:hidden">
+            <div class="space-y-3 sm:hidden">
+                <Link href="/backoffice/roles/create">
+                    <Button size="sm" class="w-full">
+                        <Plus class="mr-2 h-4 w-4" />
+                        Nouveau rôle
+                    </Button>
+                </Link>
                 <div
                     v-for="role in props.roles"
                     :key="role.id"

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
@@ -17,12 +18,15 @@ import {
     Square,
     Users,
 } from 'lucide-vue-next';
+import InputText from 'primevue/inputtext';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
 interface RoleData {
     id: number;
     name: string;
+    code: string | null;
+    is_system: boolean;
     permissions: string[];
     users_count: number;
 }
@@ -128,6 +132,10 @@ const activePermissions = ref<Set<string>>(
     ),
 );
 
+const codeInput = ref(props.role.code ?? '');
+const nameInput = ref(props.role.name);
+const identityErrors = ref<{ code?: string; name?: string }>({});
+
 const saving = ref(false);
 const flashSuccess = ref(false);
 
@@ -194,29 +202,39 @@ const totalPossible = computed(
 );
 
 function save() {
-    if (isSuperAdmin.value) return;
     saving.value = true;
+    identityErrors.value = {};
 
-    router.put(
-        `/backoffice/roles/${props.role.id}`,
-        { permissions: [...activePermissions.value] },
-        {
-            onSuccess: () => {
-                flashSuccess.value = true;
-                setTimeout(() => {
-                    flashSuccess.value = false;
-                }, 3000);
-                toast.add({
-                    severity: 'success',
-                    summary: 'Permissions mises à jour',
-                    life: 3000,
-                });
-            },
-            onFinish: () => {
-                saving.value = false;
-            },
+    const payload: Record<string, unknown> = {
+        code: codeInput.value || null,
+        permissions: [...activePermissions.value],
+    };
+    if (!props.role.is_system) {
+        payload.name = nameInput.value;
+    }
+
+    router.put(`/backoffice/roles/${props.role.id}`, payload, {
+        onSuccess: () => {
+            flashSuccess.value = true;
+            setTimeout(() => {
+                flashSuccess.value = false;
+            }, 3000);
+            toast.add({
+                severity: 'success',
+                summary: 'Rôle mis à jour',
+                life: 3000,
+            });
         },
-    );
+        onError: (errors) => {
+            identityErrors.value = {
+                code: errors.code,
+                name: errors.name,
+            };
+        },
+        onFinish: () => {
+            saving.value = false;
+        },
+    });
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -305,6 +323,52 @@ const breadcrumbs: BreadcrumbItem[] = [
                 </div>
             </div>
 
+            <!-- Identité du rôle -->
+            <div
+                class="flex flex-col gap-4 rounded-xl border bg-card p-4 shadow-sm sm:flex-row sm:items-start sm:p-6"
+            >
+                <div class="w-full max-w-[10rem]">
+                    <Label for="role-code" class="mb-1.5 block text-xs"
+                        >Trinôme / abréviation</Label
+                    >
+                    <InputText
+                        id="role-code"
+                        v-model="codeInput"
+                        class="w-full"
+                        :class="{ 'p-invalid': identityErrors.code }"
+                        placeholder="Ex: PDG"
+                        maxlength="10"
+                    />
+                    <p
+                        v-if="identityErrors.code"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ identityErrors.code }}
+                    </p>
+                </div>
+
+                <div v-if="!role.is_system" class="w-full sm:max-w-xs">
+                    <Label for="role-name" class="mb-1.5 block text-xs"
+                        >Nom technique</Label
+                    >
+                    <InputText
+                        id="role-name"
+                        v-model="nameInput"
+                        class="w-full"
+                        :class="{ 'p-invalid': identityErrors.name }"
+                    />
+                    <p
+                        v-if="identityErrors.name"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ identityErrors.name }}
+                    </p>
+                </div>
+                <p v-else class="pt-6 text-xs text-muted-foreground italic">
+                    Rôle système — le nom technique ne peut pas être modifié.
+                </p>
+            </div>
+
             <!-- Matrice des permissions -->
             <div
                 class="overflow-hidden overflow-x-auto rounded-xl border bg-card shadow-sm"
@@ -323,12 +387,7 @@ const breadcrumbs: BreadcrumbItem[] = [
                                 Sauvegardé
                             </span>
                         </transition>
-                        <Button
-                            v-if="!isSuperAdmin"
-                            size="sm"
-                            :disabled="saving"
-                            @click="save"
-                        >
+                        <Button size="sm" :disabled="saving" @click="save">
                             <Save class="mr-2 h-4 w-4" />
                             {{ saving ? 'Enregistrement…' : 'Enregistrer' }}
                         </Button>

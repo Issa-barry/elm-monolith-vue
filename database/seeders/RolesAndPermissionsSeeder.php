@@ -106,14 +106,17 @@ class RolesAndPermissionsSeeder extends Seeder
         Permission::firstOrCreate(['name' => 'logistique.cloturer']);
 
         // ── 2. Rôles + matrices de permissions ────────────────────────────────
-        $superAdmin = Role::firstOrCreate(['name' => 'super_admin']);
-        $adminEntreprise = Role::firstOrCreate(['name' => 'admin_entreprise']);
-        $manager = Role::firstOrCreate(['name' => 'manager']);
-        $commerciale = Role::firstOrCreate(['name' => 'commerciale']);
-        $comptable = Role::firstOrCreate(['name' => 'comptable']);
-        Role::firstOrCreate(['name' => 'client']);
-        Role::firstOrCreate(['name' => 'proprietaire']);
-        Role::firstOrCreate(['name' => 'livreur']);
+        // is_system=true : jamais renommables ni supprimables via le CRUD de rôles
+        // (RoleController) — leur name est référencé en dur ailleurs (middleware `role:` des
+        // routes, quelques hasAnyRole() de Policies) ; les supprimer casserait ces endroits.
+        $superAdmin = Role::firstOrCreate(['name' => 'super_admin'], ['is_system' => true]);
+        $adminEntreprise = Role::firstOrCreate(['name' => 'admin_entreprise'], ['is_system' => true]);
+        $manager = Role::firstOrCreate(['name' => 'manager'], ['is_system' => true]);
+        $commerciale = Role::firstOrCreate(['name' => 'commerciale'], ['is_system' => true]);
+        $comptable = Role::firstOrCreate(['name' => 'comptable'], ['is_system' => true]);
+        Role::firstOrCreate(['name' => 'client'], ['is_system' => true]);
+        Role::firstOrCreate(['name' => 'proprietaire'], ['is_system' => true]);
+        Role::firstOrCreate(['name' => 'livreur'], ['is_system' => true]);
 
         $superAdmin->syncPermissions(Permission::all());
 
