@@ -20,6 +20,13 @@ enum EvenementComptable: string
     case DEPENSE_INTERNE_VALIDEE = 'depense_interne_validee';
     case DEPENSE_AVANCE_TIERS_VALIDEE = 'depense_avance_tiers_validee';
     case REGULARISATION_CLOTURE_FICHE = 'regularisation_cloture_fiche';
+    // Vente/facturation client — cf. VenteComptabilisationService. Fait générateur =
+    // sortie de FactureVente du statut CREEE (montant définitif, quantités réellement
+    // chargées), jamais la création de la facture (encore une estimation) ni la
+    // livraison physique (statut LIVREE, purement logistique).
+    case VENTE_FACTUREE = 'vente_facturee';
+    // Fait générateur = EncaissementVente créé (chaque encaissement, partiel ou total).
+    case ENCAISSEMENT_VENTE_RECU = 'encaissement_vente_recu';
 
     public function label(): string
     {
@@ -31,6 +38,8 @@ enum EvenementComptable: string
             self::DEPENSE_INTERNE_VALIDEE => 'Dépense interne validée',
             self::DEPENSE_AVANCE_TIERS_VALIDEE => 'Dépense imputée à un tiers (avance)',
             self::REGULARISATION_CLOTURE_FICHE => 'Régularisation de clôture (fiche non validée)',
+            self::VENTE_FACTUREE => 'Vente facturée',
+            self::ENCAISSEMENT_VENTE_RECU => 'Encaissement client reçu',
         };
     }
 }
