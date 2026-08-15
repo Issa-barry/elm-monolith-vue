@@ -179,7 +179,9 @@ function removeRow(index: number): void {
                             class="w-28"
                             autofocus
                         />
-                        <span class="text-xs text-muted-foreground">sachets</span>
+                        <span class="text-xs text-muted-foreground"
+                            >sachets</span
+                        >
                         <Button
                             type="button"
                             variant="ghost"

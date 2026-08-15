@@ -404,7 +404,8 @@ const capaciteVehiculeConforme = computed(() => {
     if (capacitesParCategorieSelectionnee.value.length > 0) {
         return usageParCategorie.value.every((c) => {
             if (c.qte > c.capacite_max) return false;
-            if (c.qte < c.capacite_max) return props.autoriser_saisie_dessous_qte_max;
+            if (c.qte < c.capacite_max)
+                return props.autoriser_saisie_dessous_qte_max;
             return true;
         });
     }
@@ -717,7 +718,9 @@ function submit() {
 
                         <!-- Régime legacy : un seul plafond global (aucune catégorie configurée) -->
                         <p
-                            v-if="capacitesParCategorieSelectionnee.length === 0"
+                            v-if="
+                                capacitesParCategorieSelectionnee.length === 0
+                            "
                             class="mb-3 text-xs"
                             :class="
                                 capaciteVehiculeSelectionne === null
@@ -735,7 +738,9 @@ function submit() {
                                     : `${capaciteVehiculeSelectionne} packs`
                             }}
                             · Quantité saisie: {{ quantiteTotale }} packs
-                            <template v-if="capaciteVehiculeSelectionne !== null">
+                            <template
+                                v-if="capaciteVehiculeSelectionne !== null"
+                            >
                                 <span
                                     v-if="
                                         quantiteTotale ===

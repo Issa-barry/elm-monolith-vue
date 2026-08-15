@@ -463,7 +463,8 @@ const capaciteVehiculeConforme = computed(() => {
     if (capacitesParCategorieSelectionnee.value.length > 0) {
         return usageParCategorie.value.every((c) => {
             if (c.qte > c.capacite_max) return false;
-            if (c.qte < c.capacite_max) return props.autoriser_saisie_dessous_qte_max;
+            if (c.qte < c.capacite_max)
+                return props.autoriser_saisie_dessous_qte_max;
             return true;
         });
     }
@@ -1358,7 +1359,9 @@ function confirmerEtCreer() {
                             <span
                                 v-for="c in usageParCategorie"
                                 :key="c.categorie_id"
-                                :class="capaciteLigneClass(c.qte, c.capacite_max)"
+                                :class="
+                                    capaciteLigneClass(c.qte, c.capacite_max)
+                                "
                             >
                                 {{ c.categorie_nom }} : {{ c.qte }} /
                                 {{ c.capacite_max }}
@@ -1378,7 +1381,10 @@ function confirmerEtCreer() {
 
                             <!-- Régime legacy : un seul plafond global (aucune catégorie configurée) -->
                             <span
-                                v-if="capacitesParCategorieSelectionnee.length === 0"
+                                v-if="
+                                    capacitesParCategorieSelectionnee.length ===
+                                    0
+                                "
                                 :class="
                                     capaciteVehiculeSelectionne === null
                                         ? 'text-muted-foreground'

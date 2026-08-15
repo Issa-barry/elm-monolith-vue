@@ -344,9 +344,9 @@ function onSeuilBlur() {
                         </p>
                         <p class="text-xs text-muted-foreground">
                             Ce paramètre détermine à quel moment la commission
-                            de vente naît. Elle naît toujours au statut «
-                            Créée » et ne devient payable qu'après validation
-                            de la période de paiement.
+                            de vente naît. Elle naît toujours au statut « Créée
+                            » et ne devient payable qu'après validation de la
+                            période de paiement.
                         </p>
                         <div
                             class="flex flex-col gap-3 pt-1 sm:flex-row sm:gap-6"
