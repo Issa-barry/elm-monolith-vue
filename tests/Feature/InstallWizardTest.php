@@ -2,17 +2,19 @@
 
 namespace Tests\Feature;
 
-use App\Enums\SiteType;
+use App\Enums\DomaineActivite;
 use App\Models\AppInstallation;
 use App\Models\Categorie;
 use App\Models\OptionCatalogue;
 use App\Models\Organization;
-use App\Models\Site;
+use App\Models\ProduitType;
 use App\Models\TypeVehicule;
 use App\Models\User;
+use App\Services\InstallationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -37,7 +39,7 @@ class InstallWizardTest extends TestCase
     private function payload(array $overrides = []): array
     {
         return array_replace_recursive([
-            'organisation' => ['nom' => 'ELM Test'],
+            'organisation' => ['nom' => 'ELM Test', 'domaine' => DomaineActivite::COMMERCE_DISTRIBUTION->value],
             'admin' => [
                 'prenom' => 'Issa',
                 'nom' => 'BARRY',
@@ -46,7 +48,6 @@ class InstallWizardTest extends TestCase
                 'password' => 'Sup3r$ecretPwd',
                 'password_confirmation' => 'Sup3r$ecretPwd',
             ],
-            'siege' => ['ville' => 'Conakry', 'quartier' => 'Matoto'],
         ], $overrides);
     }
 
@@ -87,6 +88,32 @@ class InstallWizardTest extends TestCase
 
         $this->assertSame(2, Organization::whereIn('name', ['ELM Test', 'ELM Test 2'])->count());
         $this->assertSame(2, AppInstallation::count());
+    }
+
+    /**
+     * Le nom ne doit jamais servir d'identité technique en SaaS — deux entreprises indépendantes
+     * peuvent légitimement porter le même nom commercial (cf. mémo idempotence corrigé).
+     */
+    public function test_deux_organisations_saas_peuvent_porter_le_meme_nom(): void
+    {
+        config(['app.deployment_mode' => 'saas', 'app.install_token' => 'ma-cle-secrete']);
+
+        $this->withSession(['install_token_verified' => true])
+            ->post('/install', $this->payload())
+            ->assertOk();
+
+        $this->withSession(['install_token_verified' => true])
+            ->post('/install', $this->payload([
+                'admin' => ['telephone' => '+224622000001'],
+            ]))
+            ->assertOk();
+
+        $this->assertSame(2, Organization::where('name', 'ELM Test')->count());
+        $this->assertSame(
+            2,
+            Organization::where('name', 'ELM Test')->pluck('id')->unique()->count(),
+            'les deux organisations doivent avoir un identifiant distinct'
+        );
     }
 
     public function test_install_saas_sans_token_configure_refuse_avec_erreur_serveur(): void
@@ -208,40 +235,67 @@ class InstallWizardTest extends TestCase
         $this->assertGreaterThan(0, OptionCatalogue::where('organization_id', $org->id)->count());
         $this->assertSame(5, TypeVehicule::where('organization_id', $org->id)->count());
         $this->assertTrue(TypeVehicule::where('organization_id', $org->id)->where('nom', 'Minibus')->exists());
+        $this->assertTrue(ProduitType::where('organization_id', $org->id)->where('code', 'matiere_production')->exists());
     }
 
-    public function test_cree_le_site_siege_a_partir_de_ladresse_saisie(): void
+    public function test_aucun_site_nest_cree_pendant_linstallation(): void
+    {
+        $this->post('/install', $this->payload())->assertOk();
+
+        $org = Organization::where('slug', 'elm-test')->firstOrFail();
+        $this->assertSame(0, $org->sites()->count());
+    }
+
+    public function test_domaine_dactivite_est_persiste(): void
     {
         $this->post('/install', $this->payload([
-            'siege' => ['ville' => 'Kankan', 'quartier' => 'Timbo'],
+            'organisation' => ['domaine' => DomaineActivite::RESTAURATION->value],
         ]))->assertOk();
 
         $org = Organization::where('slug', 'elm-test')->firstOrFail();
-        $siege = Site::where('organization_id', $org->id)->where('nom', 'Siège')->first();
+        $this->assertSame(DomaineActivite::RESTAURATION, $org->domaine_activite);
 
-        $this->assertNotNull($siege);
-        $this->assertSame(SiteType::SIEGE, $siege->type);
-        $this->assertSame('Kankan', $siege->ville);
-        $this->assertSame('Timbo', $siege->quartier);
-        $this->assertSame('+224622000000', $siege->telephone);
+        // Les catégories seedées reflètent le domaine choisi (Plats, pas Vêtements).
+        $this->assertTrue(Categorie::where('organization_id', $org->id)->where('nom', 'Plats')->exists());
+        $this->assertFalse(Categorie::where('organization_id', $org->id)->where('nom', 'Vêtements')->exists());
     }
 
-    public function test_ville_du_siege_obligatoire(): void
+    public function test_domaine_dactivite_obligatoire(): void
     {
         $this->post('/install', $this->payload([
-            'siege' => ['ville' => ''],
-        ]))->assertSessionHasErrors('siege.ville');
+            'organisation' => ['domaine' => ''],
+        ]))->assertSessionHasErrors('organisation.domaine');
 
         $this->assertFalse(AppInstallation::isInstalled());
     }
 
-    public function test_quartier_du_siege_obligatoire(): void
+    public function test_domaine_dactivite_invalide_est_rejete(): void
     {
         $this->post('/install', $this->payload([
-            'siege' => ['quartier' => ''],
-        ]))->assertSessionHasErrors('siege.quartier');
+            'organisation' => ['domaine' => 'pas-un-domaine'],
+        ]))->assertSessionHasErrors('organisation.domaine');
+    }
 
-        $this->assertFalse(AppInstallation::isInstalled());
+    public function test_refuse_une_seconde_organisation_en_on_premise(): void
+    {
+        config(['app.deployment_mode' => 'on_premise']);
+
+        $this->post('/install', $this->payload())->assertOk();
+
+        // Le verrou web (isLocked → redirect login) ferme déjà /install normalement — ce test
+        // vérifie le filet de sécurité métier dans InstallationService lui-même, en simulant un
+        // appel qui contournerait isLocked() (ex: depuis la CLI, cf. InstallAppTest).
+        $service = app(InstallationService::class);
+
+        $this->expectException(ValidationException::class);
+
+        $service->install(
+            organisation: ['nom' => 'Autre Entreprise', 'domaine' => DomaineActivite::COMMERCE_DISTRIBUTION->value],
+            admin: [
+                'prenom' => 'Issa', 'nom' => 'BARRY', 'telephone' => '+224622000099', 'email' => null,
+                'password' => 'Sup3r$ecretPwd', 'password_confirmation' => 'Sup3r$ecretPwd',
+            ],
+        );
     }
 
     public function test_reutilise_organisation_existante_de_meme_nom_sans_dupliquer(): void

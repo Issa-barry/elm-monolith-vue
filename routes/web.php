@@ -45,6 +45,7 @@ use App\Http\Controllers\FraisCommissionPartController;
 use App\Http\Controllers\InstallWizardController;
 use App\Http\Controllers\LivreurController;
 use App\Http\Controllers\MediaController;
+use App\Http\Controllers\OnboardingSiteController;
 use App\Http\Controllers\OptionCatalogueController;
 use App\Http\Controllers\PackingController;
 use App\Http\Controllers\PaieController;
@@ -149,6 +150,14 @@ Route::get('/', function (Request $request) {
 })->name('home');
 
 Route::get('/sitemap.xml', SitemapController::class)->name('sitemap');
+
+// ── Onboarding du premier site (post-connexion) ────────────────────────────────
+// Hors du groupe 'require.site' (par construction : c'est justement l'absence de site
+// organisation qui amène ici, cf. EnsureOrganizationHasSite) mais toujours authentifié.
+Route::middleware(['auth', 'account.active'])->prefix('onboarding')->name('onboarding.')->group(function () {
+    Route::get('site', [OnboardingSiteController::class, 'show'])->name('site.show');
+    Route::post('site', [OnboardingSiteController::class, 'store'])->name('site.store');
+});
 
 // ── Espace staff (back-office) ──────────────────────────────────────────────
 Route::prefix('backoffice')->group(function () {

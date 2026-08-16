@@ -480,7 +480,9 @@ function handleSubmit() {
                         class="rounded-lg border bg-muted/30 px-3 py-2 text-sm text-muted-foreground"
                     >
                         {{ selectedType.capacite_defaut }} sachets
-                        <template v-if="selectedType.capacite_defaut_bouteilles">
+                        <template
+                            v-if="selectedType.capacite_defaut_bouteilles"
+                        >
                             · {{ selectedType.capacite_defaut_bouteilles }}
                             bouteilles
                         </template>

@@ -2,19 +2,22 @@
 
 namespace App\Console\Commands;
 
+use App\Enums\DomaineActivite;
 use App\Services\InstallationService;
 use Illuminate\Console\Command;
 use Illuminate\Validation\ValidationException;
 
 /**
  * Première initialisation d'une organisation : crée (ou réutilise) l'organisation, le premier
- * compte super_admin, le site siège (à partir de la ville/quartier saisis) et le catalogue de
- * départ (catégories, options, types de véhicule — systématique, plus un choix).
+ * compte super_admin et le catalogue de départ (types de produit, catégories adaptées au
+ * domaine, options, types de véhicule — systématique, plus un choix). Le premier site n'est plus
+ * créé ici : il se configure à la première connexion (onboarding, cf.
+ * OnboardingSiteController), même parcours qu'en web.
  *
  * Simple façade interactive autour de InstallationService — toute la logique métier (org,
- * super_admin, site, catalogue, installed_at) vit dans ce service, partagée avec l'assistant web
- * `/install` (InstallWizardController) : les deux chemins produisent exactement le même
- * résultat pour les mêmes réponses.
+ * super_admin, domaine, catalogue, installed_at, verrou on-premise) vit dans ce service, partagée
+ * avec l'assistant web `/install` (InstallWizardController) : les deux chemins produisent
+ * exactement le même résultat pour les mêmes réponses.
  *
  * Le mot de passe est choisi directement par la personne qui répond aux prompts (saisie
  * masquée, jamais affichée ni loguée) — pas de mot de passe généré ni de redéfinition forcée
@@ -40,12 +43,15 @@ class InstallApp extends Command
             return self::FAILURE;
         }
 
-        if ($service->hasSuperAdmin($service->resolveOrganization($nomEntreprise))) {
+        if ($service->hasSuperAdminForName($nomEntreprise)) {
             $this->error('Cette organisation a déjà un compte super_admin — installation déjà faite.');
             $this->line("Pour ajouter d'autres comptes, utilisez le flux d'invitation de l'application.");
 
             return self::FAILURE;
         }
+
+        $this->newLine();
+        $domaine = $this->askDomaine();
 
         $this->newLine();
         $this->line('----------------------------------------');
@@ -60,30 +66,11 @@ class InstallApp extends Command
         [$password, $confirmation] = $this->askPassword($service);
 
         $this->newLine();
-        $this->line('----------------------------------------');
-        $this->line('Siège');
-        $this->line('----------------------------------------');
-        $this->newLine();
-
-        $ville = $this->ask('Ville du siège');
-        if (! $ville) {
-            $this->error('La ville du siège est obligatoire.');
-
-            return self::FAILURE;
-        }
-        $quartier = $this->ask('Quartier du siège');
-        if (! $quartier) {
-            $this->error('Le quartier du siège est obligatoire.');
-
-            return self::FAILURE;
-        }
-
-        $this->newLine();
         $this->info('Création...');
 
         try {
             $org = $service->install(
-                organisation: ['nom' => $nomEntreprise],
+                organisation: ['nom' => $nomEntreprise, 'domaine' => $domaine->value],
                 admin: [
                     'prenom' => $prenom,
                     'nom' => $nom,
@@ -92,7 +79,6 @@ class InstallApp extends Command
                     'password' => $password,
                     'password_confirmation' => $confirmation,
                 ],
-                siege: ['ville' => $ville, 'quartier' => $quartier],
             );
         } catch (ValidationException $e) {
             foreach ($e->errors() as $messages) {
@@ -107,9 +93,9 @@ class InstallApp extends Command
         $this->line('✓ Entreprise prête : '.$org->name);
         $this->line('✓ Rôles et permissions initialisés');
         $this->line('✓ Super Admin créé');
-        $this->line("✓ Siège créé : {$ville}, {$quartier}");
-        $this->line('✓ Catalogue par défaut créé (catégories, options, types de véhicule)');
-        $this->line("  Les autres sites et les produits restent à ajouter depuis l'application.");
+        $this->line('✓ Domaine d\'activité : '.$domaine->label());
+        $this->line('✓ Catalogue par défaut créé (types de produit, catégories, options, types de véhicule)');
+        $this->line('  Le premier site se configure à la première connexion.');
 
         $this->newLine();
         $this->line('========================================');
@@ -119,6 +105,26 @@ class InstallApp extends Command
         $this->warn("Pour des raisons de sécurité, le mot de passe saisi n'est jamais affiché ni conservé en clair.");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Menu à choix fermé (pas de saisie libre) — les 5 domaines sont fixes, cf.
+     * App\Enums\DomaineActivite.
+     */
+    private function askDomaine(): DomaineActivite
+    {
+        $labels = array_map(fn (DomaineActivite $d) => $d->label(), DomaineActivite::cases());
+        $choix = $this->choice("Domaine d'activité de l'entreprise", $labels, 0);
+
+        foreach (DomaineActivite::cases() as $domaine) {
+            if ($domaine->label() === $choix) {
+                return $domaine;
+            }
+        }
+
+        // Inatteignable en pratique ($this->choice ne renvoie qu'une des valeurs proposées),
+        // filet de sécurité seulement.
+        return DomaineActivite::AUTRE;
     }
 
     /**

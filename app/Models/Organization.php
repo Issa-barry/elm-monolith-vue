@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\DomaineActivite;
 use App\Services\Comptabilite\PlanComptableBootstrapService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -15,9 +16,16 @@ class Organization extends Model
 {
     use HasFactory, HasUlids, SoftDeletes;
 
-    protected $fillable = ['name', 'slug', 'code', 'siret', 'logo_path', 'is_active'];
+    protected $fillable = ['name', 'slug', 'code', 'siret', 'logo_path', 'is_active', 'domaine_activite'];
 
     protected $appends = ['logo_url'];
+
+    protected function casts(): array
+    {
+        return [
+            'domaine_activite' => DomaineActivite::class,
+        ];
+    }
 
     protected static function boot(): void
     {

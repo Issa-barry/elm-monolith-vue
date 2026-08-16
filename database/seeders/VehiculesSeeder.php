@@ -3,7 +3,6 @@
 namespace Database\Seeders;
 
 use App\Enums\CategorieVehicule;
-use App\Models\Categorie;
 use App\Models\EquipeLivraison;
 use App\Models\Organization;
 use App\Models\Proprietaire;
@@ -254,13 +253,6 @@ class VehiculesSeeder extends Seeder
             ],
         ];
 
-        // Catégorie "Sachet" — provisionnée par ProduitsSeeder (doit tourner avant ce seeder,
-        // cf. DatabaseSeeder). Sert à faire basculer chaque véhicule de démo sur le régime "par
-        // catégorie" de VehiculeCapaciteService, avec le même plafond que capacite_packs
-        // ci-dessus (aucune donnée "Bouteille" fiable à seeder ici : reste à configurer via la
-        // fiche véhicule — VehiculeCapacitesCard — une fois de vraies capacités connues).
-        $sachet = Categorie::where('organization_id', $org->id)->where('nom', 'Sachet')->first();
-
         foreach ($vehicules as $data) {
             $equipeModel = $data['equipe'];
             unset($data['equipe']);
@@ -271,13 +263,6 @@ class VehiculesSeeder extends Seeder
             );
 
             $equipeModel->update(['vehicule_id' => $vehicule->id]);
-
-            if ($sachet && $data['capacite_packs'] !== null) {
-                $vehicule->capacites()->updateOrCreate(
-                    ['categorie_id' => $sachet->id],
-                    ['organization_id' => $org->id, 'capacite_max' => $data['capacite_packs']]
-                );
-            }
         }
     }
 }

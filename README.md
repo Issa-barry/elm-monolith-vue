@@ -50,7 +50,10 @@ $PHP artisan optimize:clear
 $PHP artisan optimize
 
 ```
-
+php artisan key:generate
+php artisan migrate --force
+<!-- php artisan db:seed --class=ProductionSeeder --force -->
+php artisan optimize:clear
 
 
 
