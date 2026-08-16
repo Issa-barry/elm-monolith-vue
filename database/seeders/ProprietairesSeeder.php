@@ -25,7 +25,7 @@ class ProprietairesSeeder extends Seeder
         $sansCompte = [
             [
                 // Propriétaire par défaut des véhicules "interne" (propriété de
-                // l'organisation) — voir VehiculeController::defaultProprietaireInterneId().
+                // l'organisation) — rattaché ci-dessous à Organization::proprietaire_interne_id.
                 // Distinct du compte User admin_entreprise "Moussa SIDIBÉ"
                 // (téléphone différent) : ici c'est une fiche Proprietaire, pas
                 // un utilisateur du back-office.
@@ -75,11 +75,25 @@ class ProprietairesSeeder extends Seeder
             ],
         ];
 
+        $proprietaireInterne = null;
         foreach ($sansCompte as $data) {
-            Proprietaire::firstOrCreate(
+            $proprietaire = Proprietaire::firstOrCreate(
                 ['telephone' => $data['telephone'], 'organization_id' => $org->id],
                 [...$data, 'organization_id' => $org->id]
             );
+
+            if ($data['telephone'] === '+224622602693') {
+                $proprietaireInterne = $proprietaire;
+            }
+        }
+
+        // Propriétaire interne par défaut de l'organisation "elm" — véhicules "interne" et
+        // commissions propriétaire associées (cf. Organization::proprietaireInterne(),
+        // Proprietaire::interneParDefautId()). Pour toute autre organisation, ce rattachement
+        // se fait à l'installation (InstallationService::install()), jamais via ce seeder de
+        // démonstration.
+        if ($proprietaireInterne && ! $org->proprietaire_interne_id) {
+            $org->forceFill(['proprietaire_interne_id' => $proprietaireInterne->id])->save();
         }
 
         // ── Propriétaires avec compte (accès portail client) ──────────────────

@@ -34,6 +34,23 @@ class VehiculeTest extends TestCase
         return TypeVehicule::where('organization_id', $this->org->id)->value('id');
     }
 
+    /**
+     * Crée le propriétaire interne par défaut de $this->org et le rattache via
+     * Organization::proprietaire_interne_id (cf. InstallationService::install() en
+     * conditions réelles) — seule façon dont Proprietaire::interneParDefautId() peut
+     * désormais le retrouver, plus aucune magie sur le numéro de téléphone.
+     */
+    private function defaultInterneProprietaire(array $attributes = []): Proprietaire
+    {
+        $proprietaire = Proprietaire::factory()->create([
+            'organization_id' => $this->org->id,
+            ...$attributes,
+        ]);
+        $this->org->forceFill(['proprietaire_interne_id' => $proprietaire->id])->save();
+
+        return $proprietaire;
+    }
+
     private function makeVehicule(Organization $org, ?bool $livraisonVente = null, ?bool $livraisonLogistique = null): Vehicule
     {
         $typeVehicule = TypeVehicule::factory()->create(['organization_id' => $org->id]);
@@ -93,17 +110,17 @@ class VehiculeTest extends TestCase
             ->assertStatus(403);
     }
 
-    public function test_index_falls_back_to_type_default_capacity_when_vehicule_has_none(): void
+    public function test_index_expose_la_capacite_packs_du_type(): void
     {
-        // cas réel : véhicules créés par l'import flotte, qui ne saisit jamais
-        // de capacité propre au véhicule (voir ImportFlotteExecutor).
+        // Capacité gérée exclusivement par le type (décision produit du 16/08/2026, cf.
+        // VehiculeCapaciteService) — jamais propre au véhicule, quel que soit son origine
+        // (formulaire manuel ou import flotte, cf. ImportFlotteExecutor).
         $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'capacite_defaut' => 270]);
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'type_vehicule_id' => $type->id,
             'proprietaire_id' => $proprietaire->id,
-            'capacite_packs' => null,
         ]);
 
         $this->actingAs($this->user)
@@ -113,7 +130,7 @@ class VehiculeTest extends TestCase
             );
     }
 
-    public function test_index_falls_back_to_type_default_capacite_bouteilles_when_vehicule_has_none(): void
+    public function test_index_expose_la_capacite_bouteilles_du_type(): void
     {
         $type = TypeVehicule::factory()->create([
             'organization_id' => $this->org->id,
@@ -124,7 +141,6 @@ class VehiculeTest extends TestCase
             'organization_id' => $this->org->id,
             'type_vehicule_id' => $type->id,
             'proprietaire_id' => $proprietaire->id,
-            'capacite_bouteilles' => null,
         ]);
 
         $this->actingAs($this->user)
@@ -160,7 +176,6 @@ class VehiculeTest extends TestCase
                 'proprietaire_id' => $proprietaire->id,
                 'categorie' => 'partenaire',
                 'site_id' => $site->id,
-                'capacite_packs' => 200,
                 'is_active' => true,
                 'livraison_vente' => true,
                 'livraison_logistique' => false,
@@ -181,7 +196,13 @@ class VehiculeTest extends TestCase
         ]);
     }
 
-    public function test_store_creates_vehicule_avec_capacite_bouteilles(): void
+    /**
+     * capacite_packs/capacite_bouteilles ne sont plus des champs du formulaire véhicule
+     * (décision produit du 16/08/2026) — un envoi malgré tout (ancien client, requête forgée)
+     * n'a aucun effet : ni dans validationRules(), ces clés sont silencieusement ignorées par
+     * Request::validate(), la capacité affichée reste celle du type.
+     */
+    public function test_store_ignore_capacite_packs_et_bouteilles_envoyes_dans_le_payload(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $site = $this->user->sites()->first();
@@ -204,13 +225,14 @@ class VehiculeTest extends TestCase
         $this->assertDatabaseHas('vehicules', [
             'organization_id' => $this->org->id,
             'immatriculation' => 'MB-001-GN',
-            'capacite_packs' => 200,
-            'capacite_bouteilles' => 60,
+            'capacite_packs' => null,
+            'capacite_bouteilles' => null,
         ]);
     }
 
     public function test_store_creates_vehicule_logistique_seul(): void
     {
+        $this->defaultInterneProprietaire();
         $site = $this->user->sites()->first();
 
         $response = $this->actingAs($this->user)
@@ -220,7 +242,6 @@ class VehiculeTest extends TestCase
                 'type_vehicule_id' => $this->typeId(),
                 'categorie' => 'interne',
                 'site_id' => $site->id,
-                'capacite_packs' => 50,
                 'is_active' => true,
                 'livraison_vente' => false,
                 'livraison_logistique' => true,
@@ -243,6 +264,7 @@ class VehiculeTest extends TestCase
 
     public function test_store_accepte_usage_mixte(): void
     {
+        $this->defaultInterneProprietaire();
         $site = $this->user->sites()->first();
 
         $this->actingAs($this->user)
@@ -659,15 +681,10 @@ class VehiculeTest extends TestCase
 
     public function test_store_creates_vehicule_avec_proprietaire_par_defaut(): void
     {
-        // Cf. Proprietaire::interneParDefautId() : la fiche Proprietaire "Moussa
-        // SIDIBE" (téléphone +224622602693) est le propriétaire par défaut assigné
-        // à tout véhicule créé sans proprietaire_id explicite.
-        $defaut = Proprietaire::factory()->create([
-            'organization_id' => $this->org->id,
-            'nom' => 'SIDIBE',
-            'prenom' => 'Moussa',
-            'telephone' => '+224622602693',
-        ]);
+        // Cf. Proprietaire::interneParDefautId() : le propriétaire interne configuré sur
+        // l'organisation est assigné par défaut à tout véhicule créé sans proprietaire_id
+        // explicite.
+        $defaut = $this->defaultInterneProprietaire(['nom' => 'SIDIBE', 'prenom' => 'Moussa']);
         $site = $this->user->sites()->first();
 
         $response = $this->actingAs($this->user)
@@ -677,7 +694,6 @@ class VehiculeTest extends TestCase
                 'type_vehicule_id' => $this->typeId(),
                 'categorie' => 'interne',
                 'site_id' => $site->id,
-                'capacite_packs' => 50,
                 'is_active' => true,
                 'livraison_vente' => false,
                 'livraison_logistique' => true,
@@ -701,10 +717,7 @@ class VehiculeTest extends TestCase
     {
         // Un propriétaire explicite (différent du défaut) prime toujours sur la valeur
         // par défaut, quel que soit l'usage du véhicule.
-        Proprietaire::factory()->create([
-            'organization_id' => $this->org->id,
-            'telephone' => '+224622602693',
-        ]);
+        $this->defaultInterneProprietaire();
         $autre = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $site = $this->user->sites()->first();
 
@@ -716,7 +729,6 @@ class VehiculeTest extends TestCase
                 'proprietaire_id' => $autre->id,
                 'categorie' => 'partenaire',
                 'site_id' => $site->id,
-                'capacite_packs' => 50,
                 'is_active' => true,
                 'livraison_vente' => false,
                 'livraison_logistique' => true,
@@ -791,10 +803,7 @@ class VehiculeTest extends TestCase
 
     public function test_store_fails_partenaire_avec_proprietaire_interne_par_defaut(): void
     {
-        $defaut = Proprietaire::factory()->create([
-            'organization_id' => $this->org->id,
-            'telephone' => '+224622602693',
-        ]);
+        $defaut = $this->defaultInterneProprietaire();
         $site = $this->user->sites()->first();
 
         $this->actingAs($this->user)
@@ -836,6 +845,9 @@ class VehiculeTest extends TestCase
 
     public function test_store_succeeds_interne_sans_proprietaire(): void
     {
+        // Un propriétaire interne configuré sur l'organisation permet de créer un véhicule
+        // "interne" sans choisir explicitement de propriétaire — il y retombe automatiquement.
+        $defaut = $this->defaultInterneProprietaire();
         $site = $this->user->sites()->first();
 
         $this->actingAs($this->user)
@@ -853,7 +865,31 @@ class VehiculeTest extends TestCase
         $this->assertDatabaseHas('vehicules', [
             'immatriculation' => 'CAT-006-GN',
             'categorie' => 'interne',
+            'proprietaire_id' => $defaut->id,
         ]);
+    }
+
+    public function test_store_fails_interne_sans_proprietaire_interne_configure(): void
+    {
+        // Aucun propriétaire interne configuré sur l'organisation (cf. defaultInterneProprietaire()
+        // jamais appelé ici) : un véhicule "interne" sans propriétaire explicite ne doit jamais se
+        // retrouver silencieusement avec proprietaire_id = null (véhicule sans propriétaire
+        // économique, invisible des commissions) — erreur métier claire à la place.
+        $site = $this->user->sites()->first();
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Camion Interne Sans Defaut',
+                'immatriculation' => 'CAT-008-GN',
+                'type_vehicule_id' => $this->typeId(),
+                'categorie' => 'interne',
+                'site_id' => $site->id,
+                'livraison_vente' => true,
+                'livraison_logistique' => false,
+            ])
+            ->assertSessionHasErrors('categorie');
+
+        $this->assertDatabaseMissing('vehicules', ['immatriculation' => 'CAT-008-GN']);
     }
 
     public function test_store_succeeds_partenaire_avec_proprietaire_tiers(): void

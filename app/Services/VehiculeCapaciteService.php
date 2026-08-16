@@ -13,17 +13,18 @@ use Illuminate\Validation\ValidationException;
  * (CommandeVenteController) et le PDV (PdvCheckoutService) — avant cette classe, chacun avait
  * sa propre copie du même calcul.
  *
- * Deux régimes, choisis automatiquement par véhicule :
- * - Aucune ligne dans vehicule_capacites/type_vehicule_capacites pour ce véhicule (ou son
- *   type) → régime "legacy" : un seul plafond global (vehicules.capacite_packs, ou à défaut
- *   type_vehicules.capacite_defaut), toutes catégories de produit confondues. C'est le
- *   comportement historique, préservé tel quel pour ne rien casser sur la flotte existante.
+ * La capacité est désormais portée exclusivement par le TYPE de véhicule (décision produit du
+ * 16/08/2026) — jamais par le véhicule lui-même, pour n'avoir qu'un seul endroit où la régler
+ * (page Types de véhicules). Deux régimes, choisis automatiquement selon le type :
+ * - Aucune ligne dans type_vehicule_capacites pour le type du véhicule → régime "legacy" : un
+ *   seul plafond global (type_vehicules.capacite_defaut), toutes catégories de produit
+ *   confondues. C'est le comportement historique, préservé tel quel pour ne rien casser sur la
+ *   flotte existante.
  * - Au moins une ligne définie → régime "par catégorie" : chaque catégorie de produit vendue
- *   est comparée à SON propre plafond (capacité du véhicule pour cette catégorie, sinon celle
- *   par défaut du type). Une catégorie vendue sans plafond défini n'est pas limitée. Les
- *   plafonds des différentes catégories sont indépendants (cumulables), pas partagés — décision
- *   produit du 10/08/2026 : un véhicule à 70 sachets + 100 bouteilles peut partir chargé des
- *   deux à la fois.
+ *   est comparée à SON propre plafond (capacité par défaut du type pour cette catégorie). Une
+ *   catégorie vendue sans plafond défini n'est pas limitée. Les plafonds des différentes
+ *   catégories sont indépendants (cumulables), pas partagés — décision produit du 10/08/2026 :
+ *   un véhicule à 70 sachets + 100 bouteilles peut partir chargé des deux à la fois.
  *
  * Contrôle strict, sans exception de rôle (décision produit du 15/08/2026) : la capacité d'un
  * véhicule ne peut jamais être dépassée, quel que soit l'utilisateur. Il n'existe plus de
@@ -34,21 +35,17 @@ use Illuminate\Validation\ValidationException;
 class VehiculeCapaciteService
 {
     /**
-     * Capacité effective par catégorie pour ce véhicule (capacité propre si définie, sinon
-     * celle par défaut de son type). Vide si aucune ligne n'a été configurée nulle part —
-     * dans ce cas l'appelant doit basculer sur le régime legacy.
+     * Capacité effective par catégorie pour le type de ce véhicule. Vide si aucune ligne n'a
+     * été configurée sur le type — dans ce cas l'appelant doit basculer sur le régime legacy.
      *
      * @return Collection<string, int> categorie_id => capacite_max
      */
     public function capacitesParCategorie(Vehicule $vehicule): Collection
     {
-        $vehicule->loadMissing(['capacites', 'typeVehicule.capacites']);
+        $vehicule->loadMissing('typeVehicule.capacites');
 
         $capacites = collect();
         foreach ($vehicule->typeVehicule?->capacites ?? [] as $c) {
-            $capacites->put($c->categorie_id, $c->capacite_max);
-        }
-        foreach ($vehicule->capacites as $c) {
             $capacites->put($c->categorie_id, $c->capacite_max);
         }
 
@@ -56,13 +53,12 @@ class VehiculeCapaciteService
     }
 
     /**
-     * Capacité globale legacy (toutes catégories confondues) — même repli que l'historique
-     * capacite_packs ?? typeVehicule.capacite_defaut.
+     * Capacité globale legacy (toutes catégories confondues) — celle par défaut du type.
      */
     public function capaciteGlobaleLegacy(Vehicule $vehicule): ?int
     {
         $vehicule->loadMissing('typeVehicule');
-        $capacite = $vehicule->capacite_packs ?? $vehicule->typeVehicule?->capacite_defaut;
+        $capacite = $vehicule->typeVehicule?->capacite_defaut;
 
         return $capacite !== null ? (int) $capacite : null;
     }

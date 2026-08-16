@@ -3,8 +3,11 @@
 namespace App\Services;
 
 use App\Actions\Fortify\PasswordValidationRules;
+use App\Enums\DomaineActivite;
 use App\Models\AppInstallation;
 use App\Models\Organization;
+use App\Models\Proprietaire;
+use App\Models\Site;
 use App\Models\User;
 use Database\Seeders\CategorieDefaultSeeder;
 use Database\Seeders\OptionCatalogueDefaultSeeder;
@@ -21,6 +24,10 @@ use Illuminate\Validation\ValidationException;
  * `php artisan app:install` (InstallApp) que par l'assistant web (InstallWizardController).
  * Toute règle métier de l'installation (organisation, super_admin, catalogue de départ, marquage
  * installed_at) vit ici et nulle part ailleurs, pour que CLI et web ne puissent jamais diverger.
+ *
+ * Le premier site de l'organisation N'EST PLUS créé ici (cf. creerPremierSite()) : install()
+ * produit une organisation sans aucun site, complétée ensuite via l'onboarding post-connexion
+ * (OnboardingSiteController, gardé par le middleware EnsureOrganizationHasSite).
  */
 class InstallationService
 {
@@ -37,10 +44,10 @@ class InstallationService
     }
 
     /**
-     * Verrou d'accès à /install (web uniquement — la CLI `app:install` s'appuie sur
-     * hasSuperAdmin() par organisation et n'est jamais concernée par ce verrou). En on_premise,
-     * une seule organisation jamais plus : dès qu'une installation existe, l'assistant se ferme.
-     * En saas, jamais verrouillé : chaque visite peut créer une nouvelle organisation.
+     * Verrou d'accès à /install (web uniquement — la CLI `app:install` passe par install(), qui
+     * porte désormais son propre verrou métier, cf. son docblock). En on_premise, une seule
+     * organisation jamais plus : dès qu'une installation existe, l'assistant se ferme. En saas,
+     * jamais verrouillé : chaque visite peut créer une nouvelle organisation.
      */
     public function isLocked(): bool
     {
@@ -48,18 +55,59 @@ class InstallationService
     }
 
     /**
-     * Le slug technique n'est jamais demandé à l'installation — généré automatiquement à
-     * partir du nom, modifiable ensuite dans les paramètres de l'organisation (backoffice).
-     * Une organisation existante portant exactement le même nom (insensible à la casse) est
-     * réutilisée telle quelle plutôt que recréée — c'est ce qui rend `install()` idempotent
-     * pour une même entreprise (ex: relancer l'installation après une interruption).
+     * Lecture seule, sans effet de bord — contrairement à l'ancien resolveOrganization() public,
+     * ne crée JAMAIS d'organisation. Utilisé par InstallApp pour le pré-check avant même d'avoir
+     * demandé le domaine/téléphone/mot de passe : créer l'organisation à ce stade (comme le
+     * faisait l'ancienne implémentation) la laisserait orpheline en base si l'installation
+     * échouait ensuite (téléphone invalide, mot de passe rejeté...), la création réelle
+     * n'ayant plus lieu que dans la transaction de install().
      */
-    public function resolveOrganization(string $nom): Organization
+    public function hasSuperAdminForName(string $nom): bool
+    {
+        RolesAndPermissionsSeeder::seedRolesEtPermissions();
+
+        $org = Organization::whereRaw('LOWER(name) = ?', [mb_strtolower(trim($nom))])->first();
+
+        return $org !== null && $org->users()->role('super_admin')->exists();
+    }
+
+    /**
+     * Résout l'organisation à installer — comportement volontairement différent selon le mode,
+     * car le nom ne peut PAS servir d'identité technique en SaaS (deux entreprises indépendantes
+     * peuvent légitimement porter le même nom commercial) :
+     *
+     * - saas : crée systématiquement une NOUVELLE organisation, jamais de réutilisation par nom.
+     *   Si un besoin de reprendre une installation SaaS interrompue apparaît un jour, ce sera un
+     *   mécanisme dédié (ex: lié au téléphone de l'admin), pas une recherche par nom.
+     * - on_premise : réutilise une organisation existante de même nom (insensible à la casse) —
+     *   c'est ce qui permet de reprendre une installation interrompue, ou de recréer un
+     *   super_admin après `php artisan accounts:purge` (cf. procédure formation du README) sans
+     *   dupliquer l'organisation. Sans risque de fusionner deux entreprises distinctes : le
+     *   verrou plus bas dans install() garantit qu'il n'existe jamais qu'une seule organisation
+     *   en on_premise.
+     */
+    private function resolveOrganization(string $nom, DomaineActivite $domaine): Organization
     {
         $nom = trim($nom);
 
+        if ($this->isSaas()) {
+            return Organization::create([
+                'name' => $nom,
+                'slug' => $this->generateUniqueSlug($nom),
+                'is_active' => true,
+                'domaine_activite' => $domaine,
+            ]);
+        }
+
         $existing = Organization::whereRaw('LOWER(name) = ?', [mb_strtolower($nom)])->first();
         if ($existing) {
+            // Ne réécrit jamais un domaine déjà renseigné (donnée métier établie) — ne complète
+            // que si l'organisation existante n'en avait pas encore (ex: créée avant l'ajout de
+            // ce champ, ou par ProductionSeeder).
+            if ($existing->domaine_activite === null) {
+                $existing->update(['domaine_activite' => $domaine]);
+            }
+
             return $existing;
         }
 
@@ -67,7 +115,21 @@ class InstallationService
             'name' => $nom,
             'slug' => $this->generateUniqueSlug($nom),
             'is_active' => true,
+            'domaine_activite' => $domaine,
         ]);
+    }
+
+    private function resolveDomaine(?string $value): DomaineActivite
+    {
+        $domaine = $value !== null ? DomaineActivite::tryFrom($value) : null;
+
+        if ($domaine === null) {
+            throw ValidationException::withMessages([
+                'organisation.domaine' => "Le domaine d'activité est obligatoire.",
+            ]);
+        }
+
+        return $domaine;
     }
 
     private function generateUniqueSlug(string $nom): string
@@ -119,21 +181,40 @@ class InstallationService
 
     /**
      * Exécute l'installation complète dans une transaction : organisation (créée ou réutilisée),
-     * rôles/permissions, super_admin, catalogue de départ optionnel, marquage installed_at — tout
-     * ou rien. installed_at n'est jamais renseigné si une étape échoue en cours de route.
+     * rôles/permissions, super_admin, catalogue de départ, marquage installed_at — tout ou rien.
+     * installed_at n'est jamais renseigné si une étape échoue en cours de route.
      *
-     * @param  array{nom: string}  $organisation
-     * @param  array{prenom: string, nom: string, telephone: string, email: ?string, password: string}  $admin
-     * @param  array{categories: bool, options: bool, types_vehicule: bool}  $catalogue
+     * Le catalogue de départ (catégories, options, types de véhicule) n'est plus un choix : il
+     * est désormais créé systématiquement, comme ProduitTypeDefaultSeeder l'était déjà — une
+     * organisation fraîche part toujours avec le même socle, modifiable/supprimable ensuite via
+     * les CRUD. Valable en on_premise comme en saas.
+     *
+     * Verrou on-premise : "1 instance on-premise = 1 organisation" est désormais garanti ICI,
+     * pas seulement par InstallWizardController::isLocked() (web) — donc également respecté par
+     * `php artisan app:install`, qui n'a jamais été concerné par isLocked(). On ne peut pas se
+     * contenter de tester isInstalled() (qui ne bloquerait pas une deuxième organisation tant que
+     * la première installation n'est pas allée à son terme) : on compare directement le nombre
+     * d'organisations à celle qu'on vient de résoudre, pour aussi couvrir le cas d'une
+     * organisation créée mais jamais finalisée (pas encore de super_admin).
+     *
+     * @param  array{nom: string, domaine: string}  $organisation
+     * @param  array{prenom: string, nom: string, telephone: string, email: ?string, password: string, password_confirmation?: string}  $admin
      *
      * @throws ValidationException
      */
-    public function install(array $organisation, array $admin, array $catalogue): Organization
+    public function install(array $organisation, array $admin): Organization
     {
-        return DB::transaction(function () use ($organisation, $admin, $catalogue) {
+        return DB::transaction(function () use ($organisation, $admin) {
             RolesAndPermissionsSeeder::seedRolesEtPermissions();
 
-            $org = $this->resolveOrganization($organisation['nom']);
+            $domaine = $this->resolveDomaine($organisation['domaine'] ?? null);
+            $org = $this->resolveOrganization($organisation['nom'], $domaine);
+
+            if (! $this->isSaas() && Organization::where('id', '!=', $org->id)->exists()) {
+                throw ValidationException::withMessages([
+                    'organisation.nom' => 'Cette instance est déjà associée à une autre organisation — impossible d\'en créer une seconde en mode on-premise.',
+                ]);
+            }
 
             if ($org->users()->role('super_admin')->exists()) {
                 throw ValidationException::withMessages([
@@ -175,20 +256,39 @@ class InstallationService
             $user->syncRoles(['super_admin']);
             app(MatriculeService::class)->assignForUser($user);
 
-            // Obligatoire et inconditionnel (contrairement aux catalogues ci-dessous) : un
-            // produit ne peut pas exister sans type, une organisation ne doit donc jamais rester
-            // sans aucun type disponible — cf. docblock de ProduitTypeDefaultSeeder.
-            ProduitTypeDefaultSeeder::seedPourOrganisation($org->id);
+            // Propriétaire interne par défaut de l'organisation (véhicules "interne" et
+            // commissions propriétaire associées, cf. Organization::proprietaireInterne()) —
+            // réutilise l'identité du super_admin qui vient d'être saisie une seule fois, plutôt
+            // que de la redemander : dans l'immense majorité des cas, la personne qui installe
+            // l'application EST la propriétaire de l'entreprise. Fiche Proprietaire distincte du
+            // compte User (rattachée via user_id) : le propriétaire économique reste stable même
+            // si l'admin connecté change plus tard (cf. Organization::proprietaire_interne_id).
+            if (! $org->proprietaire_interne_id) {
+                $proprietaireInterne = Proprietaire::create([
+                    'organization_id' => $org->id,
+                    'user_id' => $user->id,
+                    'nom' => $user->nom,
+                    'prenom' => $user->prenom,
+                    'telephone' => $user->telephone,
+                    'code_pays' => $user->code_pays,
+                    'pays' => $user->pays,
+                    'code_phone_pays' => $user->code_phone_pays,
+                    'is_active' => true,
+                ]);
+                $org->forceFill(['proprietaire_interne_id' => $proprietaireInterne->id])->save();
+            }
 
-            if ($catalogue['categories'] ?? false) {
-                CategorieDefaultSeeder::seedPourOrganisation($org->id);
-            }
-            if ($catalogue['options'] ?? false) {
-                OptionCatalogueDefaultSeeder::seedPourOrganisation($org->id);
-            }
-            if ($catalogue['types_vehicule'] ?? false) {
-                TypeVehiculesSeeder::seedPourOrganisation($org->id);
-            }
+            // Socle systématique pour toute organisation fraîche, adapté au domaine d'activité
+            // qui vient d'être résolu — cf. chaque seeder pour le détail de la préconfiguration.
+            // Les produits eux-mêmes ne sont jamais seedés ici : à créer manuellement après
+            // installation.
+            ProduitTypeDefaultSeeder::seedPourOrganisation($org->id);
+            CategorieDefaultSeeder::seedPourOrganisation($org->id, $domaine);
+            // Bibliothèque d'options volontairement universelle (cf. docblock du seeder) : les
+            // options usuelles (Couleur, Taille, Volume, Poids...) sont réutilisables quel que
+            // soit le domaine, contrairement aux catégories qui, elles, sont propres au métier.
+            OptionCatalogueDefaultSeeder::seedPourOrganisation($org->id);
+            TypeVehiculesSeeder::seedPourOrganisation($org->id);
 
             // Une ligne par installation (pas un updateOrCreate([]) qui écraserait toujours la
             // même) : en saas, /install peut être rejoué pour créer plusieurs organisations —
@@ -200,6 +300,36 @@ class InstallationService
             ]);
 
             return $org;
+        });
+    }
+
+    /**
+     * Crée le premier site d'une organisation, depuis l'onboarding post-connexion
+     * (OnboardingSiteController) — le site n'est plus créé pendant install() (cf. docblock de
+     * classe). Attache l'utilisateur (le super_admin qui vient de s'installer, dans l'immense
+     * majorité des cas) à ce site comme site par défaut, même pattern que
+     * UserController::store()/UserInvitationService::accepter() — sans ça, `default_site` resterait
+     * vide côté frontend (cf. HandleInertiaRequests::defaultSite()) alors qu'un site vient
+     * d'être créé.
+     *
+     * @param  array{nom: string, type: string, ville: string, quartier: string, localisation: ?string, telephone: ?string}  $data
+     */
+    public function creerPremierSite(User $user, array $data): Site
+    {
+        return DB::transaction(function () use ($user, $data) {
+            $site = Site::create([
+                'organization_id' => $user->organization_id,
+                'nom' => trim($data['nom']),
+                'type' => $data['type'],
+                'ville' => trim($data['ville']),
+                'quartier' => trim($data['quartier']),
+                'localisation' => $data['localisation'] ?? null,
+                'telephone' => $data['telephone'] ?? null,
+            ]);
+
+            $user->sites()->syncWithoutDetaching([$site->id => ['role' => 'employe', 'is_default' => true]]);
+
+            return $site;
         });
     }
 }

@@ -276,7 +276,7 @@ test("show — véhicule créé sans propriétaire choisi : propriétaire par d�
 
     // Créé via l'onglet Véhicules d'un site, sans jamais toucher au champ
     // Propriétaire (facultatif) — il doit être auto-attribué au propriétaire
-    // par défaut de l'organisation (cf. VehiculeController::defaultProprietaireInterneId).
+    // interne de l'organisation (cf. Organization::proprietaireInterne()).
     await navigateToFirstSiteVehiclesTab(page);
     await page.getByTestId('add-site-vehicle-btn').click();
     await page.waitForURL(/\/vehicules\/create\?site_id=/, { timeout: 15_000 });

@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\DomaineActivite;
 use App\Services\InstallationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -40,7 +42,9 @@ class InstallWizardController extends Controller
             return Inertia::render('Install/Token');
         }
 
-        return Inertia::render('Install/Wizard');
+        return Inertia::render('Install/Wizard', [
+            'domaines' => DomaineActivite::options(),
+        ]);
     }
 
     public function verifyToken(Request $request): RedirectResponse
@@ -90,15 +94,13 @@ class InstallWizardController extends Controller
 
         $data = $request->validate([
             'organisation.nom' => 'required|string|max:255',
+            'organisation.domaine' => ['required', 'string', Rule::in(array_column(DomaineActivite::cases(), 'value'))],
             'admin.prenom' => 'required|string|max:100',
             'admin.nom' => 'required|string|max:100',
             'admin.telephone' => 'required|string',
             'admin.email' => 'nullable|email:rfc,dns|max:255',
             'admin.password' => 'required|string',
             'admin.password_confirmation' => 'required|string',
-            'catalogue.categories' => 'boolean',
-            'catalogue.options' => 'boolean',
-            'catalogue.types_vehicule' => 'boolean',
         ]);
 
         // La complexité/confirmation du mot de passe est revalidée par InstallationService
@@ -106,7 +108,6 @@ class InstallWizardController extends Controller
         $this->service->install(
             organisation: $data['organisation'],
             admin: $data['admin'],
-            catalogue: $data['catalogue'] ?? [],
         );
 
         $request->session()->forget('install_token_verified');

@@ -45,6 +45,7 @@ use App\Http\Controllers\FraisCommissionPartController;
 use App\Http\Controllers\InstallWizardController;
 use App\Http\Controllers\LivreurController;
 use App\Http\Controllers\MediaController;
+use App\Http\Controllers\OnboardingSiteController;
 use App\Http\Controllers\OptionCatalogueController;
 use App\Http\Controllers\PackingController;
 use App\Http\Controllers\PaieController;
@@ -150,6 +151,14 @@ Route::get('/', function (Request $request) {
 
 Route::get('/sitemap.xml', SitemapController::class)->name('sitemap');
 
+// ── Onboarding du premier site (post-connexion) ────────────────────────────────
+// Hors du groupe 'require.site' (par construction : c'est justement l'absence de site
+// organisation qui amène ici, cf. EnsureOrganizationHasSite) mais toujours authentifié.
+Route::middleware(['auth', 'account.active'])->prefix('onboarding')->name('onboarding.')->group(function () {
+    Route::get('site', [OnboardingSiteController::class, 'show'])->name('site.show');
+    Route::post('site', [OnboardingSiteController::class, 'store'])->name('site.store');
+});
+
 // ── Espace staff (back-office) ──────────────────────────────────────────────
 Route::prefix('backoffice')->group(function () {
     Route::get('dashboard', [DashboardController::class, 'index'])
@@ -253,8 +262,9 @@ Route::prefix('backoffice')->group(function () {
             Route::post('vehicules/{vehicule}/frais', [VehiculeController::class, 'storeFrais'])->name('vehicules.frais.store');
             Route::patch('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'updateFrais'])->name('vehicules.frais.update');
             Route::delete('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'destroyFrais'])->name('vehicules.frais.destroy');
-            Route::put('vehicules/{vehicule}/capacites', [VehiculeController::class, 'syncCapacites'])->name('vehicules.capacites.sync');
             Route::resource('proprietaires', ProprietaireController::class);
+            Route::post('proprietaires/{proprietaire}/definir-interne', [ProprietaireController::class, 'definirInterne'])
+                ->name('proprietaires.definir-interne');
 
             // Pièces d'identité (propriétaires uniquement pour le moment)
             Route::post('proprietaires/{proprietaire}/pieces-identite', [PieceIdentiteController::class, 'store'])

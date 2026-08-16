@@ -2,7 +2,6 @@
 import DetailHeader from '@/components/DetailHeader.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
-import VehiculeCapacitesCard from '@/components/VehiculeCapacitesCard.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
@@ -80,12 +79,6 @@ interface VehiculeData {
     type_vehicule_id: string | null;
     capacite_packs: number | null;
     capacite_bouteilles: number | null;
-    capacites: Array<{
-        id: string;
-        categorie_id: string;
-        categorie_nom: string | null;
-        capacite_max: number;
-    }>;
     site_id: string | null;
     site_nom: string | null;
     categorie: 'interne' | 'partenaire';
@@ -106,7 +99,6 @@ const props = defineProps<{
     depenses: DepenseRow[];
     equipe: EquipeData | null;
     proprietaires: ProprietaireOption[];
-    categories: Array<{ value: string; label: string }>;
     default_proprietaire_id: string | null;
 }>();
 
@@ -521,15 +513,6 @@ function formatGNF(val: number): string {
                             </div>
                         </div>
                     </div>
-
-                    <VehiculeCapacitesCard
-                        v-if="can('vehicules.update')"
-                        class="mt-6 lg:col-start-2"
-                        :capacites="vehicule.capacites"
-                        :categories="categories"
-                        :capacite-legacy="vehicule.capacite_packs"
-                        :sync-url="`/backoffice/vehicules/${vehicule.id}/capacites`"
-                    />
                 </template>
 
                 <!-- Equipe tab -->

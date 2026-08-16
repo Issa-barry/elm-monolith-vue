@@ -201,6 +201,7 @@ class ProprietaireController extends Controller
                 'is_active' => $proprietaire->is_active,
                 'vehicules_count' => $vehicules->count(),
                 'has_valid_identity_document' => $proprietaire->hasValidIdentityDocument(),
+                'is_proprietaire_interne' => $proprietaire->organization->proprietaire_interne_id === $proprietaire->id,
             ],
             'vehicules' => $vehicules,
             'depenses' => $depenses,
@@ -293,6 +294,25 @@ class ProprietaireController extends Controller
 
         return redirect()->route('proprietaires.index')
             ->with('success', 'Propriétaire supprimé.');
+    }
+
+    /**
+     * Désigne ce propriétaire comme le propriétaire interne par défaut de l'organisation
+     * (cf. Organization::proprietaireInterne()) — assigné automatiquement aux véhicules
+     * "interne" sans propriétaire tiers choisi, et aux commissions propriétaire associées.
+     * Seul moyen de régulariser/changer ce rattachement une fois l'installation terminée
+     * (jamais deviné à nouveau depuis un rôle, un téléphone ou l'import flotte).
+     */
+    public function definirInterne(Proprietaire $proprietaire): RedirectResponse
+    {
+        $this->authorize('update', $proprietaire);
+
+        $proprietaire->organization->forceFill([
+            'proprietaire_interne_id' => $proprietaire->id,
+        ])->save();
+
+        return redirect()->route('proprietaires.show', $proprietaire)
+            ->with('success', "{$proprietaire->nom_complet} est maintenant le propriétaire interne par défaut de l'organisation.");
     }
 
     private function assertPhoneUniqueInOrg(string $phone, string $orgId, ?string $ignoreId = null): void

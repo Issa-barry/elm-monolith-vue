@@ -266,8 +266,10 @@ class PdvCheckoutTest extends TestCase
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
-            'capacite_packs' => 3,
         ]);
+        // Capacité portée exclusivement par le type du véhicule (décision produit du
+        // 16/08/2026, cf. VehiculeCapaciteService) — jamais par le véhicule lui-même.
+        $vehicule->typeVehicule->update(['capacite_defaut' => 3]);
 
         $this->actingAs($this->user)
             ->post('/backoffice/pdv/checkout', [

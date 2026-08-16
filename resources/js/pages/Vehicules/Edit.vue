@@ -32,8 +32,6 @@ interface VehiculeData {
     nom_vehicule: string;
     immatriculation: string;
     type_vehicule_id: string | null;
-    capacite_packs: number | null;
-    capacite_bouteilles: number | null;
     site_id: string | null;
     proprietaire_id: number | null;
     categorie: string | null;
@@ -69,8 +67,6 @@ const form = useForm({
     nom_vehicule: props.vehicule.nom_vehicule,
     immatriculation: props.vehicule.immatriculation,
     type_vehicule_id: props.vehicule.type_vehicule_id,
-    capacite_packs: props.vehicule.capacite_packs,
-    capacite_bouteilles: props.vehicule.capacite_bouteilles,
     site_id: props.vehicule.site_id,
     proprietaire_id:
         props.vehicule.proprietaire_id ?? props.default_proprietaire_id,
