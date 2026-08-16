@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Carbon;
 use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
@@ -123,7 +124,7 @@ class User extends Authenticatable
     }
 
     /** Proxy en lecture seule vers l'identité de connexion email — jamais une colonne sur users. */
-    public function getEmailVerifiedAtAttribute(): ?\Illuminate\Support\Carbon
+    public function getEmailVerifiedAtAttribute(): ?Carbon
     {
         return $this->emailIdentity()?->verified_at;
     }
