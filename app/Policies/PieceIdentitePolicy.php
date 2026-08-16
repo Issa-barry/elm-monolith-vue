@@ -2,8 +2,8 @@
 
 namespace App\Policies;
 
-use App\Models\PieceIdentite;
 use App\Models\Personne;
+use App\Models\PieceIdentite;
 use App\Models\Proprietaire;
 use App\Models\User;
 

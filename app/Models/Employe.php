@@ -28,6 +28,10 @@ class Employe extends Model
         'statut',
     ];
 
+    // Sans $appends, ces accesseurs (proxy vers Personne) sont silencieusement absents de
+    // toute sérialisation JSON/array du modèle brut (cf. incident User — HandleInertiaRequests).
+    protected $appends = ['nom_complet', 'nom', 'prenom', 'email', 'telephone'];
+
     protected function casts(): array
     {
         return [

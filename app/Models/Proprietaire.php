@@ -27,6 +27,13 @@ class Proprietaire extends Model
         'is_active',
     ];
 
+    // Sans $appends, ces accesseurs (proxy vers Personne) sont silencieusement absents de
+    // toute sérialisation JSON/array du modèle brut (cf. incident User — HandleInertiaRequests).
+    protected $appends = [
+        'nom_complet', 'nom', 'prenom', 'surnom', 'email', 'telephone',
+        'adresse', 'ville', 'pays', 'code_pays', 'code_phone_pays',
+    ];
+
     // ── Accesseurs — proxy en lecture seule vers Personne ───────────────────────
 
     public function getNomCompletAttribute(): string

@@ -28,6 +28,11 @@ class Livreur extends Model
         'is_active' => 'boolean',
     ];
 
+    // Sans $appends, ces accesseurs (proxy vers Personne) sont silencieusement absents de
+    // toute sérialisation JSON/array du modèle brut (cf. incident User — HandleInertiaRequests).
+    // nom_complet n'a pas besoin d'être listé : c'est une vraie colonne, pas un accesseur.
+    protected $appends = ['nom', 'prenom', 'telephone'];
+
     // ── Accesseurs — proxy en lecture seule vers Personne ───────────────────────
 
     public function getNomAttribute(): ?string

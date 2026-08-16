@@ -43,6 +43,15 @@ class User extends Authenticatable
         'must_change_password',
     ];
 
+    // Ces accesseurs (proxy vers Personne/UserAuthIdentity, cf. plus bas) ne sont pas de vraies
+    // colonnes : sans $appends, Eloquent les omet silencieusement de toute sérialisation
+    // JSON/array (API, props Inertia partagées par HandleInertiaRequests...) — ce qui viderait
+    // le nom affiché partout côté frontend sans lever la moindre erreur.
+    protected $appends = [
+        'name', 'nom', 'prenom', 'telephone', 'email',
+        'pays', 'code_pays', 'code_phone_pays', 'ville', 'adresse',
+    ];
+
     protected $hidden = [
         'password',
         'two_factor_secret',
