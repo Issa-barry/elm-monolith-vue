@@ -5,7 +5,6 @@ namespace Database\Seeders;
 use App\Enums\CategorieVehicule;
 use App\Models\EquipeLivraison;
 use App\Models\Organization;
-use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TypeVehicule as TypeVehiculeModel;
 use App\Models\Vehicule;
@@ -69,11 +68,10 @@ class VehiculesSeeder extends Seeder
             ->where('nom', 'Sonfonia')
             ->firstOrFail();
 
-        // Propriétaire par défaut des véhicules logistique — voir ProprietairesSeeder
-        // et Proprietaire::interneParDefautId().
-        $proprietaireInterne = Proprietaire::where('organization_id', $org->id)
-            ->where('telephone', '+224622602693')
-            ->firstOrFail();
+        // Propriétaire par défaut des véhicules logistique — assigné à l'organisation par
+        // ProprietairesSeeder (Organization::proprietaire_interne_id), voir
+        // Proprietaire::interneParDefautId().
+        $proprietaireInterne = $org->proprietaireInterne()->firstOrFail();
 
         $equipeParChauffeur = fn (string $tel) => EquipeLivraison::query()
             ->where('organization_id', $org->id)

@@ -685,16 +685,26 @@ class ImportFlotteParser
         // Proprietaire::interneParDefautId() est lui aussi null (organisation sans défaut
         // configuré) : comparer directement les deux null se solderait, à tort, par "coïncident".
         $interneDefautId = Proprietaire::interneParDefautId($orgId);
-        $estLeProprietaireInterneParDefaut = $proprietaireResolu !== null
-            && $proprietaireResolu['id'] !== null
-            && $interneDefautId !== null
-            && $proprietaireResolu['id'] === $interneDefautId;
-        $proprietaireEstTiers = $aUnProprietaireSaisi && ! $estLeProprietaireInterneParDefaut;
 
-        if ($categorie && ! $categorie->coherentAvecProprietaireTiers($proprietaireEstTiers)) {
-            $erreurs[] = $categorie === CategorieVehicule::PARTENAIRE
-                ? 'Véhicule partenaire sans propriétaire renseigné (proprietaire_nom/proprietaire_prenom/proprietaire_telephone obligatoires).'
-                : 'Véhicule interne : le propriétaire renseigné doit être le propriétaire interne par défaut de l\'organisation, pas un véritable tiers (colonnes proprietaire_* doivent rester vides ou correspondre exactement à ce propriétaire).';
+        if ($categorie === CategorieVehicule::INTERNE && $interneDefautId === null) {
+            // L'import ne doit jamais établir implicitement "qui possède l'entreprise" à partir
+            // du fichier, même si toutes les lignes "interne" citent le même propriétaire : c'est
+            // à l'organisation de le configurer explicitement (page Propriétaires → "Définir
+            // comme propriétaire interne") avant tout import de véhicules internes — cf.
+            // Organization::proprietaire_interne_id / Proprietaire::interneParDefautId().
+            $erreurs[] = 'Aucun propriétaire interne n\'est configuré pour cette organisation. Configurez-le (page Propriétaires) avant d\'importer des véhicules internes.';
+        } else {
+            $estLeProprietaireInterneParDefaut = $proprietaireResolu !== null
+                && $proprietaireResolu['id'] !== null
+                && $interneDefautId !== null
+                && $proprietaireResolu['id'] === $interneDefautId;
+            $proprietaireEstTiers = $aUnProprietaireSaisi && ! $estLeProprietaireInterneParDefaut;
+
+            if ($categorie && ! $categorie->coherentAvecProprietaireTiers($proprietaireEstTiers)) {
+                $erreurs[] = $categorie === CategorieVehicule::PARTENAIRE
+                    ? 'Véhicule partenaire sans propriétaire renseigné (proprietaire_nom/proprietaire_prenom/proprietaire_telephone obligatoires).'
+                    : 'Véhicule interne : le propriétaire renseigné doit être le propriétaire interne par défaut de l\'organisation, pas un véritable tiers (colonnes proprietaire_* doivent rester vides ou correspondre exactement à ce propriétaire).';
+            }
         }
 
         // ── Équipe : commission et montant propriétaire non saisis dans le fichier.

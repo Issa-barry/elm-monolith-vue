@@ -55,6 +55,23 @@ class ImportFlotteTest extends TestCase
         $this->user = $this->makeUser(['imports-flotte.create', 'imports-flotte.read']);
     }
 
+    /**
+     * Crée le propriétaire interne par défaut de $this->org et le rattache via
+     * Organization::proprietaire_interne_id (cf. InstallationService::install() en conditions
+     * réelles) — seule façon dont Proprietaire::interneParDefautId() peut désormais le
+     * retrouver, plus aucune magie sur le numéro de téléphone.
+     */
+    private function defaultInterneProprietaire(array $attributes = []): Proprietaire
+    {
+        $proprietaire = Proprietaire::factory()->create([
+            'organization_id' => $this->org->id,
+            ...$attributes,
+        ]);
+        $this->org->forceFill(['proprietaire_interne_id' => $proprietaire->id])->save();
+
+        return $proprietaire;
+    }
+
     private function makeUser(array $permissions): User
     {
         Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
@@ -613,12 +630,9 @@ class ImportFlotteTest extends TestCase
     public function test_confirm_vehicule_sans_proprietaire_saisi_recoit_proprietaire_par_defaut(): void
     {
         // Cf. Proprietaire::interneParDefautId() : un véhicule importé sans propriétaire
-        // renseigné reçoit la fiche Proprietaire "Moussa SIDIBE" (téléphone
-        // +224622602693) par défaut, au lieu de rester sans propriétaire.
-        $defaut = Proprietaire::factory()->create([
-            'organization_id' => $this->org->id,
-            'telephone' => '+224622602693',
-        ]);
+        // renseigné reçoit le propriétaire interne configuré sur l'organisation par défaut,
+        // au lieu de rester sans propriétaire.
+        $defaut = $this->defaultInterneProprietaire();
 
         $import = $this->importer(
             [$this->ligneVehicule([
@@ -643,12 +657,7 @@ class ImportFlotteTest extends TestCase
      */
     public function test_analyse_accepte_vehicule_interne_dont_le_proprietaire_saisi_est_le_defaut(): void
     {
-        $defaut = Proprietaire::factory()->create([
-            'organization_id' => $this->org->id,
-            'nom' => 'SIDIBE',
-            'prenom' => 'Moussa',
-            'telephone' => '+224622602693',
-        ]);
+        $defaut = $this->defaultInterneProprietaire(['nom' => 'SIDIBE', 'prenom' => 'Moussa', 'telephone' => '+224622602693']);
 
         $import = $this->importer(
             [$this->ligneVehicule([
@@ -672,10 +681,7 @@ class ImportFlotteTest extends TestCase
     /** Un véritable tiers (propriétaire différent du défaut) reste incohérent avec "interne". */
     public function test_analyse_refuse_vehicule_interne_avec_un_veritable_proprietaire_tiers(): void
     {
-        Proprietaire::factory()->create([
-            'organization_id' => $this->org->id,
-            'telephone' => '+224622602693',
-        ]);
+        $this->defaultInterneProprietaire();
 
         $import = $this->importer(
             [$this->ligneVehicule(['vehicule_categorie' => 'interne'])], // proprietaire_telephone => 622000001, un autre numéro
@@ -685,6 +691,28 @@ class ImportFlotteTest extends TestCase
         $this->assertSame(1, $import->nb_groupes_erreur);
         $this->assertStringContainsString(
             'Véhicule interne : le propriétaire renseigné doit être le propriétaire interne par défaut',
+            $import->rapport['groupes'][0]['erreurs'][0]
+        );
+    }
+
+    /**
+     * Aucun propriétaire interne configuré sur l'organisation (jamais deviné depuis le fichier,
+     * même si toutes les lignes "interne" citent le même propriétaire) : l'import doit refuser
+     * avec un message explicite plutôt que d'assigner silencieusement proprietaire_id = null.
+     */
+    public function test_analyse_refuse_vehicule_interne_sans_proprietaire_interne_configure(): void
+    {
+        $import = $this->importer(
+            [$this->ligneVehicule([
+                'vehicule_categorie' => 'interne',
+                'proprietaire_nom' => '', 'proprietaire_prenom' => '', 'proprietaire_telephone' => '', 'proprietaire_pays' => '',
+            ])],
+            [$this->ligneLivreurChauffeur()]
+        );
+
+        $this->assertSame(1, $import->nb_groupes_erreur);
+        $this->assertStringContainsString(
+            "Aucun propriétaire interne n'est configuré pour cette organisation",
             $import->rapport['groupes'][0]['erreurs'][0]
         );
     }
@@ -1260,6 +1288,8 @@ class ImportFlotteTest extends TestCase
 
     public function test_analyse_accepts_site_with_different_case(): void
     {
+        $this->defaultInterneProprietaire();
+
         $import = $this->importer(
             [$this->ligneVehicule([
                 'vehicule_site' => 'MATOTO',
@@ -1275,6 +1305,8 @@ class ImportFlotteTest extends TestCase
     public function test_analyse_accepts_site_code_without_leading_zero(): void
     {
         // Site créé dans setUp() : premier site de l'organisation, code auto "001".
+        $this->defaultInterneProprietaire();
+
         $import = $this->importer(
             [$this->ligneVehicule([
                 'vehicule_site' => '1',

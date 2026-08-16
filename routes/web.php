@@ -263,6 +263,8 @@ Route::prefix('backoffice')->group(function () {
             Route::patch('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'updateFrais'])->name('vehicules.frais.update');
             Route::delete('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'destroyFrais'])->name('vehicules.frais.destroy');
             Route::resource('proprietaires', ProprietaireController::class);
+            Route::post('proprietaires/{proprietaire}/definir-interne', [ProprietaireController::class, 'definirInterne'])
+                ->name('proprietaires.definir-interne');
 
             // Pièces d'identité (propriétaires uniquement pour le moment)
             Route::post('proprietaires/{proprietaire}/pieces-identite', [PieceIdentiteController::class, 'store'])

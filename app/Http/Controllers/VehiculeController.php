@@ -518,17 +518,6 @@ class VehiculeController extends Controller
     }
 
     /**
-     * Propriétaire par défaut des véhicules "interne" (propriété de
-     * l'organisation) — voir database/seeders/ProprietairesSeeder.php.
-     */
-    private function defaultProprietaireInterneId(string $orgId): ?string
-    {
-        return Proprietaire::where('organization_id', $orgId)
-            ->where('telephone', '+224622602693')
-            ->value('id');
-    }
-
-    /**
      * Compare sur `immatriculation_normalisee` (tirets/espaces/points/casse ignorés, cf.
      * Vehicule::normaliserImmatriculation()) plutôt que sur `immatriculation` brut : deux
      * saisies qui désignent la même plaque ("BK-4627-02" vs "bk 4627 02") doivent être
@@ -620,6 +609,17 @@ class VehiculeController extends Controller
     {
         $categorie = CategorieVehicule::from($data['categorie']);
         $interneId = Proprietaire::interneParDefautId($orgId);
+
+        // Un véhicule "interne" sans propriétaire tiers choisi doit toujours pouvoir retomber
+        // sur le propriétaire interne de l'organisation (cf. proprietaire_id ??= plus haut) —
+        // s'il n'est pas configuré, ne jamais laisser passer silencieusement proprietaire_id à
+        // null : ce serait un véhicule sans propriétaire économique, invisible des commissions.
+        if ($categorie === CategorieVehicule::INTERNE && $data['proprietaire_id'] === null && $interneId === null) {
+            throw ValidationException::withMessages([
+                'categorie' => "Aucun propriétaire interne n'est configuré pour cette organisation. Définissez-le (page Propriétaires) avant d'ajouter des véhicules internes.",
+            ]);
+        }
+
         $proprietaireEstTiers = $data['proprietaire_id'] !== null && $data['proprietaire_id'] !== $interneId;
 
         if ($categorie->coherentAvecProprietaireTiers($proprietaireEstTiers)) {

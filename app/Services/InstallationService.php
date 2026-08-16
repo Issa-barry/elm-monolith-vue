@@ -6,6 +6,7 @@ use App\Actions\Fortify\PasswordValidationRules;
 use App\Enums\DomaineActivite;
 use App\Models\AppInstallation;
 use App\Models\Organization;
+use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\User;
 use Database\Seeders\CategorieDefaultSeeder;
@@ -254,6 +255,28 @@ class InstallationService
             ]);
             $user->syncRoles(['super_admin']);
             app(MatriculeService::class)->assignForUser($user);
+
+            // Propriétaire interne par défaut de l'organisation (véhicules "interne" et
+            // commissions propriétaire associées, cf. Organization::proprietaireInterne()) —
+            // réutilise l'identité du super_admin qui vient d'être saisie une seule fois, plutôt
+            // que de la redemander : dans l'immense majorité des cas, la personne qui installe
+            // l'application EST la propriétaire de l'entreprise. Fiche Proprietaire distincte du
+            // compte User (rattachée via user_id) : le propriétaire économique reste stable même
+            // si l'admin connecté change plus tard (cf. Organization::proprietaire_interne_id).
+            if (! $org->proprietaire_interne_id) {
+                $proprietaireInterne = Proprietaire::create([
+                    'organization_id' => $org->id,
+                    'user_id' => $user->id,
+                    'nom' => $user->nom,
+                    'prenom' => $user->prenom,
+                    'telephone' => $user->telephone,
+                    'code_pays' => $user->code_pays,
+                    'pays' => $user->pays,
+                    'code_phone_pays' => $user->code_phone_pays,
+                    'is_active' => true,
+                ]);
+                $org->forceFill(['proprietaire_interne_id' => $proprietaireInterne->id])->save();
+            }
 
             // Socle systématique pour toute organisation fraîche, adapté au domaine d'activité
             // qui vient d'être résolu — cf. chaque seeder pour le détail de la préconfiguration.

@@ -131,6 +131,22 @@ class InstallAppTest extends TestCase
         $this->assertSame(0, $org->sites()->count());
     }
 
+    /**
+     * Propriétaire interne par défaut créé et rattaché à l'organisation dès l'installation CLI —
+     * même comportement que le wizard web (cf. InstallWizardTest, InstallationService::install()).
+     */
+    public function test_propriétaire_interne_est_cree_et_rattache_a_lorganisation(): void
+    {
+        $this->runInstall()->assertExitCode(0);
+
+        $org = Organization::where('slug', 'elm-test')->firstOrFail();
+        $user = User::where('telephone', '+224622000000')->firstOrFail();
+
+        $this->assertNotNull($org->proprietaire_interne_id);
+        $this->assertSame($user->id, $org->proprietaireInterne->user_id);
+        $this->assertSame($org->id, $org->proprietaireInterne->organization_id);
+    }
+
     public function test_le_domaine_dactivite_est_persiste(): void
     {
         $this->runInstall(domaine: DomaineActivite::INDUSTRIE_FABRICATION)->assertExitCode(0);

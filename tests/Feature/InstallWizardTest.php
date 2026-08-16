@@ -246,6 +246,61 @@ class InstallWizardTest extends TestCase
         $this->assertSame(0, $org->sites()->count());
     }
 
+    /**
+     * Propriétaire interne par défaut (véhicules "interne", commissions propriétaire) créé et
+     * rattaché à l'organisation dès l'installation — plus jamais deviné depuis un numéro de
+     * téléphone codé en dur (cf. Organization::proprietaireInterne(), Proprietaire::interneParDefautId()).
+     */
+    public function test_propriétaire_interne_est_cree_et_rattache_a_lorganisation(): void
+    {
+        $this->post('/install', $this->payload())->assertOk();
+
+        $org = Organization::where('slug', 'elm-test')->firstOrFail();
+        $user = User::where('telephone', '+224622000000')->firstOrFail();
+
+        $this->assertNotNull($org->proprietaire_interne_id);
+
+        $proprietaireInterne = $org->proprietaireInterne;
+        $this->assertNotNull($proprietaireInterne);
+        $this->assertSame($user->id, $proprietaireInterne->user_id);
+        $this->assertSame($user->nom, $proprietaireInterne->nom);
+        $this->assertSame($user->prenom, $proprietaireInterne->prenom);
+        $this->assertSame($user->telephone, $proprietaireInterne->telephone);
+        $this->assertSame($org->id, $proprietaireInterne->organization_id);
+    }
+
+    /**
+     * Deux organisations installées séparément ont chacune leur propre propriétaire interne —
+     * jamais partagé entre organisations (cf. Organization::proprietaire_interne_id, scoping
+     * strict par organization_id).
+     */
+    public function test_propriétaire_interne_nest_jamais_partage_entre_organisations(): void
+    {
+        config(['app.deployment_mode' => 'saas']);
+
+        app(InstallationService::class)->install(
+            organisation: ['nom' => 'Org A', 'domaine' => DomaineActivite::COMMERCE_DISTRIBUTION->value],
+            admin: [
+                'prenom' => 'Alpha', 'nom' => 'A', 'telephone' => '+224622111111',
+                'email' => null, 'password' => 'Sup3r$ecretPwd', 'password_confirmation' => 'Sup3r$ecretPwd',
+            ],
+        );
+        app(InstallationService::class)->install(
+            organisation: ['nom' => 'Org B', 'domaine' => DomaineActivite::COMMERCE_DISTRIBUTION->value],
+            admin: [
+                'prenom' => 'Beta', 'nom' => 'B', 'telephone' => '+224622222222',
+                'email' => null, 'password' => 'Sup3r$ecretPwd', 'password_confirmation' => 'Sup3r$ecretPwd',
+            ],
+        );
+
+        $orgA = Organization::where('slug', 'org-a')->firstOrFail();
+        $orgB = Organization::where('slug', 'org-b')->firstOrFail();
+
+        $this->assertNotSame($orgA->proprietaire_interne_id, $orgB->proprietaire_interne_id);
+        $this->assertSame($orgA->id, $orgA->proprietaireInterne->organization_id);
+        $this->assertSame($orgB->id, $orgB->proprietaireInterne->organization_id);
+    }
+
     public function test_domaine_dactivite_est_persiste(): void
     {
         $this->post('/install', $this->payload([
