@@ -5,9 +5,10 @@ namespace Database\Seeders\Organizations\FelloDemo;
 use App\Enums\MotifAjustementStock;
 use App\Models\MouvementStock;
 use App\Models\Organization;
+use App\Models\Personne;
 use App\Models\Produit;
 use App\Models\Site;
-use App\Models\User;
+use App\Models\UserAuthIdentity;
 use App\Models\VarianteStock;
 use Illuminate\Database\Seeder;
 
@@ -58,7 +59,10 @@ class FelloDemoStockSeeder extends Seeder
         $cosa = Site::where('organization_id', $org->id)->where('nom', 'Boutique Cosa')->firstOrFail();
         // mouvements_stock.created_by est obligatoire (NOT NULL) — l'admin de
         // démo est crédité de la mise en stock initiale.
-        $admin = User::where('organization_id', $org->id)->where('telephone', '+224600000101')->firstOrFail();
+        $admin = UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_TELEPHONE, Personne::normaliserTelephone('+224600000101'));
+        if (! $admin || $admin->organization_id !== $org->id) {
+            throw new \RuntimeException('Admin de démo introuvable (+224600000101) pour fello-demo.');
+        }
 
         foreach (self::STOCKS as $nom => [$qteMadina, $qteCosa]) {
             $produit = Produit::where('organization_id', $org->id)->where('nom', $nom)->first();

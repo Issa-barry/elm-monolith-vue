@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Auth\UserIdentityProvider;
 use App\Models\Categorie;
 use App\Models\Client;
 use App\Models\CommandeAchat;
@@ -44,7 +45,6 @@ use App\Policies\SitePolicy;
 use App\Policies\UserInvitationPolicy;
 use App\Policies\UserPolicy;
 use App\Policies\VehiculePolicy;
-use App\Auth\UserIdentityProvider;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;

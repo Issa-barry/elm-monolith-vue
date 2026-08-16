@@ -16,7 +16,7 @@ class VerificationNotificationTest extends TestCase
     {
         Notification::fake();
 
-        $user = User::factory()->unverified()->create();
+        $user = User::factory()->unverified()->create(['email' => fake()->unique()->safeEmail()]);
 
         $this->actingAs($user)
             ->post(route('verification.send'))

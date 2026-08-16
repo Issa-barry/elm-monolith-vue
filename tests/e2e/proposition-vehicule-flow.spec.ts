@@ -9,8 +9,14 @@ import {
 } from './helpers';
 
 const PROPRIETAIRE_PHONE = '+33754158797';
+// Généré via GD (imagecreatetruecolor + imagepng), pas le "plus petit PNG possible"
+// habituel trouvé en ligne (grayscale+alpha, 68 octets) : ce dernier passe la
+// validation `image` de Laravel (getimagesize() le reconnaît) mais fait échouer
+// Intervention Image/GD en aval avec "Unable to decode input" (DecoderException) —
+// ImageService::storeAsWebp() plante en 500 uniquement à la soumission réelle du
+// formulaire, jamais repéré avant faute de test qui va jusqu'à l'upload.
 const ONE_PIXEL_PNG = Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO3Zk0gAAAAASUVORK5CYII=',
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAADElEQVQImWM4IScHAAK2AQVhu1gcAAAAAElFTkSuQmCC',
     'base64',
 );
 

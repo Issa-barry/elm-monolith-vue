@@ -147,6 +147,40 @@ class User extends Authenticatable
         return $identity === null || $identity->isVerified();
     }
 
+    /**
+     * Surcharge MustVerifyEmail::markEmailAsVerified() — la colonne email_verified_at
+     * n'existe plus sur users, forceFill()->save() casserait la requête SQL. Écrit sur
+     * l'UserAuthIdentity email à la place (cf. hasVerifiedEmail()/getEmailVerifiedAtAttribute()).
+     */
+    public function markEmailAsVerified(): bool
+    {
+        $identity = $this->emailIdentity();
+
+        if (! $identity) {
+            return false;
+        }
+
+        $result = $identity->update(['verified_at' => now()]);
+        $this->unsetRelation('authIdentities');
+
+        return $result;
+    }
+
+    /** Symétrique de markEmailAsVerified() — même raison de surcharge. */
+    public function markEmailAsUnverified(): bool
+    {
+        $identity = $this->emailIdentity();
+
+        if (! $identity) {
+            return false;
+        }
+
+        $result = $identity->update(['verified_at' => null]);
+        $this->unsetRelation('authIdentities');
+
+        return $result;
+    }
+
     /** Utilisé par le PasswordBroker de Fortify (Features::resetPasswords()). */
     public function getEmailForPasswordReset(): ?string
     {
