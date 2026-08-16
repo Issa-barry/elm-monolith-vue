@@ -229,8 +229,9 @@ class AuthenticationTest extends TestCase
         $user = User::factory()->withoutTwoFactor()->create([
             'is_active' => false,
             'status' => User::STATUS_PENDING_VALIDATION,
-            'email_verified_at' => null,
+            'email' => 'unverified@example.com',
         ]);
+        $user->emailIdentity()->update(['verified_at' => null]);
 
         $response = $this->post(route('login.store'), [
             'telephone' => $user->telephone,

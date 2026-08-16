@@ -20,6 +20,7 @@ use App\Models\Livreur;
 use App\Models\PaieLigne;
 use App\Models\PaiePeriode;
 use App\Models\PaieVariable;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
@@ -54,11 +55,17 @@ class DepenseComptabiliteTest extends TestCase
         static $seq = 0;
         $seq++;
 
-        $employe = Employe::create([
+        $personne = Personne::create([
             'organization_id' => $this->org->id,
-            'matricule' => 'EMP-'.str_pad((string) $seq, 4, '0', STR_PAD_LEFT),
             'nom' => 'TEST',
             'prenom' => 'Salarié',
+            'telephone' => '+224'.fake()->unique()->numerify('#########'),
+        ]);
+
+        $employe = Employe::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
+            'matricule' => 'EMP-'.str_pad((string) $seq, 4, '0', STR_PAD_LEFT),
             'type_employe' => 'interne',
             'statut' => 'actif',
         ]);

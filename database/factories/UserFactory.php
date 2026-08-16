@@ -63,10 +63,17 @@ class UserFactory extends Factory
         return parent::create($attributes, $parent);
     }
 
+    /**
+     * Vérifie/crée via des requêtes fraîches (jamais `$user->telephoneIdentity()` ni
+     * `emailIdentity()` ici) : ces accesseurs lisent `$user->authIdentities`, qui se
+     * mettrait en cache VIDE puisqu'appelé avant toute création — toute lecture
+     * ultérieure de `$user->telephone`/`email` sur cette même instance resterait donc
+     * null en permanence, même une fois l'identité réellement créée en base.
+     */
     public function configure(): static
     {
         return $this->afterCreating(function (User $user) {
-            if ($user->telephoneIdentity() === null) {
+            if (! $user->authIdentities()->where('type', UserAuthIdentity::TYPE_TELEPHONE)->exists()) {
                 $telephone = $user->personne?->telephone ?? ('+224'.fake()->unique()->numerify('#########'));
                 $user->authIdentities()->create([
                     'type' => UserAuthIdentity::TYPE_TELEPHONE,
@@ -77,7 +84,7 @@ class UserFactory extends Factory
                 ]);
             }
 
-            if ($user->emailIdentity() === null && $user->personne?->email) {
+            if ($user->personne?->email && ! $user->authIdentities()->where('type', UserAuthIdentity::TYPE_EMAIL)->exists()) {
                 $email = $user->personne->email;
                 $user->authIdentities()->create([
                     'type' => UserAuthIdentity::TYPE_EMAIL,
@@ -86,6 +93,8 @@ class UserFactory extends Factory
                     'verified_at' => now(),
                 ]);
             }
+
+            $user->unsetRelation('authIdentities');
         });
     }
 

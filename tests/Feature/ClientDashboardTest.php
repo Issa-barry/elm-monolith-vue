@@ -11,6 +11,7 @@ use App\Models\CommissionPart;
 use App\Models\CommissionVente;
 use App\Models\Livreur;
 use App\Models\Organization;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\User;
 use App\Models\Vehicule;
@@ -128,12 +129,17 @@ class ClientDashboardTest extends TestCase
             'telephone' => $user->telephone,
         ]);
 
-        $proprietaire = Proprietaire::create([
+        $personne = Personne::create([
             'organization_id' => $org->id,
-            'user_id' => $user->id,
             'nom' => $user->nom,
             'prenom' => $user->prenom,
             'telephone' => $user->telephone,
+        ]);
+
+        $proprietaire = Proprietaire::create([
+            'organization_id' => $org->id,
+            'user_id' => $user->id,
+            'personne_id' => $personne->id,
             'is_active' => true,
         ]);
 
@@ -215,12 +221,17 @@ class ClientDashboardTest extends TestCase
         $org = Organization::factory()->create();
         $user = $this->clientUser($org);
 
-        $proprietaire = Proprietaire::create([
+        $personne = Personne::create([
             'organization_id' => $org->id,
-            'user_id' => $user->id,
             'nom' => $user->nom,
             'prenom' => $user->prenom,
             'telephone' => $user->telephone,
+        ]);
+
+        $proprietaire = Proprietaire::create([
+            'organization_id' => $org->id,
+            'user_id' => $user->id,
+            'personne_id' => $personne->id,
             'is_active' => true,
         ]);
 
@@ -243,12 +254,17 @@ class ClientDashboardTest extends TestCase
         ]);
         $user->assignRole('livreur');
 
-        $livreur = Livreur::create([
+        $personne = Personne::create([
             'organization_id' => $org->id,
-            'user_id' => $user->id,
             'nom' => $user->nom,
             'prenom' => $user->prenom,
             'telephone' => $user->telephone,
+        ]);
+
+        $livreur = Livreur::create([
+            'organization_id' => $org->id,
+            'user_id' => $user->id,
+            'personne_id' => $personne->id,
             'is_active' => true,
         ]);
 
