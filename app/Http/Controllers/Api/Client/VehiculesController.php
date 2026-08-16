@@ -73,7 +73,7 @@ class VehiculesController extends Controller
         $proprietaire = Proprietaire::query()
             ->when($orgId, fn ($q) => $q->where('organization_id', $orgId))
             ->where(fn ($q) => $q->where('user_id', $user->id)
-                ->when($telephone, fn ($q2) => $q2->orWhere('telephone', $telephone)))
+                ->when($telephone, fn ($q2) => $q2->orWhereHas('personne', fn ($p) => $p->where('telephone', $telephone))))
             ->first();
 
         if ($orgId === null && $proprietaire) {
@@ -83,7 +83,7 @@ class VehiculesController extends Controller
         $livreur = Livreur::query()
             ->when($orgId, fn ($q) => $q->where('organization_id', $orgId))
             ->where(fn ($q) => $q->where('user_id', $user->id)
-                ->when($telephone, fn ($q2) => $q2->orWhere('telephone', $telephone)))
+                ->when($telephone, fn ($q2) => $q2->orWhereHas('personne', fn ($p) => $p->where('telephone', $telephone))))
             ->first();
 
         if ($orgId === null && $livreur) {

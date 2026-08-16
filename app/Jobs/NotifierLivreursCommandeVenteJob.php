@@ -4,8 +4,10 @@ namespace App\Jobs;
 
 use App\Models\CommandeVente;
 use App\Models\Livreur;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\User;
+use App\Models\UserAuthIdentity;
 use App\Notifications\CommandeValideeNotification;
 use App\Services\ExpoPushNotificationService;
 use Illuminate\Bus\Queueable;
@@ -100,7 +102,7 @@ class NotifierLivreursCommandeVenteJob implements ShouldQueue
         }
 
         return $livreur->telephone
-            ? User::where('telephone', $livreur->telephone)->first()
+            ? UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_TELEPHONE, Personne::normaliserTelephone($livreur->telephone))
             : null;
     }
 
@@ -111,7 +113,7 @@ class NotifierLivreursCommandeVenteJob implements ShouldQueue
         }
 
         return $proprietaire->telephone
-            ? User::where('telephone', $proprietaire->telephone)->first()
+            ? UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_TELEPHONE, Personne::normaliserTelephone($proprietaire->telephone))
             : null;
     }
 }

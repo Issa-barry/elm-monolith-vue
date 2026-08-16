@@ -4,6 +4,9 @@ namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\ProfileUpdateRequest;
+use App\Models\Personne;
+use App\Models\User;
+use App\Models\UserAuthIdentity;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -29,15 +32,71 @@ class ProfileController extends Controller
      */
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
-        $request->user()->fill($request->validated());
+        $user = $request->user();
+        $data = $request->validated();
+        $emailChanged = ($data['email'] ?? null) !== $user->email;
 
-        if ($request->user()->isDirty('email')) {
-            $request->user()->email_verified_at = null;
+        $user->personne->update([
+            'prenom' => $data['prenom'],
+            'nom' => $data['nom'],
+            'email' => $data['email'] ?? null,
+        ]);
+
+        $this->syncEmailIdentity($user, $data['email'] ?? null, $emailChanged);
+
+        if (array_key_exists('telephone', $data) && filled($data['telephone'])) {
+            $this->syncTelephoneIdentity($user, $data['telephone']);
         }
 
-        $request->user()->save();
-
         return to_route('profile.edit');
+    }
+
+    /** Même pattern que UserController::syncEmailIdentity(), avec remise à zéro de la
+     *  vérification si l'adresse a réellement changé. */
+    private function syncEmailIdentity(User $user, ?string $email, bool $resetVerification): void
+    {
+        $identity = $user->emailIdentity();
+
+        if (! $email) {
+            $identity?->delete();
+
+            return;
+        }
+
+        $normalized = UserAuthIdentity::normaliser(UserAuthIdentity::TYPE_EMAIL, $email);
+
+        if ($identity) {
+            $identity->update([
+                'value' => $email,
+                'normalized_value' => $normalized,
+                'verified_at' => $resetVerification ? null : $identity->verified_at,
+            ]);
+        } else {
+            $user->authIdentities()->create([
+                'type' => UserAuthIdentity::TYPE_EMAIL,
+                'value' => $email,
+                'normalized_value' => $normalized,
+                'verified_at' => null,
+            ]);
+        }
+    }
+
+    private function syncTelephoneIdentity(User $user, string $telephone): void
+    {
+        $identity = $user->telephoneIdentity();
+        $normalized = Personne::normaliserTelephone($telephone);
+
+        if ($identity) {
+            $identity->update(['value' => $telephone, 'normalized_value' => $normalized]);
+        } else {
+            $user->authIdentities()->create([
+                'type' => UserAuthIdentity::TYPE_TELEPHONE,
+                'value' => $telephone,
+                'normalized_value' => $normalized,
+                'verified_at' => now(),
+                'is_primary' => true,
+            ]);
+        }
     }
 
     /**

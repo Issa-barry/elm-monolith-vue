@@ -68,11 +68,14 @@ class CommissionProprietaireController extends Controller
             ->where('cp.type_beneficiaire', 'proprietaire')
             ->whereNotNull('cp.proprietaire_id')
             ->leftJoin('proprietaires', 'proprietaires.id', '=', 'cp.proprietaire_id')
+            // telephone n'est plus une colonne physique de `proprietaires` depuis la refonte
+            // Personne — jointure vers `personnes` requise.
+            ->leftJoin('personnes AS proprietaires_personnes', 'proprietaires_personnes.id', '=', 'proprietaires.personne_id')
             ->select(['cp.proprietaire_id AS beneficiaire_id'])
             ->selectRaw(
                 '"proprietaire"                   AS type_beneficiaire,
                  MAX(cp.beneficiaire_nom)         AS beneficiaire_nom,
-                 MAX(proprietaires.telephone)     AS telephone,
+                 MAX(proprietaires_personnes.telephone) AS telephone,
                  SUM(cp.montant_brut)             AS total_brut_cumule,
                  SUM(COALESCE(cp.montant_actuel, cp.montant_net)) AS total_a_payer_cumule,
                  SUM(cp.montant_verse)            AS total_verse,
@@ -687,7 +690,8 @@ class CommissionProprietaireController extends Controller
         $query = CommissionPart::with([
             'commission.commande.site:id,nom',
             'commission.vehicule:id,nom_vehicule,immatriculation',
-            'proprietaire:id,telephone',
+            'proprietaire:id,personne_id',
+            'proprietaire.personne',
         ])
             ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
             ->where('type_beneficiaire', 'proprietaire')

@@ -18,7 +18,7 @@ class ProduitHistoriqueController extends Controller
         $varianteIds = $produit->variantes()->pluck('id');
 
         $mouvements = MouvementStock::whereIn('produit_variante_id', $varianteIds)
-            ->with('createur:id,prenom,nom')
+            ->with(['createur:id,personne_id', 'createur.personne'])
             ->orderByDesc('created_at')
             ->take(200)
             ->get()

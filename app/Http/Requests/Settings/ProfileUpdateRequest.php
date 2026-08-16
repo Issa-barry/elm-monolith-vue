@@ -2,10 +2,9 @@
 
 namespace App\Http\Requests\Settings;
 
-use App\Models\User;
+use App\Models\UserAuthIdentity;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class ProfileUpdateRequest extends FormRequest
 {
@@ -51,7 +50,15 @@ class ProfileUpdateRequest extends FormRequest
                 'lowercase',
                 'email',
                 'max:255',
-                Rule::unique(User::class)->ignore($this->user()->id),
+                function ($attribute, $value, $fail) {
+                    $existing = UserAuthIdentity::resoudre(
+                        UserAuthIdentity::TYPE_EMAIL,
+                        UserAuthIdentity::normaliser(UserAuthIdentity::TYPE_EMAIL, $value)
+                    );
+                    if ($existing && $existing->id !== $this->user()->id) {
+                        $fail('Cette adresse e-mail est déjà utilisée.');
+                    }
+                },
             ],
         ];
 

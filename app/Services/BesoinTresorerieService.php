@@ -222,7 +222,7 @@ class BesoinTresorerieService
 
         return PaieLigne::where('paie_periode_id', $periode->id)
             ->whereHas('employe', fn ($q) => $q->where('site_id', $siteId))
-            ->with('employe:id,nom_complet')
+            ->with(['employe:id,personne_id', 'employe.personne'])
             ->get()
             ->filter(fn (PaieLigne $l) => (float) $l->reste_a_payer > 0.0)
             ->map(fn (PaieLigne $l) => [

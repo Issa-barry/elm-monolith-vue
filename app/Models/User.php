@@ -50,6 +50,7 @@ class User extends Authenticatable
     protected $appends = [
         'name', 'nom', 'prenom', 'telephone', 'email',
         'pays', 'code_pays', 'code_phone_pays', 'ville', 'adresse',
+        'email_verified_at',
     ];
 
     protected $hidden = [
@@ -119,6 +120,12 @@ class User extends Authenticatable
     public function getEmailAttribute(): ?string
     {
         return $this->emailIdentity()?->value;
+    }
+
+    /** Proxy en lecture seule vers l'identité de connexion email — jamais une colonne sur users. */
+    public function getEmailVerifiedAtAttribute(): ?\Illuminate\Support\Carbon
+    {
+        return $this->emailIdentity()?->verified_at;
     }
 
     public function telephoneIdentity(): ?UserAuthIdentity

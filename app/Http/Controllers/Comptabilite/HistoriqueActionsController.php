@@ -70,9 +70,12 @@ class HistoriqueActionsController extends Controller
 
         $logs = $query->paginate(30)->withQueryString();
 
-        $acteurs = User::where('organization_id', $orgId)
-            ->orderBy('name')
-            ->get(['id', 'name'])
+        // `name` est un accesseur (prenom+nom via Personne), pas une colonne physique de
+        // `users` — tri en collection après eager-load, pas de ->orderBy('name') en SQL.
+        $acteurs = User::with('personne')
+            ->where('organization_id', $orgId)
+            ->get(['id', 'personne_id'])
+            ->sortBy('name')
             ->map(fn ($u) => ['value' => $u->id, 'label' => $u->name])
             ->values();
 

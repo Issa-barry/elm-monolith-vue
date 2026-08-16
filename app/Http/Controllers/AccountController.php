@@ -17,7 +17,8 @@ class AccountController extends Controller
 
         $clientUserIds = Client::whereNotNull('user_id')->pluck('user_id')->flip();
 
-        $accounts = User::orderBy('created_at', 'desc')
+        $accounts = User::with(['personne', 'authIdentities'])
+            ->orderBy('created_at', 'desc')
             ->get()
             ->map(function (User $u) use ($clientUserIds) {
                 $hasStaffRole = $u->hasAnyRole(['super_admin', 'admin_entreprise', 'manager', 'commerciale', 'comptable']);
