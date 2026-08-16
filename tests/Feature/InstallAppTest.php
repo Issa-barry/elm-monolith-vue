@@ -2,10 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Enums\DomaineActivite;
 use App\Models\AppInstallation;
 use App\Models\Categorie;
 use App\Models\OptionCatalogue;
 use App\Models\Organization;
+use App\Models\ProduitType;
 use App\Models\TypeVehicule;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -96,49 +98,80 @@ class InstallAppTest extends TestCase
 
         $this->artisan('app:install')
             ->expectsQuestion("Nom de l'entreprise", 'ELM Test')
+            ->expectsQuestion("Domaine d'activité de l'entreprise", DomaineActivite::COMMERCE_DISTRIBUTION->label())
             ->expectsQuestion('Prénom', 'Issa')
             ->expectsQuestion('Nom', 'BARRY')
             ->expectsQuestion('Téléphone (format international, ex: +224622000000)', '+224622000000')
             ->expectsQuestion('Email (facultatif)', '')
             ->expectsQuestion('Mot de passe (min. 8 caractères, majuscule + minuscule + symbole)', 'Sup3r$ecretPwd')
             ->expectsQuestion('Confirmer le mot de passe', 'Sup3r$ecretPwd')
-            ->expectsConfirmation('Créer les catégories prédéfinies ?', 'no')
-            ->expectsConfirmation('Installer la bibliothèque d\'options prédéfinies ?', 'no')
-            ->expectsConfirmation(
-                'Créer les types de véhicule prédéfinis (Tricycle, Minibus, Camionnette, Camion, Remorque) ?',
-                'no',
-            )
             ->assertExitCode(1);
 
         $this->assertDatabaseMissing('users', ['telephone' => '+224622000099']);
         $this->assertFalse(AppInstallation::isInstalled());
     }
 
-    public function test_categories_et_options_sont_des_choix_independants(): void
+    public function test_catalogue_par_defaut_est_toujours_cree(): void
     {
-        $this->runInstall(categories: true, options: false)->assertExitCode(0);
+        $this->runInstall()->assertExitCode(0);
 
         $org = Organization::where('slug', 'elm-test')->firstOrFail();
         $this->assertGreaterThan(0, Categorie::where('organization_id', $org->id)->count());
-        $this->assertSame(0, OptionCatalogue::where('organization_id', $org->id)->count());
-    }
-
-    public function test_types_vehicule_est_un_choix_independant(): void
-    {
-        $this->runInstall(categories: false, options: false, typesVehicule: true)->assertExitCode(0);
-
-        $org = Organization::where('slug', 'elm-test')->firstOrFail();
+        $this->assertGreaterThan(0, OptionCatalogue::where('organization_id', $org->id)->count());
         $this->assertSame(5, TypeVehicule::where('organization_id', $org->id)->count());
         $this->assertTrue(TypeVehicule::where('organization_id', $org->id)->where('nom', 'Minibus')->exists());
+        $this->assertTrue(ProduitType::where('organization_id', $org->id)->where('code', 'matiere_production')->exists());
     }
 
-    public function test_installation_sans_catalogue_ne_cree_rien(): void
+    public function test_aucun_site_nest_cree_pendant_linstallation(): void
     {
-        $this->runInstall(categories: false, options: false, typesVehicule: false)->assertExitCode(0);
+        $this->runInstall()->assertExitCode(0);
 
         $org = Organization::where('slug', 'elm-test')->firstOrFail();
-        $this->assertSame(0, Categorie::where('organization_id', $org->id)->count());
-        $this->assertSame(0, OptionCatalogue::where('organization_id', $org->id)->count());
-        $this->assertSame(0, TypeVehicule::where('organization_id', $org->id)->count());
+        $this->assertSame(0, $org->sites()->count());
+    }
+
+    /**
+     * Propriétaire interne par défaut créé et rattaché à l'organisation dès l'installation CLI —
+     * même comportement que le wizard web (cf. InstallWizardTest, InstallationService::install()).
+     */
+    public function test_propriétaire_interne_est_cree_et_rattache_a_lorganisation(): void
+    {
+        $this->runInstall()->assertExitCode(0);
+
+        $org = Organization::where('slug', 'elm-test')->firstOrFail();
+        $user = User::where('telephone', '+224622000000')->firstOrFail();
+
+        $this->assertNotNull($org->proprietaire_interne_id);
+        $this->assertSame($user->id, $org->proprietaireInterne->user_id);
+        $this->assertSame($org->id, $org->proprietaireInterne->organization_id);
+    }
+
+    public function test_le_domaine_dactivite_est_persiste(): void
+    {
+        $this->runInstall(domaine: DomaineActivite::INDUSTRIE_FABRICATION)->assertExitCode(0);
+
+        $org = Organization::where('slug', 'elm-test')->firstOrFail();
+        $this->assertSame(DomaineActivite::INDUSTRIE_FABRICATION, $org->domaine_activite);
+    }
+
+    public function test_refuse_une_seconde_organisation_en_on_premise_via_cli(): void
+    {
+        config(['app.deployment_mode' => 'on_premise']);
+
+        $this->runInstall(orgNom: 'ELM Test')->assertExitCode(0);
+
+        $this->artisan('app:install')
+            ->expectsQuestion("Nom de l'entreprise", 'Autre Entreprise')
+            ->expectsQuestion("Domaine d'activité de l'entreprise", DomaineActivite::COMMERCE_DISTRIBUTION->label())
+            ->expectsQuestion('Prénom', 'Issa')
+            ->expectsQuestion('Nom', 'BARRY')
+            ->expectsQuestion('Téléphone (format international, ex: +224622000000)', '+224622000099')
+            ->expectsQuestion('Email (facultatif)', '')
+            ->expectsQuestion('Mot de passe (min. 8 caractères, majuscule + minuscule + symbole)', 'Sup3r$ecretPwd')
+            ->expectsQuestion('Confirmer le mot de passe', 'Sup3r$ecretPwd')
+            ->assertExitCode(1);
+
+        $this->assertSame(1, Organization::count());
     }
 }

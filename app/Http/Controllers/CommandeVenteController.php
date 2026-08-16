@@ -485,7 +485,7 @@ class CommandeVenteController extends Controller
                     'nom' => $vehicule->nom_vehicule,
                     'immatriculation' => $vehicule->immatriculation,
                     'type' => $vehicule->typeVehicule?->nom,
-                    'capacite_packs' => $vehicule->capacite_packs ?? $vehicule->typeVehicule?->capacite_defaut,
+                    'capacite_packs' => $vehicule->typeVehicule?->capacite_defaut,
                     'proprietaire_nom' => $vehicule->proprietaire
                         ? trim($vehicule->proprietaire->prenom.' '.$vehicule->proprietaire->nom)
                         : null,
@@ -1087,7 +1087,6 @@ class CommandeVenteController extends Controller
     {
         return Vehicule::with([
             'typeVehicule',
-            'capacites.categorie',
             'typeVehicule.capacites.categorie',
             'equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'chauffeur'),
             'equipe.membres.livreur',
@@ -1101,10 +1100,10 @@ class CommandeVenteController extends Controller
                 'id' => $v->id,
                 'nom_vehicule' => $v->nom_vehicule,
                 'immatriculation' => $v->immatriculation,
-                // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
-                // on retombe sur la capacité par défaut du type (cf. VehiculeController).
-                'capacite_packs' => ($c = $v->capacite_packs ?? $v->typeVehicule?->capacite_defaut) !== null
-                    ? (int) $c
+                // Capacité portée exclusivement par le type du véhicule (décision produit du
+                // 16/08/2026, cf. VehiculeCapaciteService) — jamais par le véhicule lui-même.
+                'capacite_packs' => $v->typeVehicule?->capacite_defaut !== null
+                    ? (int) $v->typeVehicule->capacite_defaut
                     : null,
                 // Plafonds par catégorie (Sachet, Bouteille, ...) — même calcul que le contrôle
                 // serveur (VehiculeCapaciteService::capacitesParCategorie), pour que le
@@ -1126,9 +1125,6 @@ class CommandeVenteController extends Controller
     {
         $noms = [];
         foreach ($v->typeVehicule?->capacites ?? [] as $c) {
-            $noms[$c->categorie_id] = $c->categorie?->nom ?? 'Catégorie';
-        }
-        foreach ($v->capacites as $c) {
             $noms[$c->categorie_id] = $c->categorie?->nom ?? 'Catégorie';
         }
 

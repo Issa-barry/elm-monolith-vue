@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AppLogoIcon from '@/components/AppLogoIcon.vue';
 import InputError from '@/components/InputError.vue';
+import PhoneCountryInput from '@/components/PhoneCountryInput.vue';
 import TextLink from '@/components/TextLink.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -18,8 +19,7 @@ import { home, register } from '@/routes';
 import { store } from '@/routes/login';
 import { Form, Head, Link } from '@inertiajs/vue3';
 import { Clock, Eye, EyeOff, MailWarning, ShieldX } from 'lucide-vue-next';
-import Select from 'primevue/select';
-import { computed, ref, watch } from 'vue';
+import { ref } from 'vue';
 
 defineProps<{
     status?: string;
@@ -28,114 +28,8 @@ defineProps<{
     orgBranding?: { name: string; logo_url: string | null } | null;
 }>();
 
-interface CountryOption {
-    label: string;
-    code: string;
-    prefix: string;
-    localLength: number;
-}
-
-const PAYS: CountryOption[] = [
-    { label: 'Guinée', code: 'GN', prefix: '+224', localLength: 9 },
-    { label: 'Guinée-Bissau', code: 'GW', prefix: '+245', localLength: 7 },
-    { label: 'Sénégal', code: 'SN', prefix: '+221', localLength: 9 },
-    { label: 'Mali', code: 'ML', prefix: '+223', localLength: 8 },
-    { label: "Côte d'Ivoire", code: 'CI', prefix: '+225', localLength: 10 },
-    { label: 'Liberia', code: 'LR', prefix: '+231', localLength: 8 },
-    { label: 'Sierra Leone', code: 'SL', prefix: '+232', localLength: 8 },
-    { label: 'France', code: 'FR', prefix: '+33', localLength: 9 },
-    { label: 'Chine', code: 'CN', prefix: '+86', localLength: 11 },
-    {
-        label: 'Émirats arabes unis',
-        code: 'AE',
-        prefix: '+971',
-        localLength: 9,
-    },
-    { label: 'Inde', code: 'IN', prefix: '+91', localLength: 10 },
-];
-
-const STORAGE_KEY = 'login_country_code';
-const savedCode = globalThis.localStorage?.getItem(STORAGE_KEY) ?? PAYS[0].code;
-const selectedCountryCode = ref(
-    PAYS.some((p) => p.code === savedCode) ? savedCode : PAYS[0].code,
-);
-
-watch(selectedCountryCode, (code) => {
-    globalThis.localStorage?.setItem(STORAGE_KEY, code);
-});
-const phoneDigits = ref('');
-const phoneTouched = ref(false);
+const phoneIsValid = ref(false);
 const showPassword = ref(false);
-
-const selectedPays = computed(
-    () => PAYS.find((p) => p.code === selectedCountryCode.value) ?? PAYS[0],
-);
-
-// Si l'utilisateur tape 0xxxxxxxx (format local avec 0 initial), on le strip pour l'international
-const fullPhone = computed(() => {
-    if (!phoneDigits.value) return '';
-    // Strip leading 0 for international format (visible dans l'input, supprimé techniquement)
-    return `${selectedPays.value.prefix}${phoneDigits.value.replace(/^0/, '')}`;
-});
-
-// Le numéro est valide quand la partie locale (sans le 0 initial) atteint localLength
-const phoneIsValid = computed(() => {
-    const digits = phoneDigits.value.replace(/^0/, '');
-    return digits.length >= selectedPays.value.localLength;
-});
-
-// Message client uniquement après interaction avec le champ
-const phoneClientError = computed<string | null>(() => {
-    if (!phoneTouched.value) return null;
-    if (!phoneDigits.value) return 'Numéro de téléphone requis.';
-    if (!phoneIsValid.value) {
-        return `Numéro trop court (${selectedPays.value.localLength} chiffres attendus).`;
-    }
-    return null;
-});
-
-function flagUrl(code: string): string {
-    return `https://flagcdn.com/20x15/${code.toLowerCase()}.png`;
-}
-
-function handlePhoneInput(e: Event) {
-    const input = e.target as HTMLInputElement;
-    const raw = input.value.replace(/\D/g, '');
-    // +1 digit autorisé si commence par 0 (ex: 0758855039 = 10 chiffres France)
-    const max = raw.startsWith('0')
-        ? selectedPays.value.localLength + 1
-        : selectedPays.value.localLength;
-    const digits = raw.slice(0, max);
-    phoneDigits.value = digits;
-    input.value = digits;
-}
-
-function handlePhoneBlur() {
-    phoneTouched.value = true;
-}
-
-function handlePhoneKeydown(e: KeyboardEvent) {
-    const pass = [
-        'Backspace',
-        'Delete',
-        'Tab',
-        'Escape',
-        'Enter',
-        'ArrowLeft',
-        'ArrowRight',
-        'ArrowUp',
-        'ArrowDown',
-        'Home',
-        'End',
-    ];
-    if (pass.includes(e.key)) return;
-    if (
-        (e.ctrlKey || e.metaKey) &&
-        ['a', 'c', 'v', 'x'].includes(e.key.toLowerCase())
-    )
-        return;
-    if (!/^\d$/.test(e.key)) e.preventDefault();
-}
 </script>
 
 <template>
@@ -260,9 +154,6 @@ function handlePhoneKeydown(e: KeyboardEvent) {
                         </div>
                     </div>
 
-                    <!-- Champ téléphone caché (valeur complète) -->
-                    <input type="hidden" name="telephone" :value="fullPhone" />
-
                     <div class="space-y-5">
                         <!-- Sélecteur pays + numéro -->
                         <div class="space-y-2">
@@ -270,71 +161,14 @@ function handlePhoneKeydown(e: KeyboardEvent) {
                                 >Numéro de téléphone
                                 <span class="text-destructive">*</span></Label
                             >
-                            <div class="flex gap-2">
-                                <Select
-                                    v-model="selectedCountryCode"
-                                    :options="PAYS"
-                                    option-label="label"
-                                    option-value="code"
-                                    :tabindex="1"
-                                    class="shrink-0"
-                                    :pt="{
-                                        root: { class: 'h-10' },
-                                        label: {
-                                            class: 'flex items-center py-0 h-10',
-                                        },
-                                    }"
-                                >
-                                    <template #value="{ value }">
-                                        <div
-                                            v-if="value"
-                                            class="flex items-center gap-2"
-                                        >
-                                            <img
-                                                :src="flagUrl(value)"
-                                                class="h-4 w-auto rounded-sm shadow-sm"
-                                            />
-                                            <span class="font-mono text-sm">{{
-                                                selectedPays.prefix
-                                            }}</span>
-                                        </div>
-                                    </template>
-                                    <template #option="{ option }">
-                                        <div class="flex items-center gap-2">
-                                            <img
-                                                :src="flagUrl(option.code)"
-                                                :alt="option.label"
-                                                class="h-4 w-auto rounded-sm shadow-sm"
-                                            />
-                                            <span>{{ option.label }}</span>
-                                            <span
-                                                class="ml-auto text-xs text-muted-foreground"
-                                                >{{ option.prefix }}</span
-                                            >
-                                        </div>
-                                    </template>
-                                </Select>
-
-                                <input
-                                    :value="phoneDigits"
-                                    @keydown="handlePhoneKeydown"
-                                    @input="handlePhoneInput"
-                                    @blur="handlePhoneBlur"
-                                    type="tel"
-                                    :tabindex="2"
-                                    autocomplete="tel-national"
-                                    inputmode="numeric"
-                                    autofocus
-                                    required
-                                    :maxlength="
-                                        phoneDigits.startsWith('0')
-                                            ? selectedPays.localLength + 1
-                                            : selectedPays.localLength
-                                    "
-                                    :placeholder="`${selectedPays.localLength} chiffres`"
-                                    class="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                                />
-                            </div>
+                            <PhoneCountryInput
+                                id="telephone"
+                                name="telephone"
+                                :tabindex-country="1"
+                                :tabindex-input="2"
+                                autofocus
+                                @update:valid="phoneIsValid = $event"
+                            />
                             <InputError
                                 :message="
                                     errors.telephone?.includes('bloqué') ||
@@ -345,7 +179,7 @@ function handlePhoneKeydown(e: KeyboardEvent) {
                                         'en attente de validation',
                                     )
                                         ? undefined
-                                        : (phoneClientError ?? errors.telephone)
+                                        : errors.telephone
                                 "
                             />
                         </div>

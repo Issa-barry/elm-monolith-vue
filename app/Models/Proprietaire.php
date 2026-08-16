@@ -75,15 +75,18 @@ class Proprietaire extends Model
     }
 
     /**
-     * Propriétaire par défaut représentant l'organisation elle-même (voir
-     * database/seeders/ProprietairesSeeder.php) — assigné automatiquement à un véhicule quand
-     * aucun propriétaire tiers n'est explicitement choisi. Centralise ce qui était dupliqué
-     * entre VehiculeController et EquipeLivraisonController.
+     * Propriétaire par défaut représentant l'organisation elle-même — assigné automatiquement
+     * à un véhicule quand aucun propriétaire tiers n'est explicitement choisi. Centralise ce qui
+     * était dupliqué entre VehiculeController et EquipeLivraisonController.
+     *
+     * Source de vérité : Organization::proprietaire_interne_id (relation explicite par
+     * organisation, fixée à l'installation — cf. InstallationService::install()). N'infère
+     * plus jamais ce propriétaire d'un numéro de téléphone particulier : cette ancienne
+     * implémentation ne fonctionnait que pour l'organisation historique de démonstration
+     * seedée par ProprietairesSeeder, et renvoyait toujours null pour toute autre organisation.
      */
     public static function interneParDefautId(string $organizationId): ?string
     {
-        return static::where('organization_id', $organizationId)
-            ->where('telephone', '+224622602693')
-            ->value('id');
+        return Organization::where('id', $organizationId)->value('proprietaire_interne_id');
     }
 }

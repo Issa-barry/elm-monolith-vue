@@ -21,9 +21,12 @@ use Tests\TestCase;
 /**
  * Capacité par catégorie de produit (sachets / bouteilles...) — décision produit du
  * 10/08/2026 : cumulable (plafonds indépendants par catégorie), voir VehiculeCapaciteService.
- * Le régime "legacy" (un seul plafond global, capacite_packs) est déjà largement couvert par
- * CommandeVenteTest/PdvCheckoutTest — cette classe se concentre sur le nouveau régime et sur
- * la non-régression du repli legacy quand aucune ligne n'est configurée.
+ * Portée exclusivement par le TYPE de véhicule (décision produit du 16/08/2026) : un véhicule
+ * n'a plus de capacité propre, il hérite entièrement de celle de son type — un seul endroit
+ * (page Types de véhicules) pour la régler. Le régime "legacy" (un seul plafond global,
+ * type_vehicules.capacite_defaut) est déjà largement couvert par CommandeVenteTest/
+ * PdvCheckoutTest — cette classe se concentre sur le nouveau régime et sur la non-régression
+ * du repli legacy quand aucune ligne n'est configurée.
  */
 class VehiculeCapaciteTest extends TestCase
 {
@@ -62,14 +65,20 @@ class VehiculeCapaciteTest extends TestCase
         ]);
     }
 
-    private function makeVehicule(Organization $org, array $overrides = []): Vehicule
+    private function makeTypeVehicule(Organization $org, array $overrides = []): TypeVehicule
+    {
+        return TypeVehicule::factory()->create(array_merge(['organization_id' => $org->id], $overrides));
+    }
+
+    private function makeVehicule(Organization $org, TypeVehicule $typeVehicule): Vehicule
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id]);
 
-        return Vehicule::factory()->create(array_merge([
+        return Vehicule::factory()->create([
             'organization_id' => $org->id,
             'proprietaire_id' => $proprietaire->id,
-        ], $overrides));
+            'type_vehicule_id' => $typeVehicule->id,
+        ]);
     }
 
     /**
@@ -88,15 +97,16 @@ class VehiculeCapaciteTest extends TestCase
         return $user;
     }
 
-    // ── Vente web — régime "par catégorie" ───────────────────────────────────────
+    // ── Vente web — régime "par catégorie" (capacité du type) ────────────────────
 
     public function test_capacites_par_categorie_sont_independantes_et_cumulables(): void
     {
         $sachet = $this->makeCategorie($this->org, 'Sachet');
         $bouteille = $this->makeCategorie($this->org, 'Bouteille');
-        $vehicule = $this->makeVehicule($this->org, ['capacite_packs' => null]);
-        $vehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachet->id, 'capacite_max' => 70]);
-        $vehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $bouteille->id, 'capacite_max' => 100]);
+        $typeVehicule = $this->makeTypeVehicule($this->org);
+        $typeVehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachet->id, 'capacite_max' => 70]);
+        $typeVehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $bouteille->id, 'capacite_max' => 100]);
+        $vehicule = $this->makeVehicule($this->org, $typeVehicule);
 
         $produitSachet = $this->makeProduitAvecVariante($this->org, ['nom' => 'Sachet 500ml', 'categorie_id' => $sachet->id], ['prix_vente' => 1000]);
         $produitBouteille = $this->makeProduitAvecVariante($this->org, ['nom' => 'Bouteille 1.5L', 'categorie_id' => $bouteille->id], ['prix_vente' => 3000]);
@@ -119,9 +129,10 @@ class VehiculeCapaciteTest extends TestCase
     {
         $sachet = $this->makeCategorie($this->org, 'Sachet');
         $bouteille = $this->makeCategorie($this->org, 'Bouteille');
-        $vehicule = $this->makeVehicule($this->org, ['capacite_packs' => null]);
-        $vehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachet->id, 'capacite_max' => 70]);
-        $vehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $bouteille->id, 'capacite_max' => 100]);
+        $typeVehicule = $this->makeTypeVehicule($this->org);
+        $typeVehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachet->id, 'capacite_max' => 70]);
+        $typeVehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $bouteille->id, 'capacite_max' => 100]);
+        $vehicule = $this->makeVehicule($this->org, $typeVehicule);
 
         $produitSachet = $this->makeProduitAvecVariante($this->org, ['nom' => 'Sachet 500ml', 'categorie_id' => $sachet->id], ['prix_vente' => 1000]);
         $produitBouteille = $this->makeProduitAvecVariante($this->org, ['nom' => 'Bouteille 1.5L', 'categorie_id' => $bouteille->id], ['prix_vente' => 3000]);
@@ -143,9 +154,10 @@ class VehiculeCapaciteTest extends TestCase
     {
         $sachet = $this->makeCategorie($this->org, 'Sachet');
         $bouteille = $this->makeCategorie($this->org, 'Bouteille');
-        $vehicule = $this->makeVehicule($this->org, ['capacite_packs' => null]);
+        $typeVehicule = $this->makeTypeVehicule($this->org);
         // Aucune capacité définie pour "Bouteille" — doit rester illimitée.
-        $vehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachet->id, 'capacite_max' => 70]);
+        $typeVehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachet->id, 'capacite_max' => 70]);
+        $vehicule = $this->makeVehicule($this->org, $typeVehicule);
 
         $produitBouteille = $this->makeProduitAvecVariante($this->org, ['nom' => 'Bouteille 1.5L', 'categorie_id' => $bouteille->id], ['prix_vente' => 3000]);
 
@@ -165,9 +177,10 @@ class VehiculeCapaciteTest extends TestCase
 
         $sachet = $this->makeCategorie($this->org, 'Sachet');
         $bouteille = $this->makeCategorie($this->org, 'Bouteille');
-        $vehicule = $this->makeVehicule($this->org, ['capacite_packs' => null]);
-        $vehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachet->id, 'capacite_max' => 70]);
-        $vehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $bouteille->id, 'capacite_max' => 100]);
+        $typeVehicule = $this->makeTypeVehicule($this->org);
+        $typeVehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachet->id, 'capacite_max' => 70]);
+        $typeVehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $bouteille->id, 'capacite_max' => 100]);
+        $vehicule = $this->makeVehicule($this->org, $typeVehicule);
 
         $produitSachet = $this->makeProduitAvecVariante($this->org, ['nom' => 'Sachet 500ml', 'categorie_id' => $sachet->id], ['prix_vente' => 1000]);
 
@@ -191,8 +204,9 @@ class VehiculeCapaciteTest extends TestCase
         Parametre::setVentesAutorisationSaisieDessousQteMax($this->org->id, false);
 
         $sachet = $this->makeCategorie($this->org, 'Sachet');
-        $vehicule = $this->makeVehicule($this->org, ['capacite_packs' => null]);
-        $vehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachet->id, 'capacite_max' => 70]);
+        $typeVehicule = $this->makeTypeVehicule($this->org);
+        $typeVehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachet->id, 'capacite_max' => 70]);
+        $vehicule = $this->makeVehicule($this->org, $typeVehicule);
 
         $produitSachet = $this->makeProduitAvecVariante($this->org, ['nom' => 'Sachet 500ml', 'categorie_id' => $sachet->id], ['prix_vente' => 1000]);
 
@@ -206,52 +220,13 @@ class VehiculeCapaciteTest extends TestCase
             ->assertSessionHasErrors('lignes');
     }
 
-    public function test_capacite_type_vehicule_sert_de_repli_par_categorie(): void
-    {
-        $sachet = $this->makeCategorie($this->org, 'Sachet');
-        $typeVehicule = TypeVehicule::factory()->create(['organization_id' => $this->org->id]);
-        $typeVehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachet->id, 'capacite_max' => 20]);
-        $vehicule = $this->makeVehicule($this->org, ['capacite_packs' => null, 'type_vehicule_id' => $typeVehicule->id]);
-
-        $produitSachet = $this->makeProduitAvecVariante($this->org, ['nom' => 'Sachet 500ml', 'categorie_id' => $sachet->id], ['prix_vente' => 1000]);
-
-        $this->actingAs($this->user)
-            ->post(route('ventes.store'), [
-                'vehicule_id' => $vehicule->id,
-                'lignes' => [
-                    ['produit_id' => $produitSachet->id, 'qte' => 21, 'prix_vente' => 1000],
-                ],
-            ])
-            ->assertSessionHasErrors('lignes');
-    }
-
-    public function test_vehicule_capacite_prevaut_sur_le_repli_type(): void
-    {
-        $sachet = $this->makeCategorie($this->org, 'Sachet');
-        $typeVehicule = TypeVehicule::factory()->create(['organization_id' => $this->org->id]);
-        $typeVehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachet->id, 'capacite_max' => 20]);
-        $vehicule = $this->makeVehicule($this->org, ['capacite_packs' => null, 'type_vehicule_id' => $typeVehicule->id]);
-        // Override propre au véhicule : doit primer sur celle du type.
-        $vehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachet->id, 'capacite_max' => 90]);
-
-        $produitSachet = $this->makeProduitAvecVariante($this->org, ['nom' => 'Sachet 500ml', 'categorie_id' => $sachet->id], ['prix_vente' => 1000]);
-
-        $this->actingAs($this->user)
-            ->post(route('ventes.store'), [
-                'vehicule_id' => $vehicule->id,
-                'lignes' => [
-                    ['produit_id' => $produitSachet->id, 'qte' => 80, 'prix_vente' => 1000],
-                ],
-            ])
-            ->assertRedirect();
-    }
-
     // ── Non-régression du régime legacy ──────────────────────────────────────────
 
-    public function test_vehicule_sans_aucune_ligne_de_capacite_reste_sur_le_plafond_global(): void
+    public function test_vehicule_sans_aucune_capacite_par_categorie_reste_sur_le_plafond_global_du_type(): void
     {
         $categorie = $this->makeCategorie($this->org, 'Divers');
-        $vehicule = $this->makeVehicule($this->org, ['capacite_packs' => 5]);
+        $typeVehicule = $this->makeTypeVehicule($this->org, ['capacite_defaut' => 5]);
+        $vehicule = $this->makeVehicule($this->org, $typeVehicule);
         $produit = $this->makeProduitAvecVariante($this->org, ['nom' => 'Produit', 'categorie_id' => $categorie->id], ['prix_vente' => 1000]);
 
         $this->actingAs($this->user)
@@ -269,7 +244,8 @@ class VehiculeCapaciteTest extends TestCase
     public function test_permission_qte_update_ne_permet_plus_de_depasser_le_regime_legacy(): void
     {
         $categorie = $this->makeCategorie($this->org, 'Divers');
-        $vehicule = $this->makeVehicule($this->org, ['capacite_packs' => 5]);
+        $typeVehicule = $this->makeTypeVehicule($this->org, ['capacite_defaut' => 5]);
+        $vehicule = $this->makeVehicule($this->org, $typeVehicule);
         $produit = $this->makeProduitAvecVariante($this->org, ['nom' => 'Produit', 'categorie_id' => $categorie->id], ['prix_vente' => 1000]);
 
         $this->actingAs($this->makeUserAvecQteUpdate())
@@ -287,8 +263,9 @@ class VehiculeCapaciteTest extends TestCase
     public function test_permission_qte_update_ne_permet_plus_de_depasser_le_regime_par_categorie(): void
     {
         $sachet = $this->makeCategorie($this->org, 'Sachet');
-        $vehicule = $this->makeVehicule($this->org, ['capacite_packs' => null]);
-        $vehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachet->id, 'capacite_max' => 70]);
+        $typeVehicule = $this->makeTypeVehicule($this->org);
+        $typeVehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachet->id, 'capacite_max' => 70]);
+        $vehicule = $this->makeVehicule($this->org, $typeVehicule);
         $produitSachet = $this->makeProduitAvecVariante($this->org, ['nom' => 'Sachet 500ml', 'categorie_id' => $sachet->id], ['prix_vente' => 1000]);
 
         $this->actingAs($this->makeUserAvecQteUpdate())
@@ -309,9 +286,10 @@ class VehiculeCapaciteTest extends TestCase
     {
         $sachet = $this->makeCategorie($this->org, 'Sachet');
         $bouteille = $this->makeCategorie($this->org, 'Bouteille');
-        $vehicule = $this->makeVehicule($this->org, ['capacite_packs' => null]);
-        $vehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachet->id, 'capacite_max' => 70]);
-        $vehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $bouteille->id, 'capacite_max' => 100]);
+        $typeVehicule = $this->makeTypeVehicule($this->org);
+        $typeVehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachet->id, 'capacite_max' => 70]);
+        $typeVehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $bouteille->id, 'capacite_max' => 100]);
+        $vehicule = $this->makeVehicule($this->org, $typeVehicule);
 
         $produitSachet = $this->makeProduitAvecVariante($this->org, ['nom' => 'Sachet 500ml', 'categorie_id' => $sachet->id], ['prix_vente' => 1000]);
         $produitBouteille = $this->makeProduitAvecVariante($this->org, ['nom' => 'Bouteille 1.5L', 'categorie_id' => $bouteille->id], ['prix_vente' => 3000]);
@@ -333,8 +311,9 @@ class VehiculeCapaciteTest extends TestCase
     public function test_pdv_depassement_dune_categorie_est_rejete(): void
     {
         $sachet = $this->makeCategorie($this->org, 'Sachet');
-        $vehicule = $this->makeVehicule($this->org, ['capacite_packs' => null]);
-        $vehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachet->id, 'capacite_max' => 70]);
+        $typeVehicule = $this->makeTypeVehicule($this->org);
+        $typeVehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachet->id, 'capacite_max' => 70]);
+        $vehicule = $this->makeVehicule($this->org, $typeVehicule);
 
         $produitSachet = $this->makeProduitAvecVariante($this->org, ['nom' => 'Sachet 500ml', 'categorie_id' => $sachet->id], ['prix_vente' => 1000]);
 
@@ -347,76 +326,6 @@ class VehiculeCapaciteTest extends TestCase
                 ],
             ])
             ->assertSessionHasErrors('lignes');
-    }
-
-    // ── Synchronisation des capacités (véhicule) ─────────────────────────────────
-
-    public function test_sync_capacites_vehicule_cree_les_lignes(): void
-    {
-        $sachet = $this->makeCategorie($this->org, 'Sachet');
-        $bouteille = $this->makeCategorie($this->org, 'Bouteille');
-        $vehicule = $this->makeVehicule($this->org);
-
-        $this->actingAs($this->user)
-            ->put("/backoffice/vehicules/{$vehicule->id}/capacites", [
-                'capacites' => [
-                    ['categorie_id' => $sachet->id, 'capacite_max' => 70],
-                    ['categorie_id' => $bouteille->id, 'capacite_max' => 100],
-                ],
-            ])
-            ->assertRedirect();
-
-        $this->assertDatabaseHas('vehicule_capacites', ['vehicule_id' => $vehicule->id, 'categorie_id' => $sachet->id, 'capacite_max' => 70]);
-        $this->assertDatabaseHas('vehicule_capacites', ['vehicule_id' => $vehicule->id, 'categorie_id' => $bouteille->id, 'capacite_max' => 100]);
-        $this->assertSame(2, $vehicule->capacites()->count());
-    }
-
-    public function test_sync_capacites_vehicule_remplace_les_lignes_existantes(): void
-    {
-        $sachet = $this->makeCategorie($this->org, 'Sachet');
-        $bouteille = $this->makeCategorie($this->org, 'Bouteille');
-        $vehicule = $this->makeVehicule($this->org);
-        $vehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachet->id, 'capacite_max' => 50]);
-
-        $this->actingAs($this->user)
-            ->put("/backoffice/vehicules/{$vehicule->id}/capacites", [
-                'capacites' => [
-                    ['categorie_id' => $bouteille->id, 'capacite_max' => 100],
-                ],
-            ])
-            ->assertRedirect();
-
-        $this->assertSame(1, $vehicule->capacites()->count());
-        $this->assertDatabaseMissing('vehicule_capacites', ['vehicule_id' => $vehicule->id, 'categorie_id' => $sachet->id]);
-        $this->assertDatabaseHas('vehicule_capacites', ['vehicule_id' => $vehicule->id, 'categorie_id' => $bouteille->id]);
-    }
-
-    public function test_sync_capacites_vehicule_rejette_categorie_dupliquee(): void
-    {
-        $sachet = $this->makeCategorie($this->org, 'Sachet');
-        $vehicule = $this->makeVehicule($this->org);
-
-        $this->actingAs($this->user)
-            ->put("/backoffice/vehicules/{$vehicule->id}/capacites", [
-                'capacites' => [
-                    ['categorie_id' => $sachet->id, 'capacite_max' => 70],
-                    ['categorie_id' => $sachet->id, 'capacite_max' => 90],
-                ],
-            ])
-            ->assertSessionHasErrors();
-    }
-
-    public function test_sync_capacites_vehicule_returns_403_for_other_organization(): void
-    {
-        $autreOrg = Organization::factory()->create();
-        $vehicule = $this->makeVehicule($autreOrg);
-        $categorie = $this->makeCategorie($autreOrg, 'Sachet');
-
-        $this->actingAs($this->user)
-            ->put("/backoffice/vehicules/{$vehicule->id}/capacites", [
-                'capacites' => [['categorie_id' => $categorie->id, 'capacite_max' => 70]],
-            ])
-            ->assertStatus(403);
     }
 
     // ── Synchronisation des capacités (type de véhicule) ─────────────────────────

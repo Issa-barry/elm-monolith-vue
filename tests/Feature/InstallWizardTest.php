@@ -2,15 +2,19 @@
 
 namespace Tests\Feature;
 
+use App\Enums\DomaineActivite;
 use App\Models\AppInstallation;
 use App\Models\Categorie;
 use App\Models\OptionCatalogue;
 use App\Models\Organization;
+use App\Models\ProduitType;
 use App\Models\TypeVehicule;
 use App\Models\User;
+use App\Services\InstallationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -35,7 +39,7 @@ class InstallWizardTest extends TestCase
     private function payload(array $overrides = []): array
     {
         return array_replace_recursive([
-            'organisation' => ['nom' => 'ELM Test'],
+            'organisation' => ['nom' => 'ELM Test', 'domaine' => DomaineActivite::COMMERCE_DISTRIBUTION->value],
             'admin' => [
                 'prenom' => 'Issa',
                 'nom' => 'BARRY',
@@ -44,7 +48,6 @@ class InstallWizardTest extends TestCase
                 'password' => 'Sup3r$ecretPwd',
                 'password_confirmation' => 'Sup3r$ecretPwd',
             ],
-            'catalogue' => ['categories' => false, 'options' => false, 'types_vehicule' => false],
         ], $overrides);
     }
 
@@ -85,6 +88,32 @@ class InstallWizardTest extends TestCase
 
         $this->assertSame(2, Organization::whereIn('name', ['ELM Test', 'ELM Test 2'])->count());
         $this->assertSame(2, AppInstallation::count());
+    }
+
+    /**
+     * Le nom ne doit jamais servir d'identité technique en SaaS — deux entreprises indépendantes
+     * peuvent légitimement porter le même nom commercial (cf. mémo idempotence corrigé).
+     */
+    public function test_deux_organisations_saas_peuvent_porter_le_meme_nom(): void
+    {
+        config(['app.deployment_mode' => 'saas', 'app.install_token' => 'ma-cle-secrete']);
+
+        $this->withSession(['install_token_verified' => true])
+            ->post('/install', $this->payload())
+            ->assertOk();
+
+        $this->withSession(['install_token_verified' => true])
+            ->post('/install', $this->payload([
+                'admin' => ['telephone' => '+224622000001'],
+            ]))
+            ->assertOk();
+
+        $this->assertSame(2, Organization::where('name', 'ELM Test')->count());
+        $this->assertSame(
+            2,
+            Organization::where('name', 'ELM Test')->pluck('id')->unique()->count(),
+            'les deux organisations doivent avoir un identifiant distinct'
+        );
     }
 
     public function test_install_saas_sans_token_configure_refuse_avec_erreur_serveur(): void
@@ -197,45 +226,131 @@ class InstallWizardTest extends TestCase
         ]))->assertSessionHasErrors('admin.password');
     }
 
-    public function test_categories_oui_options_non(): void
-    {
-        $this->post('/install', $this->payload([
-            'catalogue' => ['categories' => true, 'options' => false],
-        ]))->assertOk();
-
-        $org = Organization::where('slug', 'elm-test')->firstOrFail();
-        $this->assertGreaterThan(0, Categorie::where('organization_id', $org->id)->count());
-        $this->assertSame(0, OptionCatalogue::where('organization_id', $org->id)->count());
-    }
-
-    public function test_categories_non_options_oui(): void
-    {
-        $this->post('/install', $this->payload([
-            'catalogue' => ['categories' => false, 'options' => true],
-        ]))->assertOk();
-
-        $org = Organization::where('slug', 'elm-test')->firstOrFail();
-        $this->assertSame(0, Categorie::where('organization_id', $org->id)->count());
-        $this->assertGreaterThan(0, OptionCatalogue::where('organization_id', $org->id)->count());
-    }
-
-    public function test_types_vehicule_oui(): void
-    {
-        $this->post('/install', $this->payload([
-            'catalogue' => ['types_vehicule' => true],
-        ]))->assertOk();
-
-        $org = Organization::where('slug', 'elm-test')->firstOrFail();
-        $this->assertSame(5, TypeVehicule::where('organization_id', $org->id)->count());
-        $this->assertTrue(TypeVehicule::where('organization_id', $org->id)->where('nom', 'Minibus')->exists());
-    }
-
-    public function test_installation_sans_catalogue_ne_cree_aucun_type_vehicule(): void
+    public function test_catalogue_par_defaut_est_toujours_cree(): void
     {
         $this->post('/install', $this->payload())->assertOk();
 
         $org = Organization::where('slug', 'elm-test')->firstOrFail();
-        $this->assertSame(0, TypeVehicule::where('organization_id', $org->id)->count());
+        $this->assertGreaterThan(0, Categorie::where('organization_id', $org->id)->count());
+        $this->assertGreaterThan(0, OptionCatalogue::where('organization_id', $org->id)->count());
+        $this->assertSame(5, TypeVehicule::where('organization_id', $org->id)->count());
+        $this->assertTrue(TypeVehicule::where('organization_id', $org->id)->where('nom', 'Minibus')->exists());
+        $this->assertTrue(ProduitType::where('organization_id', $org->id)->where('code', 'matiere_production')->exists());
+    }
+
+    public function test_aucun_site_nest_cree_pendant_linstallation(): void
+    {
+        $this->post('/install', $this->payload())->assertOk();
+
+        $org = Organization::where('slug', 'elm-test')->firstOrFail();
+        $this->assertSame(0, $org->sites()->count());
+    }
+
+    /**
+     * Propriétaire interne par défaut (véhicules "interne", commissions propriétaire) créé et
+     * rattaché à l'organisation dès l'installation — plus jamais deviné depuis un numéro de
+     * téléphone codé en dur (cf. Organization::proprietaireInterne(), Proprietaire::interneParDefautId()).
+     */
+    public function test_propriétaire_interne_est_cree_et_rattache_a_lorganisation(): void
+    {
+        $this->post('/install', $this->payload())->assertOk();
+
+        $org = Organization::where('slug', 'elm-test')->firstOrFail();
+        $user = User::where('telephone', '+224622000000')->firstOrFail();
+
+        $this->assertNotNull($org->proprietaire_interne_id);
+
+        $proprietaireInterne = $org->proprietaireInterne;
+        $this->assertNotNull($proprietaireInterne);
+        $this->assertSame($user->id, $proprietaireInterne->user_id);
+        $this->assertSame($user->nom, $proprietaireInterne->nom);
+        $this->assertSame($user->prenom, $proprietaireInterne->prenom);
+        $this->assertSame($user->telephone, $proprietaireInterne->telephone);
+        $this->assertSame($org->id, $proprietaireInterne->organization_id);
+    }
+
+    /**
+     * Deux organisations installées séparément ont chacune leur propre propriétaire interne —
+     * jamais partagé entre organisations (cf. Organization::proprietaire_interne_id, scoping
+     * strict par organization_id).
+     */
+    public function test_propriétaire_interne_nest_jamais_partage_entre_organisations(): void
+    {
+        config(['app.deployment_mode' => 'saas']);
+
+        app(InstallationService::class)->install(
+            organisation: ['nom' => 'Org A', 'domaine' => DomaineActivite::COMMERCE_DISTRIBUTION->value],
+            admin: [
+                'prenom' => 'Alpha', 'nom' => 'A', 'telephone' => '+224622111111',
+                'email' => null, 'password' => 'Sup3r$ecretPwd', 'password_confirmation' => 'Sup3r$ecretPwd',
+            ],
+        );
+        app(InstallationService::class)->install(
+            organisation: ['nom' => 'Org B', 'domaine' => DomaineActivite::COMMERCE_DISTRIBUTION->value],
+            admin: [
+                'prenom' => 'Beta', 'nom' => 'B', 'telephone' => '+224622222222',
+                'email' => null, 'password' => 'Sup3r$ecretPwd', 'password_confirmation' => 'Sup3r$ecretPwd',
+            ],
+        );
+
+        $orgA = Organization::where('slug', 'org-a')->firstOrFail();
+        $orgB = Organization::where('slug', 'org-b')->firstOrFail();
+
+        $this->assertNotSame($orgA->proprietaire_interne_id, $orgB->proprietaire_interne_id);
+        $this->assertSame($orgA->id, $orgA->proprietaireInterne->organization_id);
+        $this->assertSame($orgB->id, $orgB->proprietaireInterne->organization_id);
+    }
+
+    public function test_domaine_dactivite_est_persiste(): void
+    {
+        $this->post('/install', $this->payload([
+            'organisation' => ['domaine' => DomaineActivite::RESTAURATION->value],
+        ]))->assertOk();
+
+        $org = Organization::where('slug', 'elm-test')->firstOrFail();
+        $this->assertSame(DomaineActivite::RESTAURATION, $org->domaine_activite);
+
+        // Les catégories seedées reflètent le domaine choisi (Plats, pas Vêtements).
+        $this->assertTrue(Categorie::where('organization_id', $org->id)->where('nom', 'Plats')->exists());
+        $this->assertFalse(Categorie::where('organization_id', $org->id)->where('nom', 'Vêtements')->exists());
+    }
+
+    public function test_domaine_dactivite_obligatoire(): void
+    {
+        $this->post('/install', $this->payload([
+            'organisation' => ['domaine' => ''],
+        ]))->assertSessionHasErrors('organisation.domaine');
+
+        $this->assertFalse(AppInstallation::isInstalled());
+    }
+
+    public function test_domaine_dactivite_invalide_est_rejete(): void
+    {
+        $this->post('/install', $this->payload([
+            'organisation' => ['domaine' => 'pas-un-domaine'],
+        ]))->assertSessionHasErrors('organisation.domaine');
+    }
+
+    public function test_refuse_une_seconde_organisation_en_on_premise(): void
+    {
+        config(['app.deployment_mode' => 'on_premise']);
+
+        $this->post('/install', $this->payload())->assertOk();
+
+        // Le verrou web (isLocked → redirect login) ferme déjà /install normalement — ce test
+        // vérifie le filet de sécurité métier dans InstallationService lui-même, en simulant un
+        // appel qui contournerait isLocked() (ex: depuis la CLI, cf. InstallAppTest).
+        $service = app(InstallationService::class);
+
+        $this->expectException(ValidationException::class);
+
+        $service->install(
+            organisation: ['nom' => 'Autre Entreprise', 'domaine' => DomaineActivite::COMMERCE_DISTRIBUTION->value],
+            admin: [
+                'prenom' => 'Issa', 'nom' => 'BARRY', 'telephone' => '+224622000099', 'email' => null,
+                'password' => 'Sup3r$ecretPwd', 'password_confirmation' => 'Sup3r$ecretPwd',
+            ],
+        );
     }
 
     public function test_reutilise_organisation_existante_de_meme_nom_sans_dupliquer(): void

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Http\Responses\LoginResponse;
 use App\Models\Organization;
+use App\Models\Site;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
@@ -13,6 +14,18 @@ use Tests\TestCase;
 class LoginResponseTest extends TestCase
 {
     use RefreshDatabase;
+
+    /**
+     * Un site est nécessaire pour qu'un utilisateur staff soit redirigé vers le dashboard plutôt
+     * que l'onboarding du premier site (cf. AuthRedirects::defaultPathForUser) — sans rapport
+     * avec ce que ces tests vérifient (le choix dashboard/client selon le rôle), donc attaché
+     * systématiquement pour ne pas polluer leur intention.
+     */
+    private function attacherSite(User $user): void
+    {
+        $site = Site::create(['organization_id' => $user->organization_id, 'nom' => 'Siège', 'type' => 'siege']);
+        $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
+    }
 
     private function makeRequest(User $user, bool $wantsJson = false, ?string $intendedUrl = null): Request
     {
@@ -33,6 +46,7 @@ class LoginResponseTest extends TestCase
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('admin_entreprise');
+        $this->attacherSite($user);
 
         $request = $this->makeRequest($user);
         $loginResponse = new LoginResponse;
@@ -104,6 +118,7 @@ class LoginResponseTest extends TestCase
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('admin_entreprise');
+        $this->attacherSite($user);
 
         $request = $this->makeRequest($user, false, route('client.dashboard'));
         $loginResponse = new LoginResponse;

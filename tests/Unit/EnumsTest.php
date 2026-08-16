@@ -237,12 +237,15 @@ class EnumsTest extends TestCase
         $this->assertSame('Usine', SiteType::USINE->label());
         $this->assertSame('Dépôt', SiteType::DEPOT->label());
         $this->assertSame('Agence', SiteType::AGENCE->label());
+        $this->assertSame('Boutique / Point de vente', SiteType::BOUTIQUE->label());
+        $this->assertSame('Restaurant', SiteType::RESTAURANT->label());
+        $this->assertSame('Autre', SiteType::AUTRE->label());
     }
 
     public function test_site_type_options(): void
     {
         $options = SiteType::options();
-        $this->assertCount(4, $options);
+        $this->assertCount(7, $options);
     }
 
     // ── ProduitType ───────────────────────────────────────────────────────────
