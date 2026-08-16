@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
@@ -17,12 +18,16 @@ import {
     Square,
     Users,
 } from 'lucide-vue-next';
+import InputText from 'primevue/inputtext';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
 interface RoleData {
     id: number;
     name: string;
+    label: string;
+    code: string | null;
+    is_system: boolean;
     permissions: string[];
     users_count: number;
 }
@@ -34,30 +39,6 @@ const props = defineProps<{
 }>();
 
 const toast = useToast();
-
-const roleConfig: Record<string, { label: string; color: string; bg: string }> =
-    {
-        super_admin: {
-            label: 'Super Admin',
-            color: 'text-violet-600 dark:text-violet-400',
-            bg: 'bg-violet-50 dark:bg-violet-950/40',
-        },
-        admin_entreprise: {
-            label: 'Admin Entreprise',
-            color: 'text-blue-600 dark:text-blue-400',
-            bg: 'bg-blue-50 dark:bg-blue-950/40',
-        },
-        commerciale: {
-            label: 'Commerciale',
-            color: 'text-emerald-600 dark:text-emerald-400',
-            bg: 'bg-emerald-50 dark:bg-emerald-950/40',
-        },
-        comptable: {
-            label: 'Comptable',
-            color: 'text-amber-600 dark:text-amber-400',
-            bg: 'bg-amber-50 dark:bg-amber-950/40',
-        },
-    };
 
 const resourceLabels: Record<string, string> = {
     // Personnes
@@ -109,14 +90,6 @@ const actionLabels: Record<string, { label: string; color: string }> = {
 };
 
 const isSuperAdmin = computed(() => props.role.name === 'super_admin');
-const cfg = computed(
-    () =>
-        roleConfig[props.role.name] ?? {
-            label: props.role.name,
-            color: 'text-muted-foreground',
-            bg: 'bg-muted',
-        },
-);
 
 const activePermissions = ref<Set<string>>(
     new Set(
@@ -127,6 +100,10 @@ const activePermissions = ref<Set<string>>(
             : props.role.permissions,
     ),
 );
+
+const codeInput = ref(props.role.code ?? '');
+const labelInput = ref(props.role.label);
+const identityErrors = ref<{ code?: string; label?: string }>({});
 
 const saving = ref(false);
 const flashSuccess = ref(false);
@@ -194,40 +171,52 @@ const totalPossible = computed(
 );
 
 function save() {
-    if (isSuperAdmin.value) return;
     saving.value = true;
+    identityErrors.value = {};
 
-    router.put(
-        `/backoffice/roles/${props.role.id}`,
-        { permissions: [...activePermissions.value] },
-        {
-            onSuccess: () => {
-                flashSuccess.value = true;
-                setTimeout(() => {
-                    flashSuccess.value = false;
-                }, 3000);
-                toast.add({
-                    severity: 'success',
-                    summary: 'Permissions mises à jour',
-                    life: 3000,
-                });
-            },
-            onFinish: () => {
-                saving.value = false;
-            },
+    const payload: Record<string, unknown> = {
+        permissions: [...activePermissions.value],
+    };
+    // Rôle protégé (super_admin) : ni libellé ni trinôme envoyés — le backend les rejette de
+    // toute façon (règle "prohibited"), autant ne jamais les inclure côté client.
+    if (!isSuperAdmin.value) {
+        payload.label = labelInput.value;
+        payload.code = codeInput.value || null;
+    }
+
+    router.put(`/backoffice/roles/${props.role.id}`, payload, {
+        onSuccess: () => {
+            flashSuccess.value = true;
+            setTimeout(() => {
+                flashSuccess.value = false;
+            }, 3000);
+            toast.add({
+                severity: 'success',
+                summary: 'Rôle mis à jour',
+                life: 3000,
+            });
         },
-    );
+        onError: (errors) => {
+            identityErrors.value = {
+                code: errors.code,
+                label: errors.label,
+            };
+        },
+        onFinish: () => {
+            saving.value = false;
+        },
+    });
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dashboard', href: '/backoffice/dashboard' },
     { title: 'Rôles & Permissions', href: '/backoffice/roles' },
-    { title: cfg.value.label, href: '#' },
+    { title: role.label, href: '#' },
 ];
 </script>
 
 <template>
-    <Head :title="`Permissions — ${cfg.label}`" />
+    <Head :title="`Permissions — ${role.label}`" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
         <div
@@ -239,7 +228,7 @@ const breadcrumbs: BreadcrumbItem[] = [
                 </Button>
             </Link>
             <p class="flex-1 truncate text-center text-sm font-semibold">
-                Permissions — {{ cfg.label }}
+                Permissions — {{ role.label }}
             </p>
             <div class="w-8 shrink-0" />
         </div>
@@ -256,31 +245,27 @@ const breadcrumbs: BreadcrumbItem[] = [
                     </Link>
 
                     <div
-                        class="flex h-10 w-10 items-center justify-center rounded-lg"
-                        :class="cfg.bg"
+                        class="flex h-10 w-10 items-center justify-center rounded-lg bg-muted"
                     >
                         <ShieldCheck
-                            v-if="role.name === 'super_admin'"
-                            class="h-5 w-5"
-                            :class="cfg.color"
+                            v-if="isSuperAdmin"
+                            class="h-5 w-5 text-muted-foreground"
                         />
                         <Shield
                             v-else-if="role.name === 'admin_entreprise'"
-                            class="h-5 w-5"
-                            :class="cfg.color"
+                            class="h-5 w-5 text-muted-foreground"
                         />
                         <Users
                             v-else-if="role.name === 'commerciale'"
-                            class="h-5 w-5"
-                            :class="cfg.color"
+                            class="h-5 w-5 text-muted-foreground"
                         />
-                        <Lock v-else class="h-5 w-5" :class="cfg.color" />
+                        <Lock v-else class="h-5 w-5 text-muted-foreground" />
                     </div>
 
                     <div>
                         <div class="flex items-center gap-2">
                             <h1 class="text-xl font-semibold">
-                                {{ cfg.label }}
+                                {{ role.label }}
                             </h1>
                             <Badge
                                 v-if="isSuperAdmin"
@@ -305,6 +290,55 @@ const breadcrumbs: BreadcrumbItem[] = [
                 </div>
             </div>
 
+            <!-- Identité du rôle -->
+            <div
+                class="flex flex-col gap-4 rounded-xl border bg-card p-4 shadow-sm sm:flex-row sm:items-start sm:p-6"
+            >
+                <template v-if="!isSuperAdmin">
+                    <div class="w-full sm:max-w-xs">
+                        <Label for="role-label" class="mb-1.5 block text-xs"
+                            >Nom du rôle</Label
+                        >
+                        <InputText
+                            id="role-label"
+                            v-model="labelInput"
+                            class="w-full"
+                            :class="{ 'p-invalid': identityErrors.label }"
+                        />
+                        <p
+                            v-if="identityErrors.label"
+                            class="mt-1 text-xs text-destructive"
+                        >
+                            {{ identityErrors.label }}
+                        </p>
+                    </div>
+
+                    <div class="w-full max-w-[10rem]">
+                        <Label for="role-code" class="mb-1.5 block text-xs"
+                            >Trinôme / abréviation</Label
+                        >
+                        <InputText
+                            id="role-code"
+                            v-model="codeInput"
+                            class="w-full"
+                            :class="{ 'p-invalid': identityErrors.code }"
+                            placeholder="Ex: PDG"
+                            maxlength="10"
+                        />
+                        <p
+                            v-if="identityErrors.code"
+                            class="mt-1 text-xs text-destructive"
+                        >
+                            {{ identityErrors.code }}
+                        </p>
+                    </div>
+                </template>
+                <p v-else class="text-xs text-muted-foreground italic">
+                    Rôle système — ni le nom ni le trinôme ne peuvent être
+                    modifiés.
+                </p>
+            </div>
+
             <!-- Matrice des permissions -->
             <div
                 class="overflow-hidden overflow-x-auto rounded-xl border bg-card shadow-sm"
@@ -323,12 +357,7 @@ const breadcrumbs: BreadcrumbItem[] = [
                                 Sauvegardé
                             </span>
                         </transition>
-                        <Button
-                            v-if="!isSuperAdmin"
-                            size="sm"
-                            :disabled="saving"
-                            @click="save"
-                        >
+                        <Button size="sm" :disabled="saving" @click="save">
                             <Save class="mr-2 h-4 w-4" />
                             {{ saving ? 'Enregistrement…' : 'Enregistrer' }}
                         </Button>
