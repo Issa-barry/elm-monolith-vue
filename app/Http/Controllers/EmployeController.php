@@ -191,7 +191,7 @@ class EmployeController extends Controller
             'prenom' => mb_convert_case(mb_strtolower($data['prenom'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8'),
             'email' => $data['email'] ?? null,
             'telephone' => $data['telephone'] ?? null,
-            'telephone_normalise' => $data['telephone'] ? Personne::normaliserTelephone($data['telephone']) : null,
+            'telephone_normalise' => isset($data['telephone']) ? Personne::normaliserTelephone($data['telephone']) : null,
         ]);
 
         $employe->update([

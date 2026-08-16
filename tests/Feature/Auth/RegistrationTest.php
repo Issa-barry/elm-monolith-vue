@@ -256,7 +256,8 @@ class RegistrationTest extends TestCase
 
     public function test_registration_fails_when_phone_already_in_users(): void
     {
-        User::factory()->create(['telephone' => '+224620000005']);
+        $org = $this->createOrgWithInscription();
+        User::factory()->create(['organization_id' => $org->id, 'telephone' => '+224620000005']);
 
         $this->withVerifiedOtp('+224620000005')
             ->post(route('register.store'), [
@@ -342,7 +343,8 @@ class RegistrationTest extends TestCase
 
     public function test_registration_fails_with_duplicate_email(): void
     {
-        User::factory()->create(['email' => 'existing@example.com']);
+        $org = $this->createOrgWithInscription();
+        User::factory()->create(['organization_id' => $org->id, 'email' => 'existing@example.com']);
 
         $this->post(route('register.store'), [
             'prenom' => 'Test',

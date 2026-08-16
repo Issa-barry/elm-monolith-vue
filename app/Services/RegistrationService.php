@@ -72,6 +72,13 @@ class RegistrationService
         }
 
         $hasEmail = filled($data->email);
+
+        if ($hasEmail && UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_EMAIL, UserAuthIdentity::normaliser(UserAuthIdentity::TYPE_EMAIL, $data->email)) !== null) {
+            throw ValidationException::withMessages([
+                'email' => 'Un compte existe déjà avec cette adresse e-mail. Veuillez vous connecter.',
+            ]);
+        }
+
         $token = Str::random(64);
 
         $user = DB::transaction(function () use ($data, $phone, $token, $hasEmail) {

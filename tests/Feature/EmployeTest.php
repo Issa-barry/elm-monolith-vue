@@ -226,8 +226,8 @@ class EmployeTest extends TestCase
         $otherOrg = Organization::factory()->create();
 
         // Same matricule allowed across different orgs
-        Employe::create(['organization_id' => $this->org->id,   'matricule' => '000001', 'nom' => 'A', 'prenom' => 'A', 'type_employe' => 'interne', 'statut' => 'actif']);
-        Employe::create(['organization_id' => $otherOrg->id,    'matricule' => '000001', 'nom' => 'B', 'prenom' => 'B', 'type_employe' => 'interne', 'statut' => 'actif']);
+        $this->makeEmploye(['organization_id' => $this->org->id, 'matricule' => '000001', 'nom' => 'A', 'prenom' => 'A']);
+        $this->makeEmploye(['organization_id' => $otherOrg->id, 'matricule' => '000001', 'nom' => 'B', 'prenom' => 'B']);
 
         $this->assertDatabaseCount('employes', 2);
     }
