@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\StatutImportFlotte;
+use App\Enums\TypeImportFlotte;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -20,6 +21,7 @@ class ImportFlotte extends Model
         'fichier_original',
         'fichier_path',
         'statut',
+        'type',
         'nb_lignes_total',
         'nb_groupes_valides',
         'nb_groupes_erreur',
@@ -37,6 +39,7 @@ class ImportFlotte extends Model
     {
         return [
             'statut' => StatutImportFlotte::class,
+            'type' => TypeImportFlotte::class,
             'rapport' => 'array',
             'analyse_le' => 'datetime',
             'demarre_le' => 'datetime',

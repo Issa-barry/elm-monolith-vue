@@ -10,12 +10,11 @@ import type { DefineComponent } from 'vue';
 import { createApp, h } from 'vue';
 import { initializeTheme } from './composables/useAppearance';
 import {
-    applyAppThemeColors,
-    applyStoredPrimeVueColors,
-    getPrimeVueThemePreset,
-    getStoredPrimeVueTheme,
-    resolvePrimeVueThemeFromEnv,
-} from './lib/primevue-theme';
+    applyEnvironmentTheme,
+    watchEnvironmentTheme,
+} from './composables/useEnvironmentTheme';
+import { getPrimeVueThemePreset } from './lib/primevue-theme';
+import type { ThemeSharedProps } from './types/theme';
 
 // Quand la session expire, Inertia suit la redirection vers /login avec la
 // même méthode HTTP (PUT/PATCH/DELETE) ce qui génère un 405. On force un
@@ -29,9 +28,6 @@ router.on('invalid', (event) => {
 });
 
 const appName = import.meta.env.VITE_APP_NAME || 'Eau-la-maman';
-const initialPrimeVueTheme =
-    getStoredPrimeVueTheme() ?? resolvePrimeVueThemeFromEnv();
-const { preset: primeVuePreset } = getPrimeVueThemePreset(initialPrimeVueTheme);
 
 // Apply light/dark class before the app mounts to avoid a flash of wrong theme.
 initializeTheme();
@@ -44,6 +40,17 @@ createInertiaApp({
             import.meta.glob<DefineComponent>('./pages/**/*.vue'),
         ),
     setup({ el, App, props, plugin }) {
+        // Thème global résolu côté serveur (ThemePolicyService, partagé via
+        // HandleInertiaRequests) — jamais localStorage/VITE_* pour ces 3 axes,
+        // cf. docs/theming.md. `props` contient déjà la page initiale ici, donc
+        // ceci est synchrone, pas de flash lié à un aller-retour réseau.
+        const initialTheme = (
+            props.initialPage.props as { theme: ThemeSharedProps }
+        ).theme.active;
+        const { preset: primeVuePreset } = getPrimeVueThemePreset(
+            initialTheme.preset,
+        );
+
         const app = createApp({ render: () => h(App, props) })
             .use(plugin)
             .use(PrimeVue, {
@@ -197,13 +204,10 @@ createInertiaApp({
                 },
             });
 
-        const { primary, surface } =
-            applyStoredPrimeVueColors(initialPrimeVueTheme);
-        applyAppThemeColors(
-            primary,
-            surface,
-            document.documentElement.classList.contains('dark'),
-        );
+        applyEnvironmentTheme(initialTheme);
+        // Garde les couleurs synchronisées avec le prop `theme` à chaque
+        // navigation Inertia et après tout changement fait par un admin.
+        watchEnvironmentTheme();
 
         app.use(ConfirmationService).use(ToastService).mount(el);
     },

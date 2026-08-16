@@ -301,7 +301,9 @@ class DepenseController extends Controller
                 ? trim("{$vehicule->proprietaire->prenom} {$vehicule->proprietaire->nom}")
                 : '—',
             'site' => $vehicule->site?->nom ?? '—',
-            'categorie' => $vehicule->categorie,
+            // Propriété réelle du véhicule — plus jamais reconstruite depuis
+            // livraison_logistique (confusion usage/propriété corrigée, cf. Vehicule::categorie).
+            'categorie' => $vehicule->categorie->value,
         ]);
     }
 
@@ -1106,7 +1108,11 @@ class DepenseController extends Controller
                 'id' => $v->id,
                 'nom_vehicule' => $v->nom_vehicule,
                 'immatriculation' => $v->immatriculation,
-                'categorie' => $v->categorie,
+                // Propriété réelle du véhicule — plus jamais reconstruite depuis
+                // livraison_logistique (confusion usage/propriété corrigée, cf. Vehicule::categorie).
+                // Consommé par Depenses/Create.vue et Edit.vue (vehiculeContext) pour distinguer
+                // "ELM" d'un propriétaire tiers dans le picker.
+                'categorie' => $v->categorie->value,
                 'site_nom' => $v->site?->nom,
                 'proprietaire_nom' => $v->proprietaire
                     ? trim("{$v->proprietaire->prenom} {$v->proprietaire->nom}")

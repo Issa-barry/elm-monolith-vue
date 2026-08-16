@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\CategorieVehicule;
 use App\Models\Categorie;
 use App\Models\Depense;
 use App\Models\EquipeLivreur;
@@ -51,6 +52,8 @@ class VehiculeController extends Controller
             'capacite_bouteilles' => $v->capacite_bouteilles ?? $v->typeVehicule?->capacite_defaut_bouteilles,
             'site_id' => $v->site_id,
             'site_nom' => $v->relationLoaded('site') ? $v->site?->nom : null,
+            'categorie' => $v->categorie?->value,
+            'categorie_label' => $v->categorie_label,
             'proprietaire_id' => $v->proprietaire_id,
             'proprietaire_nom' => $v->proprietaire ? trim($v->proprietaire->prenom.' '.$v->proprietaire->nom) : null,
             'proprietaire_telephone' => $v->proprietaire?->telephone,
@@ -96,6 +99,7 @@ class VehiculeController extends Controller
                 : [],
             'livraison_vente' => $v->livraison_vente,
             'livraison_logistique' => $v->livraison_logistique,
+            'usage_label' => $v->usage_label,
             'photo_url' => $v->photo_url,
             'is_active' => $v->is_active,
         ];
@@ -187,6 +191,7 @@ class VehiculeController extends Controller
         return Inertia::render('Vehicules/Create', [
             'proprietaires' => $this->proprietairesOptions(),
             'types' => $this->typesOptions(),
+            'categories_vehicule' => CategorieVehicule::options(),
             'initial_proprietaire_id' => $initialProprietaireId,
             'sites' => $this->sitesOptions($user, $orgId),
             'default_site_id' => $defaultSiteId,
@@ -223,6 +228,7 @@ class VehiculeController extends Controller
         // propriétaire tiers explicitement choisi, le véhicule est réputé appartenir à
         // l'organisation elle-même (propriétaire par défaut).
         $data['proprietaire_id'] ??= Proprietaire::interneParDefautId($orgId);
+        $this->ensureCategorieCoherente($data, $orgId);
 
         if ($request->hasFile('photo')) {
             $data['photo_path'] = (new ImageService)->storeAsWebp($request->file('photo'), 'vehicules');
@@ -294,6 +300,8 @@ class VehiculeController extends Controller
             'depenses' => $depenses,
             'equipe' => $equipeData,
             'proprietaires' => $this->proprietairesOptions(),
+            // Catégories de dépenses (carburant/réparation/autre) — sans rapport avec
+            // Vehicule::categorie (INTERNE/PARTENAIRE), qui n'a pas de sélecteur sur cet écran.
             'categories' => $this->categoriesOptions(),
             'default_proprietaire_id' => Proprietaire::interneParDefautId($vehicule->organization_id),
         ]);
@@ -402,6 +410,7 @@ class VehiculeController extends Controller
             'vehicule' => $this->vehiculeData($vehicule),
             'proprietaires' => $this->proprietairesOptions(),
             'types' => $this->typesOptions(),
+            'categories_vehicule' => CategorieVehicule::options(),
             'sites' => $this->sitesOptions($user, $orgId),
             'can_change_site' => $user->isAdmin(),
             'default_proprietaire_id' => Proprietaire::interneParDefautId($orgId),
@@ -432,6 +441,7 @@ class VehiculeController extends Controller
         $data = $this->normalizeStrings($data);
 
         $data['proprietaire_id'] ??= Proprietaire::interneParDefautId($orgId);
+        $this->ensureCategorieCoherente($data, $orgId);
 
         if ($request->hasFile('photo')) {
             $imageService = new ImageService;
@@ -589,6 +599,26 @@ class VehiculeController extends Controller
             ->value('id');
     }
 
+    /**
+     * Compare sur `immatriculation_normalisee` (tirets/espaces/points/casse ignorés, cf.
+     * Vehicule::normaliserImmatriculation()) plutôt que sur `immatriculation` brut : deux
+     * saisies qui désignent la même plaque ("BK-4627-02" vs "bk 4627 02") doivent être
+     * rejetées comme un doublon, pas seulement une chaîne strictement identique.
+     */
+    private function immatriculationUniqueRule(string $orgId, ?Vehicule $vehicule): \Closure
+    {
+        return function (string $attribute, mixed $value, \Closure $fail) use ($orgId, $vehicule) {
+            $conflit = Vehicule::where('organization_id', $orgId)
+                ->where('immatriculation_normalisee', Vehicule::normaliserImmatriculation((string) $value))
+                ->when($vehicule, fn ($q) => $q->where('id', '!=', $vehicule->id))
+                ->first();
+
+            if ($conflit) {
+                $fail("Ce matricule correspond déjà au véhicule \"{$conflit->nom_vehicule}\" ({$conflit->immatriculation}).");
+            }
+        };
+    }
+
     private function normalizeStrings(array $data): array
     {
         if (! empty($data['nom_vehicule'])) {
@@ -607,14 +637,9 @@ class VehiculeController extends Controller
      */
     private function validationRules(string $orgId, ?Vehicule $vehicule = null): array
     {
-        $immatriculationRule = Rule::unique('vehicules', 'immatriculation')->where('organization_id', $orgId);
-        if ($vehicule) {
-            $immatriculationRule = $immatriculationRule->ignore($vehicule->id);
-        }
-
         return [
             'nom_vehicule' => 'required|string|max:100',
-            'immatriculation' => ['required', 'string', 'max:20', $immatriculationRule],
+            'immatriculation' => ['required', 'string', 'max:20', $this->immatriculationUniqueRule($orgId, $vehicule)],
             'type_vehicule_id' => [
                 'required', 'string',
                 Rule::exists('type_vehicules', 'id')->where('organization_id', $orgId)->whereNull('deleted_at'),
@@ -634,6 +659,7 @@ class VehiculeController extends Controller
                 'string',
                 Rule::exists('proprietaires', 'id')->where('organization_id', $orgId),
             ],
+            'categorie' => ['required', Rule::enum(CategorieVehicule::class)],
             'livraison_vente' => 'required|boolean',
             'livraison_logistique' => 'required|boolean',
             'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
@@ -657,17 +683,40 @@ class VehiculeController extends Controller
         ]);
     }
 
+    /**
+     * Cohérence catégorie ↔ propriétaire — appliquée après résolution du propriétaire par
+     * défaut (store()/update()), donc $data['proprietaire_id'] est toujours renseigné ici.
+     * Règle centralisée dans CategorieVehicule::coherentAvecProprietaireTiers() pour que
+     * formulaire, import et conversion de proposition l'appliquent identiquement.
+     */
+    private function ensureCategorieCoherente(array $data, string $orgId): void
+    {
+        $categorie = CategorieVehicule::from($data['categorie']);
+        $interneId = Proprietaire::interneParDefautId($orgId);
+        $proprietaireEstTiers = $data['proprietaire_id'] !== null && $data['proprietaire_id'] !== $interneId;
+
+        if ($categorie->coherentAvecProprietaireTiers($proprietaireEstTiers)) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'categorie' => $categorie === CategorieVehicule::PARTENAIRE
+                ? 'Un véhicule partenaire doit avoir un véritable propriétaire tiers (le propriétaire interne par défaut ne peut pas être utilisé).'
+                : 'Un véhicule interne ne peut pas avoir de propriétaire tiers — laissez le propriétaire vide ou choisissez le propriétaire interne.',
+        ]);
+    }
+
     private function messages(): array
     {
         return [
             'nom_vehicule.required' => 'Le nom du véhicule est obligatoire.',
             'immatriculation.required' => "L'immatriculation est obligatoire.",
-            'immatriculation.unique' => 'Ce matricule est déjà utilisé par un autre véhicule.',
             'type_vehicule_id.required' => 'Le type de véhicule est obligatoire.',
             'type_vehicule_id.exists' => 'Type de véhicule invalide.',
             'site_id.required' => 'Le site est obligatoire.',
             'site_id.exists' => 'Le site sélectionné est introuvable.',
             'proprietaire_id.exists' => 'Le propriétaire sélectionné est introuvable.',
+            'categorie.required' => 'La catégorie du véhicule est obligatoire.',
             'photo.image' => 'Le fichier doit être une image.',
             'photo.mimes' => 'La photo doit être au format jpg, jpeg, png ou webp.',
             'photo.max' => 'La photo ne peut pas dépasser 3 Mo.',

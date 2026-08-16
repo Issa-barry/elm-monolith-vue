@@ -335,10 +335,14 @@ class PaiementPeriodeController extends Controller
             'validated_at' => now(),
         ]);
 
+        // Seul moment où les commissions de vente encore CREEE de cette période
+        // deviennent payables — cf. CommissionAdjustmentService::activerCommissionsCreees().
+        $nbCommissionsActivees = CommissionAdjustmentService::activerCommissionsCreees($periode);
+
         app(AuditLogService::class)->record($periode, AuditEvent::VALIDATED, auth()->user(), null, null, [
             'module' => 'periodes_paiement',
             'site_id' => $periode->site_id,
-            'description' => "Période {$periode->reference} validée",
+            'description' => "Période {$periode->reference} validée ({$nbCommissionsActivees} commission(s) de vente activée(s))",
         ]);
 
         // Comptabilité générale : engagement de la dette envers chaque bénéficiaire,

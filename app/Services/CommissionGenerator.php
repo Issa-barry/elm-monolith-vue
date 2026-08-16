@@ -46,10 +46,9 @@ class CommissionGenerator
 
         $vehicule = $commande->vehicule;
 
-        // Sécurité : si la commande est déjà encaissable (legacy / appel hors workflow normal),
-        // on active directement plutôt que de créer une commission qui resterait bloquée à CREEE.
-        $statutInitial = $commande->isEncaissable() ? StatutCommission::IMPAYE : StatutCommission::CREEE;
-
+        // Toujours créée en CREEE : elle ne devient IMPAYE(E) qu'à la validation
+        // de la période de paiement qui la couvre, jamais avant — cf.
+        // CommissionAdjustmentService::activerCommissionsCreees().
         $commission = CommissionVente::create([
             'organization_id' => $commande->organization_id,
             'commande_vente_id' => $commande->id,
@@ -57,7 +56,7 @@ class CommissionGenerator
             'montant_commande' => (float) $commande->total_commande,
             'montant_commission_totale' => $calc['commission_totale'],
             'montant_verse' => 0,
-            'statut' => $statutInitial->value,
+            'statut' => StatutCommission::CREEE->value,
         ]);
 
         foreach ($calc['parts'] as $part) {
@@ -73,13 +72,16 @@ class CommissionGenerator
                 'frais_supplementaires' => $part['frais_supplementaires'],
                 'montant_net' => $part['montant_net'],
                 'montant_verse' => 0,
-                'statut' => $statutInitial->value,
+                'statut' => StatutCommission::CREEE->value,
             ]);
         }
 
         // Une nouvelle commission sur une quinzaine déjà "Calculée" ne doit pas y rester
         // silencieusement absente : on recalcule immédiatement plutôt que d'attendre la
-        // prochaine ouverture de la page période (cf. PeriodeCalculatorService).
-        app(PeriodeCalculatorService::class)->recalculerPeriodesConcernees($commande->organization_id, $commande->created_at);
+        // prochaine ouverture de la page période (cf. PeriodeCalculatorService). Date de
+        // la commission elle-même (= validation du chargement), pas de la commande : ce
+        // sont ces deux dates que PeriodeCalculatorService et PeriodePayabilityChecker
+        // doivent utiliser de façon cohérente pour rattacher une part à sa période.
+        app(PeriodeCalculatorService::class)->recalculerPeriodesConcernees($commande->organization_id, $commission->created_at);
     }
 }

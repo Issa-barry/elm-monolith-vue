@@ -108,6 +108,9 @@ class BesoinTresorerieServiceTest extends TestCase
             'montant_verse' => 0,
             'statut' => $statut,
         ]);
+        // La période est résolue sur la date de la commission elle-même (naissance
+        // au chargement réel), pas sur celle de la commande — cf. PeriodeCalculatorService.
+        $commission->forceFill(['created_at' => $date])->saveQuietly();
 
         return CommissionPart::create([
             'commission_vente_id' => $commission->id,

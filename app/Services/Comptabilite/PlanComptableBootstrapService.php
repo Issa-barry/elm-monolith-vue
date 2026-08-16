@@ -64,6 +64,8 @@ class PlanComptableBootstrapService
             '467140' => 'Livreurs — avances et dépenses à récupérer',
             '467150' => 'Propriétaires — charges à payer (provision de clôture)',
             '467160' => 'Livreurs — charges à payer (provision de clôture)',
+            '411000' => 'Clients',
+            '701000' => 'Ventes de marchandises',
             '571000' => 'Caisse',
             '521000' => 'Banque',
             '561000' => 'Mobile Money (générique)',
@@ -134,6 +136,27 @@ class PlanComptableBootstrapService
             ['paiement_livreur', 'tresorerie', 'mobile_money:djomy', '561300', 'MM'],
             ['paiement_livreur', 'tresorerie', 'virement', '521000', 'BQ'],
             ['paiement_livreur', 'tresorerie', 'cheque', '521000', 'BQ'],
+
+            // Vente facturée (engagement — créance client constatée à la sortie du
+            // statut CREEE de la facture, montant définitif). Journal VE, provisionné
+            // ci-dessus mais resté inutilisé jusqu'ici (V1 se limitait aux commissions).
+            ['vente_facturee', 'client', null, '411000', 'VE'],
+            ['vente_facturee', 'produit_vente', null, '701000', 'VE'],
+
+            // Encaissement client (règlement — solde tout ou partie de la créance).
+            // Journal résolu via la ligne trésorerie (moyen_paiement réel), comme pour
+            // paiement_proprietaire/paiement_livreur ci-dessus — mêmes 4 valeurs
+            // App\Enums\ModePaiement (especes/mobile_money/virement/cheque), même
+            // chaîne de repli CompteMappingResolver.
+            ['encaissement_vente_recu', 'client', null, '411000', null],
+            ['encaissement_vente_recu', 'tresorerie', null, '571000', 'CA'],
+            ['encaissement_vente_recu', 'tresorerie', 'especes', '571000', 'CA'],
+            ['encaissement_vente_recu', 'tresorerie', 'mobile_money', '561000', 'MM'],
+            ['encaissement_vente_recu', 'tresorerie', 'mobile_money:orange', '561100', 'MM'],
+            ['encaissement_vente_recu', 'tresorerie', 'mobile_money:mtn', '561200', 'MM'],
+            ['encaissement_vente_recu', 'tresorerie', 'mobile_money:djomy', '561300', 'MM'],
+            ['encaissement_vente_recu', 'tresorerie', 'virement', '521000', 'BQ'],
+            ['encaissement_vente_recu', 'tresorerie', 'cheque', '521000', 'BQ'],
 
             // Dépense interne (vraie charge ELM)
             ['depense_interne_validee', 'charge_defaut', null, '628800', 'OD'],

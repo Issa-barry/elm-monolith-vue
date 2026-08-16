@@ -3,12 +3,14 @@
 namespace App\Models;
 
 use App\Enums\ModePaiement;
+use App\Services\Comptabilite\VenteComptabilisationService;
 use App\Services\JournalTresorerieService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class EncaissementVente extends Model
 {
@@ -49,6 +51,17 @@ class EncaissementVente extends Model
                 $facture->commande->cloturerSiComplete();
             }
             JournalTresorerieService::enregistrerEncaissement($e);
+
+            // Comptabilité générale, en aval — ne doit jamais empêcher un encaissement
+            // métier d'être enregistré (mode shadow, même principe que DepenseObserver).
+            try {
+                app(VenteComptabilisationService::class)->comptabiliserEncaissementVente($e);
+            } catch (\Throwable $ex) {
+                Log::error('Comptabilisation encaissement vente échouée', [
+                    'encaissement_id' => $e->id,
+                    'error' => $ex->getMessage(),
+                ]);
+            }
         });
 
         static::deleted(function (EncaissementVente $e) {

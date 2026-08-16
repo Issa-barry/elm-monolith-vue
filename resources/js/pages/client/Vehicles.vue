@@ -172,7 +172,7 @@ onMounted(() => {
                                 </th>
                                 <th class="py-2 pr-4 font-medium">Type</th>
                                 <th class="py-2 pr-4 font-medium">
-                                    Capacite (packs)
+                                    Capacite (sachets)
                                 </th>
                                 <th class="py-2 pr-0 font-medium">Statut</th>
                             </tr>
@@ -372,7 +372,7 @@ onMounted(() => {
                             <div>
                                 <label
                                     class="text-sm font-medium text-foreground"
-                                    >Capacite (packs)</label
+                                    >Capacite (sachets)</label
                                 >
                                 <div class="relative mt-1">
                                     <input

@@ -457,7 +457,7 @@ function submit() {
                                                     class="before:mr-2 before:content-['·']"
                                                 >
                                                     {{ option.capacite_packs }}
-                                                    packs
+                                                    sachets
                                                 </span>
                                                 <span
                                                     v-if="option.equipe_nom"
@@ -516,7 +516,7 @@ function submit() {
                             {{
                                 capaciteVehiculeSelectionne === null
                                     ? 'non définie'
-                                    : `${capaciteVehiculeSelectionne} packs`
+                                    : `${capaciteVehiculeSelectionne} sachets`
                             }}
                             · Quantité saisie: {{ quantiteTotale }} packs
                             <template

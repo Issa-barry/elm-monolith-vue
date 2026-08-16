@@ -10,8 +10,10 @@ use App\Enums\StatutFactureVente;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
 use App\Models\FactureVente;
+use App\Services\Comptabilite\VenteComptabilisationService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 
@@ -40,10 +42,9 @@ class CommandeVenteService
     /**
      * BROUILLON → A_CHARGER.
      * Vérifie qu'il y a au moins une ligne et (optionnellement) un véhicule.
-     * Crée dans le même mouvement la facture et les commissions associées,
-     * en statut « Créée » (basées sur les quantités demandées) : elles existent
-     * dès la commande mais ne deviennent encaissables/payables qu'à la validation
-     * du chargement (cf. validerChargement()).
+     * Crée dans le même mouvement la facture associée, en statut « Créée ».
+     * Aucune commission n'est générée à ce stade : elle naît du chargement réel,
+     * pas de la commande — cf. validerChargement().
      */
     public static function confirmer(CommandeVente $commande): void
     {
@@ -57,20 +58,20 @@ class CommandeVenteService
                 'a_charger_at' => now(),
             ]);
 
-            self::creerFactureEtCommissionsInitiales($commande);
+            self::creerFactureInitiale($commande);
         });
     }
 
     /**
-     * Crée la facture (statut CREEE) et, si le véhicule a une équipe, les
-     * commissions (statut CREEE) — idempotent : ne recrée rien si déjà présent.
+     * Crée la facture (statut CREEE) — idempotent : ne la recrée pas si déjà
+     * présente.
      */
-    private static function creerFactureEtCommissionsInitiales(CommandeVente $commande): void
+    private static function creerFactureInitiale(CommandeVente $commande): void
     {
         // load() (et non loadMissing()) : si un appel précédent sur cette même
         // instance a mis en cache une relation "facture" nulle avant sa création,
         // loadMissing() ne la rafraîchirait pas et provoquerait une double création.
-        $commande->load('facture', 'vehicule');
+        $commande->load('facture');
 
         if (! $commande->facture) {
             FactureVente::create([
@@ -82,10 +83,6 @@ class CommandeVenteService
                 'montant_brut' => $commande->total_commande,
                 'montant_net' => $commande->total_commande,
             ]);
-        }
-
-        if ($commande->vehicule_id && $commande->vehicule) {
-            CommissionGenerator::generateForCommandeIfMissing($commande);
         }
     }
 
@@ -111,7 +108,7 @@ class CommandeVenteService
                 'statut' => StatutCommandeVente::FACTURATION,
             ]);
 
-            FactureVente::create([
+            $facture = FactureVente::create([
                 'organization_id' => $commande->organization_id,
                 'site_id' => $commande->site_id,
                 'vehicule_id' => null,
@@ -121,13 +118,31 @@ class CommandeVenteService
                 'montant_net' => $commande->total_commande,
                 'statut_facture' => StatutFactureVente::IMPAYEE,
             ]);
+
+            self::comptabiliserVenteFacturee($facture);
         });
     }
 
     /**
+     * Comptabilité générale, en aval — ne doit jamais empêcher une vente d'être
+     * facturée (mode shadow, même principe que DepenseObserver/FicheComptabilisationService).
+     */
+    private static function comptabiliserVenteFacturee(FactureVente $facture): void
+    {
+        try {
+            app(VenteComptabilisationService::class)->comptabiliserVenteFacturee($facture);
+        } catch (\Throwable $e) {
+            Log::error('Comptabilisation vente facturée échouée', [
+                'facture_id' => $facture->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
      * A_CHARGER → CHARGEMENT_EN_COURS.
-     * La facture et les commissions existent déjà depuis confirmer() ; cette
-     * étape ne fait qu'avancer le statut (sécurité : recrée si jamais manquant,
+     * La facture existe déjà depuis confirmer() ; cette étape ne fait
+     * qu'avancer le statut (sécurité : recrée la facture si jamais manquante,
      * pour les commandes créées avant ce correctif).
      */
     public static function demarrerChargement(CommandeVente $commande): void
@@ -135,7 +150,7 @@ class CommandeVenteService
         abort_if(! $commande->isACharger(), 422, 'La commande doit être en statut « À charger ».');
 
         DB::transaction(function () use ($commande) {
-            self::creerFactureEtCommissionsInitiales($commande);
+            self::creerFactureInitiale($commande);
 
             $commande->update([
                 'statut' => StatutCommandeVente::CHARGEMENT_EN_COURS,
@@ -146,7 +161,13 @@ class CommandeVenteService
 
     /**
      * CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS.
-     * Enregistre les quantités chargées par ligne.
+     * Enregistre les quantités chargées par ligne — quantités qui déterminent
+     * définitivement le calcul de la commission de vente, quel que soit le
+     * déclencheur configuré (jamais recalculée plus tard). Sous CHARGEMENT_VALIDE
+     * (déclencheur par défaut), c'est ici que la commission naît, en statut
+     * CREEE — elle ne devient payable qu'à la validation de la période de
+     * paiement qui la couvre (cf. CommissionTriggerService::onChargementValide(),
+     * CommissionAdjustmentService::activerCommissionsCreees()).
      *
      * @param  array<array{id: string, quantite_chargee?: int|null, type_ecart?: string|null, commentaire_ecart?: string|null}>  $lignesData
      */
@@ -155,10 +176,11 @@ class CommandeVenteService
         abort_if(! $commande->isChargementEnCours(), 422, 'La commande doit être en cours de chargement.');
 
         DB::transaction(function () use ($commande, $lignesData) {
+            self::assertEquipeCommissionValide($commande);
+
             self::appliquerQuantitesChargees($commande, $lignesData);
             self::recalculerTotaux($commande);
             self::decrementerStock($commande);
-            self::recalculerCommissions($commande);
             self::validerPreconditions($commande->fresh(), StatutCommandeVente::LIVRAISON_EN_COURS);
 
             $commande->update([
@@ -166,64 +188,43 @@ class CommandeVenteService
                 'chargement_valide_at' => now(),
             ]);
 
-            self::activerFactureEtCommissions($commande);
+            self::activerFacture($commande);
+            CommissionTriggerService::onChargementValide($commande);
         });
     }
 
     /**
-     * Recalcule les commissions (totale + part de chaque membre actif de
-     * l'équipe — chauffeur, convoyeur, etc.) à partir des quantités réellement
-     * chargées. Met à jour les enregistrements existants (idempotent — ne
-     * crée jamais de doublon).
+     * Bloque la validation du chargement si le véhicule a une équipe dont la
+     * répartition des taux est invalide (≠ 100 %) — sans cela, le chargement
+     * serait validé silencieusement sans qu'aucune commission ne puisse être
+     * créée derrière, ce qui ne doit jamais passer inaperçu. Ne bloque rien si
+     * le véhicule n'est pas éligible aux commissions ou n'a pas d'équipe : dans
+     * ces cas, aucune commission n'est due, ce n'est pas une erreur.
      */
-    private static function recalculerCommissions(CommandeVente $commande): void
+    private static function assertEquipeCommissionValide(CommandeVente $commande): void
     {
-        $commande->load('vehicule.equipe.membres.livreur', 'vehicule.proprietaire', 'lignes', 'commissions.parts');
+        $commande->loadMissing('vehicule.equipe');
+        $vehicule = $commande->vehicule;
 
-        if (! $commande->vehicule || ! $commande->vehicule->equipe) {
+        if (! $vehicule || ! $commande->commission_eligible_snapshot || ! $vehicule->equipe) {
             return;
         }
 
         try {
-            $calc = CommissionCalculator::fromCommande($commande);
-        } catch (InvalidArgumentException) {
-            return;
-        }
-
-        $commission = $commande->commissions->first();
-        if (! $commission) {
-            return;
-        }
-
-        $commission->montant_commande = (float) $commande->total_commande;
-        $commission->montant_commission_totale = $calc['commission_totale'];
-        $commission->saveQuietly();
-
-        foreach ($calc['parts'] as $partData) {
-            $part = $commission->parts->first(fn ($p) => $partData['type_beneficiaire'] === 'livreur'
-                ? ($p->type_beneficiaire === 'livreur' && $p->livreur_id === $partData['livreur_id'])
-                : ($p->type_beneficiaire === 'proprietaire' && $p->proprietaire_id === $partData['proprietaire_id']));
-
-            if (! $part) {
-                continue;
-            }
-
-            $part->taux_commission = $partData['taux_commission'];
-            $part->montant_brut = $partData['montant_brut'];
-            $part->montant_net = max(0.0, round($partData['montant_brut'] - (float) $part->frais_supplementaires, 2));
-            $part->saveQuietly();
+            CommissionCalculator::validateTauxTotal($vehicule->equipe, (float) $vehicule->equipe->taux_commission_proprietaire);
+        } catch (InvalidArgumentException $e) {
+            abort(422, "Impossible de valider le chargement : {$e->getMessage()}");
         }
     }
 
     /**
-     * Active la facture et les commissions encore en statut CREEE :
-     * IMPAYE(E) si un montant est dû, sinon PAYE(E) directement — pas de
-     * dette à créer pour un montant nul (ex. commande entièrement annulée
-     * au chargement).
+     * Active la facture encore en statut CREEE : IMPAYEE si un montant est dû,
+     * sinon PAYEE directement — pas de dette à créer pour un montant nul (ex.
+     * commande entièrement annulée au chargement).
      */
-    private static function activerFactureEtCommissions(CommandeVente $commande): void
+    private static function activerFacture(CommandeVente $commande): void
     {
-        $commande->load('facture', 'commissions.parts');
+        $commande->load('facture');
 
         if ($commande->facture && $commande->facture->statut_facture === StatutFactureVente::CREEE) {
             $commande->facture->update([
@@ -231,30 +232,8 @@ class CommandeVenteService
                     ? StatutFactureVente::IMPAYEE
                     : StatutFactureVente::PAYEE,
             ]);
-        }
 
-        foreach ($commande->commissions as $commission) {
-            if ($commission->statut !== StatutCommission::CREEE) {
-                continue;
-            }
-
-            $commission->update([
-                'statut' => (float) $commission->montant_commission_totale > 0
-                    ? StatutCommission::IMPAYE
-                    : StatutCommission::PAYE,
-            ]);
-
-            foreach ($commission->parts as $part) {
-                if ($part->statut !== StatutCommission::CREEE) {
-                    continue;
-                }
-
-                $part->update([
-                    'statut' => (float) $part->montant_net > 0
-                        ? StatutCommission::IMPAYE
-                        : StatutCommission::PAYE,
-                ]);
-            }
+            self::comptabiliserVenteFacturee($commande->facture);
         }
     }
 
@@ -388,11 +367,30 @@ class CommandeVenteService
                 $commande->loadMissing('facture');
                 if ($commande->facture && ! $commande->facture->isAnnulee() && ! $commande->facture->isPayee()) {
                     $commande->facture->update(['statut_facture' => StatutFactureVente::ANNULEE]);
+                    self::contrepasserVenteFactureeSiExistante($commande->facture, $motif);
                 }
             }
 
             self::annulerCommissionsAssociees($commande);
         });
+    }
+
+    /**
+     * Contrepasse la pièce comptable d'une facture déjà comptabilisée (statut IMPAYEE
+     * atteint, cf. comptabiliserVenteFacturee()) puis annulée — sans effet si elle
+     * n'avait jamais été comptabilisée (montant nul, ou échec de comptabilisation en
+     * amont). Mode shadow, même principe que comptabiliserVenteFacturee().
+     */
+    private static function contrepasserVenteFactureeSiExistante(FactureVente $facture, string $motif): void
+    {
+        try {
+            app(VenteComptabilisationService::class)->contrepasserVenteFactureeSiExistante($facture, 'Facture annulée — '.$motif);
+        } catch (\Throwable $e) {
+            Log::error('Contrepassation vente facturée (annulation) échouée', [
+                'facture_id' => $facture->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -431,7 +429,7 @@ class CommandeVenteService
 
     /**
      * BROUILLON → A_CHARGER : au moins une ligne requise. Le véhicule n'est obligatoire que
-     * hors commande partenaire — un client PARTENAIRE charge sa propre commande sans véhicule
+     * hors commande externe — un client EXTERNE charge sa propre commande sans véhicule
      * de flotte (facturée à prix usine, cf. VehiculeCommandeContextResolver).
      */
     private static function checkConfirmer(CommandeVente $commande, array &$errors): void
@@ -442,7 +440,7 @@ class CommandeVenteService
             $errors[] = 'La commande doit contenir au moins une ligne produit.';
         }
 
-        if (! $commande->vehicule_id && $commande->client?->type !== ClientType::PARTENAIRE) {
+        if (! $commande->vehicule_id && $commande->client?->type !== ClientType::EXTERNE) {
             $errors[] = 'Un véhicule doit être assigné avant de confirmer la commande.';
         }
     }

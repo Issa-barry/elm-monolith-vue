@@ -1,6 +1,7 @@
 import { InertiaLinkProps } from '@inertiajs/vue3';
 import type { LucideIcon } from 'lucide-vue-next';
 import type { SeoDefaults } from './seo';
+import type { ThemeSharedProps } from './theme';
 
 // ── RBAC ─────────────────────────────────────────────────────────────────────
 export type Resource =
@@ -95,6 +96,7 @@ export type AppPageProps<
     transferts_a_receptionner: number;
     module_flags: Partial<Record<ModuleFlagKey, boolean>>;
     seoDefaults: SeoDefaults;
+    theme: ThemeSharedProps;
 };
 
 export interface Organization {

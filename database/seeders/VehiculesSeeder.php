@@ -2,6 +2,8 @@
 
 namespace Database\Seeders;
 
+use App\Enums\CategorieVehicule;
+use App\Models\Categorie;
 use App\Models\EquipeLivraison;
 use App\Models\Organization;
 use App\Models\Proprietaire;
@@ -17,7 +19,11 @@ use Illuminate\Database\Seeder;
  * Le type ne fixe plus la capacité (cf. TypeVehiculesSeeder) : chaque véhicule
  * porte sa propre capacite_packs, indépendamment des autres véhicules du même type.
  *
- * VENTE (propriétaire privé, opèrent pour un site — équivalent de l'ancien "externe") :
+ * Catégorie (propriété, cf. CategorieVehicule) et usage (vente/logistique) sont deux axes
+ * indépendants — ce jeu de données a juste PARTENAIRE sur le groupe "vente" et INTERNE sur le
+ * groupe "logistique" par coïncidence de données de démo, jamais par règle.
+ *
+ * VENTE — PARTENAIRE (propriétaire tiers réel, opèrent pour un site) :
  * | Véhicule         | Type     | Équipe         | Immat      | Site     |
  * |------------------|----------|----------------|------------|----------|
  * | Nen Dow          | Camion   | Nen Dow        | RC-001-GN  | Matoto   |
@@ -26,7 +32,7 @@ use Illuminate\Database\Seeder;
  * | Kaloum Express   | Minibus  | Kaloum Express | KX-001-GN  | Sonfonia |
  * | Conakry 2        | Tricycle | Conakry 2      | TC-002-GN  | Matoto   |
  *
- * LOGISTIQUE (propriété de l'organisation — équivalent de l'ancien "interne") :
+ * LOGISTIQUE — INTERNE (propriété de l'organisation) :
  * | Véhicule | Type     | Équipe           | Immat      | Site   |
  * |----------|----------|------------------|------------|--------|
  * | elm-1    | Minibus  | ELM Logistique 1 | ELM-001-GN | Matoto |
@@ -101,6 +107,7 @@ class VehiculesSeeder extends Seeder
                 'immatriculation' => 'RC-001-GN',
                 'type_vehicule_id' => $type('Camion'),
                 'capacite_packs' => 500,
+                'categorie' => CategorieVehicule::PARTENAIRE,
                 'livraison_vente' => true,
                 'livraison_logistique' => false,
                 'site_id' => $matoto->id,
@@ -115,6 +122,7 @@ class VehiculesSeeder extends Seeder
                 'immatriculation' => 'TC-001-GN',
                 'type_vehicule_id' => $type('Tricycle'),
                 'capacite_packs' => 80,
+                'categorie' => CategorieVehicule::PARTENAIRE,
                 'livraison_vente' => true,
                 'livraison_logistique' => false,
                 'site_id' => $lambanyi->id,
@@ -129,6 +137,7 @@ class VehiculesSeeder extends Seeder
                 'immatriculation' => 'VN-001-GN',
                 'type_vehicule_id' => $type('Minibus'),
                 'capacite_packs' => 150,
+                'categorie' => CategorieVehicule::PARTENAIRE,
                 'livraison_vente' => true,
                 'livraison_logistique' => false,
                 'site_id' => $matoto->id,
@@ -143,6 +152,7 @@ class VehiculesSeeder extends Seeder
                 'immatriculation' => 'KX-001-GN',
                 'type_vehicule_id' => $type('Minibus'),
                 'capacite_packs' => 120,
+                'categorie' => CategorieVehicule::PARTENAIRE,
                 'livraison_vente' => true,
                 'livraison_logistique' => false,
                 'site_id' => $sonfonia->id,
@@ -157,6 +167,7 @@ class VehiculesSeeder extends Seeder
                 'immatriculation' => 'TC-002-GN',
                 'type_vehicule_id' => $type('Tricycle'),
                 'capacite_packs' => 60,
+                'categorie' => CategorieVehicule::PARTENAIRE,
                 'livraison_vente' => true,
                 'livraison_logistique' => false,
                 'site_id' => $matoto->id,
@@ -173,6 +184,7 @@ class VehiculesSeeder extends Seeder
                 'immatriculation' => 'ELM-001-GN',
                 'type_vehicule_id' => $type('Minibus'),
                 'capacite_packs' => 120,
+                'categorie' => CategorieVehicule::INTERNE,
                 'livraison_vente' => false,
                 'livraison_logistique' => true,
                 'site_id' => $matoto->id,
@@ -187,6 +199,7 @@ class VehiculesSeeder extends Seeder
                 'immatriculation' => 'ELM-002-GN',
                 'type_vehicule_id' => $type('Minibus'),
                 'capacite_packs' => 80,
+                'categorie' => CategorieVehicule::INTERNE,
                 'livraison_vente' => false,
                 'livraison_logistique' => true,
                 'site_id' => $matoto->id,
@@ -201,6 +214,7 @@ class VehiculesSeeder extends Seeder
                 'immatriculation' => 'ELM-003-GN',
                 'type_vehicule_id' => $type('Camion'),
                 'capacite_packs' => 300,
+                'categorie' => CategorieVehicule::INTERNE,
                 'livraison_vente' => false,
                 'livraison_logistique' => true,
                 'site_id' => $matoto->id,
@@ -215,6 +229,7 @@ class VehiculesSeeder extends Seeder
                 'immatriculation' => 'ELM-004-GN',
                 'type_vehicule_id' => $type('Minibus'),
                 'capacite_packs' => 100,
+                'categorie' => CategorieVehicule::INTERNE,
                 'livraison_vente' => false,
                 'livraison_logistique' => true,
                 'site_id' => $matoto->id,
@@ -229,6 +244,7 @@ class VehiculesSeeder extends Seeder
                 'immatriculation' => 'BK-4627-02',
                 'type_vehicule_id' => $type('Camion'),
                 'capacite_packs' => 200,
+                'categorie' => CategorieVehicule::INTERNE,
                 'livraison_vente' => false,
                 'livraison_logistique' => true,
                 'site_id' => $kouria->id,
@@ -237,6 +253,13 @@ class VehiculesSeeder extends Seeder
                 'equipe' => $eqCousin,
             ],
         ];
+
+        // Catégorie "Sachet" — provisionnée par ProduitsSeeder (doit tourner avant ce seeder,
+        // cf. DatabaseSeeder). Sert à faire basculer chaque véhicule de démo sur le régime "par
+        // catégorie" de VehiculeCapaciteService, avec le même plafond que capacite_packs
+        // ci-dessus (aucune donnée "Bouteille" fiable à seeder ici : reste à configurer via la
+        // fiche véhicule — VehiculeCapacitesCard — une fois de vraies capacités connues).
+        $sachet = Categorie::where('organization_id', $org->id)->where('nom', 'Sachet')->first();
 
         foreach ($vehicules as $data) {
             $equipeModel = $data['equipe'];
@@ -248,6 +271,13 @@ class VehiculesSeeder extends Seeder
             );
 
             $equipeModel->update(['vehicule_id' => $vehicule->id]);
+
+            if ($sachet && $data['capacite_packs'] !== null) {
+                $vehicule->capacites()->updateOrCreate(
+                    ['categorie_id' => $sachet->id],
+                    ['organization_id' => $org->id, 'capacite_max' => $data['capacite_packs']]
+                );
+            }
         }
     }
 }

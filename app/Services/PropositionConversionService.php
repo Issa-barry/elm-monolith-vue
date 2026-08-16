@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\CategorieVehicule;
 use App\Enums\StatutPropositionVehicule;
 use App\Models\PropositionVehicule;
 use App\Models\Proprietaire;
@@ -54,6 +55,11 @@ class PropositionConversionService
                 'type_vehicule_id' => $typeVehiculeId,
                 'capacite_packs' => $proposition->capacite_packs,
                 'proprietaire_id' => $proprietaire->id,
+                // Une proposition est toujours soumise par un tiers réel (résolveProprietaire()
+                // ne rattache jamais le propriétaire interne par défaut) : le véhicule converti
+                // est donc systématiquement PARTENAIRE, jamais déduit après coup — cf.
+                // CategorieVehicule.
+                'categorie' => CategorieVehicule::PARTENAIRE,
                 // Une proposition convertie rejoint la flotte gérée pour la vente (elle avait
                 // déjà commission_eligible=true dans l'ancien modèle) — jamais la logistique
                 // par défaut, l'admin l'active explicitement si besoin.

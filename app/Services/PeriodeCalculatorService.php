@@ -143,7 +143,7 @@ class PeriodeCalculatorService
 
         $commParts = CommissionPart::where('type_beneficiaire', $type)
             ->whereNotNull("{$type}_id")
-            ->whereHas('commission.commande', function ($q) use ($periode, $orgId) {
+            ->whereHas('commission', function ($q) use ($periode, $orgId) {
                 $q->where('organization_id', $orgId)
                     ->whereBetween('created_at', [$periode->date_debut->startOfDay(), $periode->date_fin->endOfDay()]);
             })
@@ -182,7 +182,7 @@ class PeriodeCalculatorService
         $commParts = CommissionPart::where('type_beneficiaire', 'livreur')
             ->whereNotNull('livreur_id')
             ->where('statut', '!=', StatutCommission::ANNULEE->value)
-            ->whereHas('commission.commande', function ($q) use ($periode, $orgId) {
+            ->whereHas('commission', function ($q) use ($periode, $orgId) {
                 $q->where('organization_id', $orgId)
                     ->whereBetween('created_at', [$periode->date_debut->startOfDay(), $periode->date_fin->endOfDay()]);
             })
@@ -294,7 +294,7 @@ class PeriodeCalculatorService
         $commParts = CommissionPart::where('type_beneficiaire', 'proprietaire')
             ->whereNotNull('proprietaire_id')
             ->where('statut', '!=', StatutCommission::ANNULEE->value)
-            ->whereHas('commission.commande', function ($q) use ($periode, $orgId) {
+            ->whereHas('commission', function ($q) use ($periode, $orgId) {
                 $q->where('organization_id', $orgId)
                     ->whereBetween('created_at', [$periode->date_debut->startOfDay(), $periode->date_fin->endOfDay()]);
             })

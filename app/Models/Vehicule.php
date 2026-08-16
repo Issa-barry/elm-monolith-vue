@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\CategorieVehicule;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -25,16 +26,48 @@ class Vehicule extends Model
         'capacite_packs',
         'capacite_bouteilles',
         'proprietaire_id',
+        'categorie',
         'livraison_vente',
         'livraison_logistique',
         'photo_path',
         'is_active',
     ];
 
+    /**
+     * `immatriculation_normalisee` n'est jamais dans $fillable : elle est recalculée
+     * automatiquement à chaque sauvegarde (cf. booted() ci-dessous), jamais confiée à
+     * l'appelant — un seul endroit peut la faire diverger de `immatriculation`, jamais aucun.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (self $vehicule) {
+            $vehicule->immatriculation_normalisee = self::normaliserImmatriculation($vehicule->immatriculation);
+        });
+    }
+
+    /**
+     * Clé de comparaison stricte pour détecter les doublons "même plaque, saisie différemment"
+     * (tirets/espaces/points/casse ignorés) — ex : "BK-4627-02", "bk 4627 02" et "BK.4627.02"
+     * normalisent tous vers "BK462702". Utilisée pour l'unicité par organisation (cf. migration
+     * add_immatriculation_normalisee_to_vehicules_table) et par ImportFlotteParser pour
+     * retrouver un véhicule existant quel que soit le format saisi dans le fichier.
+     */
+    public static function normaliserImmatriculation(?string $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $value = mb_strtoupper(trim($value), 'UTF-8');
+
+        return preg_replace('/[^A-Z0-9]/u', '', $value) ?? '';
+    }
+
     protected function casts(): array
     {
         return [
             'is_active' => 'boolean',
+            'categorie' => CategorieVehicule::class,
             'livraison_vente' => 'boolean',
             'livraison_logistique' => 'boolean',
             'capacite_packs' => 'integer',
@@ -42,7 +75,7 @@ class Vehicule extends Model
         ];
     }
 
-    protected $appends = ['photo_url', 'type_label'];
+    protected $appends = ['photo_url', 'type_label', 'usage_label', 'categorie_label'];
 
     public function getPhotoUrlAttribute(): ?string
     {
@@ -54,6 +87,39 @@ class Vehicule extends Model
         return $this->relationLoaded('typeVehicule') && $this->typeVehicule
             ? $this->typeVehicule->nom
             : '';
+    }
+
+    public function getCategorieLabelAttribute(): string
+    {
+        return $this->categorie?->label() ?? '';
+    }
+
+    /**
+     * Libellé d'usage affiché dans la gestion des véhicules (Index/Show) — dérivé des deux
+     * booléens plutôt que stocké, pour une seule source de vérité. "Usage non défini" est
+     * le cas d'un véhicule créé par import flotte sans qu'aucun usage n'ait été saisi dans
+     * le fichier (cf. ImportFlotteParser) — jamais possible via le formulaire manuel, qui
+     * exige toujours au moins un usage (cf. VehiculeController::ensureAuMoinsUnUsage()).
+     */
+    public function getUsageLabelAttribute(): string
+    {
+        return match (true) {
+            $this->livraison_vente && $this->livraison_logistique => 'Vente + Logistique',
+            $this->livraison_vente => 'Vente',
+            $this->livraison_logistique => 'Logistique',
+            default => 'Usage non défini',
+        };
+    }
+
+    /**
+     * Un véhicule sans aucun usage n'a pas sa place dans les opérations métier — déjà
+     * garanti par scopeLivraisonVente()/scopeLivraisonLogistique() ci-dessous (qui
+     * l'excluent tous les deux), cette méthode ne fait que centraliser la lecture de cet
+     * état pour l'UI et les contrôles applicatifs.
+     */
+    public function aAuMoinsUnUsage(): bool
+    {
+        return $this->livraison_vente || $this->livraison_logistique;
     }
 
     // ── Relations ─────────────────────────────────────────────────────────────

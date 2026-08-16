@@ -80,7 +80,11 @@ test('client submits vehicule proposition -> backoffice can open and handle it',
         .click();
     await submitResponse;
 
-    await expect(page).toHaveURL(/\/client\/vehicules$/, {
+    // storeVehicleProposal() redirige vers la page dédiée "Mes propositions"
+    // (route client.propositions.index -> /client/proposer-vehicule), pas
+    // vers /client/vehicules — cf. ClientDashboardController::proposals()
+    // qui rend client/VehicleProposals (liste des propositions + flash succès).
+    await expect(page).toHaveURL(/\/client\/proposer-vehicule$/, {
         timeout: 30_000,
     });
     await expect(

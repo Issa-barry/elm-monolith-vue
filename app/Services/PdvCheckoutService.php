@@ -106,9 +106,10 @@ class PdvCheckoutService
         }
 
         // PDV n'a jamais exigé de chargement complet (contrairement à la vente web, cf.
-        // Parametre::isVentesAutorisationSaisieDessousQteMax) ni de bypass par permission —
-        // comportement historique préservé tel quel.
-        $this->vehiculeCapaciteService->verifier($vehicule, $data['lignes'], 'quantite', false, false);
+        // Parametre::isVentesAutorisationSaisieDessousQteMax) — comportement historique
+        // préservé tel quel. Le dépassement de capacité, lui, n'est plus tolérable pour
+        // personne (cf. VehiculeCapaciteService), PDV compris.
+        $this->vehiculeCapaciteService->verifier($vehicule, $data['lignes'], 'quantite', false);
     }
 
     /**

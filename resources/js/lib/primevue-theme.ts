@@ -8,6 +8,13 @@ import Lara from '@primeuix/themes/lara';
 import Material from '@primeuix/themes/material';
 import Nora from '@primeuix/themes/nora';
 
+// Mécanique de rendu du thème (palettes, application des variables CSS
+// PrimeVue + du pont vers les tokens shadcn/Tailwind). La DÉCISION de quel
+// preset/couleur est actif ne vit plus ici : elle vient du serveur
+// (ThemePolicyService, partagé via le prop Inertia `theme`, cf.
+// composables/useEnvironmentTheme.ts) — ce fichier ne fait qu'appliquer ce
+// qu'on lui donne. Voir docs/theming.md.
+
 export type PrimeVueThemeName =
     | 'aura'
     | 'lara'
@@ -38,10 +45,6 @@ export type PrimeVueSurfaceName =
     | 'stone'
     | 'neutral'
     | 'gray';
-
-export const PRIMEVUE_THEME_STORAGE_KEY = 'primevue_theme';
-export const PRIMEVUE_PRIMARY_STORAGE_KEY = 'primevue_primary';
-export const PRIMEVUE_SURFACE_STORAGE_KEY = 'primevue_surface';
 
 const PRIMEVUE_PRESETS: Record<PrimeVueThemeName, object> = {
     aura: Aura,
@@ -343,6 +346,12 @@ const SURFACE_PALETTES: Record<PrimeVueSurfaceName, Record<number, string>> = {
     },
 };
 
+/**
+ * Garde-fous défensifs : le serveur (ThemePolicyService) est l'autorité sur
+ * les valeurs autorisées, mais un prop Inertia mal formé ne doit pas planter
+ * l'appli — ces fonctions retombent sur un fallback sûr plutôt que sur
+ * `undefined`.
+ */
 export function normalizePrimeVueTheme(
     value?: string | null,
 ): PrimeVueThemeName {
@@ -352,6 +361,7 @@ export function normalizePrimeVueTheme(
     if (normalized === 'lara') return 'lara';
     if (normalized === 'material') return 'material';
     if (normalized === 'nora') return 'nora';
+    if (normalized === 'aura') return 'aura';
 
     return 'starter';
 }
@@ -361,9 +371,7 @@ export function normalizePrimeVuePrimary(
 ): PrimeVuePrimaryName {
     const normalized = value?.toLowerCase() as PrimeVuePrimaryName | undefined;
 
-    return normalized && normalized in PRIMARY_PALETTES
-        ? normalized
-        : 'emerald';
+    return normalized && normalized in PRIMARY_PALETTES ? normalized : 'blue';
 }
 
 export function normalizePrimeVueSurface(
@@ -371,7 +379,7 @@ export function normalizePrimeVueSurface(
 ): PrimeVueSurfaceName {
     const normalized = value?.toLowerCase() as PrimeVueSurfaceName | undefined;
 
-    return normalized && normalized in SURFACE_PALETTES ? normalized : 'zinc';
+    return normalized && normalized in SURFACE_PALETTES ? normalized : 'slate';
 }
 
 export function getPrimeVueThemePreset(value?: string | null): {
@@ -384,96 +392,6 @@ export function getPrimeVueThemePreset(value?: string | null): {
         name,
         preset: PRIMEVUE_PRESETS[name],
     };
-}
-
-export function getDefaultPrimeVuePrimary(
-    theme: PrimeVueThemeName,
-): PrimeVuePrimaryName {
-    return theme === 'starter' ? 'blue' : 'emerald';
-}
-
-export function getDefaultPrimeVueSurface(
-    theme: PrimeVueThemeName,
-): PrimeVueSurfaceName {
-    return theme === 'starter' ? 'slate' : 'zinc';
-}
-
-export function resolvePrimeVueThemeFromEnv(): PrimeVueThemeName {
-    return normalizePrimeVueTheme(
-        import.meta.env.VITE_PRIMEVUE_THEME || 'starter',
-    );
-}
-
-export function resolvePrimeVuePrimaryFromEnv(
-    theme: PrimeVueThemeName,
-): PrimeVuePrimaryName {
-    return normalizePrimeVuePrimary(
-        import.meta.env.VITE_PRIMEVUE_PRIMARY ||
-            getDefaultPrimeVuePrimary(theme),
-    );
-}
-
-export function resolvePrimeVueSurfaceFromEnv(
-    theme: PrimeVueThemeName,
-): PrimeVueSurfaceName {
-    return normalizePrimeVueSurface(
-        import.meta.env.VITE_PRIMEVUE_SURFACE ||
-            getDefaultPrimeVueSurface(theme),
-    );
-}
-
-export function getStoredPrimeVueTheme(): PrimeVueThemeName | null {
-    if (typeof window === 'undefined') {
-        return null;
-    }
-
-    const value = localStorage.getItem(PRIMEVUE_THEME_STORAGE_KEY);
-
-    return value ? normalizePrimeVueTheme(value) : null;
-}
-
-export function getStoredPrimeVuePrimary(): PrimeVuePrimaryName | null {
-    if (typeof window === 'undefined') {
-        return null;
-    }
-
-    const value = localStorage.getItem(PRIMEVUE_PRIMARY_STORAGE_KEY);
-
-    return value ? normalizePrimeVuePrimary(value) : null;
-}
-
-export function getStoredPrimeVueSurface(): PrimeVueSurfaceName | null {
-    if (typeof window === 'undefined') {
-        return null;
-    }
-
-    const value = localStorage.getItem(PRIMEVUE_SURFACE_STORAGE_KEY);
-
-    return value ? normalizePrimeVueSurface(value) : null;
-}
-
-export function setStoredPrimeVueTheme(value: PrimeVueThemeName) {
-    if (typeof window === 'undefined') {
-        return;
-    }
-
-    localStorage.setItem(PRIMEVUE_THEME_STORAGE_KEY, value);
-}
-
-export function setStoredPrimeVuePrimary(value: PrimeVuePrimaryName) {
-    if (typeof window === 'undefined') {
-        return;
-    }
-
-    localStorage.setItem(PRIMEVUE_PRIMARY_STORAGE_KEY, value);
-}
-
-export function setStoredPrimeVueSurface(value: PrimeVueSurfaceName) {
-    if (typeof window === 'undefined') {
-        return;
-    }
-
-    localStorage.setItem(PRIMEVUE_SURFACE_STORAGE_KEY, value);
 }
 
 export function applyPrimeVueThemePreset(value: PrimeVueThemeName) {
@@ -493,6 +411,12 @@ export function applyPrimeVueSurfaceColor(value: PrimeVueSurfaceName) {
     });
 }
 
+/**
+ * Pont entre les palettes PrimeVue et les tokens CSS "app" (shadcn/Tailwind) —
+ * cf. docs/theming.md section 3. Reste le seul mécanisme de synchronisation
+ * entre les deux design systems, appelé à chaque changement d'apparence
+ * (light/dark) ou de thème global.
+ */
 export function applyAppThemeColors(
     primary: PrimeVuePrimaryName,
     surface: PrimeVueSurfaceName,
@@ -579,23 +503,44 @@ export function applyAppThemeColors(
     });
 }
 
-export function applyStoredPrimeVueColors(theme?: PrimeVueThemeName): {
-    primary: PrimeVuePrimaryName;
-    surface: PrimeVueSurfaceName;
-} {
-    const currentTheme = theme ?? resolvePrimeVueThemeFromEnv();
-    const primary =
-        getStoredPrimeVuePrimary() ??
-        resolvePrimeVuePrimaryFromEnv(currentTheme);
-    const surface =
-        getStoredPrimeVueSurface() ??
-        resolvePrimeVueSurfaceFromEnv(currentTheme);
+/**
+ * Chips de couleur pour les écrans de choix (settings/Theme.vue). Classes
+ * Tailwind statiques (pas de nom de classe généré dynamiquement, requis par
+ * la purge de Tailwind v4) — source unique pour ne pas disperser cette liste
+ * entre plusieurs composants.
+ */
+export const PRIMEVUE_PRIMARY_SWATCHES: Record<PrimeVuePrimaryName, string> = {
+    zinc: 'bg-zinc-500',
+    emerald: 'bg-emerald-500',
+    green: 'bg-green-500',
+    lime: 'bg-lime-500',
+    yellow: 'bg-yellow-500',
+    sky: 'bg-sky-500',
+    blue: 'bg-blue-500',
+    indigo: 'bg-indigo-500',
+    violet: 'bg-violet-500',
+    purple: 'bg-purple-500',
+    fuchsia: 'bg-fuchsia-500',
+    pink: 'bg-pink-500',
+    rose: 'bg-rose-500',
+    orange: 'bg-orange-500',
+    amber: 'bg-amber-500',
+    teal: 'bg-teal-500',
+    cyan: 'bg-cyan-500',
+};
 
-    applyPrimeVuePrimaryColor(primary);
-    applyPrimeVueSurfaceColor(surface);
+export const PRIMEVUE_SURFACE_SWATCHES: Record<PrimeVueSurfaceName, string> = {
+    zinc: 'bg-zinc-500',
+    slate: 'bg-slate-500',
+    stone: 'bg-stone-500',
+    neutral: 'bg-neutral-500',
+    gray: 'bg-gray-500',
+};
 
-    return {
-        primary,
-        surface,
-    };
-}
+export const PRIMEVUE_THEME_LABELS: Record<PrimeVueThemeName, string> = {
+    starter: 'Starter Kit',
+    aura: 'Aura',
+    lara: 'Lara',
+    material: 'Material',
+    nora: 'Nora',
+};

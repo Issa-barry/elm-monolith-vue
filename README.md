@@ -1,7 +1,7 @@
 # en DEV (a ne pas supprimer par IA)
 php artisan migrate:fresh --seed
 php artisan optimize:clear
-php artisan optimize
+php artisan optimize 
 
 # Déploiement
 
@@ -16,6 +16,22 @@ des clients/livreurs/véhicules/produits fictifs, pas fait pour la production.
 
 ## 1er déploiement (base vide, une seule fois)
 
+⚠️ `db:seed --class=ProductionSeeder` est **spécifique à la vraie production "Eau la
+maman"** (il câble en dur l'organisation `elm` — sites, catalogue 7 produits, paramètres
+réels, cf. `RolesAndPermissionsSeeder::run()`). Ne le lance QUE pour ce déploiement-là.
+Pour toute **autre instance** (preprod formation, démo, futur client...), saute cette
+étape et va directement de `migrate --force` à `app:install` / `/install` — l'organisation
+est alors créée dynamiquement à partir du nom saisi (`InstallationService::resolveOrganization`),
+sans dépendre de `elm`. Lancer `ProductionSeeder` sur une autre instance crée une
+organisation "Eau la maman" fantôme en plus de celle voulue — pour nettoyer après coup :
+
+```bash
+$PHP artisan tinker --execute="\App\Models\Organization::where('slug','elm')->first()?->forceDelete();"
+```
+
+(`forceDelete()`, pas `delete()` : l'organisation est soft-deletable, seul un vrai DELETE
+déclenche les `cascadeOnDelete()` sur toutes les tables `organization_id`.)
+
 ```bash
 cd ~/domains/xxx.com/public_html
 export PHP=/opt/alt/php84/usr/bin/php   # si besoin de forcer la version PHP
@@ -24,12 +40,21 @@ composer2 install --no-dev --prefer-dist --optimize-autoloader
 # Configurer .env (DB, APP_ENV=production, APP_INSTALL_TOKEN=<clé secrète>...) puis :
 $PHP artisan key:generate
 $PHP artisan migrate --force
+
+# Uniquement pour la vraie prod "Eau la maman" (voir avertissement ci-dessus) :
 $PHP artisan db:seed --class=ProductionSeeder --force
+
 ln -s "$PWD/storage/app/public" "$PWD/public/storage" || true
 
 $PHP artisan optimize:clear
 $PHP artisan optimize
+
 ```
+
+
+
+
+
 
 Puis, **depuis un navigateur**, ouvrir `https://ton-domaine/install` et suivre l'assistant
 (4 étapes : Entreprise, Super Admin, Catalogue initial, Résumé). C'est la façon recommandée
@@ -170,3 +195,15 @@ php -d pcov.enabled=1 vendor/bin/phpunit --coverage-text
 # Serveur de dev local
 php artisan serve --port=8080
 ```
+
+Procédure complète pour repartir à zéro sur formation
+Déployer ce commit sur pre-prod (le nouveau code doit être en place avant de pouvoir lancer la commande via SSH).
+En SSH sur formation :
+
+php artisan accounts:purge --organization=elm
+(tapez SUPPRIMER après avoir vérifié l'URL/l'environnement affichés)
+Recréer le premier compte, toujours via SSH :
+
+php artisan app:install
+Au prompt "Nom de l'entreprise", tapez exactement Eau la maman (correspondance exacte, insensible à la casse) — ça réutilise l'organisation existante (avec son catalogue/sites/etc. intacts) plutôt que d'en créer une nouvelle, puisqu'elle n'a plus de super_admin après la purge.
+Vous êtes de nouveau super_admin, vous invitez ensuite vos comptes de recette normalement via l'app.

@@ -7,10 +7,12 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, useForm, usePage } from '@inertiajs/vue3';
 import {
     AlertTriangle,
+    HandCoins,
     Lock,
     PackageCheck,
     ShieldCheck,
 } from 'lucide-vue-next';
+import RadioButton from 'primevue/radiobutton';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref, watch } from 'vue';
 
@@ -22,11 +24,20 @@ interface RoleQuantite {
     locked: boolean;
 }
 
+interface DeclencheurOption {
+    value: string;
+    label: string;
+}
+
 const props = defineProps<{
     roles: RoleQuantite[];
     autoriser_saisie_dessous_qte_max: boolean;
     controle_impayes_actif: boolean;
     seuil_impayes_max: number;
+    declencheur_commission_vente: string;
+    declencheur_commission_logistique: string;
+    declencheurs_commission_vente_options: DeclencheurOption[];
+    declencheurs_commission_logistique_options: DeclencheurOption[];
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -50,6 +61,8 @@ const form = useForm({
     autoriser_saisie_dessous_qte_max: props.autoriser_saisie_dessous_qte_max,
     controle_impayes_actif: props.controle_impayes_actif,
     seuil_impayes_max: props.seuil_impayes_max,
+    declencheur_commission_vente: props.declencheur_commission_vente,
+    declencheur_commission_logistique: props.declencheur_commission_logistique,
 });
 
 type EditableRoleField = 'quantity_edit_role_names' | 'price_edit_role_names';
@@ -312,6 +325,83 @@ function onSeuilBlur() {
                                 "
                             />
                         </button>
+                    </div>
+                </div>
+
+                <div class="overflow-hidden rounded-xl border bg-card">
+                    <div
+                        class="flex items-center gap-2 border-b bg-muted/30 px-5 py-3"
+                    >
+                        <HandCoins class="h-4 w-4 text-muted-foreground" />
+                        <h3 class="text-sm font-semibold text-foreground">
+                            Commissions
+                        </h3>
+                    </div>
+
+                    <div class="space-y-2 px-5 py-4">
+                        <p class="text-sm font-medium text-foreground">
+                            Commission de vente — générer la commission
+                        </p>
+                        <p class="text-xs text-muted-foreground">
+                            Ce paramètre détermine à quel moment la commission
+                            de vente naît. Elle naît toujours au statut « Créée
+                            » et ne devient payable qu'après validation de la
+                            période de paiement.
+                        </p>
+                        <div
+                            class="flex flex-col gap-3 pt-1 sm:flex-row sm:gap-6"
+                        >
+                            <label
+                                v-for="option in declencheurs_commission_vente_options"
+                                :key="`vente-${option.value}`"
+                                class="flex cursor-pointer items-center gap-2"
+                            >
+                                <RadioButton
+                                    :model-value="
+                                        form.declencheur_commission_vente
+                                    "
+                                    :value="option.value"
+                                    :disabled="form.processing"
+                                    @update:model-value="
+                                        form.declencheur_commission_vente =
+                                            option.value
+                                    "
+                                />
+                                <span class="text-sm">{{ option.label }}</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2 border-t px-5 py-4">
+                        <p class="text-sm font-medium text-foreground">
+                            Commission logistique — générer la commission
+                        </p>
+                        <p class="text-xs text-muted-foreground">
+                            Ce paramètre détermine à quel moment la commission
+                            logistique devient générable.
+                        </p>
+                        <div
+                            class="flex flex-col gap-3 pt-1 sm:flex-row sm:gap-6"
+                        >
+                            <label
+                                v-for="option in declencheurs_commission_logistique_options"
+                                :key="`logistique-${option.value}`"
+                                class="flex cursor-pointer items-center gap-2"
+                            >
+                                <RadioButton
+                                    :model-value="
+                                        form.declencheur_commission_logistique
+                                    "
+                                    :value="option.value"
+                                    :disabled="form.processing"
+                                    @update:model-value="
+                                        form.declencheur_commission_logistique =
+                                            option.value
+                                    "
+                                />
+                                <span class="text-sm">{{ option.label }}</span>
+                            </label>
+                        </div>
                     </div>
                 </div>
 

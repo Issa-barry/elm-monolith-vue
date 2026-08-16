@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import Breadcrumbs from '@/components/Breadcrumbs.vue';
+import EnvironmentBadge from '@/components/EnvironmentBadge.vue';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -143,6 +144,7 @@ onMounted(() => {
     >
         <div class="flex items-center gap-2">
             <SidebarTrigger class="-ml-1" />
+            <EnvironmentBadge />
             <template v-if="breadcrumbs && breadcrumbs.length > 0">
                 <Breadcrumbs
                     :breadcrumbs="breadcrumbs"

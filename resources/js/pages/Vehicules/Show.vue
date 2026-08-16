@@ -19,6 +19,7 @@ import {
     Plus,
     Receipt,
     Settings,
+    TriangleAlert,
     Users,
 } from 'lucide-vue-next';
 import Toast from 'primevue/toast';
@@ -87,6 +88,8 @@ interface VehiculeData {
     }>;
     site_id: string | null;
     site_nom: string | null;
+    categorie: 'interne' | 'partenaire';
+    categorie_label: string;
     proprietaire_id: string | null;
     proprietaire_nom: string | null;
     proprietaire_telephone: string | null;
@@ -108,11 +111,10 @@ const props = defineProps<{
 }>();
 
 // Propriété (tiers ou organisation) — indépendante des usages vente/logistique,
-// cf. EquipeStepperModal (détermine si un partage propriétaire est saisi).
+// cf. EquipeStepperModal (détermine si un partage propriétaire est saisi). Source de vérité :
+// vehicule.categorie (jamais re-déduit de proprietaire_id, cf. CategorieVehicule côté backend).
 const proprietaireEstTiers = computed(
-    () =>
-        !!props.vehicule.proprietaire_id &&
-        props.vehicule.proprietaire_id !== props.default_proprietaire_id,
+    () => props.vehicule.categorie === 'partenaire',
 );
 
 const { can } = usePermissions();
@@ -257,7 +259,7 @@ function formatGNF(val: number): string {
                             v-if="vehicule.capacite_packs"
                             class="text-xs text-muted-foreground"
                         >
-                            {{ vehicule.capacite_packs }} packs
+                            {{ vehicule.capacite_packs }} sachets
                         </span>
                         <span
                             v-if="vehicule.capacite_bouteilles"
@@ -414,6 +416,14 @@ function formatGNF(val: number): string {
                             </div>
                             <div class="rounded-lg border bg-background p-4">
                                 <p class="text-xs text-muted-foreground">
+                                    Catégorie
+                                </p>
+                                <p class="mt-1 text-sm font-medium">
+                                    {{ vehicule.categorie_label }}
+                                </p>
+                            </div>
+                            <div class="rounded-lg border bg-background p-4">
+                                <p class="text-xs text-muted-foreground">
                                     Usages
                                 </p>
                                 <p class="mt-1 flex flex-wrap gap-1.5">
@@ -427,6 +437,27 @@ function formatGNF(val: number): string {
                                         class="inline-flex items-center rounded-full bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700 dark:bg-orange-950 dark:text-orange-300"
                                         >Logistique</span
                                     >
+                                    <span
+                                        v-if="
+                                            !vehicule.livraison_vente &&
+                                            !vehicule.livraison_logistique
+                                        "
+                                        class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+                                    >
+                                        <TriangleAlert class="h-3 w-3" />
+                                        Usage non défini
+                                    </span>
+                                </p>
+                                <p
+                                    v-if="
+                                        !vehicule.livraison_vente &&
+                                        !vehicule.livraison_logistique
+                                    "
+                                    class="mt-1.5 text-xs text-muted-foreground"
+                                >
+                                    Ce véhicule existe mais ne peut être utilisé
+                                    pour aucune opération tant qu'un usage n'est
+                                    pas défini.
                                 </p>
                             </div>
                             <div class="rounded-lg border bg-background p-4">
@@ -436,7 +467,7 @@ function formatGNF(val: number): string {
                                 <p class="mt-1 text-sm font-medium">
                                     {{
                                         vehicule.capacite_packs !== null
-                                            ? `${vehicule.capacite_packs} packs`
+                                            ? `${vehicule.capacite_packs} sachets`
                                             : '—'
                                     }}
                                     <template
@@ -493,7 +524,7 @@ function formatGNF(val: number): string {
 
                     <VehiculeCapacitesCard
                         v-if="can('vehicules.update')"
-                        class="mt-6"
+                        class="mt-6 lg:col-start-2"
                         :capacites="vehicule.capacites"
                         :categories="categories"
                         :capacite-legacy="vehicule.capacite_packs"

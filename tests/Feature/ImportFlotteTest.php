@@ -25,7 +25,7 @@ class ImportFlotteTest extends TestCase
     use RefreshDatabase;
 
     private const HEADERS_VEHICULES = [
-        'vehicule_immatriculation', 'vehicule_nom', 'vehicule_type',
+        'vehicule_immatriculation', 'vehicule_nom', 'vehicule_type', 'vehicule_categorie',
         'vehicule_site', 'vehicule_livraison_vente', 'vehicule_livraison_logistique',
         'vehicule_capacite_sachets', 'vehicule_capacite_bouteilles',
         'proprietaire_nom', 'proprietaire_prenom', 'proprietaire_telephone', 'proprietaire_pays',
@@ -78,6 +78,7 @@ class ImportFlotteTest extends TestCase
             'vehicule_immatriculation' => 'RC-1234-A',
             'vehicule_nom' => 'Camion 1',
             'vehicule_type' => 'Tricycle',
+            'vehicule_categorie' => 'partenaire',
             'vehicule_site' => 'Matoto',
             'vehicule_livraison_vente' => 'oui',
             'vehicule_livraison_logistique' => 'non',
@@ -143,6 +144,38 @@ class ImportFlotteTest extends TestCase
         );
     }
 
+    // ── mode "livreurs seulement" (TypeImportFlotte::LIVREURS) ─────────────────
+
+    private function uploadLivreursOnlyFile(array $lignesLivreurs): UploadedFile
+    {
+        $spreadsheet = new Spreadsheet;
+
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('livreurs');
+        $sheet->fromArray(self::HEADERS_LIVREURS, null, 'A1');
+        foreach ($lignesLivreurs as $i => $ligne) {
+            $row = array_map(fn ($h) => $ligne[$h] ?? '', self::HEADERS_LIVREURS);
+            $sheet->fromArray($row, null, 'A'.($i + 2));
+        }
+
+        $tmpPath = tempnam(sys_get_temp_dir(), 'import_flotte_livreurs_test').'.xlsx';
+        (new Xlsx($spreadsheet))->save($tmpPath);
+
+        return new UploadedFile($tmpPath, 'import-livreurs.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+    }
+
+    private function importerLivreursSeul(array $lignesLivreurs): ImportFlotte
+    {
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.store'), [
+                'type' => 'livreurs',
+                'fichier' => $this->uploadLivreursOnlyFile($lignesLivreurs),
+            ])
+            ->assertRedirect();
+
+        return ImportFlotte::firstOrFail();
+    }
+
     // ── accès / permissions ──────────────────────────────────────────────────
 
     public function test_create_redirects_unauthenticated_user(): void
@@ -190,6 +223,7 @@ class ImportFlotteTest extends TestCase
         $import = $this->importer(
             [$this->ligneVehicule([
                 'vehicule_site' => '',
+                'vehicule_categorie' => 'interne',
                 'proprietaire_nom' => '', 'proprietaire_prenom' => '', 'proprietaire_telephone' => '', 'proprietaire_pays' => '',
             ])],
             [$this->ligneLivreurChauffeur()]
@@ -198,14 +232,161 @@ class ImportFlotteTest extends TestCase
         $this->assertSame(1, $import->nb_groupes_erreur);
     }
 
-    public function test_analyse_flags_error_for_vehicule_sans_aucun_usage(): void
+    // ── usage vente/logistique : vide/absent = "non", jamais un usage par défaut ───────
+
+    public function test_analyse_accepts_vehicule_sans_aucun_usage(): void
     {
+        // Un véhicule sans aucun usage n'est plus une erreur d'analyse (cf.
+        // ImportFlotteParser) : il est simplement importé sans usage, non exploitable
+        // tant qu'un usage n'est pas défini — voir test_confirm_creates_vehicule_sans_usage_quand_colonnes_a_non.
         $import = $this->importer(
             [$this->ligneVehicule(['vehicule_livraison_vente' => 'non', 'vehicule_livraison_logistique' => 'non'])],
             [$this->ligneLivreurChauffeur()]
         );
 
+        $this->assertSame(0, $import->nb_groupes_erreur);
+        $this->assertSame(1, $import->nb_groupes_valides);
+    }
+
+    public function test_confirm_creates_vehicule_sans_usage_quand_colonnes_a_non(): void
+    {
+        $import = $this->importerVehiculeEtChauffeur(['vehicule_livraison_vente' => 'non', 'vehicule_livraison_logistique' => 'non']);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
+        $this->assertFalse($vehicule->livraison_vente);
+        $this->assertFalse($vehicule->livraison_logistique);
+        $this->assertFalse($vehicule->aAuMoinsUnUsage());
+        $this->assertSame('Usage non défini', $vehicule->usage_label);
+    }
+
+    public function test_confirm_creates_vehicule_sans_usage_quand_colonnes_vides(): void
+    {
+        // Cellules vides (jamais renseignées) : même comportement qu'un "non" explicite —
+        // jamais un repli sur un usage vente par défaut, contrairement à l'ancien comportement.
+        $import = $this->importerVehiculeEtChauffeur(['vehicule_livraison_vente' => '', 'vehicule_livraison_logistique' => '']);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
+        $this->assertFalse($vehicule->livraison_vente);
+        $this->assertFalse($vehicule->livraison_logistique);
+    }
+
+    public function test_confirm_creates_vehicule_logistique_uniquement(): void
+    {
+        $import = $this->importerVehiculeEtChauffeur(['vehicule_livraison_vente' => 'non', 'vehicule_livraison_logistique' => 'oui']);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
+        $this->assertFalse($vehicule->livraison_vente);
+        $this->assertTrue($vehicule->livraison_logistique);
+    }
+
+    public function test_confirm_creates_vehicule_vente_et_logistique(): void
+    {
+        $import = $this->importerVehiculeEtChauffeur(['vehicule_livraison_vente' => 'oui', 'vehicule_livraison_logistique' => 'oui']);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
+        $this->assertTrue($vehicule->livraison_vente);
+        $this->assertTrue($vehicule->livraison_logistique);
+    }
+
+    public function test_analyse_accepts_yes_no_spellings_for_usage(): void
+    {
+        $import = $this->importer(
+            [$this->ligneVehicule(['vehicule_livraison_vente' => 'yes', 'vehicule_livraison_logistique' => 'no'])],
+            [$this->ligneLivreurChauffeur()]
+        );
+
+        $this->assertSame(0, $import->nb_groupes_erreur);
+        $this->assertTrue($import->rapport['groupes'][0]['vehicule']['livraison_vente']);
+        $this->assertFalse($import->rapport['groupes'][0]['vehicule']['livraison_logistique']);
+    }
+
+    public function test_analyse_flags_error_for_unrecognized_usage_value(): void
+    {
+        $import = $this->importer(
+            [$this->ligneVehicule(['vehicule_livraison_vente' => 'peut-etre'])],
+            [$this->ligneLivreurChauffeur()]
+        );
+
         $this->assertSame(1, $import->nb_groupes_erreur);
+        $this->assertStringContainsString('Usage vente invalide', $import->rapport['groupes'][0]['erreurs'][0]);
+        $this->assertStringContainsString('peut-etre', $import->rapport['groupes'][0]['erreurs'][0]);
+    }
+
+    public function test_analyse_flags_error_for_unrecognized_usage_logistique_value(): void
+    {
+        $import = $this->importer(
+            [$this->ligneVehicule(['vehicule_livraison_logistique' => 'X-invalide'])],
+            [$this->ligneLivreurChauffeur()]
+        );
+
+        $this->assertSame(1, $import->nb_groupes_erreur);
+        $this->assertStringContainsString('Usage logistique invalide', $import->rapport['groupes'][0]['erreurs'][0]);
+    }
+
+    /**
+     * Un véhicule déjà en base (immatriculation déjà connue) n'est jamais réécrit par
+     * l'import (cf. ImportFlotteExecutor::executerGroupe(), qui ne fait que réutiliser son
+     * id) — une colonne d'usage vide sur une ligne "vehicules" qui sert d'ancrage à des
+     * livreurs supplémentaires ne doit donc jamais désactiver un usage déjà configuré.
+     */
+    public function test_confirm_ne_modifie_pas_les_usages_dun_vehicule_deja_existant(): void
+    {
+        $vehiculeExistant = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'immatriculation' => 'RC-1234-A',
+            'type_vehicule_id' => $this->type->id,
+            'site_id' => $this->site->id,
+            'livraison_vente' => true,
+            'livraison_logistique' => true,
+        ]);
+
+        $import = $this->importerVehiculeEtChauffeur(['vehicule_livraison_vente' => '', 'vehicule_livraison_logistique' => '']);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $vehiculeExistant->refresh();
+        $this->assertTrue($vehiculeExistant->livraison_vente);
+        $this->assertTrue($vehiculeExistant->livraison_logistique);
+    }
+
+    /** L'aperçu (avant confirmation) reste cohérent avec ce qui sera réellement appliqué. */
+    public function test_analyse_previews_existing_vehicule_usage_sur_colonnes_vides(): void
+    {
+        Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'immatriculation' => 'RC-1234-A',
+            'type_vehicule_id' => $this->type->id,
+            'site_id' => $this->site->id,
+            'livraison_vente' => false,
+            'livraison_logistique' => true,
+        ]);
+
+        $import = $this->importer(
+            [$this->ligneVehicule(['vehicule_livraison_vente' => '', 'vehicule_livraison_logistique' => ''])],
+            [$this->ligneLivreurChauffeur()]
+        );
+
+        $this->assertSame(0, $import->nb_groupes_erreur);
+        $this->assertFalse($import->rapport['groupes'][0]['vehicule']['livraison_vente']);
+        $this->assertTrue($import->rapport['groupes'][0]['vehicule']['livraison_logistique']);
     }
 
     public function test_analyse_accepts_new_vehicule_without_any_livreur(): void
@@ -251,6 +432,63 @@ class ImportFlotteTest extends TestCase
         $this->assertSame(0, Vehicule::where('organization_id', $this->org->id)->count());
     }
 
+    /**
+     * Même plaque déjà en base, écrite différemment dans le fichier (espaces/points/tirets/casse)
+     * : doit retrouver le véhicule existant, jamais en créer un doublon écrit différemment.
+     */
+    public function test_analyse_retrouve_vehicule_existant_malgre_un_format_dimmatriculation_different(): void
+    {
+        $existant = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'immatriculation' => 'BK-4627-02',
+        ]);
+
+        $import = $this->importer(
+            [$this->ligneVehicule(['vehicule_immatriculation' => 'bk 4627.02'])],
+            [$this->ligneLivreurChauffeur(['vehicule_immatriculation' => 'bk 4627.02'])]
+        );
+
+        $this->assertSame(0, $import->nb_groupes_erreur);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $this->assertSame(1, Vehicule::where('organization_id', $this->org->id)->count());
+        $this->assertSame('BK-4627-02', $existant->fresh()->immatriculation);
+    }
+
+    /**
+     * Immatriculation proche d'un véhicule déjà en base, mais pas identique même après
+     * normalisation (ex : suffixe manquant) — jamais fusionné automatiquement, mais signalé
+     * pour que l'utilisateur confirme/corrige au lieu de créer silencieusement un doublon.
+     */
+    public function test_analyse_signale_une_immatriculation_proche_dun_vehicule_existant(): void
+    {
+        Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom_vehicule' => 'Cousin',
+            'immatriculation' => 'BK-4627-02',
+        ]);
+
+        $import = $this->importer(
+            [$this->ligneVehicule(['vehicule_immatriculation' => 'BK4627'])],
+            [$this->ligneLivreurChauffeur(['vehicule_immatriculation' => 'BK4627'])]
+        );
+
+        $this->assertSame(1, $import->nb_groupes_erreur);
+        $erreur = $import->rapport['groupes'][0]['erreurs'][0];
+        $this->assertStringContainsString("Immatriculation proche d'un véhicule existant", $erreur);
+        $this->assertStringContainsString('Cousin', $erreur);
+        $this->assertStringContainsString('BK-4627-02', $erreur);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertStatus(422);
+
+        $this->assertSame(1, Vehicule::where('organization_id', $this->org->id)->count());
+    }
+
     public function test_analyse_flags_error_for_livreur_attached_to_two_different_vehicules(): void
     {
         // Un livreur pas encore en base, rattaché à deux véhicules différents
@@ -268,11 +506,20 @@ class ImportFlotteTest extends TestCase
             ]
         );
 
-        $this->assertSame(0, $import->nb_groupes_valides);
-        $this->assertSame(2, $import->nb_groupes_erreur);
-        $erreur = collect($import->rapport['groupes'])->flatMap(fn ($g) => $g['erreurs'])->first();
+        // Un seul groupe d'erreur pour le conflit (pas un par véhicule concerné —
+        // cf. groupesConflitLivreurMultiVehicules) : les deux véhicules restent
+        // par ailleurs des groupes valides (simplement sans le livreur litigieux,
+        // ni équipe puisqu'aucun autre livreur ne leur est rattaché).
+        $this->assertSame(2, $import->nb_groupes_valides);
+        $this->assertSame(1, $import->nb_groupes_erreur);
+
+        $groupeErreur = collect($import->rapport['groupes'])->firstWhere('statut', 'erreur');
+        $erreur = $groupeErreur['erreurs'][0];
         $this->assertStringContainsString('+224623000001', $erreur);
         $this->assertStringContainsString('plusieurs véhicules différents', $erreur);
+        $this->assertStringContainsString('RC-1111-A', $erreur);
+        $this->assertStringContainsString('RC-2222-B', $erreur);
+        $this->assertStringContainsString('RC-1111-A, RC-2222-B', $groupeErreur['immatriculation']);
 
         $this->actingAs($this->user)
             ->post(route('imports-flotte.confirm', $import))
@@ -375,6 +622,7 @@ class ImportFlotteTest extends TestCase
 
         $import = $this->importer(
             [$this->ligneVehicule([
+                'vehicule_categorie' => 'interne',
                 'proprietaire_nom' => '', 'proprietaire_prenom' => '', 'proprietaire_telephone' => '', 'proprietaire_pays' => '',
             ])],
             [$this->ligneLivreurChauffeur()]
@@ -386,6 +634,59 @@ class ImportFlotteTest extends TestCase
 
         $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
         $this->assertSame($defaut->id, $vehicule->proprietaire_id);
+    }
+
+    /**
+     * Une ligne "interne" peut documenter explicitement le propriétaire interne par défaut
+     * (mêmes nom/prénom/téléphone) au lieu de laisser les colonnes proprietaire_* vides — même
+     * règle de cohérence que VehiculeController::ensureCategorieCoherente() côté formulaire.
+     */
+    public function test_analyse_accepte_vehicule_interne_dont_le_proprietaire_saisi_est_le_defaut(): void
+    {
+        $defaut = Proprietaire::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom' => 'SIDIBE',
+            'prenom' => 'Moussa',
+            'telephone' => '+224622602693',
+        ]);
+
+        $import = $this->importer(
+            [$this->ligneVehicule([
+                'vehicule_categorie' => 'interne',
+                'proprietaire_nom' => 'SIDIBE', 'proprietaire_prenom' => 'Moussa',
+                'proprietaire_telephone' => '622602693', 'proprietaire_pays' => 'GN',
+            ])],
+            [$this->ligneLivreurChauffeur()]
+        );
+
+        $this->assertSame(0, $import->nb_groupes_erreur);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
+        $this->assertSame($defaut->id, $vehicule->proprietaire_id);
+    }
+
+    /** Un véritable tiers (propriétaire différent du défaut) reste incohérent avec "interne". */
+    public function test_analyse_refuse_vehicule_interne_avec_un_veritable_proprietaire_tiers(): void
+    {
+        Proprietaire::factory()->create([
+            'organization_id' => $this->org->id,
+            'telephone' => '+224622602693',
+        ]);
+
+        $import = $this->importer(
+            [$this->ligneVehicule(['vehicule_categorie' => 'interne'])], // proprietaire_telephone => 622000001, un autre numéro
+            [$this->ligneLivreurChauffeur()]
+        );
+
+        $this->assertSame(1, $import->nb_groupes_erreur);
+        $this->assertStringContainsString(
+            'Véhicule interne : le propriétaire renseigné doit être le propriétaire interne par défaut',
+            $import->rapport['groupes'][0]['erreurs'][0]
+        );
     }
 
     public function test_confirm_creates_livreur_sans_nom_avec_designation_par_defaut(): void
@@ -962,6 +1263,7 @@ class ImportFlotteTest extends TestCase
         $import = $this->importer(
             [$this->ligneVehicule([
                 'vehicule_site' => 'MATOTO',
+                'vehicule_categorie' => 'interne',
                 'proprietaire_nom' => '', 'proprietaire_prenom' => '', 'proprietaire_telephone' => '', 'proprietaire_pays' => '',
             ])],
             [$this->ligneLivreurChauffeur()]
@@ -976,6 +1278,7 @@ class ImportFlotteTest extends TestCase
         $import = $this->importer(
             [$this->ligneVehicule([
                 'vehicule_site' => '1',
+                'vehicule_categorie' => 'interne',
                 'proprietaire_nom' => '', 'proprietaire_prenom' => '', 'proprietaire_telephone' => '', 'proprietaire_pays' => '',
             ])],
             [$this->ligneLivreurChauffeur()]
@@ -1000,12 +1303,248 @@ class ImportFlotteTest extends TestCase
         }
     }
 
+    /**
+     * Cas d'une cellule Excel de type booléen natif (pas du texte "oui"/"1") — cf.
+     * ImportFlotteParser::toBool(), qui gère explicitement is_bool() pour ce cas.
+     */
+    public function test_analyse_accepts_native_boolean_cell_value(): void
+    {
+        $import = $this->importerVehiculeEtChauffeur([
+            'vehicule_livraison_vente' => true,
+            'vehicule_livraison_logistique' => false,
+        ]);
+
+        $this->assertSame(0, $import->nb_groupes_erreur);
+        $this->assertTrue($import->rapport['groupes'][0]['vehicule']['livraison_vente']);
+        $this->assertFalse($import->rapport['groupes'][0]['vehicule']['livraison_logistique']);
+    }
+
+    // ── mode "livreurs seulement" (TypeImportFlotte::LIVREURS) ─────────────────
+
+    public function test_livreurs_seul_store_persists_type(): void
+    {
+        Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'immatriculation' => 'RC-1234-A',
+            'type_vehicule_id' => $this->type->id,
+        ]);
+
+        $import = $this->importerLivreursSeul([$this->ligneLivreurChauffeur()]);
+
+        $this->assertSame('livreurs', $import->type->value);
+    }
+
+    public function test_store_defaults_to_type_flotte_when_omitted(): void
+    {
+        $import = $this->importerVehiculeEtChauffeur();
+
+        $this->assertSame('flotte', $import->type->value);
+    }
+
+    public function test_livreurs_seul_analyse_flags_error_when_vehicule_does_not_exist(): void
+    {
+        $import = $this->importerLivreursSeul([$this->ligneLivreurChauffeur()]);
+
+        $this->assertSame(1, $import->nb_groupes_erreur);
+        $this->assertStringContainsString('Aucun véhicule avec l\'immatriculation "RC-1234-A" en base', $import->rapport['groupes'][0]['erreurs'][0]);
+    }
+
+    public function test_livreurs_seul_analyse_attaches_livreur_to_existing_vehicule_without_creating_it(): void
+    {
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'immatriculation' => 'RC-1234-A',
+            'type_vehicule_id' => $this->type->id,
+        ]);
+
+        $import = $this->importerLivreursSeul([$this->ligneLivreurChauffeur()]);
+
+        $this->assertSame(0, $import->nb_groupes_erreur);
+        $this->assertSame(1, $import->nb_groupes_valides);
+        $this->assertTrue($import->rapport['groupes'][0]['vehicule']['existe']);
+        $this->assertSame($vehicule->id, $import->rapport['groupes'][0]['vehicule']['id']);
+        $this->assertNull($import->rapport['groupes'][0]['proprietaire']);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $import->refresh();
+        $this->assertSame('termine', $import->statut->value);
+        $this->assertSame(0, $import->nb_proprietaires_crees);
+        $this->assertSame(0, $import->nb_vehicules_crees, 'le véhicule existant ne doit jamais être recréé');
+        $this->assertSame(1, $import->nb_livreurs_crees);
+        $this->assertSame(1, $import->nb_equipes_creees);
+
+        $livreur = Livreur::where('organization_id', $this->org->id)->where('telephone', '+224623000001')->firstOrFail();
+        $equipe = EquipeLivraison::where('vehicule_id', $vehicule->id)->firstOrFail();
+        $this->assertTrue($equipe->membres()->where('livreur_id', $livreur->id)->exists());
+
+        // Aucune donnée du véhicule n'est modifiée par ce mode (aucune feuille
+        // "vehicules" fournie, la ligne n'a jamais existé).
+        $this->assertSame('RC-1234-A', $vehicule->fresh()->immatriculation);
+    }
+
+    public function test_livreurs_seul_adds_member_to_existing_equipe_without_touching_its_commission(): void
+    {
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'immatriculation' => 'RC-1234-A',
+            'type_vehicule_id' => $this->type->id,
+        ]);
+        $equipe = EquipeLivraison::create([
+            'organization_id' => $this->org->id,
+            'vehicule_id' => $vehicule->id,
+            'commission_unitaire_par_pack' => 5000,
+        ]);
+        $chauffeur = Livreur::factory()->create(['organization_id' => $this->org->id, 'telephone' => '+224623000001']);
+        $equipe->membres()->create(['livreur_id' => $chauffeur->id, 'role' => 'chauffeur', 'montant_par_pack' => 3000]);
+
+        $import = $this->importerLivreursSeul([
+            $this->ligneLivreurChauffeur([
+                'livreur_nom' => 'Soumah', 'livreur_prenom' => 'Fatoumata',
+                'livreur_telephone' => '623000002', 'livreur_role' => 'convoyeur',
+            ]),
+        ]);
+
+        $this->assertSame(0, $import->nb_groupes_erreur);
+        $this->assertTrue($import->rapport['groupes'][0]['equipe']['existe']);
+
+        $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
+        $import->refresh();
+
+        $this->assertSame('termine', $import->statut->value);
+        $this->assertSame(0, $import->nb_equipes_creees, 'équipe déjà existante, pas recréée');
+        $this->assertSame(1, $import->nb_livreurs_crees);
+        $this->assertSame(2, $equipe->membres()->count());
+        // L'équipe déjà configurée n'est pas remise à zéro par l'import.
+        $this->assertSame('5000.00', $equipe->fresh()->commission_unitaire_par_pack);
+    }
+
+    public function test_livreurs_seul_analyse_flags_error_for_invalid_phone(): void
+    {
+        Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'immatriculation' => 'RC-1234-A',
+            'type_vehicule_id' => $this->type->id,
+        ]);
+
+        $import = $this->importerLivreursSeul([
+            $this->ligneLivreurChauffeur(['livreur_telephone' => '12345']),
+        ]);
+
+        $this->assertSame(1, $import->nb_groupes_erreur);
+    }
+
+    public function test_livreurs_seul_analyse_consolidates_multi_vehicule_conflict_into_one_group(): void
+    {
+        Vehicule::factory()->create(['organization_id' => $this->org->id, 'immatriculation' => 'RC-1111-A', 'type_vehicule_id' => $this->type->id]);
+        Vehicule::factory()->create(['organization_id' => $this->org->id, 'immatriculation' => 'RC-2222-B', 'type_vehicule_id' => $this->type->id]);
+
+        $import = $this->importerLivreursSeul([
+            $this->ligneLivreurChauffeur(['vehicule_immatriculation' => 'RC-1111-A']),
+            $this->ligneLivreurChauffeur(['vehicule_immatriculation' => 'RC-2222-B']),
+        ]);
+
+        // Comme en mode "flotte" : un seul groupe d'erreur pour le conflit, pas
+        // un par véhicule concerné. Contrairement au mode "flotte" (où le
+        // véhicule reste un groupe valide séparé, ancré par sa propre ligne
+        // "vehicules"), ici les deux véhicules n'ont plus aucune ligne "livreurs"
+        // à eux une fois la ligne litigieuse exclue — il n'y a donc rien d'autre
+        // à rapporter pour eux.
+        $this->assertSame(0, $import->nb_groupes_valides);
+        $this->assertSame(1, $import->nb_groupes_erreur);
+
+        $groupeErreur = collect($import->rapport['groupes'])->firstWhere('statut', 'erreur');
+        $this->assertStringContainsString('RC-1111-A', $groupeErreur['erreurs'][0]);
+        $this->assertStringContainsString('RC-2222-B', $groupeErreur['erreurs'][0]);
+    }
+
+    public function test_livreurs_seul_ignores_vehicules_sheet_if_present(): void
+    {
+        // Même si l'utilisateur laisse une feuille "vehicules" dans le fichier
+        // (ex: modèle "flotte" réutilisé par erreur), le mode "livreurs" ne la
+        // lit jamais : seule la feuille "livreurs" compte.
+        Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'immatriculation' => 'RC-1234-A',
+            'type_vehicule_id' => $this->type->id,
+        ]);
+
+        $fichier = $this->uploadFile(
+            [$this->ligneVehicule(['vehicule_immatriculation' => 'RC-9999-Z'])],
+            [$this->ligneLivreurChauffeur()]
+        );
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.store'), ['type' => 'livreurs', 'fichier' => $fichier])
+            ->assertRedirect();
+
+        $import = ImportFlotte::firstOrFail();
+        $this->assertSame(0, $import->nb_groupes_erreur);
+        $this->assertSame(1, $import->nb_groupes_valides);
+
+        $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
+        $this->assertSame(0, Vehicule::where('immatriculation', 'RC-9999-Z')->count(), 'la feuille "vehicules" ne doit jamais être exploitée dans ce mode');
+    }
+
+    public function test_livreurs_seul_template_download(): void
+    {
+        $this->actingAs($this->user)
+            ->get(route('imports-flotte.template', ['type' => 'livreurs']))
+            ->assertOk()
+            ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    }
+
     public function test_analyse_still_accepts_an_already_valid_file(): void
     {
         // Non-régression : un fichier déjà au format canonique ne doit générer
         // aucune erreur nouvelle après l'ajout de la normalisation.
         $import = $this->importerVehiculeEtChauffeur();
 
+        $this->assertSame(0, $import->nb_groupes_erreur);
+        $this->assertSame(1, $import->nb_groupes_valides);
+    }
+
+    /**
+     * Régression : un onglet renommé "Véhicules" (accentué, capitalisé — comme
+     * partout ailleurs dans l'UI de l'appli) doit être reconnu au même titre que
+     * "vehicules". Avant fix, la feuille "vehicules" semblait introuvable
+     * (trouverFeuille comparait sans passer par ImportTextNormalizer) : toutes
+     * les lignes "livreurs" échouaient avec un message d'immatriculation
+     * "introuvable" trompeur, alors que la ligne véhicule existait bien.
+     */
+    public function test_analyse_accepts_sheet_titled_with_accent_and_uppercase(): void
+    {
+        $spreadsheet = new Spreadsheet;
+
+        $sheetVehicules = $spreadsheet->getActiveSheet();
+        $sheetVehicules->setTitle('Véhicules');
+        $sheetVehicules->fromArray(self::HEADERS_VEHICULES, null, 'A1');
+        $sheetVehicules->fromArray(
+            array_map(fn ($h) => $this->ligneVehicule()[$h] ?? '', self::HEADERS_VEHICULES),
+            null,
+            'A2'
+        );
+
+        $sheetLivreurs = $spreadsheet->createSheet();
+        $sheetLivreurs->setTitle('livreurs');
+        $sheetLivreurs->fromArray(self::HEADERS_LIVREURS, null, 'A1');
+        $sheetLivreurs->fromArray(
+            array_map(fn ($h) => $this->ligneLivreurChauffeur()[$h] ?? '', self::HEADERS_LIVREURS),
+            null,
+            'A2'
+        );
+
+        $tmpPath = tempnam(sys_get_temp_dir(), 'import_flotte_test').'.xlsx';
+        (new Xlsx($spreadsheet))->save($tmpPath);
+        $fichier = new UploadedFile($tmpPath, 'import.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.store'), ['fichier' => $fichier])
+            ->assertRedirect();
+
+        $import = ImportFlotte::firstOrFail();
         $this->assertSame(0, $import->nb_groupes_erreur);
         $this->assertSame(1, $import->nb_groupes_valides);
     }

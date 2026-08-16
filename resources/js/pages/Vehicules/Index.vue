@@ -20,11 +20,15 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     Car,
+    ChevronDown,
+    Download,
     Eye,
     MoreVertical,
     Pencil,
     Search,
     Trash2,
+    TriangleAlert,
+    Upload,
     X,
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
@@ -48,6 +52,8 @@ interface Vehicule {
     type_label: string;
     capacite_packs: number | null;
     capacite_bouteilles: number | null;
+    categorie: 'interne' | 'partenaire';
+    categorie_label: string;
     proprietaire_nom: string | null;
     proprietaire_telephone: string | null;
     proprietaire_code_phone_pays: string | null;
@@ -59,6 +65,7 @@ interface Vehicule {
     is_active: boolean;
     livraison_vente: boolean;
     livraison_logistique: boolean;
+    usage_label: string;
 }
 
 const props = defineProps<{ vehicules: Vehicule[] }>();
@@ -138,6 +145,7 @@ const filterFields = computed<FilterField[]>(() => [
         options: [
             { value: 'vente', label: 'Vente' },
             { value: 'logistique', label: 'Logistique' },
+            { value: 'aucun', label: 'Usage non défini' },
         ],
     },
     {
@@ -150,6 +158,11 @@ const filterFields = computed<FilterField[]>(() => [
         ],
     },
 ]);
+
+function matchesUsageFilter(v: Vehicule, value: string): boolean {
+    if (value === 'aucun') return !v.livraison_vente && !v.livraison_logistique;
+    return value === 'vente' ? v.livraison_vente : v.livraison_logistique;
+}
 
 const filteredVehicules = computed(() =>
     props.vehicules.filter((v) => {
@@ -174,10 +187,7 @@ const filteredVehicules = computed(() =>
               ? v.is_active
               : !v.is_active;
         const matchUsage =
-            !filterUsage.value ||
-            (filterUsage.value === 'vente'
-                ? v.livraison_vente
-                : v.livraison_logistique);
+            !filterUsage.value || matchesUsageFilter(v, filterUsage.value);
         const matchAgence =
             !filterAgence.value ||
             (filterAgence.value === '__none__'
@@ -188,6 +198,30 @@ const filteredVehicules = computed(() =>
         );
     }),
 );
+
+// Mini stats — calculées sur l'ensemble des véhicules (indépendantes des filtres actifs),
+// pour donner une vue d'ensemble constante pendant qu'on filtre la liste en dessous.
+const vehiculeStats = computed(() => {
+    const total = props.vehicules.length;
+    const actifs = props.vehicules.filter((v) => v.is_active).length;
+    const sansEquipe = props.vehicules.filter((v) => !v.equipe_nom).length;
+
+    const parTypeMap = new Map<string, number>();
+    for (const v of props.vehicules) {
+        parTypeMap.set(v.type_label, (parTypeMap.get(v.type_label) ?? 0) + 1);
+    }
+    const parType = [...parTypeMap.entries()]
+        .map(([label, count]) => ({ label, count }))
+        .sort((a, b) => b.count - a.count);
+
+    return {
+        total,
+        actifs,
+        inactifs: total - actifs,
+        sansEquipe,
+        parType,
+    };
+});
 
 const mobileFiltered = computed(() =>
     props.vehicules.filter((v) => {
@@ -213,9 +247,7 @@ const mobileFiltered = computed(() =>
               : !v.is_active;
         const matchUsage =
             !mobileFilterUsage.value ||
-            (mobileFilterUsage.value === 'vente'
-                ? v.livraison_vente
-                : v.livraison_logistique);
+            matchesUsageFilter(v, mobileFilterUsage.value);
         const matchAgence =
             !mobileFilterAgence.value ||
             (mobileFilterAgence.value === '__none__'
@@ -327,6 +359,7 @@ function confirmDelete(v: Vehicule) {
                         <option value="">Tous usages</option>
                         <option value="vente">Vente</option>
                         <option value="logistique">Logistique</option>
+                        <option value="aucun">Usage non défini</option>
                     </select>
                     <select
                         v-model="mobileFilterStatut"
@@ -391,6 +424,13 @@ function confirmDelete(v: Vehicule) {
                         >
                             {{ v.type_label }}
                         </span>
+                        <div
+                            v-if="!v.livraison_vente && !v.livraison_logistique"
+                            class="mt-1 flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400"
+                        >
+                            <TriangleAlert class="h-3 w-3" />
+                            Usage non défini
+                        </div>
                     </div>
 
                     <!-- Status dot -->
@@ -477,6 +517,118 @@ function confirmDelete(v: Vehicule) {
                         }}
                     </p>
                 </div>
+                <DropdownMenu v-if="can('imports-flotte.create')">
+                    <DropdownMenuTrigger as-child>
+                        <Button variant="outline">
+                            <Upload class="mr-2 h-4 w-4" />
+                            Importer
+                            <ChevronDown class="ml-2 h-3.5 w-3.5" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" class="w-56">
+                        <DropdownMenuItem as-child>
+                            <Link
+                                href="/settings/imports-flotte/nouveau"
+                                class="flex w-full items-center gap-2"
+                            >
+                                <Upload class="h-4 w-4" />
+                                Importer
+                            </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem as-child>
+                            <a
+                                href="/settings/imports-flotte/modele"
+                                class="flex w-full items-center gap-2"
+                            >
+                                <Download class="h-4 w-4" />
+                                Télécharger le modèle
+                            </a>
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
+
+            <!-- Mini stats — vue d'ensemble indépendante des filtres -->
+            <div class="grid grid-cols-4 gap-3">
+                <div
+                    class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                >
+                    <p class="mt-0.5 text-base font-semibold tabular-nums">
+                        {{ vehiculeStats.total }}
+                    </p>
+                    <p
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Total
+                    </p>
+                </div>
+                <div
+                    class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                >
+                    <p
+                        class="mt-0.5 text-base font-semibold text-emerald-600 tabular-nums dark:text-emerald-400"
+                    >
+                        {{ vehiculeStats.actifs }}
+                    </p>
+                    <p
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Actifs
+                    </p>
+                </div>
+                <div
+                    class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                >
+                    <p
+                        class="mt-0.5 text-base font-semibold text-muted-foreground tabular-nums"
+                    >
+                        {{ vehiculeStats.inactifs }}
+                    </p>
+                    <p
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Inactifs
+                    </p>
+                </div>
+                <div
+                    class="rounded-lg border bg-card px-3 py-3 text-center sm:px-4"
+                >
+                    <p
+                        class="mt-0.5 text-base font-semibold tabular-nums"
+                        :class="
+                            vehiculeStats.sansEquipe > 0
+                                ? 'text-amber-600 dark:text-amber-400'
+                                : 'text-foreground'
+                        "
+                    >
+                        {{ vehiculeStats.sansEquipe }}
+                    </p>
+                    <p
+                        class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Sans équipe
+                    </p>
+                </div>
+            </div>
+
+            <!-- Répartition par type -->
+            <div
+                v-if="vehiculeStats.parType.length"
+                class="flex flex-wrap items-center gap-2 rounded-lg border bg-card px-3 py-2.5"
+            >
+                <span
+                    class="text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                >
+                    Par type
+                </span>
+                <span
+                    v-for="t in vehiculeStats.parType"
+                    :key="t.label"
+                    class="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium"
+                >
+                    {{ t.label }}
+                    <span class="text-muted-foreground">{{ t.count }}</span>
+                </span>
             </div>
 
             <!-- Filtres -->
@@ -601,7 +753,7 @@ function confirmDelete(v: Vehicule) {
                             >
                                 {{
                                     data.capacite_packs != null
-                                        ? `${data.capacite_packs} packs`
+                                        ? `${data.capacite_packs} sachets`
                                         : '—'
                                 }}
                                 <template
@@ -621,6 +773,11 @@ function confirmDelete(v: Vehicule) {
                     >
                         <template #body="{ data }">
                             <div class="leading-tight">
+                                <div
+                                    class="text-[11px] font-medium tracking-wide text-muted-foreground/70 uppercase"
+                                >
+                                    {{ data.categorie_label }}
+                                </div>
                                 <div class="text-muted-foreground">
                                     {{ data.proprietaire_nom ?? '—' }}
                                 </div>
@@ -657,6 +814,33 @@ function confirmDelete(v: Vehicule) {
                                     {{ data.livreur_principal_nom }}
                                 </div>
                             </div>
+                        </template>
+                    </Column>
+
+                    <!-- Usage -->
+                    <Column
+                        field="usage_label"
+                        header="Usage"
+                        sortable
+                        style="width: 160px"
+                    >
+                        <template #body="{ data }">
+                            <span
+                                v-if="
+                                    data.livraison_vente ||
+                                    data.livraison_logistique
+                                "
+                                class="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium"
+                            >
+                                {{ data.usage_label }}
+                            </span>
+                            <span
+                                v-else
+                                class="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400"
+                            >
+                                <TriangleAlert class="h-3.5 w-3.5" />
+                                {{ data.usage_label }}
+                            </span>
                         </template>
                     </Column>
 

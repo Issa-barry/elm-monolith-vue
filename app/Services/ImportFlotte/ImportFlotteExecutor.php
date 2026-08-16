@@ -25,7 +25,7 @@ class ImportFlotteExecutor
         // Ré-analyse à l'instant T (et non réutilisation du rapport d'aperçu) pour
         // éviter tout écart avec un changement survenu entre l'aperçu et la confirmation.
         $absolutePath = Storage::disk('local')->path($import->fichier_path);
-        $analyse = $this->parser->analyser($absolutePath, $import->organization_id);
+        $analyse = $this->parser->analyser($absolutePath, $import->organization_id, $import->type);
 
         $groupesErreur = array_filter($analyse['groupes'], fn ($g) => $g['statut'] === 'erreur');
 
@@ -113,6 +113,7 @@ class ImportFlotteExecutor
                 'livraison_vente' => $vData['livraison_vente'],
                 'livraison_logistique' => $vData['livraison_logistique'],
                 'site_id' => $vData['site_id'],
+                'categorie' => $vData['categorie'],
                 // Propriété indépendante de l'usage : propriétaire tiers si résolu depuis le
                 // fichier, sinon propriétaire par défaut (organisation).
                 'proprietaire_id' => $proprietaireId ?? Proprietaire::interneParDefautId($orgId),

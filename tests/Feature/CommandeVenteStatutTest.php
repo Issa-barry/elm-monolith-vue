@@ -281,7 +281,12 @@ class CommandeVenteStatutTest extends TestCase
         $this->assertEquals($fresh->reference, $facture->reference);
     }
 
-    public function test_confirmer_cree_les_commissions_en_statut_creee_pour_chauffeur_et_convoyeur(): void
+    /**
+     * La commission de vente naît du chargement réel (validerChargement()),
+     * jamais de la confirmation : aucune ligne commissions_ventes ne doit
+     * exister tant que le chargement n'a pas été validé.
+     */
+    public function test_confirmer_ne_cree_aucune_commission(): void
     {
         $vehicule = $this->makeVehiculeAvecEquipe();
         ['commande' => $commande] = $this->makeCommandeWithLigne([], $vehicule);
@@ -290,22 +295,11 @@ class CommandeVenteStatutTest extends TestCase
             ->post(route('ventes.statut.avancer', $commande))
             ->assertRedirect();
 
-        $this->assertDatabaseHas('commissions_ventes', [
-            'commande_vente_id' => $commande->id,
-            'statut' => 'creee',
-        ]);
-
-        $commission = $commande->fresh()->commissions()->first();
-        $this->assertNotNull($commission);
-        // 2 parts livreur (chauffeur + convoyeur) + 1 part propriétaire, toutes en Créée.
-        $this->assertEquals(3, $commission->parts()->where('statut', 'creee')->count());
-        $this->assertEqualsCanonicalizing(
-            ['chauffeur', 'convoyeur'],
-            $commission->parts()->where('type_beneficiaire', 'livreur')->pluck('role')->all()
-        );
+        $this->assertEquals(StatutCommandeVente::A_CHARGER, $commande->fresh()->statut);
+        $this->assertDatabaseMissing('commissions_ventes', ['commande_vente_id' => $commande->id]);
     }
 
-    public function test_demarrer_chargement_ne_recree_pas_la_facture_ni_les_commissions(): void
+    public function test_demarrer_chargement_ne_recree_pas_la_facture_et_ne_cree_toujours_pas_de_commission(): void
     {
         $vehicule = $this->makeVehiculeAvecEquipe();
         ['commande' => $commande] = $this->makeCommandeWithLigne([
@@ -313,9 +307,6 @@ class CommandeVenteStatutTest extends TestCase
         ], $vehicule);
 
         $factureId = $commande->fresh()->facture->id;
-        $commissionAvant = $commande->fresh()->commissions()->first();
-        $commissionId = $commissionAvant->id;
-        $nbPartsAvant = $commissionAvant->parts()->count();
 
         $this->actingAs($this->user)
             ->post(route('ventes.statut.avancer', $commande))
@@ -324,10 +315,8 @@ class CommandeVenteStatutTest extends TestCase
         $fresh = $commande->fresh();
         $this->assertEquals(StatutCommandeVente::CHARGEMENT_EN_COURS, $fresh->statut);
         $this->assertEquals($factureId, $fresh->facture->id);
-        $this->assertEquals($commissionId, $fresh->commissions()->first()->id);
         $this->assertEquals(1, FactureVente::where('commande_vente_id', $commande->id)->count());
-        $this->assertEquals(1, $fresh->commissions()->count());
-        $this->assertEquals($nbPartsAvant, $fresh->commissions()->first()->parts()->count());
+        $this->assertDatabaseMissing('commissions_ventes', ['commande_vente_id' => $commande->id]);
     }
 
     // ── CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS ──────────────────────────────
@@ -413,18 +402,15 @@ class CommandeVenteStatutTest extends TestCase
         ]);
     }
 
-    public function test_valider_chargement_recalcule_commissions_chauffeur_et_convoyeur_selon_qte_chargee(): void
+    public function test_valider_chargement_cree_les_commissions_chauffeur_et_convoyeur_selon_qte_chargee(): void
     {
         $vehicule = $this->makeVehiculeAvecEquipe(tauxChauffeur: 18.42, tauxConvoyeur: 13.16);
         ['commande' => $commande, 'ligne' => $ligne] = $this->makeCommandeWithLigne([
             'statut' => StatutCommandeVente::CHARGEMENT_EN_COURS,
         ], $vehicule);
 
-        $commission = $commande->fresh()->commissions()->first();
-        $avant = $commission->parts()->orderBy('role')->get()->keyBy('role');
-        // Sur quantité demandée (2 × (2000-1500) = 1000 de marge) :
-        $this->assertEquals(184.2, round((float) $avant['chauffeur']->montant_brut, 2));
-        $this->assertEquals(131.6, round((float) $avant['convoyeur']->montant_brut, 2));
+        // Aucune commission tant que le chargement n'est pas validé.
+        $this->assertDatabaseMissing('commissions_ventes', ['commande_vente_id' => $commande->id]);
 
         // Valide le chargement avec seulement 1 pack chargé au lieu de 2.
         $this->actingAs($this->user)
@@ -437,13 +423,18 @@ class CommandeVenteStatutTest extends TestCase
             ])
             ->assertRedirect();
 
-        $apres = $commission->fresh()->parts()->orderBy('role')->get()->keyBy('role');
+        $commission = $commande->fresh()->commissions()->first();
+        $this->assertNotNull($commission);
+        $parts = $commission->parts()->orderBy('role')->get()->keyBy('role');
 
-        // Marge sur 1 pack = 500 → chauffeur 18.42% = 92.10, convoyeur 13.16% = 65.80
-        $this->assertEquals(92.1, round((float) $apres['chauffeur']->montant_brut, 2));
-        $this->assertEquals(65.8, round((float) $apres['convoyeur']->montant_brut, 2));
-        $this->assertEquals('impaye', $apres['chauffeur']->statut->value);
-        $this->assertEquals('impaye', $apres['convoyeur']->statut->value);
+        // Commission calculée directement sur la quantité chargée (1 pack, jamais
+        // les 2 demandées) : marge = 500 → chauffeur 18.42% = 92.10, convoyeur 13.16% = 65.80
+        $this->assertEquals(92.1, round((float) $parts['chauffeur']->montant_brut, 2));
+        $this->assertEquals(65.8, round((float) $parts['convoyeur']->montant_brut, 2));
+        // Créée seulement — ne devient IMPAYE qu'à la validation de la période de paiement.
+        $this->assertEquals('creee', $commission->statut->value);
+        $this->assertEquals('creee', $parts['chauffeur']->statut->value);
+        $this->assertEquals('creee', $parts['convoyeur']->statut->value);
     }
 
     public function test_valider_chargement_decremente_le_stock_du_site(): void
@@ -545,8 +536,6 @@ class CommandeVenteStatutTest extends TestCase
             'statut' => StatutCommandeVente::CHARGEMENT_EN_COURS,
         ], $vehicule);
 
-        $nbPartsAvant = $commande->fresh()->commissions()->first()->parts()->count();
-
         $this->actingAs($this->user)
             ->post(route('ventes.statut.avancer', $commande), [
                 'lignes' => [['id' => $ligne->id, 'quantite_chargee' => 2, 'type_ecart' => 'conforme']],
@@ -554,6 +543,7 @@ class CommandeVenteStatutTest extends TestCase
             ->assertRedirect();
 
         $this->assertEquals(StatutCommandeVente::LIVRAISON_EN_COURS, $commande->fresh()->statut);
+        $nbPartsAvant = $commande->fresh()->commissions()->first()->parts()->count();
 
         // Toute nouvelle tentative d'avancer depuis LIVRAISON_EN_COURS est refusée par la policy.
         $this->actingAs($this->user)
@@ -593,14 +583,17 @@ class CommandeVenteStatutTest extends TestCase
             'statut' => StatutCommandeVente::CHARGEMENT_EN_COURS,
         ], $vehicule);
 
-        $chauffeurPart = $commande->fresh()->commissions()->first()->parts()->where('role', 'chauffeur')->first();
-        $this->assertEquals('creee', $chauffeurPart->statut->value);
+        // Tant que le chargement n'est pas validé, aucune commission n'existe
+        // encore : rien n'est payable.
+        $this->assertDatabaseMissing('commissions_ventes', ['commande_vente_id' => $commande->id]);
+
+        $chauffeurId = $vehicule->fresh()->equipe->membres()->where('role', 'chauffeur')->first()->livreur_id;
 
         Permission::firstOrCreate(['name' => 'comptabilite.payer', 'guard_name' => 'web']);
         $this->user->givePermissionTo('comptabilite.payer');
 
         $this->actingAs($this->user)
-            ->post(route('comptabilite.commissions.vente.livreur.paiements', $chauffeurPart->livreur_id), [
+            ->post(route('comptabilite.commissions.vente.livreur.paiements', $chauffeurId), [
                 'montant' => 50,
                 'mode_paiement' => 'especes',
             ])

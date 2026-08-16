@@ -34,7 +34,7 @@ class VehiculeTest extends TestCase
         return TypeVehicule::where('organization_id', $this->org->id)->value('id');
     }
 
-    private function makeVehicule(Organization $org): Vehicule
+    private function makeVehicule(Organization $org, ?bool $livraisonVente = null, ?bool $livraisonLogistique = null): Vehicule
     {
         $typeVehicule = TypeVehicule::factory()->create(['organization_id' => $org->id]);
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id]);
@@ -49,6 +49,8 @@ class VehiculeTest extends TestCase
             'type_vehicule_id' => $typeVehicule->id,
             'proprietaire_id' => $proprietaire->id,
             'site_id' => $site->id,
+            ...($livraisonVente !== null ? ['livraison_vente' => $livraisonVente] : []),
+            ...($livraisonLogistique !== null ? ['livraison_logistique' => $livraisonLogistique] : []),
         ]);
     }
 
@@ -156,6 +158,7 @@ class VehiculeTest extends TestCase
                 'immatriculation' => 'RC-001-GN',
                 'type_vehicule_id' => $this->typeId(),
                 'proprietaire_id' => $proprietaire->id,
+                'categorie' => 'partenaire',
                 'site_id' => $site->id,
                 'capacite_packs' => 200,
                 'is_active' => true,
@@ -189,6 +192,7 @@ class VehiculeTest extends TestCase
                 'immatriculation' => 'MB-001-GN',
                 'type_vehicule_id' => $this->typeId(),
                 'proprietaire_id' => $proprietaire->id,
+                'categorie' => 'partenaire',
                 'site_id' => $site->id,
                 'capacite_packs' => 200,
                 'capacite_bouteilles' => 60,
@@ -214,6 +218,7 @@ class VehiculeTest extends TestCase
                 'nom_vehicule' => 'Tricycle 01',
                 'immatriculation' => 'TC-TEST-GN',
                 'type_vehicule_id' => $this->typeId(),
+                'categorie' => 'interne',
                 'site_id' => $site->id,
                 'capacite_packs' => 50,
                 'is_active' => true,
@@ -245,6 +250,7 @@ class VehiculeTest extends TestCase
                 'nom_vehicule' => 'Camion Mixte',
                 'immatriculation' => 'MX-001-GN',
                 'type_vehicule_id' => $this->typeId(),
+                'categorie' => 'interne',
                 'site_id' => $site->id,
                 'livraison_vente' => true,
                 'livraison_logistique' => true,
@@ -267,6 +273,7 @@ class VehiculeTest extends TestCase
                 'nom_vehicule' => 'Camion Sans Usage',
                 'immatriculation' => 'NU-001-GN',
                 'type_vehicule_id' => $this->typeId(),
+                'categorie' => 'interne',
                 'site_id' => $site->id,
                 'livraison_vente' => false,
                 'livraison_logistique' => false,
@@ -286,6 +293,7 @@ class VehiculeTest extends TestCase
                 'immatriculation' => 'RC-NOSITE-GN',
                 'type_vehicule_id' => $this->typeId(),
                 'proprietaire_id' => $proprietaire->id,
+                'categorie' => 'partenaire',
                 'livraison_vente' => true,
                 'livraison_logistique' => false,
             ])
@@ -306,6 +314,7 @@ class VehiculeTest extends TestCase
                 'nom_vehicule' => 'Tricycle Autre Org',
                 'immatriculation' => 'TC-AUTREORG-GN',
                 'type_vehicule_id' => $this->typeId(),
+                'categorie' => 'interne',
                 'site_id' => $otherSite->id,
                 'livraison_vente' => true,
                 'livraison_logistique' => false,
@@ -317,7 +326,7 @@ class VehiculeTest extends TestCase
     {
         $this->actingAs($this->user)
             ->post(route('vehicules.store'), [])
-            ->assertSessionHasErrors(['nom_vehicule', 'immatriculation', 'type_vehicule_id', 'site_id', 'livraison_vente', 'livraison_logistique']);
+            ->assertSessionHasErrors(['nom_vehicule', 'immatriculation', 'type_vehicule_id', 'site_id', 'categorie', 'livraison_vente', 'livraison_logistique']);
     }
 
     public function test_store_fails_with_invalid_type_vehicule(): void
@@ -360,6 +369,7 @@ class VehiculeTest extends TestCase
                 'immatriculation' => 'RC-EXT-GN',
                 'type_vehicule_id' => $this->typeId(),
                 'proprietaire_id' => $proprietaire->id,
+                'categorie' => 'partenaire',
                 'site_id' => $site->id,
                 'livraison_vente' => true,
                 'livraison_logistique' => false,
@@ -389,6 +399,7 @@ class VehiculeTest extends TestCase
                 'immatriculation' => 'RC-NONADMIN-GN',
                 'type_vehicule_id' => $this->typeId(),
                 'proprietaire_id' => $proprietaire->id,
+                'categorie' => 'partenaire',
                 'site_id' => $otherSite->id,
                 'livraison_vente' => true,
                 'livraison_logistique' => false,
@@ -410,6 +421,7 @@ class VehiculeTest extends TestCase
                 'immatriculation' => 'RC-NONADMINOK-GN',
                 'type_vehicule_id' => $this->typeId(),
                 'proprietaire_id' => $proprietaire->id,
+                'categorie' => 'partenaire',
                 'site_id' => $ownSite->id,
                 'livraison_vente' => true,
                 'livraison_logistique' => false,
@@ -456,6 +468,7 @@ class VehiculeTest extends TestCase
                 'immatriculation' => $vehicule->immatriculation,
                 'type_vehicule_id' => $vehicule->type_vehicule_id,
                 'proprietaire_id' => $nouveauProprietaire->id,
+                'categorie' => 'partenaire',
                 'site_id' => $vehicule->site_id,
                 'is_active' => true,
                 'livraison_vente' => true,
@@ -475,7 +488,7 @@ class VehiculeTest extends TestCase
 
         $this->actingAs($this->user)
             ->put(route('vehicules.update', $vehicule), [])
-            ->assertSessionHasErrors(['nom_vehicule', 'immatriculation', 'type_vehicule_id', 'site_id', 'livraison_vente', 'livraison_logistique']);
+            ->assertSessionHasErrors(['nom_vehicule', 'immatriculation', 'type_vehicule_id', 'site_id', 'categorie', 'livraison_vente', 'livraison_logistique']);
     }
 
     public function test_update_fails_sans_aucun_usage(): void
@@ -488,6 +501,7 @@ class VehiculeTest extends TestCase
                 'immatriculation' => $vehicule->immatriculation,
                 'type_vehicule_id' => $vehicule->type_vehicule_id,
                 'proprietaire_id' => $vehicule->proprietaire_id,
+                'categorie' => 'partenaire',
                 'site_id' => $vehicule->site_id,
                 'livraison_vente' => false,
                 'livraison_logistique' => false,
@@ -506,6 +520,7 @@ class VehiculeTest extends TestCase
                 'immatriculation' => $vehicule->immatriculation,
                 'type_vehicule_id' => $vehicule->type_vehicule_id,
                 'proprietaire_id' => $vehicule->proprietaire_id,
+                'categorie' => 'partenaire',
                 'site_id' => $vehicule->site_id,
                 'livraison_vente' => true,
                 'livraison_logistique' => true,
@@ -529,6 +544,7 @@ class VehiculeTest extends TestCase
                 'immatriculation' => $vehicule->immatriculation,
                 'type_vehicule_id' => $vehicule->type_vehicule_id,
                 'proprietaire_id' => $vehicule->proprietaire_id,
+                'categorie' => 'partenaire',
                 'site_id' => $vehicule->site_id,
                 'is_active' => true,
                 'livraison_vente' => true,
@@ -555,6 +571,7 @@ class VehiculeTest extends TestCase
                 'immatriculation' => $vehicule->immatriculation,
                 'type_vehicule_id' => $vehicule->type_vehicule_id,
                 'proprietaire_id' => $vehicule->proprietaire_id,
+                'categorie' => 'partenaire',
                 'site_id' => $otherSite->id,
                 'livraison_vente' => true,
                 'livraison_logistique' => false,
@@ -628,6 +645,7 @@ class VehiculeTest extends TestCase
             'type_vehicule_id' => $typeVehicule->id,
             'site_id' => $site->id,
             'proprietaire_id' => null,
+            'categorie' => 'interne',
         ]);
 
         $this->actingAs($this->user)
@@ -657,6 +675,7 @@ class VehiculeTest extends TestCase
                 'nom_vehicule' => 'Tricycle Défaut',
                 'immatriculation' => 'TC-DEFAUT-GN',
                 'type_vehicule_id' => $this->typeId(),
+                'categorie' => 'interne',
                 'site_id' => $site->id,
                 'capacite_packs' => 50,
                 'is_active' => true,
@@ -695,6 +714,7 @@ class VehiculeTest extends TestCase
                 'immatriculation' => 'TC-EXPLICITE-GN',
                 'type_vehicule_id' => $this->typeId(),
                 'proprietaire_id' => $autre->id,
+                'categorie' => 'partenaire',
                 'site_id' => $site->id,
                 'capacite_packs' => 50,
                 'is_active' => true,
@@ -707,6 +727,198 @@ class VehiculeTest extends TestCase
             'immatriculation' => 'TC-EXPLICITE-GN',
             'proprietaire_id' => $autre->id,
         ]);
+    }
+
+    // ── catégorie (propriété INTERNE/PARTENAIRE) — obligatoire et cohérente avec le ────────
+    // propriétaire, cf. CategorieVehicule::coherentAvecProprietaireTiers() ─────────────────
+
+    public function test_store_fails_sans_categorie(): void
+    {
+        $site = $this->user->sites()->first();
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Camion Sans Categorie',
+                'immatriculation' => 'CAT-001-GN',
+                'type_vehicule_id' => $this->typeId(),
+                'site_id' => $site->id,
+                'livraison_vente' => true,
+                'livraison_logistique' => false,
+            ])
+            ->assertSessionHasErrors('categorie');
+
+        $this->assertDatabaseMissing('vehicules', ['immatriculation' => 'CAT-001-GN']);
+    }
+
+    public function test_store_fails_avec_categorie_invalide(): void
+    {
+        $site = $this->user->sites()->first();
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Camion Categorie Invalide',
+                'immatriculation' => 'CAT-002-GN',
+                'type_vehicule_id' => $this->typeId(),
+                'categorie' => 'externe',
+                'site_id' => $site->id,
+                'livraison_vente' => true,
+                'livraison_logistique' => false,
+            ])
+            ->assertSessionHasErrors('categorie');
+    }
+
+    public function test_store_fails_partenaire_sans_proprietaire_tiers(): void
+    {
+        // Categorie PARTENAIRE sans proprietaire_id du tout : le contrôleur assignerait
+        // silencieusement le propriétaire interne par défaut si la cohérence n'était pas
+        // vérifiée après coup — cf. VehiculeController::ensureCategorieCoherente().
+        $site = $this->user->sites()->first();
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Camion Partenaire Sans Proprio',
+                'immatriculation' => 'CAT-003-GN',
+                'type_vehicule_id' => $this->typeId(),
+                'categorie' => 'partenaire',
+                'site_id' => $site->id,
+                'livraison_vente' => true,
+                'livraison_logistique' => false,
+            ])
+            ->assertSessionHasErrors('categorie');
+
+        $this->assertDatabaseMissing('vehicules', ['immatriculation' => 'CAT-003-GN']);
+    }
+
+    public function test_store_fails_partenaire_avec_proprietaire_interne_par_defaut(): void
+    {
+        $defaut = Proprietaire::factory()->create([
+            'organization_id' => $this->org->id,
+            'telephone' => '+224622602693',
+        ]);
+        $site = $this->user->sites()->first();
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Camion Partenaire Proprio Interne',
+                'immatriculation' => 'CAT-004-GN',
+                'type_vehicule_id' => $this->typeId(),
+                'proprietaire_id' => $defaut->id,
+                'categorie' => 'partenaire',
+                'site_id' => $site->id,
+                'livraison_vente' => true,
+                'livraison_logistique' => false,
+            ])
+            ->assertSessionHasErrors('categorie');
+
+        $this->assertDatabaseMissing('vehicules', ['immatriculation' => 'CAT-004-GN']);
+    }
+
+    public function test_store_fails_interne_avec_proprietaire_tiers(): void
+    {
+        $tiers = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $site = $this->user->sites()->first();
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Camion Interne Proprio Tiers',
+                'immatriculation' => 'CAT-005-GN',
+                'type_vehicule_id' => $this->typeId(),
+                'proprietaire_id' => $tiers->id,
+                'categorie' => 'interne',
+                'site_id' => $site->id,
+                'livraison_vente' => true,
+                'livraison_logistique' => false,
+            ])
+            ->assertSessionHasErrors('categorie');
+
+        $this->assertDatabaseMissing('vehicules', ['immatriculation' => 'CAT-005-GN']);
+    }
+
+    public function test_store_succeeds_interne_sans_proprietaire(): void
+    {
+        $site = $this->user->sites()->first();
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Camion Interne Ok',
+                'immatriculation' => 'CAT-006-GN',
+                'type_vehicule_id' => $this->typeId(),
+                'categorie' => 'interne',
+                'site_id' => $site->id,
+                'livraison_vente' => true,
+                'livraison_logistique' => false,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('vehicules', [
+            'immatriculation' => 'CAT-006-GN',
+            'categorie' => 'interne',
+        ]);
+    }
+
+    public function test_store_succeeds_partenaire_avec_proprietaire_tiers(): void
+    {
+        $tiers = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $site = $this->user->sites()->first();
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Camion Partenaire Ok',
+                'immatriculation' => 'CAT-007-GN',
+                'type_vehicule_id' => $this->typeId(),
+                'proprietaire_id' => $tiers->id,
+                'categorie' => 'partenaire',
+                'site_id' => $site->id,
+                'livraison_vente' => true,
+                'livraison_logistique' => false,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('vehicules', [
+            'immatriculation' => 'CAT-007-GN',
+            'proprietaire_id' => $tiers->id,
+            'categorie' => 'partenaire',
+        ]);
+    }
+
+    public function test_update_fails_quand_categorie_devient_incoherente_avec_le_proprietaire(): void
+    {
+        $tiers = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($this->org);
+        $vehicule->update(['categorie' => 'partenaire', 'proprietaire_id' => $tiers->id]);
+
+        $this->actingAs($this->user)
+            ->put(route('vehicules.update', $vehicule), [
+                'nom_vehicule' => $vehicule->nom_vehicule,
+                'immatriculation' => $vehicule->immatriculation,
+                'type_vehicule_id' => $vehicule->type_vehicule_id,
+                'proprietaire_id' => $tiers->id,
+                // Bascule vers INTERNE sans changer le propriétaire tiers : incohérent.
+                'categorie' => 'interne',
+                'site_id' => $vehicule->site_id,
+                'livraison_vente' => true,
+                'livraison_logistique' => false,
+            ])
+            ->assertSessionHasErrors('categorie');
+
+        $this->assertDatabaseHas('vehicules', [
+            'id' => $vehicule->id,
+            'categorie' => 'partenaire',
+        ]);
+    }
+
+    public function test_show_expose_categorie(): void
+    {
+        $vehicule = $this->makeVehicule($this->org);
+        $vehicule->update(['categorie' => 'partenaire']);
+
+        $this->actingAs($this->user)
+            ->get(route('vehicules.show', $vehicule))
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Vehicules/Show')
+                ->where('vehicule.categorie', 'partenaire')
+                ->where('vehicule.categorie_label', 'Partenaire')
+            );
     }
 
     public function test_show_expose_livreur_nom_sans_doublon_de_designation(): void
@@ -779,6 +991,25 @@ class VehiculeTest extends TestCase
             ->assertSessionHasErrors('immatriculation');
     }
 
+    /** Même plaque, écrite différemment (espaces/points/casse) : doit rester un doublon détecté. */
+    public function test_store_fails_si_immatriculation_correspond_apres_normalisation(): void
+    {
+        Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'immatriculation' => 'BK-4627-02',
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Camion Doublon',
+                'immatriculation' => 'bk 4627.02',
+                'type_vehicule_id' => $this->typeId(),
+            ])
+            ->assertSessionHasErrors('immatriculation');
+
+        $this->assertSame(1, Vehicule::where('organization_id', $this->org->id)->count());
+    }
+
     public function test_update_fails_si_immatriculation_utilisee_par_autre_vehicule(): void
     {
         $vehicule = $this->makeVehicule($this->org);
@@ -796,5 +1027,66 @@ class VehiculeTest extends TestCase
                 'proprietaire_id' => $vehicule->proprietaire_id,
             ])
             ->assertSessionHasErrors('immatriculation');
+    }
+
+    // ── usage vente/logistique — règle métier centralisée (Vehicule::usage_label / ────
+    // aAuMoinsUnUsage()) et exclusion des sélecteurs opérationnels (scopes) ───────────
+
+    public function test_usage_label_reflects_livraison_flags(): void
+    {
+        $this->assertSame('Vente', $this->makeVehicule($this->org, true, false)->usage_label);
+        $this->assertSame('Logistique', $this->makeVehicule($this->org, false, true)->usage_label);
+        $this->assertSame('Vente + Logistique', $this->makeVehicule($this->org, true, true)->usage_label);
+        $this->assertSame('Usage non défini', $this->makeVehicule($this->org, false, false)->usage_label);
+    }
+
+    public function test_a_au_moins_un_usage_helper(): void
+    {
+        $this->assertTrue($this->makeVehicule($this->org, true, false)->aAuMoinsUnUsage());
+        $this->assertTrue($this->makeVehicule($this->org, false, true)->aAuMoinsUnUsage());
+        $this->assertFalse($this->makeVehicule($this->org, false, false)->aAuMoinsUnUsage());
+    }
+
+    /**
+     * Les scopes ci-dessous sont le mécanisme réel utilisé par tous les sélecteurs
+     * opérationnels (CommandeVenteController::vehiculesActifs(), PdvController,
+     * TransfertLogistiqueController, RessourcesController) — les tester directement
+     * couvre donc l'exclusion effective d'un véhicule sans usage (ou avec un usage
+     * différent de celui demandé) de ces sélecteurs.
+     */
+    public function test_scope_livraison_vente_exclut_vehicule_sans_aucun_usage(): void
+    {
+        $sansUsage = $this->makeVehicule($this->org, false, false);
+
+        $this->assertFalse(Vehicule::livraisonVente()->whereKey($sansUsage->id)->exists());
+    }
+
+    public function test_scope_livraison_logistique_exclut_vehicule_sans_aucun_usage(): void
+    {
+        $sansUsage = $this->makeVehicule($this->org, false, false);
+
+        $this->assertFalse(Vehicule::livraisonLogistique()->whereKey($sansUsage->id)->exists());
+    }
+
+    public function test_scope_livraison_logistique_exclut_vehicule_vente_uniquement(): void
+    {
+        $venteUniquement = $this->makeVehicule($this->org, true, false);
+
+        $this->assertFalse(Vehicule::livraisonLogistique()->whereKey($venteUniquement->id)->exists());
+    }
+
+    public function test_scope_livraison_vente_exclut_vehicule_logistique_uniquement(): void
+    {
+        $logistiqueUniquement = $this->makeVehicule($this->org, false, true);
+
+        $this->assertFalse(Vehicule::livraisonVente()->whereKey($logistiqueUniquement->id)->exists());
+    }
+
+    public function test_scope_livraison_vente_et_logistique_incluent_vehicule_avec_les_deux_usages(): void
+    {
+        $vehicule = $this->makeVehicule($this->org, true, true);
+
+        $this->assertTrue(Vehicule::livraisonVente()->whereKey($vehicule->id)->exists());
+        $this->assertTrue(Vehicule::livraisonLogistique()->whereKey($vehicule->id)->exists());
     }
 }

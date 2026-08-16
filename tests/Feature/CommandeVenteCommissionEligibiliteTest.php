@@ -95,6 +95,12 @@ class CommandeVenteCommissionEligibiliteTest extends TestCase
         ]);
     }
 
+    /**
+     * Crée la commande puis fait progresser le workflow jusqu'à LIVRAISON_EN_COURS
+     * (chargement validé) — c'est à cette étape, et seulement là, que la commission
+     * naît sous le déclencheur par défaut CHARGEMENT_VALIDE (cf. CommandeVenteService::
+     * validerChargement() / CommissionTriggerService).
+     */
     private function creerCommande(Vehicule $vehicule, Produit $produit): CommandeVente
     {
         $this->actingAs($this->user)
@@ -106,7 +112,25 @@ class CommandeVenteCommissionEligibiliteTest extends TestCase
             ])
             ->assertRedirect();
 
-        return CommandeVente::where('vehicule_id', $vehicule->id)->latest()->first();
+        $commande = CommandeVente::where('vehicule_id', $vehicule->id)->latest()->first();
+
+        // A_CHARGER → CHARGEMENT_EN_COURS.
+        $this->actingAs($this->user)
+            ->post(route('ventes.statut.avancer', $commande))
+            ->assertRedirect();
+
+        $ligne = $commande->lignes()->first();
+
+        // CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS.
+        $this->actingAs($this->user)
+            ->post(route('ventes.statut.avancer', $commande), [
+                'lignes' => [
+                    ['id' => $ligne->id, 'quantite_chargee' => 100, 'type_ecart' => 'conforme'],
+                ],
+            ])
+            ->assertRedirect();
+
+        return $commande->fresh();
     }
 
     // CommissionCalculator base son calcul sur prix_vente_snapshot -

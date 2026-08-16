@@ -31,6 +31,22 @@ class InstallationService
         return AppInstallation::isInstalled();
     }
 
+    public function isSaas(): bool
+    {
+        return config('app.deployment_mode') === 'saas';
+    }
+
+    /**
+     * Verrou d'accès à /install (web uniquement — la CLI `app:install` s'appuie sur
+     * hasSuperAdmin() par organisation et n'est jamais concernée par ce verrou). En on_premise,
+     * une seule organisation jamais plus : dès qu'une installation existe, l'assistant se ferme.
+     * En saas, jamais verrouillé : chaque visite peut créer une nouvelle organisation.
+     */
+    public function isLocked(): bool
+    {
+        return ! $this->isSaas() && $this->isInstalled();
+    }
+
     /**
      * Le slug technique n'est jamais demandé à l'installation — généré automatiquement à
      * partir du nom, modifiable ensuite dans les paramètres de l'organisation (backoffice).
@@ -174,9 +190,11 @@ class InstallationService
                 TypeVehiculesSeeder::seedPourOrganisation($org->id);
             }
 
-            // updateOrCreate (pas firstOrCreate) : garantit que installed_at est bien renseigné
-            // même dans l'hypothèse improbable d'une ligne préexistante sans date.
-            AppInstallation::query()->updateOrCreate([], [
+            // Une ligne par installation (pas un updateOrCreate([]) qui écraserait toujours la
+            // même) : en saas, /install peut être rejoué pour créer plusieurs organisations —
+            // cette table sert alors d'historique/audit. En on_premise il n'y en aura jamais
+            // qu'une, puisque isLocked() ferme /install dès la première ligne insérée.
+            AppInstallation::create([
                 'organization_id' => $org->id,
                 'installed_at' => now(),
             ]);

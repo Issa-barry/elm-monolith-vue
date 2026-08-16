@@ -52,7 +52,7 @@ class EcritureComptableService
         }
 
         // ── Idempotence (garde applicative rapide, avant tout travail) ──────────
-        $existante = $this->trouverPieceExistante($organizationId, $source, $evenement);
+        $existante = $this->pieceExistantePour($organizationId, $source, $evenement);
         if ($existante) {
             return $existante;
         }
@@ -118,7 +118,7 @@ class EcritureComptableService
             ) {
                 // Re-vérifie sous transaction (fenêtre de course réduite ; le filet de
                 // sécurité final reste la contrainte unique en base, cf. catch ci-dessous).
-                $existante = $this->trouverPieceExistante($organizationId, $source, $evenement);
+                $existante = $this->pieceExistantePour($organizationId, $source, $evenement);
                 if ($existante) {
                     return $existante;
                 }
@@ -164,7 +164,7 @@ class EcritureComptableService
             });
         } catch (QueryException $e) {
             if ($this->estConflitIdempotence($e)) {
-                return $this->trouverPieceExistante($organizationId, $source, $evenement)
+                return $this->pieceExistantePour($organizationId, $source, $evenement)
                     ?? throw $e;
             }
 
@@ -233,7 +233,13 @@ class EcritureComptableService
         });
     }
 
-    private function trouverPieceExistante(string $organizationId, Model $source, EvenementComptable $evenement): ?PieceComptable
+    /**
+     * Vérifie l'idempotence d'un (organisation, source, événement) sans rien écrire —
+     * même clé que la contrainte unique compta_pieces_idempotency_unique. Public pour
+     * être réutilisable en lecture seule par un rattrapage (dry-run : distinguer "déjà
+     * comptabilisé" de "à comptabiliser" sans dupliquer cette requête ailleurs).
+     */
+    public function pieceExistantePour(string $organizationId, Model $source, EvenementComptable $evenement): ?PieceComptable
     {
         return PieceComptable::query()
             ->where('organization_id', $organizationId)
