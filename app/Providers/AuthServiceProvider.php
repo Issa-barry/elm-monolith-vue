@@ -44,7 +44,9 @@ use App\Policies\SitePolicy;
 use App\Policies\UserInvitationPolicy;
 use App\Policies\UserPolicy;
 use App\Policies\VehiculePolicy;
+use App\Auth\UserIdentityProvider;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 
 class AuthServiceProvider extends ServiceProvider
@@ -84,5 +86,12 @@ class AuthServiceProvider extends ServiceProvider
                 return true;
             }
         });
+
+        // Résout par email/telephone via user_auth_identities — ces colonnes n'existent
+        // plus sur `users` depuis PERSONNE + USERS (cf. UserIdentityProvider).
+        Auth::provider('user_identity', fn ($app, array $config) => new UserIdentityProvider(
+            $app['hash'],
+            $config['model']
+        ));
     }
 }

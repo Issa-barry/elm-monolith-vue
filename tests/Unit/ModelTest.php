@@ -1016,7 +1016,9 @@ class ModelTest extends TestCase
 
     public function test_user_name_attribute(): void
     {
-        $user = User::factory()->make(['prenom' => 'Mamadou', 'nom' => 'DIALLO']);
+        $user = User::factory()->make();
+        $user->setRelation('personne', Personne::factory()->make(['prenom' => 'Mamadou', 'nom' => 'DIALLO']));
+
         $this->assertSame('Mamadou DIALLO', $user->name);
     }
 
