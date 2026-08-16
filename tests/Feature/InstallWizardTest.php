@@ -192,7 +192,7 @@ class InstallWizardTest extends TestCase
         $org = Organization::where('slug', 'elm-test')->firstOrFail();
         $this->assertSame('ELM Test', $org->name);
 
-        $user = User::where('telephone', '+224622000000')->firstOrFail();
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000000'))->firstOrFail();
         $this->assertTrue($user->hasRole('super_admin'));
         $this->assertTrue(Hash::check('Sup3r$ecretPwd', $user->password));
         $this->assertFalse($user->must_change_password);
@@ -204,7 +204,7 @@ class InstallWizardTest extends TestCase
             'admin' => ['telephone' => '+33612345678'],
         ]))->assertOk();
 
-        $user = User::where('telephone', '+33612345678')->firstOrFail();
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+33612345678'))->firstOrFail();
         $this->assertSame('FR', $user->code_pays);
         $this->assertSame('France', $user->pays);
         $this->assertSame('+33', $user->code_phone_pays);
@@ -256,7 +256,7 @@ class InstallWizardTest extends TestCase
         $this->post('/install', $this->payload())->assertOk();
 
         $org = Organization::where('slug', 'elm-test')->firstOrFail();
-        $user = User::where('telephone', '+224622000000')->firstOrFail();
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000000'))->firstOrFail();
 
         $this->assertNotNull($org->proprietaire_interne_id);
 

@@ -118,7 +118,8 @@ class CommissionLogistiqueController extends Controller
         $partsParLivreur = CommissionLogistiquePart::with([
             'commission.vehicule:id,nom_vehicule,immatriculation,capacite_packs,type_vehicule_id,proprietaire_id',
             'commission.vehicule.typeVehicule:id,nom',
-            'commission.vehicule.proprietaire:id,prenom,nom,telephone,code_phone_pays',
+            'commission.vehicule.proprietaire:id,personne_id',
+            'commission.vehicule.proprietaire.personne',
             'commission.transfert.siteSource:id,nom',
         ])
             ->whereIn('livreur_id', $allLivreurIds)
@@ -360,7 +361,7 @@ class CommissionLogistiqueController extends Controller
 
         $filteredPartIds = $filteredParts->pluck('id')->toArray();
 
-        $paymentsQuery = CommissionPayment::with('createur:id,prenom,nom')
+        $paymentsQuery = CommissionPayment::with(['createur:id,personne_id', 'createur.personne'])
             ->where('organization_id', $orgId)
             ->where('livreur_id', $livreurId)
             ->where('beneficiary_type', 'livreur')
@@ -608,7 +609,8 @@ class CommissionLogistiqueController extends Controller
         return CommissionLogistiquePart::with([
             'commission.transfert.siteSource:id,nom',
             'commission.vehicule:id,nom_vehicule,immatriculation',
-            'livreur:id,telephone',
+            'livreur:id,personne_id',
+            'livreur.personne',
         ])
             ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
             ->where('type_beneficiaire', 'livreur')

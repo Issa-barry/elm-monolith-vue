@@ -100,7 +100,7 @@ class EquipeLivraisonTest extends TestCase
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule->id]))
             ->assertRedirectContains('/backoffice/vehicules/');
 
-        $this->assertDatabaseHas('livreurs', [
+        $this->assertDatabaseHas('personnes', [
             'telephone' => '+224620000001',
             'organization_id' => $this->org->id,
         ]);
@@ -126,8 +126,10 @@ class EquipeLivraisonTest extends TestCase
             ->assertRedirectContains('/backoffice/vehicules/');
 
         $this->assertDatabaseHas('livreurs', [
-            'telephone' => '+224620000001',
             'nom_complet' => 'Chauffeur 1',
+        ]);
+        $this->assertDatabaseHas('personnes', [
+            'telephone' => '+224620000001',
             'nom' => null,
             'prenom' => null,
         ]);
@@ -153,8 +155,10 @@ class EquipeLivraisonTest extends TestCase
             ->assertRedirectContains('/backoffice/vehicules/');
 
         $this->assertDatabaseHas('livreurs', [
-            'telephone' => '+224620000001',
             'nom_complet' => "Chauffeur-1 {$vehicule->nom_vehicule}",
+        ]);
+        $this->assertDatabaseHas('personnes', [
+            'telephone' => '+224620000001',
         ]);
     }
 
@@ -190,13 +194,13 @@ class EquipeLivraisonTest extends TestCase
             ->assertRedirectContains('/backoffice/vehicules/');
 
         $this->assertDatabaseHas('livreurs', [
-            'telephone' => '+224620000002',
             'nom_complet' => "Convoyeur-1 {$vehicule->nom_vehicule}",
         ]);
+        $this->assertDatabaseHas('personnes', ['telephone' => '+224620000002']);
         $this->assertDatabaseHas('livreurs', [
-            'telephone' => '+224620000003',
             'nom_complet' => "Convoyeur-2 {$vehicule->nom_vehicule}",
         ]);
+        $this->assertDatabaseHas('personnes', ['telephone' => '+224620000003']);
     }
 
     public function test_store_creates_plusieurs_membres_avec_des_surnoms_differents(): void
@@ -226,8 +230,10 @@ class EquipeLivraisonTest extends TestCase
             ]))
             ->assertRedirectContains('/backoffice/vehicules/');
 
-        $this->assertDatabaseHas('livreurs', ['telephone' => '+224620000001', 'nom_complet' => 'Petit Moussa']);
-        $this->assertDatabaseHas('livreurs', ['telephone' => '+224620000002', 'nom_complet' => 'Doudou']);
+        $this->assertDatabaseHas('livreurs', ['nom_complet' => 'Petit Moussa']);
+        $this->assertDatabaseHas('personnes', ['telephone' => '+224620000001']);
+        $this->assertDatabaseHas('livreurs', ['nom_complet' => 'Doudou']);
+        $this->assertDatabaseHas('personnes', ['telephone' => '+224620000002']);
     }
 
     public function test_update_ne_touche_jamais_nom_et_prenom_du_livreur_existant(): void
@@ -242,8 +248,8 @@ class EquipeLivraisonTest extends TestCase
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule->id]))
             ->assertRedirectContains('/backoffice/vehicules/');
 
-        $livreur = Livreur::where('telephone', '+224620000001')->firstOrFail();
-        $livreur->update(['nom' => 'BARRY', 'prenom' => 'Issa']);
+        $livreur = Livreur::whereHas('personne', fn ($q) => $q->where('telephone', '+224620000001'))->firstOrFail();
+        $livreur->personne->update(['nom' => 'BARRY', 'prenom' => 'Issa']);
 
         $equipe = EquipeLivraison::where('organization_id', $this->org->id)->first();
 

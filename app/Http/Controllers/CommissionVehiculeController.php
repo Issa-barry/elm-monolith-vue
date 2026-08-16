@@ -261,7 +261,7 @@ class CommissionVehiculeController extends Controller
         // ── Historique des paiements ───────────────────────────────────────────
         $filteredPartIds = $filteredParts->pluck('id')->toArray();
 
-        $paymentsQuery = CommissionPayment::with('createur:id,prenom,nom')
+        $paymentsQuery = CommissionPayment::with(['createur:id,personne_id', 'createur.personne'])
             ->where('organization_id', $orgId)
             ->where('livreur_id', $livreurId)
             ->where('beneficiary_type', 'livreur')
@@ -342,7 +342,7 @@ class CommissionVehiculeController extends Controller
         abort_unless($vehicule->organization_id === auth()->user()->organization_id, 403);
 
         $soldes = CommissionPaymentService::soldesParVehicule($vehicule);
-        $payments = CommissionPayment::with('createur:id,prenom,nom')
+        $payments = CommissionPayment::with(['createur:id,personne_id', 'createur.personne'])
             ->where('vehicule_id', $vehicule->id)
             ->where('organization_id', $vehicule->organization_id)
             ->orderByDesc('paid_at')

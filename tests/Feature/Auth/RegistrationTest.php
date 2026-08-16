@@ -104,12 +104,12 @@ class RegistrationTest extends TestCase
 
         $this->assertAuthenticated();
 
-        $this->assertDatabaseHas('users', [
+        $this->assertDatabaseHas('personnes', [
             'email' => 'test@example.com',
             'telephone' => null,
         ]);
 
-        $user = User::where('email', 'test@example.com')->first();
+        $user = User::whereHas('personne', fn ($q) => $q->where('email', 'test@example.com'))->first();
         $this->assertTrue($user->hasRole('client'));
     }
 
@@ -126,7 +126,7 @@ class RegistrationTest extends TestCase
                 'password' => 'Password@123',
             ])->assertRedirect(route('client.dashboard', absolute: false));
 
-        $this->assertDatabaseHas('users', [
+        $this->assertDatabaseHas('personnes', [
             'email' => 'mamadou@example.com',
             'telephone' => '+224620000000',
         ]);
@@ -145,7 +145,7 @@ class RegistrationTest extends TestCase
                 'password' => 'Password@123',
             ])->assertRedirect(route('client.dashboard', absolute: false));
 
-        $this->assertDatabaseHas('users', [
+        $this->assertDatabaseHas('personnes', [
             'telephone' => '+221701234567',
         ]);
     }
@@ -163,7 +163,7 @@ class RegistrationTest extends TestCase
                 'password' => 'Password@123',
             ])->assertRedirect(route('client.dashboard', absolute: false));
 
-        $this->assertDatabaseHas('users', [
+        $this->assertDatabaseHas('personnes', [
             'telephone' => '+33612345678',
         ]);
     }
@@ -223,7 +223,7 @@ class RegistrationTest extends TestCase
                 'password' => 'Password@123',
             ]);
 
-        $user = User::where('telephone', '+224620000003')->first();
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224620000003'))->first();
         $this->assertNotNull($user);
         $this->assertEquals($user->id, $client->fresh()->user_id);
     }
@@ -327,7 +327,7 @@ class RegistrationTest extends TestCase
         ])->assertRedirect(route('client.dashboard', absolute: false));
 
         $this->assertAuthenticated();
-        $this->assertDatabaseHas('users', ['prenom' => 'Test', 'nom' => 'USER', 'email' => null]);
+        $this->assertDatabaseHas('personnes', ['prenom' => 'Test', 'nom' => 'USER', 'email' => null]);
     }
 
     public function test_registration_fails_with_invalid_email(): void
@@ -472,7 +472,7 @@ class RegistrationTest extends TestCase
             'password' => 'Password@123',
         ]);
 
-        $user = User::where('email', 'test@example.com')->first();
+        $user = User::whereHas('personne', fn ($q) => $q->where('email', 'test@example.com'))->first();
         $this->assertNotNull($user);
         $this->assertNotEquals('password', $user->password);
     }

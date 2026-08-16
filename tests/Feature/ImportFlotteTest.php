@@ -562,7 +562,7 @@ class ImportFlotteTest extends TestCase
         $this->assertSame(1, $import->nb_livreurs_crees);
         $this->assertSame(1, $import->nb_equipes_creees);
 
-        $proprietaire = Proprietaire::where('organization_id', $this->org->id)->where('telephone', '+224622000001')->firstOrFail();
+        $proprietaire = Proprietaire::where('organization_id', $this->org->id)->whereHas('personne', fn ($q) => $q->where('telephone', '+224622000001'))->firstOrFail();
         $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
         $this->assertSame($proprietaire->id, $vehicule->proprietaire_id);
         $this->assertTrue($vehicule->livraison_vente);
@@ -584,7 +584,7 @@ class ImportFlotteTest extends TestCase
         $this->assertSame('chauffeur', $membre->role);
         $this->assertSame('0.00', $membre->montant_par_pack);
 
-        $livreur = Livreur::where('organization_id', $this->org->id)->where('telephone', '+224623000001')->firstOrFail();
+        $livreur = Livreur::where('organization_id', $this->org->id)->whereHas('personne', fn ($q) => $q->where('telephone', '+224623000001'))->firstOrFail();
         $this->assertSame($livreur->id, $membre->livreur_id);
     }
 
@@ -729,7 +729,7 @@ class ImportFlotteTest extends TestCase
             ->post(route('imports-flotte.confirm', $import))
             ->assertRedirect(route('imports-flotte.show', $import));
 
-        $livreur = Livreur::where('organization_id', $this->org->id)->where('telephone', '+224623000001')->firstOrFail();
+        $livreur = Livreur::where('organization_id', $this->org->id)->whereHas('personne', fn ($q) => $q->where('telephone', '+224623000001'))->firstOrFail();
         $this->assertSame('Chauffeur-1 Camion 1', $livreur->nom_complet);
     }
 
@@ -756,8 +756,8 @@ class ImportFlotteTest extends TestCase
             ->post(route('imports-flotte.confirm', $import))
             ->assertRedirect(route('imports-flotte.show', $import));
 
-        $premier = Livreur::where('organization_id', $this->org->id)->where('telephone', '+224623000002')->firstOrFail();
-        $second = Livreur::where('organization_id', $this->org->id)->where('telephone', '+224623000003')->firstOrFail();
+        $premier = Livreur::where('organization_id', $this->org->id)->whereHas('personne', fn ($q) => $q->where('telephone', '+224623000002'))->firstOrFail();
+        $second = Livreur::where('organization_id', $this->org->id)->whereHas('personne', fn ($q) => $q->where('telephone', '+224623000003'))->firstOrFail();
         $this->assertSame('Convoyeur-1 Camion 1', $premier->nom_complet);
         $this->assertSame('Convoyeur-2 Camion 1', $second->nom_complet);
     }
@@ -957,7 +957,7 @@ class ImportFlotteTest extends TestCase
         $this->assertSame(2, $import->nb_vehicules_crees);
         $this->assertSame(1, Proprietaire::where('organization_id', $this->org->id)->count());
 
-        $proprietaire = Proprietaire::where('organization_id', $this->org->id)->where('telephone', '+224622000001')->firstOrFail();
+        $proprietaire = Proprietaire::where('organization_id', $this->org->id)->whereHas('personne', fn ($q) => $q->where('telephone', '+224622000001'))->firstOrFail();
         $vehiculeA = Vehicule::where('immatriculation', 'RC-1111-A')->firstOrFail();
         $vehiculeB = Vehicule::where('immatriculation', 'RC-2222-B')->firstOrFail();
         $this->assertSame($proprietaire->id, $vehiculeA->proprietaire_id);
@@ -1183,7 +1183,7 @@ class ImportFlotteTest extends TestCase
         $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
 
         $this->assertTrue(
-            Proprietaire::where('organization_id', $this->org->id)->where('telephone', '+32470123456')->exists()
+            Proprietaire::where('organization_id', $this->org->id)->whereHas('personne', fn ($q) => $q->where('telephone', '+32470123456'))->exists()
         );
     }
 
@@ -1200,7 +1200,7 @@ class ImportFlotteTest extends TestCase
         $import = $this->importerVehiculeEtChauffeur(['proprietaire_telephone' => '622000001']);
         $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
 
-        $this->assertTrue(Proprietaire::where('telephone', '+224622000001')->exists());
+        $this->assertTrue(Proprietaire::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000001'))->exists());
     }
 
     public function test_confirm_normalizes_phone_with_leading_zero(): void
@@ -1208,7 +1208,7 @@ class ImportFlotteTest extends TestCase
         $import = $this->importerVehiculeEtChauffeur(['proprietaire_telephone' => '0622000001']);
         $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
 
-        $this->assertTrue(Proprietaire::where('telephone', '+224622000001')->exists());
+        $this->assertTrue(Proprietaire::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000001'))->exists());
     }
 
     public function test_confirm_normalizes_phone_with_224_prefix(): void
@@ -1216,7 +1216,7 @@ class ImportFlotteTest extends TestCase
         $import = $this->importerVehiculeEtChauffeur(['proprietaire_telephone' => '224622000001']);
         $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
 
-        $this->assertTrue(Proprietaire::where('telephone', '+224622000001')->exists());
+        $this->assertTrue(Proprietaire::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000001'))->exists());
     }
 
     public function test_confirm_normalizes_phone_with_plus_224_prefix(): void
@@ -1224,7 +1224,7 @@ class ImportFlotteTest extends TestCase
         $import = $this->importerVehiculeEtChauffeur(['proprietaire_telephone' => '+224622000001']);
         $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
 
-        $this->assertTrue(Proprietaire::where('telephone', '+224622000001')->exists());
+        $this->assertTrue(Proprietaire::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000001'))->exists());
     }
 
     public function test_confirm_normalizes_phone_with_00224_prefix(): void
@@ -1232,7 +1232,7 @@ class ImportFlotteTest extends TestCase
         $import = $this->importerVehiculeEtChauffeur(['proprietaire_telephone' => '00224622000001']);
         $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
 
-        $this->assertTrue(Proprietaire::where('telephone', '+224622000001')->exists());
+        $this->assertTrue(Proprietaire::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000001'))->exists());
     }
 
     public function test_confirm_normalizes_phone_with_spaces_and_dashes(): void
@@ -1240,7 +1240,7 @@ class ImportFlotteTest extends TestCase
         $import = $this->importerVehiculeEtChauffeur(['proprietaire_telephone' => '622-00-00-01']);
         $this->actingAs($this->user)->post(route('imports-flotte.confirm', $import));
 
-        $this->assertTrue(Proprietaire::where('telephone', '+224622000001')->exists());
+        $this->assertTrue(Proprietaire::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000001'))->exists());
     }
 
     public function test_analyse_accepts_vehicule_type_with_different_case(): void
@@ -1408,7 +1408,7 @@ class ImportFlotteTest extends TestCase
         $this->assertSame(1, $import->nb_livreurs_crees);
         $this->assertSame(1, $import->nb_equipes_creees);
 
-        $livreur = Livreur::where('organization_id', $this->org->id)->where('telephone', '+224623000001')->firstOrFail();
+        $livreur = Livreur::where('organization_id', $this->org->id)->whereHas('personne', fn ($q) => $q->where('telephone', '+224623000001'))->firstOrFail();
         $equipe = EquipeLivraison::where('vehicule_id', $vehicule->id)->firstOrFail();
         $this->assertTrue($equipe->membres()->where('livreur_id', $livreur->id)->exists());
 

@@ -238,8 +238,11 @@ class EmployeTest extends TestCase
 
         $this->assertDatabaseHas('employes', [
             'id' => $employe->id,
-            'nom' => 'CAMARA',
             'statut' => 'suspendu',
+        ]);
+        $this->assertDatabaseHas('personnes', [
+            'id' => $employe->fresh()->personne_id,
+            'nom' => 'CAMARA',
         ]);
     }
 
