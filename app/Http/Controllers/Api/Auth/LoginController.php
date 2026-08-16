@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\Livreur;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\User;
 use App\Services\PhoneNormalizer;
@@ -72,11 +73,16 @@ class LoginController extends Controller
             return;
         }
 
-        Livreur::where('telephone', $user->telephone)
+        // nom/prenom/telephone ne sont plus des colonnes de livreurs/proprietaires — l'identité
+        // civile est portée par Personne (cf. Personne::normaliserTelephone(), même pattern que
+        // RegisterLookupController/UserInvitationService).
+        $normalise = Personne::normaliserTelephone($user->telephone);
+
+        Livreur::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
             ->whereNull('user_id')
             ->update(['user_id' => $user->id]);
 
-        Proprietaire::where('telephone', $user->telephone)
+        Proprietaire::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
             ->whereNull('user_id')
             ->update(['user_id' => $user->id]);
     }

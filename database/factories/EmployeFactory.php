@@ -23,31 +23,47 @@ class EmployeFactory extends Factory
     }
 
     /**
+     * Verrou de réentrance : `parent::create()` avec des attributs non vides route via
+     * `state($attributes)->create([])`, qui rappelle CETTE méthode avec `$attributes = []`.
+     * Sans ce verrou, la garde ci-dessous redevient vraie à chaque rappel et re-résout un
+     * nouveau personne_id indéfiniment (récursion infinie).
+     */
+    private static bool $resolvingIdentity = false;
+
+    /**
      * Compatibilité : `Employe::factory()->create(['nom' => ..., 'telephone' => ...])` reste
      * possible malgré le déplacement de l'identité civile vers Personne.
      */
     public function create($attributes = [], ?Model $parent = null)
     {
-        if (is_array($attributes) && ! isset($attributes['personne_id'])) {
-            $orgId = $attributes['organization_id'] ?? Organization::factory()->create()->id;
-            $attributes['organization_id'] = $orgId;
+        if (is_array($attributes) && ! isset($attributes['personne_id']) && ! self::$resolvingIdentity) {
+            self::$resolvingIdentity = true;
 
-            $overrides = array_intersect_key($attributes, array_flip(self::IDENTITY_KEYS));
-            $defaults = [
-                'nom' => strtoupper(fake()->lastName()),
-                'prenom' => fake()->firstName(),
-                'email' => fake()->unique()->safeEmail(),
-                'telephone' => '+224'.fake()->numerify('#########'),
-            ];
+            try {
+                $orgId = $attributes['organization_id'] ?? Organization::factory()->create()->id;
+                $attributes['organization_id'] = $orgId;
 
-            $attributes['personne_id'] = Personne::factory()->create([
-                'organization_id' => $orgId,
-                ...$defaults,
-                ...$overrides,
-            ])->id;
+                $overrides = array_intersect_key($attributes, array_flip(self::IDENTITY_KEYS));
+                $defaults = [
+                    'nom' => strtoupper(fake()->lastName()),
+                    'prenom' => fake()->firstName(),
+                    'email' => fake()->unique()->safeEmail(),
+                    'telephone' => '+224'.fake()->numerify('#########'),
+                ];
 
-            foreach (self::IDENTITY_KEYS as $key) {
-                unset($attributes[$key]);
+                $attributes['personne_id'] = Personne::factory()->create([
+                    'organization_id' => $orgId,
+                    ...$defaults,
+                    ...$overrides,
+                ])->id;
+
+                foreach (self::IDENTITY_KEYS as $key) {
+                    unset($attributes[$key]);
+                }
+
+                return parent::create($attributes, $parent);
+            } finally {
+                self::$resolvingIdentity = false;
             }
         }
 
