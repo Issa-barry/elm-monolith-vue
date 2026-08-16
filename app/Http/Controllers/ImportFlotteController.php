@@ -25,7 +25,7 @@ class ImportFlotteController extends Controller
     {
         $this->authorize('viewAny', ImportFlotte::class);
 
-        $imports = ImportFlotte::with('user:id,nom,prenom')
+        $imports = ImportFlotte::with(['user:id,personne_id', 'user.personne'])
             ->where('organization_id', auth()->user()->organization_id)
             ->orderByDesc('created_at')
             ->get()

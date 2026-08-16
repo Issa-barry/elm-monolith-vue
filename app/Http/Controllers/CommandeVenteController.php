@@ -228,19 +228,21 @@ class CommandeVenteController extends Controller
 
         if ($proprietaire) {
             $query->whereHas('vehicule.proprietaire', function ($q) use ($proprietaire) {
-                $q->where('nom', 'like', "%{$proprietaire}%")
-                    ->orWhere('prenom', 'like', "%{$proprietaire}%")
-                    ->orWhere('telephone', 'like', "%{$proprietaire}%");
+                $q->whereHas('personne', function ($p) use ($proprietaire) {
+                    $p->where('nom', 'like', "%{$proprietaire}%")
+                        ->orWhere('prenom', 'like', "%{$proprietaire}%")
+                        ->orWhere('telephone', 'like', "%{$proprietaire}%");
+                });
             });
         }
 
         if ($proprietaireNom = $request->input('proprietaire_nom')) {
-            $query->whereHas('vehicule.proprietaire', fn ($q) => $q->where('nom', 'like', "%{$proprietaireNom}%")
-                ->orWhere('prenom', 'like', "%{$proprietaireNom}%"));
+            $query->whereHas('vehicule.proprietaire', fn ($q) => $q->whereHas('personne', fn ($p) => $p->where('nom', 'like', "%{$proprietaireNom}%")
+                ->orWhere('prenom', 'like', "%{$proprietaireNom}%")));
         }
 
         if ($proprietaireTel = $request->input('proprietaire_telephone')) {
-            $query->whereHas('vehicule.proprietaire', fn ($q) => $q->where('telephone', 'like', "%{$proprietaireTel}%"));
+            $query->whereHas('vehicule.proprietaire', fn ($q) => $q->whereHas('personne', fn ($p) => $p->where('telephone', 'like', "%{$proprietaireTel}%")));
         }
 
         if ($livreur) {
@@ -249,22 +251,24 @@ class CommandeVenteController extends Controller
             // saisi/affiché côté Eau La Maman.
             $query->whereHas('vehicule.equipe.livreurs', function ($q) use ($livreur) {
                 $q->where('livreurs.nom_complet', 'like', "%{$livreur}%")
-                    ->orWhere('livreurs.nom', 'like', "%{$livreur}%")
-                    ->orWhere('livreurs.prenom', 'like', "%{$livreur}%")
-                    ->orWhere('livreurs.telephone', 'like', "%{$livreur}%");
+                    ->orWhereHas('personne', function ($p) use ($livreur) {
+                        $p->where('nom', 'like', "%{$livreur}%")
+                            ->orWhere('prenom', 'like', "%{$livreur}%")
+                            ->orWhere('telephone', 'like', "%{$livreur}%");
+                    });
             });
         }
 
         if ($livreurNom = $request->input('livreur_nom')) {
-            $query->whereHas('vehicule.equipe.livreurs', fn ($q) => $q->where('livreurs.nom', 'like', "%{$livreurNom}%"));
+            $query->whereHas('vehicule.equipe.livreurs', fn ($q) => $q->whereHas('personne', fn ($p) => $p->where('nom', 'like', "%{$livreurNom}%")));
         }
 
         if ($livreurPrenom = $request->input('livreur_prenom')) {
-            $query->whereHas('vehicule.equipe.livreurs', fn ($q) => $q->where('livreurs.prenom', 'like', "%{$livreurPrenom}%"));
+            $query->whereHas('vehicule.equipe.livreurs', fn ($q) => $q->whereHas('personne', fn ($p) => $p->where('prenom', 'like', "%{$livreurPrenom}%")));
         }
 
         if ($livreurTel = $request->input('livreur_telephone')) {
-            $query->whereHas('vehicule.equipe.livreurs', fn ($q) => $q->where('livreurs.telephone', 'like', "%{$livreurTel}%"));
+            $query->whereHas('vehicule.equipe.livreurs', fn ($q) => $q->whereHas('personne', fn ($p) => $p->where('telephone', 'like', "%{$livreurTel}%")));
         }
 
         if ($livreurRole = $request->input('livreur_role')) {

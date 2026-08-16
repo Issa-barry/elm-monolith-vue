@@ -355,15 +355,17 @@ class EquipeLivraisonController extends Controller
 
     private function proprietairesOptions(string $orgId): array
     {
-        return Proprietaire::where('organization_id', $orgId)
+        return Proprietaire::with('personne')
+            ->where('organization_id', $orgId)
             ->where('is_active', true)
-            ->orderBy('nom')
             ->get()
+            ->sortBy('nom')
             ->map(fn (Proprietaire $p) => [
                 'value' => $p->id,
                 'label' => trim("{$p->prenom} {$p->nom}"),
                 'telephone' => $p->telephone,
             ])
+            ->values()
             ->toArray();
     }
 

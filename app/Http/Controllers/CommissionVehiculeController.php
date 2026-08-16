@@ -64,7 +64,10 @@ class CommissionVehiculeController extends Controller
         // Fetch telephone + vehicule data for ALL livreurs upfront (needed for search)
         $allLivreurIds = $rows->pluck('livreur_id')->filter()->unique()->values()->toArray();
 
-        $telephones = Livreur::whereIn('id', $allLivreurIds)->pluck('telephone', 'id');
+        $telephones = Livreur::with('personne')
+            ->whereIn('id', $allLivreurIds)
+            ->get()
+            ->mapWithKeys(fn (Livreur $l) => [$l->id => $l->telephone]);
 
         $vehiculesParLivreur = CommissionLogistiquePart::with('commission.vehicule:id,nom_vehicule,immatriculation')
             ->whereIn('livreur_id', $allLivreurIds)

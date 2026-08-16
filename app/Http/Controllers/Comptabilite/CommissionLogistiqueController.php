@@ -94,7 +94,10 @@ class CommissionLogistiqueController extends Controller
             ->values();
 
         $allLivreurIds = $rows->pluck('livreur_id')->filter()->unique()->values()->toArray();
-        $telephones = Livreur::whereIn('id', $allLivreurIds)->pluck('telephone', 'id');
+        $telephones = Livreur::with('personne')
+            ->whereIn('id', $allLivreurIds)
+            ->get()
+            ->mapWithKeys(fn (Livreur $l) => [$l->id => $l->telephone]);
 
         $fraisDepensesParLivreur = [];
         if (! empty($allLivreurIds)) {

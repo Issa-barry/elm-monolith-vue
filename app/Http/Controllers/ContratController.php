@@ -21,7 +21,7 @@ class ContratController extends Controller
         $orgId = auth()->user()->organization_id;
         $filters = $request->only(['statut_contrat', 'type_contrat']);
 
-        $query = Contrat::with('employe:id,nom,prenom,matricule')
+        $query = Contrat::with(['employe:id,personne_id,matricule', 'employe.personne'])
             ->where('organization_id', $orgId);
 
         if (! empty($filters['statut_contrat'])) {
@@ -49,10 +49,11 @@ class ContratController extends Controller
 
         $orgId = auth()->user()->organization_id;
 
-        $employes = Employe::where('organization_id', $orgId)
+        $employes = Employe::with('personne')
+            ->where('organization_id', $orgId)
             ->where('statut', 'actif')
-            ->orderBy('nom')
-            ->get(['id', 'nom', 'prenom', 'matricule'])
+            ->get(['id', 'personne_id', 'matricule'])
+            ->sortBy('nom')
             ->map(fn ($e) => [
                 'value' => $e->id,
                 'label' => "{$e->prenom} {$e->nom} ({$e->matricule})",
@@ -109,9 +110,10 @@ class ContratController extends Controller
 
         $orgId = auth()->user()->organization_id;
 
-        $employes = Employe::where('organization_id', $orgId)
-            ->orderBy('nom')
-            ->get(['id', 'nom', 'prenom', 'matricule'])
+        $employes = Employe::with('personne')
+            ->where('organization_id', $orgId)
+            ->get(['id', 'personne_id', 'matricule'])
+            ->sortBy('nom')
             ->map(fn ($e) => [
                 'value' => $e->id,
                 'label' => "{$e->prenom} {$e->nom} ({$e->matricule})",
@@ -186,7 +188,7 @@ class ContratController extends Controller
 
     private function toRow(Contrat $c): array
     {
-        $c->loadMissing('employe:id,nom,prenom,matricule');
+        $c->loadMissing(['employe:id,personne_id,matricule', 'employe.personne']);
 
         return [
             'id' => $c->id,
