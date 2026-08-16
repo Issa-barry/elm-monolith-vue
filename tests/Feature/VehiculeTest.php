@@ -232,6 +232,7 @@ class VehiculeTest extends TestCase
 
     public function test_store_creates_vehicule_logistique_seul(): void
     {
+        $this->defaultInterneProprietaire();
         $site = $this->user->sites()->first();
 
         $response = $this->actingAs($this->user)
@@ -263,6 +264,7 @@ class VehiculeTest extends TestCase
 
     public function test_store_accepte_usage_mixte(): void
     {
+        $this->defaultInterneProprietaire();
         $site = $this->user->sites()->first();
 
         $this->actingAs($this->user)
