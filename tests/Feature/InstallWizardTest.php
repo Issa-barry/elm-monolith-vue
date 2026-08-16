@@ -2,10 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Enums\SiteType;
 use App\Models\AppInstallation;
 use App\Models\Categorie;
 use App\Models\OptionCatalogue;
 use App\Models\Organization;
+use App\Models\Site;
 use App\Models\TypeVehicule;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -44,7 +46,7 @@ class InstallWizardTest extends TestCase
                 'password' => 'Sup3r$ecretPwd',
                 'password_confirmation' => 'Sup3r$ecretPwd',
             ],
-            'catalogue' => ['categories' => false, 'options' => false, 'types_vehicule' => false],
+            'siege' => ['ville' => 'Conakry', 'quartier' => 'Matoto'],
         ], $overrides);
     }
 
@@ -197,45 +199,49 @@ class InstallWizardTest extends TestCase
         ]))->assertSessionHasErrors('admin.password');
     }
 
-    public function test_categories_oui_options_non(): void
-    {
-        $this->post('/install', $this->payload([
-            'catalogue' => ['categories' => true, 'options' => false],
-        ]))->assertOk();
-
-        $org = Organization::where('slug', 'elm-test')->firstOrFail();
-        $this->assertGreaterThan(0, Categorie::where('organization_id', $org->id)->count());
-        $this->assertSame(0, OptionCatalogue::where('organization_id', $org->id)->count());
-    }
-
-    public function test_categories_non_options_oui(): void
-    {
-        $this->post('/install', $this->payload([
-            'catalogue' => ['categories' => false, 'options' => true],
-        ]))->assertOk();
-
-        $org = Organization::where('slug', 'elm-test')->firstOrFail();
-        $this->assertSame(0, Categorie::where('organization_id', $org->id)->count());
-        $this->assertGreaterThan(0, OptionCatalogue::where('organization_id', $org->id)->count());
-    }
-
-    public function test_types_vehicule_oui(): void
-    {
-        $this->post('/install', $this->payload([
-            'catalogue' => ['types_vehicule' => true],
-        ]))->assertOk();
-
-        $org = Organization::where('slug', 'elm-test')->firstOrFail();
-        $this->assertSame(5, TypeVehicule::where('organization_id', $org->id)->count());
-        $this->assertTrue(TypeVehicule::where('organization_id', $org->id)->where('nom', 'Minibus')->exists());
-    }
-
-    public function test_installation_sans_catalogue_ne_cree_aucun_type_vehicule(): void
+    public function test_catalogue_par_defaut_est_toujours_cree(): void
     {
         $this->post('/install', $this->payload())->assertOk();
 
         $org = Organization::where('slug', 'elm-test')->firstOrFail();
-        $this->assertSame(0, TypeVehicule::where('organization_id', $org->id)->count());
+        $this->assertGreaterThan(0, Categorie::where('organization_id', $org->id)->count());
+        $this->assertGreaterThan(0, OptionCatalogue::where('organization_id', $org->id)->count());
+        $this->assertSame(5, TypeVehicule::where('organization_id', $org->id)->count());
+        $this->assertTrue(TypeVehicule::where('organization_id', $org->id)->where('nom', 'Minibus')->exists());
+    }
+
+    public function test_cree_le_site_siege_a_partir_de_ladresse_saisie(): void
+    {
+        $this->post('/install', $this->payload([
+            'siege' => ['ville' => 'Kankan', 'quartier' => 'Timbo'],
+        ]))->assertOk();
+
+        $org = Organization::where('slug', 'elm-test')->firstOrFail();
+        $siege = Site::where('organization_id', $org->id)->where('nom', 'Siège')->first();
+
+        $this->assertNotNull($siege);
+        $this->assertSame(SiteType::SIEGE, $siege->type);
+        $this->assertSame('Kankan', $siege->ville);
+        $this->assertSame('Timbo', $siege->quartier);
+        $this->assertSame('+224622000000', $siege->telephone);
+    }
+
+    public function test_ville_du_siege_obligatoire(): void
+    {
+        $this->post('/install', $this->payload([
+            'siege' => ['ville' => ''],
+        ]))->assertSessionHasErrors('siege.ville');
+
+        $this->assertFalse(AppInstallation::isInstalled());
+    }
+
+    public function test_quartier_du_siege_obligatoire(): void
+    {
+        $this->post('/install', $this->payload([
+            'siege' => ['quartier' => ''],
+        ]))->assertSessionHasErrors('siege.quartier');
+
+        $this->assertFalse(AppInstallation::isInstalled());
     }
 
     public function test_reutilise_organisation_existante_de_meme_nom_sans_dupliquer(): void

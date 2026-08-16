@@ -2,10 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Enums\SiteType;
 use App\Models\AppInstallation;
 use App\Models\Categorie;
 use App\Models\OptionCatalogue;
 use App\Models\Organization;
+use App\Models\Site;
 use App\Models\TypeVehicule;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -102,43 +104,52 @@ class InstallAppTest extends TestCase
             ->expectsQuestion('Email (facultatif)', '')
             ->expectsQuestion('Mot de passe (min. 8 caractères, majuscule + minuscule + symbole)', 'Sup3r$ecretPwd')
             ->expectsQuestion('Confirmer le mot de passe', 'Sup3r$ecretPwd')
-            ->expectsConfirmation('Créer les catégories prédéfinies ?', 'no')
-            ->expectsConfirmation('Installer la bibliothèque d\'options prédéfinies ?', 'no')
-            ->expectsConfirmation(
-                'Créer les types de véhicule prédéfinis (Tricycle, Minibus, Camionnette, Camion, Remorque) ?',
-                'no',
-            )
+            ->expectsQuestion('Ville du siège', 'Conakry')
+            ->expectsQuestion('Quartier du siège', 'Matoto')
             ->assertExitCode(1);
 
         $this->assertDatabaseMissing('users', ['telephone' => '+224622000099']);
         $this->assertFalse(AppInstallation::isInstalled());
     }
 
-    public function test_categories_et_options_sont_des_choix_independants(): void
+    public function test_catalogue_par_defaut_est_toujours_cree(): void
     {
-        $this->runInstall(categories: true, options: false)->assertExitCode(0);
+        $this->runInstall()->assertExitCode(0);
 
         $org = Organization::where('slug', 'elm-test')->firstOrFail();
         $this->assertGreaterThan(0, Categorie::where('organization_id', $org->id)->count());
-        $this->assertSame(0, OptionCatalogue::where('organization_id', $org->id)->count());
-    }
-
-    public function test_types_vehicule_est_un_choix_independant(): void
-    {
-        $this->runInstall(categories: false, options: false, typesVehicule: true)->assertExitCode(0);
-
-        $org = Organization::where('slug', 'elm-test')->firstOrFail();
+        $this->assertGreaterThan(0, OptionCatalogue::where('organization_id', $org->id)->count());
         $this->assertSame(5, TypeVehicule::where('organization_id', $org->id)->count());
         $this->assertTrue(TypeVehicule::where('organization_id', $org->id)->where('nom', 'Minibus')->exists());
     }
 
-    public function test_installation_sans_catalogue_ne_cree_rien(): void
+    public function test_cree_le_site_siege_a_partir_de_la_ville_et_du_quartier_saisis(): void
     {
-        $this->runInstall(categories: false, options: false, typesVehicule: false)->assertExitCode(0);
+        $this->runInstall(ville: 'Kankan', quartier: 'Timbo')->assertExitCode(0);
 
         $org = Organization::where('slug', 'elm-test')->firstOrFail();
-        $this->assertSame(0, Categorie::where('organization_id', $org->id)->count());
-        $this->assertSame(0, OptionCatalogue::where('organization_id', $org->id)->count());
-        $this->assertSame(0, TypeVehicule::where('organization_id', $org->id)->count());
+        $siege = Site::where('organization_id', $org->id)->where('nom', 'Siège')->first();
+
+        $this->assertNotNull($siege);
+        $this->assertSame(SiteType::SIEGE, $siege->type);
+        $this->assertSame('Kankan', $siege->ville);
+        $this->assertSame('Timbo', $siege->quartier);
+        $this->assertSame('+224622000000', $siege->telephone);
+    }
+
+    public function test_refuse_une_ville_de_siege_vide(): void
+    {
+        $this->artisan('app:install')
+            ->expectsQuestion("Nom de l'entreprise", 'ELM Test')
+            ->expectsQuestion('Prénom', 'Issa')
+            ->expectsQuestion('Nom', 'BARRY')
+            ->expectsQuestion('Téléphone (format international, ex: +224622000000)', '+224622000000')
+            ->expectsQuestion('Email (facultatif)', '')
+            ->expectsQuestion('Mot de passe (min. 8 caractères, majuscule + minuscule + symbole)', 'Sup3r$ecretPwd')
+            ->expectsQuestion('Confirmer le mot de passe', 'Sup3r$ecretPwd')
+            ->expectsQuestion('Ville du siège', '')
+            ->assertExitCode(1);
+
+        $this->assertFalse(AppInstallation::isInstalled());
     }
 }

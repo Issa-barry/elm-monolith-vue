@@ -57,11 +57,18 @@ $PHP artisan optimize
 
 
 Puis, **depuis un navigateur**, ouvrir `https://ton-domaine/install` et suivre l'assistant
-(4 étapes : Entreprise, Super Admin, Catalogue initial, Résumé). C'est la façon recommandée
-de terminer la première installation : le pipeline CI/CD (`deploy-hostinger.yml`) ne lance
-**jamais** cette étape automatiquement — elle demande une saisie humaine (nom de
-l'entreprise, identité et mot de passe du Super Admin) qui n'a pas sa place dans un script
-de déploiement.
+(3 étapes : Entreprise, Super Admin, Résumé). C'est la façon recommandée de terminer la
+première installation : le pipeline CI/CD (`deploy-hostinger.yml`) ne lance **jamais** cette
+étape automatiquement — elle demande une saisie humaine (nom de l'entreprise, ville/quartier
+du siège, identité et mot de passe du Super Admin) qui n'a pas sa place dans un script de
+déploiement.
+
+L'étape "Entreprise" demande aussi la ville et le quartier du siège — un premier `Site` (type
+Siège) est créé automatiquement à partir de cette adresse ; les autres sites (usines, dépôts,
+agences) s'ajoutent ensuite depuis l'application (CRUD Sites ou import flotte), jamais seedés.
+Le catalogue de départ (catégories, options, types de véhicule) n'est plus une case à cocher :
+il est désormais toujours créé, en on_premise comme en saas — seuls les produits restent à
+créer manuellement après coup.
 
 L'assistant web est protégé par `APP_INSTALL_TOKEN` (variable d'environnement à définir dans
 `.env` avant le 1er accès — la clé n'est jamais stockée en base ni loguée, seule sa
@@ -161,6 +168,14 @@ npm run e2e:ui
 # 4) Voir le rapport HTML après exécution
 npm run e2e:report
 ```
+
+`npm run e2e` reconstruit aussi les assets front (`npm run e2e:build`) avec `APP_ENV=e2e` avant de
+lancer Playwright — indispensable : les actions générées par Wayfinder (`resources/js/actions/**`)
+embarquent une URL absolue basée sur `APP_URL`, figée au moment du build. Sans ce rebuild sous
+`.env.e2e`, les assets déjà compilés pointent vers l'`APP_URL` de `.env` (ex. `:8000`) au lieu du
+serveur E2E (`:8080`) → CORS bloqué → login E2E impossible sur une base fraîche. Si tu lances un
+scénario directement via `npx playwright test <fichier>` (sans passer par `npm run e2e`), assure-toi
+d'avoir exécuté `npm run e2e:db:reset && npm run e2e:build` au moins une fois avant.
 
 Scénarios E2E disponibles :
 

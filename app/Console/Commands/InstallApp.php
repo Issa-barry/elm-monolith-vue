@@ -8,11 +8,11 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Première initialisation d'une organisation : crée (ou réutilise) l'organisation, le premier
- * compte super_admin, et optionnellement un catalogue de départ (catégories, options, types de
- * véhicule).
+ * compte super_admin, le site siège (à partir de la ville/quartier saisis) et le catalogue de
+ * départ (catégories, options, types de véhicule — systématique, plus un choix).
  *
  * Simple façade interactive autour de InstallationService — toute la logique métier (org,
- * super_admin, catalogue, installed_at) vit dans ce service, partagée avec l'assistant web
+ * super_admin, site, catalogue, installed_at) vit dans ce service, partagée avec l'assistant web
  * `/install` (InstallWizardController) : les deux chemins produisent exactement le même
  * résultat pour les mêmes réponses.
  *
@@ -59,9 +59,24 @@ class InstallApp extends Command
         $email = $this->ask('Email (facultatif)') ?: null;
         [$password, $confirmation] = $this->askPassword($service);
 
-        $categories = $this->confirm('Créer les catégories prédéfinies ?', true);
-        $options = $this->confirm('Installer la bibliothèque d\'options prédéfinies ?', true);
-        $typesVehicule = $this->confirm('Créer les types de véhicule prédéfinis (Tricycle, Minibus, Camionnette, Camion, Remorque) ?', true);
+        $this->newLine();
+        $this->line('----------------------------------------');
+        $this->line('Siège');
+        $this->line('----------------------------------------');
+        $this->newLine();
+
+        $ville = $this->ask('Ville du siège');
+        if (! $ville) {
+            $this->error('La ville du siège est obligatoire.');
+
+            return self::FAILURE;
+        }
+        $quartier = $this->ask('Quartier du siège');
+        if (! $quartier) {
+            $this->error('Le quartier du siège est obligatoire.');
+
+            return self::FAILURE;
+        }
 
         $this->newLine();
         $this->info('Création...');
@@ -77,7 +92,7 @@ class InstallApp extends Command
                     'password' => $password,
                     'password_confirmation' => $confirmation,
                 ],
-                catalogue: ['categories' => $categories, 'options' => $options, 'types_vehicule' => $typesVehicule],
+                siege: ['ville' => $ville, 'quartier' => $quartier],
             );
         } catch (ValidationException $e) {
             foreach ($e->errors() as $messages) {
@@ -92,15 +107,9 @@ class InstallApp extends Command
         $this->line('✓ Entreprise prête : '.$org->name);
         $this->line('✓ Rôles et permissions initialisés');
         $this->line('✓ Super Admin créé');
-        if ($categories) {
-            $this->line('✓ Catégories créées');
-        }
-        if ($options) {
-            $this->line('✓ Options créées');
-        }
-        if ($typesVehicule) {
-            $this->line('✓ Types de véhicule créés');
-        }
+        $this->line("✓ Siège créé : {$ville}, {$quartier}");
+        $this->line('✓ Catalogue par défaut créé (catégories, options, types de véhicule)');
+        $this->line("  Les autres sites et les produits restent à ajouter depuis l'application.");
 
         $this->newLine();
         $this->line('========================================');

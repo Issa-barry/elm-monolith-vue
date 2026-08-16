@@ -96,9 +96,8 @@ class InstallWizardController extends Controller
             'admin.email' => 'nullable|email:rfc,dns|max:255',
             'admin.password' => 'required|string',
             'admin.password_confirmation' => 'required|string',
-            'catalogue.categories' => 'boolean',
-            'catalogue.options' => 'boolean',
-            'catalogue.types_vehicule' => 'boolean',
+            'siege.ville' => 'required|string|max:100',
+            'siege.quartier' => 'required|string|max:100',
         ]);
 
         // La complexité/confirmation du mot de passe est revalidée par InstallationService
@@ -106,7 +105,7 @@ class InstallWizardController extends Controller
         $this->service->install(
             organisation: $data['organisation'],
             admin: $data['admin'],
-            catalogue: $data['catalogue'] ?? [],
+            siege: $data['siege'],
         );
 
         $request->session()->forget('install_token_verified');

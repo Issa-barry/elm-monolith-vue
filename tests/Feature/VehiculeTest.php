@@ -93,17 +93,17 @@ class VehiculeTest extends TestCase
             ->assertStatus(403);
     }
 
-    public function test_index_falls_back_to_type_default_capacity_when_vehicule_has_none(): void
+    public function test_index_expose_la_capacite_packs_du_type(): void
     {
-        // cas réel : véhicules créés par l'import flotte, qui ne saisit jamais
-        // de capacité propre au véhicule (voir ImportFlotteExecutor).
+        // Capacité gérée exclusivement par le type (décision produit du 16/08/2026, cf.
+        // VehiculeCapaciteService) — jamais propre au véhicule, quel que soit son origine
+        // (formulaire manuel ou import flotte, cf. ImportFlotteExecutor).
         $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'capacite_defaut' => 270]);
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'type_vehicule_id' => $type->id,
             'proprietaire_id' => $proprietaire->id,
-            'capacite_packs' => null,
         ]);
 
         $this->actingAs($this->user)
@@ -113,7 +113,7 @@ class VehiculeTest extends TestCase
             );
     }
 
-    public function test_index_falls_back_to_type_default_capacite_bouteilles_when_vehicule_has_none(): void
+    public function test_index_expose_la_capacite_bouteilles_du_type(): void
     {
         $type = TypeVehicule::factory()->create([
             'organization_id' => $this->org->id,
@@ -124,7 +124,6 @@ class VehiculeTest extends TestCase
             'organization_id' => $this->org->id,
             'type_vehicule_id' => $type->id,
             'proprietaire_id' => $proprietaire->id,
-            'capacite_bouteilles' => null,
         ]);
 
         $this->actingAs($this->user)
@@ -160,7 +159,6 @@ class VehiculeTest extends TestCase
                 'proprietaire_id' => $proprietaire->id,
                 'categorie' => 'partenaire',
                 'site_id' => $site->id,
-                'capacite_packs' => 200,
                 'is_active' => true,
                 'livraison_vente' => true,
                 'livraison_logistique' => false,
@@ -181,7 +179,13 @@ class VehiculeTest extends TestCase
         ]);
     }
 
-    public function test_store_creates_vehicule_avec_capacite_bouteilles(): void
+    /**
+     * capacite_packs/capacite_bouteilles ne sont plus des champs du formulaire véhicule
+     * (décision produit du 16/08/2026) — un envoi malgré tout (ancien client, requête forgée)
+     * n'a aucun effet : ni dans validationRules(), ces clés sont silencieusement ignorées par
+     * Request::validate(), la capacité affichée reste celle du type.
+     */
+    public function test_store_ignore_capacite_packs_et_bouteilles_envoyes_dans_le_payload(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $site = $this->user->sites()->first();
@@ -204,8 +208,8 @@ class VehiculeTest extends TestCase
         $this->assertDatabaseHas('vehicules', [
             'organization_id' => $this->org->id,
             'immatriculation' => 'MB-001-GN',
-            'capacite_packs' => 200,
-            'capacite_bouteilles' => 60,
+            'capacite_packs' => null,
+            'capacite_bouteilles' => null,
         ]);
     }
 
@@ -220,7 +224,6 @@ class VehiculeTest extends TestCase
                 'type_vehicule_id' => $this->typeId(),
                 'categorie' => 'interne',
                 'site_id' => $site->id,
-                'capacite_packs' => 50,
                 'is_active' => true,
                 'livraison_vente' => false,
                 'livraison_logistique' => true,
@@ -677,7 +680,6 @@ class VehiculeTest extends TestCase
                 'type_vehicule_id' => $this->typeId(),
                 'categorie' => 'interne',
                 'site_id' => $site->id,
-                'capacite_packs' => 50,
                 'is_active' => true,
                 'livraison_vente' => false,
                 'livraison_logistique' => true,
@@ -716,7 +718,6 @@ class VehiculeTest extends TestCase
                 'proprietaire_id' => $autre->id,
                 'categorie' => 'partenaire',
                 'site_id' => $site->id,
-                'capacite_packs' => 50,
                 'is_active' => true,
                 'livraison_vente' => false,
                 'livraison_logistique' => true,

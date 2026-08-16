@@ -58,12 +58,15 @@ class CommandeVenteCommissionEligibiliteTest extends TestCase
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
 
-        return Vehicule::factory()->create([
+        $vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
-            'capacite_packs' => $capacite,
             'livraison_vente' => $livraisonVente,
         ]);
+        // Capacité portée par le type (décision produit du 16/08/2026), jamais le véhicule.
+        $vehicule->typeVehicule->update(['capacite_defaut' => $capacite]);
+
+        return $vehicule;
     }
 
     /** Équipe à taux 100% (chauffeur + convoyeur + propriétaire), nécessaire pour que CommissionGenerator ne rejette pas la commande. */

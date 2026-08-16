@@ -47,8 +47,6 @@ const form = useForm({
     nom_vehicule: '',
     immatriculation: '',
     type_vehicule_id: null as string | null,
-    capacite_packs: null as number | null,
-    capacite_bouteilles: null as number | null,
     site_id: props.default_site_id,
     proprietaire_id:
         props.initial_proprietaire_id ?? props.default_proprietaire_id,

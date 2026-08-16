@@ -3,8 +3,10 @@
 namespace App\Services;
 
 use App\Actions\Fortify\PasswordValidationRules;
+use App\Enums\SiteType;
 use App\Models\AppInstallation;
 use App\Models\Organization;
+use App\Models\Site;
 use App\Models\User;
 use Database\Seeders\CategorieDefaultSeeder;
 use Database\Seeders\OptionCatalogueDefaultSeeder;
@@ -119,18 +121,23 @@ class InstallationService
 
     /**
      * Exécute l'installation complète dans une transaction : organisation (créée ou réutilisée),
-     * rôles/permissions, super_admin, catalogue de départ optionnel, marquage installed_at — tout
-     * ou rien. installed_at n'est jamais renseigné si une étape échoue en cours de route.
+     * rôles/permissions, super_admin, site siège, catalogue de départ, marquage installed_at —
+     * tout ou rien. installed_at n'est jamais renseigné si une étape échoue en cours de route.
+     *
+     * Le catalogue de départ (catégories, options, types de véhicule) n'est plus un choix : il
+     * est désormais créé systématiquement, comme ProduitTypeDefaultSeeder l'était déjà — une
+     * organisation fraîche part toujours avec le même socle, modifiable/supprimable ensuite via
+     * les CRUD. Valable en on_premise comme en saas.
      *
      * @param  array{nom: string}  $organisation
      * @param  array{prenom: string, nom: string, telephone: string, email: ?string, password: string}  $admin
-     * @param  array{categories: bool, options: bool, types_vehicule: bool}  $catalogue
+     * @param  array{ville: string, quartier: string}  $siege
      *
      * @throws ValidationException
      */
-    public function install(array $organisation, array $admin, array $catalogue): Organization
+    public function install(array $organisation, array $admin, array $siege): Organization
     {
-        return DB::transaction(function () use ($organisation, $admin, $catalogue) {
+        return DB::transaction(function () use ($organisation, $admin, $siege) {
             RolesAndPermissionsSeeder::seedRolesEtPermissions();
 
             $org = $this->resolveOrganization($organisation['nom']);
@@ -138,6 +145,17 @@ class InstallationService
             if ($org->users()->role('super_admin')->exists()) {
                 throw ValidationException::withMessages([
                     'organisation.nom' => "Cette entreprise (« {$org->name} ») a déjà un compte super_admin — installation déjà faite.",
+                ]);
+            }
+
+            if (trim($siege['ville'] ?? '') === '') {
+                throw ValidationException::withMessages([
+                    'siege.ville' => 'La ville du siège est obligatoire.',
+                ]);
+            }
+            if (trim($siege['quartier'] ?? '') === '') {
+                throw ValidationException::withMessages([
+                    'siege.quartier' => 'Le quartier du siège est obligatoire.',
                 ]);
             }
 
@@ -175,20 +193,34 @@ class InstallationService
             $user->syncRoles(['super_admin']);
             app(MatriculeService::class)->assignForUser($user);
 
-            // Obligatoire et inconditionnel (contrairement aux catalogues ci-dessous) : un
-            // produit ne peut pas exister sans type, une organisation ne doit donc jamais rester
-            // sans aucun type disponible — cf. docblock de ProduitTypeDefaultSeeder.
+            // Socle systématique pour toute organisation fraîche — plus un choix (ancien wizard
+            // "Catalogue initial" retiré) : catégories, options et types de véhicule sont
+            // toujours créés, au même titre que ProduitTypeDefaultSeeder ci-dessous (obligatoire
+            // car un produit ne peut pas exister sans type). Modifiable/supprimable ensuite via
+            // les CRUD respectifs. Les produits eux-mêmes ne sont jamais seedés ici : à créer
+            // manuellement après installation.
             ProduitTypeDefaultSeeder::seedPourOrganisation($org->id);
+            CategorieDefaultSeeder::seedPourOrganisation($org->id);
+            OptionCatalogueDefaultSeeder::seedPourOrganisation($org->id);
+            TypeVehiculesSeeder::seedPourOrganisation($org->id);
 
-            if ($catalogue['categories'] ?? false) {
-                CategorieDefaultSeeder::seedPourOrganisation($org->id);
-            }
-            if ($catalogue['options'] ?? false) {
-                OptionCatalogueDefaultSeeder::seedPourOrganisation($org->id);
-            }
-            if ($catalogue['types_vehicule'] ?? false) {
-                TypeVehiculesSeeder::seedPourOrganisation($org->id);
-            }
+            // Site siège unique créé à l'installation, à partir de l'adresse saisie — les autres
+            // sites (usines, dépôts, agences) sont ajoutés ensuite par l'organisation elle-même
+            // (CRUD Sites ou import flotte), jamais seedés. Téléphone repris du super_admin
+            // (aucun numéro dédié au siège n'est demandé à l'installation) — modifiable ensuite
+            // comme le reste depuis la fiche Site. firstOrCreate : un réinstall après
+            // interruption (organisation existante, pas encore de super_admin) ne duplique pas
+            // le siège si l'étape avait déjà été atteinte une première fois.
+            Site::firstOrCreate(
+                ['organization_id' => $org->id, 'nom' => 'Siège'],
+                [
+                    'type' => SiteType::SIEGE,
+                    'ville' => trim($siege['ville']),
+                    'quartier' => trim($siege['quartier']),
+                    'pays' => $telephoneInfo['pays'] ?? null,
+                    'telephone' => $telephoneInfo['telephone'],
+                ],
+            );
 
             // Une ligne par installation (pas un updateOrCreate([]) qui écraserait toujours la
             // même) : en saas, /install peut être rejoué pour créer plusieurs organisations —

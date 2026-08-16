@@ -60,11 +60,14 @@ class CommandeVenteModeTarificationTest extends TestCase
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
 
-        return Vehicule::factory()->create([
+        $vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
-            'capacite_packs' => $capacite,
         ]);
+        // Capacité portée par le type (décision produit du 16/08/2026), jamais le véhicule.
+        $vehicule->typeVehicule->update(['capacite_defaut' => $capacite]);
+
+        return $vehicule;
     }
 
     // ── store : total selon le contexte (véhicule / client partenaire) ──────

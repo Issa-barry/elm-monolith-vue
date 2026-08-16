@@ -6,7 +6,6 @@ import { Link } from '@inertiajs/vue3';
 import { Building2, Save, Upload, X } from 'lucide-vue-next';
 import AutoComplete from 'primevue/autocomplete';
 import Dropdown from 'primevue/dropdown';
-import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import { computed, ref, watch } from 'vue';
 
@@ -37,8 +36,6 @@ interface FormData {
     nom_vehicule: string;
     immatriculation: string;
     type_vehicule_id: string | null;
-    capacite_packs: number | null;
-    capacite_bouteilles: number | null;
     site_id: string | null;
     proprietaire_id: number | string | null;
     categorie: string | null;
@@ -75,14 +72,9 @@ watch(
 );
 
 function onTypeChange(value: string) {
-    const type = props.types.find((t) => t.value === value);
     emit('update:form', {
         ...props.form,
         type_vehicule_id: value,
-        capacite_packs: type ? type.capacite_defaut : props.form.capacite_packs,
-        capacite_bouteilles: type
-            ? type.capacite_defaut_bouteilles
-            : props.form.capacite_bouteilles,
     });
 }
 
@@ -481,57 +473,32 @@ function handleSubmit() {
                     </p>
                 </div>
 
-                <div>
-                    <Label for="capacite_packs" class="mb-1.5 block">
-                        Capacité (sachets)
-                        <span
-                            v-if="selectedType"
-                            class="ml-1 text-xs text-muted-foreground"
-                        >
-                            défaut : {{ selectedType.capacite_defaut }}
-                        </span>
-                    </Label>
-                    <InputNumber
-                        id="capacite_packs"
-                        :model-value="form.capacite_packs"
-                        @update:model-value="
-                            $emit('update:form', {
-                                ...form,
-                                capacite_packs: $event,
-                            })
-                        "
-                        :min="1"
-                        :max="99999"
-                        :use-grouping="false"
-                        class="w-full"
-                    />
-                </div>
-
-                <div>
-                    <Label for="capacite_bouteilles" class="mb-1.5 block">
-                        Capacité (bouteilles)
-                        <span
-                            v-if="selectedType?.capacite_defaut_bouteilles"
-                            class="ml-1 text-xs text-muted-foreground"
-                        >
-                            défaut :
-                            {{ selectedType.capacite_defaut_bouteilles }}
-                        </span>
-                    </Label>
-                    <InputNumber
-                        id="capacite_bouteilles"
-                        :model-value="form.capacite_bouteilles"
-                        @update:model-value="
-                            $emit('update:form', {
-                                ...form,
-                                capacite_bouteilles: $event,
-                            })
-                        "
-                        :min="1"
-                        :max="99999"
-                        :use-grouping="false"
-                        class="w-full"
-                    />
+                <div class="sm:col-span-2">
+                    <Label class="mb-1.5 block">Capacité</Label>
+                    <p
+                        v-if="selectedType"
+                        class="rounded-lg border bg-muted/30 px-3 py-2 text-sm text-muted-foreground"
+                    >
+                        {{ selectedType.capacite_defaut }} sachets
+                        <template v-if="selectedType.capacite_defaut_bouteilles">
+                            · {{ selectedType.capacite_defaut_bouteilles }}
+                            bouteilles
+                        </template>
+                    </p>
+                    <p
+                        v-else
+                        class="rounded-lg border bg-muted/30 px-3 py-2 text-sm text-muted-foreground"
+                    >
+                        Choisir un type pour voir sa capacité.
+                    </p>
+                    <p class="mt-1 text-xs text-muted-foreground">
+                        Définie sur le type de véhicule, pas ici —
+                        <Link
+                            href="/backoffice/type-vehicules"
+                            class="underline"
+                            >gérer les types</Link
+                        >.
+                    </p>
                 </div>
             </div>
         </div>

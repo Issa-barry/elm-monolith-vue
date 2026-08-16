@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
@@ -18,12 +17,7 @@ interface PhoneInfo {
     fuseau: string | null;
 }
 
-const STEP_LABELS = [
-    'Entreprise',
-    'Super Administrateur',
-    'Catalogue initial',
-    'Résumé',
-];
+const STEP_LABELS = ['Entreprise', 'Super Administrateur', 'Résumé'];
 const currentStep = ref(1);
 
 const form = useForm({
@@ -36,7 +30,7 @@ const form = useForm({
         password: '',
         password_confirmation: '',
     },
-    catalogue: { categories: true, options: true, types_vehicule: true },
+    siege: { ville: '', quartier: '' },
 });
 
 function errorFor(key: string): string | undefined {
@@ -44,7 +38,12 @@ function errorFor(key: string): string | undefined {
 }
 
 // ── Étape 1 : Entreprise ─────────────────────────────────────────────────────
-const step1Valid = computed(() => form.organisation.nom.trim().length > 0);
+const step1Valid = computed(
+    () =>
+        form.organisation.nom.trim().length > 0 &&
+        form.siege.ville.trim().length > 0 &&
+        form.siege.quartier.trim().length > 0,
+);
 
 // ── Étape 2 : Super Admin ─────────────────────────────────────────────────────
 function getCsrfToken(): string {
@@ -115,16 +114,18 @@ function previousStep() {
 function submit() {
     form.post('/install', {
         preserveScroll: true,
-        // Les erreurs de admin.* / catalogue.* sont validées côté serveur au moment du submit
-        // final (étape 4) mais leur <InputError> vit dans le markup des étapes 1-3, qui ne sont
-        // pas rendues à ce moment-là — sans ce renvoi, l'erreur reste invisible et le bouton
-        // "Terminer" semble ne rien faire.
+        // Les erreurs de admin.* / siege.* sont validées côté serveur au moment du submit final
+        // (étape 3, Résumé) mais leur <InputError> vit dans le markup des étapes 1-2, qui ne
+        // sont pas rendues à ce moment-là — sans ce renvoi, l'erreur reste invisible et le
+        // bouton "Terminer" semble ne rien faire.
         onError: (errors) => {
             const firstKey = Object.keys(errors)[0];
             if (!firstKey) return;
             if (firstKey.startsWith('admin.')) currentStep.value = 2;
-            else if (firstKey.startsWith('catalogue.')) currentStep.value = 3;
-            else if (firstKey.startsWith('organisation.'))
+            else if (
+                firstKey.startsWith('organisation.') ||
+                firstKey.startsWith('siege.')
+            )
                 currentStep.value = 1;
         },
     });
@@ -200,6 +201,33 @@ function submit() {
                         </p>
                         <InputError :message="errorFor('organisation.nom')" />
                     </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="grid gap-2">
+                            <Label for="siege-ville"
+                                >Ville du siège
+                                <span class="text-destructive">*</span></Label
+                            >
+                            <Input id="siege-ville" v-model="form.siege.ville" />
+                            <InputError :message="errorFor('siege.ville')" />
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="siege-quartier"
+                                >Quartier du siège
+                                <span class="text-destructive">*</span></Label
+                            >
+                            <Input
+                                id="siege-quartier"
+                                v-model="form.siege.quartier"
+                            />
+                            <InputError :message="errorFor('siege.quartier')" />
+                        </div>
+                    </div>
+                    <p class="text-xs text-muted-foreground">
+                        Crée le site siège de l'entreprise. Les autres sites
+                        (usines, dépôts, agences) s'ajoutent ensuite depuis
+                        l'application.
+                    </p>
                 </div>
 
                 <!-- Étape 2 : Super Admin -->
@@ -317,75 +345,7 @@ function submit() {
                     </div>
                 </div>
 
-                <!-- Étape 3 : Catalogue initial -->
-                <div v-else-if="currentStep === 3" class="grid gap-5">
-                    <div class="flex items-start gap-3">
-                        <Checkbox
-                            id="cat-categories"
-                            :model-value="form.catalogue.categories"
-                            @update:model-value="
-                                form.catalogue.categories = $event === true
-                            "
-                        />
-                        <div>
-                            <Label
-                                for="cat-categories"
-                                class="cursor-pointer font-medium"
-                                >Créer les catégories prédéfinies ?</Label
-                            >
-                            <p class="text-xs text-muted-foreground">
-                                Un catalogue de départ générique (vêtements,
-                                chaussures, boissons...) — modifiable librement
-                                ensuite.
-                            </p>
-                        </div>
-                    </div>
-                    <div class="flex items-start gap-3">
-                        <Checkbox
-                            id="cat-options"
-                            :model-value="form.catalogue.options"
-                            @update:model-value="
-                                form.catalogue.options = $event === true
-                            "
-                        />
-                        <div>
-                            <Label
-                                for="cat-options"
-                                class="cursor-pointer font-medium"
-                                >Installer la bibliothèque d'options prédéfinies
-                                ?</Label
-                            >
-                            <p class="text-xs text-muted-foreground">
-                                Modèles réutilisables (Couleur, Taille,
-                                Pointure...) — pas de produits ni de variantes
-                                créés automatiquement.
-                            </p>
-                        </div>
-                    </div>
-                    <div class="flex items-start gap-3">
-                        <Checkbox
-                            id="cat-types-vehicule"
-                            :model-value="form.catalogue.types_vehicule"
-                            @update:model-value="
-                                form.catalogue.types_vehicule = $event === true
-                            "
-                        />
-                        <div>
-                            <Label
-                                for="cat-types-vehicule"
-                                class="cursor-pointer font-medium"
-                                >Créer les types de véhicule prédéfinis ?</Label
-                            >
-                            <p class="text-xs text-muted-foreground">
-                                Tricycle, Minibus, Camionnette, Camion, Remorque
-                                — requis pour l'import de flotte et la fiche
-                                véhicule, modifiable ensuite.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Étape 4 : Résumé -->
+                <!-- Étape 3 : Résumé -->
                 <div v-else class="grid gap-5">
                     <div>
                         <h3
@@ -394,6 +354,10 @@ function submit() {
                             Entreprise
                         </h3>
                         <p class="text-sm">{{ form.organisation.nom }}</p>
+                        <p class="text-sm text-muted-foreground">
+                            Siège : {{ form.siege.ville }},
+                            {{ form.siege.quartier }}
+                        </p>
                     </div>
                     <div>
                         <h3
@@ -431,17 +395,10 @@ function submit() {
                         >
                             Catalogue
                         </h3>
-                        <p class="text-sm">
-                            Catégories :
-                            {{ form.catalogue.categories ? 'Oui' : 'Non' }}
-                        </p>
-                        <p class="text-sm">
-                            Options :
-                            {{ form.catalogue.options ? 'Oui' : 'Non' }}
-                        </p>
-                        <p class="text-sm">
-                            Types de véhicule :
-                            {{ form.catalogue.types_vehicule ? 'Oui' : 'Non' }}
+                        <p class="text-sm text-muted-foreground">
+                            Catégories, options et types de véhicule prédéfinis
+                            créés automatiquement — modifiables ensuite. Les
+                            produits restent à créer manuellement.
                         </p>
                     </div>
                     <InputError :message="errorFor('organisation.nom')" />
@@ -471,13 +428,6 @@ function submit() {
                     v-else-if="currentStep === 2"
                     type="button"
                     :disabled="!step2Valid"
-                    @click="nextStep"
-                >
-                    Suivant
-                </Button>
-                <Button
-                    v-else-if="currentStep === 3"
-                    type="button"
                     @click="nextStep"
                 >
                     Suivant
