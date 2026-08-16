@@ -5,8 +5,10 @@ namespace App\Actions\Fortify;
 use App\Features\ModuleFeature;
 use App\Models\Client;
 use App\Models\Livreur;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\User;
+use App\Models\UserAuthIdentity;
 use App\Services\ModuleService;
 use App\Services\OtpService;
 use Illuminate\Support\Facades\DB;
@@ -49,7 +51,7 @@ class CreateNewUser implements CreatesNewUsers
         $validated = Validator::make($input, [
             'prenom' => ['required', 'string', 'min:2', 'max:100'],
             'nom' => ['required', 'string', 'min:2', 'max:100'],
-            'email' => ['nullable', 'string', 'email', 'max:255', Rule::unique(User::class)],
+            'email' => ['nullable', 'string', 'email', 'max:255'],
             'telephone' => ['nullable', 'string', 'max:30'],
             'telephone_country' => ['nullable', 'string', Rule::in(array_keys(self::PHONE_BY_COUNTRY))],
             'telephone_local' => ['nullable', 'string', 'regex:/^\d*$/', 'max:15'],
@@ -60,10 +62,16 @@ class CreateNewUser implements CreatesNewUsers
 
         $telephone = $this->resolveTelephone($validated);
 
-        // ── Unicité téléphone dans users ───────────────────────────────────────
-        if ($telephone !== null && User::where('telephone', $telephone)->exists()) {
+        // ── Unicité (remplace users.telephone/email — vit désormais dans user_auth_identities) ──
+        if ($telephone !== null && UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_TELEPHONE, Personne::normaliserTelephone($telephone)) !== null) {
             throw ValidationException::withMessages([
                 'telephone' => 'Ce numéro est déjà associé à un compte. Connectez-vous ou réinitialisez votre mot de passe.',
+            ]);
+        }
+
+        if (isset($validated['email']) && UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_EMAIL, UserAuthIdentity::normaliser(UserAuthIdentity::TYPE_EMAIL, $validated['email'])) !== null) {
+            throw ValidationException::withMessages([
+                'email' => 'Cette adresse email est déjà utilisée.',
             ]);
         }
 
@@ -80,13 +88,38 @@ class CreateNewUser implements CreatesNewUsers
         }
 
         return DB::transaction(function () use ($validated, $telephone) {
-            $user = User::create([
+            // Pas encore d'organisation à ce stade — cf. Personne::resoudreOuCreer(),
+            // organization_id nullable, même pattern que RegistrationService::register().
+            $personne = Personne::create([
+                'organization_id' => null,
                 'prenom' => self::formatPrenom($validated['prenom']),
                 'nom' => mb_strtoupper($validated['nom']),
-                'email' => isset($validated['email']) ? mb_strtolower($validated['email']) : null,
                 'telephone' => $telephone,
+                'telephone_normalise' => $telephone !== null ? Personne::normaliserTelephone($telephone) : null,
+                'email' => isset($validated['email']) ? mb_strtolower($validated['email']) : null,
+            ]);
+
+            $user = User::create([
+                'personne_id' => $personne->id,
                 'password' => $validated['password'],
             ]);
+            if ($telephone !== null) {
+                $user->authIdentities()->create([
+                    'type' => UserAuthIdentity::TYPE_TELEPHONE,
+                    'value' => $telephone,
+                    'normalized_value' => Personne::normaliserTelephone($telephone),
+                    'verified_at' => now(),
+                    'is_primary' => true,
+                ]);
+            }
+            if (isset($validated['email'])) {
+                $user->authIdentities()->create([
+                    'type' => UserAuthIdentity::TYPE_EMAIL,
+                    'value' => mb_strtolower($validated['email']),
+                    'normalized_value' => UserAuthIdentity::normaliser(UserAuthIdentity::TYPE_EMAIL, $validated['email']),
+                    'is_primary' => $telephone === null,
+                ]);
+            }
 
             Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
             $user->assignRole('client');
@@ -116,25 +149,49 @@ class CreateNewUser implements CreatesNewUsers
             return;
         }
 
+        $normalise = Personne::normaliserTelephone($telephone);
+
         // 2. Livreur (pré-créé par admin) → lier et créer un client
-        $livreur = Livreur::where('telephone', $telephone)->whereNull('user_id')->first();
+        $livreur = Livreur::whereNull('user_id')
+            ->whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
+            ->first();
         if ($livreur) {
             Role::firstOrCreate(['name' => 'livreur', 'guard_name' => 'web']);
             $user->assignRole('livreur');
             $livreur->update(['user_id' => $user->id]);
-            $user->update(['organization_id' => $livreur->organization_id]);
+            $this->rattacherMemePersonne($user, $livreur->personne, $livreur->organization_id);
             $this->findOrCreateClientInOrg($user, $livreur->organization_id, $telephone);
 
             return;
         }
 
         // 3. Propriétaire sans user_id → lier le propriétaire et créer un client
-        $proprietaire = Proprietaire::where('telephone', $telephone)->whereNull('user_id')->first();
+        $proprietaire = Proprietaire::whereNull('user_id')
+            ->whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
+            ->first();
         if ($proprietaire) {
             Role::firstOrCreate(['name' => 'proprietaire', 'guard_name' => 'web']);
             $user->assignRole('proprietaire');
             $proprietaire->update(['user_id' => $user->id]);
+            $this->rattacherMemePersonne($user, $proprietaire->personne, $proprietaire->organization_id);
             $this->findOrCreateClientInOrg($user, $proprietaire->organization_id, $telephone);
+        }
+    }
+
+    /**
+     * Le compte vient d'être créé avec une Personne "à la volée" (sans organisation) ; on
+     * découvre ici qu'il s'agit en réalité de la même personne physique qu'un rôle métier déjà
+     * existant (même téléphone) — on rattache le compte à CETTE Personne (celle du rôle,
+     * rattachée à son organisation) plutôt que de garder deux fiches distinctes pour le même
+     * humain, et on supprime la fiche provisoire devenue orpheline.
+     */
+    private function rattacherMemePersonne(User $user, Personne $personneDuRole, string $organizationId): void
+    {
+        $ancienne = $user->personne;
+        $user->update(['organization_id' => $organizationId, 'personne_id' => $personneDuRole->id]);
+
+        if ($ancienne->id !== $personneDuRole->id) {
+            $ancienne->delete();
         }
     }
 

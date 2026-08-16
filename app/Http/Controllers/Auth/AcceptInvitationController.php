@@ -4,7 +4,8 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Mail\OtpInvitationMail;
-use App\Models\User;
+use App\Models\Personne;
+use App\Models\UserAuthIdentity;
 use App\Models\UserInvitation;
 use App\Services\OtpService;
 use App\Services\PhoneNormalizer;
@@ -72,7 +73,7 @@ class AcceptInvitationController extends Controller
             return response()->json(['error' => 'Numéro de téléphone invalide.'], 422);
         }
 
-        if (User::where('telephone', $phone)->exists()) {
+        if (UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_TELEPHONE, Personne::normaliserTelephone($phone)) !== null) {
             return response()->json(['status' => 'user_exists']);
         }
 
@@ -231,19 +232,26 @@ class AcceptInvitationController extends Controller
         }
 
         $data = $request->validate([
-            'telephone' => ['required', 'string', 'max:30', 'unique:users,telephone'],
+            'telephone' => ['required', 'string', 'max:30'],
             'code_pays' => ['nullable', 'string', 'max:5'],
             'prenom' => ['required', 'string', 'min:2', 'max:100'],
             'nom' => ['required', 'string', 'min:2', 'max:100'],
             'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
         ], [
             'telephone.required' => 'Le numéro de téléphone est obligatoire.',
-            'telephone.unique' => 'Ce numéro de téléphone est déjà utilisé.',
             'prenom.required' => 'Le prénom est obligatoire.',
             'nom.required' => 'Le nom est obligatoire.',
             'password.required' => 'Le mot de passe est obligatoire.',
             'password.confirmed' => 'La confirmation du mot de passe ne correspond pas.',
         ]);
+
+        // Remplace l'ancienne règle unique:users,telephone — telephone ne vit plus sur users,
+        // l'unicité de connexion se vérifie désormais via user_auth_identities.
+        if (UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_TELEPHONE, Personne::normaliserTelephone($data['telephone'])) !== null) {
+            throw ValidationException::withMessages([
+                'telephone' => 'Ce numéro de téléphone est déjà utilisé.',
+            ]);
+        }
 
         $context = $this->otpContext($invitation);
 

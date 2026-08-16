@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\CategorieVehicule;
 use App\Enums\StatutPropositionVehicule;
+use App\Models\Personne;
 use App\Models\PropositionVehicule;
 use App\Models\Proprietaire;
 use App\Models\TypeVehicule;
@@ -114,7 +115,7 @@ class PropositionConversionService
         $telephone = $proposition->telephone_contact;
         if ($telephone && $orgId) {
             $existing = Proprietaire::where('organization_id', $orgId)
-                ->where('telephone', $telephone)
+                ->whereHas('personne', fn ($q) => $q->where('telephone_normalise', Personne::normaliserTelephone($telephone)))
                 ->first();
 
             if ($existing) {
@@ -129,12 +130,16 @@ class PropositionConversionService
         $nom = mb_strtoupper((string) array_pop($nomParts), 'UTF-8');
         $prenom = $nomParts[0] ?? null;
 
-        $proprietaire = Proprietaire::create([
-            'organization_id' => $orgId,
-            'user_id' => $proposition->user_id,
+        $personne = Personne::resoudreOuCreer($orgId, [
             'nom' => $nom ?: 'INCONNU',
             'prenom' => $prenom,
             'telephone' => $telephone,
+        ]);
+
+        $proprietaire = Proprietaire::create([
+            'organization_id' => $orgId,
+            'user_id' => $proposition->user_id,
+            'personne_id' => $personne->id,
             'is_active' => true,
         ]);
 

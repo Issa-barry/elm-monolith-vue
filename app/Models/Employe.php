@@ -17,13 +17,12 @@ class Employe extends Model
 {
     use HasFactory, HasUlids, SoftDeletes;
 
+    // Identité (nom/prenom/email/telephone) portée par Personne — jamais de colonne
+    // équivalente ici, cf. accesseurs ci-dessous.
     protected $fillable = [
         'organization_id',
+        'personne_id',
         'matricule',
-        'nom',
-        'prenom',
-        'email',
-        'telephone',
         'type_employe',
         'site_id',
         'statut',
@@ -39,12 +38,37 @@ class Employe extends Model
 
     public function getNomCompletAttribute(): string
     {
-        return trim("{$this->prenom} {$this->nom}");
+        return $this->personne?->nom_complet ?? '';
+    }
+
+    public function getNomAttribute(): ?string
+    {
+        return $this->personne?->nom;
+    }
+
+    public function getPrenomAttribute(): ?string
+    {
+        return $this->personne?->prenom;
+    }
+
+    public function getEmailAttribute(): ?string
+    {
+        return $this->personne?->email;
+    }
+
+    public function getTelephoneAttribute(): ?string
+    {
+        return $this->personne?->telephone;
     }
 
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);
+    }
+
+    public function personne(): BelongsTo
+    {
+        return $this->belongsTo(Personne::class);
     }
 
     public function site(): BelongsTo

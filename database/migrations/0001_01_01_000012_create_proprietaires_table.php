@@ -12,22 +12,12 @@ return new class extends Migration
             $table->ulid('id')->primary();
             $table->foreignUlid('organization_id')->constrained()->cascadeOnDelete();
             $table->foreignUlid('user_id')->nullable()->constrained()->nullOnDelete();
-            $table->string('nom', 100);
-            $table->string('prenom', 100)->nullable();
-            $table->string('surnom', 100)->nullable();
-            $table->string('email')->nullable();
-            $table->string('telephone', 20)->nullable();
-            $table->text('adresse')->nullable();
-            $table->string('pays', 100)->nullable();
-            $table->string('code_pays', 2)->nullable();
-            $table->string('code_phone_pays', 10)->nullable();
-            $table->string('ville', 100)->nullable();
+            // Identité civile (nom/prenom/surnom/telephone/email...) portée par Personne — cf.
+            // database/migrations/0001_01_01_000003_z_create_personnes_table.php.
+            $table->foreignUlid('personne_id')->constrained('personnes')->restrictOnDelete();
             $table->boolean('is_active')->default(true);
             $table->timestamps();
             $table->softDeletes();
-
-            $table->index(['organization_id', 'telephone']);
-            $table->index(['organization_id', 'email']);
         });
     }
 

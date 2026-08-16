@@ -57,12 +57,11 @@ class PieceIdentite extends Model
         ];
     }
 
-    // Entités pouvant porter une pièce d'identité — extensible : ajouter une classe
-    // ici + son alias dans AppServiceProvider::morphMap() suffit pour ouvrir le
-    // périmètre à une nouvelle personne physique (Client, Employe...), sans toucher
-    // à la table, au modèle ou au reste du pipeline.
+    // Une pièce d'identité (passeport, CNI, permis) appartient à la personne physique,
+    // jamais à un rôle métier particulier — un même document ne doit pas être ressaisi
+    // séparément pour chaque rôle (Proprietaire, Employe...) d'une même Personne.
     private const ALLOWED_IDENTIFIABLE_TYPES = [
-        Proprietaire::class,
+        Personne::class,
     ];
 
     // Garde-fou modèle en plus du contrôleur/policy : empêche tout code (seeder,

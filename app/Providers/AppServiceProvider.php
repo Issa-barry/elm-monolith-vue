@@ -6,6 +6,7 @@ use App\Features\ModuleFeature;
 use App\Models\CommandeVente;
 use App\Models\Depense;
 use App\Models\Organization;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Observers\DepenseObserver;
 use App\Observers\VenteObserver;
@@ -72,6 +73,7 @@ class AppServiceProvider extends ServiceProvider
         // ces relations non liées à cette fonctionnalité.
         Relation::morphMap([
             'proprietaire' => Proprietaire::class,
+            'personne' => Personne::class,
         ]);
 
         // Feature flags Pennant - modules metier.

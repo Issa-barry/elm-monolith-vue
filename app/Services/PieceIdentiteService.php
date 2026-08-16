@@ -11,9 +11,9 @@ use Throwable;
 
 /**
  * Logique métier des pièces d'identité, indépendante du contrôleur HTTP.
- * Générique sur le modèle "identifiable" (actuellement seul Proprietaire est
- * autorisé — voir PieceIdentite::ALLOWED_IDENTIFIABLE_TYPES) pour rester
- * réutilisable telle quelle quand une nouvelle entité sera ouverte.
+ * Générique sur le modèle "identifiable" (actuellement seul Personne est
+ * autorisé — voir PieceIdentite::ALLOWED_IDENTIFIABLE_TYPES) : une pièce
+ * appartient à la personne physique, pas à un rôle métier particulier.
  */
 class PieceIdentiteService
 {

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -28,32 +29,19 @@ class User extends Authenticatable
 
     public const STATUS_INACTIVE = 'inactive';
 
+    // Compte d'accès pur — ni identité (nom/prenom, cf. Personne) ni identifiant de connexion
+    // (telephone/email, cf. UserAuthIdentity) ne sont mass-assignables ici. Un User n'existe
+    // jamais sans personne_id.
     protected $fillable = [
-        'prenom',
-        'nom',
-        'email',
         'password',
-        'telephone',
         'is_active',
         'status',
-        'email_verified_at',
-        'email_verification_token',
-        'email_verification_expires_at',
-        'pays',
-        'code_pays',
-        'code_phone_pays',
-        'ville',
-        'adresse',
         'organization_id',
+        'personne_id',
         'matricule',
         'expo_push_token',
         'must_change_password',
     ];
-
-    public function getNameAttribute(): string
-    {
-        return trim("{$this->prenom} {$this->nom}");
-    }
 
     protected $hidden = [
         'password',
@@ -65,8 +53,6 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime:Y-m-d H:i:s',
-            'email_verification_expires_at' => 'datetime',
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
             'is_active' => 'boolean',
@@ -74,18 +60,95 @@ class User extends Authenticatable
         ];
     }
 
+    public function getNameAttribute(): string
+    {
+        return trim("{$this->prenom} {$this->nom}");
+    }
+
+    /** Proxy en lecture seule vers Personne — jamais de colonne nom/prenom sur users. */
+    public function getNomAttribute(): ?string
+    {
+        return $this->personne?->nom;
+    }
+
+    public function getPrenomAttribute(): ?string
+    {
+        return $this->personne?->prenom;
+    }
+
+    public function getPaysAttribute(): ?string
+    {
+        return $this->personne?->pays;
+    }
+
+    public function getCodePaysAttribute(): ?string
+    {
+        return $this->personne?->code_pays;
+    }
+
+    public function getCodePhonePaysAttribute(): ?string
+    {
+        return $this->personne?->code_phone_pays;
+    }
+
+    public function getVilleAttribute(): ?string
+    {
+        return $this->personne?->ville;
+    }
+
+    public function getAdresseAttribute(): ?string
+    {
+        return $this->personne?->adresse;
+    }
+
+    /** Proxy en lecture seule vers l'identité de connexion correspondante. */
+    public function getTelephoneAttribute(): ?string
+    {
+        return $this->telephoneIdentity()?->value;
+    }
+
+    public function getEmailAttribute(): ?string
+    {
+        return $this->emailIdentity()?->value;
+    }
+
+    public function telephoneIdentity(): ?UserAuthIdentity
+    {
+        return $this->authIdentities->firstWhere('type', UserAuthIdentity::TYPE_TELEPHONE);
+    }
+
+    public function emailIdentity(): ?UserAuthIdentity
+    {
+        return $this->authIdentities->firstWhere('type', UserAuthIdentity::TYPE_EMAIL);
+    }
+
+    /** Un email est facultatif : sans identité email du tout, on considère "rien à vérifier". */
     public function hasVerifiedEmail(): bool
     {
-        if ($this->email === null) {
-            return true;
-        }
+        $identity = $this->emailIdentity();
 
-        return $this->email_verified_at !== null;
+        return $identity === null || $identity->isVerified();
+    }
+
+    /** Utilisé par le PasswordBroker de Fortify (Features::resetPasswords()). */
+    public function getEmailForPasswordReset(): ?string
+    {
+        return $this->emailIdentity()?->value;
     }
 
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);
+    }
+
+    public function personne(): BelongsTo
+    {
+        return $this->belongsTo(Personne::class);
+    }
+
+    public function authIdentities(): HasMany
+    {
+        return $this->hasMany(UserAuthIdentity::class);
     }
 
     public function client(): HasOne

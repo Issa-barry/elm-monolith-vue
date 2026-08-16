@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\TypePieceIdentite;
 use App\Models\Depense;
+use App\Models\Personne;
 use App\Models\PieceIdentite;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
@@ -23,9 +24,10 @@ class ProprietaireController extends Controller
     {
         $this->authorize('viewAny', Proprietaire::class);
 
-        $proprietaires = Proprietaire::where('organization_id', auth()->user()->organization_id)
-            ->orderBy('nom')
+        $proprietaires = Proprietaire::with('personne')
+            ->where('organization_id', auth()->user()->organization_id)
             ->get()
+            ->sortBy('nom')
             ->map(fn (Proprietaire $p) => [
                 'id' => $p->id,
                 'nom' => $p->nom,
@@ -40,7 +42,8 @@ class ProprietaireController extends Controller
                 'code_pays' => $p->code_pays,
                 'adresse' => $p->adresse,
                 'is_active' => $p->is_active,
-            ]);
+            ])
+            ->values();
 
         return Inertia::render('Proprietaires/Index', [
             'proprietaires' => $proprietaires,
@@ -87,7 +90,24 @@ class ProprietaireController extends Controller
             $this->assertEmailUniqueInOrg($data['email'], $orgId);
         }
 
-        Proprietaire::create([...$data, 'organization_id' => $orgId]);
+        $personne = Personne::resoudreOuCreer($orgId, [
+            'nom' => $data['nom'],
+            'prenom' => $data['prenom'],
+            'surnom' => $data['surnom'] ?? null,
+            'email' => $data['email'] ?? null,
+            'telephone' => $data['telephone'],
+            'code_pays' => $data['code_pays'],
+            'code_phone_pays' => $data['code_phone_pays'] ?? null,
+            'pays' => $data['pays'] ?? null,
+            'ville' => $data['ville'],
+            'adresse' => $data['adresse'] ?? null,
+        ]);
+
+        Proprietaire::create([
+            'organization_id' => $orgId,
+            'personne_id' => $personne->id,
+            'is_active' => $data['is_active'] ?? true,
+        ]);
 
         return redirect()->route('proprietaires.index')
             ->with('success', 'Propriétaire créé avec succès.');
@@ -281,7 +301,20 @@ class ProprietaireController extends Controller
             $this->assertEmailUniqueInOrg($data['email'], $proprietaire->organization_id, $proprietaire->id);
         }
 
-        $proprietaire->update($data);
+        $proprietaire->personne->update([
+            'nom' => $data['nom'],
+            'prenom' => $data['prenom'],
+            'surnom' => $data['surnom'] ?? null,
+            'email' => $data['email'] ?? null,
+            'telephone' => $data['telephone'],
+            'telephone_normalise' => Personne::normaliserTelephone($data['telephone']),
+            'code_pays' => $data['code_pays'],
+            'code_phone_pays' => $data['code_phone_pays'] ?? null,
+            'pays' => $data['pays'] ?? null,
+            'ville' => $data['ville'],
+            'adresse' => $data['adresse'] ?? null,
+        ]);
+        $proprietaire->update(['is_active' => $data['is_active'] ?? $proprietaire->is_active]);
 
         return redirect()->route('proprietaires.edit', $proprietaire)
             ->with('success', 'Propriétaire mis à jour avec succès.');
@@ -318,8 +351,8 @@ class ProprietaireController extends Controller
     private function assertPhoneUniqueInOrg(string $phone, string $orgId, ?string $ignoreId = null): void
     {
         $exists = Proprietaire::where('organization_id', $orgId)
-            ->where('telephone', $phone)
             ->whereNull('deleted_at')
+            ->whereHas('personne', fn ($q) => $q->where('telephone_normalise', Personne::normaliserTelephone($phone)))
             ->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))
             ->exists();
 
@@ -333,8 +366,8 @@ class ProprietaireController extends Controller
     private function assertEmailUniqueInOrg(string $email, string $orgId, ?string $ignoreId = null): void
     {
         $exists = Proprietaire::where('organization_id', $orgId)
-            ->where('email', $email)
             ->whereNull('deleted_at')
+            ->whereHas('personne', fn ($q) => $q->where('email', $email))
             ->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))
             ->exists();
 

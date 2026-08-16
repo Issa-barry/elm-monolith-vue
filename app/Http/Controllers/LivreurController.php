@@ -4,9 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\CommissionPart;
 use App\Models\Livreur;
+use App\Models\Personne;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -53,16 +54,30 @@ class LivreurController extends Controller
 
         $data = $request->validate([
             'nom_complet' => 'nullable|string|max:150',
-            'telephone' => [
-                'required', 'string', 'max:30',
-                Rule::unique('livreurs', 'telephone')->where('organization_id', $orgId),
-            ],
+            'telephone' => ['required', 'string', 'max:30'],
         ], [
             'telephone.required' => 'Le numéro de téléphone est obligatoire.',
-            'telephone.unique' => 'Ce numéro de téléphone est déjà utilisé dans votre organisation.',
         ]);
 
-        $livreur = Livreur::create([...$data, 'organization_id' => $orgId, 'is_active' => true]);
+        $telephoneNormalise = Personne::normaliserTelephone($data['telephone']);
+        $existe = Livreur::where('organization_id', $orgId)
+            ->whereHas('personne', fn ($q) => $q->where('telephone_normalise', $telephoneNormalise))
+            ->exists();
+
+        if ($existe) {
+            throw ValidationException::withMessages([
+                'telephone' => 'Ce numéro de téléphone est déjà utilisé dans votre organisation.',
+            ]);
+        }
+
+        $personne = Personne::resoudreOuCreer($orgId, ['telephone' => $data['telephone']]);
+
+        $livreur = Livreur::create([
+            'nom_complet' => $data['nom_complet'] ?? null,
+            'personne_id' => $personne->id,
+            'organization_id' => $orgId,
+            'is_active' => true,
+        ]);
 
         return response()->json([
             'id' => $livreur->id,

@@ -18,27 +18,70 @@ class Proprietaire extends Model
         'is_active' => 'boolean',
     ];
 
+    // Identité (nom/prenom/surnom/email/telephone/adresse/ville/pays) portée par Personne —
+    // jamais de colonne équivalente ici, cf. accesseurs ci-dessous.
     protected $fillable = [
         'organization_id',
         'user_id',
-        'nom',
-        'prenom',
-        'surnom',
-        'email',
-        'telephone',
-        'adresse',
-        'ville',
-        'pays',
-        'code_pays',
-        'code_phone_pays',
+        'personne_id',
         'is_active',
     ];
 
-    // ── Accessor ──────────────────────────────────────────────────────────────
+    // ── Accesseurs — proxy en lecture seule vers Personne ───────────────────────
 
     public function getNomCompletAttribute(): string
     {
-        return trim("{$this->prenom} {$this->nom}");
+        return $this->personne?->nom_complet ?? '';
+    }
+
+    public function getNomAttribute(): ?string
+    {
+        return $this->personne?->nom;
+    }
+
+    public function getPrenomAttribute(): ?string
+    {
+        return $this->personne?->prenom;
+    }
+
+    public function getSurnomAttribute(): ?string
+    {
+        return $this->personne?->surnom;
+    }
+
+    public function getEmailAttribute(): ?string
+    {
+        return $this->personne?->email;
+    }
+
+    public function getTelephoneAttribute(): ?string
+    {
+        return $this->personne?->telephone;
+    }
+
+    public function getAdresseAttribute(): ?string
+    {
+        return $this->personne?->adresse;
+    }
+
+    public function getVilleAttribute(): ?string
+    {
+        return $this->personne?->ville;
+    }
+
+    public function getPaysAttribute(): ?string
+    {
+        return $this->personne?->pays;
+    }
+
+    public function getCodePaysAttribute(): ?string
+    {
+        return $this->personne?->code_pays;
+    }
+
+    public function getCodePhonePaysAttribute(): ?string
+    {
+        return $this->personne?->code_phone_pays;
     }
 
     // ── Relations ─────────────────────────────────────────────────────────────
@@ -48,14 +91,20 @@ class Proprietaire extends Model
         return $this->belongsTo(Organization::class);
     }
 
+    public function personne(): BelongsTo
+    {
+        return $this->belongsTo(Personne::class);
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
+    /** Les pièces d'identité appartiennent à la personne, pas à un rôle particulier. */
     public function piecesIdentite(): MorphMany
     {
-        return $this->morphMany(PieceIdentite::class, 'identifiable');
+        return $this->personne->piecesIdentite();
     }
 
     // Pas de pieceIdentiteActive() en MorphOne : plusieurs pièces de types

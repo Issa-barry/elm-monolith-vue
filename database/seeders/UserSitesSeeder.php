@@ -3,8 +3,10 @@
 namespace Database\Seeders;
 
 use App\Models\Organization;
+use App\Models\Personne;
 use App\Models\Site;
 use App\Models\User;
+use App\Models\UserAuthIdentity;
 use Illuminate\Database\Seeder;
 
 /**
@@ -51,9 +53,16 @@ class UserSitesSeeder extends Seeder
         ];
 
         foreach ($affectations as $item) {
-            $user = User::where($item['lookup'])
-                ->where('organization_id', $org->id)
-                ->first();
+            $lookup = $item['lookup'];
+            $user = isset($lookup['telephone'])
+                ? UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_TELEPHONE, Personne::normaliserTelephone($lookup['telephone']))
+                : User::whereHas('personne', fn ($q) => $q->where('prenom', $lookup['prenom'])->where('nom', $lookup['nom']))
+                    ->where('organization_id', $org->id)
+                    ->first();
+
+            if ($user && $user->organization_id !== $org->id) {
+                $user = null;
+            }
 
             if (! $user) {
                 $this->command->warn('Utilisateur introuvable : '.json_encode($item['lookup']));

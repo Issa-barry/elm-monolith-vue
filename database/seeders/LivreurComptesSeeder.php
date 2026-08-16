@@ -4,10 +4,11 @@ namespace Database\Seeders;
 
 use App\Models\Livreur;
 use App\Models\Organization;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\User;
+use App\Models\UserAuthIdentity;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Role;
 
 /**
@@ -16,7 +17,7 @@ use Spatie\Permission\Models\Role;
  * Cas couverts:
  * - Livreur actif: compte lie a un livreur pre-cree
  * - Livreur pending: simulation auto-inscription, is_active = false sur le livreur
- * - Livreur + proprietaire: compte double role
+ * - Livreur + proprietaire: compte double role, MEME Personne pour les deux rôles
  */
 class LivreurComptesSeeder extends Seeder
 {
@@ -46,19 +47,14 @@ class LivreurComptesSeeder extends Seeder
         ];
 
         foreach ($actifs as $data) {
+            $personne = $this->resoudrePersonne($org->id, $data);
+
             $livreur = Livreur::firstOrCreate(
-                ['telephone' => $data['telephone'], 'organization_id' => $org->id],
-                [
-                    'prenom' => $data['prenom'],
-                    'nom' => $data['nom'],
-                    'nom_complet' => "{$data['prenom']} {$data['nom']}",
-                    'telephone' => $data['telephone'],
-                    'organization_id' => $org->id,
-                    'is_active' => true,
-                ]
+                ['personne_id' => $personne->id, 'organization_id' => $org->id],
+                ['nom_complet' => "{$data['prenom']} {$data['nom']}", 'is_active' => true]
             );
 
-            $user = $this->upsertUser($data, $org->id);
+            $user = $this->upsertUser($personne, $data, $org->id);
             $user->syncRoles(['livreur']);
 
             if ((string) $livreur->user_id !== (string) $user->id) {
@@ -77,18 +73,16 @@ class LivreurComptesSeeder extends Seeder
         ];
 
         foreach ($pending as $data) {
-            $user = $this->upsertUser($data, $org->id);
+            $personne = $this->resoudrePersonne($org->id, $data);
+
+            $user = $this->upsertUser($personne, $data, $org->id);
             $user->syncRoles(['livreur']);
 
             $livreur = Livreur::updateOrCreate(
-                ['telephone' => $data['telephone'], 'organization_id' => $org->id],
+                ['personne_id' => $personne->id, 'organization_id' => $org->id],
                 [
                     'user_id' => $user->id,
-                    'prenom' => $data['prenom'],
-                    'nom' => $data['nom'],
                     'nom_complet' => "{$data['prenom']} {$data['nom']}",
-                    'telephone' => $data['telephone'],
-                    'organization_id' => $org->id,
                     'is_active' => false,
                 ]
             );
@@ -98,7 +92,7 @@ class LivreurComptesSeeder extends Seeder
             }
         }
 
-        // 3) Livreur + proprietaire (double role)
+        // 3) Livreur + proprietaire (double role) — même personne physique, deux rôles.
         $dual = [
             'telephone' => '+224622000007',
             'prenom' => 'Alpha',
@@ -106,19 +100,14 @@ class LivreurComptesSeeder extends Seeder
             'email' => 'alpha.barry@elm.gn',
         ];
 
+        $dualPersonne = $this->resoudrePersonne($org->id, $dual);
+
         $dualLivreur = Livreur::firstOrCreate(
-            ['telephone' => $dual['telephone'], 'organization_id' => $org->id],
-            [
-                'prenom' => $dual['prenom'],
-                'nom' => $dual['nom'],
-                'nom_complet' => "{$dual['prenom']} {$dual['nom']}",
-                'telephone' => $dual['telephone'],
-                'organization_id' => $org->id,
-                'is_active' => true,
-            ]
+            ['personne_id' => $dualPersonne->id, 'organization_id' => $org->id],
+            ['nom_complet' => "{$dual['prenom']} {$dual['nom']}", 'is_active' => true]
         );
 
-        $dualUser = $this->upsertUser($dual, $org->id);
+        $dualUser = $this->upsertUser($dualPersonne, $dual, $org->id);
         $dualUser->syncRoles(['livreur', 'proprietaire']);
 
         if ((string) $dualLivreur->user_id !== (string) $dualUser->id) {
@@ -126,15 +115,8 @@ class LivreurComptesSeeder extends Seeder
         }
 
         Proprietaire::updateOrCreate(
-            ['telephone' => $dual['telephone'], 'organization_id' => $org->id],
-            [
-                'nom' => $dual['nom'],
-                'prenom' => $dual['prenom'],
-                'telephone' => $dual['telephone'],
-                'is_active' => true,
-                'user_id' => $dualUser->id,
-                'organization_id' => $org->id,
-            ]
+            ['personne_id' => $dualPersonne->id, 'organization_id' => $org->id],
+            ['is_active' => true, 'user_id' => $dualUser->id]
         );
 
         $this->command->newLine();
@@ -156,22 +138,46 @@ class LivreurComptesSeeder extends Seeder
         $this->command->newLine();
     }
 
+    private function resoudrePersonne(string $organizationId, array $data): Personne
+    {
+        return Personne::resoudreOuCreer($organizationId, [
+            'prenom' => $data['prenom'],
+            'nom' => $data['nom'],
+            'telephone' => $data['telephone'],
+            'email' => $data['email'] ?? null,
+        ]);
+    }
+
     /**
      * Assure un compte idempotent et remet le mot de passe du seed a chaque execution.
      */
-    private function upsertUser(array $data, string $organizationId): User
+    private function upsertUser(Personne $personne, array $data, string $organizationId): User
     {
-        return User::updateOrCreate(
-            ['telephone' => $data['telephone']],
+        $user = User::updateOrCreate(
+            ['personne_id' => $personne->id],
+            ['password' => self::PASSWORD, 'organization_id' => $organizationId]
+        );
+
+        $user->authIdentities()->updateOrCreate(
+            ['type' => UserAuthIdentity::TYPE_TELEPHONE],
             [
-                'prenom' => $data['prenom'],
-                'nom' => $data['nom'],
-                'email' => $data['email'] ?? null,
-                'telephone' => $data['telephone'],
-                'password' => Hash::make(self::PASSWORD),
-                'email_verified_at' => isset($data['email']) ? now() : null,
-                'organization_id' => $organizationId,
+                'value' => $data['telephone'],
+                'normalized_value' => Personne::normaliserTelephone($data['telephone']),
+                'verified_at' => now(),
+                'is_primary' => true,
             ]
         );
+        if ($data['email'] ?? null) {
+            $user->authIdentities()->updateOrCreate(
+                ['type' => UserAuthIdentity::TYPE_EMAIL],
+                [
+                    'value' => $data['email'],
+                    'normalized_value' => UserAuthIdentity::normaliser(UserAuthIdentity::TYPE_EMAIL, $data['email']),
+                    'verified_at' => now(),
+                ]
+            );
+        }
+
+        return $user;
     }
 }

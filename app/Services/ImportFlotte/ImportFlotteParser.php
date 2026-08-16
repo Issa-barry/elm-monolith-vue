@@ -7,6 +7,7 @@ use App\Enums\TypeImportFlotte;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TypeVehicule;
@@ -813,8 +814,8 @@ class ImportFlotteParser
         $data = $this->normalizePersonData(array_merge($data, ['nom' => $nom, 'prenom' => $prenom]));
 
         $existant = Proprietaire::where('organization_id', $orgId)
-            ->where('telephone', $data['telephone'])
             ->whereNull('deleted_at')
+            ->whereHas('personne', fn ($q) => $q->where('telephone_normalise', Personne::normaliserTelephone($data['telephone'])))
             ->first();
 
         // Un même propriétaire peut posséder plusieurs véhicules : plusieurs
@@ -915,8 +916,8 @@ class ImportFlotteParser
             }
 
             $livreurExistant = Livreur::where('organization_id', $orgId)
-                ->where('telephone', $telephone)
                 ->whereNull('deleted_at')
+                ->whereHas('personne', fn ($q) => $q->where('telephone_normalise', Personne::normaliserTelephone($telephone)))
                 ->first();
 
             if ($livreurExistant) {

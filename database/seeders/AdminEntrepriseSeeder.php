@@ -3,11 +3,12 @@
 namespace Database\Seeders;
 
 use App\Models\Organization;
+use App\Models\Personne;
 use App\Models\Site;
 use App\Models\User;
+use App\Models\UserAuthIdentity;
 use App\Services\MatriculeService;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Role;
 
 class AdminEntrepriseSeeder extends Seeder
@@ -36,19 +37,26 @@ class AdminEntrepriseSeeder extends Seeder
         ];
 
         foreach ($users as $data) {
+            $personne = Personne::resoudreOuCreer($org->id, [
+                'prenom' => $data['prenom'],
+                'nom' => $data['nom'],
+                'telephone' => $data['telephone'],
+                'code_pays' => $data['code_pays'],
+                'pays' => 'France',
+                'code_phone_pays' => '+33',
+            ]);
+
             $user = User::updateOrCreate(
-                ['telephone' => $data['telephone']],
+                ['personne_id' => $personne->id],
+                ['password' => self::PASSWORD, 'organization_id' => $org->id, 'is_active' => true]
+            );
+            $user->authIdentities()->updateOrCreate(
+                ['type' => UserAuthIdentity::TYPE_TELEPHONE],
                 [
-                    'prenom' => $data['prenom'],
-                    'nom' => $data['nom'],
-                    'code_pays' => $data['code_pays'],
-                    'pays' => 'France',
-                    'code_phone_pays' => '+33',
-                    'email' => null,
-                    'email_verified_at' => now(),
-                    'password' => Hash::make(self::PASSWORD),
-                    'organization_id' => $org->id,
-                    'is_active' => true,
+                    'value' => $data['telephone'],
+                    'normalized_value' => Personne::normaliserTelephone($data['telephone']),
+                    'verified_at' => now(),
+                    'is_primary' => true,
                 ]
             );
 

@@ -6,7 +6,8 @@ use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
 use App\Features\ModuleFeature;
 use App\Models\Organization;
-use App\Models\User;
+use App\Models\Personne;
+use App\Models\UserAuthIdentity;
 use App\Services\ModuleService;
 use App\Services\PhoneNormalizer;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -75,7 +76,7 @@ class FortifyServiceProvider extends ServiceProvider
                 ]);
             }
 
-            $user = User::where('telephone', $phone)->first();
+            $user = UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_TELEPHONE, Personne::normaliserTelephone($phone));
 
             if (! $user || ! Hash::check($request->password, $user->password)) {
                 // Message en dur (comme les autres branches ci-dessous) plutôt que
