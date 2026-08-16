@@ -88,9 +88,7 @@ class RequireActiveLivreurTest extends TestCase
         Proprietaire::create([
             'organization_id' => $org->id,
             'user_id' => $user->id,
-            'nom' => $user->nom,
-            'prenom' => $user->prenom,
-            'telephone' => $user->telephone,
+            'personne_id' => $user->personne_id,
             'is_active' => true,
         ]);
 
