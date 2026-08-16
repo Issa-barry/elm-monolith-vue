@@ -369,7 +369,7 @@ Route::prefix('backoffice')->group(function () {
             Route::put('users/{user}/password', [UserController::class, 'updatePassword'])->name('users.update-password');
             Route::patch('users/{user}/validate', [UserController::class, 'validateAccount'])->name('users.validate');
             Route::patch('users/{user}/reject', [UserController::class, 'rejectAccount'])->name('users.reject');
-            Route::resource('roles', RoleController::class)->only(['index', 'edit', 'update']);
+            Route::resource('roles', RoleController::class)->only(['index', 'create', 'store', 'edit', 'update', 'destroy']);
             Route::post('invitations/{invitation}/resend', [UserInvitationController::class, 'resend'])
                 ->name('invitations.resend');
             Route::delete('invitations/{invitation}', [UserInvitationController::class, 'destroy'])

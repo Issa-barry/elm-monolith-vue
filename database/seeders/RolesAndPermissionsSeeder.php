@@ -106,14 +106,32 @@ class RolesAndPermissionsSeeder extends Seeder
         Permission::firstOrCreate(['name' => 'logistique.cloturer']);
 
         // ── 2. Rôles + matrices de permissions ────────────────────────────────
-        $superAdmin = Role::firstOrCreate(['name' => 'super_admin']);
-        $adminEntreprise = Role::firstOrCreate(['name' => 'admin_entreprise']);
-        $manager = Role::firstOrCreate(['name' => 'manager']);
-        $commerciale = Role::firstOrCreate(['name' => 'commerciale']);
-        $comptable = Role::firstOrCreate(['name' => 'comptable']);
-        Role::firstOrCreate(['name' => 'client']);
-        Role::firstOrCreate(['name' => 'proprietaire']);
-        Role::firstOrCreate(['name' => 'livreur']);
+        // Rôles système (organization_id NULL, partagés par toutes les organisations) — seul
+        // super_admin est protégé contre le renommage/suppression (règle centralisée dans
+        // RoleController, jamais une colonne : cf. sa docblock). Les 7 autres sont désormais des
+        // rôles métier ordinaires, modifiables/supprimables comme n'importe quel rôle créé via le
+        // CRUD, simplement pré-remplis ici pour ne pas partir d'une organisation vide.
+        // Le label est réassigné à chaque exécution (idempotent) plutôt que seulement à la
+        // création, pour corriger aussi les rôles déjà en base avant l'ajout de cette colonne.
+        $labels = [
+            'super_admin' => 'Super administrateur',
+            'admin_entreprise' => 'Administrateur entreprise',
+            'manager' => 'Manager',
+            'commerciale' => 'Commerciale',
+            'comptable' => 'Comptable',
+            'client' => 'Client',
+            'proprietaire' => 'Propriétaire',
+            'livreur' => 'Livreur',
+        ];
+        foreach ($labels as $name => $label) {
+            Role::updateOrCreate(['name' => $name, 'organization_id' => null], ['label' => $label]);
+        }
+
+        $superAdmin = Role::whereNull('organization_id')->where('name', 'super_admin')->firstOrFail();
+        $adminEntreprise = Role::whereNull('organization_id')->where('name', 'admin_entreprise')->firstOrFail();
+        $manager = Role::whereNull('organization_id')->where('name', 'manager')->firstOrFail();
+        $commerciale = Role::whereNull('organization_id')->where('name', 'commerciale')->firstOrFail();
+        $comptable = Role::whereNull('organization_id')->where('name', 'comptable')->firstOrFail();
 
         $superAdmin->syncPermissions(Permission::all());
 
