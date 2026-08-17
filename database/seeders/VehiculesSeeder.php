@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Enums\CategorieVehicule;
 use App\Models\EquipeLivraison;
 use App\Models\Organization;
+use App\Models\Personne;
 use App\Models\Site;
 use App\Models\TypeVehicule as TypeVehiculeModel;
 use App\Models\Vehicule;
@@ -78,8 +79,8 @@ class VehiculesSeeder extends Seeder
             ->whereHas('membres', fn ($q) => $q
                 ->where('role', 'chauffeur')
                 ->whereHas('livreur', fn ($q2) => $q2
-                    ->where('telephone', $tel)
                     ->where('organization_id', $org->id)
+                    ->whereHas('personne', fn ($q3) => $q3->where('telephone_normalise', Personne::normaliserTelephone($tel)))
                 )
             )
             ->firstOrFail();

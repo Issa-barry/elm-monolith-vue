@@ -53,11 +53,14 @@ class CommissionVenteController extends Controller
             $query
                 ->whereNotNull('cp.livreur_id')
                 ->leftJoin('livreurs', 'livreurs.id', '=', 'cp.livreur_id')
+                // telephone n'est plus une colonne physique de `livreurs`/`proprietaires`
+                // depuis la refonte Personne — jointure vers `personnes` requise.
+                ->leftJoin('personnes AS livreurs_personnes', 'livreurs_personnes.id', '=', 'livreurs.personne_id')
                 ->select(['cp.livreur_id AS beneficiaire_id'])
                 ->selectRaw(
                     '"livreur"                        AS type_beneficiaire,
                      MAX(cp.beneficiaire_nom)         AS beneficiaire_nom,
-                     MAX(livreurs.telephone)          AS telephone,
+                     MAX(livreurs_personnes.telephone) AS telephone,
                      SUM(cp.montant_brut)             AS total_brut_cumule,
                      SUM(cp.frais_supplementaires)    AS total_frais,
                      SUM(cp.montant_net)              AS total_net_cumule,
@@ -70,11 +73,12 @@ class CommissionVenteController extends Controller
             $query
                 ->whereNotNull('cp.proprietaire_id')
                 ->leftJoin('proprietaires', 'proprietaires.id', '=', 'cp.proprietaire_id')
+                ->leftJoin('personnes AS proprietaires_personnes', 'proprietaires_personnes.id', '=', 'proprietaires.personne_id')
                 ->select(['cp.proprietaire_id AS beneficiaire_id'])
                 ->selectRaw(
                     '"proprietaire"                   AS type_beneficiaire,
                      MAX(cp.beneficiaire_nom)         AS beneficiaire_nom,
-                     MAX(proprietaires.telephone)     AS telephone,
+                     MAX(proprietaires_personnes.telephone) AS telephone,
                      SUM(cp.montant_brut)             AS total_brut_cumule,
                      SUM(cp.frais_supplementaires)    AS total_frais,
                      SUM(cp.montant_net)              AS total_net_cumule,
@@ -453,8 +457,10 @@ class CommissionVenteController extends Controller
             'vehicule.proprietaire',
             'vehicule.frais',
             'parts.versements.creator',
-            'parts.proprietaire:id,telephone',
-            'parts.livreur:id,telephone',
+            'parts.proprietaire:id,personne_id',
+            'parts.proprietaire.personne',
+            'parts.livreur:id,personne_id',
+            'parts.livreur.personne',
         ]);
 
         return Inertia::render('Commissions/Show', [

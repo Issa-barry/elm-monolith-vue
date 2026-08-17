@@ -5,8 +5,9 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Livreur;
+use App\Models\Personne;
 use App\Models\Proprietaire;
-use App\Models\User;
+use App\Models\UserAuthIdentity;
 use App\Services\OtpService;
 use App\Services\PhoneNormalizer;
 use Illuminate\Http\JsonResponse;
@@ -39,12 +40,13 @@ class RegisterLookupController extends Controller
         }
 
         // 1. Téléphone déjà dans users → orienter vers connexion
-        if (User::where('telephone', $phone)->exists()) {
+        if (UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_TELEPHONE, Personne::normaliserTelephone($phone)) !== null) {
             return response()->json(['status' => 'user_exists']);
         }
 
         // 2. Rechercher un préremplissage dans les tables métier
         $prefill = null;
+        $normalise = Personne::normaliserTelephone($phone);
 
         // Priorité : client sans user_id
         $client = Client::where('telephone', $phone)->whereNull('user_id')->first();
@@ -54,7 +56,7 @@ class RegisterLookupController extends Controller
 
         // Livreur (pas de user_id dans la table livreurs)
         if (! $prefill) {
-            $livreur = Livreur::where('telephone', $phone)->first();
+            $livreur = Livreur::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))->first();
             if ($livreur) {
                 $prefill = ['prenom' => $livreur->prenom, 'nom' => $livreur->nom];
             }
@@ -62,7 +64,9 @@ class RegisterLookupController extends Controller
 
         // Propriétaire sans user_id
         if (! $prefill) {
-            $proprietaire = Proprietaire::where('telephone', $phone)->whereNull('user_id')->first();
+            $proprietaire = Proprietaire::whereNull('user_id')
+                ->whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
+                ->first();
             if ($proprietaire) {
                 $prefill = ['prenom' => $proprietaire->prenom, 'nom' => $proprietaire->nom];
             }

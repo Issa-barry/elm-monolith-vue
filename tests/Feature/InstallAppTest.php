@@ -32,7 +32,7 @@ class InstallAppTest extends TestCase
         $org = Organization::where('slug', 'elm-test')->firstOrFail();
         $this->assertSame('ELM Test', $org->name);
 
-        $user = User::where('telephone', '+224622000000')->firstOrFail();
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000000'))->firstOrFail();
         $this->assertSame('Issa', $user->prenom);
         $this->assertSame('BARRY', $user->nom);
         $this->assertSame('GN', $user->code_pays);
@@ -56,7 +56,7 @@ class InstallAppTest extends TestCase
             ->expectsOutputToContain('jamais affiché ni conservé en clair')
             ->assertExitCode(0);
 
-        $user = User::where('telephone', '+224622000000')->firstOrFail();
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000000'))->firstOrFail();
         $this->assertTrue(Hash::check('Sup3r$ecretPwd', $user->password));
     }
 
@@ -107,7 +107,7 @@ class InstallAppTest extends TestCase
             ->expectsQuestion('Confirmer le mot de passe', 'Sup3r$ecretPwd')
             ->assertExitCode(1);
 
-        $this->assertDatabaseMissing('users', ['telephone' => '+224622000099']);
+        $this->assertDatabaseMissing('personnes', ['telephone' => '+224622000099']);
         $this->assertFalse(AppInstallation::isInstalled());
     }
 
@@ -140,7 +140,7 @@ class InstallAppTest extends TestCase
         $this->runInstall()->assertExitCode(0);
 
         $org = Organization::where('slug', 'elm-test')->firstOrFail();
-        $user = User::where('telephone', '+224622000000')->firstOrFail();
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000000'))->firstOrFail();
 
         $this->assertNotNull($org->proprietaire_interne_id);
         $this->assertSame($user->id, $org->proprietaireInterne->user_id);

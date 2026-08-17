@@ -99,7 +99,8 @@ class CommissionLogistiqueController extends Controller
             'transfert.siteSource:id,nom',
             'transfert.siteDestination:id,nom',
             'vehicule:id,nom_vehicule,immatriculation',
-            'parts.versements.createur:id,prenom,nom',
+            'parts.versements.createur:id,personne_id',
+            'parts.versements.createur.personne',
         ]);
 
         $user = auth()->user();

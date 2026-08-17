@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\Livreur;
 use App\Models\Organization;
+use App\Models\Personne;
 use App\Models\User;
+use App\Models\UserAuthIdentity;
 use App\Services\OtpService;
 use App\Services\PhoneNormalizer;
 use Illuminate\Http\RedirectResponse;
@@ -35,7 +37,9 @@ class LivreurRegistrationController extends Controller
             throw ValidationException::withMessages(['telephone' => 'Numéro de téléphone invalide.']);
         }
 
-        if (User::where('telephone', $phone)->exists()) {
+        $normalise = Personne::normaliserTelephone($phone);
+
+        if (UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_TELEPHONE, $normalise) !== null) {
             throw ValidationException::withMessages(['telephone' => 'Ce numéro est déjà associé à un compte. Connectez-vous ou réinitialisez votre mot de passe.']);
         }
 
@@ -43,26 +47,46 @@ class LivreurRegistrationController extends Controller
             throw ValidationException::withMessages(['telephone' => 'La vérification par code OTP est requise.']);
         }
 
-        $user = DB::transaction(function () use ($validated, $phone, $otp) {
+        $user = DB::transaction(function () use ($validated, $phone, $normalise, $otp) {
             $org = Organization::first();
 
+            $nomComplet = trim(self::formatPrenom($validated['prenom']).' '.mb_strtoupper($validated['nom']));
+
+            // Lier à un livreur pré-existant sans compte, sinon créer (inactif jusqu'à
+            // validation admin) — cherché AVANT de créer la Personne, pour réutiliser la
+            // sienne plutôt que d'en créer une nouvelle pour la même personne physique.
+            $existing = $org
+                ? Livreur::where('organization_id', $org->id)
+                    ->whereNull('user_id')
+                    ->whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
+                    ->first()
+                : null;
+
+            $personne = $existing
+                ? $existing->personne
+                : Personne::create([
+                    'organization_id' => $org?->id,
+                    'prenom' => self::formatPrenom($validated['prenom']),
+                    'nom' => mb_strtoupper($validated['nom']),
+                    'telephone' => $phone,
+                    'telephone_normalise' => $normalise,
+                ]);
+
             $user = User::create([
-                'prenom' => self::formatPrenom($validated['prenom']),
-                'nom' => mb_strtoupper($validated['nom']),
-                'telephone' => $phone,
+                'personne_id' => $personne->id,
                 'password' => $validated['password'],
                 'organization_id' => $org?->id,
+            ]);
+            $user->authIdentities()->create([
+                'type' => UserAuthIdentity::TYPE_TELEPHONE,
+                'value' => $phone,
+                'normalized_value' => $normalise,
+                'verified_at' => now(),
+                'is_primary' => true,
             ]);
 
             Role::firstOrCreate(['name' => 'livreur', 'guard_name' => 'web']);
             $user->assignRole('livreur');
-
-            // Lier à un livreur pré-existant sans compte, sinon créer (inactif jusqu'à validation admin)
-            $existing = $org
-                ? Livreur::where('telephone', $phone)->where('organization_id', $org->id)->whereNull('user_id')->first()
-                : null;
-
-            $nomComplet = trim(self::formatPrenom($validated['prenom']).' '.mb_strtoupper($validated['nom']));
 
             if ($existing) {
                 $existing->update([
@@ -75,10 +99,8 @@ class LivreurRegistrationController extends Controller
                 Livreur::create([
                     'organization_id' => $org?->id,
                     'user_id' => $user->id,
-                    'nom' => mb_strtoupper($validated['nom']),
-                    'prenom' => self::formatPrenom($validated['prenom']),
+                    'personne_id' => $personne->id,
                     'nom_complet' => $nomComplet,
-                    'telephone' => $phone,
                     'is_active' => false,
                 ]);
             }

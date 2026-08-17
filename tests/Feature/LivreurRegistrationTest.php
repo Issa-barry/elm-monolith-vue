@@ -42,13 +42,15 @@ class LivreurRegistrationTest extends TestCase
         $this->post('/register/livreur', $this->validPayload())
             ->assertRedirect(route('client.pending'));
 
-        $user = User::where('telephone', '+224622111001')->first();
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622111001'))->first();
         $this->assertNotNull($user);
         $this->assertTrue($user->hasRole('livreur'));
 
         $this->assertDatabaseHas('livreurs', [
-            'telephone' => '+224622111001',
             'is_active' => false,
+        ]);
+        $this->assertDatabaseHas('personnes', [
+            'telephone' => '+224622111001',
         ]);
     }
 
@@ -59,11 +61,11 @@ class LivreurRegistrationTest extends TestCase
 
         $this->post('/register/livreur', $this->validPayload());
 
-        $livreur = Livreur::where('telephone', '+224622111001')->first();
+        $livreur = Livreur::whereHas('personne', fn ($q) => $q->where('telephone', '+224622111001'))->first();
         $this->assertNotNull($livreur);
         $this->assertFalse($livreur->is_active);
 
-        $user = User::where('telephone', '+224622111001')->first();
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622111001'))->first();
         $this->assertSame($user->id, $livreur->user_id);
     }
 
@@ -83,7 +85,7 @@ class LivreurRegistrationTest extends TestCase
         $this->post('/register/livreur', $this->validPayload())
             ->assertRedirect(route('client.pending'));
 
-        $user = User::where('telephone', '+224622111001')->first();
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622111001'))->first();
         $this->assertSame($user->id, $livreur->fresh()->user_id);
         $this->assertDatabaseCount('livreurs', 1);
     }

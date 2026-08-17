@@ -8,8 +8,10 @@ use App\Models\CommandeVente;
 use App\Models\CommissionPart;
 use App\Models\Depense;
 use App\Models\Livreur;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\User;
+use App\Models\UserAuthIdentity;
 use App\Models\Vehicule;
 use App\Notifications\CommissionPayeeNotification;
 use App\Services\CommissionVentePaiementService;
@@ -91,7 +93,9 @@ class PaiementCommissionVenteController extends Controller
             return User::find($livreur->user_id);
         }
 
-        return $livreur->telephone ? User::where('telephone', $livreur->telephone)->first() : null;
+        return $livreur->telephone
+            ? UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_TELEPHONE, Personne::normaliserTelephone($livreur->telephone))
+            : null;
     }
 
     private function userDuProprietaire(?Proprietaire $proprietaire): ?User
@@ -104,7 +108,9 @@ class PaiementCommissionVenteController extends Controller
             return User::find($proprietaire->user_id);
         }
 
-        return $proprietaire->telephone ? User::where('telephone', $proprietaire->telephone)->first() : null;
+        return $proprietaire->telephone
+            ? UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_TELEPHONE, Personne::normaliserTelephone($proprietaire->telephone))
+            : null;
     }
 
     /**

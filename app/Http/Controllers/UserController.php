@@ -4,14 +4,15 @@ namespace App\Http\Controllers;
 
 use App\Enums\AuditEvent;
 use App\Mail\AccountValidatedMail;
+use App\Models\Personne;
 use App\Models\Site;
 use App\Models\User;
+use App\Models\UserAuthIdentity;
 use App\Services\AuditLogService;
 use App\Services\MatriculeService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
@@ -73,23 +74,67 @@ class UserController extends Controller
         return ['pays' => null, 'code_phone_pays' => null];
     }
 
-    private function buildUserFields(array $data, ?bool $currentIsActive = null): array
+    /** Champs d'identité (Personne) — jamais écrits directement sur users. */
+    private function buildPersonneFields(array $data): array
     {
         $resolved = $this->resolvePays($data['code_pays'] ?? null);
-        $codePays = $data['code_pays'] ?? null;
 
         return [
             'prenom' => mb_convert_case(mb_strtolower($data['prenom'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8'),
             'nom' => mb_strtoupper($data['nom'], 'UTF-8'),
-            'email' => isset($data['email']) ? mb_strtolower($data['email'], 'UTF-8') : null,
             'telephone' => $data['telephone'],
+            'telephone_normalise' => Personne::normaliserTelephone($data['telephone']),
             'pays' => $resolved['pays'],
-            'code_pays' => $codePays,
+            'code_pays' => $data['code_pays'] ?? null,
             'code_phone_pays' => $resolved['code_phone_pays'],
             'ville' => isset($data['ville']) ? mb_convert_case(mb_strtolower($data['ville'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8') : null,
             'adresse' => isset($data['adresse']) ? mb_convert_case(mb_strtolower($data['adresse'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8') : null,
-            'is_active' => $data['is_active'] ?? $currentIsActive ?? true,
+            'email' => isset($data['email']) ? mb_strtolower($data['email'], 'UTF-8') : null,
         ];
+    }
+
+    /** Crée/renseigne l'identité de connexion téléphone (toujours obligatoire). */
+    private function syncTelephoneIdentity(User $user, string $telephone): void
+    {
+        $identity = $user->telephoneIdentity();
+        $normalized = Personne::normaliserTelephone($telephone);
+
+        if ($identity) {
+            $identity->update(['value' => $telephone, 'normalized_value' => $normalized]);
+        } else {
+            $user->authIdentities()->create([
+                'type' => UserAuthIdentity::TYPE_TELEPHONE,
+                'value' => $telephone,
+                'normalized_value' => $normalized,
+                'verified_at' => now(),
+                'is_primary' => true,
+            ]);
+        }
+    }
+
+    /** Crée/renseigne/supprime l'identité de connexion email (facultative). */
+    private function syncEmailIdentity(User $user, ?string $email): void
+    {
+        $identity = $user->emailIdentity();
+
+        if (! $email) {
+            $identity?->delete();
+
+            return;
+        }
+
+        $normalized = UserAuthIdentity::normaliser(UserAuthIdentity::TYPE_EMAIL, $email);
+
+        if ($identity) {
+            $identity->update(['value' => $email, 'normalized_value' => $normalized]);
+        } else {
+            $user->authIdentities()->create([
+                'type' => UserAuthIdentity::TYPE_EMAIL,
+                'value' => $email,
+                'normalized_value' => $normalized,
+                'verified_at' => now(),
+            ]);
+        }
     }
 
     public function index(): Response
@@ -100,13 +145,13 @@ class UserController extends Controller
         $orgId = $authUser->organization_id;
 
         $users = User::with([
-            'roles:id,name',
+            'personne', 'authIdentities', 'roles:id,name',
             'sites' => fn ($q) => $q->wherePivot('is_default', true)->select('sites.id', 'sites.nom', 'sites.code')->limit(1),
         ])
             ->where('organization_id', $orgId)
             ->whereHas('roles', fn ($q) => $q->whereIn('name', self::STAFF_ROLES))
-            ->orderBy('nom')
             ->get()
+            ->sortBy('nom')
             ->map(function (User $u) {
                 $defaultSite = $u->sites->first();
 
@@ -128,11 +173,13 @@ class UserController extends Controller
                     'site_id' => $defaultSite?->id,
                     'is_me' => $u->id === auth()->id(),
                 ];
-            });
+            })
+            ->values();
 
         $pendingRegistrations = collect();
         if ($authUser->isSuperAdmin()) {
-            $pendingRegistrations = User::whereNull('organization_id')
+            $pendingRegistrations = User::with(['personne', 'authIdentities'])
+                ->whereNull('organization_id')
                 ->orderBy('created_at', 'desc')
                 ->get()
                 ->map(fn (User $u) => [
@@ -142,7 +189,7 @@ class UserController extends Controller
                     'nom_complet' => $u->name,
                     'email' => $u->email,
                     'telephone' => $u->telephone,
-                    'email_verified' => ! is_null($u->email_verified_at),
+                    'email_verified' => $u->emailIdentity()?->isVerified() ?? false,
                     'created_at' => $u->created_at?->format('d/m/Y H:i'),
                 ]);
         }
@@ -179,6 +226,22 @@ class UserController extends Controller
         }
     }
 
+    /** Remplace unique:users,telephone / unique:users,email — vivent désormais dans user_auth_identities. */
+    private function assertIdentityUnique(string $telephone, ?string $email, ?string $ignoreUserId = null): void
+    {
+        $telephoneUser = UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_TELEPHONE, Personne::normaliserTelephone($telephone));
+        if ($telephoneUser && $telephoneUser->id !== $ignoreUserId) {
+            throw ValidationException::withMessages(['telephone' => 'Ce numéro de téléphone est déjà utilisé.']);
+        }
+
+        if ($email) {
+            $emailUser = UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_EMAIL, UserAuthIdentity::normaliser(UserAuthIdentity::TYPE_EMAIL, $email));
+            if ($emailUser && $emailUser->id !== $ignoreUserId) {
+                throw ValidationException::withMessages(['email' => 'Cette adresse e-mail est déjà utilisée.']);
+            }
+        }
+    }
+
     public function store(Request $request): RedirectResponse
     {
         $this->authorize('create', User::class);
@@ -191,8 +254,8 @@ class UserController extends Controller
         $data = $request->validate([
             'prenom' => 'required|string|max:100',
             'nom' => 'required|string|max:100',
-            'email' => 'nullable|email|max:255|unique:users,email',
-            'telephone' => 'required|string|max:50|unique:users,telephone',
+            'email' => 'nullable|email|max:255',
+            'telephone' => 'required|string|max:50',
             'code_pays' => ['nullable', Rule::in(array_keys(USER_PAYS))],
             'ville' => 'nullable|string|max:100',
             'adresse' => 'nullable|string|max:255',
@@ -204,9 +267,7 @@ class UserController extends Controller
             'prenom.required' => 'Le prénom est obligatoire.',
             'nom.required' => 'Le nom est obligatoire.',
             'email.email' => "L'adresse e-mail est invalide.",
-            'email.unique' => 'Cette adresse e-mail est déjà utilisée.',
             'telephone.required' => 'Le numéro de téléphone est obligatoire.',
-            'telephone.unique' => 'Ce numéro de téléphone est déjà utilisé.',
             'role.required' => 'Le rôle est obligatoire.',
             'role.in' => 'Rôle invalide.',
             'site_id.required' => 'Le site est obligatoire.',
@@ -216,11 +277,19 @@ class UserController extends Controller
             'password.min' => 'Le mot de passe doit contenir au moins 8 caractères.',
         ]);
 
-        $fields = $this->buildUserFields($data);
-        $user = User::create(array_merge($fields, [
-            'password' => Hash::make($data['password']),
+        $this->assertIdentityUnique($data['telephone'], $data['email'] ?? null);
+
+        $personneFields = $this->buildPersonneFields($data);
+        $personne = Personne::resoudreOuCreer($orgId, $personneFields);
+
+        $user = User::create([
+            'personne_id' => $personne->id,
+            'password' => $data['password'],
             'organization_id' => $orgId,
-        ]));
+            'is_active' => $data['is_active'] ?? true,
+        ]);
+        $this->syncTelephoneIdentity($user, $data['telephone']);
+        $this->syncEmailIdentity($user, $data['email'] ?? null);
 
         $user->assignRole($data['role']);
         $user->sites()->attach($data['site_id'], ['role' => 'employe', 'is_default' => true]);
@@ -268,8 +337,8 @@ class UserController extends Controller
         $data = $request->validate([
             'prenom' => 'required|string|max:100',
             'nom' => 'required|string|max:100',
-            'email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
-            'telephone' => ['required', 'string', 'max:50', Rule::unique('users', 'telephone')->ignore($user->id)],
+            'email' => ['nullable', 'email', 'max:255'],
+            'telephone' => ['required', 'string', 'max:50'],
             'code_pays' => ['nullable', Rule::in(array_keys(USER_PAYS))],
             'ville' => 'nullable|string|max:100',
             'adresse' => 'nullable|string|max:255',
@@ -281,14 +350,14 @@ class UserController extends Controller
             'prenom.required' => 'Le prénom est obligatoire.',
             'nom.required' => 'Le nom est obligatoire.',
             'email.email' => "L'adresse e-mail est invalide.",
-            'email.unique' => 'Cette adresse e-mail est déjà utilisée.',
             'telephone.required' => 'Le numéro de téléphone est obligatoire.',
-            'telephone.unique' => 'Ce numéro de téléphone est déjà utilisé.',
             'role.required' => 'Le rôle est obligatoire.',
             'site_id.required' => 'Le site est obligatoire.',
             'site_id.exists' => 'Site invalide.',
             'password.confirmed' => 'La confirmation du mot de passe ne correspond pas.',
         ]);
+
+        $this->assertIdentityUnique($data['telephone'], $data['email'] ?? null, $user->id);
 
         // Un rôle admin ne peut être attribué qu'à un compte déjà validé : un compte
         // en attente doit d'abord être validé avant toute élévation de privilèges.
@@ -300,13 +369,16 @@ class UserController extends Controller
 
         $previousRole = $user->getRoleNames()->first();
 
-        $updateData = $this->buildUserFields($data, $user->is_active);
+        $personneFields = $this->buildPersonneFields($data);
+        $user->personne->update(collect($personneFields)->except(['telephone', 'telephone_normalise'])->all());
+        $this->syncTelephoneIdentity($user, $data['telephone']);
+        $this->syncEmailIdentity($user, $data['email'] ?? null);
 
+        $userUpdate = ['is_active' => $data['is_active'] ?? $user->is_active];
         if (! empty($data['password'])) {
-            $updateData['password'] = Hash::make($data['password']);
+            $userUpdate['password'] = $data['password'];
         }
-
-        $user->update($updateData);
+        $user->update($userUpdate);
         $user->syncRoles([$data['role']]);
 
         if ($previousRole !== $data['role']) {
@@ -379,7 +451,7 @@ class UserController extends Controller
             'password.min' => 'Le mot de passe doit contenir au moins 8 caractères.',
         ]);
 
-        $user->update(['password' => Hash::make($data['password'])]);
+        $user->update(['password' => $data['password']]);
 
         return redirect()->route('users.edit', $user)
             ->with('success', "Mot de passe de {$user->name} mis à jour.");

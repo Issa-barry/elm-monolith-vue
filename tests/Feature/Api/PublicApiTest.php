@@ -144,10 +144,11 @@ class PublicApiTest extends TestCase
         $response->assertHeaderMissing('set-cookie');
         $this->assertGuest();
 
-        $user = User::where('telephone', '+224622111001')->first();
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622111001'))->first();
         $this->assertNotNull($user);
         $this->assertTrue($user->hasRole('livreur'));
-        $this->assertDatabaseHas('livreurs', ['telephone' => '+224622111001', 'is_active' => false]);
+        $this->assertDatabaseHas('livreurs', ['is_active' => false]);
+        $this->assertDatabaseHas('personnes', ['telephone' => '+224622111001']);
     }
 
     public function test_livreur_registration_links_existing_admin_created_livreur(): void
@@ -163,7 +164,7 @@ class PublicApiTest extends TestCase
         $this->postJson(route('api.public.register.livreur'), $this->livreurPayload(), $this->vitrineHeaders())
             ->assertOk();
 
-        $user = User::where('telephone', '+224622111001')->first();
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622111001'))->first();
         $this->assertSame($user->id, $livreur->fresh()->user_id);
         $this->assertDatabaseCount('livreurs', 1);
     }

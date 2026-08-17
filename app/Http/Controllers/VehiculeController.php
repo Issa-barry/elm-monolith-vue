@@ -480,15 +480,17 @@ class VehiculeController extends Controller
 
     private function proprietairesOptions(): array
     {
-        return Proprietaire::where('organization_id', auth()->user()->organization_id)
+        return Proprietaire::with('personne')
+            ->where('organization_id', auth()->user()->organization_id)
             ->where('is_active', true)
-            ->orderBy('nom')
             ->get()
+            ->sortBy('nom')
             ->map(fn (Proprietaire $p) => [
                 'value' => $p->id,
                 'label' => trim("{$p->prenom} {$p->nom}"),
                 'telephone' => $p->telephone,
             ])
+            ->values()
             ->toArray();
     }
 

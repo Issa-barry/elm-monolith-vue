@@ -81,7 +81,7 @@ class ProprietaireTest extends TestCase
             ])
             ->assertRedirect(route('proprietaires.index'));
 
-        $this->assertDatabaseHas('proprietaires', [
+        $this->assertDatabaseHas('personnes', [
             'nom' => 'CAMARA',
             'organization_id' => $this->org->id,
         ]);
@@ -252,8 +252,8 @@ class ProprietaireTest extends TestCase
             ])
             ->assertRedirect(route('proprietaires.edit', $proprietaire));
 
-        $this->assertDatabaseHas('proprietaires', [
-            'id' => $proprietaire->id,
+        $this->assertDatabaseHas('personnes', [
+            'id' => $proprietaire->fresh()->personne_id,
             'nom' => 'BALDE',
         ]);
     }

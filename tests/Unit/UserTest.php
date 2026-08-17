@@ -18,21 +18,21 @@ class UserTest extends TestCase
 
     public function test_name_combines_prenom_and_nom(): void
     {
-        $user = User::factory()->make(['prenom' => 'Mamadou', 'nom' => 'BARRY']);
+        $user = User::factory()->create(['prenom' => 'Mamadou', 'nom' => 'BARRY']);
 
         $this->assertSame('Mamadou BARRY', $user->name);
     }
 
     public function test_name_trims_whitespace_when_prenom_empty(): void
     {
-        $user = User::factory()->make(['prenom' => '', 'nom' => 'DIALLO']);
+        $user = User::factory()->create(['prenom' => '', 'nom' => 'DIALLO']);
 
         $this->assertSame('DIALLO', $user->name);
     }
 
     public function test_name_trims_whitespace_when_nom_empty(): void
     {
-        $user = User::factory()->make(['prenom' => 'Alpha', 'nom' => '']);
+        $user = User::factory()->create(['prenom' => 'Alpha', 'nom' => '']);
 
         $this->assertSame('Alpha', $user->name);
     }

@@ -12,6 +12,7 @@ use App\Models\CommissionVente;
 use App\Models\Depense;
 use App\Models\DepenseType;
 use App\Models\Livreur;
+use App\Models\Personne;
 use App\Models\Site;
 use App\Models\Vehicule;
 use App\Services\PeriodePaiementService;
@@ -61,11 +62,16 @@ class CommissionVenteFraisTest extends TestCase
 
     private function makeLivreur(): Livreur
     {
-        return Livreur::create([
+        $personne = Personne::create([
             'organization_id' => $this->org->id,
             'nom' => 'CAMARA',
             'prenom' => 'Oumar',
             'telephone' => '62200'.random_int(1000, 9999),
+        ]);
+
+        return Livreur::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
             'is_active' => true,
         ]);
     }

@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Livreur;
 use App\Models\Organization;
+use App\Models\Personne;
 use Illuminate\Database\Seeder;
 
 class LivreursSeeder extends Seeder
@@ -43,14 +44,18 @@ class LivreursSeeder extends Seeder
         ];
 
         foreach ($livreurs as $data) {
+            $personne = Personne::resoudreOuCreer($org->id, [
+                'nom' => $data['nom'],
+                'prenom' => $data['prenom'],
+                'telephone' => $data['telephone'],
+            ]);
+
             Livreur::firstOrCreate(
-                ['telephone' => $data['telephone'], 'organization_id' => $org->id],
+                ['personne_id' => $personne->id, 'organization_id' => $org->id],
                 [
-                    ...$data,
                     // Identité civile jamais utilisée côté Eau La Maman —
                     // nom_complet est le seul champ affiché (voir Livreur::$fillable).
                     'nom_complet' => "{$data['prenom']} {$data['nom']}",
-                    'organization_id' => $org->id,
                     'is_active' => true,
                 ]
             );

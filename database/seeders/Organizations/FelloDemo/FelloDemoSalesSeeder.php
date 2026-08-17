@@ -7,8 +7,10 @@ use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
 use App\Models\Organization;
+use App\Models\Personne;
 use App\Models\Site;
 use App\Models\User;
+use App\Models\UserAuthIdentity;
 use App\Models\VarianteStock;
 use App\Services\CommandeVenteService;
 use App\Services\PdvCheckoutService;
@@ -47,8 +49,11 @@ class FelloDemoSalesSeeder extends Seeder
 
         $this->purgerVentesExistantes($org->id);
 
-        $admin = User::where('organization_id', $org->id)->where('telephone', '+224600000101')->firstOrFail();
-        $commercial = User::where('organization_id', $org->id)->where('telephone', '+224600000102')->firstOrFail();
+        $admin = UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_TELEPHONE, Personne::normaliserTelephone('+224600000101'));
+        $commercial = UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_TELEPHONE, Personne::normaliserTelephone('+224600000102'));
+        if (! $admin || $admin->organization_id !== $org->id || ! $commercial || $commercial->organization_id !== $org->id) {
+            throw new \RuntimeException('Comptes staff de démo introuvables pour fello-demo.');
+        }
 
         $clients = Client::where('organization_id', $org->id)->get();
 

@@ -6,6 +6,7 @@ use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
 use App\Models\ImportFlotte;
 use App\Models\Livreur;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
 use Illuminate\Support\Facades\DB;
@@ -79,14 +80,17 @@ class ImportFlotteExecutor
             } elseif (isset($proprietairesParTelephone[$p['telephone']])) {
                 $proprietaireId = $proprietairesParTelephone[$p['telephone']];
             } else {
-                $proprietaire = Proprietaire::create([
-                    'organization_id' => $orgId,
+                $personne = Personne::resoudreOuCreer($orgId, [
                     'nom' => $p['nom'],
                     'prenom' => $p['prenom'],
                     'telephone' => $p['telephone'],
                     'code_pays' => $p['code_pays'],
                     'pays' => $p['pays'],
                     'code_phone_pays' => $p['code_phone_pays'],
+                ]);
+                $proprietaire = Proprietaire::create([
+                    'organization_id' => $orgId,
+                    'personne_id' => $personne->id,
                     'is_active' => true,
                 ]);
                 $proprietaireId = $proprietaire->id;
@@ -194,10 +198,11 @@ class ImportFlotteExecutor
                 // vide en base : repli sur la désignation par défaut.
                 $nomComplet = $l['nom_complet'] ?? Livreur::designationParDefaut($l['role'], $roleCounts[$l['role']], $vData['nom_vehicule']);
 
+                $personneLivreur = Personne::resoudreOuCreer($orgId, ['telephone' => $l['telephone']]);
                 $livreur = Livreur::create([
                     'organization_id' => $orgId,
+                    'personne_id' => $personneLivreur->id,
                     'nom_complet' => $nomComplet,
-                    'telephone' => $l['telephone'],
                     'is_active' => true,
                 ]);
                 $livreurId = $livreur->id;

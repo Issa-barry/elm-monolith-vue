@@ -102,10 +102,18 @@ class CommissionAjustementController extends Controller
             'commissions_logistique' => collect($groupesRaw)->where('type', 'logistique')
                 ->map(fn (array $g) => ['id' => $g['commission_id'], 'label' => 'Transfert '.$g['reference']])
                 ->values(),
-            'livreurs' => Livreur::where('organization_id', $orgId)->orderBy('nom_complet')->get(['id', 'nom', 'prenom', 'nom_complet', 'telephone'])
-                ->map(fn (Livreur $l) => ['id' => $l->id, 'nom' => $l->libelleAffichage()]),
-            'proprietaires' => Proprietaire::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom', 'prenom'])
-                ->map(fn (Proprietaire $p) => ['id' => $p->id, 'nom' => $p->nom_complet]),
+            // nom/prenom/telephone ne sont plus des colonnes de livreurs/proprietaires (identité
+            // portée par Personne, cf. accesseurs des modèles) — seules les colonnes réelles
+            // (id, nom_complet) sont sélectionnables en base, `with('personne')` évite le N+1
+            // sur les accesseurs, et le tri se fait en collection plutôt qu'en SQL.
+            'livreurs' => Livreur::where('organization_id', $orgId)->with('personne')->get(['id', 'nom_complet', 'personne_id'])
+                ->sortBy('nom_complet')
+                ->map(fn (Livreur $l) => ['id' => $l->id, 'nom' => $l->libelleAffichage()])
+                ->values(),
+            'proprietaires' => Proprietaire::where('organization_id', $orgId)->with('personne')->get(['id', 'personne_id'])
+                ->sortBy('nom_complet')
+                ->map(fn (Proprietaire $p) => ['id' => $p->id, 'nom' => $p->nom_complet])
+                ->values(),
         ]);
     }
 

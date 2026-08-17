@@ -132,12 +132,18 @@ class ApiRegistrationTest extends TestCase
             ->assertJsonPath('user.is_active', false);
 
         $this->assertDatabaseHas('users', [
-            'telephone' => '+224620000100',
-            'email' => 'mamadou@example.com',
             'status' => UserStatus::PENDING->value,
             'is_active' => false,
-            'email_verified_at' => null,
         ]);
+
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224620000100'))->first();
+        $this->assertNotNull($user);
+        $this->assertDatabaseHas('personnes', [
+            'id' => $user->personne_id,
+            'telephone' => '+224620000100',
+            'email' => 'mamadou@example.com',
+        ]);
+        $this->assertNull($user->emailIdentity()?->verified_at);
     }
 
     public function test_register_sends_verification_email(): void
@@ -157,9 +163,9 @@ class ApiRegistrationTest extends TestCase
 
         $this->postJson(route('api.auth.register.store'), $this->validPayload());
 
-        $user = User::where('email', 'mamadou@example.com')->first();
-        $this->assertNotNull($user->email_verification_token);
-        $this->assertNotNull($user->email_verification_expires_at);
+        $user = User::whereHas('personne', fn ($q) => $q->where('email', 'mamadou@example.com'))->first();
+        $this->assertNotNull($user->emailIdentity()?->verification_token);
+        $this->assertNotNull($user->emailIdentity()?->verification_expires_at);
     }
 
     public function test_register_assigns_client_role(): void
@@ -168,7 +174,7 @@ class ApiRegistrationTest extends TestCase
 
         $this->postJson(route('api.auth.register.store'), $this->validPayload());
 
-        $user = User::where('email', 'mamadou@example.com')->first();
+        $user = User::whereHas('personne', fn ($q) => $q->where('email', 'mamadou@example.com'))->first();
         $this->assertTrue($user->hasRole('client'));
     }
 
@@ -181,7 +187,7 @@ class ApiRegistrationTest extends TestCase
             'nom' => 'diallo',
         ]));
 
-        $this->assertDatabaseHas('users', [
+        $this->assertDatabaseHas('personnes', [
             'prenom' => 'Mamadou',
             'nom' => 'DIALLO',
         ]);
@@ -226,10 +232,12 @@ class ApiRegistrationTest extends TestCase
             ->assertJsonPath('user.is_active', true);
 
         $this->assertDatabaseHas('users', [
-            'telephone' => '+224620000100',
-            'email' => null,
             'status' => UserStatus::ACTIVE->value,
             'is_active' => true,
+        ]);
+        $this->assertDatabaseHas('personnes', [
+            'telephone' => '+224620000100',
+            'email' => null,
         ]);
 
         Mail::assertNothingSent();
@@ -320,7 +328,7 @@ class ApiRegistrationTest extends TestCase
 
         $this->postJson(route('api.auth.register.store'), $this->validPayload());
 
-        $user = User::where('telephone', '+224620000100')->first();
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224620000100'))->first();
         $this->assertEquals($user->id, $client->fresh()->user_id);
     }
 
@@ -336,7 +344,7 @@ class ApiRegistrationTest extends TestCase
 
         $this->postJson(route('api.auth.register.store'), $this->validPayload());
 
-        $user = User::where('telephone', '+224620000100')->first();
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224620000100'))->first();
         $this->assertEquals($user->id, $livreur->fresh()->user_id);
         $this->assertTrue($user->hasRole('livreur'));
     }
@@ -353,7 +361,7 @@ class ApiRegistrationTest extends TestCase
 
         $this->postJson(route('api.auth.register.store'), $this->validPayload());
 
-        $user = User::where('telephone', '+224620000100')->first();
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224620000100'))->first();
         $this->assertEquals($user->id, $proprietaire->fresh()->user_id);
         $this->assertTrue($user->hasRole('proprietaire'));
     }
@@ -366,8 +374,8 @@ class ApiRegistrationTest extends TestCase
 
         $this->postJson(route('api.auth.register.store'), $this->validPayload());
 
-        $user = User::where('email', 'mamadou@example.com')->first();
-        $token = $user->email_verification_token;
+        $user = User::whereHas('personne', fn ($q) => $q->where('email', 'mamadou@example.com'))->first();
+        $token = $user->emailIdentity()?->verification_token;
 
         $this->get(route('api.auth.verify-email', ['token' => $token]))
             ->assertOk()
@@ -376,8 +384,8 @@ class ApiRegistrationTest extends TestCase
         $user->refresh();
         $this->assertEquals(UserStatus::ACTIVE->value, $user->status);
         $this->assertTrue($user->is_active);
-        $this->assertNotNull($user->email_verified_at);
-        $this->assertNull($user->email_verification_token);
+        $this->assertNotNull($user->emailIdentity()?->verified_at);
+        $this->assertNull($user->emailIdentity()?->verification_token);
     }
 
     public function test_verify_email_returns_404_for_invalid_token(): void
@@ -392,10 +400,10 @@ class ApiRegistrationTest extends TestCase
 
         $this->postJson(route('api.auth.register.store'), $this->validPayload());
 
-        $user = User::where('email', 'mamadou@example.com')->first();
-        $user->update(['email_verification_expires_at' => now()->subHour()]);
+        $user = User::whereHas('personne', fn ($q) => $q->where('email', 'mamadou@example.com'))->first();
+        $user->emailIdentity()->update(['verification_expires_at' => now()->subHour()]);
 
-        $this->get(route('api.auth.verify-email', ['token' => $user->email_verification_token]))
+        $this->get(route('api.auth.verify-email', ['token' => $user->emailIdentity()?->verification_token]))
             ->assertStatus(410);
     }
 
@@ -421,8 +429,8 @@ class ApiRegistrationTest extends TestCase
 
         $this->postJson(route('api.auth.register.store'), $this->validPayload());
 
-        $user = User::where('email', 'mamadou@example.com')->first();
-        $token = $user->email_verification_token;
+        $user = User::whereHas('personne', fn ($q) => $q->where('email', 'mamadou@example.com'))->first();
+        $token = $user->emailIdentity()?->verification_token;
 
         $this->get(route('api.auth.verify-email', ['token' => $token]));
 

@@ -7,11 +7,13 @@ use App\Enums\StatutEmploye;
 use App\Enums\TypeContrat;
 use App\Enums\TypeEmploye;
 use App\Models\Employe;
+use App\Models\Personne;
 use App\Models\Site;
 use App\Services\MatriculeService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -34,7 +36,7 @@ class EmployeController extends Controller
         $orgId = auth()->user()->organization_id;
         $filters = $request->only(['statut', 'type_employe', 'type_contrat', 'search']);
 
-        $query = Employe::with(['site:id,nom,code', 'contratActif'])
+        $query = Employe::with(['personne', 'site:id,nom,code', 'contratActif'])
             ->where('organization_id', $orgId);
 
         if (! empty($filters['statut'])) {
@@ -55,16 +57,20 @@ class EmployeController extends Controller
         if (! empty($filters['search'])) {
             $s = $filters['search'];
             $query->where(function ($q) use ($s) {
-                $q->where('nom', 'like', "%{$s}%")
-                    ->orWhere('prenom', 'like', "%{$s}%")
-                    ->orWhere('matricule', $s)
-                    ->orWhere('telephone', 'like', "%{$s}%")
-                    ->orWhere('email', 'like', "%{$s}%");
+                $q->where('matricule', $s)
+                    ->orWhereHas('personne', function ($q2) use ($s) {
+                        $q2->where('nom', 'like', "%{$s}%")
+                            ->orWhere('prenom', 'like', "%{$s}%")
+                            ->orWhere('telephone', 'like', "%{$s}%")
+                            ->orWhere('email', 'like', "%{$s}%");
+                    });
             });
         }
 
-        $employes = $query->orderBy('nom')->orderBy('prenom')->get()
-            ->map(fn (Employe $e) => $this->toRow($e));
+        $employes = $query->get()
+            ->sortBy(['nom', 'prenom'])
+            ->map(fn (Employe $e) => $this->toRow($e))
+            ->values();
 
         return Inertia::render('Employes/Index', [
             'employes' => $employes,
@@ -88,6 +94,25 @@ class EmployeController extends Controller
         ]);
     }
 
+    /** Remplace unique:employes,email — email vit désormais sur personnes. */
+    private function assertEmailUniqueInOrg(?string $email, string $orgId, ?string $ignoreEmployeId = null): void
+    {
+        if (! $email) {
+            return;
+        }
+
+        $exists = Employe::where('organization_id', $orgId)
+            ->whereHas('personne', fn ($q) => $q->where('email', $email))
+            ->when($ignoreEmployeId, fn ($q) => $q->where('id', '!=', $ignoreEmployeId))
+            ->exists();
+
+        if ($exists) {
+            throw ValidationException::withMessages([
+                'email' => 'Cette adresse e-mail est déjà utilisée.',
+            ]);
+        }
+    }
+
     public function store(Request $request): RedirectResponse
     {
         $this->authorize('create', Employe::class);
@@ -98,21 +123,32 @@ class EmployeController extends Controller
         $data = $request->validate([
             'nom' => 'required|string|max:100',
             'prenom' => 'required|string|max:100',
-            'email' => ['nullable', 'email', 'max:255', Rule::unique('employes', 'email')->where('organization_id', $orgId)],
+            'email' => ['nullable', 'email', 'max:255'],
             'telephone' => 'nullable|string|max:50',
             'type_employe' => ['required', Rule::in(TypeEmploye::values())],
             'site_id' => 'nullable|exists:sites,id',
             'statut' => ['required', Rule::in(StatutEmploye::values())],
         ], $this->messages());
 
+        $this->assertEmailUniqueInOrg($data['email'] ?? null, $orgId);
+
         $matricule = app(MatriculeService::class)->generate($orgId, Employe::class);
 
-        $employe = Employe::create(array_merge($data, [
-            'organization_id' => $orgId,
-            'matricule' => $matricule,
+        $personne = Personne::resoudreOuCreer($orgId, [
             'nom' => mb_strtoupper($data['nom'], 'UTF-8'),
             'prenom' => mb_convert_case(mb_strtolower($data['prenom'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8'),
-        ]));
+            'email' => $data['email'] ?? null,
+            'telephone' => $data['telephone'] ?? null,
+        ]);
+
+        $employe = Employe::create([
+            'organization_id' => $orgId,
+            'personne_id' => $personne->id,
+            'matricule' => $matricule,
+            'type_employe' => $data['type_employe'],
+            'site_id' => $data['site_id'] ?? null,
+            'statut' => $data['statut'],
+        ]);
 
         return redirect()->route('employes.edit', $employe)
             ->with('success', "{$employe->nom_complet} a été créé avec succès.");
@@ -141,17 +177,28 @@ class EmployeController extends Controller
         $data = $request->validate([
             'nom' => 'required|string|max:100',
             'prenom' => 'required|string|max:100',
-            'email' => ['nullable', 'email', 'max:255', Rule::unique('employes', 'email')->where('organization_id', $orgId)->ignore($employe->id)],
+            'email' => ['nullable', 'email', 'max:255'],
             'telephone' => 'nullable|string|max:50',
             'type_employe' => ['required', Rule::in(TypeEmploye::values())],
             'site_id' => 'nullable|exists:sites,id',
             'statut' => ['required', Rule::in(StatutEmploye::values())],
         ], $this->messages());
 
-        $employe->update(array_merge($data, [
+        $this->assertEmailUniqueInOrg($data['email'] ?? null, $orgId, $employe->id);
+
+        $employe->personne->update([
             'nom' => mb_strtoupper($data['nom'], 'UTF-8'),
             'prenom' => mb_convert_case(mb_strtolower($data['prenom'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8'),
-        ]));
+            'email' => $data['email'] ?? null,
+            'telephone' => $data['telephone'] ?? null,
+            'telephone_normalise' => isset($data['telephone']) ? Personne::normaliserTelephone($data['telephone']) : null,
+        ]);
+
+        $employe->update([
+            'type_employe' => $data['type_employe'],
+            'site_id' => $data['site_id'] ?? null,
+            'statut' => $data['statut'],
+        ]);
 
         return redirect()->route('employes.edit', $employe)
             ->with('success', "{$employe->nom_complet} a été mis à jour.");
@@ -197,7 +244,7 @@ class EmployeController extends Controller
 
     private function toDetail(Employe $employe): array
     {
-        $employe->load(['site:id,nom,code', 'contratActif', 'contrats' => fn ($q) => $q->orderByDesc('date_debut')]);
+        $employe->load(['personne', 'site:id,nom,code', 'contratActif', 'contrats' => fn ($q) => $q->orderByDesc('date_debut')]);
 
         return array_merge($this->toRow($employe), [
             'contrats' => $employe->contrats->map(fn ($c) => [
@@ -219,7 +266,6 @@ class EmployeController extends Controller
             'nom.required' => 'Le nom est obligatoire.',
             'prenom.required' => 'Le prénom est obligatoire.',
             'email.email' => "L'adresse e-mail est invalide.",
-            'email.unique' => 'Cette adresse e-mail est déjà utilisée.',
             'type_employe.required' => 'Le type d\'employé est obligatoire.',
             'type_employe.in' => 'Type d\'employé invalide.',
             'statut.required' => 'Le statut est obligatoire.',

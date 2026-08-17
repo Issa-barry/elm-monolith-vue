@@ -3,7 +3,8 @@
 namespace App\Http\Controllers\Api\Auth\PasswordReset;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
+use App\Models\Personne;
+use App\Models\UserAuthIdentity;
 use App\Services\OtpService;
 use App\Services\PhoneNormalizer;
 use Illuminate\Http\JsonResponse;
@@ -31,7 +32,7 @@ class ResetController extends Controller
             throw ValidationException::withMessages(['telephone' => 'La vérification OTP est requise avant de réinitialiser le mot de passe.']);
         }
 
-        $user = User::where('telephone', $phone)->first();
+        $user = UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_TELEPHONE, Personne::normaliserTelephone($phone));
 
         if (! $user) {
             throw ValidationException::withMessages(['telephone' => 'Aucun compte trouvé pour ce numéro.']);

@@ -10,6 +10,7 @@ use App\Models\Employe;
 use App\Models\PaieLigne;
 use App\Models\PaiePeriode;
 use App\Models\PaieVariable;
+use App\Models\Personne;
 use App\Services\PaieCalculService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -33,12 +34,17 @@ class SalaireEmployeDetailTest extends TestCase
 
     private function makeEmployeAvecContrat(float $salaire = 1_000_000): Employe
     {
-        $employe = Employe::create([
+        $personne = Personne::create([
             'organization_id' => $this->org->id,
-            'matricule' => '000001',
             'nom' => 'CAMARA',
             'prenom' => 'Test',
             'telephone' => '+224622000099',
+        ]);
+
+        $employe = Employe::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
+            'matricule' => '000001',
             'type_employe' => 'interne',
             'statut' => 'actif',
         ]);

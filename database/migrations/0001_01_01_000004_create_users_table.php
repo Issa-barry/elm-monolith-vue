@@ -11,15 +11,13 @@ return new class extends Migration
         Schema::create('users', function (Blueprint $table) {
             $table->ulid('id')->primary();
             $table->foreignUlid('organization_id')->nullable()->constrained()->nullOnDelete();
+            // Compte d'accès pur — aucune identité civile ici. Un User appartient toujours à
+            // une Personne (nom/prenom/pays/adresse) et s'authentifie via une ou plusieurs
+            // UserAuthIdentity (telephone/email) — cf. les deux migrations suivantes. Ni
+            // `telephone` ni `email` ne reviennent jamais comme colonnes sur `users`.
+            $table->foreignUlid('personne_id')->constrained('personnes')->restrictOnDelete();
             $table->string('matricule', 6)->nullable();
             $table->string('expo_push_token', 200)->nullable();
-            $table->string('prenom', 100);
-            $table->string('nom', 100);
-            $table->string('email')->nullable()->unique();
-            $table->string('telephone', 30)->nullable()->unique();
-            $table->timestamp('email_verified_at')->nullable();
-            $table->string('email_verification_token', 64)->nullable()->unique();
-            $table->timestamp('email_verification_expires_at')->nullable();
             $table->string('password');
             // Force un utilisateur à définir son propre mot de passe à sa première connexion —
             // utilisé par `php artisan app:install` (InstallApp) pour le compte super_admin créé
@@ -32,17 +30,16 @@ return new class extends Migration
             $table->timestamp('two_factor_confirmed_at')->nullable();
             $table->boolean('is_active')->default(true);
             $table->string('status', 20)->default('active');
-            $table->string('pays', 100)->nullable();
-            $table->string('code_pays', 2)->nullable();
-            $table->string('code_phone_pays', 10)->nullable();
-            $table->string('ville', 100)->nullable();
-            $table->string('adresse', 255)->nullable();
             $table->rememberToken();
             $table->timestamps();
 
             $table->unique(['organization_id', 'matricule'], 'users_org_matricule_unique');
         });
 
+        // Table du PasswordBroker Laravel (Fortify Features::resetPasswords()) — clé `email`
+        // en texte libre, jamais une FK vers users.email (qui n'existe plus) : Fortify la
+        // remplit via User::getEmailForPasswordReset(), surchargé pour lire l'identité email
+        // dans user_auth_identities (cf. App\Models\User).
         Schema::create('password_reset_tokens', function (Blueprint $table) {
             $table->string('email')->primary();
             $table->string('token');

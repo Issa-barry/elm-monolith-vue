@@ -2,9 +2,10 @@
 
 namespace Database\Seeders;
 
+use App\Models\Personne;
 use App\Models\User;
+use App\Models\UserAuthIdentity;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -30,15 +31,25 @@ class ClientSeeder extends Seeder
         ];
 
         foreach ($clients as $data) {
+            // Pas d'organisation : compte client "à la volée", cf. RegistrationService.
+            $personne = Personne::firstOrCreate(
+                ['organization_id' => null, 'telephone_normalise' => Personne::normaliserTelephone($data['telephone'])],
+                ['prenom' => $data['prenom'], 'nom' => $data['nom'], 'telephone' => $data['telephone']]
+            );
+
             // updateOrCreate garantit que le mot de passe est toujours réinitialisé
             // lors d'un re-seed, même si le compte existe déjà.
             $user = User::updateOrCreate(
-                ['telephone' => $data['telephone']],
+                ['personne_id' => $personne->id],
+                ['password' => self::PASSWORD]
+            );
+            $user->authIdentities()->updateOrCreate(
+                ['type' => UserAuthIdentity::TYPE_TELEPHONE],
                 [
-                    'prenom' => $data['prenom'],
-                    'nom' => $data['nom'],
-                    'email' => null,
-                    'password' => Hash::make(self::PASSWORD),
+                    'value' => $data['telephone'],
+                    'normalized_value' => Personne::normaliserTelephone($data['telephone']),
+                    'verified_at' => now(),
+                    'is_primary' => true,
                 ]
             );
 

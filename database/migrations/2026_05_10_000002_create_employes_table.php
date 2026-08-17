@@ -11,11 +11,10 @@ return new class extends Migration
         Schema::create('employes', function (Blueprint $table) {
             $table->ulid('id')->primary();
             $table->foreignUlid('organization_id')->constrained()->cascadeOnDelete();
+            // Identité civile portée par Personne — cf.
+            // database/migrations/0001_01_01_000003_z_create_personnes_table.php.
+            $table->foreignUlid('personne_id')->constrained('personnes')->restrictOnDelete();
             $table->string('matricule', 6);
-            $table->string('nom', 100);
-            $table->string('prenom', 100);
-            $table->string('email', 255)->nullable();
-            $table->string('telephone', 50)->nullable();
             $table->string('type_employe', 20)->default('interne');
             $table->foreignUlid('site_id')->nullable()->constrained('sites')->nullOnDelete();
             $table->string('statut', 20)->default('actif');

@@ -6,6 +6,7 @@ use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
 use App\Models\Organization;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TypeVehicule;
@@ -975,7 +976,7 @@ class VehiculeTest extends TestCase
             'commission_unitaire_par_pack' => 100,
         ]);
 
-        $livreur = Livreur::create([
+        $livreur = Livreur::factory()->create([
             'organization_id' => $this->org->id,
             'nom_complet' => 'Chauffeur-1 ADAMA',
             'telephone' => '+224623000001',
@@ -1007,6 +1008,70 @@ class VehiculeTest extends TestCase
         $this->actingAs($this->user)
             ->get(route('vehicules.show', $vehicule))
             ->assertStatus(403);
+    }
+
+    // ── proprietairesOptions() — régression Sentry (Unknown column 'nom' in order clause) ──
+    // après la refonte Personne : nom/prenom/telephone ne sont plus des colonnes physiques
+    // de `proprietaires`, `livreurs`, `employes` ni `users` (portées par `personnes`) — un
+    // ->orderBy('nom') direct sur ces tables lève SQLSTATE[42S22]. VehiculeController::show()
+    // charge proprietairesOptions() (liste "proprietaires" exposée pour le sélecteur de
+    // réassignation), qui exécute réellement cette requête.
+
+    public function test_show_expose_le_proprietaire_dans_la_liste_apres_creation_explicite_dune_personne(): void
+    {
+        // Reproduit le parcours métier réel : Personne créée d'abord, Proprietaire rattaché
+        // ensuite via personne_id — pas le raccourci de compatibilité de ProprietaireFactory.
+        $personne = Personne::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom' => 'DIALLO',
+            'prenom' => 'Mariama',
+        ]);
+        $proprietaire = Proprietaire::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
+            'is_active' => true,
+        ]);
+        $vehicule = $this->makeVehicule($this->org);
+        $vehicule->update(['proprietaire_id' => $proprietaire->id]);
+
+        $this->actingAs($this->user)
+            ->get(route('vehicules.show', $vehicule))
+            ->assertStatus(200)
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Vehicules/Show')
+                ->where('proprietaires', fn ($list) => collect($list)->contains(
+                    fn ($p) => $p['value'] === $proprietaire->id && $p['label'] === 'Mariama DIALLO'
+                ))
+            );
+    }
+
+    public function test_show_trie_la_liste_des_proprietaires_par_ordre_alphabetique(): void
+    {
+        // Ordre de création volontairement inverse de l'ordre alphabétique attendu : si une
+        // régression réintroduit ->orderBy('nom') sur la requête (colonne inexistante sur
+        // `proprietaires`), la requête lève une QueryException et la réponse ne serait plus
+        // 200 — ce test exécute la vraie requête SQL, pas seulement l'accesseur nom/prenom.
+        $vehicule = $this->makeVehicule($this->org);
+
+        Proprietaire::factory()->create(['organization_id' => $this->org->id, 'nom' => 'Zoumanigui', 'prenom' => 'Sekou']);
+        Proprietaire::factory()->create(['organization_id' => $this->org->id, 'nom' => 'Bah', 'prenom' => 'Aminata']);
+        Proprietaire::factory()->create(['organization_id' => $this->org->id, 'nom' => 'Kone', 'prenom' => 'Ibrahim']);
+
+        $this->actingAs($this->user)
+            ->get(route('vehicules.show', $vehicule))
+            ->assertStatus(200)
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Vehicules/Show')
+                ->where('proprietaires', function ($list) {
+                    $labels = collect($list)->pluck('label')->values()->all();
+                    $posBah = array_search('Aminata Bah', $labels, true);
+                    $posKone = array_search('Ibrahim Kone', $labels, true);
+                    $posZoumanigui = array_search('Sekou Zoumanigui', $labels, true);
+
+                    return $posBah !== false && $posKone !== false && $posZoumanigui !== false
+                        && $posBah < $posKone && $posKone < $posZoumanigui;
+                })
+            );
     }
 
     // ── unicité immatriculation ───────────────────────────────────────────────
