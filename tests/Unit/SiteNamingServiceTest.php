@@ -3,84 +3,70 @@
 namespace Tests\Unit;
 
 use App\Enums\SiteType;
-use App\Models\Organization;
-use App\Models\Site;
 use App\Services\SiteNamingService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class SiteNamingServiceTest extends TestCase
 {
-    use RefreshDatabase;
-
-    private function makeOrg(): Organization
+    public function test_usine_de_matoto(): void
     {
-        return Organization::create(['name' => 'ELM Test', 'slug' => 'elm-test-'.uniqid(), 'is_active' => true]);
+        $nom = app(SiteNamingService::class)->generateName(SiteType::USINE, 'Matoto');
+
+        $this->assertSame('Usine de Matoto', $nom);
     }
 
-    public function test_premier_site_dun_type_donne_le_numero_1(): void
+    public function test_ne_produit_jamais_un_type_duplique(): void
     {
-        $org = $this->makeOrg();
+        $nom = app(SiteNamingService::class)->generateName(SiteType::USINE, 'Matoto');
 
-        $nom = app(SiteNamingService::class)->nextName($org->id, SiteType::BOUTIQUE, 'Matoto');
-
-        $this->assertSame('Boutique 1 Matoto', $nom);
+        $this->assertNotSame('Usine de Usine Matoto', $nom);
+        $this->assertSame(1, substr_count($nom, 'Usine'));
     }
 
-    public function test_numerotation_continue_apres_des_boutiques_existantes(): void
+    public function test_boutique_de_sonfonia(): void
     {
-        $org = $this->makeOrg();
-        Site::create(['organization_id' => $org->id, 'nom' => 'Boutique 1 Matoto', 'type' => SiteType::BOUTIQUE->value]);
-        Site::create(['organization_id' => $org->id, 'nom' => 'Boutique 2 Kipé', 'type' => SiteType::BOUTIQUE->value]);
+        $nom = app(SiteNamingService::class)->generateName(SiteType::BOUTIQUE, 'Sonfonia');
 
-        $nom = app(SiteNamingService::class)->nextName($org->id, SiteType::BOUTIQUE, 'Sonfonia');
-
-        $this->assertSame('Boutique 3 Sonfonia', $nom);
+        $this->assertSame('Boutique de Sonfonia', $nom);
     }
 
-    public function test_numerotation_est_independante_par_type(): void
+    public function test_agence_de_kipe(): void
     {
-        $org = $this->makeOrg();
-        Site::create(['organization_id' => $org->id, 'nom' => 'Boutique 1 Matoto', 'type' => SiteType::BOUTIQUE->value]);
-        Site::create(['organization_id' => $org->id, 'nom' => 'Boutique 2 Kipé', 'type' => SiteType::BOUTIQUE->value]);
+        $nom = app(SiteNamingService::class)->generateName(SiteType::AGENCE, 'Kipé');
 
-        $nom = app(SiteNamingService::class)->nextName($org->id, SiteType::USINE, 'Samgoya');
-
-        $this->assertSame('Usine 1 Samgoya', $nom);
+        $this->assertSame('Agence de Kipé', $nom);
     }
 
-    public function test_numerotation_est_independante_par_organisation(): void
+    public function test_depot_de_lambanyi(): void
     {
-        $orgA = $this->makeOrg();
-        $orgB = $this->makeOrg();
-        Site::create(['organization_id' => $orgA->id, 'nom' => 'Boutique 1 Matoto', 'type' => SiteType::BOUTIQUE->value]);
+        $nom = app(SiteNamingService::class)->generateName(SiteType::DEPOT, 'Lambanyi');
 
-        $nom = app(SiteNamingService::class)->nextName($orgB->id, SiteType::BOUTIQUE, 'Kipé');
-
-        $this->assertSame('Boutique 1 Kipé', $nom);
+        $this->assertSame('Dépôt de Lambanyi', $nom);
     }
 
-    public function test_le_prefixe_de_nommage_nest_pas_le_libelle_complet_avec_slash(): void
+    /**
+     * SiteType::BOUTIQUE->label() vaut "Boutique / Point de vente" — le nom généré doit rester
+     * "Boutique de ...", pas répéter le libellé d'affichage complet.
+     */
+    public function test_le_prefixe_nest_pas_le_libelle_complet_avec_slash(): void
     {
-        // SiteType::BOUTIQUE->label() vaut "Boutique / Point de vente" — le nom généré doit
-        // rester "Boutique N ...", pas répéter le libellé d'affichage complet.
-        $org = $this->makeOrg();
+        $nom = app(SiteNamingService::class)->generateName(SiteType::BOUTIQUE, 'Matoto');
 
-        $nom = app(SiteNamingService::class)->nextName($org->id, SiteType::BOUTIQUE, 'Matoto');
-
-        $this->assertStringStartsWith('Boutique 1', $nom);
+        $this->assertSame('Boutique de Matoto', $nom);
         $this->assertStringNotContainsString('Point de vente', $nom);
     }
 
-    public function test_contourne_une_collision_de_nom_existant(): void
+    public function test_le_quartier_est_normalise_par_un_trim(): void
     {
-        $org = $this->makeOrg();
-        // "Usine 1 Samgoya" existe déjà (ex: renommé manuellement) sans qu'il y ait réellement
-        // une seule Usine comptée pour ce type — le service doit quand même éviter le doublon.
-        Site::create(['organization_id' => $org->id, 'nom' => 'Usine 1 Samgoya', 'type' => SiteType::DEPOT->value]);
+        $nom = app(SiteNamingService::class)->generateName(SiteType::USINE, '  Matoto  ');
 
-        $nom = app(SiteNamingService::class)->nextName($org->id, SiteType::USINE, 'Samgoya');
+        $this->assertSame('Usine de Matoto', $nom);
+    }
 
-        $this->assertSame('Usine 2 Samgoya', $nom);
+    public function test_aucune_numerotation_nest_ajoutee(): void
+    {
+        $nom = app(SiteNamingService::class)->generateName(SiteType::USINE, 'Matoto');
+
+        $this->assertDoesNotMatchRegularExpression('/\d/', $nom);
     }
 }

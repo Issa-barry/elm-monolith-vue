@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\EquipeLivraison;
+use App\Models\GroupeCapacite;
 use App\Models\ImportFlotte;
 use App\Models\Livreur;
 use App\Models\Organization;
@@ -588,8 +589,17 @@ class ImportFlotteTest extends TestCase
         $this->assertSame($livreur->id, $membre->livreur_id);
     }
 
+    /**
+     * Les colonnes vehicule_capacite_sachets/vehicule_capacite_bouteilles ciblent le
+     * GroupeCapacite "Sachets"/"Bouteilles" de l'organisation (capacité du véhicule lui-même,
+     * aucun héritage depuis le type) — cf. ImportFlotteParser::resoudreGroupesCapacite() /
+     * ImportFlotteExecutor::upsertCapacite().
+     */
     public function test_confirm_creates_vehicule_avec_capacites_sachets_et_bouteilles(): void
     {
+        $sachets = GroupeCapacite::create(['organization_id' => $this->org->id, 'nom' => 'Sachets']);
+        $bouteilles = GroupeCapacite::create(['organization_id' => $this->org->id, 'nom' => 'Bouteilles']);
+
         $import = $this->importerVehiculeEtChauffeur([
             'vehicule_capacite_sachets' => '90',
             'vehicule_capacite_bouteilles' => '40',
@@ -600,14 +610,15 @@ class ImportFlotteTest extends TestCase
             ->assertRedirect(route('imports-flotte.show', $import));
 
         $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
-        $this->assertSame(90, $vehicule->capacite_packs);
-        $this->assertSame(40, $vehicule->capacite_bouteilles);
+        $this->assertNull($vehicule->capacite_packs, 'la colonne legacy ne doit plus être alimentée par l\'import');
+        $this->assertDatabaseHas('vehicule_capacites', ['vehicule_id' => $vehicule->id, 'groupe_capacite_id' => $sachets->id, 'capacite_max' => 90]);
+        $this->assertDatabaseHas('vehicule_capacites', ['vehicule_id' => $vehicule->id, 'groupe_capacite_id' => $bouteilles->id, 'capacite_max' => 40]);
     }
 
     public function test_confirm_vehicule_sans_capacite_saisie_reste_null(): void
     {
-        // Capacité facultative : repli géré côté affichage (capacite_defaut du
-        // type), pas d'écriture forcée en base pour ce cas — cf. VehiculeController::vehiculeData().
+        // Capacité facultative : le véhicule reste simplement non plafonné, pas d'écriture
+        // forcée en base pour ce cas — cf. VehiculeCapaciteService.
         $import = $this->importerVehiculeEtChauffeur();
 
         $this->actingAs($this->user)
@@ -617,6 +628,57 @@ class ImportFlotteTest extends TestCase
         $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
         $this->assertNull($vehicule->capacite_packs);
         $this->assertNull($vehicule->capacite_bouteilles);
+        $this->assertSame(0, $vehicule->capacites()->count());
+    }
+
+    /**
+     * Organisation sans GroupeCapacite "Sachets"/"Bouteilles" (convention non suivie, ou pas
+     * encore créés) : la capacité saisie est ignorée avec un avertissement non bloquant, jamais
+     * une erreur qui empêcherait d'importer le reste du véhicule.
+     */
+    public function test_analyse_avertit_sans_bloquer_quand_groupe_capacite_absent(): void
+    {
+        $import = $this->importer(
+            [$this->ligneVehicule(['vehicule_capacite_sachets' => '90'])],
+            [$this->ligneLivreurChauffeur()]
+        );
+
+        $this->assertSame(0, $import->nb_groupes_erreur);
+        $this->assertSame(1, $import->nb_groupes_valides);
+        $this->assertNotEmpty($import->rapport['groupes'][0]['avertissements']);
+        $this->assertStringContainsString('Capacité sachets ignorée', $import->rapport['groupes'][0]['avertissements'][0]);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
+        $this->assertSame(0, $vehicule->capacites()->count());
+    }
+
+    /**
+     * Contrairement au reste d'une ligne "véhicule déjà existant" (simple ancrage, jamais
+     * modifié), la capacité EST mise à jour — une ré-importation avec des valeurs corrigées doit
+     * pouvoir corriger la flotte déjà configurée (cf. ImportFlotteExecutor::upsertCapacite()).
+     */
+    public function test_confirm_met_a_jour_la_capacite_dun_vehicule_deja_existant(): void
+    {
+        $sachets = GroupeCapacite::create(['organization_id' => $this->org->id, 'nom' => 'Sachets']);
+        $vehiculeExistant = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'immatriculation' => 'RC-1234-A',
+            'type_vehicule_id' => $this->type->id,
+        ]);
+        $vehiculeExistant->capacites()->create(['organization_id' => $this->org->id, 'groupe_capacite_id' => $sachets->id, 'capacite_max' => 50]);
+
+        $import = $this->importerVehiculeEtChauffeur(['vehicule_capacite_sachets' => '120']);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $this->assertDatabaseHas('vehicule_capacites', ['vehicule_id' => $vehiculeExistant->id, 'groupe_capacite_id' => $sachets->id, 'capacite_max' => 120]);
+        $this->assertSame(1, $vehiculeExistant->capacites()->count(), 'upsert, pas de doublon de ligne');
     }
 
     public function test_analyse_flags_error_for_invalid_capacite_sachets(): void

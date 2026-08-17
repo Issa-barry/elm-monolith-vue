@@ -34,7 +34,6 @@ interface VehiculeInfo {
     // Propriété (tiers vs organisation) — indépendante des usages vente/logistique du
     // véhicule, calculée côté serveur (cf. Vehicules/Show.vue::proprietaireEstTiers).
     proprietaire_est_tiers: boolean;
-    capacite_packs: number | null;
     proprietaire_id: string | null;
     proprietaire_nom: string | null;
 }
@@ -832,12 +831,6 @@ const hasStep1Errors = computed(() =>
                     </p>
                     <p class="font-mono text-xs text-muted-foreground">
                         {{ vehicule.immatriculation }}
-                    </p>
-                    <p
-                        v-if="vehicule.capacite_packs"
-                        class="text-xs text-muted-foreground"
-                    >
-                        {{ vehicule.capacite_packs }} sachets
                     </p>
                 </div>
 

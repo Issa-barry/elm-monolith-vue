@@ -10,6 +10,7 @@ import {
 } from './helpers';
 
 const E2E_VEHICULE_IMMATRICULATION_PREFIX = 'E2EVH-';
+const E2E_GROUPE_CAPACITE_PREFIX = 'E2EGrpCap-';
 
 test.setTimeout(120_000);
 
@@ -293,5 +294,95 @@ test("show — véhicule créé sans propriétaire choisi : propriétaire par d�
     // par défaut de l'organisation.
     await expect(page.getByTestId('voir-fiche-proprietaire-btn')).toBeVisible({
         timeout: 5_000,
+    });
+});
+
+test('création — capacités maximales de chargement saisies dans le formulaire, sans étape séparée', async ({
+    page,
+}) => {
+    const unique = `${Date.now()}-${randomDigits(3)}`;
+    const nomGroupe = `${E2E_GROUPE_CAPACITE_PREFIX}${unique.slice(-6)}`;
+    const nomVehicule = `E2E Vehicule Capacite ${unique}`;
+    const immatriculation = `${E2E_VEHICULE_IMMATRICULATION_PREFIX}C-${unique.slice(-5)}`;
+
+    await login(page);
+
+    // Étape 1 : créer un groupe de capacité dédié (le Dropdown du formulaire véhicule ne
+    // propose que des groupes déjà existants — pas de création à la volée).
+    await page.goto('/backoffice/vehicules/groupes-capacite');
+    await page
+        .getByRole('button', { name: /nouveau groupe de capacité/i })
+        .click();
+    await page.getByPlaceholder('Ex : Sachets').fill(nomGroupe);
+    await page.getByRole('button', { name: /^ajouter$/i }).click();
+    await expect(page.getByText(nomGroupe)).toBeVisible({ timeout: 10_000 });
+
+    // Étape 2 : créer un véhicule et renseigner sa capacité DANS LE MÊME formulaire — pas
+    // d'étape séparée après l'enregistrement (cf. CapacitesEditor.vue dans VehiculeForm.vue).
+    await page.goto('/backoffice/vehicules/create');
+    await page.locator('#nom_vehicule').fill(nomVehicule);
+    await page.locator('#immatriculation').fill(immatriculation);
+    await selectOptionFromCombobox(page, page.locator('#type_vehicule'));
+    if (
+        await page
+            .locator('#site_id')
+            .isVisible()
+            .catch(() => false)
+    ) {
+        await selectOptionFromCombobox(page, page.locator('#site_id'));
+    }
+
+    await page
+        .getByRole('button', { name: /ajouter une capacité/i })
+        .click();
+    const groupeDropdown = page
+        .locator('label')
+        .filter({ hasText: /^Groupe de capacité$/ })
+        .locator('..')
+        .getByRole('combobox');
+    await selectOptionFromCombobox(page, groupeDropdown, nomGroupe);
+    // PrimeVue InputNumber traite les frappes une par une (formatage interne) — .fill() pose
+    // la valeur DOM sans déclencher sa logique de parsing, laissant le v-model à null et le
+    // bouton "Ajouter" durablement désactivé (cf. tests/e2e/stock-ajustement.spec.ts).
+    await page
+        .locator('input[inputmode="numeric"]')
+        .last()
+        .pressSequentially('1700');
+    // "Ajouter" ici n'est qu'un ajout à la liste locale du formulaire (pas de requête réseau) —
+    // distinct du bouton de soumission finale du véhicule, plus bas. Le bouton "Ajouter une
+    // capacité" est masqué (v-else) tant que ce panneau d'ajout est ouvert, donc ce nom exact
+    // ne désigne plus qu'un seul bouton à ce stade.
+    await page.getByRole('button', { name: /^ajouter$/i }).click();
+
+    await expect(page.getByText(nomGroupe).last()).toBeVisible({
+        timeout: 5_000,
+    });
+    await expect(page.locator('body')).toContainText('1700', {
+        timeout: 5_000,
+    });
+
+    // Étape 3 : soumission unique du véhicule (identité + capacité ensemble).
+    await page
+        .locator('#vehicule-form button[type="submit"]:visible')
+        .first()
+        .click();
+    await page.waitForURL(/\/vehicules\/[a-z0-9]{20,}$/, { timeout: 15_000 });
+
+    // Étape 4 : la capacité doit apparaître sur la fiche détail sans action supplémentaire.
+    await expect(page.locator('body')).toContainText(nomGroupe, {
+        timeout: 10_000,
+    });
+    await expect(page.locator('body')).toContainText('1700', {
+        timeout: 10_000,
+    });
+
+    // Étape 5 : elle doit aussi être pré-remplie sur la fiche Modifier (persistance réelle).
+    await page.goto(`${page.url()}/edit`);
+    await page.waitForURL(/\/vehicules\/[a-z0-9]+\/edit$/, { timeout: 15_000 });
+    await expect(page.getByText(nomGroupe).last()).toBeVisible({
+        timeout: 10_000,
+    });
+    await expect(page.locator('body')).toContainText('1700', {
+        timeout: 10_000,
     });
 });

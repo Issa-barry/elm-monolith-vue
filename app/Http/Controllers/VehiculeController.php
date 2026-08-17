@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\CategorieVehicule;
 use App\Models\Depense;
 use App\Models\EquipeLivreur;
+use App\Models\GroupeCapacite;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TypeVehicule;
@@ -12,9 +13,11 @@ use App\Models\User;
 use App\Models\Vehicule;
 use App\Models\VehiculeFrais;
 use App\Services\ImageService;
+use App\Services\VehiculeCapaciteService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -23,6 +26,8 @@ use Inertia\Response;
 
 class VehiculeController extends Controller
 {
+    public function __construct(private readonly VehiculeCapaciteService $vehiculeCapaciteService) {}
+
     private function vehiculeData(Vehicule $v): array
     {
         $equipe = $v->equipe;
@@ -40,11 +45,9 @@ class VehiculeController extends Controller
             'immatriculation' => $v->immatriculation,
             'type_vehicule_id' => $v->type_vehicule_id,
             'type_label' => $v->type_label,
-            // Capacité gérée exclusivement par le type (décision produit du 16/08/2026, cf.
-            // VehiculeCapaciteService) — jamais propre au véhicule, purement informatif ici.
-            'capacite_packs' => $v->typeVehicule?->capacite_defaut,
-            // Deuxième unité (bouteilles), même source — reste null si le type n'en transporte pas.
-            'capacite_bouteilles' => $v->typeVehicule?->capacite_defaut_bouteilles,
+            // Capacités maximales de chargement, propres à CE véhicule (aucun héritage depuis
+            // le type — cf. VehiculeCapaciteService).
+            'capacites' => $this->vehiculeCapaciteService->capacitesParGroupeAvecNoms($v),
             'site_id' => $v->site_id,
             'site_nom' => $v->relationLoaded('site') ? $v->site?->nom : null,
             'categorie' => $v->categorie?->value,
@@ -128,7 +131,7 @@ class VehiculeController extends Controller
     {
         $this->authorize('viewAny', Vehicule::class);
 
-        $vehicules = Vehicule::with(['typeVehicule', 'site', 'proprietaire.user.sites', 'equipe.membres.livreur'])
+        $vehicules = Vehicule::with(['typeVehicule', 'site', 'proprietaire.user.sites', 'equipe.membres.livreur', 'capacites.groupeCapacite'])
             ->where('organization_id', auth()->user()->organization_id)
             ->orderBy('nom_vehicule')
             ->get()
@@ -176,6 +179,7 @@ class VehiculeController extends Controller
             'proprietaires' => $this->proprietairesOptions(),
             'types' => $this->typesOptions(),
             'categories_vehicule' => CategorieVehicule::options(),
+            'groupes_capacite' => $this->groupesCapaciteOptions(),
             'initial_proprietaire_id' => $initialProprietaireId,
             'sites' => $this->sitesOptions($user, $orgId),
             'default_site_id' => $defaultSiteId,
@@ -218,9 +222,16 @@ class VehiculeController extends Controller
             $data['photo_path'] = (new ImageService)->storeAsWebp($request->file('photo'), 'vehicules');
         }
 
-        unset($data['photo']);
+        $capacites = $data['capacites'] ?? [];
+        unset($data['photo'], $data['capacites']);
         $data['is_active'] = false; // inactif jusqu'à attribution d'une équipe
-        $vehicule = Vehicule::create([...$data, 'organization_id' => $orgId]);
+
+        $vehicule = DB::transaction(function () use ($data, $orgId, $capacites) {
+            $vehicule = Vehicule::create([...$data, 'organization_id' => $orgId]);
+            $this->vehiculeCapaciteService->syncCapacites($vehicule, $capacites, $orgId);
+
+            return $vehicule;
+        });
 
         return redirect()->route('vehicules.show', $vehicule)
             ->with('success', 'Véhicule créé avec succès.');
@@ -230,7 +241,7 @@ class VehiculeController extends Controller
     {
         $this->authorize('view', $vehicule);
 
-        $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'equipe.membres.livreur', 'equipe.proprietaire']);
+        $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'equipe.membres.livreur', 'equipe.proprietaire', 'capacites.groupeCapacite']);
 
         $depenses = Depense::where('beneficiaire_type', 'vehicule')
             ->where('beneficiaire_id', $vehicule->id)
@@ -385,17 +396,31 @@ class VehiculeController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'equipe.membres.livreur']);
+        $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'equipe.membres.livreur', 'capacites']);
 
         return Inertia::render('Vehicules/Edit', [
             'vehicule' => $this->vehiculeData($vehicule),
             'proprietaires' => $this->proprietairesOptions(),
             'types' => $this->typesOptions(),
             'categories_vehicule' => CategorieVehicule::options(),
+            'groupes_capacite' => $this->groupesCapaciteOptions(),
             'sites' => $this->sitesOptions($user, $orgId),
             'can_change_site' => $user->isAdmin(),
             'default_proprietaire_id' => Proprietaire::interneParDefautId($orgId),
+            'capacites' => $vehicule->capacites->map(fn ($c) => [
+                'groupe_capacite_id' => $c->groupe_capacite_id,
+                'capacite_max' => $c->capacite_max,
+            ])->values()->all(),
         ]);
+    }
+
+    private function groupesCapaciteOptions(): array
+    {
+        return GroupeCapacite::where('organization_id', auth()->user()->organization_id)
+            ->orderBy('nom')
+            ->get(['id', 'nom'])
+            ->map(fn (GroupeCapacite $g) => ['value' => $g->id, 'label' => $g->nom])
+            ->toArray();
     }
 
     public function update(Request $request, Vehicule $vehicule): RedirectResponse
@@ -430,8 +455,13 @@ class VehiculeController extends Controller
             $data['photo_path'] = $imageService->storeAsWebp($request->file('photo'), 'vehicules');
         }
 
-        unset($data['photo']);
-        $vehicule->update($data);
+        $capacites = $data['capacites'] ?? [];
+        unset($data['photo'], $data['capacites']);
+
+        DB::transaction(function () use ($vehicule, $data, $orgId, $capacites) {
+            $vehicule->update($data);
+            $this->vehiculeCapaciteService->syncCapacites($vehicule, $capacites, $orgId);
+        });
 
         // Un véhicule sans équipe ne peut pas être actif
         $vehicule->load('equipe');
@@ -472,8 +502,6 @@ class VehiculeController extends Controller
             ->map(fn (TypeVehicule $t) => [
                 'value' => $t->id,
                 'label' => $t->nom,
-                'capacite_defaut' => $t->capacite_defaut,
-                'capacite_defaut_bouteilles' => $t->capacite_defaut_bouteilles,
             ])
             ->toArray();
     }
@@ -554,6 +582,8 @@ class VehiculeController extends Controller
     /**
      * Règles communes à store() et update() — seule la contrainte d'unicité
      * de l'immatriculation diffère (ignore() du véhicule courant en édition).
+     * `capacites` : saisies directement dans le même formulaire (pas d'étape séparée après
+     * l'enregistrement) — un tableau vide est valide (véhicule non limité).
      */
     private function validationRules(string $orgId, ?Vehicule $vehicule = null): array
     {
@@ -582,6 +612,13 @@ class VehiculeController extends Controller
             'livraison_logistique' => 'required|boolean',
             'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
             'is_active' => 'boolean',
+            'capacites' => 'array',
+            'capacites.*.groupe_capacite_id' => [
+                'required', 'string',
+                Rule::exists('groupes_capacite', 'id')->where('organization_id', $orgId),
+                'distinct',
+            ],
+            'capacites.*.capacite_max' => 'required|integer|min:1|max:99999',
         ];
     }
 
@@ -651,6 +688,11 @@ class VehiculeController extends Controller
             'photo.max' => 'La photo ne peut pas dépasser 3 Mo.',
             'livraison_vente.required' => 'Veuillez indiquer si ce véhicule est autorisé pour la vente.',
             'livraison_logistique.required' => 'Veuillez indiquer si ce véhicule est autorisé pour la logistique.',
+            'capacites.*.groupe_capacite_id.required' => 'Le groupe de capacité est obligatoire.',
+            'capacites.*.groupe_capacite_id.exists' => 'Groupe de capacité invalide.',
+            'capacites.*.groupe_capacite_id.distinct' => 'Chaque groupe ne peut avoir qu\'une seule ligne de capacité.',
+            'capacites.*.capacite_max.required' => 'La capacité est obligatoire.',
+            'capacites.*.capacite_max.min' => 'La capacité doit être supérieure à 0.',
         ];
     }
 }

@@ -25,6 +25,7 @@ class Produit extends Model
     protected $fillable = [
         'organization_id',
         'categorie_id',
+        'groupe_capacite_id',
         'fournisseur_id',
         'produit_type_id',
         'nom',
@@ -170,6 +171,15 @@ class Produit extends Model
     public function categorie(): BelongsTo
     {
         return $this->belongsTo(Categorie::class);
+    }
+
+    /**
+     * Groupe de capacité (ex: "Sachets", "Bouteilles") — indépendant de la Categorie catalogue,
+     * consommé uniquement par le moteur de capacité véhicule (VehiculeCapaciteService).
+     */
+    public function groupeCapacite(): BelongsTo
+    {
+        return $this->belongsTo(GroupeCapacite::class);
     }
 
     public function produitType(): BelongsTo

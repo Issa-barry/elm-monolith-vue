@@ -14,6 +14,7 @@ use App\Models\Site;
 use App\Models\TransfertLogistique;
 use App\Models\Vehicule;
 use App\Services\TransfertActiviteService;
+use App\Services\VehiculeCapaciteService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -25,6 +26,8 @@ use Inertia\Response;
 class TransfertLogistiqueController extends Controller
 {
     private const DATE_DISPLAY_FORMAT = 'd/m/Y';
+
+    public function __construct(private readonly VehiculeCapaciteService $vehiculeCapaciteService) {}
 
     // ── Index (rétro-compatibilité — redirect géré dans routes/web.php) ──────
 
@@ -224,8 +227,8 @@ class TransfertLogistiqueController extends Controller
             'vehicules' => Vehicule::where('organization_id', $orgId)
                 ->where('is_active', true)
                 ->livraisonLogistique()
-                ->with(['equipe:id,vehicule_id', 'typeVehicule'])
-                ->select('id', 'nom_vehicule', 'immatriculation', 'capacite_packs', 'type_vehicule_id')
+                ->with(['equipe:id,vehicule_id', 'capacites.groupeCapacite'])
+                ->select('id', 'nom_vehicule', 'immatriculation', 'type_vehicule_id')
                 ->get()
                 ->map(fn ($v) => [
                     'id' => $v->id,
@@ -233,9 +236,9 @@ class TransfertLogistiqueController extends Controller
                     'immatriculation' => $v->immatriculation,
                     'equipe_livraison_id' => $v->equipe?->id,
                     'equipe_nom' => $v->equipe ? $v->nom_vehicule : null,
-                    // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
-                    // on retombe sur la capacité par défaut du type (cf. VehiculeController).
-                    'capacite_packs' => $v->capacite_packs ?? $v->typeVehicule?->capacite_defaut,
+                    // Plafonds par groupe de capacité, propres à ce véhicule — même calcul que le
+                    // contrôle serveur (VehiculeCapaciteService). Vide = véhicule non limité.
+                    'capacites' => $this->vehiculeCapaciteService->capacitesParGroupeAvecNoms($v),
                 ]),
             'equipes' => EquipeLivraison::with('vehicule:id,nom_vehicule')
                 ->where('organization_id', $orgId)
@@ -245,7 +248,7 @@ class TransfertLogistiqueController extends Controller
                 ->sortBy(fn ($e) => $e->vehicule?->nom_vehicule)
                 ->values(),
             'produits' => Produit::where('organization_id', $orgId)
-                ->select('id', 'nom')
+                ->select('id', 'nom', 'groupe_capacite_id')
                 ->orderBy('nom')
                 ->get(),
         ]);
@@ -311,6 +314,8 @@ class TransfertLogistiqueController extends Controller
                 return back()->withErrors(['site_destination_id' => 'Le site destination doit être différent du site source.']);
             }
         }
+
+        $this->ensureQuantiteMatchesVehiculeCapacity($data);
 
         $transfert = DB::transaction(function () use ($data, $orgId) {
             $transfert = TransfertLogistique::create([
@@ -442,8 +447,8 @@ class TransfertLogistiqueController extends Controller
             'sites' => Site::where('organization_id', $orgId)->select('id', 'nom')->orderBy('nom')->get(),
             'vehicules' => Vehicule::where('organization_id', $orgId)->where('is_active', true)
                 ->livraisonLogistique()
-                ->with(['equipe:id,vehicule_id', 'typeVehicule'])
-                ->select('id', 'nom_vehicule', 'immatriculation', 'capacite_packs', 'type_vehicule_id')
+                ->with(['equipe:id,vehicule_id', 'capacites.groupeCapacite'])
+                ->select('id', 'nom_vehicule', 'immatriculation', 'type_vehicule_id')
                 ->get()
                 ->map(fn ($v) => [
                     'id' => $v->id,
@@ -451,9 +456,7 @@ class TransfertLogistiqueController extends Controller
                     'immatriculation' => $v->immatriculation,
                     'equipe_livraison_id' => $v->equipe?->id,
                     'equipe_nom' => $v->equipe ? $v->nom_vehicule : null,
-                    // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
-                    // on retombe sur la capacité par défaut du type (cf. VehiculeController).
-                    'capacite_packs' => $v->capacite_packs ?? $v->typeVehicule?->capacite_defaut,
+                    'capacites' => $this->vehiculeCapaciteService->capacitesParGroupeAvecNoms($v),
                 ]),
             'equipes' => EquipeLivraison::with('vehicule:id,nom_vehicule')
                 ->where('organization_id', $orgId)
@@ -462,7 +465,7 @@ class TransfertLogistiqueController extends Controller
                 ->get()
                 ->sortBy(fn ($e) => $e->vehicule?->nom_vehicule)
                 ->values(),
-            'produits' => Produit::where('organization_id', $orgId)->select('id', 'nom')->orderBy('nom')->get(),
+            'produits' => Produit::where('organization_id', $orgId)->select('id', 'nom', 'groupe_capacite_id')->orderBy('nom')->get(),
         ]);
     }
 
@@ -499,6 +502,8 @@ class TransfertLogistiqueController extends Controller
         if ($data['site_destination_id'] === $data['site_source_id']) {
             return back()->withErrors(['site_destination_id' => 'Le site destination doit être différent du site source.']);
         }
+
+        $this->ensureQuantiteMatchesVehiculeCapacity($data);
 
         DB::transaction(function () use ($data, $transfert_logistique) {
             $transfert_logistique->update([
@@ -682,6 +687,24 @@ class TransfertLogistiqueController extends Controller
     private function statutDotClass(StatutTransfert $statut): string
     {
         return $statut->dotClass();
+    }
+
+    /**
+     * Même contrôle que la vente web/PDV (VehiculeCapaciteService), mais sans exigence de
+     * chargement complet : un transfert peut charger moins que la capacité du véhicule, il ne
+     * peut simplement jamais la dépasser. $lignes utilise 'quantite_demandee' (pas 'qte' comme la
+     * vente), seule différence avec l'appel équivalent de CommandeVenteController.
+     *
+     * @throws ValidationException
+     */
+    private function ensureQuantiteMatchesVehiculeCapacity(array $data): void
+    {
+        $vehicule = Vehicule::query()->find($data['vehicule_id'] ?? null);
+        if (! $vehicule) {
+            return;
+        }
+
+        $this->vehiculeCapaciteService->verifier($vehicule, $data['lignes'] ?? [], 'quantite_demandee', false);
     }
 
     /**

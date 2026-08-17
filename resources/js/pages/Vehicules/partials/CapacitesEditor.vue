@@ -1,0 +1,242 @@
+<script setup lang="ts">
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Pencil, Plus, Trash2 } from 'lucide-vue-next';
+import Dropdown from 'primevue/dropdown';
+import InputNumber from 'primevue/inputnumber';
+import { computed, ref } from 'vue';
+
+export interface GroupeCapaciteOption {
+    value: string;
+    label: string;
+}
+
+export interface CapaciteRow {
+    groupe_capacite_id: string;
+    capacite_max: number;
+}
+
+const props = defineProps<{
+    modelValue: CapaciteRow[];
+    groupesCapacite: GroupeCapaciteOption[];
+}>();
+
+const emit = defineEmits<{ 'update:modelValue': [CapaciteRow[]] }>();
+
+function groupeLabel(id: string): string {
+    return props.groupesCapacite.find((g) => g.value === id)?.label ?? id;
+}
+
+function availableGroupes(excludeIndex?: number): GroupeCapaciteOption[] {
+    const used = props.modelValue
+        .filter((_, i) => i !== excludeIndex)
+        .map((r) => r.groupe_capacite_id);
+    return props.groupesCapacite.filter((g) => !used.includes(g.value));
+}
+
+// ── Ajout ────────────────────────────────────────────────────────────────
+const adding = ref(false);
+const newGroupeId = ref<string | null>(null);
+const newCapacite = ref<number | null>(null);
+
+function startAdd(): void {
+    newGroupeId.value = null;
+    newCapacite.value = null;
+    adding.value = true;
+}
+
+const canAdd = computed(
+    () => !!newGroupeId.value && !!newCapacite.value && newCapacite.value > 0,
+);
+
+function confirmAdd(): void {
+    if (!canAdd.value) return;
+    emit('update:modelValue', [
+        ...props.modelValue,
+        {
+            groupe_capacite_id: newGroupeId.value as string,
+            capacite_max: newCapacite.value as number,
+        },
+    ]);
+    adding.value = false;
+}
+
+// ── Édition ──────────────────────────────────────────────────────────────
+const editingIndex = ref<number | null>(null);
+const editCapacite = ref<number | null>(null);
+
+function startEdit(index: number): void {
+    editingIndex.value = index;
+    editCapacite.value = props.modelValue[index].capacite_max;
+}
+
+function confirmEdit(index: number): void {
+    if (!editCapacite.value || editCapacite.value <= 0) return;
+    emit(
+        'update:modelValue',
+        props.modelValue.map((r, i) =>
+            i === index ? { ...r, capacite_max: editCapacite.value as number } : r,
+        ),
+    );
+    editingIndex.value = null;
+}
+
+function removeRow(index: number): void {
+    emit(
+        'update:modelValue',
+        props.modelValue.filter((_, i) => i !== index),
+    );
+}
+</script>
+
+<template>
+    <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+        <h3
+            class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+        >
+            Capacités maximales de chargement
+        </h3>
+        <p class="mt-1 text-xs text-muted-foreground">
+            Limites propres à ce véhicule (ex : packs de sachets, packs de
+            bouteilles) — utilisées pour bloquer toute vente ou tout
+            chargement qui les dépasse. Aucune limite définie = véhicule non
+            plafonné.
+        </p>
+
+        <div v-if="modelValue.length > 0" class="mt-4 divide-y rounded-lg border">
+            <div
+                v-for="(row, index) in modelValue"
+                :key="row.groupe_capacite_id"
+                class="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+            >
+                <template v-if="editingIndex === index">
+                    <span class="text-sm font-medium">{{
+                        groupeLabel(row.groupe_capacite_id)
+                    }}</span>
+                    <div class="flex items-center gap-2">
+                        <InputNumber
+                            v-model="editCapacite"
+                            :min="1"
+                            :max="99999"
+                            :use-grouping="false"
+                            class="w-28"
+                            autofocus
+                        />
+                        <Button
+                            type="button"
+                            size="sm"
+                            @click="confirmEdit(index)"
+                            >OK</Button
+                        >
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            @click="editingIndex = null"
+                            >Annuler</Button
+                        >
+                    </div>
+                </template>
+                <template v-else>
+                    <span class="text-sm font-medium">{{
+                        groupeLabel(row.groupe_capacite_id)
+                    }}</span>
+                    <div class="flex items-center gap-1">
+                        <span class="text-sm text-muted-foreground">{{
+                            row.capacite_max
+                        }}</span>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            class="h-8 w-8 text-muted-foreground"
+                            @click="startEdit(index)"
+                        >
+                            <Pencil class="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            class="h-8 w-8 text-destructive"
+                            @click="removeRow(index)"
+                        >
+                            <Trash2 class="h-3.5 w-3.5" />
+                        </Button>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <div
+            v-if="adding"
+            class="mt-4 flex flex-col gap-2 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-end"
+        >
+            <div class="flex-1">
+                <Label class="mb-1.5 block text-xs">Groupe de capacité</Label>
+                <Dropdown
+                    v-model="newGroupeId"
+                    :options="availableGroupes()"
+                    option-label="label"
+                    option-value="value"
+                    placeholder="Choisir…"
+                    class="w-full"
+                />
+            </div>
+            <div class="w-full sm:w-32">
+                <Label class="mb-1.5 block text-xs">Capacité max</Label>
+                <InputNumber
+                    v-model="newCapacite"
+                    :min="1"
+                    :max="99999"
+                    :use-grouping="false"
+                    class="w-full"
+                />
+            </div>
+            <div class="flex gap-2">
+                <Button type="button" size="sm" :disabled="!canAdd" @click="confirmAdd">
+                    Ajouter
+                </Button>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    @click="adding = false"
+                >
+                    Annuler
+                </Button>
+            </div>
+        </div>
+        <template v-else>
+            <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                class="mt-4"
+                :disabled="availableGroupes().length === 0"
+                @click="startAdd"
+            >
+                <Plus class="mr-1.5 h-3.5 w-3.5" />
+                Ajouter une capacité
+            </Button>
+            <p
+                v-if="availableGroupes().length === 0 && groupesCapacite.length === 0"
+                class="mt-2 text-xs text-muted-foreground"
+            >
+                Aucun groupe de capacité défini —
+                <a
+                    href="/backoffice/vehicules/groupes-capacite"
+                    class="underline"
+                    >en créer un</a
+                >
+                (ex : Sachets, Bouteilles).
+            </p>
+            <p
+                v-else-if="availableGroupes().length === 0"
+                class="mt-2 text-xs text-muted-foreground"
+            >
+                Tous les groupes de capacité ont déjà une ligne définie.
+            </p>
+        </template>
+    </div>
+</template>

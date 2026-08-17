@@ -5,6 +5,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { ArrowLeft, CheckCircle, Save } from 'lucide-vue-next';
 import { computed } from 'vue';
+import { type CapaciteRow, type GroupeCapaciteOption } from './partials/CapacitesEditor.vue';
 import VehiculeForm from './partials/VehiculeForm.vue';
 
 interface Option {
@@ -14,8 +15,6 @@ interface Option {
 interface TypeOption {
     value: string;
     label: string;
-    capacite_defaut: number;
-    capacite_defaut_bouteilles: number | null;
 }
 
 interface SiteOption {
@@ -47,9 +46,11 @@ const props = defineProps<{
     proprietaires: Option[];
     types: TypeOption[];
     categories_vehicule: CategorieOption[];
+    groupes_capacite: GroupeCapaciteOption[];
     sites: SiteOption[];
     can_change_site: boolean;
     default_proprietaire_id: string | null;
+    capacites: CapaciteRow[];
 }>();
 const page = usePage();
 const flashSuccess = computed(
@@ -75,6 +76,7 @@ const form = useForm({
     livraison_logistique: props.vehicule.livraison_logistique,
     photo: null as File | null,
     is_active: props.vehicule.is_active,
+    capacites: [...props.capacites] as CapaciteRow[],
 });
 
 const canSubmit = computed(() => {
@@ -157,6 +159,7 @@ function submit() {
                 :proprietaires="proprietaires"
                 :types="types"
                 :categories-vehicule="categories_vehicule"
+                :groupes-capacite="groupes_capacite"
                 :photo-url="vehicule.photo_url"
                 :sites="sites"
                 :can-change-site="can_change_site"

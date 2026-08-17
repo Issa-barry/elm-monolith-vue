@@ -8,6 +8,7 @@ use App\Models\Personne;
 use App\Models\PieceIdentite;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
+use App\Models\VehiculeCapacite;
 use App\Traits\PhoneHandlerTrait;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -147,7 +148,7 @@ class ProprietaireController extends Controller
         $this->authorize('view', $proprietaire);
 
         $vehicules = Vehicule::query()
-            ->with(['typeVehicule', 'equipe.livreurs'])
+            ->with(['typeVehicule', 'equipe.livreurs', 'capacites.groupeCapacite'])
             ->where('organization_id', auth()->user()->organization_id)
             ->where('proprietaire_id', $proprietaire->id)
             ->orderBy('nom_vehicule')
@@ -163,9 +164,10 @@ class ProprietaireController extends Controller
                     'immatriculation' => $vehicule->immatriculation,
                     'photo_url' => $vehicule->photo_url,
                     'type_label' => $vehicule->type_label,
-                    // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
-                    // on retombe sur la capacité par défaut du type (cf. VehiculeController).
-                    'capacite_packs' => $vehicule->capacite_packs ?? $vehicule->typeVehicule?->capacite_defaut,
+                    'capacites' => $vehicule->capacites->map(fn (VehiculeCapacite $c) => [
+                        'groupe_capacite_nom' => $c->groupeCapacite->nom,
+                        'capacite_max' => $c->capacite_max,
+                    ])->values()->all(),
                     // Propriété réelle du véhicule — plus jamais reconstruite depuis
                     // livraison_logistique (confusion usage/propriété corrigée, cf.
                     // Vehicule::categorie), affichée telle quelle par Proprietaires/Show.vue.

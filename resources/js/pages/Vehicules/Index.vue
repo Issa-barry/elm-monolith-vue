@@ -43,6 +43,12 @@ interface EquipeMembre {
     role: string;
 }
 
+interface CapaciteRow {
+    groupe_capacite_id: string;
+    groupe_capacite_nom: string;
+    capacite_max: number;
+}
+
 interface Vehicule {
     id: string;
     nom_vehicule: string;
@@ -50,8 +56,7 @@ interface Vehicule {
     modele: string | null;
     immatriculation: string;
     type_label: string;
-    capacite_packs: number | null;
-    capacite_bouteilles: number | null;
+    capacites: CapaciteRow[];
     categorie: 'interne' | 'partenaire';
     categorie_label: string;
     proprietaire_nom: string | null;
@@ -178,7 +183,7 @@ const filteredVehicules = computed(() =>
                 .includes(q.replace(/\D/g, '')) ||
             (v.agence_nom ?? '').toLowerCase().includes(q) ||
             (v.equipe_nom ?? '').toLowerCase().includes(q) ||
-            (v.capacite_packs != null && String(v.capacite_packs).includes(q));
+            v.capacites.some((c) => String(c.capacite_max).includes(q));
         const matchType =
             !filterType.value || v.type_label === filterType.value;
         const matchStatut = !filterStatut.value
@@ -237,7 +242,7 @@ const mobileFiltered = computed(() =>
                 .includes(q.replace(/\D/g, '')) ||
             (v.agence_nom ?? '').toLowerCase().includes(q) ||
             (v.equipe_nom ?? '').toLowerCase().includes(q) ||
-            (v.capacite_packs != null && String(v.capacite_packs).includes(q));
+            v.capacites.some((c) => String(c.capacite_max).includes(q));
         const matchType =
             !mobileFilterType.value || v.type_label === mobileFilterType.value;
         const matchStatut = !mobileFilterStatut.value
@@ -742,24 +747,30 @@ function confirmDelete(v: Vehicule) {
 
                     <!-- Capacité -->
                     <Column
-                        field="capacite_packs"
                         header="Capacité"
-                        sortable
-                        style="width: 130px"
+                        style="width: 160px"
                     >
                         <template #body="{ data }">
                             <span
+                                v-if="data.capacites.length === 0"
+                                class="whitespace-nowrap text-muted-foreground tabular-nums"
+                                >—</span
+                            >
+                            <span
+                                v-else
                                 class="whitespace-nowrap text-muted-foreground tabular-nums"
                             >
-                                {{
-                                    data.capacite_packs != null
-                                        ? `${data.capacite_packs} sachets`
-                                        : '—'
-                                }}
                                 <template
-                                    v-if="data.capacite_bouteilles != null"
+                                    v-for="(c, i) in data.capacites"
+                                    :key="c.groupe_capacite_id"
                                 >
-                                    · {{ data.capacite_bouteilles }} bout.
+                                    {{ c.groupe_capacite_nom }}
+                                    {{ c.capacite_max
+                                    }}<template
+                                        v-if="i < data.capacites.length - 1"
+                                        >
+                                        ·
+                                    </template>
                                 </template>
                             </span>
                         </template>

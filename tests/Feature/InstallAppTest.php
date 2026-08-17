@@ -38,6 +38,7 @@ class InstallAppTest extends TestCase
         $this->assertSame('GN', $user->code_pays);
         $this->assertFalse($user->must_change_password);
         $this->assertTrue($user->hasRole('super_admin'));
+        $this->assertSame('issa@gmail.com', $user->email);
         $this->assertTrue($user->hasVerifiedEmail());
     }
 
@@ -102,7 +103,8 @@ class InstallAppTest extends TestCase
             ->expectsQuestion('Prénom', 'Issa')
             ->expectsQuestion('Nom', 'BARRY')
             ->expectsQuestion('Téléphone (format international, ex: +224622000000)', '+224622000000')
-            ->expectsQuestion('Email (facultatif)', '')
+            ->expectsQuestion('Email', 'issa@gmail.com')
+            ->expectsQuestion('Code reçu par email (6 chiffres)', '123456')
             ->expectsQuestion('Mot de passe (min. 8 caractères, majuscule + minuscule + symbole)', 'Sup3r$ecretPwd')
             ->assertExitCode(1);
 
@@ -166,10 +168,29 @@ class InstallAppTest extends TestCase
             ->expectsQuestion('Prénom', 'Issa')
             ->expectsQuestion('Nom', 'BARRY')
             ->expectsQuestion('Téléphone (format international, ex: +224622000000)', '+224622000099')
-            ->expectsQuestion('Email (facultatif)', '')
+            ->expectsQuestion('Email', 'autre@gmail.com')
+            ->expectsQuestion('Code reçu par email (6 chiffres)', '123456')
             ->expectsQuestion('Mot de passe (min. 8 caractères, majuscule + minuscule + symbole)', 'Sup3r$ecretPwd')
             ->assertExitCode(1);
 
         $this->assertSame(1, Organization::count());
+    }
+
+    public function test_en_saas_lemail_reste_facultatif_via_cli(): void
+    {
+        config(['app.deployment_mode' => 'saas']);
+
+        $this->artisan('app:install')
+            ->expectsQuestion("Nom de l'entreprise", 'ELM Test')
+            ->expectsQuestion("Domaine d'activité de l'entreprise", DomaineActivite::COMMERCE_DISTRIBUTION->label())
+            ->expectsQuestion('Prénom', 'Issa')
+            ->expectsQuestion('Nom', 'BARRY')
+            ->expectsQuestion('Téléphone (format international, ex: +224622000000)', '+224622000000')
+            ->expectsQuestion('Email (facultatif)', '')
+            ->expectsQuestion('Mot de passe (min. 8 caractères, majuscule + minuscule + symbole)', 'Sup3r$ecretPwd')
+            ->assertExitCode(0);
+
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000000'))->firstOrFail();
+        $this->assertNull($user->email);
     }
 }

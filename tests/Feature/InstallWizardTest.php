@@ -28,6 +28,14 @@ class InstallWizardTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * Email par défaut de payload() — pré-vérifié dans setUp() pour que tous les tests qui
+     * n'ont rien à voir avec la règle email (contenu du domaine, téléphone, mot de passe...)
+     * n'aient pas à répéter le cycle OTP. Depuis que l'email est obligatoire en on_premise (mode
+     * par défaut, cf. config/app.php), la quasi-totalité des posts /install en ont besoin.
+     */
+    private const DEFAULT_EMAIL = 'issa@gmail.com';
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -36,6 +44,14 @@ class InstallWizardTest extends TestCase
         // ailleurs (comportement métier) — le désactiver ici évite que le grand nombre de
         // requêtes de cette suite sur les mêmes routes /install* ne se percute lui-même.
         $this->withoutMiddleware(ThrottleRequests::class);
+
+        $this->preVerifyEmail(self::DEFAULT_EMAIL);
+    }
+
+    private function preVerifyEmail(string $email): void
+    {
+        app(OtpService::class)->generate($email, InstallationService::EMAIL_OTP_CONTEXT);
+        app(OtpService::class)->markVerified($email, InstallationService::EMAIL_OTP_CONTEXT);
     }
 
     private function payload(array $overrides = []): array
@@ -46,7 +62,7 @@ class InstallWizardTest extends TestCase
                 'prenom' => 'Issa',
                 'nom' => 'BARRY',
                 'telephone' => '+224622000000',
-                'email' => null,
+                'email' => self::DEFAULT_EMAIL,
                 'password' => 'Sup3r$ecretPwd',
                 'password_confirmation' => 'Sup3r$ecretPwd',
             ],
@@ -81,10 +97,16 @@ class InstallWizardTest extends TestCase
 
         $this->get('/install')->assertInertia(fn ($page) => $page->component('Install/Token'));
 
+        // Deuxième admin distinct : email et téléphone doivent différer du premier
+        // (user_auth_identities.normalized_value est unique GLOBALEMENT, pas par organisation —
+        // cf. UserAuthIdentity). Un nouveau code doit aussi être vérifié pour cette adresse : le
+        // précédent, lié à self::DEFAULT_EMAIL, a été consommé (clear()) par la 1ère installation.
+        $this->preVerifyEmail('issa2@gmail.com');
+
         $this->withSession(['install_token_verified' => true])
             ->post('/install', $this->payload([
                 'organisation' => ['nom' => 'ELM Test 2'],
-                'admin' => ['telephone' => '+224622000001'],
+                'admin' => ['telephone' => '+224622000001', 'email' => 'issa2@gmail.com'],
             ]))
             ->assertOk();
 
@@ -104,9 +126,13 @@ class InstallWizardTest extends TestCase
             ->post('/install', $this->payload())
             ->assertOk();
 
+        // Cf. commentaire de test_install_reste_accessible_apres_installation_en_saas : email et
+        // téléphone distincts (identité globale, pas scopée par organisation), nouveau code requis.
+        $this->preVerifyEmail('issa2@gmail.com');
+
         $this->withSession(['install_token_verified' => true])
             ->post('/install', $this->payload([
-                'admin' => ['telephone' => '+224622000001'],
+                'admin' => ['telephone' => '+224622000001', 'email' => 'issa2@gmail.com'],
             ]))
             ->assertOk();
 
@@ -245,7 +271,7 @@ class InstallWizardTest extends TestCase
                 'prenom' => 'Issa',
                 'nom' => 'BARRY',
                 'telephone' => '+224622000000',
-                'email' => null,
+                'email' => self::DEFAULT_EMAIL,
                 'password' => 'Sup3r$ecretPwd',
             ],
         ];
@@ -270,32 +296,132 @@ class InstallWizardTest extends TestCase
     {
         // example.com a un enregistrement MX "null" (RFC 7505, IANA) et est donc rejeté par la
         // règle `email:dns` du contrôleur — utiliser un domaine mail réel pour ce test.
-        $email = 'issa@gmail.com';
-        app(OtpService::class)->generate($email, InstallationService::EMAIL_OTP_CONTEXT);
-        app(OtpService::class)->markVerified($email, InstallationService::EMAIL_OTP_CONTEXT);
-
-        $this->post('/install', $this->payload([
-            'admin' => ['email' => $email],
-        ]))->assertOk();
+        // (déjà pré-vérifié dans setUp() puisqu'il s'agit de self::DEFAULT_EMAIL)
+        $this->post('/install', $this->payload())->assertOk();
 
         $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000000'))->firstOrFail();
-        $this->assertSame($email, $user->email);
+        $this->assertSame(self::DEFAULT_EMAIL, $user->email);
         $this->assertTrue($user->hasVerifiedEmail());
     }
 
     /**
      * "Email saisi ≠ email vérifié" (cf. InstallationService::install()) : sans passer par
      * sendEmailCode()/verifyEmailCode() au préalable, l'installation doit être refusée — jamais
-     * de verified_at renseigné du seul fait d'avoir tapé une adresse dans le formulaire.
+     * de verified_at renseigné du seul fait d'avoir tapé une adresse dans le formulaire. Adresse
+     * délibérément différente de self::DEFAULT_EMAIL (pré-vérifié dans setUp()).
      */
     public function test_installation_refusee_si_lemail_nest_jamais_ete_verifie(): void
     {
         $this->post('/install', $this->payload([
-            'admin' => ['email' => 'issa@gmail.com'],
+            'admin' => ['email' => 'jamais-verifie@gmail.com'],
         ]))->assertSessionHasErrors('admin.email');
 
         $this->assertFalse(AppInstallation::isInstalled());
         $this->assertDatabaseMissing('organizations', ['slug' => 'elm-test']);
+    }
+
+    // ── Règle email selon le mode de déploiement ──────────────────────────────────
+
+    /**
+     * En on_premise (mode par défaut, cf. config/app.php), l'email du Super Admin devient
+     * obligatoire — contrairement au reste de l'application (Login, Register, invitations...),
+     * qui n'est pas concerné par cette règle propre à /install.
+     */
+    public function test_on_premise_refuse_linstallation_sans_email(): void
+    {
+        config(['app.deployment_mode' => 'on_premise']);
+
+        $this->post('/install', $this->payload([
+            'admin' => ['email' => null],
+        ]))->assertSessionHasErrors('admin.email');
+
+        $this->assertFalse(AppInstallation::isInstalled());
+    }
+
+    public function test_on_premise_refuse_un_email_au_format_invalide(): void
+    {
+        config(['app.deployment_mode' => 'on_premise']);
+
+        $this->post('/install', $this->payload([
+            'admin' => ['email' => 'pas-un-email'],
+        ]))->assertSessionHasErrors('admin.email');
+
+        $this->assertFalse(AppInstallation::isInstalled());
+    }
+
+    public function test_on_premise_email_verifie_permet_de_terminer_linstallation(): void
+    {
+        config(['app.deployment_mode' => 'on_premise']);
+
+        // self::DEFAULT_EMAIL est déjà pré-vérifié dans setUp().
+        $this->post('/install', $this->payload())
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Install/Success'));
+
+        $this->assertTrue(AppInstallation::isInstalled());
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000000'))->firstOrFail();
+        $this->assertTrue($user->hasVerifiedEmail());
+    }
+
+    public function test_saas_installation_reussit_sans_email(): void
+    {
+        config(['app.deployment_mode' => 'saas', 'app.install_token' => 'ma-cle-secrete']);
+
+        $this->withSession(['install_token_verified' => true])
+            ->post('/install', $this->payload(['admin' => ['email' => null]]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Install/Success'));
+
+        $this->assertTrue(AppInstallation::isInstalled());
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000000'))->firstOrFail();
+        $this->assertNull($user->email);
+    }
+
+    public function test_saas_avec_email_non_verifie_est_refuse(): void
+    {
+        config(['app.deployment_mode' => 'saas', 'app.install_token' => 'ma-cle-secrete']);
+
+        $this->withSession(['install_token_verified' => true])
+            ->post('/install', $this->payload(['admin' => ['email' => 'jamais-verifie@gmail.com']]))
+            ->assertSessionHasErrors('admin.email');
+
+        $this->assertFalse(AppInstallation::isInstalled());
+    }
+
+    public function test_saas_avec_email_verifie_reussit(): void
+    {
+        config(['app.deployment_mode' => 'saas', 'app.install_token' => 'ma-cle-secrete']);
+
+        // self::DEFAULT_EMAIL est déjà pré-vérifié dans setUp().
+        $this->withSession(['install_token_verified' => true])
+            ->post('/install', $this->payload())
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Install/Success'));
+
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000000'))->firstOrFail();
+        $this->assertSame(self::DEFAULT_EMAIL, $user->email);
+        $this->assertTrue($user->hasVerifiedEmail());
+    }
+
+    /**
+     * Le label affiché ("Email *" vs "Email (facultatif)") dépend de isSaas() — transmis tel quel
+     * au composant Vue, jamais recalculé indépendamment côté frontend (cf. Wizard.vue::isSaas).
+     */
+    public function test_le_wizard_expose_is_saas_au_frontend(): void
+    {
+        config(['app.deployment_mode' => 'on_premise']);
+        $this->get('/install')->assertInertia(fn ($page) => $page
+            ->component('Install/Wizard')
+            ->where('isSaas', false)
+        );
+
+        config(['app.deployment_mode' => 'saas', 'app.install_token' => 'ma-cle-secrete']);
+        $this->withSession(['install_token_verified' => true])
+            ->get('/install')
+            ->assertInertia(fn ($page) => $page
+                ->component('Install/Wizard')
+                ->where('isSaas', true)
+            );
     }
 
     /**

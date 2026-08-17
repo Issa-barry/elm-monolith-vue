@@ -5,6 +5,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ArrowLeft, Save } from 'lucide-vue-next';
 import { computed } from 'vue';
+import { type CapaciteRow, type GroupeCapaciteOption } from './partials/CapacitesEditor.vue';
 import VehiculeForm from './partials/VehiculeForm.vue';
 
 interface Option {
@@ -14,8 +15,6 @@ interface Option {
 interface TypeOption {
     value: string;
     label: string;
-    capacite_defaut: number;
-    capacite_defaut_bouteilles: number | null;
 }
 interface SiteOption {
     id: string;
@@ -30,6 +29,7 @@ const props = defineProps<{
     proprietaires: Option[];
     types: TypeOption[];
     categories_vehicule: CategorieOption[];
+    groupes_capacite: GroupeCapaciteOption[];
     initial_proprietaire_id: string | null;
     sites: SiteOption[];
     default_site_id: string | null;
@@ -63,6 +63,7 @@ const form = useForm({
     livraison_logistique: false,
     photo: null as File | null,
     is_active: true,
+    capacites: [] as CapaciteRow[],
 });
 
 const canSubmit = computed(() => {
@@ -124,6 +125,7 @@ function submit() {
                 :proprietaires="proprietaires"
                 :types="types"
                 :categories-vehicule="categories_vehicule"
+                :groupes-capacite="groupes_capacite"
                 :sites="sites"
                 :can-change-site="can_change_site"
                 :default-proprietaire-id="default_proprietaire_id"

@@ -489,7 +489,7 @@ class CommandeVenteController extends Controller
                     'nom' => $vehicule->nom_vehicule,
                     'immatriculation' => $vehicule->immatriculation,
                     'type' => $vehicule->typeVehicule?->nom,
-                    'capacite_packs' => $vehicule->typeVehicule?->capacite_defaut,
+                    'capacites' => $this->vehiculeCapaciteService->capacitesParGroupeAvecNoms($vehicule),
                     'proprietaire_nom' => $vehicule->proprietaire
                         ? trim($vehicule->proprietaire->prenom.' '.$vehicule->proprietaire->nom)
                         : null,
@@ -1080,7 +1080,7 @@ class CommandeVenteController extends Controller
                 return [
                     'id' => $p->id,
                     'nom' => $p->nom,
-                    'categorie_id' => $p->categorie_id,
+                    'groupe_capacite_id' => $p->groupe_capacite_id,
                     'prix_vente' => (int) ($variante?->prix_vente ?? 0),
                     'prix_usine' => (int) ($variante?->prix_usine ?? 0),
                 ];
@@ -1091,7 +1091,7 @@ class CommandeVenteController extends Controller
     {
         return Vehicule::with([
             'typeVehicule',
-            'typeVehicule.capacites.categorie',
+            'capacites.groupeCapacite',
             'equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'chauffeur'),
             'equipe.membres.livreur',
         ])
@@ -1104,42 +1104,16 @@ class CommandeVenteController extends Controller
                 'id' => $v->id,
                 'nom_vehicule' => $v->nom_vehicule,
                 'immatriculation' => $v->immatriculation,
-                // Capacité portée exclusivement par le type du véhicule (décision produit du
-                // 16/08/2026, cf. VehiculeCapaciteService) — jamais par le véhicule lui-même.
-                'capacite_packs' => $v->typeVehicule?->capacite_defaut !== null
-                    ? (int) $v->typeVehicule->capacite_defaut
-                    : null,
-                // Plafonds par catégorie (Sachet, Bouteille, ...) — même calcul que le contrôle
-                // serveur (VehiculeCapaciteService::capacitesParCategorie), pour que le
-                // frontend affiche exactement ce que le backend va vérifier. Vide tant que
-                // l'organisation n'a rien configuré : le formulaire retombe alors sur
-                // capacite_packs (régime legacy).
-                'capacites_categorie' => $this->capacitesCategorieProps($v),
+                // Plafonds par groupe de capacité (Sachets, Bouteilles, ...), propres à ce
+                // véhicule — aucun héritage depuis le type, même calcul que le contrôle serveur
+                // (VehiculeCapaciteService::capacitesParGroupe), pour que le frontend affiche
+                // exactement ce que le backend va vérifier. Vide = véhicule non limité.
+                'capacites' => $this->vehiculeCapaciteService->capacitesParGroupeAvecNoms($v),
                 'livreur_nom' => $v->equipe?->livreurs->first()?->libelleAffichage(),
                 'livreur_telephone' => $v->equipe?->membres
                     ->firstWhere('role', 'chauffeur')
                     ?->livreur?->telephone,
             ]);
-    }
-
-    /**
-     * @return array<int, array{categorie_id: string, categorie_nom: string, capacite_max: int}>
-     */
-    private function capacitesCategorieProps(Vehicule $v): array
-    {
-        $noms = [];
-        foreach ($v->typeVehicule?->capacites ?? [] as $c) {
-            $noms[$c->categorie_id] = $c->categorie?->nom ?? 'Catégorie';
-        }
-
-        return $this->vehiculeCapaciteService->capacitesParCategorie($v)
-            ->map(fn (int $max, string $categorieId) => [
-                'categorie_id' => $categorieId,
-                'categorie_nom' => $noms[$categorieId] ?? 'Catégorie',
-                'capacite_max' => $max,
-            ])
-            ->values()
-            ->all();
     }
 
     private function clientsActifs(string $orgId): Collection

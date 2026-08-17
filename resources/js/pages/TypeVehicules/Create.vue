@@ -5,7 +5,6 @@ import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/vue3';
-import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -16,9 +15,6 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const form = useForm({
     nom: '',
-    capacite_defaut: null as number | null,
-    capacite_defaut_bouteilles: null as number | null,
-    unite_capacite: 'sachets',
     description: '',
     is_active: true,
 });
@@ -38,7 +34,9 @@ function submit() {
                     Nouveau type de véhicule
                 </h1>
                 <p class="mt-1 text-sm text-muted-foreground">
-                    Définissez un nouveau type pour votre flotte.
+                    Définissez un nouveau type pour votre flotte. Un type
+                    n'est qu'une classification — la capacité maximale de
+                    chargement se règle individuellement sur chaque véhicule.
                 </p>
             </div>
 
@@ -63,83 +61,6 @@ function submit() {
                     >
                         {{ form.errors.nom }}
                     </p>
-                </div>
-
-                <div class="grid gap-5 sm:grid-cols-2">
-                    <div>
-                        <Label for="capacite_defaut" class="mb-1.5 block">
-                            Capacité par défaut
-                            <span class="text-destructive">*</span>
-                        </Label>
-                        <InputNumber
-                            id="capacite_defaut"
-                            v-model="form.capacite_defaut"
-                            :min="1"
-                            :max="99999"
-                            :use-grouping="false"
-                            class="w-full"
-                            :class="{
-                                'p-invalid': form.errors.capacite_defaut,
-                            }"
-                        />
-                        <p
-                            v-if="form.errors.capacite_defaut"
-                            class="mt-1 text-xs text-destructive"
-                        >
-                            {{ form.errors.capacite_defaut }}
-                        </p>
-                    </div>
-
-                    <div>
-                        <Label for="unite_capacite" class="mb-1.5 block"
-                            >Unité
-                            <span class="text-destructive">*</span></Label
-                        >
-                        <InputText
-                            id="unite_capacite"
-                            v-model="form.unite_capacite"
-                            class="w-full"
-                            :class="{ 'p-invalid': form.errors.unite_capacite }"
-                            placeholder="sachets"
-                        />
-                        <p
-                            v-if="form.errors.unite_capacite"
-                            class="mt-1 text-xs text-destructive"
-                        >
-                            {{ form.errors.unite_capacite }}
-                        </p>
-                    </div>
-
-                    <div>
-                        <Label
-                            for="capacite_defaut_bouteilles"
-                            class="mb-1.5 block"
-                        >
-                            Capacité par défaut (bouteilles)
-                        </Label>
-                        <InputNumber
-                            id="capacite_defaut_bouteilles"
-                            v-model="form.capacite_defaut_bouteilles"
-                            :min="1"
-                            :max="99999"
-                            :use-grouping="false"
-                            class="w-full"
-                            :class="{
-                                'p-invalid':
-                                    form.errors.capacite_defaut_bouteilles,
-                            }"
-                        />
-                        <p
-                            v-if="form.errors.capacite_defaut_bouteilles"
-                            class="mt-1 text-xs text-destructive"
-                        >
-                            {{ form.errors.capacite_defaut_bouteilles }}
-                        </p>
-                        <p class="mt-1 text-xs text-muted-foreground">
-                            Laisser vide si ce type ne transporte pas de
-                            bouteilles.
-                        </p>
-                    </div>
                 </div>
 
                 <div>

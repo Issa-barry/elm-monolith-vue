@@ -11,9 +11,6 @@ import { computed, ref } from 'vue';
 interface TypeVehiculeRow {
     id: string;
     nom: string;
-    capacite_defaut: number;
-    capacite_defaut_bouteilles: number | null;
-    unite_capacite: string;
     description: string | null;
     is_active: boolean;
     vehicules_count: number;
@@ -122,10 +119,6 @@ function destroy(id: string) {
                             class="border-b text-left text-xs font-semibold tracking-wider text-muted-foreground uppercase"
                         >
                             <th class="px-4 py-3">Nom</th>
-                            <th class="px-4 py-3 text-right">
-                                Capacité défaut
-                            </th>
-                            <th class="px-4 py-3 text-right">Bouteilles</th>
                             <th class="px-4 py-3 text-center">Statut</th>
                             <th class="px-4 py-3 text-center">Véhicules</th>
                             <th class="px-4 py-3" />
@@ -145,15 +138,6 @@ function destroy(id: string) {
                                 >
                                     {{ type.description }}
                                 </p>
-                            </td>
-                            <td class="px-4 py-3 text-right font-mono">
-                                {{ type.capacite_defaut }}
-                                {{ type.unite_capacite }}
-                            </td>
-                            <td
-                                class="px-4 py-3 text-right font-mono text-muted-foreground"
-                            >
-                                {{ type.capacite_defaut_bouteilles ?? '—' }}
                             </td>
                             <td class="px-4 py-3 text-center">
                                 <span
@@ -197,7 +181,7 @@ function destroy(id: string) {
                         </tr>
                         <tr v-if="typesFiltres.length === 0">
                             <td
-                                colspan="6"
+                                colspan="4"
                                 class="px-4 py-10 text-center text-sm text-muted-foreground"
                             >
                                 Aucun type de véhicule trouvé.

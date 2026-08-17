@@ -265,12 +265,21 @@ class InstallationService
                 'admin.password',
             );
 
-            // Email facultatif, mais s'il est renseigné il doit avoir été réellement vérifié par
-            // code (cf. InstallWizardController::verifyEmailCode() / InstallApp) — jamais marqué
-            // vérifié du seul fait d'avoir été saisi. isVerified() ne lit que le cache OTP, écrit
-            // uniquement après succès d'une vérification réelle : rien n'est jamais créé en base
-            // tant que cette étape n'a pas réellement réussi (cf. docblock de classe).
+            // Email : facultatif en saas, OBLIGATOIRE en on_premise (cf. isSaas() — même mécanisme
+            // que isLocked()/resolveOrganization(), jamais une deuxième lecture indépendante du
+            // mode). Dans les deux modes, s'il est renseigné il doit avoir été réellement vérifié
+            // par code (cf. InstallWizardController::verifyEmailCode() / InstallApp) — jamais
+            // marqué vérifié du seul fait d'avoir été saisi. isVerified() ne lit que le cache OTP,
+            // écrit uniquement après succès d'une vérification réelle : rien n'est jamais créé en
+            // base tant que cette étape n'a pas réellement réussi (cf. docblock de classe).
             $emailFourni = trim((string) ($admin['email'] ?? '')) !== '';
+
+            if (! $this->isSaas() && ! $emailFourni) {
+                throw ValidationException::withMessages([
+                    'admin.email' => "L'adresse email est obligatoire pour cette installation.",
+                ]);
+            }
+
             if ($emailFourni && ! app(OtpService::class)->isVerified($admin['email'], self::EMAIL_OTP_CONTEXT)) {
                 throw ValidationException::withMessages([
                     'admin.email' => 'Veuillez vérifier votre adresse email avant de continuer.',
@@ -384,7 +393,7 @@ class InstallationService
 
             $site = Site::create([
                 'organization_id' => $user->organization_id,
-                'nom' => app(SiteNamingService::class)->nextName($user->organization_id, $type, $quartier),
+                'nom' => app(SiteNamingService::class)->generateName($type, $quartier),
                 'type' => $type->value,
                 'ville' => trim($data['ville']),
                 'quartier' => $quartier,

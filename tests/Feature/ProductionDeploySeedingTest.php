@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Enums\DomaineActivite;
 use App\Models\AppInstallation;
 use App\Models\Organization;
+use App\Services\InstallationService;
+use App\Services\OtpService;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Middleware\ThrottleRequests;
@@ -29,12 +31,20 @@ class ProductionDeploySeedingTest extends TestCase
 {
     use RefreshDatabase;
 
+    private const EMAIL = 'issa@gmail.com';
+
     protected function setUp(): void
     {
         parent::setUp();
 
         $this->withoutMiddleware(ThrottleRequests::class);
         config(['app.deployment_mode' => 'on_premise']);
+
+        // Email obligatoire en on_premise (cf. InstallationService::install()) — pré-vérifié ici
+        // pour que payload() reste utilisable telle quelle par tous les tests de ce fichier, qui
+        // ne portent pas sur la règle email elle-même (cf. InstallWizardTest pour ça).
+        app(OtpService::class)->generate(self::EMAIL, InstallationService::EMAIL_OTP_CONTEXT);
+        app(OtpService::class)->markVerified(self::EMAIL, InstallationService::EMAIL_OTP_CONTEXT);
     }
 
     private function payload(array $overrides = []): array
@@ -45,7 +55,7 @@ class ProductionDeploySeedingTest extends TestCase
                 'prenom' => 'Issa',
                 'nom' => 'BARRY',
                 'telephone' => '+224622000000',
-                'email' => null,
+                'email' => self::EMAIL,
                 'password' => 'Sup3r$ecretPwd',
                 'password_confirmation' => 'Sup3r$ecretPwd',
             ],

@@ -96,7 +96,7 @@ interface VehiculeRow {
     immatriculation: string | null;
     photo_url: string | null;
     type_label: string;
-    capacite_packs: number | null;
+    capacites: { groupe_capacite_nom: string; capacite_max: number }[];
     categorie: string | null;
     is_active: boolean;
     equipe_detail: EquipeDetail | null;
@@ -594,11 +594,22 @@ function closeLightbox() {
                                         {{ vehicule.type_label }}
                                     </td>
                                     <td class="px-4 py-3">
-                                        {{
-                                            vehicule.capacite_packs !== null
-                                                ? `${vehicule.capacite_packs} sachets`
-                                                : '-'
-                                        }}
+                                        <template
+                                            v-if="vehicule.capacites.length === 0"
+                                        >
+                                            -
+                                        </template>
+                                        <template v-else>
+                                            <span
+                                                v-for="(c, i) in vehicule.capacites"
+                                                :key="c.groupe_capacite_nom"
+                                            >
+                                                {{ i > 0 ? ' · ' : '' }}{{
+                                                    c.groupe_capacite_nom
+                                                }}
+                                                : {{ c.capacite_max }}
+                                            </span>
+                                        </template>
                                     </td>
                                     <td class="px-4 py-3">
                                         <div class="flex items-center gap-1.5">

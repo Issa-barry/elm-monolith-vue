@@ -90,6 +90,11 @@ const vehiculesItems = computed((): NavItem[] => {
             title: 'Types de véhicules',
             href: '/backoffice/type-vehicules',
         });
+    if (can('vehicules.update'))
+        sub.push({
+            title: 'Groupes de capacité',
+            href: '/backoffice/vehicules/groupes-capacite',
+        });
     if (can('propositions.read'))
         sub.push({
             title: 'Propositions',

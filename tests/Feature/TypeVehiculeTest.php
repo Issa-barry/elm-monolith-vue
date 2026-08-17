@@ -72,8 +72,6 @@ class TypeVehiculeTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('type-vehicules.store'), [
                 'nom' => 'Fourgon',
-                'capacite_defaut' => 500,
-                'unite_capacite' => 'packs',
                 'is_active' => true,
             ])
             ->assertRedirect(route('type-vehicules.index'));
@@ -81,27 +79,6 @@ class TypeVehiculeTest extends TestCase
         $this->assertDatabaseHas('type_vehicules', [
             'organization_id' => $this->org->id,
             'nom' => 'Fourgon',
-            'capacite_defaut' => 500,
-        ]);
-    }
-
-    public function test_store_creates_type_avec_capacite_defaut_bouteilles(): void
-    {
-        $this->actingAs($this->user)
-            ->post(route('type-vehicules.store'), [
-                'nom' => 'Minibus XL',
-                'capacite_defaut' => 200,
-                'capacite_defaut_bouteilles' => 50,
-                'unite_capacite' => 'packs',
-                'is_active' => true,
-            ])
-            ->assertRedirect(route('type-vehicules.index'));
-
-        $this->assertDatabaseHas('type_vehicules', [
-            'organization_id' => $this->org->id,
-            'nom' => 'Minibus XL',
-            'capacite_defaut' => 200,
-            'capacite_defaut_bouteilles' => 50,
         ]);
     }
 
@@ -109,30 +86,15 @@ class TypeVehiculeTest extends TestCase
     {
         $this->actingAs($this->user)
             ->post(route('type-vehicules.store'), [])
-            ->assertSessionHasErrors(['nom', 'capacite_defaut', 'unite_capacite']);
+            ->assertSessionHasErrors(['nom']);
     }
 
     public function test_store_fails_with_duplicate_nom_in_same_org(): void
     {
         // "Camion" is already seeded by HasOrgAndUser — try to create a duplicate
         $this->actingAs($this->user)
-            ->post(route('type-vehicules.store'), [
-                'nom' => 'Camion',
-                'capacite_defaut' => 200,
-                'unite_capacite' => 'packs',
-            ])
+            ->post(route('type-vehicules.store'), ['nom' => 'Camion'])
             ->assertSessionHasErrors('nom');
-    }
-
-    public function test_store_fails_with_invalid_capacite(): void
-    {
-        $this->actingAs($this->user)
-            ->post(route('type-vehicules.store'), [
-                'nom' => 'Test',
-                'capacite_defaut' => 0,
-                'unite_capacite' => 'packs',
-            ])
-            ->assertSessionHasErrors('capacite_defaut');
     }
 
     // ── edit ──────────────────────────────────────────────────────────────────
@@ -164,8 +126,6 @@ class TypeVehiculeTest extends TestCase
         $this->actingAs($this->user)
             ->put(route('type-vehicules.update', $type), [
                 'nom' => 'Moto',
-                'capacite_defaut' => 30,
-                'unite_capacite' => 'packs',
                 'is_active' => true,
             ])
             ->assertRedirect(route('type-vehicules.index'));
@@ -173,7 +133,6 @@ class TypeVehiculeTest extends TestCase
         $this->assertDatabaseHas('type_vehicules', [
             'id' => $type->id,
             'nom' => 'Moto',
-            'capacite_defaut' => 30,
         ]);
     }
 
@@ -183,7 +142,7 @@ class TypeVehiculeTest extends TestCase
 
         $this->actingAs($this->user)
             ->put(route('type-vehicules.update', $type), [])
-            ->assertSessionHasErrors(['nom', 'capacite_defaut', 'unite_capacite']);
+            ->assertSessionHasErrors(['nom']);
     }
 
     // ── destroy ───────────────────────────────────────────────────────────────

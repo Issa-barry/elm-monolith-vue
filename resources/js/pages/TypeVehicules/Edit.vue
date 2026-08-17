@@ -2,32 +2,20 @@
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import VehiculeCapacitesCard from '@/components/VehiculeCapacitesCard.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/vue3';
-import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 
 interface TypeVehiculeData {
     id: string;
     nom: string;
-    capacite_defaut: number;
-    capacite_defaut_bouteilles: number | null;
-    unite_capacite: string;
     description: string | null;
     is_active: boolean;
-    capacites: Array<{
-        id: string;
-        categorie_id: string;
-        categorie_nom: string | null;
-        capacite_max: number;
-    }>;
 }
 
 const props = defineProps<{
     type: TypeVehiculeData;
-    categories: Array<{ value: string; label: string }>;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -39,9 +27,6 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     _method: 'PUT',
     nom: props.type.nom,
-    capacite_defaut: props.type.capacite_defaut,
-    capacite_defaut_bouteilles: props.type.capacite_defaut_bouteilles,
-    unite_capacite: props.type.unite_capacite,
     description: props.type.description ?? '',
     is_active: props.type.is_active,
 });
@@ -62,6 +47,11 @@ function submit() {
                 </h1>
                 <p class="mt-1 text-sm font-medium text-muted-foreground">
                     {{ type.nom }}
+                </p>
+                <p class="mt-1 text-xs text-muted-foreground">
+                    Un type de véhicule n'est qu'une classification (nom) —
+                    la capacité maximale de chargement se règle
+                    individuellement sur chaque véhicule.
                 </p>
             </div>
 
@@ -85,82 +75,6 @@ function submit() {
                     >
                         {{ form.errors.nom }}
                     </p>
-                </div>
-
-                <div class="grid gap-5 sm:grid-cols-2">
-                    <div>
-                        <Label for="capacite_defaut" class="mb-1.5 block">
-                            Capacité par défaut
-                            <span class="text-destructive">*</span>
-                        </Label>
-                        <InputNumber
-                            id="capacite_defaut"
-                            v-model="form.capacite_defaut"
-                            :min="1"
-                            :max="99999"
-                            :use-grouping="false"
-                            class="w-full"
-                            :class="{
-                                'p-invalid': form.errors.capacite_defaut,
-                            }"
-                        />
-                        <p
-                            v-if="form.errors.capacite_defaut"
-                            class="mt-1 text-xs text-destructive"
-                        >
-                            {{ form.errors.capacite_defaut }}
-                        </p>
-                    </div>
-
-                    <div>
-                        <Label for="unite_capacite" class="mb-1.5 block"
-                            >Unité
-                            <span class="text-destructive">*</span></Label
-                        >
-                        <InputText
-                            id="unite_capacite"
-                            v-model="form.unite_capacite"
-                            class="w-full"
-                            :class="{ 'p-invalid': form.errors.unite_capacite }"
-                        />
-                        <p
-                            v-if="form.errors.unite_capacite"
-                            class="mt-1 text-xs text-destructive"
-                        >
-                            {{ form.errors.unite_capacite }}
-                        </p>
-                    </div>
-
-                    <div>
-                        <Label
-                            for="capacite_defaut_bouteilles"
-                            class="mb-1.5 block"
-                        >
-                            Capacité par défaut (bouteilles)
-                        </Label>
-                        <InputNumber
-                            id="capacite_defaut_bouteilles"
-                            v-model="form.capacite_defaut_bouteilles"
-                            :min="1"
-                            :max="99999"
-                            :use-grouping="false"
-                            class="w-full"
-                            :class="{
-                                'p-invalid':
-                                    form.errors.capacite_defaut_bouteilles,
-                            }"
-                        />
-                        <p
-                            v-if="form.errors.capacite_defaut_bouteilles"
-                            class="mt-1 text-xs text-destructive"
-                        >
-                            {{ form.errors.capacite_defaut_bouteilles }}
-                        </p>
-                        <p class="mt-1 text-xs text-muted-foreground">
-                            Laisser vide si ce type ne transporte pas de
-                            bouteilles.
-                        </p>
-                    </div>
                 </div>
 
                 <div>
@@ -195,14 +109,6 @@ function submit() {
                     </Button>
                 </div>
             </form>
-
-            <VehiculeCapacitesCard
-                class="mt-6"
-                :capacites="type.capacites"
-                :categories="categories"
-                :capacite-legacy="type.capacite_defaut"
-                :sync-url="`/backoffice/type-vehicules/${type.id}/capacites`"
-            />
         </div>
     </AppLayout>
 </template>

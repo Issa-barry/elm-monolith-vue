@@ -29,7 +29,7 @@ interface EquipeData {
     vehicule_immatriculation: string | null;
     vehicule_type_label: string | null;
     vehicule_categorie: string | null;
-    vehicule_capacite_packs: number | null;
+    vehicule_capacites: { groupe_capacite_nom: string; capacite_max: number }[];
     proprietaire_nom: string | null;
     proprietaire_telephone: string | null;
     taux_commission_proprietaire: number | null;
@@ -183,11 +183,18 @@ function membreLabel(membre: Membre): string {
                     </p>
                     <p class="mt-1 text-xs text-muted-foreground">
                         Capacité:
-                        {{
-                            equipe.vehicule_capacite_packs === null
-                                ? '—'
-                                : `${equipe.vehicule_capacite_packs} sachets`
-                        }}
+                        <template v-if="equipe.vehicule_capacites.length === 0">
+                            —
+                        </template>
+                        <template v-else>
+                            <span
+                                v-for="(c, i) in equipe.vehicule_capacites"
+                                :key="c.groupe_capacite_nom"
+                            >
+                                {{ i > 0 ? ' · ' : '' }}{{ c.groupe_capacite_nom }} :
+                                {{ c.capacite_max }}
+                            </span>
+                        </template>
                     </p>
                 </div>
             </div>

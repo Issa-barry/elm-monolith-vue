@@ -42,6 +42,7 @@ use App\Http\Controllers\EquipeLivraisonController;
 use App\Http\Controllers\FactureVenteController;
 use App\Http\Controllers\FournisseurController;
 use App\Http\Controllers\FraisCommissionPartController;
+use App\Http\Controllers\GroupeCapaciteController;
 use App\Http\Controllers\InstallWizardController;
 use App\Http\Controllers\LivreurController;
 use App\Http\Controllers\MediaController;
@@ -266,7 +267,14 @@ Route::prefix('backoffice')->group(function () {
             });
 
             Route::resource('type-vehicules', TypeVehiculeController::class)->except(['show']);
-            Route::put('type-vehicules/{typeVehicule}/capacites', [TypeVehiculeController::class, 'syncCapacites'])->name('type-vehicules.capacites.sync');
+            // Groupes de capacité avant vehicules/{vehicule} pour éviter toute ambiguïté de route,
+            // même logique que propositions-vehicules ci-dessus.
+            Route::prefix('vehicules/groupes-capacite')->name('groupes-capacite.')->group(function () {
+                Route::get('/', [GroupeCapaciteController::class, 'index'])->name('index');
+                Route::post('/', [GroupeCapaciteController::class, 'store'])->name('store');
+                Route::put('/{groupeCapacite}', [GroupeCapaciteController::class, 'update'])->name('update');
+                Route::delete('/{groupeCapacite}', [GroupeCapaciteController::class, 'destroy'])->name('destroy');
+            });
             Route::resource('vehicules', VehiculeController::class);
             Route::post('vehicules/{vehicule}/frais', [VehiculeController::class, 'storeFrais'])->name('vehicules.frais.store');
             Route::patch('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'updateFrais'])->name('vehicules.frais.update');

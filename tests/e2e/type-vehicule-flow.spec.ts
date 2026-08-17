@@ -18,14 +18,12 @@ test('login + create type vehicule + verify in list + edit + delete', async ({
     await page.goto('/backoffice/type-vehicules');
     await expect(page).toHaveURL(/\/type-vehicules$/);
 
-    // Step 2: Create
+    // Step 2: Create — un type n'est qu'une classification (nom), aucune capacité (décision
+    // produit du 17/08/2026 : la capacité appartient exclusivement au véhicule).
     await page.getByRole('link', { name: /nouveau type/i }).click();
     await page.waitForURL(/\/type-vehicules\/create$/);
 
     await page.locator('#nom').fill(nom);
-    // PrimeVue InputNumber renders a <span> wrapper — target the inner <input>
-    await page.locator('#capacite_defaut input').fill('250');
-    await page.locator('#unite_capacite').fill('packs');
 
     await page.getByRole('button', { name: /créer/i }).click();
     await page.waitForURL(/\/type-vehicules$/, { timeout: 15_000 });
@@ -41,11 +39,7 @@ test('login + create type vehicule + verify in list + edit + delete', async ({
     });
 
     await page.locator('#nom').fill(nomModifie);
-    // Exact match : la fiche a aussi un bouton "Enregistrer les capacités" (par catégorie),
-    // que /enregistrer/i matcherait aussi — cf. VehiculeCapacitesCard.vue.
-    await page
-        .getByRole('button', { name: 'Enregistrer', exact: true })
-        .click();
+    await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
     await page.waitForURL(/\/type-vehicules$/, { timeout: 15_000 });
 
     await expect(page.getByText(nomModifie)).toBeVisible({ timeout: 10_000 });

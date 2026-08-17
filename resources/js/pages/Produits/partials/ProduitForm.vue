@@ -40,6 +40,11 @@ interface Categorie {
     parent_id: string | null;
 }
 
+interface GroupeCapaciteOption {
+    id: string;
+    nom: string;
+}
+
 interface Limites {
     max_photos_produit: number;
     max_options_produit: number;
@@ -72,6 +77,9 @@ interface Variante {
 interface FormData {
     nom: string;
     categorie_id: string | null;
+    /** Groupe de capacité (Sachets, Bouteilles...) — indépendant de la catégorie catalogue,
+     * consommé uniquement par le contrôle de capacité véhicule. */
+    groupe_capacite_id: string | null;
     fournisseur_id: string | null;
     code_barres: string | null;
     produit_type_id: string | null;
@@ -100,6 +108,7 @@ const props = withDefaults(
         types: ProduitTypeOption[];
         statuts: Option[];
         categories?: Categorie[];
+        groupesCapacite?: GroupeCapaciteOption[];
         fournisseurs?: FournisseurOption[];
         optionsCatalogue?: OptionCatalogue[];
         limites?: Limites;
@@ -116,6 +125,7 @@ const props = withDefaults(
     }>(),
     {
         categories: () => [],
+        groupesCapacite: () => [],
         fournisseurs: () => [],
         optionsCatalogue: () => [],
         limites: undefined,
@@ -437,6 +447,37 @@ const depasseLimiteVariantes = computed(
                         class="mt-1 text-xs text-destructive"
                     >
                         {{ errors.categorie_id }}
+                    </p>
+                </div>
+
+                <!-- Groupe de capacité -->
+                <div>
+                    <Label class="mb-1.5 block">Groupe de capacité</Label>
+                    <Dropdown
+                        :model-value="form.groupe_capacite_id"
+                        @update:model-value="
+                            $emit('update:form', {
+                                ...form,
+                                groupe_capacite_id: $event,
+                            })
+                        "
+                        :options="groupesCapacite"
+                        option-label="nom"
+                        option-value="id"
+                        show-clear
+                        placeholder="Aucun"
+                        class="w-full"
+                        :class="{ 'p-invalid': errors.groupe_capacite_id }"
+                    />
+                    <p
+                        v-if="errors.groupe_capacite_id"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.groupe_capacite_id }}
+                    </p>
+                    <p v-else class="mt-1 text-xs text-muted-foreground">
+                        Utilisé pour le contrôle de capacité véhicule (ex :
+                        Sachets, Bouteilles) — sans rapport avec la catégorie.
                     </p>
                 </div>
 

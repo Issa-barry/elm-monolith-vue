@@ -40,7 +40,7 @@ interface VehiculeInfo {
     nom: string;
     immatriculation: string | null;
     type: string | null;
-    capacite_packs: number | null;
+    capacites: { groupe_capacite_nom: string; capacite_max: number }[];
     proprietaire_nom: string | null;
     proprietaire_telephone: string | null;
     proprietaire_code_phone_pays: string | null;
@@ -627,11 +627,20 @@ function fmtTel(tel: string | null | undefined): string {
             <div class="flex justify-between">
                 <span class="text-sm text-muted-foreground">Capacité</span>
                 <span class="text-sm font-medium">
-                    {{
-                        selectedVehicule?.capacite_packs != null
-                            ? selectedVehicule.capacite_packs + ' packs'
-                            : '—'
-                    }}
+                    <template
+                        v-if="!selectedVehicule?.capacites.length"
+                    >
+                        —
+                    </template>
+                    <template v-else>
+                        <span
+                            v-for="(c, i) in selectedVehicule.capacites"
+                            :key="c.groupe_capacite_nom"
+                        >
+                            {{ i > 0 ? ' · ' : '' }}{{ c.groupe_capacite_nom }} :
+                            {{ c.capacite_max }}
+                        </span>
+                    </template>
                 </span>
             </div>
             <div class="border-t pt-3">

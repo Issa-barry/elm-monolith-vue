@@ -24,6 +24,11 @@ interface Categorie {
     parent_id: string | null;
 }
 
+interface GroupeCapaciteOption {
+    id: string;
+    nom: string;
+}
+
 interface FournisseurOption {
     id: string;
     nom_complet: string;
@@ -52,6 +57,7 @@ const props = defineProps<{
     types: ProduitTypeOption[];
     statuts: Option[];
     categories: Categorie[];
+    groupesCapacite: GroupeCapaciteOption[];
     fournisseurs: FournisseurOption[];
     optionsCatalogue: OptionCatalogue[];
     limites: Limites;
@@ -67,6 +73,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     nom: '',
     categorie_id: null as string | null,
+    groupe_capacite_id: null as string | null,
     fournisseur_id: null as string | null,
     code_barres: null as string | null,
     produit_type_id: props.types[0]?.value ?? null,
@@ -132,6 +139,7 @@ function submit() {
                 :types="types"
                 :statuts="statuts"
                 :categories="categories"
+                :groupes-capacite="groupesCapacite"
                 :fournisseurs="fournisseurs"
                 :options-catalogue="optionsCatalogue"
                 :limites="limites"
