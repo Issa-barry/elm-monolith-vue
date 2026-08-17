@@ -412,6 +412,111 @@ class SiteImportTest extends TestCase
         $this->assertStringContainsString('code_facultatif', $erreur['erreurs'][0]);
     }
 
+    public function test_confirmer_matches_db_code_001_with_imported_code_1(): void
+    {
+        // "Site Principal" (créé par initOrgAndUser, cf. NB ci-dessus) porte
+        // déjà le code "001" — utilisé tel quel pour tester littéralement le
+        // cas 001 (base) / 1 (fichier), demandé explicitement.
+        $principal = Site::where('organization_id', $this->org->id)->where('code', '001')->firstOrFail();
+
+        $json = $this->confirmer([
+            $this->ligne(['code_facultatif' => '1', 'nom' => 'Site Principal Renomme', 'telephone_obligatoire' => '+224622671016']),
+        ]);
+
+        $this->assertTrue($json['execute']);
+        $this->assertSame(0, $json['crees']);
+        $this->assertSame(1, $json['mis_a_jour']);
+
+        $principal->refresh();
+        $this->assertSame('Site Principal Renomme', $principal->nom);
+        $this->assertSame('001', $principal->code);
+    }
+
+    public function test_confirmer_matches_db_code_1_with_imported_code_001(): void
+    {
+        // Sens inverse du test précédent : la base stocke "1" (sans
+        // padding), le fichier importe "001".
+        $existant = Site::create([
+            'organization_id' => $this->org->id, 'code' => '1', 'nom' => 'Ancien Format',
+            'type' => 'depot', 'ville' => 'Conakry', 'quartier' => 'Centre',
+        ]);
+
+        $json = $this->confirmer([
+            $this->ligne(['code_facultatif' => '001', 'nom' => 'Nouveau Nom', 'telephone_obligatoire' => '+224622671016']),
+        ]);
+
+        $this->assertTrue($json['execute']);
+        $this->assertSame(0, $json['crees']);
+        $this->assertSame(1, $json['mis_a_jour']);
+
+        $existant->refresh();
+        $this->assertSame('Nouveau Nom', $existant->nom);
+        $this->assertSame('1', $existant->code);
+    }
+
+    public function test_confirmer_resolves_parent_referenced_by_code_1_when_db_code_is_001(): void
+    {
+        $principal = Site::where('organization_id', $this->org->id)->where('code', '001')->firstOrFail();
+
+        $json = $this->confirmer([
+            $this->ligne(['nom' => 'Cba', 'type' => 'Usine', 'site_parent_facultatif' => '1', 'telephone_obligatoire' => '+224626078393']),
+        ]);
+
+        $this->assertTrue($json['execute']);
+        $cba = Site::where('organization_id', $this->org->id)->where('nom', 'Cba')->firstOrFail();
+        $this->assertSame($principal->id, $cba->parent_id);
+    }
+
+    public function test_confirmer_resolves_parent_declared_earlier_in_same_file_via_leading_zero_tolerant_code(): void
+    {
+        // Le parent n'existe pas encore en base : il est déclaré (avec un
+        // code "0-paddé") sur une ligne PRÉCÉDENTE du même fichier, et une
+        // autre ligne le référence sans les zéros initiaux.
+        $json = $this->confirmer([
+            $this->ligne(['code_facultatif' => '021', 'nom' => 'Nouveau Siege', 'telephone_obligatoire' => '+224664039160']),
+            $this->ligne(['nom' => 'Cba', 'type' => 'Usine', 'site_parent_facultatif' => '21', 'telephone_obligatoire' => '+224626078393']),
+        ]);
+
+        $this->assertTrue($json['execute']);
+        $this->assertSame(2, $json['crees']);
+
+        $parent = Site::where('organization_id', $this->org->id)->where('nom', 'Nouveau Siege')->firstOrFail();
+        $cba = Site::where('organization_id', $this->org->id)->where('nom', 'Cba')->firstOrFail();
+        $this->assertSame('021', $parent->code);
+        $this->assertSame($parent->id, $cba->parent_id);
+    }
+
+    public function test_analyser_flags_duplicate_code_001_and_1_in_same_file(): void
+    {
+        $json = $this->analyser([
+            $this->ligne(['code_facultatif' => '001', 'nom' => 'Site A', 'telephone_obligatoire' => '+224622671016']),
+            $this->ligne(['code_facultatif' => '1', 'nom' => 'Site B', 'telephone_obligatoire' => '+224622671017']),
+        ]);
+
+        $this->assertSame(1, $json['nb_erreurs']);
+        $erreur = collect($json['lignes'])->firstWhere('statut', 'erreur');
+        $this->assertNotNull($erreur);
+        $this->assertStringContainsString('code_facultatif', $erreur['erreurs'][0]);
+    }
+
+    public function test_confirmer_alphanumeric_code_does_not_collide_with_numeric_code(): void
+    {
+        // "AG001" ne doit jamais être réduit à "1" : il ne doit donc pas
+        // rapprocher (ni modifier) le site dont le code numérique vaut "001".
+        $numerique = Site::where('organization_id', $this->org->id)->where('code', '001')->firstOrFail();
+
+        $json = $this->confirmer([
+            $this->ligne(['code_facultatif' => 'AG001', 'nom' => 'Agence Externe', 'telephone_obligatoire' => '+224622671016']),
+        ]);
+
+        $this->assertTrue($json['execute']);
+        $this->assertSame(1, $json['crees']);
+        $this->assertSame(0, $json['mis_a_jour']);
+
+        $numerique->refresh();
+        $this->assertNotSame('Agence Externe', $numerique->nom);
+    }
+
     public function test_confirmer_creates_site_with_explicit_code_when_code_not_in_db(): void
     {
         $json = $this->confirmer([
@@ -634,5 +739,95 @@ class SiteImportTest extends TestCase
         $this->assertSame(0, $json['nb_erreurs']);
         $this->assertSame('nouveau', $json['lignes'][0]['statut']);
         $this->assertNotEmpty($json['lignes'][0]['avertissements']);
+    }
+
+    // ── site parent : résolu par nom OU par code ────────────────────────────
+
+    public function test_confirmer_resolves_parent_referenced_by_code(): void
+    {
+        Site::create([
+            'organization_id' => $this->org->id, 'code' => '101', 'nom' => 'Matoto',
+            'type' => 'siege', 'ville' => 'Conakry', 'quartier' => 'Matoto',
+        ]);
+
+        $json = $this->confirmer([
+            $this->ligne(['nom' => 'Cba', 'type' => 'Usine', 'site_parent_facultatif' => '101', 'telephone_obligatoire' => '+224626078393']),
+        ]);
+
+        $this->assertTrue($json['execute']);
+        $cba = Site::where('organization_id', $this->org->id)->where('nom', 'Cba')->firstOrFail();
+        $matoto = Site::where('organization_id', $this->org->id)->where('nom', 'Matoto')->firstOrFail();
+        $this->assertSame($matoto->id, $cba->parent_id);
+    }
+
+    public function test_confirmer_resolves_parent_by_code_ignoring_leading_zeros(): void
+    {
+        Site::create([
+            'organization_id' => $this->org->id, 'code' => '007', 'nom' => 'Tombolia',
+            'type' => 'depot', 'ville' => 'Conakry', 'quartier' => 'Tombolia',
+        ]);
+
+        $json = $this->confirmer([
+            $this->ligne(['nom' => 'Cba', 'type' => 'Usine', 'site_parent_facultatif' => '7', 'telephone_obligatoire' => '+224626078393']),
+        ]);
+
+        $this->assertTrue($json['execute']);
+        $cba = Site::where('organization_id', $this->org->id)->where('nom', 'Cba')->firstOrFail();
+        $tombolia = Site::where('organization_id', $this->org->id)->where('nom', 'Tombolia')->firstOrFail();
+        $this->assertSame($tombolia->id, $cba->parent_id);
+    }
+
+    public function test_confirmer_parent_reference_survives_parent_rename_in_same_file(): void
+    {
+        // Cas observé en usage réel : la ligne 1 renomme "Matoto" en "Matoto
+        // Centre" via code_facultatif (mise à jour), tandis que d'autres
+        // lignes du même fichier référencent encore l'ANCIEN nom "Matoto"
+        // comme site_parent_facultatif. La résolution doit continuer à
+        // pointer vers le bon site — pas se casser parce que le nom a changé
+        // entre l'analyse du parent et l'exécution.
+        $matoto = Site::create([
+            'organization_id' => $this->org->id, 'code' => '101', 'nom' => 'Matoto',
+            'type' => 'siege', 'ville' => 'Conakry', 'quartier' => 'Matoto',
+        ]);
+
+        $json = $this->confirmer([
+            $this->ligne(['code_facultatif' => '101', 'nom' => 'Matoto Centre', 'telephone_obligatoire' => '+224664039160']),
+            $this->ligne(['nom' => 'Cba', 'type' => 'Usine', 'site_parent_facultatif' => 'Matoto', 'telephone_obligatoire' => '+224626078393']),
+        ]);
+
+        $this->assertTrue($json['execute']);
+        $this->assertSame(1, $json['mis_a_jour']);
+        $this->assertSame(1, $json['crees']);
+
+        $matoto->refresh();
+        $this->assertSame('Matoto Centre', $matoto->nom);
+
+        $cba = Site::where('organization_id', $this->org->id)->where('nom', 'Cba')->firstOrFail();
+        $this->assertSame($matoto->id, $cba->parent_id);
+    }
+
+    public function test_analyser_flags_self_reference_via_parent_code(): void
+    {
+        $json = $this->analyser([
+            $this->ligne(['code_facultatif' => '101', 'nom' => 'Matoto', 'site_parent_facultatif' => '101', 'telephone_obligatoire' => '+224664039160']),
+        ]);
+
+        $this->assertSame(1, $json['nb_erreurs']);
+        $this->assertStringContainsString('site_parent_facultatif', $json['lignes'][0]['erreurs'][0]);
+    }
+
+    public function test_analyser_flags_self_reference_via_parent_old_name_after_rename(): void
+    {
+        Site::create([
+            'organization_id' => $this->org->id, 'code' => '101', 'nom' => 'Matoto',
+            'type' => 'siege', 'ville' => 'Conakry', 'quartier' => 'Matoto',
+        ]);
+
+        $json = $this->analyser([
+            $this->ligne(['code_facultatif' => '101', 'nom' => 'Matoto Centre', 'site_parent_facultatif' => 'Matoto', 'telephone_obligatoire' => '+224664039160']),
+        ]);
+
+        $this->assertSame(1, $json['nb_erreurs']);
+        $this->assertStringContainsString('site_parent_facultatif', $json['lignes'][0]['erreurs'][0]);
     }
 }

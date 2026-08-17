@@ -10,8 +10,8 @@ import { expect, test } from '@playwright/test';
 import {
     completeInstallWizard,
     completeOnboarding,
+    fillOtpCode,
     fillStep2Form,
-    firstOtpBox,
     loginAfterInstall,
     OTP_FIXED_CODE,
 } from './helpers';
@@ -53,7 +53,7 @@ test('un mauvais code est refusé avant validation du bon code', async ({ page }
         page.getByRole('heading', { name: /vérifiez votre email/i }),
     ).toBeVisible({ timeout: 15_000 });
 
-    await firstOtpBox(page).fill('000000');
+    await fillOtpCode(page, '000000');
     await page.getByRole('button', { name: /^vérifier$/i }).click();
     await expect(page.getByText(/le code saisi est incorrect/i)).toBeVisible({
         timeout: 10_000,
@@ -62,7 +62,7 @@ test('un mauvais code est refusé avant validation du bon code', async ({ page }
 
     // Toujours sur l'état de vérification : ni la confirmation de mot de passe (déjà saisi
     // avant l'envoi du code) ni un retour au formulaire principal ne sont requis pour corriger.
-    await firstOtpBox(page).fill(OTP_FIXED_CODE);
+    await fillOtpCode(page, OTP_FIXED_CODE);
     await page.getByRole('button', { name: /^vérifier$/i }).click();
     await expect(page.getByText(/adresse email vérifiée/i)).toBeVisible({
         timeout: 10_000,
@@ -104,7 +104,7 @@ test('modifier l’adresse email après envoi invalide l’ancien code', async (
     // InstallEmailVerificationTest::test_changer_dadresse_ninherite_pas_de_la_verification_precedente.
     // Ce test-ci couvre le comportement UI observable : après "Modifier l'adresse email" + nouvelle
     // adresse, un nouveau code est bien demandé et le parcours se termine normalement.
-    await firstOtpBox(page).fill(OTP_FIXED_CODE);
+    await fillOtpCode(page, OTP_FIXED_CODE);
     await page.getByRole('button', { name: /^vérifier$/i }).click();
     await expect(page.getByText(/adresse email vérifiée/i)).toBeVisible({
         timeout: 10_000,

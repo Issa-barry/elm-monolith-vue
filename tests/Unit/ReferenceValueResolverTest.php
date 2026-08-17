@@ -135,4 +135,72 @@ class ReferenceValueResolverTest extends TestCase
         $this->assertSame('1', ReferenceValueResolver::normalizeNumericCode('1'));
         $this->assertNull(ReferenceValueResolver::normalizeNumericCode('RC-01'));
     }
+
+    // ── normalizeCodeKey() : clé de comparaison canonique pour les codes ────
+    // Utilisée partout où un code de site est comparé (SiteImportParser) —
+    // cf. matrice demandée : 001 = 01 = 1, 0001 = 1, 002 = 2, 010 = 10,
+    // 000 = 0 (jamais vide), " 001 " = 1, et jamais de réduction abusive
+    // d'un code alphanumérique.
+
+    public function test_normalize_code_key_treats_leading_zero_variants_as_equal(): void
+    {
+        $key = ReferenceValueResolver::normalizeCodeKey('001');
+        $this->assertSame($key, ReferenceValueResolver::normalizeCodeKey('01'));
+        $this->assertSame($key, ReferenceValueResolver::normalizeCodeKey('1'));
+        $this->assertSame($key, ReferenceValueResolver::normalizeCodeKey('0001'));
+    }
+
+    public function test_normalize_code_key_002_equals_2(): void
+    {
+        $this->assertSame(
+            ReferenceValueResolver::normalizeCodeKey('002'),
+            ReferenceValueResolver::normalizeCodeKey('2')
+        );
+    }
+
+    public function test_normalize_code_key_only_strips_leading_zeros_not_trailing(): void
+    {
+        // "010" représente la valeur 10, pas 1 : seuls les zéros en PRÉFIXE
+        // sont ignorés.
+        $key010 = ReferenceValueResolver::normalizeCodeKey('010');
+        $this->assertSame($key010, ReferenceValueResolver::normalizeCodeKey('10'));
+        $this->assertNotSame($key010, ReferenceValueResolver::normalizeCodeKey('1'));
+    }
+
+    public function test_normalize_code_key_all_zeros_stays_functionally_zero_never_empty(): void
+    {
+        $key = ReferenceValueResolver::normalizeCodeKey('0');
+        $this->assertNotSame('', $key);
+        $this->assertSame($key, ReferenceValueResolver::normalizeCodeKey('00'));
+        $this->assertSame($key, ReferenceValueResolver::normalizeCodeKey('000'));
+    }
+
+    public function test_normalize_code_key_trims_surrounding_whitespace(): void
+    {
+        $this->assertSame(
+            ReferenceValueResolver::normalizeCodeKey('1'),
+            ReferenceValueResolver::normalizeCodeKey(' 001 ')
+        );
+    }
+
+    public function test_normalize_code_key_never_reduces_alphanumeric_code_to_its_digits(): void
+    {
+        // "AG001" ne doit jamais rapprocher un site de code "001" (donc "1").
+        $numeric = ReferenceValueResolver::normalizeCodeKey('001');
+        $this->assertNotSame($numeric, ReferenceValueResolver::normalizeCodeKey('AG001'));
+        $this->assertNotSame($numeric, ReferenceValueResolver::normalizeCodeKey('DEP01'));
+        $this->assertNotSame($numeric, ReferenceValueResolver::normalizeCodeKey('SITE-001'));
+    }
+
+    public function test_normalize_code_key_is_stable_across_php_scalar_types_from_excel(): void
+    {
+        // Excel/PhpSpreadsheet peut transmettre "001" comme chaîne, entier ou
+        // flottant selon le format de cellule ; le résultat métier doit être
+        // identique quelle que soit la représentation reçue une fois castée
+        // en chaîne (ce que fait systématiquement l'appelant, cf.
+        // SiteImportParser — jamais de cast numérique direct).
+        $viaString = ReferenceValueResolver::normalizeCodeKey('001');
+        $this->assertSame($viaString, ReferenceValueResolver::normalizeCodeKey((string) 1));
+        $this->assertSame($viaString, ReferenceValueResolver::normalizeCodeKey((string) 1.0));
+    }
 }

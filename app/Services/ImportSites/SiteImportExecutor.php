@@ -124,7 +124,11 @@ class SiteImportExecutor
                     if ($data['parent_nom'] === null) {
                         continue;
                     }
-                    $parentId = $idsParNom[ImportTextNormalizer::normalize($data['parent_nom'])] ?? null;
+                    // Le parent peut déjà exister en base (résolu directement par
+                    // le parser via `parent_existing_id`, y compris par code) ou
+                    // être un autre site créé dans ce même fichier (résolu ici
+                    // par son nom, une fois qu'il a un id — cf. docblock).
+                    $parentId = $data['parent_existing_id'] ?? ($idsParNom[ImportTextNormalizer::normalize($data['parent_nom'])] ?? null);
                     if ($parentId === null) {
                         // Garde-fou : déjà validé à l'analyse, ne devrait jamais arriver.
                         continue;
@@ -139,7 +143,7 @@ class SiteImportExecutor
                         // Garde-fou : déjà validé à l'analyse, ne devrait jamais arriver.
                         continue;
                     }
-                    $parentId = $idsParNom[ImportTextNormalizer::normalize($data['parent_nom'])] ?? null;
+                    $parentId = $data['parent_existing_id'] ?? ($idsParNom[ImportTextNormalizer::normalize($data['parent_nom'])] ?? null);
                     if ($parentId === null) {
                         continue;
                     }

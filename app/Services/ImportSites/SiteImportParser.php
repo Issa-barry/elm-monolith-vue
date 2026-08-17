@@ -22,11 +22,17 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
  * pour éviter tout écart entre ce qui a été prévisualisé et ce qui est
  * enregistré — même principe que ImportFlotteParser.
  *
- * Le site parent (site_parent_facultatif) est résolu par NOM plutôt que par
- * ID technique : c'est ce que l'utilisateur métier connaît, et ça permet à un
- * même fichier de contenir à la fois un site et ses enfants (cf. § validation
- * ci-dessous, qui accepte un parent référencé ailleurs dans le fichier, pas
- * seulement déjà en base).
+ * Le site parent (site_parent_facultatif) est résolu par NOM OU par CODE
+ * (tolérant aux zéros initiaux, même mécanisme que `code_facultatif`) plutôt
+ * que par ID technique : c'est ce que l'utilisateur métier connaît, et ça
+ * permet à un même fichier de contenir à la fois un site et ses enfants (cf.
+ * § validation ci-dessous, qui accepte un parent référencé ailleurs dans le
+ * fichier, pas seulement déjà en base). Le code est la référence la plus
+ * stable des deux : un nom peut être changé par cette même ligne d'import
+ * (rapprochement par `code_facultatif`, voir plus bas) — une autre ligne qui
+ * référencerait encore l'ancien nom comme parent doit continuer à résoudre
+ * vers le bon site, d'où la résolution directe vers l'ID existant en base
+ * quand elle est possible (cf. `existing_id` sur les candidats parent).
  *
  * `code_facultatif` est l'identifiant métier de rapprochement : quand il est
  * renseigné et correspond (après normalisation) au code d'un site déjà
@@ -41,25 +47,15 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
  * (ressusciterait un enregistrement archivé) ne sont acceptables ici.
  *
  * La comparaison des codes tolère l'absence de zéros initiaux ("1" doit
- * rapprocher "001", cf. ReferenceValueResolver::normalizeNumericCode() — déjà
- * utilisé ailleurs dans le projet pour ce même besoin de rapprochement de
- * code de site) : un utilisateur qui retape un code depuis un tableur ne
- * conserve pas toujours le zéro-padding d'origine. La valeur STOCKÉE n'est
- * en revanche jamais réécrite — cf. codeKey().
+ * rapprocher "001") via ReferenceValueResolver::normalizeCodeKey() — LA seule
+ * fonction de normalisation de code à utiliser dans cette classe (recherche
+ * d'existant, doublon fichier, code archivé, résolution de parent) : un
+ * utilisateur qui retape un code depuis un tableur ne conserve pas toujours
+ * le zéro-padding d'origine. La valeur STOCKÉE n'est en revanche jamais
+ * réécrite — seule la clé de comparaison est normalisée.
  */
 class SiteImportParser
 {
-    /**
-     * Clé de comparaison pour un code de site : équivalence numérique
-     * tolérante aux zéros initiaux ("1" == "001") pour les codes purement
-     * numériques, repli sur la normalisation texte standard sinon (codes
-     * alphanumériques). Jamais utilisée pour la valeur stockée.
-     */
-    private function codeKey(string $code): string
-    {
-        return ReferenceValueResolver::normalizeNumericCode($code) ?? ImportTextNormalizer::normalize($code);
-    }
-
     public function analyserFichier(string $absolutePath, string $orgId): array
     {
         $spreadsheet = IOFactory::load($absolutePath);
@@ -82,7 +78,7 @@ class SiteImportParser
         $idParNomExistant = $sitesExistants
             ->mapWithKeys(fn (Site $s) => [ImportTextNormalizer::normalize($s->nom) => $s->id]);
         $idParCodeExistant = $sitesExistants
-            ->mapWithKeys(fn (Site $s) => [$this->codeKey($s->code) => $s->id]);
+            ->mapWithKeys(fn (Site $s) => [ReferenceValueResolver::normalizeCodeKey($s->code) => $s->id]);
 
         // Codes de sites archivés (soft-deleted) de l'organisation : jamais
         // réutilisables (cf. Site::boot()), donc un import qui cible l'un
@@ -92,21 +88,34 @@ class SiteImportParser
         $codesArchives = Site::onlyTrashed()
             ->where('organization_id', $orgId)
             ->pluck('code')
-            ->map(fn ($c) => $this->codeKey((string) $c));
+            ->map(fn ($c) => ReferenceValueResolver::normalizeCodeKey((string) $c));
 
-        // Tous les noms présents dans le fichier (avant validation ligne à
-        // ligne) : un site_parent_facultatif peut désigner un site qui
-        // n'existe pas encore en base mais qui est une AUTRE ligne de ce
-        // même fichier — voir docblock de la classe.
-        $nomsDuFichier = $lignes
-            ->map(fn ($l) => trim((string) ($l['nom'] ?? '')))
-            ->filter(fn ($n) => $n !== '')
-            ->unique(fn ($n) => ImportTextNormalizer::normalize($n))
+        // Candidats "site parent" : chaque nom présent dans le fichier ou déjà
+        // en base peut être référencé par NOM ou par CODE (cf. docblock de la
+        // classe). `existing_id`, quand connu, permet de résoudre le parent
+        // directement vers l'enregistrement déjà en base — y compris quand
+        // CE MÊME fichier renomme ce site ou le rapproche par code — plutôt
+        // que de dépendre d'une re-résolution par nom à l'exécution qui
+        // échouerait silencieusement si le nom a changé entre-temps.
+        $candidatsFichier = $lignes
+            ->map(function ($l) use ($idParCodeExistant, $idParNomExistant) {
+                $nom = trim((string) ($l['nom'] ?? ''));
+                $code = trim((string) ($l['code_facultatif'] ?? ''));
+                if ($nom === '') {
+                    return null;
+                }
+                $existingId = $code !== ''
+                    ? $idParCodeExistant->get(ReferenceValueResolver::normalizeCodeKey($code))
+                    : $idParNomExistant->get(ImportTextNormalizer::normalize($nom));
+
+                return (object) ['nom' => $nom, 'code' => $code !== '' ? $code : null, 'existing_id' => $existingId];
+            })
+            ->filter()
+            ->unique(fn ($c) => ImportTextNormalizer::normalize($c->nom))
             ->values();
 
-        $candidatsParent = $nomsDuFichier
-            ->map(fn ($n) => (object) ['nom' => $n])
-            ->concat($sitesExistants->map(fn (Site $s) => (object) ['nom' => $s->nom]))
+        $candidatsParent = $candidatsFichier
+            ->concat($sitesExistants->map(fn (Site $s) => (object) ['nom' => $s->nom, 'code' => $s->code, 'existing_id' => $s->id]))
             ->unique(fn ($c) => ImportTextNormalizer::normalize($c->nom))
             ->values();
 
@@ -226,7 +235,7 @@ class SiteImportParser
                 $erreurs[] = "Ligne {$numeroLigne} — `code_facultatif` : ne peut pas dépasser 50 caractères.";
             } else {
                 $code = $codeSaisi;
-                $codeNormalise = $this->codeKey($code);
+                $codeNormalise = ReferenceValueResolver::normalizeCodeKey($code);
                 if (isset($premiereLigneParCode[$codeNormalise])) {
                     $erreurs[] = "Ligne {$numeroLigne} — `code_facultatif` : le code « {$code} » apparaît déjà ligne {$premiereLigneParCode[$codeNormalise]} de ce fichier.";
                 } else {
@@ -238,16 +247,44 @@ class SiteImportParser
             }
         }
 
-        // ── Site parent (facultatif, résolu par nom) ────────────────────────
+        // Le code, quand il est renseigné, est la SEULE clé de rapprochement pour
+        // cette ligne (prime sur le nom) — cf. docblock de la classe. Sans code,
+        // comportement historique inchangé : rapprochement par nom. Calculé ici
+        // (avant la résolution du site parent ci-dessous) car un auto-référencement
+        // par un ANCIEN nom/code (site qui se référencerait lui-même comme parent
+        // via un alias) doit être détectable.
+        if ($code !== null) {
+            $idExistant = $idParCodeExistant->get($codeNormalise);
+            $statut = $idExistant ? 'mise_a_jour' : 'nouveau';
+        } else {
+            $idExistant = $idParNomExistant->get($nomNormalise);
+            $statut = $idExistant ? 'existant' : 'nouveau';
+        }
+
+        // ── Site parent (facultatif, résolu par nom ou par code) ────────────
         $parentSaisi = trim((string) ($ligne['site_parent_facultatif'] ?? ''));
         $parentNom = null;
+        $parentExistingId = null;
         if ($parentSaisi !== '') {
-            if (ImportTextNormalizer::normalize($parentSaisi) === $nomNormalise) {
+            $autoReference = ImportTextNormalizer::normalize($parentSaisi) === $nomNormalise
+                || ($code !== null && ReferenceValueResolver::normalizeCodeKey($parentSaisi) === $codeNormalise);
+            if ($autoReference) {
                 $erreurs[] = "Ligne {$numeroLigne} — `site_parent_facultatif` : un site ne peut pas être son propre parent.";
             } else {
-                $parent = ReferenceValueResolver::matchExact($parentSaisi, $candidatsParent, fn ($c) => $c->nom);
-                if ($parent) {
+                $parent = ReferenceValueResolver::matchExact(
+                    $parentSaisi,
+                    $candidatsParent,
+                    [fn ($c) => $c->nom, fn ($c) => (string) ($c->code ?? '')],
+                    [fn ($c) => (string) ($c->code ?? '')]
+                );
+                if ($parent && $parent->existing_id !== null && $parent->existing_id === $idExistant) {
+                    // Auto-référencement indirect : ex. un site qui se renomme sur
+                    // cette même ligne et dont le parent pointe encore vers son
+                    // ancien nom/code.
+                    $erreurs[] = "Ligne {$numeroLigne} — `site_parent_facultatif` : un site ne peut pas être son propre parent.";
+                } elseif ($parent) {
                     $parentNom = $parent->nom;
+                    $parentExistingId = $parent->existing_id;
                     if ($parentNom !== $parentSaisi) {
                         $normalisations[] = "\"{$parentSaisi}\" → \"{$parentNom}\" (site parent)";
                     }
@@ -265,17 +302,6 @@ class SiteImportParser
 
         if (! empty($erreurs)) {
             return $this->erreur($numeroLigne, $nom, $erreurs, $normalisations);
-        }
-
-        // Le code, quand il est renseigné, est la SEULE clé de rapprochement pour
-        // cette ligne (prime sur le nom) — cf. docblock de la classe. Sans code,
-        // comportement historique inchangé : rapprochement par nom.
-        if ($code !== null) {
-            $idExistant = $idParCodeExistant->get($codeNormalise);
-            $statut = $idExistant ? 'mise_a_jour' : 'nouveau';
-        } else {
-            $idExistant = $idParNomExistant->get($nomNormalise);
-            $statut = $idExistant ? 'existant' : 'nouveau';
         }
 
         // Un nom "nouveau" mais proche d'un site déjà en base (ex: "Cba (Lansanaya,
@@ -315,6 +341,7 @@ class SiteImportParser
                 'description' => $description !== '' ? $description : null,
                 'description_fournie' => $descriptionFournie,
                 'parent_nom' => $parentNom,
+                'parent_existing_id' => $parentExistingId,
                 'parent_fourni' => $parentSaisi !== '',
                 'longitude' => $longitude,
                 'longitude_fournie' => $longitudeBrute !== '',

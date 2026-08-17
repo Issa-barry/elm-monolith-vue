@@ -26,9 +26,18 @@ export interface InstallScenario {
 
 const OTP_FIXED_CODE = '123456'; // .env.e2e fixe OTP_FIXED_CODE=123456 (cf. config/otp.php)
 
-/** Case de saisie du code (composant OtpCodeInput, sans id — ciblée par sa forme). */
-function firstOtpBox(page: Page) {
-    return page.locator('input[maxlength="1"]').first();
+/**
+ * Remplit les 6 cases du composant OtpCodeInput une par une (chemin de saisie normal, pas de
+ * collage) — Playwright's `Locator.fill()` respecte l'attribut `maxlength="1"` de chaque case,
+ * donc `fill('123456')` sur la première case seule ne pousserait qu'un chiffre unique et le
+ * bouton "Vérifier" resterait désactivé. Remplir chaque case correspond exactement à la saisie
+ * clavier réelle que le composant gère nativement (avance automatique du focus).
+ */
+async function fillOtpCode(page: Page, code: string): Promise<void> {
+    const boxes = page.locator('input[maxlength="1"]');
+    for (let i = 0; i < code.length; i++) {
+        await boxes.nth(i).fill(code[i]);
+    }
 }
 
 /** Remplit prénom/nom/téléphone/(email)/mot de passe et clique "Suivant". */
@@ -93,7 +102,7 @@ export async function completeInstallWizard(
         ).toBeVisible({ timeout: 15_000 });
         await expect(page.getByText(scenario.email)).toBeVisible();
 
-        await firstOtpBox(page).fill(OTP_FIXED_CODE);
+        await fillOtpCode(page, OTP_FIXED_CODE);
         await page.getByRole('button', { name: /^vérifier$/i }).click();
         await expect(page.getByText(/adresse email vérifiée/i)).toBeVisible({
             timeout: 15_000,
@@ -158,4 +167,4 @@ export async function completeOnboarding(
     await expect(page).toHaveURL(/\/backoffice\/dashboard/, { timeout: 20_000 });
 }
 
-export { firstOtpBox, fillStep2Form, OTP_FIXED_CODE };
+export { fillOtpCode, fillStep2Form, OTP_FIXED_CODE };
