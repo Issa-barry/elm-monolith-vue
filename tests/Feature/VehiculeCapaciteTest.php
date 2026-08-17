@@ -536,7 +536,7 @@ class VehiculeCapaciteTest extends TestCase
         $this->actingAs($this->user)
             ->get(route('vehicules.show', $vehicule))
             ->assertInertia(fn (Assert $page) => $page
-                ->where('vehicule.capacites', fn ($capacites) => count($capacites) === 1)
+                ->has('vehicule.capacites', 1)
                 ->where('vehicule.capacites.0.categorie_nom', 'Sachet eau')
             );
     }

@@ -131,7 +131,7 @@ class VehiculeController extends Controller
     {
         $this->authorize('viewAny', Vehicule::class);
 
-        $vehicules = Vehicule::with(['typeVehicule', 'site', 'proprietaire.user.sites', 'equipe.membres.livreur', 'capacites.groupeCapacite'])
+        $vehicules = Vehicule::with(['typeVehicule', 'site', 'proprietaire.user.sites', 'equipe.membres.livreur', 'capacites.categorie'])
             ->where('organization_id', auth()->user()->organization_id)
             ->orderBy('nom_vehicule')
             ->get()
@@ -241,7 +241,7 @@ class VehiculeController extends Controller
     {
         $this->authorize('view', $vehicule);
 
-        $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'equipe.membres.livreur', 'equipe.proprietaire', 'capacites.groupeCapacite']);
+        $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'equipe.membres.livreur', 'equipe.proprietaire', 'capacites.categorie']);
 
         $depenses = Depense::where('beneficiaire_type', 'vehicule')
             ->where('beneficiaire_id', $vehicule->id)
