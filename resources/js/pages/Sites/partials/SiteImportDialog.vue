@@ -8,7 +8,7 @@ import { computed, ref, watch } from 'vue';
 interface LigneResultat {
     numero_ligne: number;
     nom: string | null;
-    statut: 'nouveau' | 'existant' | 'erreur';
+    statut: 'nouveau' | 'existant' | 'mise_a_jour' | 'erreur';
     erreurs: string[];
     normalisations: string[];
     avertissements: string[];
@@ -18,10 +18,12 @@ interface ReponseImport {
     nb_lignes_total: number;
     nb_nouveaux: number;
     nb_existants: number;
+    nb_mises_a_jour: number;
     nb_erreurs: number;
     lignes: LigneResultat[];
     execute?: boolean;
     crees?: number;
+    mis_a_jour?: number;
     existants_ignores?: number;
 }
 
@@ -179,6 +181,9 @@ function fermer() {
                     <strong>telephone_obligatoire</strong>.
                     <strong>site_parent_facultatif</strong> désigne le nom d'un
                     site existant ou d'une autre ligne de ce même fichier.
+                    Renseignez <strong>code_facultatif</strong> avec le code
+                    d'un site déjà existant pour le mettre à jour au lieu d'en
+                    créer un nouveau lors d'un réimport.
                 </p>
                 <a
                     href="/backoffice/sites/import/modele"
@@ -242,6 +247,7 @@ function fermer() {
                             (rapport.crees ?? 0) > 1 ? 's' : ''
                         }}
                         créé{{ (rapport.crees ?? 0) > 1 ? 's' : '' }},
+                        {{ rapport.mis_a_jour ?? 0 }} mis à jour,
                         {{ rapport.existants_ignores }} déjà existant{{
                             (rapport.existants_ignores ?? 0) > 1 ? 's' : ''
                         }}
@@ -251,12 +257,20 @@ function fermer() {
                     </p>
                 </div>
 
-                <div v-else class="grid grid-cols-3 gap-3 text-center text-sm">
+                <div v-else class="grid grid-cols-4 gap-3 text-center text-sm">
                     <div class="rounded-lg border bg-card p-3">
                         <p class="text-2xl font-semibold">
                             {{ rapport.nb_nouveaux }}
                         </p>
                         <p class="text-xs text-muted-foreground">à créer</p>
+                    </div>
+                    <div class="rounded-lg border bg-card p-3">
+                        <p class="text-2xl font-semibold">
+                            {{ rapport.nb_mises_a_jour ?? 0 }}
+                        </p>
+                        <p class="text-xs text-muted-foreground">
+                            à mettre à jour
+                        </p>
                     </div>
                     <div class="rounded-lg border bg-card p-3">
                         <p class="text-2xl font-semibold">
@@ -355,6 +369,11 @@ function fermer() {
                                         v-if="l.statut === 'nouveau'"
                                         class="text-muted-foreground"
                                         >À créer</span
+                                    >
+                                    <span
+                                        v-else-if="l.statut === 'mise_a_jour'"
+                                        class="text-muted-foreground"
+                                        >À mettre à jour</span
                                     >
                                     <span v-else class="text-muted-foreground"
                                         >Déjà existant (ignoré)</span

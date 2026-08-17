@@ -237,5 +237,19 @@ class FortifyServiceProvider extends ServiceProvider
 
             return Limit::perMinute(10)->by($throttleKey);
         });
+
+        // OTP (vérification email pendant /install) : mêmes plafonds que otp-send/otp-verify,
+        // mais clé composite email+IP — l'entrée de la requête est `email`, pas `telephone`.
+        RateLimiter::for('otp-email-send', function (Request $request) {
+            $throttleKey = Str::transliterate(Str::lower($request->input('email', '')).'|'.$request->ip());
+
+            return Limit::perMinute(5)->by($throttleKey);
+        });
+
+        RateLimiter::for('otp-email-verify', function (Request $request) {
+            $throttleKey = Str::transliterate(Str::lower($request->input('email', '')).'|'.$request->ip());
+
+            return Limit::perMinute(10)->by($throttleKey);
+        });
     }
 }

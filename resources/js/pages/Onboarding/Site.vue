@@ -20,12 +20,9 @@ const props = defineProps<{
 }>();
 
 const form = useForm({
-    nom: '',
     type: null as string | null,
     ville: '',
     quartier: '',
-    localisation: '',
-    telephone: '',
 });
 
 // Les types suggérés (adaptés au domaine d'activité choisi à l'installation) sont mis en avant,
@@ -61,22 +58,6 @@ function submit() {
                 @submit.prevent="submit"
             >
                 <div class="grid gap-2">
-                    <Label for="site-nom"
-                        >Nom du site
-                        <span class="text-destructive">*</span></Label
-                    >
-                    <InputText
-                        id="site-nom"
-                        v-model="form.nom"
-                        class="w-full"
-                        :class="{ 'p-invalid': form.errors.nom }"
-                        placeholder="Siège, Boutique Matoto…"
-                        autofocus
-                    />
-                    <InputError :message="form.errors.nom" />
-                </div>
-
-                <div class="grid gap-2">
                     <Label
                         >Type de site
                         <span class="text-destructive">*</span></Label
@@ -91,6 +72,7 @@ function submit() {
                         placeholder="Sélectionner…"
                         class="w-full"
                         :class="{ 'p-invalid': form.errors.type }"
+                        autofocus
                     />
                     <InputError :message="form.errors.type" />
                 </div>
@@ -122,29 +104,6 @@ function submit() {
                         />
                         <InputError :message="form.errors.quartier" />
                     </div>
-                </div>
-
-                <div class="grid gap-2">
-                    <Label for="site-localisation"
-                        >Adresse / repère (facultatif)</Label
-                    >
-                    <InputText
-                        id="site-localisation"
-                        v-model="form.localisation"
-                        class="w-full"
-                    />
-                </div>
-
-                <div class="grid gap-2">
-                    <Label for="site-telephone"
-                        >Téléphone du site (facultatif)</Label
-                    >
-                    <InputText
-                        id="site-telephone"
-                        v-model="form.telephone"
-                        class="w-full"
-                        placeholder="+224622000000"
-                    />
                 </div>
 
                 <Button

@@ -55,14 +55,10 @@ class OnboardingSiteController extends Controller
         );
 
         $data = $request->validate([
-            'nom' => 'required|string|max:255',
             'type' => ['required', Rule::in(array_column(SiteType::cases(), 'value'))],
             'ville' => 'required|string|max:100',
             'quartier' => 'required|string|max:100',
-            'localisation' => 'nullable|string|max:255',
-            'telephone' => 'nullable|string|max:50',
         ], [
-            'nom.required' => 'Le nom du site est obligatoire.',
             'type.required' => 'Le type de site est obligatoire.',
             'ville.required' => 'La ville est obligatoire.',
             'quartier.required' => 'Le quartier est obligatoire.',

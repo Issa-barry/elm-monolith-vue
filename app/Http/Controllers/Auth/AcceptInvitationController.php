@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Http\Controllers\Concerns\HasOtpRateLimitResponse;
 use App\Http\Controllers\Controller;
 use App\Mail\OtpInvitationMail;
 use App\Models\Personne;
@@ -22,6 +23,8 @@ use Inertia\Response;
 
 class AcceptInvitationController extends Controller
 {
+    use HasOtpRateLimitResponse;
+
     /**
      * GET /invitations/accept/{token}
      * Render the onboarding stepper page (or an error state).
@@ -133,21 +136,6 @@ class AcceptInvitationController extends Controller
             'resent' => true,
             'cooldown_seconds' => $otp->resendCooldownSeconds(),
         ]);
-    }
-
-    /**
-     * Réponse 429 uniforme pour tout envoi/renvoi de code bloqué par une limite
-     * anti-spam, sans jamais préciser laquelle (cooldown, plafond horaire ou
-     * journalier) — seul le délai d'attente est communiqué au client.
-     */
-    private function tooManyRequestsResponse(int $waitSeconds): JsonResponse
-    {
-        $minutes = max(1, (int) ceil($waitSeconds / 60));
-
-        return response()->json([
-            'error' => "Vous avez demandé trop de codes. Réessayez dans {$minutes} minute".($minutes > 1 ? 's' : '').'.',
-            'retry_after_seconds' => $waitSeconds,
-        ], 429);
     }
 
     /**
