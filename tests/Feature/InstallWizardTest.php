@@ -226,6 +226,69 @@ class InstallWizardTest extends TestCase
         ]))->assertSessionHasErrors('admin.password');
     }
 
+    /**
+     * Le formulaire /install ne comporte plus de champ "Confirmer le mot de passe" (installation
+     * plus rapide, saisie une seule fois) — le serveur ne doit pas l'exiger non plus.
+     */
+    public function test_installation_reussit_sans_champ_password_confirmation(): void
+    {
+        $payload = [
+            'organisation' => ['nom' => 'ELM Test', 'domaine' => DomaineActivite::COMMERCE_DISTRIBUTION->value],
+            'admin' => [
+                'prenom' => 'Issa',
+                'nom' => 'BARRY',
+                'telephone' => '+224622000000',
+                'email' => null,
+                'password' => 'Sup3r$ecretPwd',
+            ],
+        ];
+
+        $this->post('/install', $payload)
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Install/Success'));
+
+        $this->assertTrue(AppInstallation::isInstalled());
+    }
+
+    public function test_mot_de_passe_trop_faible_est_rejete(): void
+    {
+        $this->post('/install', $this->payload([
+            'admin' => ['password' => 'faible', 'password_confirmation' => 'faible'],
+        ]))->assertSessionHasErrors('admin.password');
+
+        $this->assertFalse(AppInstallation::isInstalled());
+    }
+
+    public function test_email_est_persiste_quand_fourni(): void
+    {
+        // example.com a un enregistrement MX "null" (RFC 7505, IANA) et est donc rejeté par la
+        // règle `email:dns` du contrôleur — utiliser un domaine mail réel pour ce test.
+        $this->post('/install', $this->payload([
+            'admin' => ['email' => 'issa@gmail.com'],
+        ]))->assertOk();
+
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000000'))->firstOrFail();
+        $this->assertSame('issa@gmail.com', $user->email);
+        $this->assertTrue($user->hasVerifiedEmail());
+    }
+
+    /**
+     * Le sélecteur de pays de /install (PAYS_INSTALL dans Wizard.vue) restreint la saisie à
+     * Guinée/Sierra Leone côté UI, mais la résolution serveur (PhoneCountryInfo, libphonenumber)
+     * reste générique — un numéro sierra-léonais valide doit être accepté de bout en bout.
+     */
+    public function test_installation_reussit_avec_un_numero_sierra_leonais(): void
+    {
+        $this->post('/install', $this->payload([
+            'admin' => ['telephone' => '+23276123456'],
+        ]))->assertOk();
+
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+23276123456'))->firstOrFail();
+        $this->assertSame('SL', $user->code_pays);
+        $this->assertSame('Sierra Leone', $user->pays);
+        $this->assertSame('+232', $user->code_phone_pays);
+    }
+
     public function test_catalogue_par_defaut_est_toujours_cree(): void
     {
         $this->post('/install', $this->payload())->assertOk();

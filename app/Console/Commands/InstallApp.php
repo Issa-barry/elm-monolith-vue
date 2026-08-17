@@ -63,7 +63,7 @@ class InstallApp extends Command
         $nom = $this->ask('Nom');
         $telephone = $this->askTelephone($service);
         $email = $this->ask('Email (facultatif)') ?: null;
-        [$password, $confirmation] = $this->askPassword($service);
+        $password = $this->askPassword($service);
 
         $this->newLine();
         $this->info('Création...');
@@ -77,7 +77,6 @@ class InstallApp extends Command
                     'telephone' => $telephone,
                     'email' => $email,
                     'password' => $password,
-                    'password_confirmation' => $confirmation,
                 ],
             );
         } catch (ValidationException $e) {
@@ -156,19 +155,17 @@ class InstallApp extends Command
     }
 
     /**
-     * Saisie masquée (jamais affichée, jamais loguée) + confirmation — cf. Password::defaults()
-     * dans AppServiceProvider pour les règles de complexité (min 8, majuscule+minuscule, symbole).
-     *
-     * @return array{0: string, 1: string}
+     * Saisie masquée (jamais affichée, jamais loguée), une seule fois — pas de confirmation, pour
+     * une installation plus rapide. Cf. Password::defaults() dans AppServiceProvider pour les
+     * règles de complexité (min 8, majuscule+minuscule, symbole).
      */
-    private function askPassword(InstallationService $service): array
+    private function askPassword(InstallationService $service): string
     {
         while (true) {
-            $password = $this->secret('Mot de passe (min. 8 caractères, majuscule + minuscule + symbole)');
-            $confirmation = $this->secret('Confirmer le mot de passe');
+            $password = $this->secret('Mot de passe (min. 8 caractères, majuscule + minuscule + symbole)') ?? '';
 
             try {
-                $service->validatePassword($password ?? '', $confirmation ?? '');
+                $service->validatePassword($password, $password);
             } catch (ValidationException $e) {
                 foreach ($e->errors()['password'] ?? [] as $message) {
                     $this->error($message);
@@ -177,7 +174,7 @@ class InstallApp extends Command
                 continue;
             }
 
-            return [$password, $confirmation];
+            return $password;
         }
     }
 }

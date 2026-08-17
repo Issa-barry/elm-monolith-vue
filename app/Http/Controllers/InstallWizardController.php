@@ -100,7 +100,11 @@ class InstallWizardController extends Controller
             'admin.telephone' => 'required|string',
             'admin.email' => 'nullable|email:rfc,dns|max:255',
             'admin.password' => 'required|string',
-            'admin.password_confirmation' => 'required|string',
+            // Le mot de passe est saisi une seule fois (pas de champ de confirmation dans le
+            // formulaire) — `nullable` seulement pour ne pas casser un éventuel appel API qui en
+            // enverrait quand même un, auquel cas InstallationService le revalide (doit alors
+            // correspondre au mot de passe, cf. sa règle `confirmed`).
+            'admin.password_confirmation' => 'nullable|string',
         ]);
 
         // La complexité/confirmation du mot de passe est revalidée par InstallationService
