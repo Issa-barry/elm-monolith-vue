@@ -34,7 +34,10 @@ const inputs = ref<(HTMLInputElement | null)[]>([]);
 watch(
     () => props.modelValue,
     (value) => {
-        const next = Array.from({ length: props.length }, (_, i) => value[i] ?? '');
+        const next = Array.from(
+            { length: props.length },
+            (_, i) => value[i] ?? '',
+        );
         if (next.join('') !== digits.value.join('')) {
             digits.value = next;
         }
@@ -56,7 +59,10 @@ function handleInput(index: number, e: Event): void {
                 digits.value[index + i] = d;
             }
         });
-        const lastIndex = Math.min(index + raw.length - 1, digits.value.length - 1);
+        const lastIndex = Math.min(
+            index + raw.length - 1,
+            digits.value.length - 1,
+        );
         input.value = digits.value[index];
         inputs.value[lastIndex]?.focus();
         emitCode();

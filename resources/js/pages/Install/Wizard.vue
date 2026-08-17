@@ -198,7 +198,8 @@ async function sendEmailCode() {
         const json = await response.json();
 
         if (!response.ok) {
-            emailSendError.value = json?.error ?? "Impossible d'envoyer le code.";
+            emailSendError.value =
+                json?.error ?? "Impossible d'envoyer le code.";
             if (json?.retry_after_seconds)
                 startEmailResendCountdown(json.retry_after_seconds);
             return;
@@ -228,7 +229,10 @@ async function verifyEmailCode() {
                 Accept: 'application/json',
                 'X-XSRF-TOKEN': getCsrfToken(),
             },
-            body: JSON.stringify({ email: form.admin.email, code: emailCode.value }),
+            body: JSON.stringify({
+                email: form.admin.email,
+                code: emailCode.value,
+            }),
         });
         const json = await response.json();
 
@@ -237,7 +241,8 @@ async function verifyEmailCode() {
                 json?.reason === 'expired'
                     ? 'Ce code a expiré. Demandez un nouveau code.'
                     : json?.reason === 'locked'
-                      ? (json?.error ?? 'Trop de tentatives. Demandez un nouveau code.')
+                      ? (json?.error ??
+                        'Trop de tentatives. Demandez un nouveau code.')
                       : 'Le code saisi est incorrect.';
             return;
         }
@@ -483,7 +488,11 @@ function submit() {
                             ✓ Adresse email vérifiée
                         </p>
                         <InputError
-                            :message="errorFor('admin.email') ?? emailSendError ?? undefined"
+                            :message="
+                                errorFor('admin.email') ??
+                                emailSendError ??
+                                undefined
+                            "
                         />
                     </div>
 
@@ -557,9 +566,7 @@ function submit() {
 
                         <Button
                             type="button"
-                            :disabled="
-                                emailCode.length !== 6 || emailVerifying
-                            "
+                            :disabled="emailCode.length !== 6 || emailVerifying"
                             @click="verifyEmailCode"
                         >
                             <Spinner v-if="emailVerifying" />
@@ -580,9 +587,7 @@ function submit() {
                                 "
                                 @click="sendEmailCode"
                             >
-                                <span v-if="emailSending"
-                                    >Envoi en cours…</span
-                                >
+                                <span v-if="emailSending">Envoi en cours…</span>
                                 <span v-else>
                                     {{
                                         emailResendSeconds > 0

@@ -179,13 +179,13 @@ function fermer() {
                     <strong>type</strong>, <strong>ville_obligatoire</strong>,
                     <strong>quartier_obligatoire</strong>,
                     <strong>telephone_obligatoire</strong>.
-                    <strong>site_parent_facultatif</strong> désigne le nom OU
-                    le code d'un site existant ou d'une autre ligne de ce même
+                    <strong>site_parent_facultatif</strong> désigne le nom OU le
+                    code d'un site existant ou d'une autre ligne de ce même
                     fichier — préférez le code, plus stable si le site est
                     renommé plus tard. Renseignez
-                    <strong>code_facultatif</strong> avec le code d'un site
-                    déjà existant pour le mettre à jour au lieu d'en créer un
-                    nouveau lors d'un réimport.
+                    <strong>code_facultatif</strong> avec le code d'un site déjà
+                    existant pour le mettre à jour au lieu d'en créer un nouveau
+                    lors d'un réimport.
                 </p>
                 <a
                     href="/backoffice/sites/import/modele"
