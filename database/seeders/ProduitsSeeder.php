@@ -24,7 +24,7 @@ class ProduitsSeeder extends Seeder
         $siteParDefaut = Site::where('organization_id', $org->id)->orderBy('created_at')->first();
 
         // Types de produit — provisionnés par ProduitTypeDefaultSeeder (doit tourner avant ce
-        // seeder, cf. DatabaseSeeder/ProductionSeeder), résolus ici par leur code stable.
+        // seeder, cf. DatabaseSeeder), résolus ici par leur code stable.
         $typeIds = ProduitType::where('organization_id', $org->id)
             ->whereIn('code', ['materiel', 'fabricable'])
             ->pluck('id', 'code');
