@@ -122,4 +122,27 @@ class ReferenceValueResolver
 
         return ltrim($value, '0') ?: '0';
     }
+
+    /**
+     * Clé de comparaison canonique pour un code d'entité (site, véhicule...) :
+     * seule et unique méthode de normalisation à utiliser pour TOUTE
+     * comparaison de code dans le projet (recherche d'existant, détection de
+     * doublon, résolution de référence croisée, rapprochement fichier ↔ base)
+     * — ne jamais réimplémenter une variante locale.
+     *
+     * Équivalence numérique tolérante aux zéros initiaux ("1" == "01" ==
+     * "001") pour un code purement numérique — y compris une valeur ne
+     * contenant QUE des zéros ("000" → "0", jamais une chaîne vide, cf.
+     * normalizeNumericCode() qui gère déjà ce cas. Repli sur la normalisation
+     * texte standard (casse/accents/espaces) pour un code alphanumérique
+     * ("AG001", "SITE-001"...), qui n'est JAMAIS réduit à sa partie numérique.
+     *
+     * Insensible au type PHP reçu (Excel peut transmettre "001" comme
+     * chaîne, entier ou flottant selon le format de cellule) : n'importe
+     * quelle représentation textuelle du code produit la même clé.
+     */
+    public static function normalizeCodeKey(string $value): string
+    {
+        return self::normalizeNumericCode($value) ?? ImportTextNormalizer::normalize($value);
+    }
 }

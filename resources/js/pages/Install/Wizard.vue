@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import InputError from '@/components/InputError.vue';
+import OtpCodeInput from '@/components/OtpCodeInput.vue';
 import PhoneCountryInput from '@/components/PhoneCountryInput.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { Head, useForm } from '@inertiajs/vue3';
 import { Check, Eye, EyeOff } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 
 interface DomaineOption {
     value: string;
@@ -111,13 +112,198 @@ function onTelephoneChange(telephone: string) {
     }, 500);
 }
 
-const step2Valid = computed(
+// ── Étape 2 : vérification de l'email (facultatif) ────────────────────────────
+// L'email reste facultatif : sans email, rien de tout ceci ne s'affiche ni ne bloque
+// l'installation. Renseigné, il doit être réellement vérifié par code avant de continuer
+// (« email saisi ≠ email vérifié ») — cf. InstallWizardController::sendEmailCode()/verifyEmailCode().
+//
+// Présenté comme un état DÉDIÉ de l'étape 2 (step2Phase), pas comme des champs ajoutés sous
+// l'email dans le formulaire principal — repris du parcours d'invitation existant
+// (AcceptInvitationController + Invitations/Accept.vue) : même service métier (OtpService), même
+// composant de saisie (OtpCodeInput). Le formulaire principal (identité, téléphone, mot de passe)
+// se complète donc entièrement AVANT toute vérification, jamais pendant.
+type Step2Phase = 'form' | 'verify';
+const step2Phase = ref<Step2Phase>('form');
+
+const emailIsValidFormat = computed(() =>
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.admin.email.trim()),
+);
+const emailVerified = ref(false);
+const emailVerifiedFor = ref<string | null>(null);
+// Adresse pour laquelle un code a déjà été envoyé (distinct de emailVerifiedFor) : permet de
+// rouvrir l'état de vérification sans redemander de code si l'utilisateur clique "Modifier
+// l'adresse email" puis "Suivant" sans avoir rien changé (évite un 429 anti-spam inutile).
+const emailCodeSentFor = ref<string | null>(null);
+const emailJustVerified = ref(false);
+const emailCode = ref('');
+const emailSending = ref(false);
+const emailVerifying = ref(false);
+const emailSendError = ref<string | null>(null);
+const emailVerifyError = ref<string | null>(null);
+const emailResendSeconds = ref(0);
+let emailResendTimer: ReturnType<typeof setInterval> | undefined;
+let emailAdvanceTimer: ReturnType<typeof setTimeout> | undefined;
+
+// Changer l'adresse invalide l'ancien statut — le code déjà envoyé (le cas échéant) restait de
+// toute façon lié à l'ancienne adresse exacte (OtpService::EMAIL_OTP_CONTEXT scope par email),
+// jamais à la nouvelle : redemander un code est donc bien nécessaire.
+watch(
+    () => form.admin.email,
+    (value) => {
+        if (value !== emailVerifiedFor.value) emailVerified.value = false;
+        if (value !== emailCodeSentFor.value) {
+            emailCodeSentFor.value = null;
+            emailCode.value = '';
+            emailSendError.value = null;
+            emailVerifyError.value = null;
+        }
+    },
+);
+
+function startEmailResendCountdown(seconds: number) {
+    clearInterval(emailResendTimer);
+    emailResendSeconds.value = Math.max(0, Math.round(seconds));
+    if (emailResendSeconds.value === 0) return;
+
+    emailResendTimer = setInterval(() => {
+        emailResendSeconds.value -= 1;
+        if (emailResendSeconds.value <= 0) {
+            emailResendSeconds.value = 0;
+            clearInterval(emailResendTimer);
+        }
+    }, 1000);
+}
+
+onUnmounted(() => {
+    clearInterval(emailResendTimer);
+    clearTimeout(emailAdvanceTimer);
+});
+
+async function sendEmailCode() {
+    if (!emailIsValidFormat.value || emailSending.value) return;
+    emailSending.value = true;
+    emailSendError.value = null;
+    emailVerifyError.value = null;
+
+    try {
+        const response = await fetch('/install/email/send-code', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-XSRF-TOKEN': getCsrfToken(),
+            },
+            body: JSON.stringify({ email: form.admin.email }),
+        });
+        const json = await response.json();
+
+        if (!response.ok) {
+            emailSendError.value =
+                json?.error ?? "Impossible d'envoyer le code.";
+            if (json?.retry_after_seconds)
+                startEmailResendCountdown(json.retry_after_seconds);
+            return;
+        }
+
+        emailCodeSentFor.value = form.admin.email;
+        emailCode.value = '';
+        step2Phase.value = 'verify';
+        startEmailResendCountdown(json.cooldown_seconds ?? 30);
+    } catch {
+        emailSendError.value = "Impossible d'envoyer le code.";
+    } finally {
+        emailSending.value = false;
+    }
+}
+
+async function verifyEmailCode() {
+    if (emailCode.value.length !== 6 || emailVerifying.value) return;
+    emailVerifying.value = true;
+    emailVerifyError.value = null;
+
+    try {
+        const response = await fetch('/install/email/verify-code', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-XSRF-TOKEN': getCsrfToken(),
+            },
+            body: JSON.stringify({
+                email: form.admin.email,
+                code: emailCode.value,
+            }),
+        });
+        const json = await response.json();
+
+        if (!response.ok) {
+            emailVerifyError.value =
+                json?.reason === 'expired'
+                    ? 'Ce code a expiré. Demandez un nouveau code.'
+                    : json?.reason === 'locked'
+                      ? (json?.error ??
+                        'Trop de tentatives. Demandez un nouveau code.')
+                      : 'Le code saisi est incorrect.';
+            return;
+        }
+
+        emailVerified.value = true;
+        emailVerifiedFor.value = form.admin.email;
+        emailJustVerified.value = true;
+        // Accusé de réussite bref, puis enchaînement automatique — pas de clic supplémentaire
+        // requis après une vérification réussie.
+        emailAdvanceTimer = setTimeout(() => {
+            emailJustVerified.value = false;
+            step2Phase.value = 'form';
+            currentStep.value = 3;
+        }, 700);
+    } catch {
+        emailVerifyError.value = 'Impossible de vérifier ce code.';
+    } finally {
+        emailVerifying.value = false;
+    }
+}
+
+/** Revient au formulaire principal sans perdre aucune information déjà saisie. */
+function editEmail() {
+    step2Phase.value = 'form';
+    emailVerifyError.value = null;
+}
+
+const step2FormValid = computed(
     () =>
         form.admin.prenom.trim().length > 0 &&
         form.admin.nom.trim().length > 0 &&
         phoneInfo.value !== null &&
-        form.admin.password.length > 0,
+        form.admin.password.length > 0 &&
+        (form.admin.email.trim().length === 0 || emailIsValidFormat.value),
 );
+
+/**
+ * Clic "Suivant" de l'étape 2 : sans email, avance directement (étape 3). Avec un email déjà
+ * vérifié pour cette même adresse, avance aussi directement. Avec un email non encore vérifié,
+ * (re)bascule vers l'état de vérification — en envoyant un nouveau code seulement si aucun n'est
+ * déjà actif pour cette adresse précise.
+ */
+async function handleStep2Suivant() {
+    if (!step2FormValid.value) return;
+
+    const email = form.admin.email.trim();
+    if (!email) {
+        currentStep.value = 3;
+        return;
+    }
+    if (emailVerified.value && emailVerifiedFor.value === email) {
+        currentStep.value = 3;
+        return;
+    }
+    if (emailCodeSentFor.value === email) {
+        step2Phase.value = 'verify';
+        return;
+    }
+
+    await sendEmailCode();
+}
 
 // ── Étape 3 : Domaine d'activité ─────────────────────────────────────────────
 const step3Valid = computed(() => form.organisation.domaine.length > 0);
@@ -227,7 +413,10 @@ function submit() {
                 </div>
 
                 <!-- Étape 2 : Super Admin -->
-                <div v-else-if="currentStep === 2" class="grid gap-4">
+                <div
+                    v-else-if="currentStep === 2 && step2Phase === 'form'"
+                    class="grid gap-4"
+                >
                     <div class="grid grid-cols-2 gap-4">
                         <div class="grid gap-2">
                             <Label for="admin-prenom"
@@ -272,7 +461,7 @@ function submit() {
                             v-else-if="phoneInfo"
                             class="text-xs text-muted-foreground"
                         >
-                            ✓ Numéro valide ({{ phoneInfo.pays }})
+                            ✓ Format du numéro valide ({{ phoneInfo.pays }})
                         </p>
                         <p
                             v-else-if="phoneInfoError"
@@ -289,7 +478,22 @@ function submit() {
                             v-model="form.admin.email"
                             type="email"
                         />
-                        <InputError :message="errorFor('admin.email')" />
+                        <p
+                            v-if="
+                                emailVerified &&
+                                emailVerifiedFor === form.admin.email
+                            "
+                            class="text-xs text-emerald-600 dark:text-emerald-400"
+                        >
+                            ✓ Adresse email vérifiée
+                        </p>
+                        <InputError
+                            :message="
+                                errorFor('admin.email') ??
+                                emailSendError ??
+                                undefined
+                            "
+                        />
                     </div>
 
                     <div class="grid gap-2">
@@ -326,6 +530,81 @@ function submit() {
                         </p>
                         <InputError :message="errorFor('admin.password')" />
                     </div>
+                </div>
+
+                <!-- Étape 2 (sous-état) : vérification de l'email -->
+                <div
+                    v-else-if="currentStep === 2 && step2Phase === 'verify'"
+                    class="grid gap-5 text-center"
+                >
+                    <p
+                        v-if="emailJustVerified"
+                        class="text-sm font-medium text-emerald-600 dark:text-emerald-400"
+                    >
+                        ✓ Adresse email vérifiée
+                    </p>
+                    <template v-else>
+                        <div>
+                            <h3 class="text-base font-semibold">
+                                Vérifiez votre email
+                            </h3>
+                            <p class="mt-1 text-sm text-muted-foreground">
+                                Un code à 6 chiffres a été envoyé à
+                                <span class="font-medium text-foreground">{{
+                                    form.admin.email
+                                }}</span
+                                >.
+                            </p>
+                        </div>
+
+                        <OtpCodeInput
+                            v-model="emailCode"
+                            :disabled="emailVerifying"
+                        />
+
+                        <InputError :message="emailVerifyError ?? undefined" />
+
+                        <Button
+                            type="button"
+                            :disabled="emailCode.length !== 6 || emailVerifying"
+                            @click="verifyEmailCode"
+                        >
+                            <Spinner v-if="emailVerifying" />
+                            Vérifier
+                        </Button>
+
+                        <InputError :message="emailSendError ?? undefined" />
+
+                        <div class="flex flex-col items-center gap-1.5 text-sm">
+                            <p class="text-muted-foreground">
+                                Vous n'avez rien reçu ?
+                            </p>
+                            <button
+                                type="button"
+                                class="font-medium text-primary underline underline-offset-4 transition-colors hover:text-primary/80 disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline"
+                                :disabled="
+                                    emailResendSeconds > 0 || emailSending
+                                "
+                                @click="sendEmailCode"
+                            >
+                                <span v-if="emailSending">Envoi en cours…</span>
+                                <span v-else>
+                                    {{
+                                        emailResendSeconds > 0
+                                            ? `Renvoyer dans ${emailResendSeconds}s`
+                                            : 'Renvoyer le code'
+                                    }}
+                                </span>
+                            </button>
+                            <button
+                                type="button"
+                                class="text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground"
+                                @click="editEmail"
+                            >
+                                Modifier l'adresse email
+                            </button>
+                        </div>
+                    </template>
                 </div>
 
                 <!-- Étape 3 : Domaine d'activité -->
@@ -397,7 +676,12 @@ function submit() {
                 </div>
             </div>
 
-            <div class="flex items-center justify-between">
+            <!-- Masqué pendant l'état de vérification email : "Vérifier"/"Renvoyer le code"/
+                 "Modifier l'adresse email" (dans la carte ci-dessus) en tiennent déjà lieu. -->
+            <div
+                v-if="!(currentStep === 2 && step2Phase === 'verify')"
+                class="flex items-center justify-between"
+            >
                 <Button
                     v-if="currentStep > 1"
                     type="button"
@@ -419,10 +703,11 @@ function submit() {
                 <Button
                     v-else-if="currentStep === 2"
                     type="button"
-                    :disabled="!step2Valid"
-                    @click="nextStep"
+                    :disabled="!step2FormValid || emailSending"
+                    @click="handleStep2Suivant"
                 >
-                    Suivant
+                    <Spinner v-if="emailSending" />
+                    {{ emailSending ? 'Envoi du code…' : 'Suivant' }}
                 </Button>
                 <Button
                     v-else-if="currentStep === 3"

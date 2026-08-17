@@ -3,10 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Enums\DomaineActivite;
+use App\Http\Controllers\Concerns\HasOtpRateLimitResponse;
+use App\Mail\InstallEmailVerificationMail;
 use App\Services\InstallationService;
+use App\Services\OtpService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -28,6 +32,8 @@ use Inertia\Response;
  */
 class InstallWizardController extends Controller
 {
+    use HasOtpRateLimitResponse;
+
     public function __construct(private readonly InstallationService $service) {}
 
     public function show(Request $request): Response|RedirectResponse
@@ -84,6 +90,69 @@ class InstallWizardController extends Controller
         return response()->json([
             'info' => $this->service->resolveTelephone($request->string('telephone')->toString()),
         ]);
+    }
+
+    /**
+     * Envoie un code à l'email saisi pour l'étape Super Admin — appelé uniquement quand
+     * l'utilisateur renseigne un email (facultatif). Le code n'est lié à aucun User (qui
+     * n'existe pas encore) : il vit uniquement dans le cache OTP, scopé par email
+     * (cf. InstallationService::EMAIL_OTP_CONTEXT), exactement comme AcceptInvitationController.
+     */
+    public function sendEmailCode(Request $request, OtpService $otp): JsonResponse
+    {
+        abort_if($this->service->isLocked(), 404);
+        $this->assertSaasTokenConfigured();
+        $this->ensureTokenVerified($request);
+
+        $request->validate(['email' => 'required|email:rfc,dns|max:255']);
+        $email = $request->string('email')->toString();
+
+        $wait = $otp->resendWaitSeconds($email, InstallationService::EMAIL_OTP_CONTEXT);
+        if ($wait > 0) {
+            return $this->tooManyRequestsResponse($wait);
+        }
+
+        $code = $otp->generate($email, InstallationService::EMAIL_OTP_CONTEXT);
+        Mail::to($email)->send(new InstallEmailVerificationMail($code));
+
+        return response()->json([
+            'sent' => true,
+            'cooldown_seconds' => $otp->resendCooldownSeconds(),
+        ]);
+    }
+
+    /**
+     * Vérifie le code saisi pour l'email de l'étape Super Admin. Ne crée rien en base : marque
+     * seulement le cache OTP comme vérifié pour cet email (lu par InstallationService::install()
+     * au moment du submit final) — un abandon en cours de route ne laisse donc aucune trace.
+     */
+    public function verifyEmailCode(Request $request, OtpService $otp): JsonResponse
+    {
+        abort_if($this->service->isLocked(), 404);
+        $this->assertSaasTokenConfigured();
+        $this->ensureTokenVerified($request);
+
+        $request->validate([
+            'email' => 'required|email:rfc,dns|max:255',
+            'code' => 'required|string|digits:6',
+        ]);
+        $email = $request->string('email')->toString();
+
+        if ($otp->tooManyAttempts($email, InstallationService::EMAIL_OTP_CONTEXT)) {
+            return response()->json(['error' => 'Trop de tentatives. Demandez un nouveau code.', 'reason' => 'locked'], 429);
+        }
+
+        if (! $otp->hasActiveCode($email, InstallationService::EMAIL_OTP_CONTEXT)) {
+            return response()->json(['error' => 'Votre code a expiré.', 'reason' => 'expired'], 422);
+        }
+
+        if (! $otp->verify($email, $request->input('code', ''), InstallationService::EMAIL_OTP_CONTEXT)) {
+            return response()->json(['error' => 'Code incorrect.', 'reason' => 'invalid'], 422);
+        }
+
+        $otp->markVerified($email, InstallationService::EMAIL_OTP_CONTEXT);
+
+        return response()->json(['verified' => true]);
     }
 
     public function store(Request $request): Response

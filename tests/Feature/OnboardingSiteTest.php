@@ -34,6 +34,10 @@ class OnboardingSiteTest extends TestCase
         $user = User::factory()->withoutTwoFactor()->create([
             'organization_id' => $org->id,
             'password' => Hash::make('Sup3r$ecretPwd'),
+            // Fixe (pas les valeurs aléatoires par défaut de la factory) : plusieurs tests de
+            // cette classe vérifient que le site créé hérite exactement de ces valeurs.
+            'telephone' => '+224622000000',
+            'pays' => 'Guinée',
         ]);
         $user->assignRole('super_admin');
 
@@ -89,18 +93,54 @@ class OnboardingSiteTest extends TestCase
 
         $this->actingAs($user)
             ->post(route('onboarding.site.store'), [
-                'nom' => 'Siège', 'type' => SiteType::SIEGE->value,
+                'type' => SiteType::SIEGE->value,
                 'ville' => 'Conakry', 'quartier' => 'Matoto',
             ])
             ->assertRedirect(route('dashboard'));
 
         $site = Site::where('organization_id', $user->organization_id)->firstOrFail();
-        $this->assertSame('Siège', $site->nom);
         $this->assertSame(SiteType::SIEGE, $site->type);
+        $this->assertSame('Conakry', $site->ville);
+        $this->assertSame('Matoto', $site->quartier);
 
         $pivot = $user->sites()->wherePivot('is_default', true)->first();
         $this->assertNotNull($pivot);
         $this->assertSame($site->id, $pivot->id);
+    }
+
+    /**
+     * Le nom n'est plus saisi pendant l'onboarding : généré automatiquement (cf.
+     * SiteNamingService) — "Siège 1 Matoto" pour le tout premier site d'une organisation.
+     */
+    public function test_le_nom_du_site_est_genere_automatiquement(): void
+    {
+        $user = $this->makeSuperAdmin();
+
+        $this->actingAs($user)->post(route('onboarding.site.store'), [
+            'type' => SiteType::SIEGE->value,
+            'ville' => 'Conakry', 'quartier' => 'Matoto',
+        ]);
+
+        $site = Site::where('organization_id', $user->organization_id)->firstOrFail();
+        $this->assertSame('Siège 1 Matoto', $site->nom);
+    }
+
+    /**
+     * Téléphone et pays ne sont plus demandés pendant l'onboarding : hérités du Super Admin qui
+     * vient de s'installer (mêmes informations déjà saisies/vérifiées à l'étape précédente).
+     */
+    public function test_le_site_herite_du_telephone_et_du_pays_du_super_admin(): void
+    {
+        $user = $this->makeSuperAdmin();
+
+        $this->actingAs($user)->post(route('onboarding.site.store'), [
+            'type' => SiteType::SIEGE->value,
+            'ville' => 'Conakry', 'quartier' => 'Matoto',
+        ]);
+
+        $site = Site::where('organization_id', $user->organization_id)->firstOrFail();
+        $this->assertSame('+224622000000', $site->telephone);
+        $this->assertSame('Guinée', $site->pays);
     }
 
     public function test_store_refuse_un_type_de_site_invalide(): void
@@ -109,10 +149,19 @@ class OnboardingSiteTest extends TestCase
 
         $this->actingAs($user)
             ->post(route('onboarding.site.store'), [
-                'nom' => 'Siège', 'type' => 'pas-un-type',
+                'type' => 'pas-un-type',
                 'ville' => 'Conakry', 'quartier' => 'Matoto',
             ])
             ->assertSessionHasErrors('type');
+    }
+
+    public function test_store_refuse_sans_ville_ni_quartier(): void
+    {
+        $user = $this->makeSuperAdmin();
+
+        $this->actingAs($user)
+            ->post(route('onboarding.site.store'), ['type' => SiteType::SIEGE->value])
+            ->assertSessionHasErrors(['ville', 'quartier']);
     }
 
     public function test_store_refuse_si_un_site_existe_deja(): void
@@ -122,7 +171,7 @@ class OnboardingSiteTest extends TestCase
 
         $this->actingAs($user)
             ->post(route('onboarding.site.store'), [
-                'nom' => 'Autre', 'type' => SiteType::AGENCE->value,
+                'type' => SiteType::AGENCE->value,
                 'ville' => 'Conakry', 'quartier' => 'Matoto',
             ])
             ->assertStatus(403);

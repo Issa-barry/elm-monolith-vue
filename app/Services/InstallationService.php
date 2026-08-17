@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Actions\Fortify\PasswordValidationRules;
 use App\Enums\DomaineActivite;
+use App\Enums\SiteType;
 use App\Models\AppInstallation;
 use App\Models\Organization;
 use App\Models\Personne;
@@ -34,6 +35,21 @@ use Illuminate\Validation\ValidationException;
 class InstallationService
 {
     use PasswordValidationRules;
+
+    /**
+     * Contexte OTP (App\Services\OtpService) pour la vérification de l'email du Super Admin
+     * pendant l'installation — un code par email saisi, jamais lié à un User (qui n'existe pas
+     * encore à ce stade). Partagé par InstallWizardController (web) et InstallApp (CLI).
+     */
+    public const EMAIL_OTP_CONTEXT = 'install-email';
+
+    /**
+     * Pays acceptés pour le téléphone du Super Admin pendant l'installation — "elm" (Eau la
+     * maman) n'opère pour l'instant qu'en Guinée et Sierra Leone (cf. Wizard.vue::PAYS_INSTALL,
+     * même restriction côté UI). Vérifiée ici, dans le service partagé par le CLI et le web, pour
+     * qu'un appel direct à install() ne puisse jamais contourner la restriction du formulaire.
+     */
+    private const TELEPHONE_PAYS_AUTORISES = ['GN', 'SL'];
 
     public function isInstalled(): bool
     {
@@ -231,6 +247,12 @@ class InstallationService
                 ]);
             }
 
+            if (! in_array($telephoneInfo['code_pays'], self::TELEPHONE_PAYS_AUTORISES, true)) {
+                throw ValidationException::withMessages([
+                    'admin.telephone' => 'Seuls les numéros de Guinée et de Sierra Leone sont acceptés pour cette installation.',
+                ]);
+            }
+
             if (UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_TELEPHONE, Personne::normaliserTelephone($telephoneInfo['telephone'])) !== null) {
                 throw ValidationException::withMessages([
                     'admin.telephone' => 'Ce numéro est déjà utilisé par un autre compte.',
@@ -242,6 +264,18 @@ class InstallationService
                 $admin['password_confirmation'] ?? $admin['password'],
                 'admin.password',
             );
+
+            // Email facultatif, mais s'il est renseigné il doit avoir été réellement vérifié par
+            // code (cf. InstallWizardController::verifyEmailCode() / InstallApp) — jamais marqué
+            // vérifié du seul fait d'avoir été saisi. isVerified() ne lit que le cache OTP, écrit
+            // uniquement après succès d'une vérification réelle : rien n'est jamais créé en base
+            // tant que cette étape n'a pas réellement réussi (cf. docblock de classe).
+            $emailFourni = trim((string) ($admin['email'] ?? '')) !== '';
+            if ($emailFourni && ! app(OtpService::class)->isVerified($admin['email'], self::EMAIL_OTP_CONTEXT)) {
+                throw ValidationException::withMessages([
+                    'admin.email' => 'Veuillez vérifier votre adresse email avant de continuer.',
+                ]);
+            }
 
             // Identité de l'admin saisie une seule fois — cf. Personne::resoudreOuCreer() : ne
             // recrée jamais un doublon si une Personne existe déjà dans cette organisation pour
@@ -268,13 +302,17 @@ class InstallationService
                 'verified_at' => now(),
                 'is_primary' => true,
             ]);
-            if ($admin['email'] ?? null) {
+            if ($emailFourni) {
                 $user->authIdentities()->create([
                     'type' => UserAuthIdentity::TYPE_EMAIL,
                     'value' => $admin['email'],
                     'normalized_value' => UserAuthIdentity::normaliser(UserAuthIdentity::TYPE_EMAIL, $admin['email']),
+                    // Vérifié avant même d'entrer dans cette transaction (cf. contrôle
+                    // isVerified() plus haut) — jamais déduit de la simple présence du champ.
                     'verified_at' => now(),
                 ]);
+                // Le code n'a plus lieu d'être réutilisable une fois l'installation terminée.
+                app(OtpService::class)->clear($admin['email'], self::EMAIL_OTP_CONTEXT);
             }
             $user->syncRoles(['super_admin']);
             app(MatriculeService::class)->assignForUser($user);
@@ -331,19 +369,27 @@ class InstallationService
      * vide côté frontend (cf. HandleInertiaRequests::defaultSite()) alors qu'un site vient
      * d'être créé.
      *
-     * @param  array{nom: string, type: string, ville: string, quartier: string, localisation: ?string, telephone: ?string}  $data
+     * Onboarding volontairement minimal (type, ville, quartier) : tout ce qui peut être déduit
+     * ne se redemande pas — nom généré par SiteNamingService (cf. son docblock), téléphone et
+     * pays hérités du Super Admin qui installe (mêmes informations déjà saisies/vérifiées
+     * pendant install(), pas de raison de les redemander).
+     *
+     * @param  array{type: string, ville: string, quartier: string}  $data
      */
     public function creerPremierSite(User $user, array $data): Site
     {
         return DB::transaction(function () use ($user, $data) {
+            $type = SiteType::from($data['type']);
+            $quartier = trim($data['quartier']);
+
             $site = Site::create([
                 'organization_id' => $user->organization_id,
-                'nom' => trim($data['nom']),
-                'type' => $data['type'],
+                'nom' => app(SiteNamingService::class)->nextName($user->organization_id, $type, $quartier),
+                'type' => $type->value,
                 'ville' => trim($data['ville']),
-                'quartier' => trim($data['quartier']),
-                'localisation' => $data['localisation'] ?? null,
-                'telephone' => $data['telephone'] ?? null,
+                'quartier' => $quartier,
+                'telephone' => $user->telephone,
+                'pays' => $user->pays,
             ]);
 
             $user->sites()->syncWithoutDetaching([$site->id => ['role' => 'employe', 'is_default' => true]]);
