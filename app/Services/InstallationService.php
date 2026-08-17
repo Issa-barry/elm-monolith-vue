@@ -105,7 +105,7 @@ class InstallationService
         if ($existing) {
             // Ne réécrit jamais un domaine déjà renseigné (donnée métier établie) — ne complète
             // que si l'organisation existante n'en avait pas encore (ex: créée avant l'ajout de
-            // ce champ, ou par ProductionSeeder).
+            // ce champ, ou reprise d'une installation interrompue).
             if ($existing->domaine_activite === null) {
                 $existing->update(['domaine_activite' => $domaine]);
             }

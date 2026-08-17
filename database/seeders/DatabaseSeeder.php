@@ -10,8 +10,9 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             // ── Système ───────────────────────────────────────────────────────
-            RolesAndPermissionsSeeder::class,   // Organisation "elm", rôles, permissions
-            ElmDemoAccountsSeeder::class,       // Comptes staff de démo "elm" (Staff@2025) — jamais dans ProductionSeeder
+            RolesAndPermissionsSeeder::class,   // Rôles, permissions (données globales, sans organisation)
+            ElmDemoOrganizationSeeder::class,   // Organisation "elm" (dev local / CI de tests uniquement)
+            ElmDemoAccountsSeeder::class,       // Comptes staff de démo "elm" (Staff@2025) — jamais en production
 
             // ── Référentiels ──────────────────────────────────────────────────
             ClientSeeder::class,                // Comptes clients (utilisateurs)

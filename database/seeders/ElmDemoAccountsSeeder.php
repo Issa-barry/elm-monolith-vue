@@ -12,15 +12,16 @@ use Illuminate\Database\Seeder;
 /**
  * Comptes staff de démonstration pour l'organisation "elm" (mot de passe connu Staff@2025) —
  * réservé au dev local / CI (via DatabaseSeeder) ou à un environnement de démo dédié, jamais à
- * prod/preprod. Extrait de RolesAndPermissionsSeeder (qui, lui, reste appelé par ProductionSeeder
- * et doit rester garanti sans compte de démo, en toute circonstance) suite à l'incident du
- * 2026-08-12 : un `db:seed --class=ProductionSeeder` lancé avant configuration complète du .env
- * sur l'hébergement preprod avait créé ces comptes via l'ancien guard `app()->environment('production')`
- * — fragile car dépendant de l'ordre exact des étapes de déploiement. La sécurité vient maintenant
- * du fait que ce seeder n'est JAMAIS appelé par ProductionSeeder, pas d'une valeur d'APP_ENV.
+ * prod/preprod. Extrait de RolesAndPermissionsSeeder suite à l'incident du 2026-08-12 : un seeder
+ * de production lancé avant configuration complète du .env sur l'hébergement preprod avait créé
+ * ces comptes via l'ancien guard `app()->environment('production')` — fragile car dépendant de
+ * l'ordre exact des étapes de déploiement. La sécurité vient maintenant du fait que ce seeder
+ * n'est JAMAIS appelé par le pipeline de déploiement (qui ne seede que RolesAndPermissionsSeeder),
+ * pas d'une valeur d'APP_ENV.
  *
  * Requiert que RolesAndPermissionsSeeder::seedRolesEtPermissions() ait déjà tourné (rôles) et que
- * l'organisation "elm" existe déjà.
+ * l'organisation "elm" existe déjà (cf. ElmDemoOrganizationSeeder, appelé juste avant dans
+ * DatabaseSeeder).
  *
  * Lancement isolé : php artisan db:seed --class=ElmDemoAccountsSeeder
  */
