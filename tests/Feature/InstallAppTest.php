@@ -104,7 +104,6 @@ class InstallAppTest extends TestCase
             ->expectsQuestion('Téléphone (format international, ex: +224622000000)', '+224622000000')
             ->expectsQuestion('Email (facultatif)', '')
             ->expectsQuestion('Mot de passe (min. 8 caractères, majuscule + minuscule + symbole)', 'Sup3r$ecretPwd')
-            ->expectsQuestion('Confirmer le mot de passe', 'Sup3r$ecretPwd')
             ->assertExitCode(1);
 
         $this->assertDatabaseMissing('personnes', ['telephone' => '+224622000099']);
@@ -169,7 +168,6 @@ class InstallAppTest extends TestCase
             ->expectsQuestion('Téléphone (format international, ex: +224622000000)', '+224622000099')
             ->expectsQuestion('Email (facultatif)', '')
             ->expectsQuestion('Mot de passe (min. 8 caractères, majuscule + minuscule + symbole)', 'Sup3r$ecretPwd')
-            ->expectsQuestion('Confirmer le mot de passe', 'Sup3r$ecretPwd')
             ->assertExitCode(1);
 
         $this->assertSame(1, Organization::count());
