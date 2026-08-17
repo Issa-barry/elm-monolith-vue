@@ -127,6 +127,15 @@ Route::middleware('throttle:install')->group(function () {
     Route::post('install/phone-info', [InstallWizardController::class, 'resolvePhone'])->name('install.phone-info');
     Route::post('install', [InstallWizardController::class, 'store'])->name('install.store');
 });
+// Vérification de l'email du Super Admin par code (facultatif — cf. InstallWizardController) :
+// throttle dédié email+IP, distinct de `install` (10/min/IP tout court) pour rester cohérent
+// avec le anti-spam OTP déjà en place ailleurs (otp-send/otp-verify, cf. AcceptInvitationController).
+Route::post('install/email/send-code', [InstallWizardController::class, 'sendEmailCode'])
+    ->name('install.email.send-code')
+    ->middleware('throttle:otp-email-send');
+Route::post('install/email/verify-code', [InstallWizardController::class, 'verifyEmailCode'])
+    ->name('install.email.verify-code')
+    ->middleware('throttle:otp-email-verify');
 
 Route::get('/', function (Request $request) {
     $user = $request->user();

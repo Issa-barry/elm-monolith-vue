@@ -11,9 +11,11 @@ use App\Models\ProduitType;
 use App\Models\TypeVehicule;
 use App\Models\User;
 use App\Services\InstallationService;
+use App\Services\OtpService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -198,16 +200,21 @@ class InstallWizardTest extends TestCase
         $this->assertFalse($user->must_change_password);
     }
 
+    /**
+     * La détection pays/indicatif reste générique (PhoneCountryInfo/libphonenumber, cf.
+     * resolveTelephone()) — seule l'installation elle-même restreint ensuite à Guinée/Sierra
+     * Leone (cf. test_installation_refuse_un_numero_hors_guinee_sierra_leone), pas la résolution.
+     */
     public function test_pays_est_determine_depuis_le_telephone(): void
     {
         $this->post('/install', $this->payload([
-            'admin' => ['telephone' => '+33612345678'],
+            'admin' => ['telephone' => '+224622000000'],
         ]))->assertOk();
 
-        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+33612345678'))->firstOrFail();
-        $this->assertSame('FR', $user->code_pays);
-        $this->assertSame('France', $user->pays);
-        $this->assertSame('+33', $user->code_phone_pays);
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000000'))->firstOrFail();
+        $this->assertSame('GN', $user->code_pays);
+        $this->assertSame('Guinée', $user->pays);
+        $this->assertSame('+224', $user->code_phone_pays);
     }
 
     public function test_telephone_invalide_est_rejete(): void
@@ -259,23 +266,43 @@ class InstallWizardTest extends TestCase
         $this->assertFalse(AppInstallation::isInstalled());
     }
 
-    public function test_email_est_persiste_quand_fourni(): void
+    public function test_email_est_persiste_et_marque_verifie_quand_le_code_a_ete_valide(): void
     {
         // example.com a un enregistrement MX "null" (RFC 7505, IANA) et est donc rejeté par la
         // règle `email:dns` du contrôleur — utiliser un domaine mail réel pour ce test.
+        $email = 'issa@gmail.com';
+        app(OtpService::class)->generate($email, InstallationService::EMAIL_OTP_CONTEXT);
+        app(OtpService::class)->markVerified($email, InstallationService::EMAIL_OTP_CONTEXT);
+
         $this->post('/install', $this->payload([
-            'admin' => ['email' => 'issa@gmail.com'],
+            'admin' => ['email' => $email],
         ]))->assertOk();
 
         $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000000'))->firstOrFail();
-        $this->assertSame('issa@gmail.com', $user->email);
+        $this->assertSame($email, $user->email);
         $this->assertTrue($user->hasVerifiedEmail());
     }
 
     /**
+     * "Email saisi ≠ email vérifié" (cf. InstallationService::install()) : sans passer par
+     * sendEmailCode()/verifyEmailCode() au préalable, l'installation doit être refusée — jamais
+     * de verified_at renseigné du seul fait d'avoir tapé une adresse dans le formulaire.
+     */
+    public function test_installation_refusee_si_lemail_nest_jamais_ete_verifie(): void
+    {
+        $this->post('/install', $this->payload([
+            'admin' => ['email' => 'issa@gmail.com'],
+        ]))->assertSessionHasErrors('admin.email');
+
+        $this->assertFalse(AppInstallation::isInstalled());
+        $this->assertDatabaseMissing('organizations', ['slug' => 'elm-test']);
+    }
+
+    /**
      * Le sélecteur de pays de /install (PAYS_INSTALL dans Wizard.vue) restreint la saisie à
-     * Guinée/Sierra Leone côté UI, mais la résolution serveur (PhoneCountryInfo, libphonenumber)
-     * reste générique — un numéro sierra-léonais valide doit être accepté de bout en bout.
+     * Guinée/Sierra Leone côté UI ; InstallationService::install() applique la même restriction
+     * côté serveur (cf. TELEPHONE_PAYS_AUTORISES) pour qu'un appel direct à l'API ne puisse pas
+     * la contourner. Un numéro sierra-léonais valide doit être accepté de bout en bout.
      */
     public function test_installation_reussit_avec_un_numero_sierra_leonais(): void
     {
@@ -287,6 +314,15 @@ class InstallWizardTest extends TestCase
         $this->assertSame('SL', $user->code_pays);
         $this->assertSame('Sierra Leone', $user->pays);
         $this->assertSame('+232', $user->code_phone_pays);
+    }
+
+    public function test_installation_refuse_un_numero_hors_guinee_sierra_leone(): void
+    {
+        $this->post('/install', $this->payload([
+            'admin' => ['telephone' => '+33612345678'],
+        ]))->assertSessionHasErrors('admin.telephone');
+
+        $this->assertFalse(AppInstallation::isInstalled());
     }
 
     public function test_catalogue_par_defaut_est_toujours_cree(): void

@@ -3,8 +3,11 @@
 namespace App\Console\Commands;
 
 use App\Enums\DomaineActivite;
+use App\Mail\InstallEmailVerificationMail;
 use App\Services\InstallationService;
+use App\Services\OtpService;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -29,7 +32,7 @@ class InstallApp extends Command
 
     protected $description = "Initialise une organisation (et son premier compte super_admin) — première mise en route de l'application";
 
-    public function handle(InstallationService $service): int
+    public function handle(InstallationService $service, OtpService $otp): int
     {
         $this->line('========================================');
         $this->line(' Installation de l\'application');
@@ -62,7 +65,7 @@ class InstallApp extends Command
         $prenom = $this->ask('Prénom');
         $nom = $this->ask('Nom');
         $telephone = $this->askTelephone($service);
-        $email = $this->ask('Email (facultatif)') ?: null;
+        $email = $this->askEmail($otp);
         $password = $this->askPassword($service);
 
         $this->newLine();
@@ -152,6 +155,58 @@ class InstallApp extends Command
 
             return $saisie;
         }
+    }
+
+    /**
+     * Email facultatif — mais s'il est renseigné, un code est envoyé et doit être saisi
+     * correctement avant de poursuivre : même règle que l'assistant web (cf.
+     * InstallWizardController::verifyEmailCode(), InstallationService::EMAIL_OTP_CONTEXT), pour
+     * que CLI et web ne puissent jamais diverger sur "email saisi ≠ email vérifié".
+     */
+    private function askEmail(OtpService $otp): ?string
+    {
+        $email = $this->ask('Email (facultatif)') ?: null;
+        if ($email === null) {
+            return null;
+        }
+
+        $this->sendEmailCode($otp, $email);
+
+        while (true) {
+            $saisie = $this->ask('Code reçu par email (6 chiffres)') ?? '';
+
+            if ($otp->tooManyAttempts($email, InstallationService::EMAIL_OTP_CONTEXT)) {
+                $this->error('Trop de tentatives — envoi d\'un nouveau code.');
+                $this->sendEmailCode($otp, $email);
+
+                continue;
+            }
+
+            if (! $otp->hasActiveCode($email, InstallationService::EMAIL_OTP_CONTEXT)) {
+                $this->error('Ce code a expiré — envoi d\'un nouveau code.');
+                $this->sendEmailCode($otp, $email);
+
+                continue;
+            }
+
+            if (! $otp->verify($email, $saisie, InstallationService::EMAIL_OTP_CONTEXT)) {
+                $this->error('Code incorrect.');
+
+                continue;
+            }
+
+            $otp->markVerified($email, InstallationService::EMAIL_OTP_CONTEXT);
+            $this->line('✓ Email vérifié');
+
+            return $email;
+        }
+    }
+
+    private function sendEmailCode(OtpService $otp, string $email): void
+    {
+        $code = $otp->generate($email, InstallationService::EMAIL_OTP_CONTEXT);
+        Mail::to($email)->send(new InstallEmailVerificationMail($code));
+        $this->line("✓ Un code de vérification a été envoyé à {$email}.");
     }
 
     /**
