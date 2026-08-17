@@ -77,8 +77,11 @@ class LivreurTest extends TestCase
 
         $this->assertDatabaseHas('livreurs', [
             'organization_id' => $this->org->id,
-            'telephone' => '+224622000001',
             'nom_complet' => null,
+        ]);
+        $this->assertDatabaseHas('personnes', [
+            'organization_id' => $this->org->id,
+            'telephone' => '+224622000001',
         ]);
     }
 

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\Livreur;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -33,12 +34,16 @@ class MeController extends Controller
             return null;
         }
 
-        $proprietaire = Proprietaire::where('telephone', $user->telephone)->first();
+        // nom/prenom/telephone ne sont plus des colonnes de livreurs/proprietaires — l'identité
+        // civile est portée par Personne (cf. Personne::normaliserTelephone()).
+        $normalise = Personne::normaliserTelephone($user->telephone);
+
+        $proprietaire = Proprietaire::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))->first();
         if ($proprietaire) {
             return route('proprietaires.show', $proprietaire->id);
         }
 
-        $livreur = Livreur::where('telephone', $user->telephone)->first();
+        $livreur = Livreur::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))->first();
         if ($livreur) {
             return route('livreurs.show', $livreur->id);
         }

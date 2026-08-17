@@ -431,7 +431,7 @@ class ClientDashboardController extends Controller
             ->where(function ($query) use ($user, $telephone) {
                 $query->where('user_id', $user->id);
                 if ($telephone) {
-                    $query->orWhere('telephone', $telephone);
+                    $query->orWhereHas('personne', fn ($p) => $p->where('telephone', $telephone));
                 }
             })
             ->orderByRaw('CASE WHEN user_id = ? THEN 0 ELSE 1 END', [$user->id])
@@ -446,7 +446,7 @@ class ClientDashboardController extends Controller
             ->where(function ($query) use ($user, $telephone) {
                 $query->where('user_id', $user->id);
                 if ($telephone) {
-                    $query->orWhere('telephone', $telephone);
+                    $query->orWhereHas('personne', fn ($p) => $p->where('telephone', $telephone));
                 }
             })
             ->orderByRaw('CASE WHEN user_id = ? THEN 0 ELSE 1 END', [$user->id])

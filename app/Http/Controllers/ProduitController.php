@@ -379,7 +379,7 @@ class ProduitController extends Controller
             ->values();
 
         $mouvements = MouvementStock::whereIn('produit_variante_id', $varianteIds)
-            ->with(['createur:id,prenom,nom', 'site:id,nom,code', 'variante:id,combo_hash'])
+            ->with(['createur:id,personne_id', 'createur.personne', 'site:id,nom,code', 'variante:id,combo_hash'])
             ->orderByDesc('created_at')
             ->take(100)
             ->get()
@@ -512,7 +512,7 @@ class ProduitController extends Controller
         $varianteIds = $produit->variantes()->pluck('id');
 
         $ajustements = MouvementStock::whereIn('produit_variante_id', $varianteIds)
-            ->with(['createur:id,prenom,nom', 'site:id,nom,code'])
+            ->with(['createur:id,personne_id', 'createur.personne', 'site:id,nom,code'])
             ->orderByDesc('created_at')
             ->take(200)
             ->get()

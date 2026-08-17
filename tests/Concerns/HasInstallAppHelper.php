@@ -20,7 +20,6 @@ trait HasInstallAppHelper
             ->expectsQuestion('Nom', 'BARRY')
             ->expectsQuestion('Téléphone (format international, ex: +224622000000)', $telephone)
             ->expectsQuestion('Email (facultatif)', '')
-            ->expectsQuestion('Mot de passe (min. 8 caractères, majuscule + minuscule + symbole)', $password)
-            ->expectsQuestion('Confirmer le mot de passe', $password);
+            ->expectsQuestion('Mot de passe (min. 8 caractères, majuscule + minuscule + symbole)', $password);
     }
 }

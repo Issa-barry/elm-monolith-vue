@@ -83,8 +83,8 @@ class PieceIdentiteTest extends TestCase
             ->assertRedirect(route('proprietaires.show', $this->proprietaire));
 
         $this->assertDatabaseHas('pieces_identite', [
-            'identifiable_type' => 'proprietaire',
-            'identifiable_id' => $this->proprietaire->id,
+            'identifiable_type' => 'personne',
+            'identifiable_id' => $this->proprietaire->personne_id,
             'type_piece' => 'cni',
             'statut_verification' => 'en_attente',
             'est_active' => true,

@@ -11,6 +11,7 @@ use App\Models\CommissionPart;
 use App\Models\CommissionVente;
 use App\Models\Livreur;
 use App\Models\Organization;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\User;
 use App\Models\Vehicule;
@@ -128,12 +129,17 @@ class ClientDashboardTest extends TestCase
             'telephone' => $user->telephone,
         ]);
 
-        $proprietaire = Proprietaire::create([
+        $personne = Personne::create([
             'organization_id' => $org->id,
-            'user_id' => $user->id,
             'nom' => $user->nom,
             'prenom' => $user->prenom,
             'telephone' => $user->telephone,
+        ]);
+
+        $proprietaire = Proprietaire::create([
+            'organization_id' => $org->id,
+            'user_id' => $user->id,
+            'personne_id' => $personne->id,
             'is_active' => true,
         ]);
 
@@ -191,6 +197,63 @@ class ClientDashboardTest extends TestCase
             );
     }
 
+    /**
+     * Cas non couvert par les autres tests : le Proprietaire n'a pas de `user_id` (compte
+     * client créé séparément, jamais explicitement lié), la seule correspondance possible
+     * passe par le téléphone — via `Personne::telephone`, plus une colonne de `proprietaires`
+     * depuis la refonte PERSONNE + USERS. Régression réelle : cassait uniquement sur MySQL/E2E,
+     * pas sur SQLite (tests), qui tolère silencieusement un `WHERE` sur colonne inexistante.
+     */
+    public function test_dashboard_resolves_proprietaire_by_telephone_when_not_linked_by_user_id(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->clientUser($org);
+
+        $personne = Personne::create([
+            'organization_id' => $org->id,
+            'nom' => $user->nom,
+            'prenom' => $user->prenom,
+            'telephone' => $user->telephone,
+        ]);
+
+        $proprietaire = Proprietaire::create([
+            'organization_id' => $org->id,
+            'user_id' => null,
+            'personne_id' => $personne->id,
+            'is_active' => true,
+        ]);
+
+        $vehicule = Vehicule::create([
+            'organization_id' => $org->id,
+            'nom_vehicule' => 'Vehicule Sans Lien User',
+            'immatriculation' => 'BB-456-GN',
+            'type_vehicule' => 'camion',
+            'capacite_packs' => 120,
+            'proprietaire_id' => $proprietaire->id,
+            'categorie' => 'partenaire',
+            'livraison_vente' => true,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('client.dashboard'))
+            ->assertStatus(200)
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('client/Dashboard')
+                ->where('actor.is_partner', true)
+                ->where('actor.proprietaire_id', $proprietaire->id)
+                ->where('vehicules.0.nom_vehicule', $vehicule->nom_vehicule)
+            );
+
+        $this->actingAs($user)
+            ->get(route('client.propositions.index'))
+            ->assertStatus(200)
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('client/VehicleProposals')
+                ->where('actor.is_partner', true)
+            );
+    }
+
     public function test_qr_code_returns_svg_for_authenticated_user(): void
     {
         $org = Organization::factory()->create();
@@ -215,12 +278,17 @@ class ClientDashboardTest extends TestCase
         $org = Organization::factory()->create();
         $user = $this->clientUser($org);
 
-        $proprietaire = Proprietaire::create([
+        $personne = Personne::create([
             'organization_id' => $org->id,
-            'user_id' => $user->id,
             'nom' => $user->nom,
             'prenom' => $user->prenom,
             'telephone' => $user->telephone,
+        ]);
+
+        $proprietaire = Proprietaire::create([
+            'organization_id' => $org->id,
+            'user_id' => $user->id,
+            'personne_id' => $personne->id,
             'is_active' => true,
         ]);
 
@@ -243,12 +311,17 @@ class ClientDashboardTest extends TestCase
         ]);
         $user->assignRole('livreur');
 
-        $livreur = Livreur::create([
+        $personne = Personne::create([
             'organization_id' => $org->id,
-            'user_id' => $user->id,
             'nom' => $user->nom,
             'prenom' => $user->prenom,
             'telephone' => $user->telephone,
+        ]);
+
+        $livreur = Livreur::create([
+            'organization_id' => $org->id,
+            'user_id' => $user->id,
+            'personne_id' => $personne->id,
             'is_active' => true,
         ]);
 

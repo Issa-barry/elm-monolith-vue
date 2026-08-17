@@ -3,23 +3,25 @@
 namespace Database\Seeders;
 
 use App\Models\Organization;
+use App\Models\Personne;
 use App\Models\User;
+use App\Models\UserAuthIdentity;
 use App\Services\MatriculeService;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 
 /**
  * Comptes staff de démonstration pour l'organisation "elm" (mot de passe connu Staff@2025) —
  * réservé au dev local / CI (via DatabaseSeeder) ou à un environnement de démo dédié, jamais à
- * prod/preprod. Extrait de RolesAndPermissionsSeeder (qui, lui, reste appelé par ProductionSeeder
- * et doit rester garanti sans compte de démo, en toute circonstance) suite à l'incident du
- * 2026-08-12 : un `db:seed --class=ProductionSeeder` lancé avant configuration complète du .env
- * sur l'hébergement preprod avait créé ces comptes via l'ancien guard `app()->environment('production')`
- * — fragile car dépendant de l'ordre exact des étapes de déploiement. La sécurité vient maintenant
- * du fait que ce seeder n'est JAMAIS appelé par ProductionSeeder, pas d'une valeur d'APP_ENV.
+ * prod/preprod. Extrait de RolesAndPermissionsSeeder suite à l'incident du 2026-08-12 : un seeder
+ * de production lancé avant configuration complète du .env sur l'hébergement preprod avait créé
+ * ces comptes via l'ancien guard `app()->environment('production')` — fragile car dépendant de
+ * l'ordre exact des étapes de déploiement. La sécurité vient maintenant du fait que ce seeder
+ * n'est JAMAIS appelé par le pipeline de déploiement (qui ne seede que RolesAndPermissionsSeeder),
+ * pas d'une valeur d'APP_ENV.
  *
  * Requiert que RolesAndPermissionsSeeder::seedRolesEtPermissions() ait déjà tourné (rôles) et que
- * l'organisation "elm" existe déjà.
+ * l'organisation "elm" existe déjà (cf. ElmDemoOrganizationSeeder, appelé juste avant dans
+ * DatabaseSeeder).
  *
  * Lancement isolé : php artisan db:seed --class=ElmDemoAccountsSeeder
  */
@@ -93,24 +95,41 @@ class ElmDemoAccountsSeeder extends Seeder
             $paysNom = $codePays ? $pays[$codePays][0] : null;
             $codePhone = $codePays ? $pays[$codePays][1] : null;
 
-            $lookup = $data['telephone']
-                ? ['telephone' => $data['telephone']]
-                : ['prenom' => $data['prenom'], 'nom' => $data['nom']];
+            // Sans téléphone connu ("à définir"), la Personne se résout par nom+prénom dans
+            // l'organisation plutôt que par téléphone (rien à dédupliquer sinon) — reste
+            // idempotent au re-seed.
+            $personne = $data['telephone']
+                ? Personne::resoudreOuCreer($org->id, [
+                    'prenom' => $data['prenom'],
+                    'nom' => $data['nom'],
+                    'telephone' => $data['telephone'],
+                    'code_pays' => $codePays,
+                    'pays' => $paysNom,
+                    'code_phone_pays' => $codePhone,
+                ])
+                : Personne::firstOrCreate(
+                    ['organization_id' => $org->id, 'nom' => $data['nom'], 'prenom' => $data['prenom']],
+                    []
+                );
 
             // updateOrCreate garantit que le mot de passe est toujours réinitialisé
             // lors d'un re-seed, même si le compte existe déjà.
-            $user = User::updateOrCreate($lookup, [
-                'prenom' => $data['prenom'],
-                'nom' => $data['nom'],
-                'telephone' => $data['telephone'],
-                'code_pays' => $codePays,
-                'pays' => $paysNom,
-                'code_phone_pays' => $codePhone,
-                'email' => null,
-                'email_verified_at' => now(),
-                'password' => Hash::make(self::PASSWORD),
-                'organization_id' => $org->id,
-            ]);
+            $user = User::updateOrCreate(
+                ['personne_id' => $personne->id],
+                ['password' => self::PASSWORD, 'organization_id' => $org->id]
+            );
+
+            if ($data['telephone']) {
+                $user->authIdentities()->updateOrCreate(
+                    ['type' => UserAuthIdentity::TYPE_TELEPHONE],
+                    [
+                        'value' => $data['telephone'],
+                        'normalized_value' => Personne::normaliserTelephone($data['telephone']),
+                        'verified_at' => now(),
+                        'is_primary' => true,
+                    ]
+                );
+            }
 
             $user->syncRoles([$data['role']]);
             app(MatriculeService::class)->assignForUser($user);

@@ -28,13 +28,13 @@ class VehiculeCommissionsController extends Controller
         $proprietaire = Proprietaire::query()
             ->when($user->organization_id, fn ($q) => $q->where('organization_id', $user->organization_id))
             ->where(fn ($q) => $q->where('user_id', $user->id)
-                ->when($user->telephone, fn ($q2) => $q2->orWhere('telephone', $user->telephone)))
+                ->when($user->telephone, fn ($q2) => $q2->orWhereHas('personne', fn ($p) => $p->where('telephone', $user->telephone))))
             ->first();
 
         $livreur = Livreur::query()
             ->when($user->organization_id, fn ($q) => $q->where('organization_id', $user->organization_id))
             ->where(fn ($q) => $q->where('user_id', $user->id)
-                ->when($user->telephone, fn ($q2) => $q2->orWhere('telephone', $user->telephone)))
+                ->when($user->telephone, fn ($q2) => $q2->orWhereHas('personne', fn ($p) => $p->where('telephone', $user->telephone))))
             ->first();
 
         if ($proprietaire === null && $livreur === null) {

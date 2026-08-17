@@ -749,7 +749,7 @@ class UserInvitationTest extends TestCase
         ]));
 
         // User was created, but pending validation — never auto-logged in
-        $user = User::where('telephone', $phone)->first();
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', $phone))->first();
         $this->assertNotNull($user);
         $this->assertSame($invitation->email, $user->email);
         $this->assertSame($org->id, $user->organization_id);
@@ -760,7 +760,7 @@ class UserInvitationTest extends TestCase
         // Email considéré vérifié : avoir cliqué le lien d'invitation reçu à cette
         // adresse en prouve déjà la possession (sinon, une fois validé par un admin,
         // l'utilisateur resterait bloqué par le contrôle d'email non vérifié).
-        $this->assertNotNull($user->email_verified_at);
+        $this->assertNotNull($user->emailIdentity()?->verified_at);
 
         // Role assigned
         $this->assertTrue($user->hasRole('manager'));

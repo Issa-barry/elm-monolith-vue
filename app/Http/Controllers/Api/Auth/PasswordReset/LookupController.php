@@ -4,7 +4,8 @@ namespace App\Http\Controllers\Api\Auth\PasswordReset;
 
 use App\Http\Controllers\Controller;
 use App\Mail\OtpPasswordResetMail;
-use App\Models\User;
+use App\Models\Personne;
+use App\Models\UserAuthIdentity;
 use App\Services\OtpService;
 use App\Services\PhoneNormalizer;
 use Illuminate\Http\JsonResponse;
@@ -25,7 +26,7 @@ class LookupController extends Controller
             return response()->json(['error' => 'Numéro de téléphone invalide.'], 422);
         }
 
-        $user = User::where('telephone', $phone)->first();
+        $user = UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_TELEPHONE, Personne::normaliserTelephone($phone));
 
         if (! $user) {
             return response()->json(['error' => 'Aucun compte trouvé pour ce numéro de téléphone.'], 404);

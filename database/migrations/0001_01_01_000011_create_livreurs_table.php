@@ -12,23 +12,16 @@ return new class extends Migration
             $table->ulid('id')->primary();
             $table->foreignUlid('organization_id')->constrained()->cascadeOnDelete();
             $table->foreignUlid('user_id')->nullable()->constrained()->nullOnDelete();
-            // Identité civile : conservée pour d'éventuels autres projets/usages,
-            // mais jamais affichée ni demandée dans l'interface Eau La Maman —
-            // voir Livreur::$fillable et EquipeLivraisonController. Le libellé
-            // utilisateur ("Membre") repose uniquement sur nom_complet, facultatif.
-            $table->string('nom', 100)->nullable();
-            $table->string('prenom', 100)->nullable();
+            // Identité civile (nom/prenom/telephone) portée par Personne — cf.
+            // database/migrations/0001_01_01_000003_z_create_personnes_table.php. nom_complet
+            // reste ici : désignation d'affichage propre à ce rôle (ex: "Chauffeur-1 Camion X"
+            // généré automatiquement quand aucun nom n'est connu), pas l'état civil de la
+            // personne — jamais déplacé vers Personne.
+            $table->foreignUlid('personne_id')->constrained('personnes')->restrictOnDelete();
             $table->string('nom_complet', 150)->nullable();
-            // Nullable en base (comme avant) : de nombreuses fixtures de tests
-            // et flux internes créent un Livreur sans téléphone connu. Le
-            // téléphone reste obligatoire au niveau applicatif partout où c'est
-            // pertinent (EquipeLivraisonController, ImportFlotteParser, LivreurController).
-            $table->string('telephone', 30)->nullable();
             $table->boolean('is_active')->default(true);
             $table->timestamps();
             $table->softDeletes();
-
-            $table->unique(['telephone', 'organization_id']);
         });
     }
 

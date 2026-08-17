@@ -5,8 +5,9 @@ namespace App\Http\Controllers\Api\Public;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Livreur;
+use App\Models\Personne;
 use App\Models\Proprietaire;
-use App\Models\User;
+use App\Models\UserAuthIdentity;
 use App\Services\OtpService;
 use App\Services\PhoneNormalizer;
 use Illuminate\Http\JsonResponse;
@@ -34,11 +35,12 @@ class RegisterLookupController extends Controller
             ], 422);
         }
 
-        if (User::where('telephone', $phone)->exists()) {
+        if (UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_TELEPHONE, Personne::normaliserTelephone($phone)) !== null) {
             return response()->json(['status' => 'user_exists']);
         }
 
         $prefill = null;
+        $normalise = Personne::normaliserTelephone($phone);
 
         $client = Client::where('telephone', $phone)->whereNull('user_id')->first();
         if ($client) {
@@ -46,14 +48,16 @@ class RegisterLookupController extends Controller
         }
 
         if (! $prefill) {
-            $livreur = Livreur::where('telephone', $phone)->first();
+            $livreur = Livreur::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))->first();
             if ($livreur) {
                 $prefill = ['prenom' => $livreur->prenom, 'nom' => $livreur->nom];
             }
         }
 
         if (! $prefill) {
-            $proprietaire = Proprietaire::where('telephone', $phone)->whereNull('user_id')->first();
+            $proprietaire = Proprietaire::whereNull('user_id')
+                ->whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
+                ->first();
             if ($proprietaire) {
                 $prefill = ['prenom' => $proprietaire->prenom, 'nom' => $proprietaire->nom];
             }

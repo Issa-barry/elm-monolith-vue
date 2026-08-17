@@ -2,8 +2,11 @@
 
 namespace Database\Factories;
 
+use App\Models\Personne;
 use App\Models\User;
+use App\Models\UserAuthIdentity;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
 /**
@@ -16,6 +19,8 @@ class UserFactory extends Factory
      */
     protected static ?string $password;
 
+    private const IDENTITY_KEYS = ['nom', 'prenom', 'email', 'telephone', 'pays', 'code_pays', 'code_phone_pays', 'ville', 'adresse'];
+
     /**
      * Define the model's default state.
      *
@@ -24,11 +29,7 @@ class UserFactory extends Factory
     public function definition(): array
     {
         return [
-            'prenom' => fake()->firstName(),
-            'nom' => fake()->lastName(),
-            'email' => fake()->unique()->safeEmail(),
-            'telephone' => '+224'.fake()->unique()->numerify('#########'),
-            'email_verified_at' => now(),
+            'personne_id' => Personne::factory(),
             'password' => static::$password ??= 'password',
             'remember_token' => Str::random(10),
             'two_factor_secret' => Str::random(10),
@@ -40,13 +41,71 @@ class UserFactory extends Factory
     }
 
     /**
+     * Compatibilité : `User::factory()->create(['nom' => ..., 'telephone' => ...])` reste
+     * possible malgré le déplacement de l'identité vers Personne/UserAuthIdentity — les clés
+     * d'identité passées ici sont routées vers une Personne dédiée (et une UserAuthIdentity
+     * téléphone/email) plutôt que d'être silencieusement ignorées par le mass-assignment.
+     */
+    public function create($attributes = [], ?Model $parent = null)
+    {
+        if (is_array($attributes)) {
+            $overrides = array_intersect_key($attributes, array_flip(self::IDENTITY_KEYS));
+
+            if ($overrides !== [] && ! isset($attributes['personne_id'])) {
+                $attributes['personne_id'] = Personne::factory()->create($overrides)->id;
+            }
+
+            foreach (self::IDENTITY_KEYS as $key) {
+                unset($attributes[$key]);
+            }
+        }
+
+        return parent::create($attributes, $parent);
+    }
+
+    /**
+     * Vérifie/crée via des requêtes fraîches (jamais `$user->telephoneIdentity()` ni
+     * `emailIdentity()` ici) : ces accesseurs lisent `$user->authIdentities`, qui se
+     * mettrait en cache VIDE puisqu'appelé avant toute création — toute lecture
+     * ultérieure de `$user->telephone`/`email` sur cette même instance resterait donc
+     * null en permanence, même une fois l'identité réellement créée en base.
+     */
+    public function configure(): static
+    {
+        return $this->afterCreating(function (User $user) {
+            if (! $user->authIdentities()->where('type', UserAuthIdentity::TYPE_TELEPHONE)->exists()) {
+                $telephone = $user->personne?->telephone ?? ('+224'.fake()->unique()->numerify('#########'));
+                $user->authIdentities()->create([
+                    'type' => UserAuthIdentity::TYPE_TELEPHONE,
+                    'value' => $telephone,
+                    'normalized_value' => Personne::normaliserTelephone($telephone),
+                    'verified_at' => now(),
+                    'is_primary' => true,
+                ]);
+            }
+
+            if ($user->personne?->email && ! $user->authIdentities()->where('type', UserAuthIdentity::TYPE_EMAIL)->exists()) {
+                $email = $user->personne->email;
+                $user->authIdentities()->create([
+                    'type' => UserAuthIdentity::TYPE_EMAIL,
+                    'value' => $email,
+                    'normalized_value' => UserAuthIdentity::normaliser(UserAuthIdentity::TYPE_EMAIL, $email),
+                    'verified_at' => now(),
+                ]);
+            }
+
+            $user->unsetRelation('authIdentities');
+        });
+    }
+
+    /**
      * Indicate that the model's email address should be unverified.
      */
     public function unverified(): static
     {
-        return $this->state(fn (array $attributes) => [
-            'email_verified_at' => null,
-        ]);
+        return $this->afterCreating(function (User $user) {
+            $user->emailIdentity()?->update(['verified_at' => null]);
+        });
     }
 
     /**

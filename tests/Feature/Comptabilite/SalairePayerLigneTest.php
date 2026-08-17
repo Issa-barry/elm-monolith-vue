@@ -8,6 +8,7 @@ use App\Models\Employe;
 use App\Models\Organization;
 use App\Models\PaieLigne;
 use App\Models\PaiePeriode;
+use App\Models\Personne;
 use App\Models\Site;
 use App\Models\User;
 use App\Services\PaieCalculService;
@@ -53,11 +54,17 @@ class SalairePayerLigneTest extends TestCase
 
     private function makeLigne(StatutPeriodePaie $statutPeriode): PaieLigne
     {
-        $employe = Employe::create([
+        $personne = Personne::create([
             'organization_id' => $this->org->id,
-            'matricule' => '000001',
             'nom' => 'CAMARA',
             'prenom' => 'Test',
+            'telephone' => '+224'.fake()->unique()->numerify('#########'),
+        ]);
+
+        $employe = Employe::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
+            'matricule' => '000001',
             'type_employe' => 'interne',
             'statut' => 'actif',
         ]);

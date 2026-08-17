@@ -93,7 +93,8 @@ class PaieController extends Controller
         $this->authorize('view', $paie);
 
         $paie->load([
-            'lignes.employe:id,nom,prenom,matricule',
+            'lignes.employe:id,personne_id,matricule',
+            'lignes.employe.personne',
             'lignes.variables',
             'lignes.paiements',
         ]);

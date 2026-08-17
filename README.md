@@ -11,26 +11,17 @@ php artisan optimize
 (`DB::prohibitDestructiveCommands`, cf. `AppServiceProvider`) même avec `--force`, mais à
 ne jamais taper par réflexe : ça vide toute la base. Utiliser `migrate --force` seul.
 
-`db:seed` sans `--class=ProductionSeeder` — le seeder par défaut (`DatabaseSeeder`) crée
+`db:seed` sans `--class=RolesAndPermissionsSeeder` — le seeder par défaut (`DatabaseSeeder`) crée
 des clients/livreurs/véhicules/produits fictifs, pas fait pour la production.
 
 ## 1er déploiement (base vide, une seule fois)
 
-⚠️ `db:seed --class=ProductionSeeder` est **spécifique à la vraie production "Eau la
-maman"** (il câble en dur l'organisation `elm` — sites, catalogue 7 produits, paramètres
-réels, cf. `RolesAndPermissionsSeeder::run()`). Ne le lance QUE pour ce déploiement-là.
-Pour toute **autre instance** (preprod formation, démo, futur client...), saute cette
-étape et va directement de `migrate --force` à `app:install` / `/install` — l'organisation
-est alors créée dynamiquement à partir du nom saisi (`InstallationService::resolveOrganization`),
-sans dépendre de `elm`. Lancer `ProductionSeeder` sur une autre instance crée une
-organisation "Eau la maman" fantôme en plus de celle voulue — pour nettoyer après coup :
-
-```bash
-$PHP artisan tinker --execute="\App\Models\Organization::where('slug','elm')->first()?->forceDelete();"
-```
-
-(`forceDelete()`, pas `delete()` : l'organisation est soft-deletable, seul un vrai DELETE
-déclenche les `cascadeOnDelete()` sur toutes les tables `organization_id`.)
+Le déploiement (CI/CD ou manuel) ne fait **que de l'infrastructure** : migrations + données
+strictement globales (permissions, rôles système). Il ne crée **jamais** d'organisation, de site
+ou d'utilisateur métier — sur une base neuve, `organizations` doit rester vide après cette étape,
+quelle que soit l'instance (vraie prod "Eau la maman", preprod formation, démo, futur client...).
+C'est `/install` (ou `app:install` en CLI) qui crée l'organisation, à partir du nom saisi
+(`InstallationService::resolveOrganization`) — jamais un seeder.
 
 ```bash
 cd ~/domains/xxx.com/public_html
@@ -40,9 +31,7 @@ composer2 install --no-dev --prefer-dist --optimize-autoloader
 # Configurer .env (DB, APP_ENV=production, APP_INSTALL_TOKEN=<clé secrète>...) puis :
 $PHP artisan key:generate
 $PHP artisan migrate --force
-
-# Uniquement pour la vraie prod "Eau la maman" (voir avertissement ci-dessus) :
-$PHP artisan db:seed --class=ProductionSeeder --force
+$PHP artisan db:seed --class=RolesAndPermissionsSeeder --force
 
 ln -s "$PWD/storage/app/public" "$PWD/public/storage" || true
 
@@ -52,7 +41,7 @@ $PHP artisan optimize
 ```
 php artisan key:generate
 php artisan migrate --force
-<!-- php artisan db:seed --class=ProductionSeeder --force -->
+php artisan db:seed --class=RolesAndPermissionsSeeder --force
 php artisan optimize:clear
 
 
@@ -66,9 +55,9 @@ première installation : le pipeline CI/CD (`deploy-hostinger.yml`) ne lance **j
 du siège, identité et mot de passe du Super Admin) qui n'a pas sa place dans un script de
 déploiement.
 
-L'étape "Entreprise" demande aussi la ville et le quartier du siège — un premier `Site` (type
-Siège) est créé automatiquement à partir de cette adresse ; les autres sites (usines, dépôts,
-agences) s'ajoutent ensuite depuis l'application (CRUD Sites ou import flotte), jamais seedés.
+Aucun site n'est créé pendant l'installation : le premier site se configure à la première
+connexion (onboarding post-connexion), puis les suivants depuis l'application (CRUD Sites ou
+import flotte), jamais seedés.
 Le catalogue de départ (catégories, options, types de véhicule) n'est plus une case à cocher :
 il est désormais toujours créé, en on_premise comme en saas — seuls les produits restent à
 créer manuellement après coup.
@@ -87,11 +76,12 @@ $PHP artisan app:install
 CLI et web partagent exactement le même service (`InstallationService`) — les deux produisent
 un résultat identique. Aucun slug n'est demandé : il est généré automatiquement à partir du
 nom saisi, modifiable ensuite dans les paramètres de l'entreprise (backoffice). L'installation
-est idempotente par nom d'entreprise : si une entreprise du même nom existe déjà (ex: "Eau la
-maman", créée par `ProductionSeeder`), elle est réutilisée au lieu d'être recréée — il suffit
-donc de saisir le même nom que celui déjà en base pour juste ajouter le super_admin. Dans les
-deux cas, le mot de passe est choisi directement par la personne qui installe (saisie masquée
-en CLI, champ mot de passe en web) — il n'est jamais généré, affiché en clair, ni conservé.
+est idempotente par nom d'entreprise (en on-premise) : si une organisation du même nom existe
+déjà (ex: reprise d'une installation interrompue), elle est réutilisée au lieu d'être recréée —
+il suffit donc de saisir le même nom que celui déjà en base pour juste ajouter le super_admin.
+Dans les deux cas, le mot de passe est choisi directement par la personne qui installe (saisie
+masquée en CLI, champ mot de passe en web) — il n'est jamais généré, affiché en clair, ni
+conservé.
 
 ## Déploiements suivants (uniquement)
 

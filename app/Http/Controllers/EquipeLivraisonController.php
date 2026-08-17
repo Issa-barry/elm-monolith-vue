@@ -6,6 +6,7 @@ use App\Enums\CategorieVehicule;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
 use Illuminate\Http\RedirectResponse;
@@ -354,15 +355,17 @@ class EquipeLivraisonController extends Controller
 
     private function proprietairesOptions(string $orgId): array
     {
-        return Proprietaire::where('organization_id', $orgId)
+        return Proprietaire::with('personne')
+            ->where('organization_id', $orgId)
             ->where('is_active', true)
-            ->orderBy('nom')
             ->get()
+            ->sortBy('nom')
             ->map(fn (Proprietaire $p) => [
                 'value' => $p->id,
                 'label' => trim("{$p->prenom} {$p->nom}"),
                 'telephone' => $p->telephone,
             ])
+            ->values()
             ->toArray();
     }
 
@@ -422,17 +425,20 @@ class EquipeLivraisonController extends Controller
                 ->where('organization_id', $orgId)
                 ->firstOrFail();
 
-            $livreur->update([
-                'nom_complet' => $nomComplet,
+            $livreur->update(['nom_complet' => $nomComplet]);
+            $livreur->personne->update([
                 'telephone' => $m['telephone'],
+                'telephone_normalise' => Personne::normaliserTelephone($m['telephone']),
             ]);
 
             return $livreur;
         }
 
+        $personne = Personne::resoudreOuCreer($orgId, ['telephone' => $m['telephone']]);
+
         return Livreur::firstOrCreate(
-            ['telephone' => $m['telephone'], 'organization_id' => $orgId],
-            ['nom_complet' => $nomComplet, 'organization_id' => $orgId, 'is_active' => true]
+            ['personne_id' => $personne->id, 'organization_id' => $orgId],
+            ['nom_complet' => $nomComplet, 'is_active' => true]
         );
     }
 
@@ -483,8 +489,8 @@ class EquipeLivraisonController extends Controller
     private function validateMembresExclusivite(array $membres, string $orgId, ?string $equipeIdCourant = null): void
     {
         foreach ($membres as $index => $m) {
-            $livreur = Livreur::where('telephone', $m['telephone'])
-                ->where('organization_id', $orgId)
+            $livreur = Livreur::where('organization_id', $orgId)
+                ->whereHas('personne', fn ($q) => $q->where('telephone_normalise', Personne::normaliserTelephone($m['telephone'])))
                 ->first();
 
             if (! $livreur) {

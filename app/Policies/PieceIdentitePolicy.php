@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Models\Personne;
 use App\Models\PieceIdentite;
 use App\Models\Proprietaire;
 use App\Models\User;
@@ -52,7 +53,7 @@ class PieceIdentitePolicy
     /**
      * Défense en profondeur : au-delà de organization_id sur la pièce elle-même
      * (déjà fiable grâce au garde-fou modèle), revérifie explicitement que
-     * l'entité rattachée est bien un Proprietaire de la même organisation que
+     * l'entité rattachée est bien une Personne de la même organisation que
      * l'utilisateur — jamais d'autorisation sur la seule base de l'ULID connu.
      */
     private function estAccessible(User $user, PieceIdentite $pieceIdentite): bool
@@ -63,7 +64,7 @@ class PieceIdentitePolicy
 
         $identifiable = $pieceIdentite->identifiable;
 
-        return $identifiable instanceof Proprietaire
+        return $identifiable instanceof Personne
             && $identifiable->organization_id === $user->organization_id;
     }
 }

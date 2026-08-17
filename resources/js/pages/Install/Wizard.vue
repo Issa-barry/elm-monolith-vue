@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { Head, useForm } from '@inertiajs/vue3';
-import { Check } from 'lucide-vue-next';
+import { Check, Eye, EyeOff } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface DomaineOption {
@@ -43,9 +43,10 @@ const form = useForm({
         telephone: '',
         email: '',
         password: '',
-        password_confirmation: '',
     },
 });
+
+const showPassword = ref(false);
 
 function errorFor(key: string): string | undefined {
     return (form.errors as Record<string, string>)[key];
@@ -115,8 +116,7 @@ const step2Valid = computed(
         form.admin.prenom.trim().length > 0 &&
         form.admin.nom.trim().length > 0 &&
         phoneInfo.value !== null &&
-        form.admin.password.length > 0 &&
-        form.admin.password === form.admin.password_confirmation,
+        form.admin.password.length > 0,
 );
 
 // ── Étape 3 : Domaine d'activité ─────────────────────────────────────────────
@@ -227,7 +227,7 @@ function submit() {
                 </div>
 
                 <!-- Étape 2 : Super Admin -->
-                <div v-else-if="currentStep === 2" class="grid gap-5">
+                <div v-else-if="currentStep === 2" class="grid gap-4">
                     <div class="grid grid-cols-2 gap-4">
                         <div class="grid gap-2">
                             <Label for="admin-prenom"
@@ -268,21 +268,12 @@ function submit() {
                         >
                             Vérification…
                         </p>
-                        <div
+                        <p
                             v-else-if="phoneInfo"
-                            class="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground"
+                            class="text-xs text-muted-foreground"
                         >
-                            <p>✓ Pays détecté : {{ phoneInfo.pays }}</p>
-                            <p>✓ Indicatif : {{ phoneInfo.indicatif }}</p>
-                            <p>
-                                ✓ Devise :
-                                {{ phoneInfo.devise ?? 'non déterminée' }}
-                            </p>
-                            <p>
-                                ✓ Fuseau horaire :
-                                {{ phoneInfo.fuseau ?? 'non déterminé' }}
-                            </p>
-                        </div>
+                            ✓ Numéro valide ({{ phoneInfo.pays }})
+                        </p>
                         <p
                             v-else-if="phoneInfoError"
                             class="text-xs text-destructive"
@@ -306,39 +297,34 @@ function submit() {
                             >Mot de passe
                             <span class="text-destructive">*</span></Label
                         >
-                        <Input
-                            id="admin-password"
-                            v-model="form.admin.password"
-                            type="password"
-                            autocomplete="new-password"
-                        />
+                        <div class="relative">
+                            <Input
+                                id="admin-password"
+                                v-model="form.admin.password"
+                                :type="showPassword ? 'text' : 'password'"
+                                autocomplete="new-password"
+                                class="pr-10"
+                            />
+                            <button
+                                type="button"
+                                class="absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                                @click="showPassword = !showPassword"
+                                :aria-label="
+                                    showPassword
+                                        ? 'Masquer le mot de passe'
+                                        : 'Afficher le mot de passe'
+                                "
+                            >
+                                <component
+                                    :is="showPassword ? EyeOff : Eye"
+                                    class="h-4 w-4"
+                                />
+                            </button>
+                        </div>
                         <p class="text-xs text-muted-foreground">
                             Min. 8 caractères, majuscule + minuscule + symbole.
                         </p>
                         <InputError :message="errorFor('admin.password')" />
-                    </div>
-
-                    <div class="grid gap-2">
-                        <Label for="admin-password-confirmation"
-                            >Confirmer le mot de passe
-                            <span class="text-destructive">*</span></Label
-                        >
-                        <Input
-                            id="admin-password-confirmation"
-                            v-model="form.admin.password_confirmation"
-                            type="password"
-                            autocomplete="new-password"
-                        />
-                        <p
-                            v-if="
-                                form.admin.password_confirmation &&
-                                form.admin.password !==
-                                    form.admin.password_confirmation
-                            "
-                            class="text-xs text-destructive"
-                        >
-                            Les mots de passe ne correspondent pas.
-                        </p>
                     </div>
                 </div>
 

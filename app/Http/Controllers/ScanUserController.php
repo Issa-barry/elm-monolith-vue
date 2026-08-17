@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Livreur;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -23,12 +24,20 @@ class ScanUserController extends Controller
             return response()->json(['url' => null, 'message' => 'Utilisateur introuvable.'], 404);
         }
 
-        $proprietaire = Proprietaire::where('telephone', $user->telephone)->first();
+        if (! $user->telephone) {
+            return response()->json(['url' => null, 'message' => 'Aucun profil propriétaire ou livreur trouvé.'], 404);
+        }
+
+        // nom/prenom/telephone ne sont plus des colonnes de livreurs/proprietaires — l'identité
+        // civile est portée par Personne (cf. Personne::normaliserTelephone()).
+        $normalise = Personne::normaliserTelephone($user->telephone);
+
+        $proprietaire = Proprietaire::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))->first();
         if ($proprietaire) {
             return response()->json(['url' => route('proprietaires.show', $proprietaire->id)]);
         }
 
-        $livreur = Livreur::where('telephone', $user->telephone)->first();
+        $livreur = Livreur::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))->first();
         if ($livreur) {
             return response()->json(['url' => route('livreurs.show', $livreur->id)]);
         }

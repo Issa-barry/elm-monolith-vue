@@ -8,6 +8,7 @@ use App\Models\Organization;
 use App\Models\Produit;
 use App\Models\Site;
 use App\Models\User;
+use Database\Seeders\ElmDemoOrganizationSeeder;
 use Database\Seeders\FelloDemoSeeder;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -25,6 +26,7 @@ class FelloDemoSeederTest extends TestCase
     public function test_fello_demo_seeder_ne_modifie_pas_lorganisation_elm(): void
     {
         $this->seed(RolesAndPermissionsSeeder::class);
+        $this->seed(ElmDemoOrganizationSeeder::class);
 
         $elm = Organization::where('slug', 'elm')->firstOrFail();
         $elmUsersAvant = User::where('organization_id', $elm->id)->count();
@@ -57,6 +59,7 @@ class FelloDemoSeederTest extends TestCase
     public function test_aucune_donnee_fello_demo_nest_rattachee_a_elm_et_inversement(): void
     {
         $this->seed(RolesAndPermissionsSeeder::class);
+        $this->seed(ElmDemoOrganizationSeeder::class);
         $this->seed(FelloDemoSeeder::class);
 
         $elm = Organization::where('slug', 'elm')->firstOrFail();

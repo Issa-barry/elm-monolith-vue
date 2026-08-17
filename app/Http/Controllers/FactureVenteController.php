@@ -109,24 +109,29 @@ class FactureVenteController extends Controller
             $query->whereHas('commande.vehicule.equipe.membres', fn ($q) => $q
                 ->where('role', 'chauffeur')
                 ->whereHas('livreur', fn ($l) => $l
-                    ->where('nom', 'like', "%{$chauffeurRecherche}%")
-                    ->orWhere('prenom', 'like', "%{$chauffeurRecherche}%")
-                    ->orWhere('telephone', 'like', "%{$chauffeurRecherche}%")));
+                    ->where('livreurs.nom_complet', 'like', "%{$chauffeurRecherche}%")
+                    ->orWhereHas('personne', fn ($p) => $p
+                        ->where('nom', 'like', "%{$chauffeurRecherche}%")
+                        ->orWhere('prenom', 'like', "%{$chauffeurRecherche}%")
+                        ->orWhere('telephone', 'like', "%{$chauffeurRecherche}%"))));
         }
 
         if ($convoyeurRecherche) {
             $query->whereHas('commande.vehicule.equipe.membres', fn ($q) => $q
                 ->where('role', 'convoyeur')
                 ->whereHas('livreur', fn ($l) => $l
-                    ->where('nom', 'like', "%{$convoyeurRecherche}%")
-                    ->orWhere('prenom', 'like', "%{$convoyeurRecherche}%")
-                    ->orWhere('telephone', 'like', "%{$convoyeurRecherche}%")));
+                    ->where('livreurs.nom_complet', 'like', "%{$convoyeurRecherche}%")
+                    ->orWhereHas('personne', fn ($p) => $p
+                        ->where('nom', 'like', "%{$convoyeurRecherche}%")
+                        ->orWhere('prenom', 'like', "%{$convoyeurRecherche}%")
+                        ->orWhere('telephone', 'like', "%{$convoyeurRecherche}%"))));
         }
 
         if ($proprietaireRecherche) {
             $query->whereHas('commande.vehicule.proprietaire', fn ($q) => $q
-                ->where('nom', 'like', "%{$proprietaireRecherche}%")
-                ->orWhere('prenom', 'like', "%{$proprietaireRecherche}%"));
+                ->whereHas('personne', fn ($p) => $p
+                    ->where('nom', 'like', "%{$proprietaireRecherche}%")
+                    ->orWhere('prenom', 'like', "%{$proprietaireRecherche}%")));
         }
 
         if ($clientRecherche) {

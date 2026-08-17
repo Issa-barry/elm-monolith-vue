@@ -6,9 +6,11 @@ use App\Actions\Fortify\PasswordValidationRules;
 use App\Enums\DomaineActivite;
 use App\Models\AppInstallation;
 use App\Models\Organization;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\User;
+use App\Models\UserAuthIdentity;
 use Database\Seeders\CategorieDefaultSeeder;
 use Database\Seeders\OptionCatalogueDefaultSeeder;
 use Database\Seeders\ProduitTypeDefaultSeeder;
@@ -103,7 +105,7 @@ class InstallationService
         if ($existing) {
             // Ne réécrit jamais un domaine déjà renseigné (donnée métier établie) — ne complète
             // que si l'organisation existante n'en avait pas encore (ex: créée avant l'ajout de
-            // ce champ, ou par ProductionSeeder).
+            // ce champ, ou reprise d'une installation interrompue).
             if ($existing->domaine_activite === null) {
                 $existing->update(['domaine_activite' => $domaine]);
             }
@@ -229,7 +231,7 @@ class InstallationService
                 ]);
             }
 
-            if (User::where('telephone', $telephoneInfo['telephone'])->exists()) {
+            if (UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_TELEPHONE, Personne::normaliserTelephone($telephoneInfo['telephone'])) !== null) {
                 throw ValidationException::withMessages([
                     'admin.telephone' => 'Ce numéro est déjà utilisé par un autre compte.',
                 ]);
@@ -241,38 +243,55 @@ class InstallationService
                 'admin.password',
             );
 
-            $user = User::create([
-                'organization_id' => $org->id,
-                'prenom' => $admin['prenom'],
+            // Identité de l'admin saisie une seule fois — cf. Personne::resoudreOuCreer() : ne
+            // recrée jamais un doublon si une Personne existe déjà dans cette organisation pour
+            // ce téléphone (ex: reprise d'installation on-premise interrompue).
+            $personne = Personne::resoudreOuCreer($org->id, [
                 'nom' => $admin['nom'],
+                'prenom' => $admin['prenom'],
                 'telephone' => $telephoneInfo['telephone'],
                 'code_pays' => $telephoneInfo['code_pays'],
                 'pays' => $telephoneInfo['pays'],
                 'code_phone_pays' => $telephoneInfo['indicatif'],
                 'email' => $admin['email'] ?: null,
-                'email_verified_at' => now(),
+            ]);
+
+            $user = User::create([
+                'organization_id' => $org->id,
+                'personne_id' => $personne->id,
                 'password' => $admin['password'],
             ]);
+            $user->authIdentities()->create([
+                'type' => UserAuthIdentity::TYPE_TELEPHONE,
+                'value' => $telephoneInfo['telephone'],
+                'normalized_value' => Personne::normaliserTelephone($telephoneInfo['telephone']),
+                'verified_at' => now(),
+                'is_primary' => true,
+            ]);
+            if ($admin['email'] ?? null) {
+                $user->authIdentities()->create([
+                    'type' => UserAuthIdentity::TYPE_EMAIL,
+                    'value' => $admin['email'],
+                    'normalized_value' => UserAuthIdentity::normaliser(UserAuthIdentity::TYPE_EMAIL, $admin['email']),
+                    'verified_at' => now(),
+                ]);
+            }
             $user->syncRoles(['super_admin']);
             app(MatriculeService::class)->assignForUser($user);
 
             // Propriétaire interne par défaut de l'organisation (véhicules "interne" et
             // commissions propriétaire associées, cf. Organization::proprietaireInterne()) —
-            // réutilise l'identité du super_admin qui vient d'être saisie une seule fois, plutôt
-            // que de la redemander : dans l'immense majorité des cas, la personne qui installe
-            // l'application EST la propriétaire de l'entreprise. Fiche Proprietaire distincte du
-            // compte User (rattachée via user_id) : le propriétaire économique reste stable même
-            // si l'admin connecté change plus tard (cf. Organization::proprietaire_interne_id).
+            // réutilise la Personne du super_admin qui vient d'être saisie une seule fois,
+            // plutôt que de la redemander : dans l'immense majorité des cas, la personne qui
+            // installe l'application EST la propriétaire de l'entreprise. Fiche Proprietaire
+            // distincte du compte User (même personne_id, rattachée aussi via user_id pour
+            // l'accès rapide) : le propriétaire économique reste stable même si l'admin
+            // connecté change plus tard (cf. Organization::proprietaire_interne_id).
             if (! $org->proprietaire_interne_id) {
                 $proprietaireInterne = Proprietaire::create([
                     'organization_id' => $org->id,
                     'user_id' => $user->id,
-                    'nom' => $user->nom,
-                    'prenom' => $user->prenom,
-                    'telephone' => $user->telephone,
-                    'code_pays' => $user->code_pays,
-                    'pays' => $user->pays,
-                    'code_phone_pays' => $user->code_phone_pays,
+                    'personne_id' => $personne->id,
                     'is_active' => true,
                 ]);
                 $org->forceFill(['proprietaire_interne_id' => $proprietaireInterne->id])->save();

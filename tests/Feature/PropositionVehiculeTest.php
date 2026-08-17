@@ -271,7 +271,7 @@ class PropositionVehiculeTest extends TestCase
             'is_active' => false,
         ]);
 
-        $this->assertDatabaseHas('proprietaires', [
+        $this->assertDatabaseHas('personnes', [
             'organization_id' => $this->org->id,
             'telephone' => '+224628111222',
         ]);

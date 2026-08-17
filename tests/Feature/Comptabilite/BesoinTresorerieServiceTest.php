@@ -17,6 +17,7 @@ use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\PaiementFiche;
 use App\Models\PaiementFichePaiement;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
@@ -61,8 +62,14 @@ class BesoinTresorerieServiceTest extends TestCase
 
     private function makeLivreur(): Livreur
     {
+        $personne = Personne::create([
+            'organization_id' => $this->org->id,
+            'telephone' => '+224'.fake()->unique()->numerify('#########'),
+        ]);
+
         return Livreur::create([
             'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
             'nom_complet' => 'Livreur '.uniqid(),
             'is_active' => true,
         ]);
@@ -170,10 +177,17 @@ class BesoinTresorerieServiceTest extends TestCase
 
     private function makeEmploye(Site $site, float $salaireBase): Employe
     {
+        $personne = Personne::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Nom',
+            'prenom' => 'Prenom',
+            'telephone' => '+224'.fake()->unique()->numerify('#########'),
+        ]);
+
         $employe = Employe::create([
             'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
             'matricule' => (string) random_int(100000, 999999),
-            'nom' => 'Nom', 'prenom' => 'Prenom',
             'type_employe' => 'interne',
             'site_id' => $site->id,
             'statut' => 'actif',
@@ -312,8 +326,13 @@ class BesoinTresorerieServiceTest extends TestCase
             'organization_id' => $autreOrg->id,
             'nom' => 'Site Autre Org', 'type' => 'depot', 'localisation' => 'Conakry',
         ]);
+        $autrePersonne = Personne::create([
+            'organization_id' => $autreOrg->id,
+            'telephone' => '+224'.fake()->unique()->numerify('#########'),
+        ]);
         $autreLivreur = Livreur::create([
             'organization_id' => $autreOrg->id,
+            'personne_id' => $autrePersonne->id,
             'nom_complet' => 'Livreur Autre Org',
             'is_active' => true,
         ]);

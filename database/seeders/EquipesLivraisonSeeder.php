@@ -6,6 +6,7 @@ use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
 use App\Models\Organization;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use Illuminate\Database\Seeder;
 
@@ -41,13 +42,13 @@ class EquipesLivraisonSeeder extends Seeder
         $org = Organization::where('slug', 'elm')->firstOrFail();
 
         $lv = fn (string $tel) => Livreur::query()
-            ->where('telephone', $tel)
             ->where('organization_id', $org->id)
+            ->whereHas('personne', fn ($q) => $q->where('telephone_normalise', Personne::normaliserTelephone($tel)))
             ->firstOrFail();
 
         $prop = fn (string $tel) => Proprietaire::query()
-            ->where('telephone', $tel)
             ->where('organization_id', $org->id)
+            ->whereHas('personne', fn ($q) => $q->where('telephone_normalise', Personne::normaliserTelephone($tel)))
             ->firstOrFail();
 
         // ── Équipes EXTERNES ──────────────────────────────────────────────────

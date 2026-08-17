@@ -3,11 +3,12 @@
 namespace Database\Seeders\Organizations\FelloDemo;
 
 use App\Models\Organization;
+use App\Models\Personne;
 use App\Models\Site;
 use App\Models\User;
+use App\Models\UserAuthIdentity;
 use App\Services\MatriculeService;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 
 /**
  * Deux comptes staff de démo :
@@ -51,19 +52,27 @@ class FelloDemoUsersSeeder extends Seeder
         $recap = [];
 
         foreach (self::STAFF as $data) {
+            $personne = Personne::resoudreOuCreer($org->id, [
+                'prenom' => $data['prenom'],
+                'nom' => $data['nom'],
+                'telephone' => $data['telephone'],
+                'code_pays' => 'GN',
+                'code_phone_pays' => '+224',
+                'pays' => 'Guinée',
+                'ville' => 'Conakry',
+            ]);
+
             $user = User::updateOrCreate(
-                ['telephone' => $data['telephone']],
+                ['personne_id' => $personne->id],
+                ['organization_id' => $org->id, 'password' => self::PASSWORD, 'is_active' => true]
+            );
+            $user->authIdentities()->updateOrCreate(
+                ['type' => UserAuthIdentity::TYPE_TELEPHONE],
                 [
-                    'prenom' => $data['prenom'],
-                    'nom' => $data['nom'],
-                    'organization_id' => $org->id,
-                    'code_pays' => 'GN',
-                    'code_phone_pays' => '+224',
-                    'pays' => 'Guinée',
-                    'ville' => 'Conakry',
-                    'password' => Hash::make(self::PASSWORD),
-                    'is_active' => true,
-                    'email_verified_at' => now(),
+                    'value' => $data['telephone'],
+                    'normalized_value' => Personne::normaliserTelephone($data['telephone']),
+                    'verified_at' => now(),
+                    'is_primary' => true,
                 ]
             );
 

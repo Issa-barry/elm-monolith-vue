@@ -133,7 +133,7 @@ class MatriculeTest extends TestCase
                 'password_confirmation' => 'Password123',
             ]);
 
-        $user = User::where('telephone', '+224620111222')->firstOrFail();
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224620111222'))->firstOrFail();
         $this->assertNotNull($user->matricule);
         $this->assertMatchesRegularExpression('/^[0-9]{6}$/', $user->matricule);
     }
@@ -165,8 +165,8 @@ class MatriculeTest extends TestCase
             'password_confirmation' => 'Password123',
         ]);
 
-        $m1 = User::where('telephone', '+224620000010')->value('matricule');
-        $m2 = User::where('telephone', '+224620000011')->value('matricule');
+        $m1 = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224620000010'))->value('matricule');
+        $m2 = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224620000011'))->value('matricule');
 
         $this->assertNotNull($m1);
         $this->assertNotNull($m2);

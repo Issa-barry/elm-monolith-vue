@@ -15,6 +15,7 @@ use App\Models\DepenseType;
 use App\Models\Livreur;
 use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
+use App\Models\Personne;
 use App\Models\Site;
 use App\Models\User;
 use App\Models\Vehicule;
@@ -144,10 +145,16 @@ class PaiementPeriodeTest extends TestCase
         $this->travelTo('2026-06-10 12:00:00');
 
         $site = $this->defaultSite();
-        $livreur = Livreur::create([
+        $personne = Personne::create([
             'organization_id' => $this->org->id,
             'nom' => 'Diallo',
             'prenom' => 'Mamadou',
+            'telephone' => '+224'.fake()->unique()->numerify('#########'),
+        ]);
+
+        $livreur = Livreur::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
             'nom_complet' => 'Mamadou Diallo',
             'is_active' => true,
         ]);
@@ -199,10 +206,16 @@ class PaiementPeriodeTest extends TestCase
     {
         $this->travelTo('2026-06-10 12:00:00');
 
-        $livreur = Livreur::create([
+        $personne = Personne::create([
             'organization_id' => $this->org->id,
             'nom' => 'Diallo',
             'prenom' => 'Mamadou',
+            'telephone' => '+224'.fake()->unique()->numerify('#########'),
+        ]);
+
+        $livreur = Livreur::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
             'nom_complet' => 'Mamadou Diallo',
             'is_active' => true,
         ]);
@@ -253,10 +266,16 @@ class PaiementPeriodeTest extends TestCase
         $this->travelTo('2026-06-10 12:00:00');
 
         $site = $this->defaultSite();
-        $livreur = Livreur::create([
+        $personne = Personne::create([
             'organization_id' => $this->org->id,
             'nom' => 'Barry',
             'prenom' => 'Ibrahima',
+            'telephone' => '+224'.fake()->unique()->numerify('#########'),
+        ]);
+
+        $livreur = Livreur::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
             'nom_complet' => 'Ibrahima Barry',
             'is_active' => true,
         ]);
@@ -337,10 +356,16 @@ class PaiementPeriodeTest extends TestCase
     {
         $this->travelTo('2026-06-10 12:00:00');
 
-        $livreur = Livreur::create([
+        $personne = Personne::create([
             'organization_id' => $this->org->id,
             'nom' => 'Diallo',
             'prenom' => 'Mamadou',
+            'telephone' => '+224'.fake()->unique()->numerify('#########'),
+        ]);
+
+        $livreur = Livreur::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
             'nom_complet' => 'Mamadou Diallo',
             'is_active' => true,
         ]);
@@ -398,10 +423,16 @@ class PaiementPeriodeTest extends TestCase
     {
         $this->travelTo('2026-06-10 12:00:00');
 
-        $livreur = Livreur::create([
+        $personne = Personne::create([
             'organization_id' => $this->org->id,
             'nom' => 'Diallo',
             'prenom' => 'Mamadou',
+            'telephone' => '+224'.fake()->unique()->numerify('#########'),
+        ]);
+
+        $livreur = Livreur::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
             'nom_complet' => 'Mamadou Diallo',
             'is_active' => true,
         ]);
@@ -447,10 +478,16 @@ class PaiementPeriodeTest extends TestCase
     {
         $this->travelTo('2026-06-10 12:00:00');
 
-        $livreur = Livreur::create([
+        $personne = Personne::create([
             'organization_id' => $this->org->id,
             'nom' => 'Diallo',
             'prenom' => 'Mamadou',
+            'telephone' => '+224'.fake()->unique()->numerify('#########'),
+        ]);
+
+        $livreur = Livreur::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
             'nom_complet' => 'Mamadou Diallo',
             'is_active' => true,
         ]);
@@ -506,10 +543,16 @@ class PaiementPeriodeTest extends TestCase
     {
         $this->travelTo('2026-06-10 12:00:00');
 
-        $livreur = Livreur::create([
+        $personne = Personne::create([
             'organization_id' => $this->org->id,
             'nom' => 'Diallo',
             'prenom' => 'Mamadou',
+            'telephone' => '+224'.fake()->unique()->numerify('#########'),
+        ]);
+
+        $livreur = Livreur::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
             'nom_complet' => 'Mamadou Diallo',
             'is_active' => true,
         ]);
@@ -590,10 +633,16 @@ class PaiementPeriodeTest extends TestCase
         $this->travelTo('2026-06-10 12:00:00');
 
         $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id]);
-        $livreur = Livreur::create([
+        $personne = Personne::create([
             'organization_id' => $this->org->id,
             'nom' => 'Diallo',
             'prenom' => 'Mamadou',
+            'telephone' => '+224'.fake()->unique()->numerify('#########'),
+        ]);
+
+        $livreur = Livreur::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
             'nom_complet' => 'Mamadou Diallo',
             'is_active' => true,
         ]);
@@ -645,10 +694,16 @@ class PaiementPeriodeTest extends TestCase
         $this->travelTo('2026-06-10 12:00:00');
 
         $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id]);
-        $livreur = Livreur::create([
+        $personne = Personne::create([
             'organization_id' => $this->org->id,
             'nom' => 'Diallo',
             'prenom' => 'Mamadou',
+            'telephone' => '+224'.fake()->unique()->numerify('#########'),
+        ]);
+
+        $livreur = Livreur::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
             'nom_complet' => 'Mamadou Diallo',
             'is_active' => true,
         ]);
@@ -700,10 +755,16 @@ class PaiementPeriodeTest extends TestCase
         $vehiculeB = Vehicule::factory()->create(['organization_id' => $this->org->id]);
 
         foreach (['Diallo' => $vehiculeA, 'Barry' => $vehiculeB] as $nom => $vehicule) {
-            $livreur = Livreur::create([
+            $personne = Personne::create([
                 'organization_id' => $this->org->id,
                 'nom' => $nom,
                 'prenom' => 'Test',
+                'telephone' => '+224'.fake()->unique()->numerify('#########'),
+            ]);
+
+            $livreur = Livreur::create([
+                'organization_id' => $this->org->id,
+                'personne_id' => $personne->id,
                 'nom_complet' => "Test {$nom}",
                 'is_active' => true,
             ]);
@@ -756,10 +817,16 @@ class PaiementPeriodeTest extends TestCase
     {
         $this->travelTo('2026-06-10 12:00:00');
 
-        $livreur = Livreur::create([
+        $personne = Personne::create([
             'organization_id' => $this->org->id,
             'nom' => 'Diallo',
             'prenom' => 'Mamadou',
+            'telephone' => '+224'.fake()->unique()->numerify('#########'),
+        ]);
+
+        $livreur = Livreur::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
             'nom_complet' => 'Mamadou Diallo',
             'is_active' => true,
         ]);
@@ -806,10 +873,16 @@ class PaiementPeriodeTest extends TestCase
     {
         $this->travelTo('2026-06-10 12:00:00');
 
-        $livreur = Livreur::create([
+        $personne = Personne::create([
             'organization_id' => $this->org->id,
             'nom' => 'Diallo',
             'prenom' => 'Mamadou',
+            'telephone' => '+224'.fake()->unique()->numerify('#########'),
+        ]);
+
+        $livreur = Livreur::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
             'nom_complet' => 'Mamadou Diallo',
             'is_active' => true,
         ]);

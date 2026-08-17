@@ -7,8 +7,10 @@ use App\Enums\UserStatus;
 use App\Mail\EmailVerificationMail;
 use App\Models\Client;
 use App\Models\Livreur;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\User;
+use App\Models\UserAuthIdentity;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
@@ -36,7 +38,7 @@ class RegistrationService
             ]);
         }
 
-        if (User::where('telephone', $phone)->exists()) {
+        if (UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_TELEPHONE, Personne::normaliserTelephone($phone)) !== null) {
             return ['status' => 'user_exists', 'prefill' => null];
         }
 
@@ -63,28 +65,57 @@ class RegistrationService
             ]);
         }
 
-        if (User::where('telephone', $phone)->exists()) {
+        if (UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_TELEPHONE, Personne::normaliserTelephone($phone)) !== null) {
             throw ValidationException::withMessages([
                 'telephone' => 'Un compte existe déjà avec ce numéro de téléphone. Veuillez vous connecter.',
             ]);
         }
 
         $hasEmail = filled($data->email);
+
+        if ($hasEmail && UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_EMAIL, UserAuthIdentity::normaliser(UserAuthIdentity::TYPE_EMAIL, $data->email)) !== null) {
+            throw ValidationException::withMessages([
+                'email' => 'Un compte existe déjà avec cette adresse e-mail. Veuillez vous connecter.',
+            ]);
+        }
+
         $token = Str::random(64);
 
         $user = DB::transaction(function () use ($data, $phone, $token, $hasEmail) {
-            $user = User::create([
+            // Pas encore d'organisation à ce stade (auto-inscription "à la volée" — cf.
+            // Personne::resoudreOuCreer(), organization_id nullable) : linkPersonRecords()
+            // rattachera cette Personne à une organisation si un rôle existant est trouvé.
+            $personne = Personne::create([
+                'organization_id' => null,
                 'prenom' => self::formatPrenom($data->prenom),
                 'nom' => mb_strtoupper($data->nom),
-                'email' => $hasEmail ? mb_strtolower($data->email) : null,
                 'telephone' => $phone,
+                'telephone_normalise' => Personne::normaliserTelephone($phone),
+                'email' => $hasEmail ? mb_strtolower($data->email) : null,
+            ]);
+
+            $user = User::create([
+                'personne_id' => $personne->id,
                 'password' => $data->password,
                 'status' => $hasEmail ? UserStatus::PENDING->value : UserStatus::ACTIVE->value,
                 'is_active' => ! $hasEmail,
-                'email_verified_at' => null,
-                'email_verification_token' => $hasEmail ? $token : null,
-                'email_verification_expires_at' => $hasEmail ? now()->addHours(24) : null,
             ]);
+            $user->authIdentities()->create([
+                'type' => UserAuthIdentity::TYPE_TELEPHONE,
+                'value' => $phone,
+                'normalized_value' => Personne::normaliserTelephone($phone),
+                'verified_at' => now(),
+                'is_primary' => true,
+            ]);
+            if ($hasEmail) {
+                $user->authIdentities()->create([
+                    'type' => UserAuthIdentity::TYPE_EMAIL,
+                    'value' => mb_strtolower($data->email),
+                    'normalized_value' => UserAuthIdentity::normaliser(UserAuthIdentity::TYPE_EMAIL, $data->email),
+                    'verification_token' => $token,
+                    'verification_expires_at' => now()->addHours(24),
+                ]);
+            }
 
             Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
             $user->assignRole('client');
@@ -108,24 +139,28 @@ class RegistrationService
      */
     public function verifyEmail(string $token): User
     {
-        $user = User::where('email_verification_token', $token)
-            ->whereNotNull('email_verification_token')
+        $identity = UserAuthIdentity::where('verification_token', $token)
+            ->whereNotNull('verification_token')
             ->first();
 
-        if (! $user) {
+        if (! $identity) {
             abort(404, 'Lien de validation invalide ou déjà utilisé.');
         }
 
-        if ($user->email_verification_expires_at < now()) {
+        if ($identity->verification_expires_at < now()) {
             abort(410, 'Ce lien de validation a expiré. Veuillez vous réinscrire.');
         }
 
+        $identity->update([
+            'verified_at' => now(),
+            'verification_token' => null,
+            'verification_expires_at' => null,
+        ]);
+
+        $user = $identity->user;
         $user->update([
             'status' => UserStatus::ACTIVE->value,
             'is_active' => true,
-            'email_verified_at' => now(),
-            'email_verification_token' => null,
-            'email_verification_expires_at' => null,
         ]);
 
         return $user->fresh();
@@ -138,12 +173,18 @@ class RegistrationService
             return ['prenom' => $client->prenom, 'nom' => $client->nom];
         }
 
-        $livreur = Livreur::where('telephone', $phone)->whereNull('user_id')->first();
+        $normalise = Personne::normaliserTelephone($phone);
+
+        $livreur = Livreur::whereNull('user_id')
+            ->whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
+            ->first();
         if ($livreur) {
             return ['prenom' => $livreur->prenom, 'nom' => $livreur->nom];
         }
 
-        $proprietaire = Proprietaire::where('telephone', $phone)->whereNull('user_id')->first();
+        $proprietaire = Proprietaire::whereNull('user_id')
+            ->whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
+            ->first();
         if ($proprietaire) {
             return ['prenom' => $proprietaire->prenom, 'nom' => $proprietaire->nom];
         }
@@ -160,23 +201,47 @@ class RegistrationService
             return;
         }
 
-        $livreur = Livreur::where('telephone', $phone)->whereNull('user_id')->first();
+        $normalise = Personne::normaliserTelephone($phone);
+
+        $livreur = Livreur::whereNull('user_id')
+            ->whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
+            ->first();
         if ($livreur) {
             Role::firstOrCreate(['name' => 'livreur', 'guard_name' => 'web']);
             $user->assignRole('livreur');
             $livreur->update(['user_id' => $user->id]);
-            $user->update(['organization_id' => $livreur->organization_id]);
+            $this->rattacherMemePersonne($user, $livreur->personne, $livreur->organization_id);
             $this->findOrCreateClientInOrg($user, $livreur->organization_id, $phone);
 
             return;
         }
 
-        $proprietaire = Proprietaire::where('telephone', $phone)->whereNull('user_id')->first();
+        $proprietaire = Proprietaire::whereNull('user_id')
+            ->whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
+            ->first();
         if ($proprietaire) {
             Role::firstOrCreate(['name' => 'proprietaire', 'guard_name' => 'web']);
             $user->assignRole('proprietaire');
             $proprietaire->update(['user_id' => $user->id]);
+            $this->rattacherMemePersonne($user, $proprietaire->personne, $proprietaire->organization_id);
             $this->findOrCreateClientInOrg($user, $proprietaire->organization_id, $phone);
+        }
+    }
+
+    /**
+     * Le compte vient d'être créé avec une Personne "à la volée" (sans organisation) ; on
+     * découvre ici qu'il s'agit en réalité de la même personne physique qu'un rôle métier déjà
+     * existant (même téléphone) — on rattache le compte à CETTE Personne (celle du rôle,
+     * rattachée à son organisation) plutôt que de garder deux fiches distinctes pour le même
+     * humain, et on supprime la fiche provisoire devenue orpheline.
+     */
+    private function rattacherMemePersonne(User $user, Personne $personneDuRole, string $organizationId): void
+    {
+        $ancienne = $user->personne;
+        $user->update(['organization_id' => $organizationId, 'personne_id' => $personneDuRole->id]);
+
+        if ($ancienne->id !== $personneDuRole->id) {
+            $ancienne->delete();
         }
     }
 

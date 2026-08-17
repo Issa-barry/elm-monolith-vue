@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\Organization;
 use Illuminate\Database\Seeder;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -32,21 +31,23 @@ class RolesAndPermissionsSeeder extends Seeder
     private const ACTIONS = ['create', 'read', 'update', 'delete'];
 
     /**
-     * Ne crée JAMAIS de compte de démo — sécurité indépendante d'APP_ENV, garantie par le seul
-     * fait que ce seeder n'appelle plus ElmDemoAccountsSeeder (cf. son docblock pour le contexte).
-     * Le seul compte réel de mise en prod est créé par `php artisan app:install` (cf. InstallApp),
-     * jamais par un seeder. Les comptes de démo "elm", eux, sont ajoutés explicitement par
-     * DatabaseSeeder (dev local / CI) via ElmDemoAccountsSeeder, jamais ici.
+     * Ne crée JAMAIS de compte de démo, ni d'organisation — sécurité indépendante d'APP_ENV,
+     * garantie par le fait que ce seeder ne touche plus qu'à des données globales (permissions,
+     * rôles système `organization_id IS NULL`). C'est précisément ce qui le rend sûr à lancer
+     * automatiquement à chaque déploiement de production (`db:seed --class=RolesAndPermissionsSeeder
+     * --force`, cf. deploy-hostinger-admin.yml / deploy-hostinger-formation.yml) : sur une instance
+     * on-premise neuve, `organizations` doit rester vide tant que `/install` n'a pas été complété
+     * (cf. InstallationService::isLocked()) — un seeder de CI/CD ne doit jamais créer de donnée
+     * métier (organisation, site, utilisateur).
+     *
+     * Le seul compte réel de mise en prod est créé par `php artisan app:install` / `/install` (cf.
+     * InstallApp, InstallationService::install()), jamais par un seeder. L'organisation de
+     * démonstration "elm", elle, est créée par ElmDemoOrganizationSeeder, appelée uniquement par
+     * DatabaseSeeder (dev local / CI de tests) — jamais par le pipeline de déploiement.
      */
     public function run(): void
     {
         self::seedRolesEtPermissions();
-
-        // ── 3. Organisation par défaut ────────────────────────────────────────
-        Organization::firstOrCreate(
-            ['slug' => 'elm'],
-            ['name' => 'Eau la maman', 'is_active' => true]
-        );
     }
 
     /**

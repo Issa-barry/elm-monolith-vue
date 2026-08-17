@@ -8,11 +8,12 @@ use App\Http\Controllers\UserController;
 use App\Mail\UserInvitationMail;
 use App\Models\Client;
 use App\Models\Livreur;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\User;
+use App\Models\UserAuthIdentity;
 use App\Models\UserInvitation;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
@@ -36,7 +37,8 @@ class UserInvitationService
             throw new InvitationException('Ce rôle ne peut pas être attribué par invitation.');
         }
 
-        if (User::where('email', $email)->where('organization_id', $site->organization_id)->exists()) {
+        $utilisateurExistant = UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_EMAIL, UserAuthIdentity::normaliser(UserAuthIdentity::TYPE_EMAIL, $email));
+        if ($utilisateurExistant && $utilisateurExistant->organization_id === $site->organization_id) {
             throw new InvitationException('Cette adresse email est déjà associée à un compte utilisateur sur cette organisation.');
         }
 
@@ -164,19 +166,35 @@ class UserInvitationService
             throw new \RuntimeException('Ce rôle ne peut pas être attribué via une invitation.');
         }
 
-        $user = User::create([
+        $personne = Personne::resoudreOuCreer($invitation->organization_id, [
             'prenom' => mb_convert_case(mb_strtolower($data['prenom'], 'UTF-8'), MB_CASE_TITLE, 'UTF-8'),
             'nom' => mb_strtoupper($data['nom'], 'UTF-8'),
-            'email' => $invitation->email,
-            // L'email est considéré vérifié : pour arriver ici, l'utilisateur a dû ouvrir
-            // le lien d'invitation reçu à cette adresse, ce qui en prouve déjà la possession.
-            'email_verified_at' => now(),
             'telephone' => $data['telephone'],
-            'password' => Hash::make($data['password']),
-            'organization_id' => $invitation->organization_id,
             'code_pays' => $data['code_pays'] ?? null,
+            'email' => $invitation->email,
+        ]);
+
+        $user = User::create([
+            'personne_id' => $personne->id,
+            'password' => $data['password'],
+            'organization_id' => $invitation->organization_id,
             'is_active' => false,
             'status' => User::STATUS_PENDING_VALIDATION,
+        ]);
+        $user->authIdentities()->create([
+            'type' => UserAuthIdentity::TYPE_TELEPHONE,
+            'value' => $data['telephone'],
+            'normalized_value' => Personne::normaliserTelephone($data['telephone']),
+            'verified_at' => now(),
+            'is_primary' => true,
+        ]);
+        // L'email est considéré vérifié : pour arriver ici, l'utilisateur a dû ouvrir
+        // le lien d'invitation reçu à cette adresse, ce qui en prouve déjà la possession.
+        $user->authIdentities()->create([
+            'type' => UserAuthIdentity::TYPE_EMAIL,
+            'value' => $invitation->email,
+            'normalized_value' => UserAuthIdentity::normaliser(UserAuthIdentity::TYPE_EMAIL, $invitation->email),
+            'verified_at' => now(),
         ]);
 
         $user->assignRole($invitation->role);
@@ -212,12 +230,16 @@ class UserInvitationService
             return ['prenom' => $client->prenom, 'nom' => $client->nom];
         }
 
-        $livreur = Livreur::where('telephone', $normalizedPhone)->first();
+        $normalise = Personne::normaliserTelephone($normalizedPhone);
+
+        $livreur = Livreur::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))->first();
         if ($livreur) {
             return ['prenom' => $livreur->prenom, 'nom' => $livreur->nom];
         }
 
-        $proprietaire = Proprietaire::where('telephone', $normalizedPhone)->whereNull('user_id')->first();
+        $proprietaire = Proprietaire::whereNull('user_id')
+            ->whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
+            ->first();
         if ($proprietaire) {
             return ['prenom' => $proprietaire->prenom, 'nom' => $proprietaire->nom];
         }
