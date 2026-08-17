@@ -10,7 +10,7 @@ import {
 } from './helpers';
 
 const E2E_VEHICULE_IMMATRICULATION_PREFIX = 'E2EVH-';
-const E2E_GROUPE_CAPACITE_PREFIX = 'E2EGrpCap-';
+const E2E_CATEGORIE_CAPACITE_PREFIX = 'E2ECatCap-';
 
 test.setTimeout(120_000);
 
@@ -301,21 +301,21 @@ test('création — capacités maximales de chargement saisies dans le formulair
     page,
 }) => {
     const unique = `${Date.now()}-${randomDigits(3)}`;
-    const nomGroupe = `${E2E_GROUPE_CAPACITE_PREFIX}${unique.slice(-6)}`;
+    const nomCategorie = `${E2E_CATEGORIE_CAPACITE_PREFIX}${unique.slice(-6)}`;
     const nomVehicule = `E2E Vehicule Capacite ${unique}`;
     const immatriculation = `${E2E_VEHICULE_IMMATRICULATION_PREFIX}C-${unique.slice(-5)}`;
 
     await login(page);
 
-    // Étape 1 : créer un groupe de capacité dédié (le Dropdown du formulaire véhicule ne
-    // propose que des groupes déjà existants — pas de création à la volée).
-    await page.goto('/backoffice/vehicules/groupes-capacite');
-    await page
-        .getByRole('button', { name: /nouveau groupe de capacité/i })
-        .click();
-    await page.getByPlaceholder('Ex : Sachets').fill(nomGroupe);
-    await page.getByRole('button', { name: /^ajouter$/i }).click();
-    await expect(page.getByText(nomGroupe)).toBeVisible({ timeout: 10_000 });
+    // Étape 1 : créer une catégorie produit dédiée (le Dropdown du formulaire véhicule ne
+    // propose que des catégories déjà existantes — pas de création à la volée). La capacité
+    // véhicule référence directement les catégories du catalogue produit (plus de "groupe de
+    // capacité" intermédiaire, décision produit du 17/08/2026).
+    await page.goto('/backoffice/produits/categories');
+    await page.getByRole('button', { name: /nouvelle catégorie/i }).click();
+    await page.locator('#cat-nom').fill(nomCategorie);
+    await page.getByRole('button', { name: /^créer$/i }).click();
+    await expect(page.getByText(nomCategorie)).toBeVisible({ timeout: 10_000 });
 
     // Étape 2 : créer un véhicule et renseigner sa capacité DANS LE MÊME formulaire — pas
     // d'étape séparée après l'enregistrement (cf. CapacitesEditor.vue dans VehiculeForm.vue).
@@ -335,15 +335,16 @@ test('création — capacités maximales de chargement saisies dans le formulair
     await page
         .getByRole('button', { name: /ajouter une capacité/i })
         .click();
-    const groupeDropdown = page
+    const categorieDropdown = page
         .locator('label')
-        .filter({ hasText: /^Groupe de capacité$/ })
+        .filter({ hasText: /^Catégorie de produit$/ })
         .locator('..')
         .getByRole('combobox');
-    await selectOptionFromCombobox(page, groupeDropdown, nomGroupe);
+    await selectOptionFromCombobox(page, categorieDropdown, nomCategorie);
     // PrimeVue InputNumber traite les frappes une par une (formatage interne) — .fill() pose
     // la valeur DOM sans déclencher sa logique de parsing, laissant le v-model à null et le
-    // bouton "Ajouter" durablement désactivé (cf. tests/e2e/stock-ajustement.spec.ts).
+    // bouton "Ajouter" durablement désactivé (cf. tests/e2e/stock-ajustement.spec.ts) — c'est
+    // la cause réelle du bug "le bouton Ajouter disparaît" rapporté en usage manuel.
     await page
         .locator('input[inputmode="numeric"]')
         .last()
@@ -351,10 +352,13 @@ test('création — capacités maximales de chargement saisies dans le formulair
     // "Ajouter" ici n'est qu'un ajout à la liste locale du formulaire (pas de requête réseau) —
     // distinct du bouton de soumission finale du véhicule, plus bas. Le bouton "Ajouter une
     // capacité" est masqué (v-else) tant que ce panneau d'ajout est ouvert, donc ce nom exact
-    // ne désigne plus qu'un seul bouton à ce stade.
-    await page.getByRole('button', { name: /^ajouter$/i }).click();
+    // ne désigne plus qu'un seul bouton à ce stade. Doit rester visible/activable tout du long.
+    const confirmerAjoutBtn = page.getByRole('button', { name: /^ajouter$/i });
+    await expect(confirmerAjoutBtn).toBeVisible();
+    await expect(confirmerAjoutBtn).toBeEnabled();
+    await confirmerAjoutBtn.click();
 
-    await expect(page.getByText(nomGroupe).last()).toBeVisible({
+    await expect(page.getByText(nomCategorie).last()).toBeVisible({
         timeout: 5_000,
     });
     await expect(page.locator('body')).toContainText('1700', {
@@ -369,7 +373,7 @@ test('création — capacités maximales de chargement saisies dans le formulair
     await page.waitForURL(/\/vehicules\/[a-z0-9]{20,}$/, { timeout: 15_000 });
 
     // Étape 4 : la capacité doit apparaître sur la fiche détail sans action supplémentaire.
-    await expect(page.locator('body')).toContainText(nomGroupe, {
+    await expect(page.locator('body')).toContainText(nomCategorie, {
         timeout: 10_000,
     });
     await expect(page.locator('body')).toContainText('1700', {
@@ -379,7 +383,7 @@ test('création — capacités maximales de chargement saisies dans le formulair
     // Étape 5 : elle doit aussi être pré-remplie sur la fiche Modifier (persistance réelle).
     await page.goto(`${page.url()}/edit`);
     await page.waitForURL(/\/vehicules\/[a-z0-9]+\/edit$/, { timeout: 15_000 });
-    await expect(page.getByText(nomGroupe).last()).toBeVisible({
+    await expect(page.getByText(nomCategorie).last()).toBeVisible({
         timeout: 10_000,
     });
     await expect(page.locator('body')).toContainText('1700', {

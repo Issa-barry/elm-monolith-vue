@@ -6,47 +6,49 @@ import Dropdown from 'primevue/dropdown';
 import InputNumber from 'primevue/inputnumber';
 import { computed, ref } from 'vue';
 
-export interface GroupeCapaciteOption {
+export interface CategorieOption {
     value: string;
     label: string;
 }
 
 export interface CapaciteRow {
-    groupe_capacite_id: string;
+    categorie_id: string;
     capacite_max: number;
 }
 
 const props = defineProps<{
     modelValue: CapaciteRow[];
-    groupesCapacite: GroupeCapaciteOption[];
+    categoriesProduit: CategorieOption[];
 }>();
 
 const emit = defineEmits<{ 'update:modelValue': [CapaciteRow[]] }>();
 
-function groupeLabel(id: string): string {
-    return props.groupesCapacite.find((g) => g.value === id)?.label ?? id;
+function categorieLabel(id: string): string {
+    return props.categoriesProduit.find((c) => c.value === id)?.label ?? id;
 }
 
-function availableGroupes(excludeIndex?: number): GroupeCapaciteOption[] {
+function availableCategories(excludeIndex?: number): CategorieOption[] {
     const used = props.modelValue
         .filter((_, i) => i !== excludeIndex)
-        .map((r) => r.groupe_capacite_id);
-    return props.groupesCapacite.filter((g) => !used.includes(g.value));
+        .map((r) => r.categorie_id);
+    return props.categoriesProduit.filter((c) => !used.includes(c.value));
 }
 
 // ── Ajout ────────────────────────────────────────────────────────────────
 const adding = ref(false);
-const newGroupeId = ref<string | null>(null);
+const newCategorieId = ref<string | null>(null);
 const newCapacite = ref<number | null>(null);
 
 function startAdd(): void {
-    newGroupeId.value = null;
+    newCategorieId.value = null;
     newCapacite.value = null;
     adding.value = true;
 }
 
+// Le bouton "Ajouter" ne doit JAMAIS disparaître (ancien bug) : uniquement désactivé/activé
+// via :disabled, jamais retiré du DOM via v-if — l'utilisateur voit toujours où il en est.
 const canAdd = computed(
-    () => !!newGroupeId.value && !!newCapacite.value && newCapacite.value > 0,
+    () => !!newCategorieId.value && !!newCapacite.value && newCapacite.value > 0,
 );
 
 function confirmAdd(): void {
@@ -54,7 +56,7 @@ function confirmAdd(): void {
     emit('update:modelValue', [
         ...props.modelValue,
         {
-            groupe_capacite_id: newGroupeId.value as string,
+            categorie_id: newCategorieId.value as string,
             capacite_max: newCapacite.value as number,
         },
     ]);
@@ -97,21 +99,21 @@ function removeRow(index: number): void {
             Capacités maximales de chargement
         </h3>
         <p class="mt-1 text-xs text-muted-foreground">
-            Limites propres à ce véhicule (ex : packs de sachets, packs de
-            bouteilles) — utilisées pour bloquer toute vente ou tout
-            chargement qui les dépasse. Aucune limite définie = véhicule non
-            plafonné.
+            Limites propres à ce véhicule, par catégorie de produit (ex :
+            Sachet eau, Bouteille) — utilisées pour bloquer toute vente ou
+            tout chargement qui les dépasse. Aucune limite définie = véhicule
+            non plafonné pour cette catégorie.
         </p>
 
         <div v-if="modelValue.length > 0" class="mt-4 divide-y rounded-lg border">
             <div
                 v-for="(row, index) in modelValue"
-                :key="row.groupe_capacite_id"
+                :key="row.categorie_id"
                 class="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
             >
                 <template v-if="editingIndex === index">
                     <span class="text-sm font-medium">{{
-                        groupeLabel(row.groupe_capacite_id)
+                        categorieLabel(row.categorie_id)
                     }}</span>
                     <div class="flex items-center gap-2">
                         <InputNumber
@@ -139,7 +141,7 @@ function removeRow(index: number): void {
                 </template>
                 <template v-else>
                     <span class="text-sm font-medium">{{
-                        groupeLabel(row.groupe_capacite_id)
+                        categorieLabel(row.categorie_id)
                     }}</span>
                     <div class="flex items-center gap-1">
                         <span class="text-sm text-muted-foreground">{{
@@ -173,10 +175,10 @@ function removeRow(index: number): void {
             class="mt-4 flex flex-col gap-2 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-end"
         >
             <div class="flex-1">
-                <Label class="mb-1.5 block text-xs">Groupe de capacité</Label>
+                <Label class="mb-1.5 block text-xs">Catégorie de produit</Label>
                 <Dropdown
-                    v-model="newGroupeId"
-                    :options="availableGroupes()"
+                    v-model="newCategorieId"
+                    :options="availableCategories()"
                     option-label="label"
                     option-value="value"
                     placeholder="Choisir…"
@@ -193,7 +195,7 @@ function removeRow(index: number): void {
                     class="w-full"
                 />
             </div>
-            <div class="flex gap-2">
+            <div class="flex shrink-0 gap-2">
                 <Button type="button" size="sm" :disabled="!canAdd" @click="confirmAdd">
                     Ajouter
                 </Button>
@@ -213,29 +215,27 @@ function removeRow(index: number): void {
                 variant="outline"
                 size="sm"
                 class="mt-4"
-                :disabled="availableGroupes().length === 0"
+                :disabled="availableCategories().length === 0"
                 @click="startAdd"
             >
                 <Plus class="mr-1.5 h-3.5 w-3.5" />
                 Ajouter une capacité
             </Button>
             <p
-                v-if="availableGroupes().length === 0 && groupesCapacite.length === 0"
+                v-if="availableCategories().length === 0 && categoriesProduit.length === 0"
                 class="mt-2 text-xs text-muted-foreground"
             >
-                Aucun groupe de capacité défini —
-                <a
-                    href="/backoffice/vehicules/groupes-capacite"
-                    class="underline"
-                    >en créer un</a
+                Aucune catégorie de produit définie —
+                <a href="/backoffice/produits/categories" class="underline"
+                    >en créer une</a
                 >
-                (ex : Sachets, Bouteilles).
+                (ex : Sachet eau, Bouteille).
             </p>
             <p
-                v-else-if="availableGroupes().length === 0"
+                v-else-if="availableCategories().length === 0"
                 class="mt-2 text-xs text-muted-foreground"
             >
-                Tous les groupes de capacité ont déjà une ligne définie.
+                Toutes les catégories ont déjà une ligne de capacité définie.
             </p>
         </template>
     </div>

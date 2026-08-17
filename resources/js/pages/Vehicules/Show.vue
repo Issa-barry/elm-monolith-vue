@@ -72,8 +72,8 @@ interface ProprietaireOption {
 }
 
 interface CapaciteRow {
-    groupe_capacite_id: string;
-    groupe_capacite_nom: string;
+    categorie_id: string;
+    categorie_nom: string;
     capacite_max: number;
 }
 
@@ -254,10 +254,10 @@ function formatGNF(val: number): string {
                         </span>
                         <span
                             v-for="c in vehicule.capacites"
-                            :key="c.groupe_capacite_id"
+                            :key="c.categorie_id"
                             class="text-xs text-muted-foreground"
                         >
-                            {{ c.groupe_capacite_nom }} : {{ c.capacite_max }}
+                            {{ c.categorie_nom }} : {{ c.capacite_max }}
                         </span>
                     </div>
                 </template>
@@ -464,10 +464,10 @@ function formatGNF(val: number): string {
                                 </p>
                                 <p
                                     v-for="c in vehicule.capacites"
-                                    :key="c.groupe_capacite_id"
+                                    :key="c.categorie_id"
                                     class="mt-1 text-sm font-medium"
                                 >
-                                    {{ c.groupe_capacite_nom }} :
+                                    {{ c.categorie_nom }} :
                                     {{ c.capacite_max }}
                                 </p>
                             </div>

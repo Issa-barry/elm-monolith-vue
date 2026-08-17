@@ -148,7 +148,7 @@ class ProprietaireController extends Controller
         $this->authorize('view', $proprietaire);
 
         $vehicules = Vehicule::query()
-            ->with(['typeVehicule', 'equipe.livreurs', 'capacites.groupeCapacite'])
+            ->with(['typeVehicule', 'equipe.livreurs', 'capacites.categorie'])
             ->where('organization_id', auth()->user()->organization_id)
             ->where('proprietaire_id', $proprietaire->id)
             ->orderBy('nom_vehicule')
@@ -165,7 +165,7 @@ class ProprietaireController extends Controller
                     'photo_url' => $vehicule->photo_url,
                     'type_label' => $vehicule->type_label,
                     'capacites' => $vehicule->capacites->map(fn (VehiculeCapacite $c) => [
-                        'groupe_capacite_nom' => $c->groupeCapacite->nom,
+                        'categorie_nom' => $c->categorie->nom,
                         'capacite_max' => $c->capacite_max,
                     ])->values()->all(),
                     // Propriété réelle du véhicule — plus jamais reconstruite depuis

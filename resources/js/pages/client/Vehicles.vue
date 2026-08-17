@@ -221,10 +221,10 @@ onMounted(() => {
                                     <template v-else>
                                         <span
                                             v-for="(c, i) in vehicule.capacites"
-                                            :key="c.groupe_capacite_nom"
+                                            :key="c.categorie_nom"
                                         >
                                             {{ i > 0 ? ' · ' : '' }}{{
-                                                c.groupe_capacite_nom
+                                                c.categorie_nom
                                             }}
                                             : {{ c.capacite_max }}
                                         </span>

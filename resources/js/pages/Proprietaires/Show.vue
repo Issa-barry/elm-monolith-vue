@@ -96,7 +96,7 @@ interface VehiculeRow {
     immatriculation: string | null;
     photo_url: string | null;
     type_label: string;
-    capacites: { groupe_capacite_nom: string; capacite_max: number }[];
+    capacites: { categorie_nom: string; capacite_max: number }[];
     categorie: string | null;
     is_active: boolean;
     equipe_detail: EquipeDetail | null;
@@ -602,10 +602,10 @@ function closeLightbox() {
                                         <template v-else>
                                             <span
                                                 v-for="(c, i) in vehicule.capacites"
-                                                :key="c.groupe_capacite_nom"
+                                                :key="c.categorie_nom"
                                             >
                                                 {{ i > 0 ? ' · ' : '' }}{{
-                                                    c.groupe_capacite_nom
+                                                    c.categorie_nom
                                                 }}
                                                 : {{ c.capacite_max }}
                                             </span>

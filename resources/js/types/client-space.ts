@@ -15,7 +15,7 @@ export interface VehiculeOption {
     livraison_vente?: boolean;
     livraison_logistique?: boolean;
     is_active?: boolean;
-    capacites: { groupe_capacite_nom: string; capacite_max: number }[];
+    capacites: { categorie_nom: string; capacite_max: number }[];
     photo_url: string | null;
 }
 

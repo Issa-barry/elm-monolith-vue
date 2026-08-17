@@ -121,7 +121,7 @@ class CommissionLogistiqueController extends Controller
             'commission.vehicule.typeVehicule:id,nom',
             'commission.vehicule.proprietaire:id,personne_id',
             'commission.vehicule.proprietaire.personne',
-            'commission.vehicule.capacites.groupeCapacite',
+            'commission.vehicule.capacites.categorie',
             'commission.transfert.siteSource:id,nom',
         ])
             ->whereIn('livreur_id', $allLivreurIds)
@@ -147,7 +147,7 @@ class CommissionLogistiqueController extends Controller
                 'immatriculation' => $v->immatriculation,
                 'type' => $v->typeVehicule?->nom,
                 'capacites' => $v->capacites->map(fn (VehiculeCapacite $c) => [
-                    'groupe_capacite_nom' => $c->groupeCapacite->nom,
+                    'categorie_nom' => $c->categorie->nom,
                     'capacite_max' => $c->capacite_max,
                 ])->values()->all(),
                 'proprietaire_nom' => $v->proprietaire

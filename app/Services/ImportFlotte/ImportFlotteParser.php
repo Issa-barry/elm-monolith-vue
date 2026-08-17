@@ -4,9 +4,9 @@ namespace App\Services\ImportFlotte;
 
 use App\Enums\CategorieVehicule;
 use App\Enums\TypeImportFlotte;
+use App\Models\Categorie;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
-use App\Models\GroupeCapacite;
 use App\Models\Livreur;
 use App\Models\Personne;
 use App\Models\Proprietaire;
@@ -74,10 +74,12 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
  *
  * Capacité (colonnes vehicule_capacite_sachets / vehicule_capacite_bouteilles) : une valeur
  * saisie devient une capacité maximale propre à ce véhicule dans vehicule_capacites, résolue
- * contre le GroupeCapacite "Sachets"/"Bouteilles" de l'organisation (cf. GROUPE_SACHETS_NOM /
- * GROUPE_BOUTEILLES_NOM, resoudreGroupesCapacite()) — appliquée aussi bien à la création qu'à
- * un véhicule déjà existant, contrairement au reste de la ligne. Aucun héritage depuis le type
- * de véhicule : la capacité appartient exclusivement au véhicule (cf. VehiculeCapaciteService).
+ * contre la Categorie "Sachet eau"/"Bouteille" du catalogue produit de l'organisation (cf.
+ * CATEGORIE_SACHETS_NOM / CATEGORIE_BOUTEILLES_NOM, resoudreCategoriesCapacite()) — appliquée
+ * aussi bien à la création qu'à un véhicule déjà existant, contrairement au reste de la ligne.
+ * Aucun héritage depuis le type de véhicule : la capacité appartient exclusivement au véhicule
+ * (cf. VehiculeCapaciteService). Il n'existe plus de notion intermédiaire de "groupe de
+ * capacité" — la catégorie du catalogue produit EST directement la référence de capacité.
  */
 class ImportFlotteParser
 {
@@ -96,15 +98,15 @@ class ImportFlotteParser
 
     /**
      * Convention du gabarit Excel "flotte" ELM : les colonnes vehicule_capacite_sachets /
-     * vehicule_capacite_bouteilles ciblent le GroupeCapacite portant ce nom exact dans
-     * l'organisation (comparaison insensible à la casse/espaces, cf. resoudreGroupesCapacite())
-     * — c'est une convention de CE gabarit, pas une notion codée dans le moteur de capacité
-     * générique (VehiculeCapaciteService), qui ne raisonne qu'en groupe_capacite_id. GroupeCapacite
-     * est délibérément distinct de la Categorie du catalogue produit — voir son docblock de modèle.
+     * vehicule_capacite_bouteilles ciblent la Categorie du catalogue produit portant ce nom
+     * exact dans l'organisation (comparaison insensible à la casse/espaces, cf.
+     * resoudreCategoriesCapacite()) — c'est une convention de CE gabarit, pas une notion codée
+     * en dur dans le moteur de capacité générique (VehiculeCapaciteService), qui ne raisonne
+     * qu'en categorie_id.
      */
-    private const GROUPE_SACHETS_NOM = 'Sachets';
+    private const CATEGORIE_SACHETS_NOM = 'Sachet eau';
 
-    private const GROUPE_BOUTEILLES_NOM = 'Bouteilles';
+    private const CATEGORIE_BOUTEILLES_NOM = 'Bouteille';
 
     public function analyser(string $absolutePath, string $organizationId, TypeImportFlotte $type = TypeImportFlotte::FLOTTE): array
     {
@@ -139,7 +141,7 @@ class ImportFlotteParser
         // tout le fichier pour ne le proposer en création qu'une seule fois —
         // voir resoudreProprietaire().
         $telephonesProprietairesVus = [];
-        [$groupeSachetsId, $groupeBouteillesId] = $this->resoudreGroupesCapacite($organizationId);
+        [$categorieSachetsId, $categorieBouteillesId] = $this->resoudreCategoriesCapacite($organizationId);
 
         // Une même immatriculation ne doit apparaître qu'une seule fois dans
         // la feuille "vehicules" (contrairement au propriétaire, un véhicule
@@ -173,7 +175,7 @@ class ImportFlotteParser
                 continue;
             }
 
-            $groupes[] = $this->analyserGroupe($immat, $index + 2, $ligneVehicule, $lignesLivreursGroupe, $organizationId, $telephonesProprietairesVus, $groupeSachetsId, $groupeBouteillesId);
+            $groupes[] = $this->analyserGroupe($immat, $index + 2, $ligneVehicule, $lignesLivreursGroupe, $organizationId, $telephonesProprietairesVus, $categorieSachetsId, $categorieBouteillesId);
         }
 
         // Lignes de la feuille "livreurs" dont l'immatriculation n'existe dans
@@ -297,8 +299,8 @@ class ImportFlotteParser
                     'type_vehicule_id' => null,
                     'capacite_packs' => null,
                     'capacite_bouteilles' => null,
-                    'groupe_sachets_id' => null,
-                    'groupe_bouteilles_id' => null,
+                    'categorie_sachets_id' => null,
+                    'categorie_bouteilles_id' => null,
                     'livraison_vente' => null,
                     'livraison_logistique' => null,
                     'site_id' => null,
@@ -516,24 +518,25 @@ class ImportFlotteParser
     }
 
     /**
-     * Résout une fois par analyse (pas par ligne) les GroupeCapacite "Sachets"/"Bouteilles" de
-     * l'organisation, par nom normalisé (casse/espaces ignorés) — cf. GROUPE_SACHETS_NOM /
-     * GROUPE_BOUTEILLES_NOM. Une organisation qui ne suit pas cette convention de nommage
-     * (ou n'a pas encore créé ces groupes) obtient simplement null : les capacités importées
-     * pour cette colonne sont alors ignorées avec un avertissement, jamais une erreur bloquante.
+     * Résout une fois par analyse (pas par ligne) les Categorie "Sachet eau"/"Bouteille" du
+     * catalogue produit de l'organisation, par nom normalisé (casse/espaces ignorés) — cf.
+     * CATEGORIE_SACHETS_NOM / CATEGORIE_BOUTEILLES_NOM. Une organisation qui ne suit pas cette
+     * convention de nommage (ou n'a pas encore créé ces catégories) obtient simplement null :
+     * les capacités importées pour cette colonne sont alors ignorées avec un avertissement,
+     * jamais une erreur bloquante.
      *
      * @return array{0: ?string, 1: ?string}
      */
-    private function resoudreGroupesCapacite(string $orgId): array
+    private function resoudreCategoriesCapacite(string $orgId): array
     {
-        $resoudre = fn (string $nom): ?string => GroupeCapacite::where('organization_id', $orgId)
+        $resoudre = fn (string $nom): ?string => Categorie::where('organization_id', $orgId)
             ->whereRaw('LOWER(TRIM(nom)) = ?', [mb_strtolower($nom)])
             ->value('id');
 
-        return [$resoudre(self::GROUPE_SACHETS_NOM), $resoudre(self::GROUPE_BOUTEILLES_NOM)];
+        return [$resoudre(self::CATEGORIE_SACHETS_NOM), $resoudre(self::CATEGORIE_BOUTEILLES_NOM)];
     }
 
-    private function analyserGroupe(string $immatriculation, int $numeroLigneVehicule, Collection $ligneVehicule, array $lignesLivreursGroupe, string $orgId, array &$telephonesProprietairesVus, ?string $groupeSachetsId, ?string $groupeBouteillesId): array
+    private function analyserGroupe(string $immatriculation, int $numeroLigneVehicule, Collection $ligneVehicule, array $lignesLivreursGroupe, string $orgId, array &$telephonesProprietairesVus, ?string $categorieSachetsId, ?string $categorieBouteillesId): array
     {
         $numerosLignesLivreurs = array_column($lignesLivreursGroupe, 'numero_ligne');
         $erreurs = [];
@@ -616,21 +619,21 @@ class ImportFlotteParser
         }
         // Facultatives : laissées vides, ce véhicule reste non plafonné (cf.
         // VehiculeCapaciteService — plus aucun héritage depuis le type). Une valeur saisie
-        // devient une capacité maximale propre à CE véhicule (vehicule_capacites), pour le
-        // GroupeCapacite "Sachets"/"Bouteilles" résolu une fois pour toute l'analyse — voir
-        // resoudreGroupesCapacite().
+        // devient une capacité maximale propre à CE véhicule (vehicule_capacites), pour la
+        // Categorie "Sachet eau"/"Bouteille" résolue une fois pour toute l'analyse — voir
+        // resoudreCategoriesCapacite().
         [$capacitePacks, $erreurCapacitePacks] = $this->toCapaciteOrNull($ligneVehicule['vehicule_capacite_sachets'] ?? null);
         if ($erreurCapacitePacks) {
             $erreurs[] = "Capacité sachets invalide : {$erreurCapacitePacks}";
-        } elseif ($capacitePacks !== null && $groupeSachetsId === null) {
-            $avertissements[] = 'Capacité sachets ignorée : aucun groupe de capacité "'.self::GROUPE_SACHETS_NOM.'" dans cette organisation (Véhicules > Groupes de capacité).';
+        } elseif ($capacitePacks !== null && $categorieSachetsId === null) {
+            $avertissements[] = 'Capacité sachets ignorée : aucune catégorie produit "'.self::CATEGORIE_SACHETS_NOM.'" dans cette organisation (Produits > Catégories).';
             $capacitePacks = null;
         }
         [$capaciteBouteilles, $erreurCapaciteBouteilles] = $this->toCapaciteOrNull($ligneVehicule['vehicule_capacite_bouteilles'] ?? null);
         if ($erreurCapaciteBouteilles) {
             $erreurs[] = "Capacité bouteilles invalide : {$erreurCapaciteBouteilles}";
-        } elseif ($capaciteBouteilles !== null && $groupeBouteillesId === null) {
-            $avertissements[] = 'Capacité bouteilles ignorée : aucun groupe de capacité "'.self::GROUPE_BOUTEILLES_NOM.'" dans cette organisation (Véhicules > Groupes de capacité).';
+        } elseif ($capaciteBouteilles !== null && $categorieBouteillesId === null) {
+            $avertissements[] = 'Capacité bouteilles ignorée : aucune catégorie produit "'.self::CATEGORIE_BOUTEILLES_NOM.'" dans cette organisation (Produits > Catégories).';
             $capaciteBouteilles = null;
         }
 
@@ -806,11 +809,11 @@ class ImportFlotteParser
                 'type_vehicule_id' => $type?->id,
                 'capacite_packs' => $capacitePacks,
                 'capacite_bouteilles' => $capaciteBouteilles,
-                // Résolus par resoudreGroupesCapacite() — non-null uniquement quand la
-                // capacité correspondante a été saisie ET que le groupe existe dans l'org
+                // Résolus par resoudreCategoriesCapacite() — non-null uniquement quand la
+                // capacité correspondante a été saisie ET que la catégorie existe dans l'org
                 // (sinon $capacitePacks/$capaciteBouteilles sont déjà remis à null ci-dessus).
-                'groupe_sachets_id' => $groupeSachetsId,
-                'groupe_bouteilles_id' => $groupeBouteillesId,
+                'categorie_sachets_id' => $categorieSachetsId,
+                'categorie_bouteilles_id' => $categorieBouteillesId,
                 'livraison_vente' => $livraisonVente,
                 'livraison_logistique' => $livraisonLogistique,
                 'site_id' => $site?->id,

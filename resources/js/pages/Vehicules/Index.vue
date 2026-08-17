@@ -44,8 +44,8 @@ interface EquipeMembre {
 }
 
 interface CapaciteRow {
-    groupe_capacite_id: string;
-    groupe_capacite_nom: string;
+    categorie_id: string;
+    categorie_nom: string;
     capacite_max: number;
 }
 
@@ -762,9 +762,9 @@ function confirmDelete(v: Vehicule) {
                             >
                                 <template
                                     v-for="(c, i) in data.capacites"
-                                    :key="c.groupe_capacite_id"
+                                    :key="c.categorie_id"
                                 >
-                                    {{ c.groupe_capacite_nom }}
+                                    {{ c.categorie_nom }}
                                     {{ c.capacite_max
                                     }}<template
                                         v-if="i < data.capacites.length - 1"

@@ -9,7 +9,6 @@ use App\Enums\StockStatut;
 use App\Models\AuditLog;
 use App\Models\Categorie;
 use App\Models\Fournisseur;
-use App\Models\GroupeCapacite;
 use App\Models\MouvementStock;
 use App\Models\OptionCatalogue;
 use App\Models\Parametre;
@@ -249,7 +248,6 @@ class ProduitController extends Controller
             'types' => $this->typesOptions($orgId),
             'statuts' => ProduitStatut::options(),
             'categories' => Categorie::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom', 'parent_id']),
-            'groupesCapacite' => GroupeCapacite::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']),
             'optionsCatalogue' => OptionCatalogue::where('organization_id', $orgId)
                 ->orderBy('position')->orderBy('nom')
                 ->with('valeurs:id,option_catalogue_id,valeur,hex')
@@ -552,7 +550,6 @@ class ProduitController extends Controller
                 'id' => $produit->id,
                 'nom' => $produit->nom,
                 'categorie_id' => $produit->categorie_id,
-                'groupe_capacite_id' => $produit->groupe_capacite_id,
                 'fournisseur_id' => $produit->fournisseur_id,
                 'sku' => $variantePrincipale?->sku,
                 'code_barres' => $variantePrincipale?->code_barres,
@@ -592,7 +589,6 @@ class ProduitController extends Controller
             'types' => $this->typesOptions($orgId),
             'statuts' => ProduitStatut::options(),
             'categories' => Categorie::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom', 'parent_id']),
-            'groupesCapacite' => GroupeCapacite::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']),
             'fournisseurs' => $this->fournisseursOptions($orgId),
             'limites' => $this->limitesCatalogue($orgId),
             'seuilOrganisationDefaut' => Parametre::getSeuilStockFaible($orgId),
@@ -951,7 +947,6 @@ class ProduitController extends Controller
         return $request->validate([
             'nom' => 'required|string|max:255',
             'categorie_id' => ['nullable', Rule::exists('categories', 'id')->where('organization_id', $orgId)],
-            'groupe_capacite_id' => ['nullable', Rule::exists('groupes_capacite', 'id')->where('organization_id', $orgId)],
             'fournisseur_id' => [
                 'nullable',
                 Rule::exists('fournisseurs', 'id')->where('organization_id', $orgId),

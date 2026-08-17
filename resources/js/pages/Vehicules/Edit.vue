@@ -5,7 +5,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { ArrowLeft, CheckCircle, Save } from 'lucide-vue-next';
 import { computed } from 'vue';
-import { type CapaciteRow, type GroupeCapaciteOption } from './partials/CapacitesEditor.vue';
+import { type CapaciteRow, type CategorieOption as CategorieProduitOption } from './partials/CapacitesEditor.vue';
 import VehiculeForm from './partials/VehiculeForm.vue';
 
 interface Option {
@@ -46,7 +46,7 @@ const props = defineProps<{
     proprietaires: Option[];
     types: TypeOption[];
     categories_vehicule: CategorieOption[];
-    groupes_capacite: GroupeCapaciteOption[];
+    categories_produit: CategorieProduitOption[];
     sites: SiteOption[];
     can_change_site: boolean;
     default_proprietaire_id: string | null;
@@ -159,7 +159,7 @@ function submit() {
                 :proprietaires="proprietaires"
                 :types="types"
                 :categories-vehicule="categories_vehicule"
-                :groupes-capacite="groupes_capacite"
+                :categories-produit="categories_produit"
                 :photo-url="vehicule.photo_url"
                 :sites="sites"
                 :can-change-site="can_change_site"

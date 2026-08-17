@@ -17,9 +17,9 @@ interface SiteOption {
     nom: string;
 }
 
-interface CapaciteGroupe {
-    groupe_capacite_id: string;
-    groupe_capacite_nom: string;
+interface CapaciteCategorie {
+    categorie_id: string;
+    categorie_nom: string;
     capacite_max: number;
 }
 
@@ -29,7 +29,7 @@ interface VehiculeOption {
     immatriculation: string;
     equipe_livraison_id: number | null;
     equipe_nom: string | null;
-    capacites: CapaciteGroupe[];
+    capacites: CapaciteCategorie[];
 }
 
 interface EquipeOption {
@@ -40,7 +40,7 @@ interface EquipeOption {
 interface ProduitOption {
     id: number;
     nom: string;
-    groupe_capacite_id: string | null;
+    categorie_id: string | null;
 }
 
 interface TransfertData {
@@ -210,33 +210,33 @@ const quantiteTotale = computed(() =>
     form.lignes.reduce((sum, l) => sum + (l.quantite_demandee ?? 0), 0),
 );
 
-// Plafonds par groupe de capacité du véhicule sélectionné — vide si aucune capacité n'est
+// Plafonds par catégorie de produit du véhicule sélectionné — vide si aucune capacité n'est
 // configurée pour ce véhicule (non plafonné), exactement comme VehiculeCapaciteService côté
 // serveur (plus aucun héritage depuis le type).
 const capacitesSelectionnees = computed(
     () => vehiculeSelectionne.value?.capacites ?? [],
 );
 
-// Quantité demandée regroupée par groupe de capacité, uniquement pour les groupes présents
-// dans la commande et ayant un plafond configuré sur le véhicule sélectionné.
-const quantitesParGroupe = computed(() => {
+// Quantité demandée regroupée par catégorie de produit, uniquement pour les catégories
+// présentes dans la commande et ayant un plafond configuré sur le véhicule sélectionné.
+const quantitesParCategorie = computed(() => {
     const capacites = capacitesSelectionnees.value;
     if (capacites.length === 0) return [];
 
     const totaux = new Map<string, number>();
     for (const ligne of form.lignes) {
         const produit = props.produits.find((p) => p.id === ligne.produit_id);
-        const groupeId = produit?.groupe_capacite_id;
-        if (!groupeId) continue;
+        const categorieId = produit?.categorie_id;
+        if (!categorieId) continue;
         totaux.set(
-            groupeId,
-            (totaux.get(groupeId) ?? 0) + (ligne.quantite_demandee ?? 0),
+            categorieId,
+            (totaux.get(categorieId) ?? 0) + (ligne.quantite_demandee ?? 0),
         );
     }
 
     return capacites
-        .filter((c) => totaux.has(c.groupe_capacite_id))
-        .map((c) => ({ ...c, qte: totaux.get(c.groupe_capacite_id) ?? 0 }));
+        .filter((c) => totaux.has(c.categorie_id))
+        .map((c) => ({ ...c, qte: totaux.get(c.categorie_id) ?? 0 }));
 });
 
 function capaciteLigneClass(qte: number, max: number): string {
@@ -251,7 +251,7 @@ function capaciteLigneClass(qte: number, max: number): string {
 const capaciteVehiculeConforme = computed(() => {
     if (form.vehicule_id === null) return true;
     if (capacitesSelectionnees.value.length === 0) return true;
-    return quantitesParGroupe.value.every((c) => c.qte <= c.capacite_max);
+    return quantitesParCategorie.value.every((c) => c.qte <= c.capacite_max);
 });
 
 // ── Validation locale ─────────────────────────────────────────────────────────
@@ -496,10 +496,10 @@ function submit() {
                                                         v-for="(
                                                             c, i
                                                         ) in option.capacites"
-                                                        :key="c.groupe_capacite_id"
+                                                        :key="c.categorie_id"
                                                     >
                                                         {{
-                                                            c.groupe_capacite_nom
+                                                            c.categorie_nom
                                                         }}
                                                         {{ c.capacite_max
                                                         }}<template
@@ -570,13 +570,13 @@ function submit() {
                                 {{ quantiteTotale }} packs
                             </p>
                             <p
-                                v-for="c in quantitesParGroupe"
-                                :key="c.groupe_capacite_id"
+                                v-for="c in quantitesParCategorie"
+                                :key="c.categorie_id"
                                 :class="
                                     capaciteLigneClass(c.qte, c.capacite_max)
                                 "
                             >
-                                {{ c.groupe_capacite_nom }}: {{ c.qte }} /
+                                {{ c.categorie_nom }}: {{ c.qte }} /
                                 {{ c.capacite_max }}
                                 <span v-if="c.qte > c.capacite_max">
                                     —

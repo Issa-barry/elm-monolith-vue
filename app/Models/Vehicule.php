@@ -160,9 +160,9 @@ class Vehicule extends Model
     }
 
     /**
-     * Capacité maximale de chargement par groupe de capacité (Sachets, Bouteilles...), propre à
-     * ce véhicule — seule et unique source de vérité, aucun héritage depuis le type (décision
-     * produit du 17/08/2026, cf. VehiculeCapaciteService::capacitesParGroupe()).
+     * Capacité maximale de chargement par catégorie de produit (Sachet eau, Bouteille...),
+     * propre à ce véhicule — seule et unique source de vérité, aucun héritage depuis le type
+     * (décision produit du 17/08/2026, cf. VehiculeCapaciteService::capacitesParCategorie()).
      */
     public function capacites(): HasMany
     {

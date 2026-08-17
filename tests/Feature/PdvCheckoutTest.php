@@ -6,6 +6,7 @@ use App\Enums\StatutCommandeVente;
 use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
+use App\Models\Categorie;
 use App\Models\Fournisseur;
 use App\Models\Organization;
 use App\Models\Produit;
@@ -267,9 +268,15 @@ class PdvCheckoutTest extends TestCase
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
         ]);
-        // Capacité portée exclusivement par le type du véhicule (décision produit du
-        // 16/08/2026, cf. VehiculeCapaciteService) — jamais par le véhicule lui-même.
-        $vehicule->typeVehicule->update(['capacite_defaut' => 3]);
+        // Capacité portée exclusivement par le véhicule lui-même via vehicule_capacites
+        // (décision produit du 17/08/2026, cf. VehiculeCapaciteService) — jamais par son type.
+        $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Défaut']);
+        $vehicule->capacites()->create([
+            'organization_id' => $this->org->id,
+            'categorie_id' => $categorie->id,
+            'capacite_max' => 3,
+        ]);
+        $this->produit->update(['categorie_id' => $categorie->id]);
 
         $this->actingAs($this->user)
             ->post('/backoffice/pdv/checkout', [

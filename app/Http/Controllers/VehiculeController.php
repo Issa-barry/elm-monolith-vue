@@ -3,9 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Enums\CategorieVehicule;
+use App\Models\Categorie;
 use App\Models\Depense;
 use App\Models\EquipeLivreur;
-use App\Models\GroupeCapacite;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TypeVehicule;
@@ -47,7 +47,7 @@ class VehiculeController extends Controller
             'type_label' => $v->type_label,
             // Capacités maximales de chargement, propres à CE véhicule (aucun héritage depuis
             // le type — cf. VehiculeCapaciteService).
-            'capacites' => $this->vehiculeCapaciteService->capacitesParGroupeAvecNoms($v),
+            'capacites' => $this->vehiculeCapaciteService->capacitesParCategorieAvecNoms($v),
             'site_id' => $v->site_id,
             'site_nom' => $v->relationLoaded('site') ? $v->site?->nom : null,
             'categorie' => $v->categorie?->value,
@@ -179,7 +179,7 @@ class VehiculeController extends Controller
             'proprietaires' => $this->proprietairesOptions(),
             'types' => $this->typesOptions(),
             'categories_vehicule' => CategorieVehicule::options(),
-            'groupes_capacite' => $this->groupesCapaciteOptions(),
+            'categories_produit' => $this->categoriesProduitOptions(),
             'initial_proprietaire_id' => $initialProprietaireId,
             'sites' => $this->sitesOptions($user, $orgId),
             'default_site_id' => $defaultSiteId,
@@ -403,23 +403,27 @@ class VehiculeController extends Controller
             'proprietaires' => $this->proprietairesOptions(),
             'types' => $this->typesOptions(),
             'categories_vehicule' => CategorieVehicule::options(),
-            'groupes_capacite' => $this->groupesCapaciteOptions(),
+            'categories_produit' => $this->categoriesProduitOptions(),
             'sites' => $this->sitesOptions($user, $orgId),
             'can_change_site' => $user->isAdmin(),
             'default_proprietaire_id' => Proprietaire::interneParDefautId($orgId),
             'capacites' => $vehicule->capacites->map(fn ($c) => [
-                'groupe_capacite_id' => $c->groupe_capacite_id,
+                'categorie_id' => $c->categorie_id,
                 'capacite_max' => $c->capacite_max,
             ])->values()->all(),
         ]);
     }
 
-    private function groupesCapaciteOptions(): array
+    /**
+     * Catégories du catalogue produit, réutilisées telles quelles comme référence de capacité
+     * véhicule (Produit → Catégorie → Capacité véhicule) — pas de second référentiel dédié.
+     */
+    private function categoriesProduitOptions(): array
     {
-        return GroupeCapacite::where('organization_id', auth()->user()->organization_id)
+        return Categorie::where('organization_id', auth()->user()->organization_id)
             ->orderBy('nom')
             ->get(['id', 'nom'])
-            ->map(fn (GroupeCapacite $g) => ['value' => $g->id, 'label' => $g->nom])
+            ->map(fn (Categorie $c) => ['value' => $c->id, 'label' => $c->nom])
             ->toArray();
     }
 
@@ -613,9 +617,9 @@ class VehiculeController extends Controller
             'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
             'is_active' => 'boolean',
             'capacites' => 'array',
-            'capacites.*.groupe_capacite_id' => [
+            'capacites.*.categorie_id' => [
                 'required', 'string',
-                Rule::exists('groupes_capacite', 'id')->where('organization_id', $orgId),
+                Rule::exists('categories', 'id')->where('organization_id', $orgId),
                 'distinct',
             ],
             'capacites.*.capacite_max' => 'required|integer|min:1|max:99999',
@@ -688,9 +692,9 @@ class VehiculeController extends Controller
             'photo.max' => 'La photo ne peut pas dépasser 3 Mo.',
             'livraison_vente.required' => 'Veuillez indiquer si ce véhicule est autorisé pour la vente.',
             'livraison_logistique.required' => 'Veuillez indiquer si ce véhicule est autorisé pour la logistique.',
-            'capacites.*.groupe_capacite_id.required' => 'Le groupe de capacité est obligatoire.',
-            'capacites.*.groupe_capacite_id.exists' => 'Groupe de capacité invalide.',
-            'capacites.*.groupe_capacite_id.distinct' => 'Chaque groupe ne peut avoir qu\'une seule ligne de capacité.',
+            'capacites.*.categorie_id.required' => 'La catégorie de produit est obligatoire.',
+            'capacites.*.categorie_id.exists' => 'Catégorie de produit invalide.',
+            'capacites.*.categorie_id.distinct' => 'Chaque catégorie ne peut avoir qu\'une seule ligne de capacité.',
             'capacites.*.capacite_max.required' => 'La capacité est obligatoire.',
             'capacites.*.capacite_max.min' => 'La capacité doit être supérieure à 0.',
         ];

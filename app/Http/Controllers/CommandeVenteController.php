@@ -489,7 +489,7 @@ class CommandeVenteController extends Controller
                     'nom' => $vehicule->nom_vehicule,
                     'immatriculation' => $vehicule->immatriculation,
                     'type' => $vehicule->typeVehicule?->nom,
-                    'capacites' => $this->vehiculeCapaciteService->capacitesParGroupeAvecNoms($vehicule),
+                    'capacites' => $this->vehiculeCapaciteService->capacitesParCategorieAvecNoms($vehicule),
                     'proprietaire_nom' => $vehicule->proprietaire
                         ? trim($vehicule->proprietaire->prenom.' '.$vehicule->proprietaire->nom)
                         : null,
@@ -1080,7 +1080,7 @@ class CommandeVenteController extends Controller
                 return [
                     'id' => $p->id,
                     'nom' => $p->nom,
-                    'groupe_capacite_id' => $p->groupe_capacite_id,
+                    'categorie_id' => $p->categorie_id,
                     'prix_vente' => (int) ($variante?->prix_vente ?? 0),
                     'prix_usine' => (int) ($variante?->prix_usine ?? 0),
                 ];
@@ -1091,7 +1091,7 @@ class CommandeVenteController extends Controller
     {
         return Vehicule::with([
             'typeVehicule',
-            'capacites.groupeCapacite',
+            'capacites.categorie',
             'equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'chauffeur'),
             'equipe.membres.livreur',
         ])
@@ -1104,11 +1104,11 @@ class CommandeVenteController extends Controller
                 'id' => $v->id,
                 'nom_vehicule' => $v->nom_vehicule,
                 'immatriculation' => $v->immatriculation,
-                // Plafonds par groupe de capacité (Sachets, Bouteilles, ...), propres à ce
+                // Plafonds par catégorie de produit (Sachet eau, Bouteille, ...), propres à ce
                 // véhicule — aucun héritage depuis le type, même calcul que le contrôle serveur
-                // (VehiculeCapaciteService::capacitesParGroupe), pour que le frontend affiche
+                // (VehiculeCapaciteService::capacitesParCategorie), pour que le frontend affiche
                 // exactement ce que le backend va vérifier. Vide = véhicule non limité.
-                'capacites' => $this->vehiculeCapaciteService->capacitesParGroupeAvecNoms($v),
+                'capacites' => $this->vehiculeCapaciteService->capacitesParCategorieAvecNoms($v),
                 'livreur_nom' => $v->equipe?->livreurs->first()?->libelleAffichage(),
                 'livreur_telephone' => $v->equipe?->membres
                     ->firstWhere('role', 'chauffeur')

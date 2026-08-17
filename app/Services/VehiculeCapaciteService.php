@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\GroupeCapacite;
+use App\Models\Categorie;
 use App\Models\Produit;
 use App\Models\Vehicule;
 use Illuminate\Support\Collection;
@@ -15,17 +15,20 @@ use Illuminate\Validation\ValidationException;
  * (TransfertLogistiqueController).
  *
  * La capacité est portée EXCLUSIVEMENT par le véhicule lui-même (vehicule_capacites), par
- * groupe de capacité (GroupeCapacite — ex: "Sachets", "Bouteilles"), délibérément distinct de
- * la Categorie du catalogue produit (Produits finis, Matières premières...) : deux organisations
- * peuvent classer leur catalogue très différemment de leurs contraintes réelles de chargement.
+ * catégorie du catalogue produit (Categorie — ex: "Sachet eau", "Bouteille") — décision produit
+ * du 17/08/2026 : il n'existe plus de notion intermédiaire de "groupe de capacité", la
+ * catégorie du produit EST directement la référence de capacité. Une seule source de vérité
+ * Produit → Catégorie → Capacité véhicule.
  *
  * Décision produit du 17/08/2026 : plus aucun héritage/repli depuis TypeVehicule — le type d'un
  * véhicule est une classification pure, changer le type d'un véhicule ne modifie jamais ses
- * capacités. Un véhicule sans aucune ligne de capacité configurée n'est simplement pas limité
- * (comme un groupe vendu sans plafond configuré pour ce véhicule précis).
+ * capacités. Un véhicule sans aucune ligne de capacité configurée n'est simplement pas limité.
  *
- * Les plafonds des différents groupes sont indépendants (cumulables), pas partagés — un véhicule
- * à 1700 sachets + 3400 bouteilles peut partir chargé des deux à la fois.
+ * Les plafonds des différentes catégories sont indépendants (cumulables), pas partagés — un
+ * véhicule à 80 sachets + 160 bouteilles peut partir chargé des deux à la fois.
+ *
+ * Un produit sans catégorie n'est concerné par aucun contrôle (ne peut pas être rattaché à un
+ * compteur de capacité) — l'absence de configuration n'équivaut jamais à une capacité nulle.
  *
  * Contrôle strict, sans exception de rôle : la capacité d'un véhicule ne peut jamais être
  * dépassée, quel que soit l'utilisateur.
@@ -33,29 +36,29 @@ use Illuminate\Validation\ValidationException;
 class VehiculeCapaciteService
 {
     /**
-     * Capacité par groupe pour ce véhicule précis. Vide si aucune ligne n'est configurée — dans
-     * ce cas le véhicule n'est simplement pas limité.
+     * Capacité par catégorie pour ce véhicule précis. Vide si aucune ligne n'est configurée —
+     * dans ce cas le véhicule n'est simplement pas limité.
      *
-     * @return Collection<string, int> groupe_capacite_id => capacite_max
+     * @return Collection<string, int> categorie_id => capacite_max
      */
-    public function capacitesParGroupe(Vehicule $vehicule): Collection
+    public function capacitesParCategorie(Vehicule $vehicule): Collection
     {
         $vehicule->loadMissing('capacites');
 
-        return $vehicule->capacites->pluck('capacite_max', 'groupe_capacite_id');
+        return $vehicule->capacites->pluck('capacite_max', 'categorie_id');
     }
 
     /**
-     * @return array<int, array{groupe_capacite_id: string, groupe_capacite_nom: string, capacite_max: int}>
+     * @return array<int, array{categorie_id: string, categorie_nom: string, capacite_max: int}>
      */
-    public function capacitesParGroupeAvecNoms(Vehicule $vehicule): array
+    public function capacitesParCategorieAvecNoms(Vehicule $vehicule): array
     {
-        $vehicule->loadMissing('capacites.groupeCapacite');
+        $vehicule->loadMissing('capacites.categorie');
 
         return $vehicule->capacites
             ->map(fn ($c) => [
-                'groupe_capacite_id' => $c->groupe_capacite_id,
-                'groupe_capacite_nom' => $c->groupeCapacite?->nom ?? 'Groupe',
+                'categorie_id' => $c->categorie_id,
+                'categorie_nom' => $c->categorie?->nom ?? 'Catégorie',
                 'capacite_max' => $c->capacite_max,
             ])
             ->values()
@@ -65,7 +68,7 @@ class VehiculeCapaciteService
     /**
      * Remplace intégralement les lignes de capacité d'un véhicule.
      *
-     * @param  array<int, array{groupe_capacite_id: string, capacite_max: int}>  $lignes
+     * @param  array<int, array{categorie_id: string, capacite_max: int}>  $lignes
      */
     public function syncCapacites(Vehicule $vehicule, array $lignes, string $orgId): void
     {
@@ -74,7 +77,7 @@ class VehiculeCapaciteService
             foreach ($lignes as $ligne) {
                 $vehicule->capacites()->create([
                     'organization_id' => $orgId,
-                    'groupe_capacite_id' => $ligne['groupe_capacite_id'],
+                    'categorie_id' => $ligne['categorie_id'],
                     'capacite_max' => $ligne['capacite_max'],
                 ]);
             }
@@ -97,44 +100,44 @@ class VehiculeCapaciteService
         string $qteKey,
         bool $exigerChargementComplet,
     ): void {
-        $capacitesParGroupe = $this->capacitesParGroupe($vehicule);
+        $capacitesParCategorie = $this->capacitesParCategorie($vehicule);
 
-        if ($capacitesParGroupe->isEmpty()) {
+        if ($capacitesParCategorie->isEmpty()) {
             return;
         }
 
         $produitIds = collect($lignes)->pluck('produit_id')->filter()->unique()->values()->all();
-        $groupeParProduit = Produit::whereIn('id', $produitIds)->pluck('groupe_capacite_id', 'id');
+        $categorieParProduit = Produit::whereIn('id', $produitIds)->pluck('categorie_id', 'id');
 
-        $qteParGroupe = [];
+        $qteParCategorie = [];
         foreach ($lignes as $ligne) {
-            $groupeId = $groupeParProduit[$ligne['produit_id'] ?? null] ?? null;
-            // Produit sans groupe de capacité : pas concerné par un contrôle qui, par
-            // définition, se déclenche par groupe.
-            if ($groupeId === null) {
+            $categorieId = $categorieParProduit[$ligne['produit_id'] ?? null] ?? null;
+            // Produit sans catégorie : pas concerné par un contrôle qui, par définition, se
+            // déclenche par catégorie.
+            if ($categorieId === null) {
                 continue;
             }
-            $qteParGroupe[$groupeId] = ($qteParGroupe[$groupeId] ?? 0) + (int) ($ligne[$qteKey] ?? 0);
+            $qteParCategorie[$categorieId] = ($qteParCategorie[$categorieId] ?? 0) + (int) ($ligne[$qteKey] ?? 0);
         }
 
-        foreach ($qteParGroupe as $groupeId => $qte) {
-            $max = $capacitesParGroupe->get($groupeId);
-            // Groupe vendu mais sans plafond configuré pour ce véhicule : illimité.
+        foreach ($qteParCategorie as $categorieId => $qte) {
+            $max = $capacitesParCategorie->get($categorieId);
+            // Catégorie vendue mais sans plafond configuré pour ce véhicule : illimité.
             if ($max === null) {
                 continue;
             }
 
-            $nom = GroupeCapacite::find($groupeId)?->nom ?? 'groupe de capacité';
+            $nom = Categorie::find($categorieId)?->nom ?? 'catégorie';
 
             if ($qte > $max) {
                 throw ValidationException::withMessages([
-                    'lignes' => "La quantité « {$nom} » ({$qte}) dépasse la capacité du véhicule pour ce groupe ({$max} maximum).",
+                    'lignes' => "La quantité « {$nom} » ({$qte}) dépasse la capacité du véhicule pour cette catégorie ({$max} maximum).",
                 ]);
             }
 
             if ($exigerChargementComplet && $qte < $max) {
                 throw ValidationException::withMessages([
-                    'lignes' => "La quantité « {$nom} » ({$qte}) est inférieure à la capacité du véhicule pour ce groupe ({$max}). Le chargement complet est obligatoire.",
+                    'lignes' => "La quantité « {$nom} » ({$qte}) est inférieure à la capacité du véhicule pour cette catégorie ({$max}). Le chargement complet est obligatoire.",
                 ]);
             }
         }

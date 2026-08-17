@@ -2,8 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Models\Categorie;
 use App\Models\EquipeLivraison;
-use App\Models\GroupeCapacite;
 use App\Models\ImportFlotte;
 use App\Models\Livreur;
 use App\Models\Organization;
@@ -590,15 +590,15 @@ class ImportFlotteTest extends TestCase
     }
 
     /**
-     * Les colonnes vehicule_capacite_sachets/vehicule_capacite_bouteilles ciblent le
-     * GroupeCapacite "Sachets"/"Bouteilles" de l'organisation (capacité du véhicule lui-même,
-     * aucun héritage depuis le type) — cf. ImportFlotteParser::resoudreGroupesCapacite() /
+     * Les colonnes vehicule_capacite_sachets/vehicule_capacite_bouteilles ciblent la Categorie
+     * "Sachet eau"/"Bouteille" du catalogue produit de l'organisation (capacité du véhicule
+     * lui-même, aucun héritage depuis le type) — cf. ImportFlotteParser::resoudreCategoriesCapacite() /
      * ImportFlotteExecutor::upsertCapacite().
      */
     public function test_confirm_creates_vehicule_avec_capacites_sachets_et_bouteilles(): void
     {
-        $sachets = GroupeCapacite::create(['organization_id' => $this->org->id, 'nom' => 'Sachets']);
-        $bouteilles = GroupeCapacite::create(['organization_id' => $this->org->id, 'nom' => 'Bouteilles']);
+        $sachets = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachet eau']);
+        $bouteilles = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Bouteille']);
 
         $import = $this->importerVehiculeEtChauffeur([
             'vehicule_capacite_sachets' => '90',
@@ -611,8 +611,8 @@ class ImportFlotteTest extends TestCase
 
         $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
         $this->assertNull($vehicule->capacite_packs, 'la colonne legacy ne doit plus être alimentée par l\'import');
-        $this->assertDatabaseHas('vehicule_capacites', ['vehicule_id' => $vehicule->id, 'groupe_capacite_id' => $sachets->id, 'capacite_max' => 90]);
-        $this->assertDatabaseHas('vehicule_capacites', ['vehicule_id' => $vehicule->id, 'groupe_capacite_id' => $bouteilles->id, 'capacite_max' => 40]);
+        $this->assertDatabaseHas('vehicule_capacites', ['vehicule_id' => $vehicule->id, 'categorie_id' => $sachets->id, 'capacite_max' => 90]);
+        $this->assertDatabaseHas('vehicule_capacites', ['vehicule_id' => $vehicule->id, 'categorie_id' => $bouteilles->id, 'capacite_max' => 40]);
     }
 
     public function test_confirm_vehicule_sans_capacite_saisie_reste_null(): void
@@ -632,11 +632,11 @@ class ImportFlotteTest extends TestCase
     }
 
     /**
-     * Organisation sans GroupeCapacite "Sachets"/"Bouteilles" (convention non suivie, ou pas
-     * encore créés) : la capacité saisie est ignorée avec un avertissement non bloquant, jamais
+     * Organisation sans Categorie "Sachet eau"/"Bouteille" (convention non suivie, ou pas
+     * encore créées) : la capacité saisie est ignorée avec un avertissement non bloquant, jamais
      * une erreur qui empêcherait d'importer le reste du véhicule.
      */
-    public function test_analyse_avertit_sans_bloquer_quand_groupe_capacite_absent(): void
+    public function test_analyse_avertit_sans_bloquer_quand_categorie_capacite_absente(): void
     {
         $import = $this->importer(
             [$this->ligneVehicule(['vehicule_capacite_sachets' => '90'])],
@@ -663,13 +663,13 @@ class ImportFlotteTest extends TestCase
      */
     public function test_confirm_met_a_jour_la_capacite_dun_vehicule_deja_existant(): void
     {
-        $sachets = GroupeCapacite::create(['organization_id' => $this->org->id, 'nom' => 'Sachets']);
+        $sachets = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachet eau']);
         $vehiculeExistant = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'immatriculation' => 'RC-1234-A',
             'type_vehicule_id' => $this->type->id,
         ]);
-        $vehiculeExistant->capacites()->create(['organization_id' => $this->org->id, 'groupe_capacite_id' => $sachets->id, 'capacite_max' => 50]);
+        $vehiculeExistant->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachets->id, 'capacite_max' => 50]);
 
         $import = $this->importerVehiculeEtChauffeur(['vehicule_capacite_sachets' => '120']);
 
@@ -677,7 +677,7 @@ class ImportFlotteTest extends TestCase
             ->post(route('imports-flotte.confirm', $import))
             ->assertRedirect(route('imports-flotte.show', $import));
 
-        $this->assertDatabaseHas('vehicule_capacites', ['vehicule_id' => $vehiculeExistant->id, 'groupe_capacite_id' => $sachets->id, 'capacite_max' => 120]);
+        $this->assertDatabaseHas('vehicule_capacites', ['vehicule_id' => $vehiculeExistant->id, 'categorie_id' => $sachets->id, 'capacite_max' => 120]);
         $this->assertSame(1, $vehiculeExistant->capacites()->count(), 'upsert, pas de doublon de ligne');
     }
 

@@ -70,14 +70,14 @@ class ImportFlotteExecutor
         ];
     }
 
-    private function upsertCapacite(string $orgId, string $vehiculeId, ?string $groupeCapaciteId, ?int $capaciteMax): void
+    private function upsertCapacite(string $orgId, string $vehiculeId, ?string $categorieId, ?int $capaciteMax): void
     {
-        if ($groupeCapaciteId === null || $capaciteMax === null) {
+        if ($categorieId === null || $capaciteMax === null) {
             return;
         }
 
         VehiculeCapacite::updateOrCreate(
-            ['vehicule_id' => $vehiculeId, 'groupe_capacite_id' => $groupeCapaciteId],
+            ['vehicule_id' => $vehiculeId, 'categorie_id' => $categorieId],
             ['organization_id' => $orgId, 'capacite_max' => $capaciteMax]
         );
     }
@@ -149,11 +149,11 @@ class ImportFlotteExecutor
         // d'ancrage pour ses livreurs/équipe, cf. docblock de classe), la capacité EST mise à
         // jour même pour un véhicule déjà en base : une ré-importation avec des valeurs
         // corrigées doit pouvoir corriger la flotte déjà configurée. `capacite_packs`/
-        // `capacite_bouteilles` restent null quand la colonne était vide OU que le groupe de
-        // capacité correspondant n'existe pas dans l'organisation (cf.
+        // `capacite_bouteilles` restent null quand la colonne était vide OU que la catégorie
+        // correspondante n'existe pas dans l'organisation (cf.
         // ImportFlotteParser::analyserGroupe()), auquel cas on ne touche à rien pour ce groupe.
-        $this->upsertCapacite($orgId, $vehiculeId, $vData['groupe_sachets_id'] ?? null, $vData['capacite_packs']);
-        $this->upsertCapacite($orgId, $vehiculeId, $vData['groupe_bouteilles_id'] ?? null, $vData['capacite_bouteilles']);
+        $this->upsertCapacite($orgId, $vehiculeId, $vData['categorie_sachets_id'] ?? null, $vData['capacite_packs']);
+        $this->upsertCapacite($orgId, $vehiculeId, $vData['categorie_bouteilles_id'] ?? null, $vData['capacite_bouteilles']);
 
         // ── Équipe ───────────────────────────────────────────────────────────
         // Créée inactive : commission/montants à 0 (brouillon, cf.

@@ -469,21 +469,21 @@ class ClientDashboardController extends Controller
         return [$organizationId, $client, $proprietaire, $livreur];
     }
 
-    /**
-     * @return Collection<int, Vehicule>
-     */
-    /** @return array<int, array{groupe_capacite_nom: string, capacite_max: int}> */
+    /** @return array<int, array{categorie_nom: string, capacite_max: int}> */
     private function capacitesPayload(Vehicule $vehicule): array
     {
         return $vehicule->capacites
             ->map(fn ($c) => [
-                'groupe_capacite_nom' => $c->groupeCapacite->nom,
+                'categorie_nom' => $c->categorie->nom,
                 'capacite_max' => $c->capacite_max,
             ])
             ->values()
             ->all();
     }
 
+    /**
+     * @return Collection<int, Vehicule>
+     */
     private function vehiculesPartenaires(?string $organizationId, ?Proprietaire $proprietaire, ?Livreur $livreur): Collection
     {
         if ($organizationId === null) {
@@ -495,7 +495,7 @@ class ClientDashboardController extends Controller
         }
 
         return Vehicule::query()
-            ->with(['typeVehicule', 'capacites.groupeCapacite'])
+            ->with(['typeVehicule', 'capacites.categorie'])
             ->where('organization_id', $organizationId)
             ->where(function ($query) use ($proprietaire, $livreur) {
                 if ($proprietaire !== null) {
@@ -519,7 +519,7 @@ class ClientDashboardController extends Controller
         }
 
         return Vehicule::query()
-            ->with(['typeVehicule', 'capacites.groupeCapacite'])
+            ->with(['typeVehicule', 'capacites.categorie'])
             ->where('organization_id', $organizationId)
             ->where('proprietaire_id', $proprietaire->id)
             ->orderBy('nom_vehicule')

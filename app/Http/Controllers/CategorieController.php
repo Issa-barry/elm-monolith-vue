@@ -81,7 +81,7 @@ class CategorieController extends Controller
 
         if ($categorie->is_used) {
             return back()->withErrors([
-                'delete' => 'Cette catégorie est utilisée par des produits ou possède des sous-catégories. Désactivez-la plutôt que de la supprimer.',
+                'delete' => 'Cette catégorie est utilisée par des produits, possède des sous-catégories, ou sert de référence de capacité sur un véhicule. Désactivez-la plutôt que de la supprimer.',
             ]);
         }
 

@@ -10,7 +10,7 @@ import InputText from 'primevue/inputtext';
 import { computed, ref, watch } from 'vue';
 import CapacitesEditor, {
     type CapaciteRow,
-    type GroupeCapaciteOption,
+    type CategorieOption,
 } from './CapacitesEditor.vue';
 
 interface Option {
@@ -29,7 +29,12 @@ interface SiteOption {
     nom: string;
 }
 
-interface CategorieOption {
+/**
+ * Propriété du véhicule (interne/partenaire) — sans rapport avec les Catégorie du catalogue
+ * produit utilisées comme référence de capacité (prop categoriesProduit ci-dessous). Nom
+ * distinct délibéré pour éviter toute confusion entre les deux notions.
+ */
+interface CategorieVehiculeOption {
     value: string;
     label: string;
 }
@@ -54,8 +59,8 @@ const props = defineProps<{
     processing: boolean;
     proprietaires: Option[];
     types: TypeOption[];
-    categoriesVehicule: CategorieOption[];
-    groupesCapacite: GroupeCapaciteOption[];
+    categoriesVehicule: CategorieVehiculeOption[];
+    categoriesProduit: CategorieOption[];
     photoUrl?: string | null;
     sites: SiteOption[];
     canChangeSite: boolean;
@@ -480,7 +485,7 @@ function handleSubmit() {
         <div class="order-4">
             <CapacitesEditor
                 :model-value="form.capacites"
-                :groupes-capacite="groupesCapacite"
+                :categories-produit="categoriesProduit"
                 @update:model-value="
                     $emit('update:form', { ...form, capacites: $event })
                 "

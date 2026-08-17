@@ -6,11 +6,12 @@ use Illuminate\Support\Facades\DB;
 /**
  * TypeVehicule redevient une classification pure (nom du type de véhicule), sans porter aucune
  * capacité — décision produit du 17/08/2026 : plus aucun héritage de capacité depuis le type,
- * la capacité de chargement appartient exclusivement au véhicule (cf. vehicule_capacites /
- * GroupeCapacite). capacite_defaut/capacite_defaut_bouteilles/unite_capacite restent en base
- * (colonnes désormais mortes, plus lues par aucun code) pour ne pas complexifier cette migration
- * avec une suppression de colonnes — nullable pour ne plus jamais être exigées applicativement.
- * SQL brut (pas ->change()) : ce projet n'a pas doctrine/dbal installé.
+ * la capacité de chargement appartient exclusivement au véhicule, par catégorie du catalogue
+ * produit (cf. vehicule_capacites / Categorie). capacite_defaut/capacite_defaut_bouteilles/
+ * unite_capacite restent en base (colonnes désormais mortes, plus lues par aucun code) pour ne
+ * pas complexifier cette migration avec une suppression de colonnes — nullable pour ne plus
+ * jamais être exigées applicativement. SQL brut (pas ->change()) : ce projet n'a pas
+ * doctrine/dbal installé.
  */
 return new class extends Migration
 {

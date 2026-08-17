@@ -24,7 +24,7 @@ class EquipeLivraisonController extends Controller
     {
         $this->authorize('viewAny', EquipeLivraison::class);
 
-        $equipes = EquipeLivraison::with('membres.livreur', 'proprietaire', 'vehicule.typeVehicule', 'vehicule.capacites.groupeCapacite')
+        $equipes = EquipeLivraison::with('membres.livreur', 'proprietaire', 'vehicule.typeVehicule', 'vehicule.capacites.categorie')
             ->where('organization_id', auth()->user()->organization_id)
             ->get()
             ->sortBy(fn (EquipeLivraison $e) => $e->vehicule?->nom_vehicule)
@@ -137,7 +137,7 @@ class EquipeLivraisonController extends Controller
     {
         $this->authorize('view', $equipes_livraison);
 
-        $equipes_livraison->load('membres.livreur', 'proprietaire', 'vehicule.typeVehicule', 'vehicule.capacites.groupeCapacite');
+        $equipes_livraison->load('membres.livreur', 'proprietaire', 'vehicule.typeVehicule', 'vehicule.capacites.categorie');
 
         return Inertia::render('EquipesLivraison/Show', [
             'equipe' => $this->equipeData($equipes_livraison),
@@ -305,7 +305,7 @@ class EquipeLivraisonController extends Controller
             'vehicule_livraison_logistique' => $e->vehicule?->livraison_logistique,
             'vehicule_capacites' => $e->vehicule
                 ? $e->vehicule->capacites->map(fn (VehiculeCapacite $c) => [
-                    'groupe_capacite_nom' => $c->groupeCapacite->nom,
+                    'categorie_nom' => $c->categorie->nom,
                     'capacite_max' => $c->capacite_max,
                 ])->values()->all()
                 : [],

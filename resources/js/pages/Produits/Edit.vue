@@ -26,11 +26,6 @@ interface Categorie {
     parent_id: string | null;
 }
 
-interface GroupeCapaciteOption {
-    id: string;
-    nom: string;
-}
-
 interface FournisseurOption {
     id: string;
     nom_complet: string;
@@ -67,7 +62,6 @@ interface ProduitData {
     id: number;
     nom: string;
     categorie_id: string | null;
-    groupe_capacite_id: string | null;
     fournisseur_id: string | null;
     sku: string | null;
     code_barres: string | null;
@@ -90,7 +84,6 @@ const props = defineProps<{
     types: ProduitTypeOption[];
     statuts: Option[];
     categories: Categorie[];
-    groupesCapacite: GroupeCapaciteOption[];
     fournisseurs: FournisseurOption[];
     limites: Limites;
     seuilOrganisationDefaut: number;
@@ -119,7 +112,6 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     nom: props.produit.nom,
     categorie_id: props.produit.categorie_id,
-    groupe_capacite_id: props.produit.groupe_capacite_id,
     fournisseur_id: props.produit.fournisseur_id,
     code_barres: props.produit.code_barres,
     produit_type_id: props.produit.produit_type_id,
@@ -191,7 +183,6 @@ function submit() {
                 :types="types"
                 :statuts="statuts"
                 :categories="categories"
-                :groupes-capacite="groupesCapacite"
                 :fournisseurs="fournisseurs"
                 :limites="limites"
                 :seuil-organisation-defaut="seuilOrganisationDefaut"

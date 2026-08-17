@@ -57,14 +57,14 @@ interface SolvabiliteResult {
 interface ProduitOption {
     id: number;
     nom: string;
-    groupe_capacite_id: number | null;
+    categorie_id: number | null;
     prix_vente: number;
     prix_usine: number;
 }
 
-interface CapaciteGroupe {
-    groupe_capacite_id: number;
-    groupe_capacite_nom: string;
+interface CapaciteCategorie {
+    categorie_id: number;
+    categorie_nom: string;
     capacite_max: number;
 }
 
@@ -72,7 +72,7 @@ interface VehiculeOption {
     id: number;
     nom_vehicule: string;
     immatriculation: string;
-    capacites: CapaciteGroupe[];
+    capacites: CapaciteCategorie[];
     livreur_nom: string | null;
     livreur_telephone: string | null;
 }
@@ -420,33 +420,33 @@ const capacitesSelectionnees = computed(
     () => vehiculeSelectionne.value?.capacites ?? [],
 );
 
-// Quantité commandée par groupe effectivement vendu (les groupes absents de la commande ne
-// sont pas remontés ici — même logique que le regroupement backend).
-const usageParGroupe = computed(() => {
+// Quantité commandée par catégorie effectivement vendue (les catégories absentes de la
+// commande ne sont pas remontées ici — même logique que le regroupement backend).
+const usageParCategorie = computed(() => {
     const capacites = capacitesSelectionnees.value;
     if (capacites.length === 0) return [];
 
-    const qteParGroupe = new Map<number, number>();
+    const qteParCategorie = new Map<number, number>();
     for (const ligne of form.lignes) {
         if (ligne.produit_id === null) continue;
-        const groupeId =
+        const categorieId =
             props.produits.find((p) => p.id === ligne.produit_id)
-                ?.groupe_capacite_id ?? null;
-        if (groupeId === null) continue;
-        qteParGroupe.set(
-            groupeId,
-            (qteParGroupe.get(groupeId) ?? 0) + (ligne.qte ?? 0),
+                ?.categorie_id ?? null;
+        if (categorieId === null) continue;
+        qteParCategorie.set(
+            categorieId,
+            (qteParCategorie.get(categorieId) ?? 0) + (ligne.qte ?? 0),
         );
     }
 
-    return [...qteParGroupe.entries()]
-        .map(([groupeId, qte]) => {
+    return [...qteParCategorie.entries()]
+        .map(([categorieId, qte]) => {
             const cap = capacites.find(
-                (c) => c.groupe_capacite_id === groupeId,
+                (c) => c.categorie_id === categorieId,
             );
             return cap ? { ...cap, qte } : null;
         })
-        .filter((c): c is CapaciteGroupe & { qte: number } => c !== null);
+        .filter((c): c is CapaciteCategorie & { qte: number } => c !== null);
 });
 
 // Aucun dépassement n'est jamais toléré, pour aucun rôle (décision produit du 15/08/2026) —
@@ -457,7 +457,7 @@ const capaciteVehiculeConforme = computed(() => {
     if (form.vehicule_id === null) return true;
     if (capacitesSelectionnees.value.length === 0) return true;
 
-    return usageParGroupe.value.every((c) => {
+    return usageParCategorie.value.every((c) => {
         if (c.qte > c.capacite_max) return false;
         if (c.qte < c.capacite_max)
             return props.autoriser_saisie_dessous_qte_max;
@@ -465,17 +465,17 @@ const capaciteVehiculeConforme = computed(() => {
     });
 });
 
-// Plafond "doux" affiché sur le champ quantité d'une ligne : celui du groupe de capacité du
-// produit sélectionné sur cette ligne (undefined si aucun groupe ou produit non choisi). Ne
-// tient pas compte des autres lignes du même groupe — le vrai contrôle cumulé reste
+// Plafond "doux" affiché sur le champ quantité d'une ligne : celui de la catégorie du
+// produit sélectionné sur cette ligne (undefined si aucune catégorie ou produit non choisi).
+// Ne tient pas compte des autres lignes de la même catégorie — le vrai contrôle cumulé reste
 // capaciteVehiculeConforme (et, en dernier ressort, le backend).
 function maxPourLigne(produitId: number | null): number | undefined {
     if (produitId === null) return undefined;
-    const groupeId = props.produits.find((p) => p.id === produitId)
-        ?.groupe_capacite_id;
-    if (groupeId === null || groupeId === undefined) return undefined;
+    const categorieId = props.produits.find((p) => p.id === produitId)
+        ?.categorie_id;
+    if (categorieId === null || categorieId === undefined) return undefined;
     return capacitesSelectionnees.value.find(
-        (c) => c.groupe_capacite_id === groupeId,
+        (c) => c.categorie_id === categorieId,
     )?.capacite_max;
 }
 
@@ -641,9 +641,9 @@ function confirmerEtCreer() {
                                                     v-for="(
                                                         c, i
                                                     ) in option.capacites"
-                                                    :key="c.groupe_capacite_id"
+                                                    :key="c.categorie_id"
                                                 >
-                                                    {{ c.groupe_capacite_nom }}
+                                                    {{ c.categorie_nom }}
                                                     {{ c.capacite_max
                                                     }}<template
                                                         v-if="
@@ -1379,13 +1379,13 @@ function confirmerEtCreer() {
                                 Véhicule non plafonné
                             </span>
                             <span
-                                v-for="c in usageParGroupe"
-                                :key="c.groupe_capacite_id"
+                                v-for="c in usageParCategorie"
+                                :key="c.categorie_id"
                                 :class="
                                     capaciteLigneClass(c.qte, c.capacite_max)
                                 "
                             >
-                                {{ c.groupe_capacite_nom }} : {{ c.qte }} /
+                                {{ c.categorie_nom }} : {{ c.qte }} /
                                 {{ c.capacite_max }}
                                 <span v-if="c.qte === c.capacite_max">✓</span>
                                 <span v-else-if="c.qte < c.capacite_max">

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Categorie;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
@@ -111,43 +112,46 @@ class VehiculeTest extends TestCase
             ->assertStatus(403);
     }
 
-    public function test_index_expose_la_capacite_packs_du_type(): void
+    public function test_index_expose_la_capacite_propre_au_vehicule(): void
     {
-        // Capacité gérée exclusivement par le type (décision produit du 16/08/2026, cf.
-        // VehiculeCapaciteService) — jamais propre au véhicule, quel que soit son origine
-        // (formulaire manuel ou import flotte, cf. ImportFlotteExecutor).
+        // Capacité portée exclusivement par le véhicule via vehicule_capacites (décision
+        // produit du 17/08/2026, cf. VehiculeCapaciteService) — TypeVehicule::capacite_defaut
+        // est une colonne morte, jamais lue ici même si elle est renseignée.
         $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'capacite_defaut' => 270]);
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
-        Vehicule::factory()->create([
+        $vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'type_vehicule_id' => $type->id,
             'proprietaire_id' => $proprietaire->id,
+        ]);
+        $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachet eau']);
+        $vehicule->capacites()->create([
+            'organization_id' => $this->org->id,
+            'categorie_id' => $categorie->id,
+            'capacite_max' => 90,
         ]);
 
         $this->actingAs($this->user)
             ->get(route('vehicules.index'))
             ->assertInertia(fn (Assert $page) => $page
-                ->where('vehicules.0.capacite_packs', 270)
+                ->where('vehicules.0.capacites.0.categorie_nom', 'Sachet eau')
+                ->where('vehicules.0.capacites.0.capacite_max', 90)
             );
     }
 
-    public function test_index_expose_la_capacite_bouteilles_du_type(): void
+    public function test_index_expose_un_vehicule_sans_capacite_avec_un_tableau_vide(): void
     {
-        $type = TypeVehicule::factory()->create([
-            'organization_id' => $this->org->id,
-            'capacite_defaut_bouteilles' => 40,
-        ]);
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         Vehicule::factory()->create([
             'organization_id' => $this->org->id,
-            'type_vehicule_id' => $type->id,
+            'type_vehicule_id' => $this->typeId(),
             'proprietaire_id' => $proprietaire->id,
         ]);
 
         $this->actingAs($this->user)
             ->get(route('vehicules.index'))
             ->assertInertia(fn (Assert $page) => $page
-                ->where('vehicules.0.capacite_bouteilles', 40)
+                ->where('vehicules.0.capacites', [])
             );
     }
 
@@ -198,10 +202,11 @@ class VehiculeTest extends TestCase
     }
 
     /**
-     * capacite_packs/capacite_bouteilles ne sont plus des champs du formulaire véhicule
-     * (décision produit du 16/08/2026) — un envoi malgré tout (ancien client, requête forgée)
-     * n'a aucun effet : ni dans validationRules(), ces clés sont silencieusement ignorées par
-     * Request::validate(), la capacité affichée reste celle du type.
+     * capacite_packs/capacite_bouteilles sont des colonnes mortes, plus jamais alimentées par
+     * le formulaire véhicule (décision produit du 17/08/2026 — la capacité se saisit désormais
+     * via le tableau `capacites`, résolu contre vehicule_capacites/Categorie) : un envoi
+     * malgré tout de ces clés (ancien client, requête forgée) n'a aucun effet, absentes de
+     * validationRules() donc silencieusement ignorées par Request::validate().
      */
     public function test_store_ignore_capacite_packs_et_bouteilles_envoyes_dans_le_payload(): void
     {
