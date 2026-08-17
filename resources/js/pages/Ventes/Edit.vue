@@ -346,10 +346,6 @@ const totalGeneral = computed(() =>
     form.lignes.reduce((sum, l) => sum + l.total, 0),
 );
 
-const quantiteTotale = computed(() =>
-    form.lignes.reduce((sum, l) => sum + (l.qte ?? 0), 0),
-);
-
 const vehiculeSelectionne = computed(() => {
     if (form.vehicule_id === null) {
         return null;

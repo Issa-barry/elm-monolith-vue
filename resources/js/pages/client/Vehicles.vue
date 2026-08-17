@@ -9,7 +9,7 @@ import { Head, useForm, usePage } from '@inertiajs/vue3';
 import { Car, Lock, Plus, X } from 'lucide-vue-next';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 
-const props = defineProps<{
+defineProps<{
     actor: ActorPayload;
     owner_vehicules: VehiculeOption[];
     type_vehicule_options: TypeVehiculeOption[];

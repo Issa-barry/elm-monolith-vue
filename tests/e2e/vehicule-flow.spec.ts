@@ -344,11 +344,13 @@ test('création — capacités maximales de chargement saisies dans le formulair
     // PrimeVue InputNumber traite les frappes une par une (formatage interne) — .fill() pose
     // la valeur DOM sans déclencher sa logique de parsing, laissant le v-model à null et le
     // bouton "Ajouter" durablement désactivé (cf. tests/e2e/stock-ajustement.spec.ts) — c'est
-    // la cause réelle du bug "le bouton Ajouter disparaît" rapporté en usage manuel.
-    await page
-        .locator('input[inputmode="numeric"]')
-        .last()
-        .pressSequentially('1700');
+    // la cause réelle du bug "le bouton Ajouter disparaît" rapporté en usage manuel. Focus
+    // explicite puis blur en sortie pour forcer la validation/commit interne du composant
+    // avant de vérifier l'état du bouton (évite une course avec son cycle de rendu interne).
+    const capaciteMaxInput = page.locator('input[inputmode="numeric"]').last();
+    await capaciteMaxInput.click();
+    await capaciteMaxInput.pressSequentially('1700');
+    await capaciteMaxInput.blur();
     // "Ajouter" ici n'est qu'un ajout à la liste locale du formulaire (pas de requête réseau) —
     // distinct du bouton de soumission finale du véhicule, plus bas. Le bouton "Ajouter une
     // capacité" est masqué (v-else) tant que ce panneau d'ajout est ouvert, donc ce nom exact

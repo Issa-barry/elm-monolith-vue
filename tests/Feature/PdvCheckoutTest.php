@@ -3,10 +3,10 @@
 namespace Tests\Feature;
 
 use App\Enums\StatutCommandeVente;
+use App\Models\Categorie;
 use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
-use App\Models\Categorie;
 use App\Models\Fournisseur;
 use App\Models\Organization;
 use App\Models\Produit;
