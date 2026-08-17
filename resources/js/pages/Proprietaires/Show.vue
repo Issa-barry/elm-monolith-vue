@@ -595,19 +595,22 @@ function closeLightbox() {
                                     </td>
                                     <td class="px-4 py-3">
                                         <template
-                                            v-if="vehicule.capacites.length === 0"
+                                            v-if="
+                                                vehicule.capacites.length === 0
+                                            "
                                         >
                                             -
                                         </template>
                                         <template v-else>
                                             <span
-                                                v-for="(c, i) in vehicule.capacites"
+                                                v-for="(
+                                                    c, i
+                                                ) in vehicule.capacites"
                                                 :key="c.categorie_nom"
                                             >
-                                                {{ i > 0 ? ' · ' : '' }}{{
-                                                    c.categorie_nom
-                                                }}
-                                                : {{ c.capacite_max }}
+                                                {{ i > 0 ? ' · ' : ''
+                                                }}{{ c.categorie_nom }} :
+                                                {{ c.capacite_max }}
                                             </span>
                                         </template>
                                     </td>

@@ -5,7 +5,10 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ArrowLeft, Save } from 'lucide-vue-next';
 import { computed } from 'vue';
-import { type CapaciteRow, type CategorieOption as CategorieProduitOption } from './partials/CapacitesEditor.vue';
+import {
+    type CapaciteRow,
+    type CategorieOption as CategorieProduitOption,
+} from './partials/CapacitesEditor.vue';
 import VehiculeForm from './partials/VehiculeForm.vue';
 
 interface Option {

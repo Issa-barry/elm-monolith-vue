@@ -34,9 +34,9 @@ function submit() {
                     Nouveau type de véhicule
                 </h1>
                 <p class="mt-1 text-sm text-muted-foreground">
-                    Définissez un nouveau type pour votre flotte. Un type
-                    n'est qu'une classification — la capacité maximale de
-                    chargement se règle individuellement sur chaque véhicule.
+                    Définissez un nouveau type pour votre flotte. Un type n'est
+                    qu'une classification — la capacité maximale de chargement
+                    se règle individuellement sur chaque véhicule.
                 </p>
             </div>
 

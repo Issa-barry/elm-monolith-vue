@@ -215,7 +215,9 @@ onMounted(() => {
                                     {{ vehicule.type_label }}
                                 </td>
                                 <td class="py-2 pr-4">
-                                    <template v-if="vehicule.capacites.length === 0">
+                                    <template
+                                        v-if="vehicule.capacites.length === 0"
+                                    >
                                         -
                                     </template>
                                     <template v-else>
@@ -223,10 +225,9 @@ onMounted(() => {
                                             v-for="(c, i) in vehicule.capacites"
                                             :key="c.categorie_nom"
                                         >
-                                            {{ i > 0 ? ' · ' : '' }}{{
-                                                c.categorie_nom
-                                            }}
-                                            : {{ c.capacite_max }}
+                                            {{ i > 0 ? ' · ' : ''
+                                            }}{{ c.categorie_nom }} :
+                                            {{ c.capacite_max }}
                                         </span>
                                     </template>
                                 </td>

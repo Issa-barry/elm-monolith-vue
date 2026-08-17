@@ -498,15 +498,12 @@ function submit() {
                                                         ) in option.capacites"
                                                         :key="c.categorie_id"
                                                     >
-                                                        {{
-                                                            c.categorie_nom
-                                                        }}
+                                                        {{ c.categorie_nom }}
                                                         {{ c.capacite_max
                                                         }}<template
                                                             v-if="
                                                                 i <
-                                                                option
-                                                                    .capacites
+                                                                option.capacites
                                                                     .length -
                                                                     1
                                                             "

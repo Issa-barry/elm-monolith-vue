@@ -1786,8 +1786,8 @@ function connectorIsActive(idx: number): boolean {
                                     .capacites"
                                 :key="c.categorie_nom"
                             >
-                                {{ i > 0 ? ' · ' : '' }}{{ c.categorie_nom }}
-                                : {{ c.capacite_max }}
+                                {{ i > 0 ? ' · ' : '' }}{{ c.categorie_nom }} :
+                                {{ c.capacite_max }}
                             </span>
                         </template>
                     </span>

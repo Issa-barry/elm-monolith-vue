@@ -441,9 +441,7 @@ const usageParCategorie = computed(() => {
 
     return [...qteParCategorie.entries()]
         .map(([categorieId, qte]) => {
-            const cap = capacites.find(
-                (c) => c.categorie_id === categorieId,
-            );
+            const cap = capacites.find((c) => c.categorie_id === categorieId);
             return cap ? { ...cap, qte } : null;
         })
         .filter((c): c is CapaciteCategorie & { qte: number } => c !== null);
@@ -471,8 +469,9 @@ const capaciteVehiculeConforme = computed(() => {
 // capaciteVehiculeConforme (et, en dernier ressort, le backend).
 function maxPourLigne(produitId: number | null): number | undefined {
     if (produitId === null) return undefined;
-    const categorieId = props.produits.find((p) => p.id === produitId)
-        ?.categorie_id;
+    const categorieId = props.produits.find(
+        (p) => p.id === produitId,
+    )?.categorie_id;
     if (categorieId === null || categorieId === undefined) return undefined;
     return capacitesSelectionnees.value.find(
         (c) => c.categorie_id === categorieId,
@@ -632,8 +631,7 @@ function confirmerEtCreer() {
                                             }}</span>
                                             <span
                                                 v-if="
-                                                    option.capacites.length >
-                                                    0
+                                                    option.capacites.length > 0
                                                 "
                                                 class="before:mr-2 before:content-['·']"
                                             >
@@ -1607,9 +1605,7 @@ function confirmerEtCreer() {
                                         :max="
                                             can_modifier_qte
                                                 ? undefined
-                                                : maxPourLigne(
-                                                      ligne.produit_id,
-                                                  )
+                                                : maxPourLigne(ligne.produit_id)
                                         "
                                         :disabled="commandeBloquee"
                                         :use-grouping="false"

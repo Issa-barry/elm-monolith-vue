@@ -627,9 +627,7 @@ function fmtTel(tel: string | null | undefined): string {
             <div class="flex justify-between">
                 <span class="text-sm text-muted-foreground">Capacité</span>
                 <span class="text-sm font-medium">
-                    <template
-                        v-if="!selectedVehicule?.capacites.length"
-                    >
+                    <template v-if="!selectedVehicule?.capacites.length">
                         —
                     </template>
                     <template v-else>

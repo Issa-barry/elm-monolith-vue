@@ -49,9 +49,9 @@ function submit() {
                     {{ type.nom }}
                 </p>
                 <p class="mt-1 text-xs text-muted-foreground">
-                    Un type de véhicule n'est qu'une classification (nom) —
-                    la capacité maximale de chargement se règle
-                    individuellement sur chaque véhicule.
+                    Un type de véhicule n'est qu'une classification (nom) — la
+                    capacité maximale de chargement se règle individuellement
+                    sur chaque véhicule.
                 </p>
             </div>
 

@@ -48,7 +48,8 @@ function startAdd(): void {
 // Le bouton "Ajouter" ne doit JAMAIS disparaître (ancien bug) : uniquement désactivé/activé
 // via :disabled, jamais retiré du DOM via v-if — l'utilisateur voit toujours où il en est.
 const canAdd = computed(
-    () => !!newCategorieId.value && !!newCapacite.value && newCapacite.value > 0,
+    () =>
+        !!newCategorieId.value && !!newCapacite.value && newCapacite.value > 0,
 );
 
 function confirmAdd(): void {
@@ -77,7 +78,9 @@ function confirmEdit(index: number): void {
     emit(
         'update:modelValue',
         props.modelValue.map((r, i) =>
-            i === index ? { ...r, capacite_max: editCapacite.value as number } : r,
+            i === index
+                ? { ...r, capacite_max: editCapacite.value as number }
+                : r,
         ),
     );
     editingIndex.value = null;
@@ -99,13 +102,16 @@ function removeRow(index: number): void {
             Capacités maximales de chargement
         </h3>
         <p class="mt-1 text-xs text-muted-foreground">
-            Limites propres à ce véhicule, par catégorie de produit (ex :
-            Sachet eau, Bouteille) — utilisées pour bloquer toute vente ou
-            tout chargement qui les dépasse. Aucune limite définie = véhicule
-            non plafonné pour cette catégorie.
+            Limites propres à ce véhicule, par catégorie de produit (ex : Sachet
+            eau, Bouteille) — utilisées pour bloquer toute vente ou tout
+            chargement qui les dépasse. Aucune limite définie = véhicule non
+            plafonné pour cette catégorie.
         </p>
 
-        <div v-if="modelValue.length > 0" class="mt-4 divide-y rounded-lg border">
+        <div
+            v-if="modelValue.length > 0"
+            class="mt-4 divide-y rounded-lg border"
+        >
             <div
                 v-for="(row, index) in modelValue"
                 :key="row.categorie_id"
@@ -196,7 +202,12 @@ function removeRow(index: number): void {
                 />
             </div>
             <div class="flex shrink-0 gap-2">
-                <Button type="button" size="sm" :disabled="!canAdd" @click="confirmAdd">
+                <Button
+                    type="button"
+                    size="sm"
+                    :disabled="!canAdd"
+                    @click="confirmAdd"
+                >
                     Ajouter
                 </Button>
                 <Button
@@ -222,7 +233,10 @@ function removeRow(index: number): void {
                 Ajouter une capacité
             </Button>
             <p
-                v-if="availableCategories().length === 0 && categoriesProduit.length === 0"
+                v-if="
+                    availableCategories().length === 0 &&
+                    categoriesProduit.length === 0
+                "
                 class="mt-2 text-xs text-muted-foreground"
             >
                 Aucune catégorie de produit définie —

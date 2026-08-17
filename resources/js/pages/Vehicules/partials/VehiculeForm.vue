@@ -477,7 +477,6 @@ function handleSubmit() {
                         {{ errors.type_vehicule_id }}
                     </p>
                 </div>
-
             </div>
         </div>
 

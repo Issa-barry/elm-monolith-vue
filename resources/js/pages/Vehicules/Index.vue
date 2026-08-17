@@ -746,10 +746,7 @@ function confirmDelete(v: Vehicule) {
                     </Column>
 
                     <!-- Capacité -->
-                    <Column
-                        header="Capacité"
-                        style="width: 160px"
-                    >
+                    <Column header="Capacité" style="width: 160px">
                         <template #body="{ data }">
                             <span
                                 v-if="data.capacites.length === 0"
@@ -768,7 +765,7 @@ function confirmDelete(v: Vehicule) {
                                     {{ c.capacite_max
                                     }}<template
                                         v-if="i < data.capacites.length - 1"
-                                        >
+                                    >
                                         ·
                                     </template>
                                 </template>
