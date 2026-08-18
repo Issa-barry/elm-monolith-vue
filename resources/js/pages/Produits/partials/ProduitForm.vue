@@ -26,12 +26,17 @@ interface Option {
     label: string;
 }
 
-// `required_prices`/`gere_stock` (cf. ProduitTypeController::typesOptions() côté backend,
-// seule source de vérité, remplace l'ancien enum figé) pilotent le "*" affiché sur les prix
-// obligatoires et l'affichage de la section Stock pour le type sélectionné.
+// `required_prices`/`gere_stock` (cf. ProduitController::typesOptions() côté backend, seule
+// source de vérité) pilotent le "*" affiché sur les prix obligatoires et l'affichage de la
+// section Stock pour le type sélectionné. `achetable`/`vendable` pilotent une notion distincte,
+// l'applicabilité fonctionnelle (même champs que ceux qui filtrent les flux achat/vente) : un
+// prix peut être applicable sans être obligatoire — ne jamais confondre les deux (cf. analyse
+// tarification tricycle/applicabilité).
 interface ProduitTypeOption extends Option {
     gere_stock: boolean;
     required_prices: string[];
+    achetable: boolean;
+    vendable: boolean;
 }
 
 interface Categorie {
@@ -148,6 +153,17 @@ const requiredPrices = computed(
 function prixRequis(champ: string): boolean {
     return requiredPrices.value.includes(champ);
 }
+// Applicabilité (visibilité du champ) — distincte de l'obligation ci-dessus. prix_achat/
+// prix_vente suivent achetable/vendable (un type peut accepter un prix facultatif sans
+// l'exiger) ; prix_usine/prix_usine_tricycle restent pilotés par leur obligation, faute de
+// notion "applicable mais facultatif" pertinente pour ce prix dans ce domaine.
+const prixAchatApplicable = computed(
+    () => selectedType.value?.achetable ?? true,
+);
+const prixVenteApplicable = computed(
+    () => selectedType.value?.vendable ?? true,
+);
+
 // Rouge dès qu'un champ requis est vide ET que le formulaire a déjà été refusé une fois pour
 // ce motif — le backend regroupe toutes les erreurs de prix sous la clé `produit_type_id` (un
 // seul message listant les champs manquants), jamais sous le champ lui-même individuellement.
@@ -723,13 +739,17 @@ const depasseLimiteVariantes = computed(
                 ajustable ensuite individuellement.
             </p>
 
+            <!--
+                Grille fluide auto-fit : le navigateur détermine seul le nombre de colonnes
+                selon la largeur réellement disponible (jamais de nombre de colonnes codé en
+                dur/calculé en JS) — chaque champ garde une largeur confortable (min 15rem) et
+                passe naturellement à la ligne suivante sans laisser de trou quand un champ
+                conditionnel (prix_achat/prix_vente) est absent. L'ordre du DOM ci-dessous EST
+                l'ordre visuel (pas de `order-*`) : Coût de revient reste toujours en dernier
+                simplement parce qu'il est écrit en dernier.
+            -->
             <div
-                class="grid gap-4 sm:grid-cols-2 sm:gap-5"
-                :class="
-                    prixRequis('prix_usine')
-                        ? 'lg:grid-cols-5'
-                        : 'lg:grid-cols-3'
-                "
+                class="grid grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] gap-4 sm:gap-5"
             >
                 <div v-if="prixRequis('prix_usine')">
                     <Label for="prix_usine" class="mb-1.5 block"
@@ -771,7 +791,8 @@ const depasseLimiteVariantes = computed(
 
                 <div v-if="prixRequis('prix_usine')">
                     <Label for="prix_usine_tricycle" class="mb-1.5 block"
-                        >Prix usine — Tricycle</Label
+                        >Prix usine — Tricycle
+                        <span class="text-destructive">*</span></Label
                     >
                     <InputNumber
                         input-id="prix_usine_tricycle"
@@ -787,52 +808,22 @@ const depasseLimiteVariantes = computed(
                         locale="fr-GN"
                         class="w-full"
                         input-class="w-full"
-                    />
-                    <p class="mt-1 text-xs text-muted-foreground">
-                        Optionnel — sans valeur, le tarif "Autres véhicules"
-                        s'applique aussi aux tricycles.
-                    </p>
-                </div>
-
-                <div>
-                    <Label for="prix_achat" class="mb-1.5 block"
-                        >Prix achat
-                        <span
-                            v-if="prixRequis('prix_achat')"
-                            class="text-destructive"
-                            >*</span
-                        ></Label
-                    >
-                    <InputNumber
-                        input-id="prix_achat"
-                        :model-value="form.prix_achat"
-                        @update:model-value="
-                            $emit('update:form', {
-                                ...form,
-                                prix_achat: $event,
-                            })
-                        "
-                        :min="0"
-                        :use-grouping="true"
-                        locale="fr-GN"
-                        class="w-full"
-                        input-class="w-full"
                         :class="{
                             'p-invalid': prixInvalide(
-                                'prix_achat',
-                                form.prix_achat,
+                                'prix_usine_tricycle',
+                                form.prix_usine_tricycle,
                             ),
                         }"
                     />
                     <p
-                        v-if="errors.prix_achat"
+                        v-if="errors.prix_usine_tricycle"
                         class="mt-1 text-xs text-destructive"
                     >
-                        {{ errors.prix_achat }}
+                        {{ errors.prix_usine_tricycle }}
                     </p>
                 </div>
 
-                <div>
+                <div v-if="prixVenteApplicable">
                     <Label for="prix_vente" class="mb-1.5 block"
                         >Prix vente
                         <span
@@ -867,6 +858,44 @@ const depasseLimiteVariantes = computed(
                         class="mt-1 text-xs text-destructive"
                     >
                         {{ errors.prix_vente }}
+                    </p>
+                </div>
+
+                <div v-if="prixAchatApplicable">
+                    <Label for="prix_achat" class="mb-1.5 block"
+                        >Prix achat
+                        <span
+                            v-if="prixRequis('prix_achat')"
+                            class="text-destructive"
+                            >*</span
+                        ></Label
+                    >
+                    <InputNumber
+                        input-id="prix_achat"
+                        :model-value="form.prix_achat"
+                        @update:model-value="
+                            $emit('update:form', {
+                                ...form,
+                                prix_achat: $event,
+                            })
+                        "
+                        :min="0"
+                        :use-grouping="true"
+                        locale="fr-GN"
+                        class="w-full"
+                        input-class="w-full"
+                        :class="{
+                            'p-invalid': prixInvalide(
+                                'prix_achat',
+                                form.prix_achat,
+                            ),
+                        }"
+                    />
+                    <p
+                        v-if="errors.prix_achat"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.prix_achat }}
                     </p>
                 </div>
 

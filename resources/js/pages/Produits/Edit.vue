@@ -13,11 +13,14 @@ interface Option {
     label: string;
 }
 
-// `required_prices`/`gere_stock` (cf. ProduitTypeController::typesOptions()) pilotent
-// l'affichage du "*" sur les prix obligatoires et de la section Stock, dans ProduitForm.vue.
+// `required_prices`/`gere_stock` (cf. ProduitController::typesOptions()) pilotent l'affichage
+// du "*" sur les prix obligatoires et de la section Stock, dans ProduitForm.vue.
+// `achetable`/`vendable` pilotent la visibilité (applicabilité) de prix_achat/prix_vente.
 interface ProduitTypeOption extends Option {
     gere_stock: boolean;
     required_prices: string[];
+    achetable: boolean;
+    vendable: boolean;
 }
 
 interface Categorie {
@@ -93,12 +96,19 @@ const props = defineProps<{
 
 const showVarianteModal = ref(false);
 const varianteEnEdition = ref<Variante | null>(null);
-const prixUsineRequis = computed(
-    () =>
-        props.types
-            .find((t) => t.value === props.produit.produit_type_id)
-            ?.required_prices.includes('prix_usine') ?? false,
+const typeCourant = computed(() =>
+    props.types.find((t) => t.value === props.produit.produit_type_id),
 );
+const prixUsineRequis = computed(
+    () => typeCourant.value?.required_prices.includes('prix_usine') ?? false,
+);
+// cf. ProduitForm.vue : achetable/vendable pilotent la visibilité de prix_achat/prix_vente,
+// distincte de leur obligation — même règle reproduite ici pour VarianteEditModal.vue afin de
+// ne jamais diverger entre création/édition du produit simple et édition d'une variante.
+const prixAchatApplicable = computed(
+    () => typeCourant.value?.achetable ?? true,
+);
+const prixVenteApplicable = computed(() => typeCourant.value?.vendable ?? true);
 
 function editerVariante(variante: Variante) {
     varianteEnEdition.value = variante;
@@ -205,6 +215,8 @@ function submit() {
             :produit-id="String(produit.id)"
             :variante="varianteEnEdition"
             :prix-usine-requis="prixUsineRequis"
+            :prix-achat-applicable="prixAchatApplicable"
+            :prix-vente-applicable="prixVenteApplicable"
         />
 
         <!-- ─── Footer sticky mobile ─── -->

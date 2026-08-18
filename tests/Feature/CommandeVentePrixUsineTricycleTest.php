@@ -178,4 +178,31 @@ class CommandeVentePrixUsineTricycleTest extends TestCase
         $commande->refresh();
         $this->assertEquals(5050.0, (float) $commande->lignes()->first()->prix_usine_snapshot, 'Le snapshot ne doit jamais être recalculé rétroactivement.');
     }
+
+    /**
+     * Décision métier : aucun repli implicite de prix_usine_tricycle vers prix_usine — une
+     * variante historique (créée hors ProduitService, donc jamais validée) sans tarif tricycle
+     * dédié doit bloquer la commande avec une erreur explicite plutôt que d'appliquer
+     * silencieusement le tarif "autres véhicules" à un tricycle.
+     */
+    public function test_commande_avec_vehicule_tricycle_refuse_si_le_tarif_tricycle_nest_pas_renseigne(): void
+    {
+        $produit = $this->makeProduitAvecVariante(
+            $this->org,
+            ['nom' => 'Pack Sans Tricycle'],
+            ['prix_vente' => 6000, 'prix_usine' => 5100, 'prix_usine_tricycle' => null],
+        );
+        $vehicule = $this->makeVehicule(CategorieTarifaireVehicule::TRICYCLE);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 10, 'prix_vente' => 6000],
+                ],
+            ])
+            ->assertSessionHasErrors('lignes');
+
+        $this->assertDatabaseMissing('commandes_ventes', ['vehicule_id' => $vehicule->id]);
+    }
 }

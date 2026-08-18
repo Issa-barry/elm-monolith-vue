@@ -60,6 +60,13 @@ class ProduitController extends Controller
                 'label' => $t->nom,
                 'gere_stock' => $t->gere_stock,
                 'required_prices' => $t->requiredPrices(),
+                // Applicabilité fonctionnelle (déjà utilisée pour filtrer les flux
+                // achat/vente, cf. CommandeAchatController/CommandeVenteController/
+                // PdvController) — réutilisée ici pour piloter la visibilité des champs
+                // prix_achat/prix_vente dans le formulaire, distincte de l'obligation de
+                // saisie (*_requis, cf. required_prices ci-dessus).
+                'achetable' => $t->achetable,
+                'vendable' => $t->vendable,
             ]);
     }
 
@@ -835,6 +842,10 @@ class ProduitController extends Controller
                 'nom' => $produit->nom,
                 'type_nom' => $produit->produitType?->nom,
                 'prix_usine_requis' => (bool) $produit->produitType?->prix_usine_requis,
+                // cf. typesOptions() : achetable/vendable pilotent la visibilité de
+                // prix_achat/prix_vente, indépendamment de leur caractère obligatoire.
+                'achetable' => (bool) ($produit->produitType?->achetable ?? true),
+                'vendable' => (bool) ($produit->produitType?->vendable ?? true),
             ],
             'variantes' => $produit->variantes->map(fn (ProduitVariante $v) => [
                 'id' => $v->id,

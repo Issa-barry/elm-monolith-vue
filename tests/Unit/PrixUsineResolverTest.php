@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use App\Enums\CategorieTarifaireVehicule;
 use App\Models\ProduitVariante;
 use App\Services\PrixUsineResolver;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 /**
@@ -50,23 +51,25 @@ class PrixUsineResolverTest extends TestCase
         $this->assertSame(5100, $prix);
     }
 
-    public function test_retombe_sur_le_tarif_standard_pour_un_tricycle_sans_tarif_dedie(): void
+    public function test_refuse_explicitement_un_tricycle_sans_tarif_dedie(): void
     {
-        // Variante historique jamais éditée depuis l'ajout du tarif tricycle : pas de casse pour
-        // les données existantes, le repli est automatique et centralisé ici (jamais réimplémenté
-        // ailleurs).
+        // Décision métier : les deux tarifs sont deux décisions distinctes, jamais l'un déduit
+        // de l'autre — ProduitService garantit déjà leur présence conjointe à la source, donc ce
+        // cas ne devrait fonctionnellement jamais survenir pour une variante valide ; s'il
+        // survient malgré tout (donnée historique non migrée), on refuse explicitement plutôt
+        // que d'appliquer silencieusement un autre prix.
+        $this->expectException(ValidationException::class);
+
         $variante = $this->variante(5100, null);
 
-        $prix = PrixUsineResolver::resolve($variante, CategorieTarifaireVehicule::TRICYCLE);
-
-        $this->assertSame(5100, $prix);
+        PrixUsineResolver::resolve($variante, CategorieTarifaireVehicule::TRICYCLE);
     }
 
-    public function test_retombe_sur_zero_sans_aucun_tarif_renseigne(): void
+    public function test_retombe_sur_zero_sans_aucun_tarif_autre_vehicule_renseigne(): void
     {
         $variante = $this->variante(null, null);
 
-        $this->assertSame(0, PrixUsineResolver::resolve($variante, CategorieTarifaireVehicule::TRICYCLE));
         $this->assertSame(0, PrixUsineResolver::resolve($variante, CategorieTarifaireVehicule::AUTRE_VEHICULE));
+        $this->assertSame(0, PrixUsineResolver::resolve($variante, null));
     }
 }

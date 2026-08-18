@@ -37,10 +37,14 @@ const props = withDefaults(
         variante: Variante | null;
         /** Le type du produit exige-t-il un prix usine ? (cf. ProduitType.prix_usine_requis) */
         prixUsineRequis: boolean;
+        /** Applicabilité (visibilité, pas obligation) de prix_achat/prix_vente pour ce type —
+         * cf. ProduitType.achetable/vendable, même règle que ProduitForm.vue. */
+        prixAchatApplicable?: boolean;
+        prixVenteApplicable?: boolean;
         /** Galerie du produit — absente si l'appelant ne gère pas encore les médias. */
         medias?: MediaOption[];
     }>(),
-    { medias: () => [] },
+    { medias: () => [], prixAchatApplicable: true, prixVenteApplicable: true },
 );
 
 const emit = defineEmits<{
@@ -163,9 +167,20 @@ function submit() {
                 </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
+            <!--
+                Grille fluide auto-fit (cf. ProduitForm.vue, même règle) : le nombre de
+                colonnes n'est jamais codé en dur, le navigateur répartit les champs selon la
+                largeur réellement disponible dans la modale. Coût de revient reste en dernier
+                simplement parce qu'il est le dernier du DOM.
+            -->
+            <div
+                class="grid grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-4"
+            >
                 <div v-if="prixUsineRequis" class="space-y-1.5">
-                    <Label class="block">Prix usine — Autres véhicules</Label>
+                    <Label class="block"
+                        >Prix usine — Autres véhicules
+                        <span class="text-destructive">*</span></Label
+                    >
                     <InputNumber
                         v-model="form.prix_usine"
                         :min="0"
@@ -184,7 +199,10 @@ function submit() {
                 </div>
 
                 <div v-if="prixUsineRequis" class="space-y-1.5">
-                    <Label class="block">Prix usine — Tricycle</Label>
+                    <Label class="block"
+                        >Prix usine — Tricycle
+                        <span class="text-destructive">*</span></Label
+                    >
                     <InputNumber
                         v-model="form.prix_usine_tricycle"
                         :min="0"
@@ -192,29 +210,19 @@ function submit() {
                         locale="fr-GN"
                         class="w-full"
                         input-class="w-full"
-                    />
-                </div>
-
-                <div class="space-y-1.5">
-                    <Label class="block">Prix achat</Label>
-                    <InputNumber
-                        v-model="form.prix_achat"
-                        :min="0"
-                        :use-grouping="true"
-                        locale="fr-GN"
-                        class="w-full"
-                        input-class="w-full"
-                        :class="form.errors.prix_achat ? 'p-invalid' : ''"
+                        :class="
+                            form.errors.prix_usine_tricycle ? 'p-invalid' : ''
+                        "
                     />
                     <p
-                        v-if="form.errors.prix_achat"
+                        v-if="form.errors.prix_usine_tricycle"
                         class="text-xs text-destructive"
                     >
-                        {{ form.errors.prix_achat }}
+                        {{ form.errors.prix_usine_tricycle }}
                     </p>
                 </div>
 
-                <div class="space-y-1.5">
+                <div v-if="prixVenteApplicable" class="space-y-1.5">
                     <Label class="block">Prix vente</Label>
                     <InputNumber
                         v-model="form.prix_vente"
@@ -230,6 +238,25 @@ function submit() {
                         class="text-xs text-destructive"
                     >
                         {{ form.errors.prix_vente }}
+                    </p>
+                </div>
+
+                <div v-if="prixAchatApplicable" class="space-y-1.5">
+                    <Label class="block">Prix achat</Label>
+                    <InputNumber
+                        v-model="form.prix_achat"
+                        :min="0"
+                        :use-grouping="true"
+                        locale="fr-GN"
+                        class="w-full"
+                        input-class="w-full"
+                        :class="form.errors.prix_achat ? 'p-invalid' : ''"
+                    />
+                    <p
+                        v-if="form.errors.prix_achat"
+                        class="text-xs text-destructive"
+                    >
+                        {{ form.errors.prix_achat }}
                     </p>
                 </div>
 
