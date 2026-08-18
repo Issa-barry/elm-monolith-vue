@@ -15,6 +15,7 @@ use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Spatie\Permission\Models\Permission;
@@ -26,10 +27,15 @@ class ImportFlotteTest extends TestCase
 {
     use HasProduitVariante, RefreshDatabase;
 
+    /**
+     * Ne contient volontairement plus de colonne de capacité fixe (ancienne convention
+     * vehicule_capacite_sachets/vehicule_capacite_bouteilles, abandonnée) : les colonnes
+     * "capacite__<REFERENCE>" sont désormais dynamiques, ajoutées automatiquement par
+     * uploadFile() à partir des clés présentes dans les lignes fournies par chaque test.
+     */
     private const HEADERS_VEHICULES = [
         'vehicule_immatriculation', 'vehicule_nom', 'vehicule_type', 'vehicule_categorie',
         'vehicule_site', 'vehicule_livraison_vente', 'vehicule_livraison_logistique',
-        'vehicule_capacite_sachets', 'vehicule_capacite_bouteilles',
         'proprietaire_nom', 'proprietaire_prenom', 'proprietaire_telephone', 'proprietaire_pays',
     ];
 
@@ -119,15 +125,39 @@ class ImportFlotteTest extends TestCase
         ], $overrides);
     }
 
+    /**
+     * En-têtes de la feuille "vehicules" pour CET upload : les colonnes fixes
+     * (HEADERS_VEHICULES) plus toute clé additionnelle présente dans une des lignes fournies
+     * (typiquement "capacite__<REFERENCE>") — permet à chaque test de déclarer ses propres
+     * colonnes de capacité sans toucher au gabarit partagé.
+     *
+     * @return string[]
+     */
+    private function entetesVehicules(array $lignesVehicules): array
+    {
+        $entetes = self::HEADERS_VEHICULES;
+        foreach ($lignesVehicules as $ligne) {
+            foreach (array_keys($ligne) as $cle) {
+                if (! in_array($cle, $entetes, true)) {
+                    $entetes[] = $cle;
+                }
+            }
+        }
+
+        return $entetes;
+    }
+
     private function uploadFile(array $lignesVehicules, array $lignesLivreurs): UploadedFile
     {
         $spreadsheet = new Spreadsheet;
 
+        $entetesVehicules = $this->entetesVehicules($lignesVehicules);
+
         $sheetVehicules = $spreadsheet->getActiveSheet();
         $sheetVehicules->setTitle('vehicules');
-        $sheetVehicules->fromArray(self::HEADERS_VEHICULES, null, 'A1');
+        $sheetVehicules->fromArray($entetesVehicules, null, 'A1');
         foreach ($lignesVehicules as $i => $ligne) {
-            $row = array_map(fn ($h) => $ligne[$h] ?? '', self::HEADERS_VEHICULES);
+            $row = array_map(fn ($h) => $ligne[$h] ?? '', $entetesVehicules);
             $sheetVehicules->fromArray($row, null, 'A'.($i + 2));
         }
 
@@ -138,6 +168,36 @@ class ImportFlotteTest extends TestCase
             $row = array_map(fn ($h) => $ligne[$h] ?? '', self::HEADERS_LIVREURS);
             $sheetLivreurs->fromArray($row, null, 'A'.($i + 2));
         }
+
+        $tmpPath = tempnam(sys_get_temp_dir(), 'import_flotte_test').'.xlsx';
+        (new Xlsx($spreadsheet))->save($tmpPath);
+
+        return new UploadedFile($tmpPath, 'import.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+    }
+
+    /**
+     * Variante de uploadFile() prenant les en-têtes "vehicules" tels quels (pas de déduplication
+     * automatique) — nécessaire pour reproduire un VRAI doublon de colonne dans le fichier (ex:
+     * "capacite__SACHET_EAU" présente deux fois), qu'entetesVehicules() ne peut pas produire
+     * puisqu'elle en fait justement l'union.
+     *
+     * @param  string[]  $entetesVehicules
+     * @param  array<int, array<int, string>>  $lignesVehicules  une ligne = un tableau de valeurs, dans le même ordre que $entetesVehicules
+     */
+    private function uploadFileAvecEntetesBrutes(array $entetesVehicules, array $lignesVehicules): UploadedFile
+    {
+        $spreadsheet = new Spreadsheet;
+
+        $sheetVehicules = $spreadsheet->getActiveSheet();
+        $sheetVehicules->setTitle('vehicules');
+        $sheetVehicules->fromArray($entetesVehicules, null, 'A1');
+        foreach ($lignesVehicules as $i => $row) {
+            $sheetVehicules->fromArray($row, null, 'A'.($i + 2));
+        }
+
+        $sheetLivreurs = $spreadsheet->createSheet();
+        $sheetLivreurs->setTitle('livreurs');
+        $sheetLivreurs->fromArray(self::HEADERS_LIVREURS, null, 'A1');
 
         $tmpPath = tempnam(sys_get_temp_dir(), 'import_flotte_test').'.xlsx';
         (new Xlsx($spreadsheet))->save($tmpPath);
@@ -591,23 +651,31 @@ class ImportFlotteTest extends TestCase
     }
 
     /**
-     * Les colonnes vehicule_capacite_sachets/vehicule_capacite_bouteilles ciblent la Categorie
-     * dont la `reference` machine vaut "SACHET_EAU"/"BOUTEILLE_EAU" (capacité du véhicule
-     * lui-même, aucun héritage depuis le type) — cf. ImportFlotteParser::resoudreCategoriesCapacite() /
+     * Colonnes dynamiques "capacite__<REFERENCE>" (ex: "capacite__SACHET_EAU") — une par
+     * catégorie du catalogue produit à plafonner, en nombre libre (plus de convention à deux
+     * colonnes fixes "sachets"/"bouteilles") — cf. ImportFlotteParser::resoudreColonnesCapacite() /
      * ImportFlotteExecutor::upsertCapacite(). Résolution par `reference`, jamais par `nom` : le
      * libellé choisi ici ("Sachet eau" / "Bouteille") est volontairement différent de la
      * convention "elm" ("Sachet d'eau" / "Bouteille d'eau", cf. ProduitsSeeder) pour prouver que
      * seule la référence compte.
      */
-    public function test_confirm_creates_vehicule_avec_capacites_sachets_et_bouteilles(): void
+    public function test_confirm_creates_vehicule_avec_plusieurs_capacites_sur_differentes_categories(): void
     {
         $sachets = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachet eau', 'reference' => 'SACHET_EAU']);
         $bouteilles = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Bouteille', 'reference' => 'BOUTEILLE_EAU']);
 
         $import = $this->importerVehiculeEtChauffeur([
-            'vehicule_capacite_sachets' => '90',
-            'vehicule_capacite_bouteilles' => '40',
+            'capacite__SACHET_EAU' => '90',
+            'capacite__BOUTEILLE_EAU' => '40',
         ]);
+
+        // L'aperçu (avant confirmation) doit déjà exposer les deux capacités comme "à créer" —
+        // c'est ce que consomme la colonne "Capacités" de l'écran d'analyse (ImportsFlotte/Show.vue).
+        $capacitesApercu = collect($import->rapport['groupes'][0]['vehicule']['capacites'])->keyBy('reference');
+        $this->assertSame('creer', $capacitesApercu['SACHET_EAU']['statut']);
+        $this->assertSame(90, $capacitesApercu['SACHET_EAU']['valeur']);
+        $this->assertNull($capacitesApercu['SACHET_EAU']['valeur_actuelle']);
+        $this->assertSame('creer', $capacitesApercu['BOUTEILLE_EAU']['statut']);
 
         $this->actingAs($this->user)
             ->post(route('imports-flotte.confirm', $import))
@@ -630,7 +698,7 @@ class ImportFlotteTest extends TestCase
         $sachets->update(['nom' => 'Sachets 25 unités']);
         $this->assertSame('SACHET_EAU', $sachets->fresh()->reference, 'la référence ne doit jamais être régénérée au renommage');
 
-        $import = $this->importerVehiculeEtChauffeur(['vehicule_capacite_sachets' => '90']);
+        $import = $this->importerVehiculeEtChauffeur(['capacite__SACHET_EAU' => '90']);
 
         $this->actingAs($this->user)
             ->post(route('imports-flotte.confirm', $import))
@@ -643,24 +711,25 @@ class ImportFlotteTest extends TestCase
     /**
      * La référence "SACHET_EAU" d'une organisation ne doit jamais résoudre la capacité d'une
      * AUTRE organisation, même si celle-ci n'a créé aucune catégorie du tout — isolation
-     * multi-tenant.
+     * multi-tenant. Une colonne "capacite__<REFERENCE>" est écrite par l'organisation
+     * elle-même : une référence introuvable pour CETTE organisation bloque le groupe entier
+     * (comme un type de véhicule ou un site introuvable), jamais un simple avertissement.
      */
     public function test_confirm_nutilise_jamais_une_categorie_dune_autre_organisation(): void
     {
         $autreOrg = Organization::factory()->create();
         Categorie::create(['organization_id' => $autreOrg->id, 'nom' => 'Sachet eau', 'reference' => 'SACHET_EAU']);
 
-        $import = $this->importerVehiculeEtChauffeur(['vehicule_capacite_sachets' => '90']);
+        $import = $this->importerVehiculeEtChauffeur(['capacite__SACHET_EAU' => '90']);
 
-        $this->assertNotEmpty($import->rapport['groupes'][0]['avertissements']);
-        $this->assertStringContainsString('Capacité sachets ignorée', $import->rapport['groupes'][0]['avertissements'][0]);
+        $this->assertSame(1, $import->nb_groupes_erreur);
+        $this->assertStringContainsString('Référence catégorie inconnue : SACHET_EAU', $import->rapport['groupes'][0]['erreurs'][0]);
 
         $this->actingAs($this->user)
             ->post(route('imports-flotte.confirm', $import))
-            ->assertRedirect(route('imports-flotte.show', $import));
+            ->assertStatus(422);
 
-        $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
-        $this->assertSame(0, $vehicule->capacites()->count());
+        $this->assertSame(0, Vehicule::where('organization_id', $this->org->id)->count());
     }
 
     public function test_confirm_vehicule_sans_capacite_saisie_reste_null(): void
@@ -668,6 +737,8 @@ class ImportFlotteTest extends TestCase
         // Capacité facultative : le véhicule reste simplement non plafonné, pas d'écriture
         // forcée en base pour ce cas — cf. VehiculeCapaciteService.
         $import = $this->importerVehiculeEtChauffeur();
+
+        $this->assertSame([], $import->rapport['groupes'][0]['vehicule']['capacites']);
 
         $this->actingAs($this->user)
             ->post(route('imports-flotte.confirm', $import))
@@ -680,34 +751,37 @@ class ImportFlotteTest extends TestCase
     }
 
     /**
-     * Organisation sans Categorie de `reference` "SACHET_EAU"/"BOUTEILLE_EAU" (convention non
-     * suivie, ou pas encore créées) : la capacité saisie est ignorée avec un avertissement non
-     * bloquant, jamais une erreur qui empêcherait d'importer le reste du véhicule.
+     * Organisation sans Categorie de `reference` "SACHET_EAU" (convention non suivie, ou pas
+     * encore créée) : une colonne "capacite__<REFERENCE>" est écrite par l'organisation
+     * elle-même — une référence introuvable est presque toujours une faute de frappe, donc
+     * bloque le groupe entier (comme un type de véhicule ou un site introuvable), jamais un
+     * simple avertissement qui laisserait silencieusement le véhicule non plafonné.
      */
-    public function test_analyse_avertit_sans_bloquer_quand_categorie_capacite_absente(): void
+    public function test_analyse_bloque_quand_categorie_capacite_absente(): void
     {
         $import = $this->importer(
-            [$this->ligneVehicule(['vehicule_capacite_sachets' => '90'])],
+            [$this->ligneVehicule(['capacite__SACHET_EAU' => '90'])],
             [$this->ligneLivreurChauffeur()]
         );
 
-        $this->assertSame(0, $import->nb_groupes_erreur);
-        $this->assertSame(1, $import->nb_groupes_valides);
-        $this->assertNotEmpty($import->rapport['groupes'][0]['avertissements']);
-        $this->assertStringContainsString('Capacité sachets ignorée', $import->rapport['groupes'][0]['avertissements'][0]);
+        $this->assertSame(1, $import->nb_groupes_erreur);
+        $this->assertSame(0, $import->nb_groupes_valides);
+        $this->assertStringContainsString('Référence catégorie inconnue : SACHET_EAU', $import->rapport['groupes'][0]['erreurs'][0]);
+        $this->assertSame(1, $import->rapport['groupes'][0]['nb_capacites_erreur']);
 
         $this->actingAs($this->user)
             ->post(route('imports-flotte.confirm', $import))
-            ->assertRedirect(route('imports-flotte.show', $import));
+            ->assertStatus(422);
 
-        $vehicule = Vehicule::where('organization_id', $this->org->id)->where('immatriculation', 'RC-1234-A')->firstOrFail();
-        $this->assertSame(0, $vehicule->capacites()->count());
+        $this->assertSame(0, Vehicule::where('organization_id', $this->org->id)->count());
     }
 
     /**
      * Contrairement au reste d'une ligne "véhicule déjà existant" (simple ancrage, jamais
      * modifié), la capacité EST mise à jour — une ré-importation avec des valeurs corrigées doit
      * pouvoir corriger la flotte déjà configurée (cf. ImportFlotteExecutor::upsertCapacite()).
+     * L'aperçu doit distinguer ce cas ('modifier', avec l'ancienne ET la nouvelle valeur) d'une
+     * simple création — cf. formatCapacite() côté Vue (ImportsFlotte/Show.vue).
      */
     public function test_confirm_met_a_jour_la_capacite_dun_vehicule_deja_existant(): void
     {
@@ -719,7 +793,12 @@ class ImportFlotteTest extends TestCase
         ]);
         $vehiculeExistant->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachets->id, 'capacite_max' => 50]);
 
-        $import = $this->importerVehiculeEtChauffeur(['vehicule_capacite_sachets' => '120']);
+        $import = $this->importerVehiculeEtChauffeur(['capacite__SACHET_EAU' => '120']);
+
+        $capaciteApercu = $import->rapport['groupes'][0]['vehicule']['capacites'][0];
+        $this->assertSame('modifier', $capaciteApercu['statut']);
+        $this->assertSame(50, $capaciteApercu['valeur_actuelle']);
+        $this->assertSame(120, $capaciteApercu['valeur']);
 
         $this->actingAs($this->user)
             ->post(route('imports-flotte.confirm', $import))
@@ -727,6 +806,29 @@ class ImportFlotteTest extends TestCase
 
         $this->assertDatabaseHas('vehicule_capacites', ['vehicule_id' => $vehiculeExistant->id, 'categorie_id' => $sachets->id, 'capacite_max' => 120]);
         $this->assertSame(1, $vehiculeExistant->capacites()->count(), 'upsert, pas de doublon de ligne');
+    }
+
+    /**
+     * Une capacité importée avec exactement la même valeur que celle déjà en base doit être
+     * signalée 'inchangee' à l'aperçu — jamais présentée comme une modification, pour ne pas
+     * inquiéter l'utilisateur sur un changement qui n'en est pas un.
+     */
+    public function test_analyse_marque_la_capacite_inchangee_quand_meme_valeur_en_base(): void
+    {
+        $sachets = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachet eau', 'reference' => 'SACHET_EAU']);
+        $vehiculeExistant = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'immatriculation' => 'RC-1234-A',
+            'type_vehicule_id' => $this->type->id,
+        ]);
+        $vehiculeExistant->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachets->id, 'capacite_max' => 90]);
+
+        $import = $this->importerVehiculeEtChauffeur(['capacite__SACHET_EAU' => '90']);
+
+        $capaciteApercu = $import->rapport['groupes'][0]['vehicule']['capacites'][0];
+        $this->assertSame('inchangee', $capaciteApercu['statut']);
+        $this->assertSame(90, $capaciteApercu['valeur_actuelle']);
+        $this->assertSame(90, $capaciteApercu['valeur']);
     }
 
     /**
@@ -745,8 +847,8 @@ class ImportFlotteTest extends TestCase
         ]);
         $vehiculeExistant->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachets->id, 'capacite_max' => 50]);
 
-        // Colonne vehicule_capacite_sachets absente du payload (jamais renseignée sur cette
-        // ligne de ré-import) — ligneVehicule() ne fournit pas cette clé par défaut.
+        // Aucune colonne "capacite__SACHET_EAU" du tout sur cette ligne de ré-import —
+        // ligneVehicule() ne fournit pas cette clé par défaut.
         $import = $this->importerVehiculeEtChauffeur();
 
         $this->actingAs($this->user)
@@ -755,6 +857,42 @@ class ImportFlotteTest extends TestCase
 
         $this->assertDatabaseHas('vehicule_capacites', ['vehicule_id' => $vehiculeExistant->id, 'categorie_id' => $sachets->id, 'capacite_max' => 50]);
         $this->assertSame(1, $vehiculeExistant->capacites()->count());
+    }
+
+    /**
+     * Doublon de colonne de capacité (deux fois la référence "SACHET_EAU", même normalisée en
+     * casse) : la résolution serait ambiguë — array_combine() écraserait silencieusement l'une
+     * des deux colonnes sans jamais lever d'erreur — donc bloqué globalement plutôt que de
+     * deviner quelle colonne l'emporte, cf. ImportFlotteParser::resoudreColonnesCapacite().
+     */
+    public function test_analyse_rejette_un_doublon_de_colonne_capacite(): void
+    {
+        Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachet eau', 'reference' => 'SACHET_EAU']);
+
+        $entetes = array_merge(self::HEADERS_VEHICULES, ['capacite__SACHET_EAU', 'capacite__sachet_eau']);
+        $valeurs = [
+            'vehicule_immatriculation' => 'RC-1234-A',
+            'vehicule_nom' => 'Camion 1',
+            'vehicule_type' => 'Tricycle',
+            'vehicule_categorie' => 'partenaire',
+            'vehicule_site' => 'Matoto',
+            'vehicule_livraison_vente' => 'oui',
+            'vehicule_livraison_logistique' => 'non',
+            'proprietaire_nom' => 'Diallo',
+            'proprietaire_prenom' => 'Mamadou',
+            'proprietaire_telephone' => '622000001',
+            'proprietaire_pays' => 'GN',
+        ];
+        $ligne = array_map(fn ($h) => $valeurs[$h] ?? '90', $entetes);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.store'), ['fichier' => $this->uploadFileAvecEntetesBrutes($entetes, [$ligne])])
+            ->assertRedirect();
+
+        $import = ImportFlotte::firstOrFail();
+        $this->assertSame(1, $import->nb_groupes_erreur);
+        $this->assertStringContainsString('doublon', mb_strtolower($import->rapport['groupes'][0]['erreurs'][0]));
+        $this->assertStringContainsString('SACHET_EAU', $import->rapport['groupes'][0]['erreurs'][0]);
     }
 
     /**
@@ -769,7 +907,7 @@ class ImportFlotteTest extends TestCase
     {
         $bouteilles = Categorie::create(['organization_id' => $this->org->id, 'nom' => "Bouteille d'eau", 'reference' => 'BOUTEILLE_EAU']);
 
-        $import = $this->importerVehiculeEtChauffeur(['vehicule_capacite_bouteilles' => '150']);
+        $import = $this->importerVehiculeEtChauffeur(['capacite__BOUTEILLE_EAU' => '150']);
         $this->actingAs($this->user)
             ->post(route('imports-flotte.confirm', $import))
             ->assertRedirect(route('imports-flotte.show', $import));
@@ -811,10 +949,10 @@ class ImportFlotteTest extends TestCase
 
     public function test_analyse_flags_error_for_invalid_capacite_sachets(): void
     {
-        $import = $this->importerVehiculeEtChauffeur(['vehicule_capacite_sachets' => 'abc']);
+        $import = $this->importerVehiculeEtChauffeur(['capacite__SACHET_EAU' => 'abc']);
 
         $this->assertSame(1, $import->nb_groupes_erreur);
-        $this->assertStringContainsString('Capacité sachets invalide', $import->rapport['groupes'][0]['erreurs'][0]);
+        $this->assertStringContainsString('Capacité "SACHET_EAU" invalide', $import->rapport['groupes'][0]['erreurs'][0]);
     }
 
     public function test_confirm_vehicule_sans_proprietaire_saisi_recoit_proprietaire_par_defaut(): void
@@ -1716,6 +1854,32 @@ class ImportFlotteTest extends TestCase
             ->get(route('imports-flotte.template', ['type' => 'livreurs']))
             ->assertOk()
             ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    }
+
+    /**
+     * Le gabarit "vehicules" téléchargeable contient une colonne "capacite__<REFERENCE>" par
+     * catégorie du catalogue de l'organisation — généré dynamiquement à la demande (cf.
+     * ImportFlotteController::template(), ImportFlotteVehiculesSheetExport), jamais figé aux
+     * deux colonnes fixes de l'ancienne convention.
+     */
+    public function test_flotte_template_download_contient_une_colonne_par_categorie(): void
+    {
+        Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachet eau', 'reference' => 'SACHET_EAU']);
+        Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Bouteille', 'reference' => 'BOUTEILLE_EAU']);
+
+        $response = $this->actingAs($this->user)
+            ->get(route('imports-flotte.template'))
+            ->assertOk()
+            ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+
+        $tmpPath = tempnam(sys_get_temp_dir(), 'template_flotte_test').'.xlsx';
+        file_put_contents($tmpPath, $response->streamedContent());
+
+        $spreadsheet = IOFactory::load($tmpPath);
+        $entetes = $spreadsheet->getSheetByName('vehicules')->rangeToArray('A1:Z1', null, true, true, false)[0];
+
+        $this->assertContains('capacite__SACHET_EAU', $entetes);
+        $this->assertContains('capacite__BOUTEILLE_EAU', $entetes);
     }
 
     public function test_analyse_still_accepts_an_already_valid_file(): void

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\StatutImportFlotte;
 use App\Enums\TypeImportFlotte;
 use App\Http\Requests\StoreImportFlotteRequest;
+use App\Models\Categorie;
 use App\Models\ImportFlotte;
 use App\Services\ImportFlotte\ImportFlotteExecutor;
 use App\Services\ImportFlotte\ImportFlotteLivreursSheetExport;
@@ -136,7 +137,11 @@ class ImportFlotteController extends Controller
             return Excel::download(new ImportFlotteLivreursSheetExport, 'template-import-livreurs.xlsx');
         }
 
-        return Excel::download(new ImportFlotteTemplateExport, 'template-import-flotte.xlsx');
+        $categories = Categorie::where('organization_id', auth()->user()->organization_id)
+            ->orderBy('nom')
+            ->get();
+
+        return Excel::download(new ImportFlotteTemplateExport($categories), 'template-import-flotte.xlsx');
     }
 
     private function analyser(ImportFlotte $import): void

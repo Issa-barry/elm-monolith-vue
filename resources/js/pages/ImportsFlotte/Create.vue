@@ -213,11 +213,16 @@ function submit() {
                         vous convient, sans dupliquer l'information.
                     </p>
                     <p class="mt-2 text-sm text-muted-foreground">
-                        <strong>vehicule_capacite_sachets</strong> et
-                        <strong>vehicule_capacite_bouteilles</strong> sont
-                        facultatives : laissées vides, le véhicule reste non
-                        plafonné pour cette catégorie (aucune capacité par
-                        défaut n'est héritée du type de véhicule).
+                        Une colonne
+                        <strong>capacite__&lt;RÉFÉRENCE&gt;</strong>
+                        par catégorie de produit à plafonner (ex:
+                        <strong>capacite__BOUTEILLE_EAU</strong>) — la référence
+                        de chaque catégorie est visible sur la page Produits >
+                        Catégories. Le modèle téléchargeable ci-dessous génère
+                        automatiquement une colonne par catégorie existante.
+                        Toutes facultatives : laissée vide, une colonne ne
+                        plafonne pas le véhicule pour cette catégorie (aucune
+                        capacité par défaut n'est héritée du type de véhicule).
                     </p>
                     <p class="mt-2 text-sm text-muted-foreground">
                         <strong>vehicule_livraison_vente</strong>

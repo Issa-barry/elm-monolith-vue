@@ -32,6 +32,10 @@ test('login + create product + verify list', async ({ page }) => {
     // (cf. ProduitType::requiredPrices()) — sans ça la création échoue en validation
     // et reste sur /produits/create.
     await page.locator('#prix_achat').fill('1000');
+    // PrimeVue InputNumber ne committe la valeur dans le v-model qu'au blur (jamais sur le
+    // simple événement "input" de .fill()) — sans ce blur, le bouton "Enregistrer" (bloqué
+    // tant que canSubmit est faux, cf. ProduitForm.vue) reste désactivé indéfiniment.
+    await page.locator('#prix_achat').blur();
     await page.getByRole('button', { name: /^enregistrer$/i }).click();
 
     // Création → redirige vers la fiche du produit (pas la liste).
@@ -83,6 +87,11 @@ test('create fabricable product with two-tier prix usine and verify persistence'
     await page.locator('#prix_usine').fill('5100');
     await page.locator('#prix_usine_tricycle').fill('5050');
     await page.locator('#prix_vente').fill('6000');
+    // PrimeVue InputNumber ne committe la valeur dans le v-model qu'au blur — les deux
+    // premiers champs sont "blurrés" naturellement quand le focus passe au suivant, mais le
+    // dernier (#prix_vente) ne l'est jamais avant le clic sur "Enregistrer", qui reste alors
+    // bloqué indéfiniment tant que canSubmit est faux (cf. ProduitForm.vue).
+    await page.locator('#prix_vente').blur();
 
     await page.getByRole('button', { name: /^enregistrer$/i }).click();
 
