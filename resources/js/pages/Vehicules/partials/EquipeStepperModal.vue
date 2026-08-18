@@ -786,7 +786,9 @@ const hasStep1Errors = computed(() =>
                                         )
                                     }}</span>
                                     <span
-                                        v-if="vehicule.proprietaire_est_entreprise"
+                                        v-if="
+                                            vehicule.proprietaire_est_entreprise
+                                        "
                                         class="ml-1.5 inline-flex items-center rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
                                         >Entreprise</span
                                     >

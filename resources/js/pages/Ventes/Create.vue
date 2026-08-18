@@ -1063,7 +1063,10 @@ function confirmerEtCreer() {
                             est également renseigné, pour ne jamais laisser croire que la dette
                             du client est prise en compte alors qu'elle ne l'est pas. -->
                             <div
-                                v-if="clientSolvabiliteLoading && !form.vehicule_id"
+                                v-if="
+                                    clientSolvabiliteLoading &&
+                                    !form.vehicule_id
+                                "
                                 class="mt-3 flex items-center gap-2 text-xs text-muted-foreground"
                             >
                                 <svg

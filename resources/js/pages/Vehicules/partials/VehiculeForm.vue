@@ -515,10 +515,9 @@ function handleSubmit() {
             <p class="mb-4 text-xs text-muted-foreground">
                 Facultatif. Laisser vide pour utiliser le seuil global des
                 ventes<span v-if="seuilGlobalImpayesLabel"
-                    >— seuil global actuel :
-                    {{ seuilGlobalImpayesLabel }}</span
-                >. Ce n'est pas la dette actuelle du véhicule, mais la limite
-                de dette autorisée avant blocage des nouvelles ventes.
+                    >— seuil global actuel : {{ seuilGlobalImpayesLabel }}</span
+                >. Ce n'est pas la dette actuelle du véhicule, mais la limite de
+                dette autorisée avant blocage des nouvelles ventes.
             </p>
             <div class="max-w-xs">
                 <Label for="seuil_dette_derogation" class="mb-1.5 block text-sm"

@@ -821,7 +821,9 @@ function formatGNF(val: number): string {
             nom_vehicule: vehicule.nom_vehicule,
             immatriculation: vehicule.immatriculation,
             proprietaire_id: vehicule.proprietaire_id,
-            proprietaire_nom: vehicule.proprietaire_nom_affichage ?? vehicule.proprietaire_nom,
+            proprietaire_nom:
+                vehicule.proprietaire_nom_affichage ??
+                vehicule.proprietaire_nom,
             proprietaire_est_entreprise: vehicule.proprietaire_est_entreprise,
         }"
         :equipe="equipe"

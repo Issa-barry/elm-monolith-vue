@@ -203,8 +203,7 @@ function onTelephoneInput(value: string | null | undefined) {
                     </div>
                     <div>
                         <Label for="nom" class="mb-1.5 block"
-                            >Nom
-                            <span class="text-destructive">*</span></Label
+                            >Nom <span class="text-destructive">*</span></Label
                         >
                         <InputText
                             id="nom"

@@ -436,9 +436,7 @@ function closeLightbox() {
                             "
                             class="rounded-lg border bg-background p-4"
                         >
-                            <p class="text-xs text-muted-foreground">
-                                Contact
-                            </p>
+                            <p class="text-xs text-muted-foreground">Contact</p>
                             <p class="mt-1 text-sm font-medium">
                                 {{ proprietaire.nom_complet }}
                             </p>
