@@ -2,7 +2,16 @@
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Image, Layers, Plus, Save, X } from 'lucide-vue-next';
+import {
+    AlertTriangle,
+    Image,
+    Layers,
+    Plus,
+    Save,
+    TrendingDown,
+    TrendingUp,
+    X,
+} from 'lucide-vue-next';
 import Dropdown from 'primevue/dropdown';
 import Editor from 'primevue/editor';
 import InputNumber from 'primevue/inputnumber';
@@ -174,6 +183,98 @@ function prixInvalide(champ: string, valeur: number | null): boolean {
         (valeur === null || valeur === undefined)
     );
 }
+
+// ── Résumé de rentabilité (aperçu live, purement informatif) ────────────────
+// Le backend reste seul juge de ce qui est accepté (ProduitService::validerPrixSelonType) —
+// ce bloc ne fait qu'anticiper visuellement la même règle pour éviter un aller-retour serveur
+// inutile. Bénéfice/marge basés sur le coût de revient (jamais obligatoire, jamais bloquant) ;
+// seuil de marge faible = 10 %, cohérent avec le seuil déjà évoqué pour le chantier marge
+// (cf. mémoire "Prix produit & marge — spec cible").
+const SEUIL_MARGE_FAIBLE_PCT = 10;
+
+function formatMontant(val: number): string {
+    return new Intl.NumberFormat('fr-FR').format(Math.round(val));
+}
+
+const beneficeEstime = computed(() => {
+    if (props.form.prix_vente === null || props.form.cout === null)
+        return null;
+    return props.form.prix_vente - props.form.cout;
+});
+const margeEstimeePct = computed(() => {
+    if (beneficeEstime.value === null || !props.form.prix_vente) return null;
+    return (beneficeEstime.value / props.form.prix_vente) * 100;
+});
+type EtatRentabilite = 'perte' | 'faible' | 'saine';
+const etatRentabilite = computed<EtatRentabilite | null>(() => {
+    if (margeEstimeePct.value === null) return null;
+    if (margeEstimeePct.value <= 0) return 'perte';
+    if (margeEstimeePct.value < SEUIL_MARGE_FAIBLE_PCT) return 'faible';
+    return 'saine';
+});
+
+// Marge de commission par catégorie tarifaire — simple différence, purement indicative (le
+// calcul réel/officiel reste CommissionCalculator côté serveur, sur les montants snapshotés).
+const margeCommissionAutresVehicules = computed(() => {
+    if (
+        !prixRequis('prix_usine') ||
+        props.form.prix_vente === null ||
+        props.form.prix_usine === null
+    )
+        return null;
+    return props.form.prix_vente - props.form.prix_usine;
+});
+const margeCommissionTricycle = computed(() => {
+    if (
+        !prixRequis('prix_usine') ||
+        props.form.prix_vente === null ||
+        props.form.prix_usine_tricycle === null
+    )
+        return null;
+    return props.form.prix_vente - props.form.prix_usine_tricycle;
+});
+
+// ── Blocage bouton Enregistrer ───────────────────────────────────────────────
+// Anticipe côté client exactement la règle bloquante déjà appliquée côté serveur
+// (prix_vente doit être strictement supérieur à prix_usine ET prix_usine_tricycle quand
+// requis) — le coût de revient, lui, ne bloque jamais (warning fort uniquement, cf.
+// etatRentabilite === 'perte'), le métier peut vendre à perte volontairement (promotion,
+// liquidation, produit d'appel...).
+const margeUsineBloquante = computed(() => {
+    if (!prixRequis('prix_usine') || props.form.prix_vente === null)
+        return false;
+    const depasseAutresVehicules =
+        props.form.prix_usine !== null &&
+        props.form.prix_vente <= props.form.prix_usine;
+    const depasseTricycle =
+        props.form.prix_usine_tricycle !== null &&
+        props.form.prix_vente <= props.form.prix_usine_tricycle;
+
+    return depasseAutresVehicules || depasseTricycle;
+});
+
+const champsObligatoiresManquants = computed(() => {
+    if (
+        !props.form.nom?.trim() ||
+        !props.form.produit_type_id ||
+        !props.form.statut
+    )
+        return true;
+
+    return requiredPrices.value.some((champ) => {
+        const valeur = (props.form as unknown as Record<string, unknown>)[
+            champ
+        ];
+
+        return valeur === null || valeur === undefined || valeur === '';
+    });
+});
+
+const canSubmit = computed(
+    () => !champsObligatoiresManquants.value && !margeUsineBloquante.value,
+);
+
+defineExpose({ canSubmit });
 
 // ── Alerte de stock faible ──────────────────────────────────────────────────
 const seuilSpecifique = computed({
@@ -917,6 +1018,76 @@ const depasseLimiteVariantes = computed(
                     />
                 </div>
             </div>
+
+            <!--
+                Résumé de rentabilité — aperçu live, informatif uniquement (le backend reste
+                seul juge à l'enregistrement). Petit bloc discret sous la grille, pas une
+                carte séparée.
+            -->
+            <div
+                v-if="
+                    etatRentabilite !== null ||
+                    margeCommissionAutresVehicules !== null ||
+                    margeCommissionTricycle !== null
+                "
+                class="mt-4 space-y-1.5 border-t pt-4 text-xs sm:mt-5 sm:pt-5"
+            >
+                <div
+                    v-if="etatRentabilite !== null"
+                    class="flex items-center gap-1.5 font-medium"
+                    :class="{
+                        'text-destructive': etatRentabilite === 'perte',
+                        'text-amber-600': etatRentabilite === 'faible',
+                        'text-emerald-600': etatRentabilite === 'saine',
+                    }"
+                >
+                    <TrendingDown
+                        v-if="etatRentabilite === 'perte'"
+                        class="h-3.5 w-3.5 shrink-0"
+                    />
+                    <AlertTriangle
+                        v-else-if="etatRentabilite === 'faible'"
+                        class="h-3.5 w-3.5 shrink-0"
+                    />
+                    <TrendingUp v-else class="h-3.5 w-3.5 shrink-0" />
+
+                    <span v-if="etatRentabilite === 'perte'">
+                        Perte estimée :
+                        {{ formatMontant(Math.abs(beneficeEstime!)) }} GNF /
+                        unité
+                    </span>
+                    <span v-else-if="etatRentabilite === 'faible'">
+                        Marge faible : {{ formatMontant(beneficeEstime!) }} GNF
+                        ({{ Math.round(margeEstimeePct!) }} %)
+                    </span>
+                    <span v-else>
+                        Bénéfice estimé : +{{
+                            formatMontant(beneficeEstime!)
+                        }}
+                        GNF / unité — Marge {{ Math.round(margeEstimeePct!) }}
+                        %
+                    </span>
+                </div>
+
+                <div
+                    v-if="
+                        margeCommissionAutresVehicules !== null ||
+                        margeCommissionTricycle !== null
+                    "
+                    class="flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground"
+                >
+                    <span>Marge commission —</span>
+                    <span v-if="margeCommissionAutresVehicules !== null">
+                        Autres véhicules :
+                        {{ formatMontant(margeCommissionAutresVehicules) }}
+                        GNF
+                    </span>
+                    <span v-if="margeCommissionTricycle !== null">
+                        Tricycle :
+                        {{ formatMontant(margeCommissionTricycle) }} GNF
+                    </span>
+                </div>
+            </div>
         </div>
 
         <!-- Section : Stock ───────────────────────────────────────────────── -->
@@ -1140,7 +1311,7 @@ const depasseLimiteVariantes = computed(
             <a href="/backoffice/produits">
                 <Button type="button" variant="outline"> Retour </Button>
             </a>
-            <Button type="submit" :disabled="processing">
+            <Button type="submit" :disabled="processing || !canSubmit">
                 <Save class="mr-2 h-4 w-4" />
                 {{ processing ? 'Enregistrement…' : 'Enregistrer' }}
             </Button>

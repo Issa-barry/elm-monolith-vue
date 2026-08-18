@@ -3,7 +3,12 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { useForm } from '@inertiajs/vue3';
-import { Layers } from 'lucide-vue-next';
+import {
+    AlertTriangle,
+    Layers,
+    TrendingDown,
+    TrendingUp,
+} from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
@@ -83,6 +88,69 @@ watch(
         form.media_id = v.media_id ?? null;
     },
     { immediate: true },
+);
+
+// ── Résumé de rentabilité + blocage bouton (même règle que ProduitForm.vue) ─────────────────
+const SEUIL_MARGE_FAIBLE_PCT = 10;
+
+function formatMontant(val: number): string {
+    return new Intl.NumberFormat('fr-FR').format(Math.round(val));
+}
+
+const beneficeEstime = computed(() => {
+    if (form.prix_vente === null || form.cout === null) return null;
+    return form.prix_vente - form.cout;
+});
+const margeEstimeePct = computed(() => {
+    if (beneficeEstime.value === null || !form.prix_vente) return null;
+    return (beneficeEstime.value / form.prix_vente) * 100;
+});
+type EtatRentabilite = 'perte' | 'faible' | 'saine';
+const etatRentabilite = computed<EtatRentabilite | null>(() => {
+    if (margeEstimeePct.value === null) return null;
+    if (margeEstimeePct.value <= 0) return 'perte';
+    if (margeEstimeePct.value < SEUIL_MARGE_FAIBLE_PCT) return 'faible';
+    return 'saine';
+});
+
+const margeCommissionAutresVehicules = computed(() => {
+    if (
+        !props.prixUsineRequis ||
+        form.prix_vente === null ||
+        form.prix_usine === null
+    )
+        return null;
+    return form.prix_vente - form.prix_usine;
+});
+const margeCommissionTricycle = computed(() => {
+    if (
+        !props.prixUsineRequis ||
+        form.prix_vente === null ||
+        form.prix_usine_tricycle === null
+    )
+        return null;
+    return form.prix_vente - form.prix_usine_tricycle;
+});
+
+const margeUsineBloquante = computed(() => {
+    if (!props.prixUsineRequis || form.prix_vente === null) return false;
+    const depasseAutresVehicules =
+        form.prix_usine !== null && form.prix_vente <= form.prix_usine;
+    const depasseTricycle =
+        form.prix_usine_tricycle !== null &&
+        form.prix_vente <= form.prix_usine_tricycle;
+
+    return depasseAutresVehicules || depasseTricycle;
+});
+
+const champsObligatoiresManquants = computed(() => {
+    if (!props.prixUsineRequis) return false;
+
+    return form.prix_usine === null || form.prix_usine_tricycle === null;
+});
+
+const canSubmit = computed(
+    () => !champsObligatoiresManquants.value && !margeUsineBloquante.value,
 );
 
 function close() {
@@ -273,6 +341,72 @@ function submit() {
                 </div>
             </div>
 
+            <!-- Résumé de rentabilité — même règle/même bloc que ProduitForm.vue -->
+            <div
+                v-if="
+                    etatRentabilite !== null ||
+                    margeCommissionAutresVehicules !== null ||
+                    margeCommissionTricycle !== null
+                "
+                class="space-y-1.5 border-t pt-3 text-xs"
+            >
+                <div
+                    v-if="etatRentabilite !== null"
+                    class="flex items-center gap-1.5 font-medium"
+                    :class="{
+                        'text-destructive': etatRentabilite === 'perte',
+                        'text-amber-600': etatRentabilite === 'faible',
+                        'text-emerald-600': etatRentabilite === 'saine',
+                    }"
+                >
+                    <TrendingDown
+                        v-if="etatRentabilite === 'perte'"
+                        class="h-3.5 w-3.5 shrink-0"
+                    />
+                    <AlertTriangle
+                        v-else-if="etatRentabilite === 'faible'"
+                        class="h-3.5 w-3.5 shrink-0"
+                    />
+                    <TrendingUp v-else class="h-3.5 w-3.5 shrink-0" />
+
+                    <span v-if="etatRentabilite === 'perte'">
+                        Perte estimée :
+                        {{ formatMontant(Math.abs(beneficeEstime!)) }} GNF /
+                        unité
+                    </span>
+                    <span v-else-if="etatRentabilite === 'faible'">
+                        Marge faible : {{ formatMontant(beneficeEstime!) }} GNF
+                        ({{ Math.round(margeEstimeePct!) }} %)
+                    </span>
+                    <span v-else>
+                        Bénéfice estimé : +{{
+                            formatMontant(beneficeEstime!)
+                        }}
+                        GNF / unité — Marge {{ Math.round(margeEstimeePct!) }}
+                        %
+                    </span>
+                </div>
+
+                <div
+                    v-if="
+                        margeCommissionAutresVehicules !== null ||
+                        margeCommissionTricycle !== null
+                    "
+                    class="flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground"
+                >
+                    <span>Marge commission —</span>
+                    <span v-if="margeCommissionAutresVehicules !== null">
+                        Autres véhicules :
+                        {{ formatMontant(margeCommissionAutresVehicules) }}
+                        GNF
+                    </span>
+                    <span v-if="margeCommissionTricycle !== null">
+                        Tricycle :
+                        {{ formatMontant(margeCommissionTricycle) }} GNF
+                    </span>
+                </div>
+            </div>
+
             <div class="space-y-1.5">
                 <Label class="block">Code-barres</Label>
                 <InputText
@@ -300,7 +434,10 @@ function submit() {
         <template #footer>
             <div class="flex justify-end gap-2">
                 <Button variant="outline" @click="close">Annuler</Button>
-                <Button :disabled="form.processing" @click="submit">
+                <Button
+                    :disabled="form.processing || !canSubmit"
+                    @click="submit"
+                >
                     Enregistrer
                 </Button>
             </div>

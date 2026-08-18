@@ -96,6 +96,9 @@ const props = defineProps<{
 
 const showVarianteModal = ref(false);
 const varianteEnEdition = ref<Variante | null>(null);
+// Expose canSubmit (champs obligatoires + marge usine bloquante) pour désactiver le bouton
+// sticky mobile, physiquement hors du <form> (relié via l'attribut HTML form="produit-form").
+const produitFormRef = ref<InstanceType<typeof ProduitForm> | null>(null);
 const typeCourant = computed(() =>
     props.types.find((t) => t.value === props.produit.produit_type_id),
 );
@@ -191,6 +194,7 @@ function submit() {
         <!-- ─── Formulaire ─── -->
         <div class="mx-auto max-w-4xl p-4 sm:p-6">
             <ProduitForm
+                ref="produitFormRef"
                 :form="form"
                 :errors="form.errors"
                 :types="types"
@@ -226,7 +230,9 @@ function submit() {
             <button
                 type="submit"
                 form="produit-form"
-                :disabled="form.processing"
+                :disabled="
+                    form.processing || !(produitFormRef?.canSubmit ?? true)
+                "
                 class="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-transform active:scale-[0.98] disabled:opacity-60"
             >
                 <Spinner v-if="form.processing" class="h-4 w-4" />

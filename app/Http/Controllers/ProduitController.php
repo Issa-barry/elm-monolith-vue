@@ -472,6 +472,10 @@ class ProduitController extends Controller
                 'produit_type_id' => $produit->produit_type_id,
                 'type_nom' => $produit->produitType?->nom,
                 'prix_usine_requis' => (bool) $produit->produitType?->prix_usine_requis,
+                // cf. typesOptions()/variantesIndex() : achetable/vendable pilotent la
+                // visibilité de prix_achat/prix_vente dans VarianteEditModal.vue.
+                'achetable' => (bool) ($produit->produitType?->achetable ?? true),
+                'vendable' => (bool) ($produit->produitType?->vendable ?? true),
                 'statut' => $produit->statut?->value,
                 'statut_label' => $produit->statut?->label(),
                 'prix_usine' => $variantePrincipale?->prix_usine,
@@ -505,7 +509,11 @@ class ProduitController extends Controller
                     'libelle' => $v->libelle,
                     'sku' => $v->sku,
                     'code_barres' => $v->code_barres,
+                    'prix_usine' => $v->prix_usine,
+                    'prix_usine_tricycle' => $v->prix_usine_tricycle,
                     'prix_vente' => $v->prix_vente,
+                    'prix_achat' => $v->prix_achat,
+                    'cout' => $v->cout,
                     'is_default' => $v->is_default,
                     'is_active' => $v->is_active,
                     'options' => $this->varianteOptions($v),
