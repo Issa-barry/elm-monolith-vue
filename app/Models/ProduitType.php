@@ -144,6 +144,12 @@ class ProduitType extends Model
         }
         if ($this->prix_usine_requis) {
             $champs[] = 'prix_usine';
+            // Décision métier : dès qu'un type utilise le prix usine, les deux tarifs
+            // (autres véhicules / tricycle) sont deux décisions tarifaires distinctes et
+            // doivent être saisis explicitement, même identiques — jamais de repli implicite
+            // de l'un vers l'autre. Dérivé de prix_usine_requis plutôt qu'un flag séparé :
+            // il n'existe aucun cas métier où seul l'un des deux tarifs serait obligatoire.
+            $champs[] = 'prix_usine_tricycle';
         }
         if ($this->prix_vente_requis) {
             $champs[] = 'prix_vente';

@@ -177,19 +177,39 @@ function onVehiculeClear() {
     recomputeAllTotals();
 }
 
-// Pré-remplit la quantité de l'unique ligne à la capacité du véhicule — seulement quand ce
-// véhicule n'a qu'un seul groupe de capacité configuré (sinon ambigu : lequel choisir ?).
+// Pré-remplit la quantité de l'unique ligne à la capacité du véhicule POUR LA CATÉGORIE DU
+// PRODUIT déjà choisi sur cette ligne — seulement s'il n'y a qu'une seule ligne avec un produit
+// sélectionné (sinon ambigu : quelle ligne recevrait le plafond ?). Cible la capacité de la
+// catégorie du produit, pas "la seule capacité du véhicule au total" (ancienne condition, trop
+// fragile dès qu'un véhicule a plusieurs catégories plafonnées, ex: Sachet ET Bouteille — le
+// produit de cette ligne n'appartenant qu'à l'une des deux, l'autre ne doit pas empêcher le
+// pré-remplissage).
 function applyVehiculeCapacityOnSingleLine(vehicule: VehiculeOption | null) {
-    if (!vehicule || vehicule.capacites.length !== 1) {
+    if (!vehicule || form.lignes.length !== 1) {
         return;
     }
 
-    if (form.lignes.length !== 1) {
+    const ligne = form.lignes[0];
+    if (ligne.produit_id === null) {
         return;
     }
 
-    form.lignes[0].qte = vehicule.capacites[0].capacite_max;
-    form.lignes[0].total = computeLigneTotal(form.lignes[0]);
+    const categorieId = props.produits.find(
+        (p) => p.id === ligne.produit_id,
+    )?.categorie_id;
+    if (categorieId === null || categorieId === undefined) {
+        return;
+    }
+
+    const capacite = vehicule.capacites.find(
+        (c) => c.categorie_id === categorieId,
+    );
+    if (!capacite) {
+        return;
+    }
+
+    ligne.qte = capacite.capacite_max;
+    ligne.total = computeLigneTotal(ligne);
 }
 
 // ── Mode de tarification (montant à encaisser par l'usine) & éligibilité aux

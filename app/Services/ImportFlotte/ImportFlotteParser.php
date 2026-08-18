@@ -72,14 +72,31 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
  * documenté plus haut — le repli ci-dessus ne fait que garder l'aperçu cohérent avec ce
  * qui sera réellement appliqué.
  *
- * Capacité (colonnes vehicule_capacite_sachets / vehicule_capacite_bouteilles) : une valeur
- * saisie devient une capacité maximale propre à ce véhicule dans vehicule_capacites, résolue
- * contre la Categorie "Sachet eau"/"Bouteille" du catalogue produit de l'organisation (cf.
- * CATEGORIE_SACHETS_NOM / CATEGORIE_BOUTEILLES_NOM, resoudreCategoriesCapacite()) — appliquée
- * aussi bien à la création qu'à un véhicule déjà existant, contrairement au reste de la ligne.
+ * Capacité (colonnes dynamiques "capacite__<REFERENCE>", ex: "capacite__BOUTEILLE_DEAU") : une
+ * valeur saisie devient une capacité maximale propre à ce véhicule dans vehicule_capacites,
+ * résolue contre la Categorie du catalogue produit de l'organisation dont la `reference`
+ * machine stable vaut exactement la partie après "capacite__" (cf. resoudreColonnesCapacite())
+ * — appliquée aussi bien à la création qu'à un véhicule déjà existant, contrairement au reste
+ * de la ligne. Résolution par `reference` plutôt que par `nom` : le nom affiché reste librement
+ * renommable par l'organisation sans jamais casser cette convention d'import (cf.
+ * Categorie::genererReferenceUnique() — identifiant immuable, généré une fois à la création).
  * Aucun héritage depuis le type de véhicule : la capacité appartient exclusivement au véhicule
  * (cf. VehiculeCapaciteService). Il n'existe plus de notion intermédiaire de "groupe de
  * capacité" — la catégorie du catalogue produit EST directement la référence de capacité.
+ *
+ * Le nombre de colonnes de capacité n'est pas limité à l'avance (contrairement à l'ancienne
+ * convention à deux colonnes fixes vehicule_capacite_sachets/vehicule_capacite_bouteilles,
+ * abandonnée) : chaque organisation peut plafonner autant de catégories de son catalogue
+ * qu'elle le souhaite, une colonne par catégorie. Chaque capacité détectée est comparée à la
+ * valeur déjà en base (pour un véhicule existant) afin d'exposer un statut explicite à
+ * l'aperçu — 'creer' / 'modifier' / 'inchangee' (cf. `capacites` dans le groupe retourné par
+ * analyserGroupe()) — plutôt que de laisser l'utilisateur deviner ce que l'import va réellement
+ * changer. Une référence de colonne introuvable dans le catalogue de l'organisation, ou une
+ * valeur non numérique, bloque le groupe entier (ajoutée à `erreurs`, jamais un simple
+ * avertissement silencieux) — contrairement à l'ancienne convention à 2 colonnes fixes, celle-ci
+ * est écrite par l'organisation elle-même : une référence introuvable y est presque toujours une
+ * faute de frappe. `nb_capacites_erreur` (compteur, présent sur chaque groupe qu'il soit valide
+ * ou en erreur) permet à l'aperçu de totaliser ces problèmes sur l'ensemble du fichier.
  */
 class ImportFlotteParser
 {
@@ -97,16 +114,14 @@ class ImportFlotteParser
     private const MAX_LIGNES = 500;
 
     /**
-     * Convention du gabarit Excel "flotte" ELM : les colonnes vehicule_capacite_sachets /
-     * vehicule_capacite_bouteilles ciblent la Categorie du catalogue produit portant ce nom
-     * exact dans l'organisation (comparaison insensible à la casse/espaces, cf.
-     * resoudreCategoriesCapacite()) — c'est une convention de CE gabarit, pas une notion codée
-     * en dur dans le moteur de capacité générique (VehiculeCapaciteService), qui ne raisonne
-     * qu'en categorie_id.
+     * Préfixe des colonnes de capacité dynamiques du gabarit "vehicules" — tout en-tête de la
+     * forme "{PREFIXE}<REFERENCE>" (ex: "capacite__BOUTEILLE_DEAU") cible la Categorie de
+     * l'organisation portant cette `reference` exacte (cf. resoudreColonnesCapacite(),
+     * Categorie::reference). Ce n'est qu'une convention de CE gabarit, pas une notion codée en
+     * dur dans le moteur de capacité générique (VehiculeCapaciteService), qui ne raisonne qu'en
+     * categorie_id.
      */
-    private const CATEGORIE_SACHETS_NOM = 'Sachet eau';
-
-    private const CATEGORIE_BOUTEILLES_NOM = 'Bouteille';
+    private const CAPACITE_COLONNE_PREFIXE = 'capacite__';
 
     public function analyser(string $absolutePath, string $organizationId, TypeImportFlotte $type = TypeImportFlotte::FLOTTE): array
     {
@@ -141,7 +156,26 @@ class ImportFlotteParser
         // tout le fichier pour ne le proposer en création qu'une seule fois —
         // voir resoudreProprietaire().
         $telephonesProprietairesVus = [];
-        [$categorieSachetsId, $categorieBouteillesId] = $this->resoudreCategoriesCapacite($organizationId);
+        $entetesVehicules = $this->entetesFeuille($spreadsheet, 'vehicules');
+        $resolutionColonnesCapacite = $this->resoudreColonnesCapacite($entetesVehicules, $organizationId);
+        $colonnesCapacite = $resolutionColonnesCapacite['colonnes'];
+
+        // Problème structurel du fichier (pas d'une ligne en particulier) : remonté une seule
+        // fois, globalement — comme groupesConflitLivreurMultiVehicules() pour un problème
+        // similaire côté "livreurs". $colonnesCapacite reste volontairement vide dans ce cas
+        // (cf. resoudreColonnesCapacite()) : aucune capacité n'est résolue pour aucune ligne
+        // tant que le fichier est ambigu, plutôt que de deviner quelle colonne doit gagner.
+        if ($resolutionColonnesCapacite['erreur_doublon'] !== null) {
+            $groupes[] = [
+                'immatriculation' => null,
+                'ligne_vehicule' => null,
+                'lignes_livreurs' => [],
+                'statut' => 'erreur',
+                'erreurs' => [$resolutionColonnesCapacite['erreur_doublon']],
+                'normalisations' => [],
+                'avertissements' => [],
+            ];
+        }
 
         // Une même immatriculation ne doit apparaître qu'une seule fois dans
         // la feuille "vehicules" (contrairement au propriétaire, un véhicule
@@ -175,7 +209,7 @@ class ImportFlotteParser
                 continue;
             }
 
-            $groupes[] = $this->analyserGroupe($immat, $index + 2, $ligneVehicule, $lignesLivreursGroupe, $organizationId, $telephonesProprietairesVus, $categorieSachetsId, $categorieBouteillesId);
+            $groupes[] = $this->analyserGroupe($immat, $index + 2, $ligneVehicule, $lignesLivreursGroupe, $organizationId, $telephonesProprietairesVus, $colonnesCapacite);
         }
 
         // Lignes de la feuille "livreurs" dont l'immatriculation n'existe dans
@@ -293,14 +327,11 @@ class ImportFlotteParser
                     'nom_vehicule' => $vehicule->nom_vehicule,
                     // Champs de création non applicables (véhicule déjà en base, jamais
                     // recréé/modifié dans ce mode) — jamais lus par ImportFlotteExecutor
-                    // quand existe=true. capacite_packs/capacite_bouteilles à null : ce mode
-                    // (une seule feuille "livreurs") ne lit jamais de colonne de capacité, donc
+                    // quand existe=true. capacites à [] : ce mode (une seule feuille
+                    // "livreurs") ne lit jamais de colonne de capacité, donc
                     // ImportFlotteExecutor ne touchera à aucune capacité pour ces groupes.
                     'type_vehicule_id' => null,
-                    'capacite_packs' => null,
-                    'capacite_bouteilles' => null,
-                    'categorie_sachets_id' => null,
-                    'categorie_bouteilles_id' => null,
+                    'capacites' => [],
                     'livraison_vente' => null,
                     'livraison_logistique' => null,
                     'site_id' => null,
@@ -518,25 +549,94 @@ class ImportFlotteParser
     }
 
     /**
-     * Résout une fois par analyse (pas par ligne) les Categorie "Sachet eau"/"Bouteille" du
-     * catalogue produit de l'organisation, par nom normalisé (casse/espaces ignorés) — cf.
-     * CATEGORIE_SACHETS_NOM / CATEGORIE_BOUTEILLES_NOM. Une organisation qui ne suit pas cette
-     * convention de nommage (ou n'a pas encore créé ces catégories) obtient simplement null :
-     * les capacités importées pour cette colonne sont alors ignorées avec un avertissement,
-     * jamais une erreur bloquante.
+     * Ligne d'en-têtes brute de la feuille $nom, dans le même ordre que le fichier — distincte
+     * de lireFeuille() (qui recombine chaque ligne en tableau associatif et perd donc l'ordre/la
+     * liste des en-têtes une fois qu'ils sont devenus des clés) : nécessaire ici pour détecter
+     * les colonnes "capacite__<REFERENCE>" ET un éventuel doublon d'en-tête, que
+     * array_combine() dans lireFeuille() écraserait silencieusement (la valeur de la première
+     * colonne en double serait perdue sans qu'aucune erreur ne soit levée).
      *
-     * @return array{0: ?string, 1: ?string}
+     * @return string[]
      */
-    private function resoudreCategoriesCapacite(string $orgId): array
+    private function entetesFeuille(Spreadsheet $spreadsheet, string $nom): array
     {
-        $resoudre = fn (string $nom): ?string => Categorie::where('organization_id', $orgId)
-            ->whereRaw('LOWER(TRIM(nom)) = ?', [mb_strtolower($nom)])
-            ->value('id');
+        $sheet = $this->trouverFeuille($spreadsheet, $nom);
+        if (! $sheet) {
+            return [];
+        }
 
-        return [$resoudre(self::CATEGORIE_SACHETS_NOM), $resoudre(self::CATEGORIE_BOUTEILLES_NOM)];
+        $premiereRangee = $sheet->rangeToArray('A1:'.$sheet->getHighestColumn().'1', null, true, true, false)[0] ?? [];
+
+        return array_map(fn ($e) => trim((string) $e), $premiereRangee);
     }
 
-    private function analyserGroupe(string $immatriculation, int $numeroLigneVehicule, Collection $ligneVehicule, array $lignesLivreursGroupe, string $orgId, array &$telephonesProprietairesVus, ?string $categorieSachetsId, ?string $categorieBouteillesId): array
+    /**
+     * Détecte, une fois par analyse (pas par ligne), les colonnes de capacité dynamiques de la
+     * feuille "vehicules" — tout en-tête au format "capacite__<REFERENCE>" (cf.
+     * CAPACITE_COLONNE_PREFIXE) cible la Categorie du catalogue produit de l'organisation
+     * portant cette `reference` exacte (Categorie::reference). Une organisation qui n'a pas
+     * (encore) de catégorie portant cette référence obtient simplement `categorie: null` pour
+     * cette colonne : chaque ligne qui saisit effectivement une valeur sur cette colonne est
+     * alors bloquée avec une erreur explicite "Référence catégorie inconnue : ..." (cf.
+     * analyserGroupe()) — une ligne qui laisse la colonne vide n'est jamais affectée. Un VRAI
+     * doublon de colonne (même référence normalisée présente deux fois) bloque tout le fichier
+     * d'un coup, la résolution étant sinon ambiguë.
+     *
+     * @return array{colonnes: array<int, array{cle: string, reference: string, categorie: ?Categorie}>, erreur_doublon: ?string}
+     */
+    private function resoudreColonnesCapacite(array $entetes, string $orgId): array
+    {
+        $prefixe = self::CAPACITE_COLONNE_PREFIXE;
+        $longueurPrefixe = mb_strlen($prefixe);
+
+        $colonnes = [];
+        $referencesVues = [];
+        $referencesEnDoublon = [];
+
+        foreach ($entetes as $entete) {
+            if (mb_strtolower(mb_substr($entete, 0, $longueurPrefixe)) !== $prefixe) {
+                continue;
+            }
+
+            $reference = mb_strtoupper(trim(mb_substr($entete, $longueurPrefixe)), 'UTF-8');
+            if ($reference === '') {
+                continue;
+            }
+
+            if (isset($referencesVues[$reference])) {
+                $referencesEnDoublon[$reference] = true;
+            }
+            $referencesVues[$reference] = true;
+
+            $colonnes[] = ['cle' => $entete, 'reference' => $reference];
+        }
+
+        if (! empty($referencesEnDoublon)) {
+            return [
+                'colonnes' => [],
+                'erreur_doublon' => 'Colonnes de capacité en doublon pour la référence '
+                    .implode(', ', array_map(fn ($r) => "\"{$r}\"", array_keys($referencesEnDoublon)))
+                    .' — une seule colonne "capacite__<REFERENCE>" par catégorie est autorisée.',
+            ];
+        }
+
+        $categoriesParReference = Categorie::where('organization_id', $orgId)
+            ->whereIn('reference', array_column($colonnes, 'reference'))
+            ->get()
+            ->keyBy('reference');
+
+        foreach ($colonnes as &$colonne) {
+            $colonne['categorie'] = $categoriesParReference->get($colonne['reference']);
+        }
+        unset($colonne);
+
+        return ['colonnes' => $colonnes, 'erreur_doublon' => null];
+    }
+
+    /**
+     * @param  array<int, array{cle: string, reference: string, categorie: ?Categorie}>  $colonnesCapacite
+     */
+    private function analyserGroupe(string $immatriculation, int $numeroLigneVehicule, Collection $ligneVehicule, array $lignesLivreursGroupe, string $orgId, array &$telephonesProprietairesVus, array $colonnesCapacite): array
     {
         $numerosLignesLivreurs = array_column($lignesLivreursGroupe, 'numero_ligne');
         $erreurs = [];
@@ -570,9 +670,13 @@ class ImportFlotteParser
         // déjà en base, jamais en créer un doublon simplement écrit différemment (cf.
         // Vehicule::normaliserImmatriculation()).
         $immatriculationNormalisee = Vehicule::normaliserImmatriculation($immatriculation);
+        // Capacités déjà en base chargées ici (pas requêtées à nouveau par colonne de capacité
+        // plus bas) : évite un aller-retour SQL par colonne de capacité et par ligne — voir
+        // construction de $capacites ci-dessous.
         $vehiculeExistant = Vehicule::where('organization_id', $orgId)
             ->where('immatriculation_normalisee', $immatriculationNormalisee)
             ->whereNull('deleted_at')
+            ->with('capacites')
             ->first();
 
         // Aucune correspondance exacte (même normalisée) : avant de conclure "nouveau
@@ -617,24 +721,66 @@ class ImportFlotteParser
         if ($erreurLivraisonLogistique) {
             $erreurs[] = "Usage logistique invalide : {$erreurLivraisonLogistique}";
         }
-        // Facultatives : laissées vides, ce véhicule reste non plafonné (cf.
-        // VehiculeCapaciteService — plus aucun héritage depuis le type). Une valeur saisie
+        // Facultatives : laissées vides, ce véhicule reste non plafonné pour cette catégorie
+        // (cf. VehiculeCapaciteService — plus aucun héritage depuis le type). Une valeur saisie
         // devient une capacité maximale propre à CE véhicule (vehicule_capacites), pour la
-        // Categorie "Sachet eau"/"Bouteille" résolue une fois pour toute l'analyse — voir
-        // resoudreCategoriesCapacite().
-        [$capacitePacks, $erreurCapacitePacks] = $this->toCapaciteOrNull($ligneVehicule['vehicule_capacite_sachets'] ?? null);
-        if ($erreurCapacitePacks) {
-            $erreurs[] = "Capacité sachets invalide : {$erreurCapacitePacks}";
-        } elseif ($capacitePacks !== null && $categorieSachetsId === null) {
-            $avertissements[] = 'Capacité sachets ignorée : aucune catégorie produit "'.self::CATEGORIE_SACHETS_NOM.'" dans cette organisation (Produits > Catégories).';
-            $capacitePacks = null;
-        }
-        [$capaciteBouteilles, $erreurCapaciteBouteilles] = $this->toCapaciteOrNull($ligneVehicule['vehicule_capacite_bouteilles'] ?? null);
-        if ($erreurCapaciteBouteilles) {
-            $erreurs[] = "Capacité bouteilles invalide : {$erreurCapaciteBouteilles}";
-        } elseif ($capaciteBouteilles !== null && $categorieBouteillesId === null) {
-            $avertissements[] = 'Capacité bouteilles ignorée : aucune catégorie produit "'.self::CATEGORIE_BOUTEILLES_NOM.'" dans cette organisation (Produits > Catégories).';
-            $capaciteBouteilles = null;
+        // Categorie de chaque colonne "capacite__<REFERENCE>" détectée une fois pour toute
+        // l'analyse — voir resoudreColonnesCapacite(). Comparée à la valeur déjà en base
+        // (véhicule existant) pour exposer un statut explicite à l'aperçu (creer/modifier/
+        // inchangee/erreur) plutôt que de se contenter d'écraser silencieusement.
+        $capacitesExistantesParCategorie = $vehiculeExistant
+            ? $vehiculeExistant->capacites->keyBy('categorie_id')
+            : collect();
+
+        // Contrairement à l'ancienne convention à 2 colonnes fixes (où l'organisation n'avait
+        // pas forcément suivi la convention de nom, donc une catégorie absente n'était qu'un
+        // avertissement), une colonne "capacite__<REFERENCE>" est écrite par l'organisation
+        // elle-même : une référence introuvable est presque toujours une faute de frappe, jamais
+        // une convention non suivie — bloquant comme toute autre donnée de référence introuvable
+        // (type de véhicule, site...), jamais masqué derrière un simple avertissement qui
+        // laisserait silencieusement le véhicule non plafonné pour cette catégorie.
+        $capacites = [];
+        $nbCapacitesErreur = 0;
+        foreach ($colonnesCapacite as $colonne) {
+            $brut = trim((string) ($ligneVehicule[$colonne['cle']] ?? ''));
+            if ($brut === '') {
+                continue;
+            }
+
+            $categorie = $colonne['categorie'];
+            $categorieLabel = $categorie?->nom ?? $colonne['reference'];
+
+            [$valeur, $erreurValeur] = $this->toCapaciteOrNull($brut);
+            if ($erreurValeur) {
+                $erreurs[] = "Capacité \"{$categorieLabel}\" invalide : {$erreurValeur}";
+                $nbCapacitesErreur++;
+
+                continue;
+            }
+
+            if ($categorie === null) {
+                $erreurs[] = "Référence catégorie inconnue : {$colonne['reference']}";
+                $nbCapacitesErreur++;
+
+                continue;
+            }
+
+            $capaciteExistante = $capacitesExistantesParCategorie->get($categorie->id);
+            $valeurActuelle = $capaciteExistante?->capacite_max;
+            $statut = match (true) {
+                $capaciteExistante === null => 'creer',
+                $valeurActuelle === $valeur => 'inchangee',
+                default => 'modifier',
+            };
+
+            $capacites[] = [
+                'categorie_id' => $categorie->id,
+                'categorie_nom' => $categorieLabel,
+                'reference' => $colonne['reference'],
+                'valeur' => $valeur,
+                'valeur_actuelle' => $valeurActuelle,
+                'statut' => $statut,
+            ];
         }
 
         if ($nomVehicule === '') {
@@ -791,6 +937,10 @@ class ImportFlotteParser
                 'erreurs' => $erreurs,
                 'normalisations' => $normalisations,
                 'avertissements' => $avertissements,
+                // Compté même quand le groupe échoue globalement (pour une raison liée ou non
+                // aux capacités) — l'aperçu peut ainsi additionner ce compteur sur TOUS les
+                // groupes, pas seulement les groupes valides, pour le résumé "en erreur".
+                'nb_capacites_erreur' => $nbCapacitesErreur,
             ];
         }
 
@@ -802,18 +952,18 @@ class ImportFlotteParser
             'erreurs' => [],
             'normalisations' => $normalisations,
             'avertissements' => $avertissements,
+            'nb_capacites_erreur' => $nbCapacitesErreur,
             'vehicule' => [
                 'existe' => (bool) $vehiculeExistant,
                 'id' => $vehiculeExistant?->id,
                 'nom_vehicule' => $nomVehicule,
                 'type_vehicule_id' => $type?->id,
-                'capacite_packs' => $capacitePacks,
-                'capacite_bouteilles' => $capaciteBouteilles,
-                // Résolus par resoudreCategoriesCapacite() — non-null uniquement quand la
-                // capacité correspondante a été saisie ET que la catégorie existe dans l'org
-                // (sinon $capacitePacks/$capaciteBouteilles sont déjà remis à null ci-dessus).
-                'categorie_sachets_id' => $categorieSachetsId,
-                'categorie_bouteilles_id' => $categorieBouteillesId,
+                // Une entrée par colonne "capacite__<REFERENCE>" non vide sur cette ligne, cf.
+                // construction plus haut — jamais de statut 'erreur' ici : une référence
+                // introuvable ou une valeur invalide bloque tout le groupe (retour anticipé
+                // ci-dessus), donc ce tableau ne contient que des entrées déjà valides
+                // (creer/modifier/inchangee).
+                'capacites' => $capacites,
                 'livraison_vente' => $livraisonVente,
                 'livraison_logistique' => $livraisonLogistique,
                 'site_id' => $site?->id,

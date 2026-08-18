@@ -146,6 +146,7 @@ class ProduitService
     {
         $labels = [
             'prix_usine' => 'prix usine',
+            'prix_usine_tricycle' => 'prix usine tricycle',
             'prix_vente' => 'prix de vente',
             'prix_achat' => "prix d'achat",
         ];

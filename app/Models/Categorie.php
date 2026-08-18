@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 
 class Categorie extends Model
 {
@@ -20,6 +21,7 @@ class Categorie extends Model
         'organization_id',
         'parent_id',
         'nom',
+        'reference',
         'description',
         'statut',
         'position',
@@ -45,6 +47,9 @@ class Categorie extends Model
             if (empty($c->statut)) {
                 $c->statut = CategorieStatut::ACTIF;
             }
+            if (empty($c->reference)) {
+                $c->reference = self::genererReferenceUnique($c->organization_id, $c->nom);
+            }
         });
 
         static::updating(function (Categorie $c) {
@@ -52,6 +57,27 @@ class Categorie extends Model
                 $c->updated_by = Auth::id();
             }
         });
+    }
+
+    /**
+     * Référence machine stable, indépendante du `nom` (librement renommable) — sert de clé
+     * robuste à l'import flotte (cf. ImportFlotteParser::resoudreCategoriesCapacite()) pour
+     * cibler une catégorie même après renommage, et s'affiche à l'utilisateur (ex: "Réf.
+     * BOUTEILLE_EAU") pour préparer un fichier d'import. Jamais régénérée sur update (immuable
+     * une fois créée) — même pattern que ProduitType::genererCodeUnique(), en MAJUSCULES.
+     */
+    private static function genererReferenceUnique(string $organizationId, string $nom): string
+    {
+        $base = Str::upper(Str::slug($nom, '_')) ?: 'CATEGORIE';
+        $reference = $base;
+        $i = 2;
+
+        while (static::withTrashed()->where('organization_id', $organizationId)->where('reference', $reference)->exists()) {
+            $reference = "{$base}_{$i}";
+            $i++;
+        }
+
+        return $reference;
     }
 
     // ── Mutateurs ─────────────────────────────────────────────────────────────

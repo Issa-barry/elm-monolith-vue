@@ -62,6 +62,7 @@ interface Variante {
     sku: string | null;
     code_barres: string | null;
     prix_usine: number | null;
+    prix_usine_tricycle: number | null;
     prix_vente: number | null;
     prix_achat: number | null;
     cout: number | null;
@@ -94,6 +95,8 @@ interface Produit {
     produit_type_id: string | null;
     type_nom: string | null;
     prix_usine_requis: boolean;
+    achetable: boolean;
+    vendable: boolean;
     statut: string;
     statut_label: string;
     prix_usine: number | null;
@@ -174,6 +177,8 @@ const showHistoriqueModal = ref(false);
 const showVarianteModal = ref(false);
 const varianteEnEdition = ref<Variante | null>(null);
 const prixUsineRequis = computed(() => props.produit.prix_usine_requis);
+const prixAchatApplicable = computed(() => props.produit.achetable);
+const prixVenteApplicable = computed(() => props.produit.vendable);
 
 function editerVariante(variante: Variante) {
     varianteEnEdition.value = variante;
@@ -962,6 +967,8 @@ const ajustements = props.mouvements.map((m) => ({
             :produit-id="produit.id"
             :variante="varianteEnEdition"
             :prix-usine-requis="prixUsineRequis"
+            :prix-achat-applicable="prixAchatApplicable"
+            :prix-vente-applicable="prixVenteApplicable"
             :medias="produit.medias"
         />
     </AppLayout>

@@ -23,6 +23,15 @@ interface GroupeLivreur {
     montant_par_pack: number;
 }
 
+interface GroupeCapacite {
+    categorie_id: string;
+    categorie_nom: string;
+    reference: string;
+    valeur: number;
+    valeur_actuelle: number | null;
+    statut: 'creer' | 'modifier' | 'inchangee';
+}
+
 interface Groupe {
     immatriculation: string | null;
     ligne_vehicule: number | null;
@@ -31,7 +40,16 @@ interface Groupe {
     erreurs: string[];
     normalisations?: string[];
     avertissements?: string[];
-    vehicule?: { existe: boolean; nom_vehicule: string; categorie: string };
+    // Présent sur TOUT groupe (valide ou en erreur) — une référence de catégorie introuvable ou
+    // une valeur invalide bloque le groupe entier (cf. ImportFlotteParser), donc ce compteur doit
+    // être additionné sur l'ensemble des groupes, pas seulement les groupes valides.
+    nb_capacites_erreur?: number;
+    vehicule?: {
+        existe: boolean;
+        nom_vehicule: string;
+        categorie: string;
+        capacites?: GroupeCapacite[];
+    };
     proprietaire?: {
         existe: boolean;
         doublon_fichier?: boolean;
@@ -94,6 +112,13 @@ const aperçu = computed(() => {
     const vehicules = { creer: 0, existants: 0 };
     const proprietaires = { creer: 0, existants: 0 };
     const livreurs = { creer: 0, existants: 0 };
+    // Compte des couples véhicule/catégorie détectés via les colonnes
+    // "capacite__<REFERENCE>" — pas des véhicules : un même véhicule peut
+    // apporter plusieurs capacités (une par catégorie plafonnée). "erreur" est
+    // additionné sur TOUS les groupes (pas seulement les valides, cf. boucle
+    // dédiée plus bas) : une référence/valeur de capacité invalide bloque tout
+    // le groupe, donc ces problèmes ne se voient jamais dans un groupe valide.
+    const capacites = { creer: 0, modifier: 0, inchangee: 0, erreur: 0 };
     let equipes = 0;
     // Groupe véhicule sans aucun livreur dans le fichier (nouveau véhicule
     // livré "nu", ou véhicule existant dont on ne touche pas l'équipe) — cf.
@@ -127,16 +152,32 @@ const aperçu = computed(() => {
                 livreurs.creer++;
             }
         }
+        for (const c of g.vehicule?.capacites ?? []) {
+            capacites[c.statut]++;
+        }
+    }
+
+    for (const g of props.record.rapport?.groupes ?? []) {
+        capacites.erreur += g.nb_capacites_erreur ?? 0;
     }
 
     return {
         vehicules,
         proprietaires,
         livreurs,
+        capacites,
         equipes,
         vehiculesSansLivreur,
     };
 });
+
+/** Libellé compact d'une ligne de capacité pour la colonne "Capacités" du tableau. */
+function formatCapacite(c: GroupeCapacite): string {
+    if (c.statut === 'modifier') {
+        return `${c.categorie_nom} : ${c.valeur_actuelle} → ${c.valeur}`;
+    }
+    return `${c.categorie_nom} : ${c.valeur}`;
+}
 
 function formatLignes(g: Groupe): string {
     const parties: string[] = [];
@@ -213,7 +254,7 @@ onBeforeUnmount(() => {
 
             <!-- Aperçu (analyse) -->
             <template v-if="record.statut === 'analyse'">
-                <div class="grid gap-4 sm:grid-cols-5">
+                <div class="grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
                     <div class="rounded-xl border bg-card p-4">
                         <p class="text-xs text-muted-foreground">
                             Propriétaires à créer
@@ -274,6 +315,26 @@ onBeforeUnmount(() => {
                         </p>
                         <p class="text-xs text-muted-foreground">
                             sur {{ groupesValides.length }} groupe(s) valide(s)
+                        </p>
+                    </div>
+                    <div class="rounded-xl border bg-card p-4">
+                        <p class="text-xs text-muted-foreground">Capacités</p>
+                        <p class="mt-1 text-2xl font-semibold">
+                            {{ aperçu.capacites.creer }}
+                        </p>
+                        <p class="text-xs text-muted-foreground">
+                            à créer · {{ aperçu.capacites.modifier }} à modifier
+                            <template v-if="aperçu.capacites.inchangee">
+                                · {{ aperçu.capacites.inchangee }} inchangée{{
+                                    aperçu.capacites.inchangee > 1 ? 's' : ''
+                                }}
+                            </template>
+                        </p>
+                        <p
+                            v-if="aperçu.capacites.erreur"
+                            class="mt-0.5 text-xs text-amber-600 dark:text-amber-400"
+                        >
+                            {{ aperçu.capacites.erreur }} en erreur
                         </p>
                     </div>
                 </div>
@@ -347,6 +408,9 @@ onBeforeUnmount(() => {
                                         Propriétaire
                                     </th>
                                     <th class="py-2 pr-3 font-medium">
+                                        Capacités
+                                    </th>
+                                    <th class="py-2 pr-3 font-medium">
                                         Équipe
                                     </th>
                                     <th class="py-2 pr-3 font-medium">
@@ -399,6 +463,26 @@ onBeforeUnmount(() => {
                                                 ligne)</span
                                             >
                                         </template>
+                                        <span v-else>—</span>
+                                    </td>
+                                    <td class="py-2 pr-3 text-muted-foreground">
+                                        <ul
+                                            v-if="g.vehicule?.capacites?.length"
+                                            class="space-y-0.5"
+                                        >
+                                            <li
+                                                v-for="(cap, k) in g.vehicule
+                                                    .capacites"
+                                                :key="k"
+                                                :class="
+                                                    cap.statut === 'modifier'
+                                                        ? 'font-medium text-foreground'
+                                                        : ''
+                                                "
+                                            >
+                                                {{ formatCapacite(cap) }}
+                                            </li>
+                                        </ul>
                                         <span v-else>—</span>
                                     </td>
                                     <td

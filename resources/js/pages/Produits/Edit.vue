@@ -13,11 +13,14 @@ interface Option {
     label: string;
 }
 
-// `required_prices`/`gere_stock` (cf. ProduitTypeController::typesOptions()) pilotent
-// l'affichage du "*" sur les prix obligatoires et de la section Stock, dans ProduitForm.vue.
+// `required_prices`/`gere_stock` (cf. ProduitController::typesOptions()) pilotent l'affichage
+// du "*" sur les prix obligatoires et de la section Stock, dans ProduitForm.vue.
+// `achetable`/`vendable` pilotent la visibilité (applicabilité) de prix_achat/prix_vente.
 interface ProduitTypeOption extends Option {
     gere_stock: boolean;
     required_prices: string[];
+    achetable: boolean;
+    vendable: boolean;
 }
 
 interface Categorie {
@@ -93,12 +96,22 @@ const props = defineProps<{
 
 const showVarianteModal = ref(false);
 const varianteEnEdition = ref<Variante | null>(null);
-const prixUsineRequis = computed(
-    () =>
-        props.types
-            .find((t) => t.value === props.produit.produit_type_id)
-            ?.required_prices.includes('prix_usine') ?? false,
+// Expose canSubmit (champs obligatoires + marge usine bloquante) pour désactiver le bouton
+// sticky mobile, physiquement hors du <form> (relié via l'attribut HTML form="produit-form").
+const produitFormRef = ref<InstanceType<typeof ProduitForm> | null>(null);
+const typeCourant = computed(() =>
+    props.types.find((t) => t.value === props.produit.produit_type_id),
 );
+const prixUsineRequis = computed(
+    () => typeCourant.value?.required_prices.includes('prix_usine') ?? false,
+);
+// cf. ProduitForm.vue : achetable/vendable pilotent la visibilité de prix_achat/prix_vente,
+// distincte de leur obligation — même règle reproduite ici pour VarianteEditModal.vue afin de
+// ne jamais diverger entre création/édition du produit simple et édition d'une variante.
+const prixAchatApplicable = computed(
+    () => typeCourant.value?.achetable ?? true,
+);
+const prixVenteApplicable = computed(() => typeCourant.value?.vendable ?? true);
 
 function editerVariante(variante: Variante) {
     varianteEnEdition.value = variante;
@@ -181,6 +194,7 @@ function submit() {
         <!-- ─── Formulaire ─── -->
         <div class="mx-auto max-w-4xl p-4 sm:p-6">
             <ProduitForm
+                ref="produitFormRef"
                 :form="form"
                 :errors="form.errors"
                 :types="types"
@@ -205,6 +219,8 @@ function submit() {
             :produit-id="String(produit.id)"
             :variante="varianteEnEdition"
             :prix-usine-requis="prixUsineRequis"
+            :prix-achat-applicable="prixAchatApplicable"
+            :prix-vente-applicable="prixVenteApplicable"
         />
 
         <!-- ─── Footer sticky mobile ─── -->
@@ -214,7 +230,9 @@ function submit() {
             <button
                 type="submit"
                 form="produit-form"
-                :disabled="form.processing"
+                :disabled="
+                    form.processing || !(produitFormRef?.canSubmit ?? true)
+                "
                 class="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-transform active:scale-[0.98] disabled:opacity-60"
             >
                 <Spinner v-if="form.processing" class="h-4 w-4" />

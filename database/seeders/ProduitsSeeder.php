@@ -35,13 +35,19 @@ class ProduitsSeeder extends Seeder
         // vehicule_capacites/type_vehicule_capacites), au lieu d'un seul plafond global qui
         // mélangeait les deux. Pas de hiérarchie "Boissons" parente : inutile tant qu'il n'y a
         // que ces deux familles.
+        // Références explicites (plutôt que le slug auto-généré du nom) : ce sont les deux
+        // catégories de référence ciblées par l'import flotte (colonnes
+        // vehicule_capacite_sachets/vehicule_capacite_bouteilles, cf.
+        // ImportFlotteParser::CATEGORIE_SACHETS_REFERENCE/CATEGORIE_BOUTEILLES_REFERENCE) — une
+        // référence stable et connue à l'avance, indépendante du libellé (renommable sans casser
+        // l'import).
         $sachet = Categorie::firstOrCreate(
-            ['organization_id' => $org->id, 'nom' => 'Sachet', 'parent_id' => null],
-            ['statut' => CategorieStatut::ACTIF]
+            ['organization_id' => $org->id, 'nom' => "Sachet d'eau", 'parent_id' => null],
+            ['statut' => CategorieStatut::ACTIF, 'reference' => 'SACHET_EAU']
         );
         $bouteille = Categorie::firstOrCreate(
-            ['organization_id' => $org->id, 'nom' => 'Bouteille', 'parent_id' => null],
-            ['statut' => CategorieStatut::ACTIF]
+            ['organization_id' => $org->id, 'nom' => "Bouteille d'eau", 'parent_id' => null],
+            ['statut' => CategorieStatut::ACTIF, 'reference' => 'BOUTEILLE_EAU']
         );
 
         // categorie_id reste null pour "Rouleau" : c'est un consommable d'usine (matériel),
@@ -62,6 +68,7 @@ class ProduitsSeeder extends Seeder
                 'categorie_id' => $bouteille->id,
                 'statut' => ProduitStatut::ACTIF->value,
                 'prix_usine' => 4100,
+                'prix_usine_tricycle' => 4100,
                 'prix_vente' => 5000,
                 'qte_stock' => 10000,
                 'alerte_stock_active' => false,
@@ -72,6 +79,7 @@ class ProduitsSeeder extends Seeder
                 'categorie_id' => $bouteille->id,
                 'statut' => ProduitStatut::ACTIF->value,
                 'prix_usine' => 4500,
+                'prix_usine_tricycle' => 4500,
                 'prix_vente' => 5000,
                 'qte_stock' => 10000,
                 'alerte_stock_active' => false,
@@ -82,6 +90,7 @@ class ProduitsSeeder extends Seeder
                 'categorie_id' => $sachet->id,
                 'statut' => ProduitStatut::ACTIF->value,
                 'prix_usine' => 18000,
+                'prix_usine_tricycle' => 18000,
                 'prix_vente' => 20000,
                 'qte_stock' => 150000,
                 'alerte_stock_active' => true,
@@ -94,6 +103,7 @@ class ProduitsSeeder extends Seeder
                 'categorie_id' => $sachet->id,
                 'statut' => ProduitStatut::ACTIF->value,
                 'prix_usine' => 22000,
+                'prix_usine_tricycle' => 22000,
                 'prix_vente' => 25000,
                 'qte_stock' => 25000,
                 'alerte_stock_active' => true,
@@ -106,6 +116,7 @@ class ProduitsSeeder extends Seeder
                 'categorie_id' => $sachet->id,
                 'statut' => ProduitStatut::ACTIF->value,
                 'prix_usine' => 18000,
+                'prix_usine_tricycle' => 18000,
                 'prix_vente' => 20000,
                 'qte_stock' => 100000,
                 'alerte_stock_active' => true,
@@ -118,6 +129,7 @@ class ProduitsSeeder extends Seeder
                 'categorie_id' => $sachet->id,
                 'statut' => ProduitStatut::ACTIF->value,
                 'prix_usine' => 18000,
+                'prix_usine_tricycle' => 18000,
                 'prix_vente' => 20000,
                 'qte_stock' => 900,
                 'alerte_stock_active' => true,

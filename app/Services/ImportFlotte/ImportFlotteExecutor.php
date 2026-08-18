@@ -144,16 +144,17 @@ class ImportFlotteExecutor
             $compteurs['vehicules_crees']++;
         }
 
-        // ── Capacité (propre à ce véhicule, aucun héritage depuis le type) ─────
+        // ── Capacités (propres à ce véhicule, aucun héritage depuis le type) ───
         // Contrairement au reste de ce bloc (une ligne "véhicule déjà existant" ne sert que
-        // d'ancrage pour ses livreurs/équipe, cf. docblock de classe), la capacité EST mise à
-        // jour même pour un véhicule déjà en base : une ré-importation avec des valeurs
-        // corrigées doit pouvoir corriger la flotte déjà configurée. `capacite_packs`/
-        // `capacite_bouteilles` restent null quand la colonne était vide OU que la catégorie
-        // correspondante n'existe pas dans l'organisation (cf.
-        // ImportFlotteParser::analyserGroupe()), auquel cas on ne touche à rien pour ce groupe.
-        $this->upsertCapacite($orgId, $vehiculeId, $vData['categorie_sachets_id'] ?? null, $vData['capacite_packs']);
-        $this->upsertCapacite($orgId, $vehiculeId, $vData['categorie_bouteilles_id'] ?? null, $vData['capacite_bouteilles']);
+        // d'ancrage pour ses livreurs/équipe, cf. docblock de classe), les capacités SONT mises
+        // à jour même pour un véhicule déjà en base : une ré-importation avec des valeurs
+        // corrigées doit pouvoir corriger la flotte déjà configurée. Une entrée par colonne
+        // "capacite__<REFERENCE>" non vide sur la ligne (cf. ImportFlotteParser::analyserGroupe())
+        // — une valeur invalide OU une référence catégorie introuvable bloque tout le groupe dès
+        // l'analyse (jamais atteint ici) : chaque entrée de $vData['capacites'] est donc déjà valide.
+        foreach ($vData['capacites'] ?? [] as $capacite) {
+            $this->upsertCapacite($orgId, $vehiculeId, $capacite['categorie_id'], $capacite['valeur']);
+        }
 
         // ── Équipe ───────────────────────────────────────────────────────────
         // Créée inactive : commission/montants à 0 (brouillon, cf.
