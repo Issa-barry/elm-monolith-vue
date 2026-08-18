@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AuditEvent;
+use App\Enums\CategorieTarifaireVehicule;
 use App\Enums\ClientType;
 use App\Enums\ModeTarification;
 use App\Enums\MotifAnnulation;
@@ -23,6 +24,7 @@ use App\Models\Vehicule;
 use App\Services\AuditLogService;
 use App\Services\CommandeVenteActiviteService;
 use App\Services\CommandeVenteService;
+use App\Services\PrixUsineResolver;
 use App\Services\VehiculeCapaciteService;
 use App\Services\VehiculeCommandeContextResolver;
 use Illuminate\Http\JsonResponse;
@@ -376,7 +378,7 @@ class CommandeVenteController extends Controller
         $this->enforcePrixVentePolicy($data, null);
 
         $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null);
-        [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $context->modeTarification);
+        [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $context->modeTarification, $context->categorieTarifaireVehicule);
 
         $commande = CommandeVente::create([
             'organization_id' => $orgId,
@@ -627,7 +629,7 @@ class CommandeVenteController extends Controller
         $oldSnapshot = $this->commandeSnapshot($vente);
 
         $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null);
-        [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $context->modeTarification);
+        [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $context->modeTarification, $context->categorieTarifaireVehicule);
 
         $vente->update([
             'vehicule_id' => $data['vehicule_id'] ?? null,
@@ -954,7 +956,7 @@ class CommandeVenteController extends Controller
             ->toArray();
     }
 
-    private function buildLignesDataAndTotal(array $lignes, ModeTarification $mode): array
+    private function buildLignesDataAndTotal(array $lignes, ModeTarification $mode, ?CategorieTarifaireVehicule $categorieTarifaire = null): array
     {
         $lignesData = [];
         $totalCommande = 0;
@@ -964,7 +966,7 @@ class CommandeVenteController extends Controller
             $produit = $variante->produit;
             $qte = (int) $ligne['qte'];
             $prixVente = (float) $ligne['prix_vente'];
-            $prixUsine = (float) ($variante->prix_usine ?? 0);
+            $prixUsine = (float) PrixUsineResolver::resolve($variante, $categorieTarifaire);
             $totalLigne = $qte * ($mode === ModeTarification::PRIX_VENTE ? $prixVente : $prixUsine);
 
             $lignesData[] = [

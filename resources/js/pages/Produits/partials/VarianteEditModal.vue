@@ -15,6 +15,7 @@ interface Variante {
     sku: string | null;
     code_barres: string | null;
     prix_usine: number | null;
+    prix_usine_tricycle: number | null;
     prix_vente: number | null;
     prix_achat: number | null;
     cout: number | null;
@@ -54,6 +55,7 @@ const localVisible = computed({
 const form = useForm({
     code_barres: null as string | null,
     prix_usine: null as number | null,
+    prix_usine_tricycle: null as number | null,
     prix_vente: null as number | null,
     prix_achat: null as number | null,
     cout: null as number | null,
@@ -69,6 +71,7 @@ watch(
         if (!v) return;
         form.code_barres = v.code_barres;
         form.prix_usine = v.prix_usine;
+        form.prix_usine_tricycle = v.prix_usine_tricycle;
         form.prix_vente = v.prix_vente;
         form.prix_achat = v.prix_achat;
         form.cout = v.cout;
@@ -162,7 +165,7 @@ function submit() {
 
             <div class="grid grid-cols-2 gap-4">
                 <div v-if="prixUsineRequis" class="space-y-1.5">
-                    <Label class="block">Prix usine</Label>
+                    <Label class="block">Prix usine — Autres véhicules</Label>
                     <InputNumber
                         v-model="form.prix_usine"
                         :min="0"
@@ -178,6 +181,18 @@ function submit() {
                     >
                         {{ form.errors.prix_usine }}
                     </p>
+                </div>
+
+                <div v-if="prixUsineRequis" class="space-y-1.5">
+                    <Label class="block">Prix usine — Tricycle</Label>
+                    <InputNumber
+                        v-model="form.prix_usine_tricycle"
+                        :min="0"
+                        :use-grouping="true"
+                        locale="fr-GN"
+                        class="w-full"
+                        input-class="w-full"
+                    />
                 </div>
 
                 <div class="space-y-1.5">

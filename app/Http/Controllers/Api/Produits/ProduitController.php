@@ -249,6 +249,7 @@ class ProduitController extends Controller
             'prix_vente' => $variante?->prix_vente,
             'prix_achat' => $variante?->prix_achat,
             'prix_usine' => $variante?->prix_usine,
+            'prix_usine_tricycle' => $variante?->prix_usine_tricycle,
             'cout' => $variante?->cout,
             'qte_stock' => $produit->qte_stock,
             'seuil_alerte_stock' => $produit->seuil_alerte_stock,

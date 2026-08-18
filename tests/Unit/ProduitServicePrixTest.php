@@ -94,6 +94,114 @@ class ProduitServicePrixTest extends TestCase
         }
     }
 
+    // ── Tarif tricycle : contrôlé indépendamment du tarif "autres véhicules" ────
+
+    public function test_fabricable_accepte_prix_usine_tricycle_valide(): void
+    {
+        $produit = $this->creer([
+            'type' => 'fabricable',
+            'prix_usine' => 5100,
+            'prix_usine_tricycle' => 5050,
+            'prix_vente' => 6000,
+        ]);
+
+        $this->assertSame(5050, $produit->variantes->first()->prix_usine_tricycle);
+    }
+
+    public function test_fabricable_refuse_si_prix_usine_tricycle_egal_au_prix_vente(): void
+    {
+        $this->expectException(ValidationException::class);
+
+        $this->creer([
+            'type' => 'fabricable',
+            'prix_usine' => 5100,
+            'prix_usine_tricycle' => 6000,
+            'prix_vente' => 6000,
+        ]);
+    }
+
+    public function test_fabricable_refuse_si_prix_usine_tricycle_superieur_au_prix_vente(): void
+    {
+        $this->expectException(ValidationException::class);
+
+        $this->creer([
+            'type' => 'fabricable',
+            'prix_usine' => 5100,
+            'prix_usine_tricycle' => 6100,
+            'prix_vente' => 6000,
+        ]);
+    }
+
+    /** Le tarif standard valide ne doit jamais masquer une marge tricycle invalide. */
+    public function test_fabricable_refuse_marge_tricycle_invalide_meme_si_marge_standard_valide(): void
+    {
+        try {
+            $this->creer([
+                'type' => 'fabricable',
+                'prix_usine' => 5100,
+                'prix_usine_tricycle' => 6000,
+                'prix_vente' => 6000,
+            ]);
+            $this->fail('ValidationException attendue : marge tricycle nulle.');
+        } catch (ValidationException $e) {
+            $this->assertArrayHasKey('prix_vente', $e->errors());
+        }
+    }
+
+    public function test_fabricable_sans_prix_usine_tricycle_reste_valide(): void
+    {
+        // Champ optionnel : une variante qui ne le renseigne pas n'est jamais bloquée pour
+        // autant (cf. PrixUsineResolver, repli sur prix_usine).
+        $produit = $this->creer([
+            'type' => 'fabricable',
+            'prix_usine' => 5100,
+            'prix_vente' => 6000,
+        ]);
+
+        $this->assertNull($produit->variantes->first()->prix_usine_tricycle);
+    }
+
+    public function test_achat_vente_nimpose_aucune_regle_sur_prix_usine_tricycle(): void
+    {
+        // champPrixReference() = 'prix_achat' pour ACHAT_VENTE : prix_usine_tricycle n'a pas de
+        // sens ici, jamais forcé même si renseigné à une valeur incohérente.
+        $produit = $this->creer([
+            'type' => 'achat_vente',
+            'prix_achat' => 100000,
+            'prix_usine_tricycle' => 999999,
+            'prix_vente' => 120000,
+        ]);
+
+        $this->assertSame(120000, $produit->variantes->first()->prix_vente);
+    }
+
+    public function test_deux_variantes_ont_des_tarifs_tricycle_totalement_independants(): void
+    {
+        $produit = $this->service->creer([
+            'organization_id' => $this->org->id,
+            'nom' => 'Eau en bouteille',
+            'produit_type_id' => $this->typeId('fabricable'),
+            'statut' => 'actif',
+            'prix_usine' => 15000,
+            'prix_usine_tricycle' => 14700,
+            'prix_vente' => 17000,
+            'options' => [
+                ['nom' => 'Contenance', 'valeurs' => ['350ml', '500ml']],
+            ],
+        ])->fresh(['variantes']);
+
+        $variante350 = $produit->variantes->first();
+        $variante500 = $produit->variantes->last();
+
+        $variante500->update(['prix_usine' => 18000, 'prix_usine_tricycle' => 17500, 'prix_vente' => 20000]);
+
+        $variante350->refresh();
+        $variante500->refresh();
+
+        $this->assertSame(14700, $variante350->prix_usine_tricycle);
+        $this->assertSame(17500, $variante500->prix_usine_tricycle);
+    }
+
     // ── ACHAT_VENTE ───────────────────────────────────────────────────────────
 
     public function test_achat_vente_accepte_prix_vente_superieur_au_prix_achat(): void
