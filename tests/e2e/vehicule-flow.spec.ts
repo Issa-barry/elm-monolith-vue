@@ -355,9 +355,10 @@ test('création — capacités maximales de chargement saisies dans le formulair
     await expect(page.getByText(nomCategorie).last()).toBeVisible({
         timeout: 5_000,
     });
-    await expect(page.locator('body')).toContainText('1700', {
-        timeout: 5_000,
-    });
+    // La ligne reste éditable inline (pas de promotion en <span> texte comme dans l'ancien
+    // workflow à confirmation) — la valeur ne vit que dans l'attribut `value` de l'input
+    // PrimeVue, jamais dans le textContent du body, d'où l'assertion sur l'input lui-même.
+    await expect(capaciteMaxInput).toHaveValue('1700', { timeout: 5_000 });
 
     // Étape 3 : soumission unique du véhicule (identité + capacité ensemble).
     await page
