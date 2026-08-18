@@ -15,7 +15,7 @@ export interface VehiculeOption {
     livraison_vente?: boolean;
     livraison_logistique?: boolean;
     is_active?: boolean;
-    capacite_packs: number | null;
+    capacites: { categorie_nom: string; capacite_max: number }[];
     photo_url: string | null;
 }
 
@@ -30,7 +30,6 @@ export interface DashboardFiltersPayload {
 export interface TypeVehiculeOption {
     value: string;
     label: string;
-    capacite_defaut: number;
 }
 
 export interface EarningsPayload {

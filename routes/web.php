@@ -161,8 +161,9 @@ Route::get('/', function (Request $request) {
 Route::get('/sitemap.xml', SitemapController::class)->name('sitemap');
 
 // ── Onboarding du premier site (post-connexion) ────────────────────────────────
-// Hors du groupe 'require.site' (par construction : c'est justement l'absence de site
-// organisation qui amène ici, cf. EnsureOrganizationHasSite) mais toujours authentifié.
+// Hors du groupe 'org.site.required' (par construction : c'est justement l'absence de site
+// organisation qui amène ici, cf. EnsureOrganizationHasSite — l'appliquer ici créerait une
+// boucle de redirection) mais toujours authentifié.
 Route::middleware(['auth', 'account.active'])->prefix('onboarding')->name('onboarding.')->group(function () {
     Route::get('site', [OnboardingSiteController::class, 'show'])->name('site.show');
     Route::post('site', [OnboardingSiteController::class, 'store'])->name('site.store');
@@ -171,10 +172,10 @@ Route::middleware(['auth', 'account.active'])->prefix('onboarding')->name('onboa
 // ── Espace staff (back-office) ──────────────────────────────────────────────
 Route::prefix('backoffice')->group(function () {
     Route::get('dashboard', [DashboardController::class, 'index'])
-        ->middleware(['auth', 'account.active', 'password.not-expired', 'verified', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'require.site'])
+        ->middleware(['auth', 'account.active', 'password.not-expired', 'verified', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'org.site.required', 'require.site'])
         ->name('dashboard');
 
-    Route::middleware(['auth', 'account.active', 'password.not-expired', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'require.site'])->group(function () {
+    Route::middleware(['auth', 'account.active', 'password.not-expired', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'org.site.required', 'require.site'])->group(function () {
 
         // Messages de contact
         Route::get('contact-messages/unread-count', [ContactController::class, 'unreadCount'])->name('contact-messages.unread-count');
@@ -266,7 +267,6 @@ Route::prefix('backoffice')->group(function () {
             });
 
             Route::resource('type-vehicules', TypeVehiculeController::class)->except(['show']);
-            Route::put('type-vehicules/{typeVehicule}/capacites', [TypeVehiculeController::class, 'syncCapacites'])->name('type-vehicules.capacites.sync');
             Route::resource('vehicules', VehiculeController::class);
             Route::post('vehicules/{vehicule}/frais', [VehiculeController::class, 'storeFrais'])->name('vehicules.frais.store');
             Route::patch('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'updateFrais'])->name('vehicules.frais.update');
@@ -610,8 +610,8 @@ Route::middleware(['auth', 'role:client|proprietaire|livreur', 'active.livreur']
 });
 
 // ── Mot de passe provisoire (cf. app:install / must_change_password) ──────────
-// Volontairement hors du groupe backoffice ('role:...', 'require.site') : un compte tout
-// juste créé doit pouvoir définir son mot de passe avant même d'avoir un site rattaché.
+// Volontairement hors du groupe backoffice ('role:...', 'org.site.required', 'require.site') :
+// un compte tout juste créé doit pouvoir définir son mot de passe avant même d'avoir un site rattaché.
 Route::middleware(['auth', 'account.active'])->group(function () {
     Route::get('password/force-change', [ForcePasswordChangeController::class, 'show'])->name('password.force-change');
     Route::post('password/force-change', [ForcePasswordChangeController::class, 'update'])->name('password.force-change.update');

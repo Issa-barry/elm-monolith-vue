@@ -122,6 +122,17 @@ class PaiementCommissionVenteTest extends TestCase
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('admin_entreprise');
 
+        // Une organisation sans aucun site force l'onboarding pour tout rôle staff (cf.
+        // AuthRedirects::needsOnboarding, middleware EnsureOrganizationHasSite) : sans site,
+        // cette requête serait redirigée avant même d'atteindre le contrôleur testé.
+        $site = Site::create([
+            'organization_id' => $org->id,
+            'nom' => 'Site Test',
+            'type' => 'depot',
+            'localisation' => 'Conakry',
+        ]);
+        $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
+
         $this->actingAs($user)->post(
             route('commissions.beneficiaires.paiements.store', ['type' => 'livreur', 'beneficiaireId' => 'some-id']),
             ['montant' => 100, 'mode_paiement' => 'especes']

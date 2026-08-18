@@ -43,9 +43,13 @@ const subtitle = computed(() => {
     return roleLabel.value;
 });
 
+// site.label est calculé côté serveur (Site::getLabelAttribute(), via
+// HandleInertiaRequests::defaultSite()) — source unique pour éviter qu'un site déjà
+// auto-descriptif (ex: "Usine de Matoto", généré par SiteNamingService à l'onboarding) ne soit
+// re-préfixé ici en "Usine de Usine de Matoto".
 const siteLabel = computed(() => {
     const site = page.props.auth.default_site;
-    return site ? `${site.type_label} de ${site.nom}` : 'Aucun site affecté';
+    return site ? site.label : 'Aucun site affecté';
 });
 </script>
 

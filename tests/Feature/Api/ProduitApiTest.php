@@ -6,6 +6,7 @@ use App\Models\Fournisseur;
 use App\Models\Organization;
 use App\Models\Produit;
 use App\Models\ProduitType;
+use App\Models\VarianteStock;
 use App\Services\ProduitService;
 use Database\Seeders\ProduitTypeDefaultSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -410,6 +411,8 @@ class ProduitApiTest extends TestCase
     {
         Sanctum::actingAs($this->user, ['*']);
 
+        // qte_stock=50 est un agrégat legacy, jamais ventilé par site (aucune ligne
+        // VarianteStock) : le site de l'utilisateur démarre à 0, il n'hérite jamais du legacy.
         $produit = $this->makeProduit($this->org, ['qte_stock' => 50]);
 
         $this->postJson(route('api.backoffice.produits.ajuster-stock', $produit), [
@@ -417,19 +420,19 @@ class ProduitApiTest extends TestCase
             'motif_type' => 'apres_production',
         ])
             ->assertOk()
-            ->assertJsonFragment(['qte_stock' => 70]);
+            ->assertJsonFragment(['qte_stock' => 20]);
 
         $this->assertDatabaseHas('produits', [
             'id' => $produit->id,
-            'qte_stock' => 70,
+            'qte_stock' => 20,
         ]);
 
         $this->assertDatabaseHas('mouvements_stock', [
             'produit_variante_id' => $this->varianteId($produit),
             'type' => 'entree',
             'quantite' => 20,
-            'stock_avant' => 50,
-            'stock_apres' => 70,
+            'stock_avant' => 0,
+            'stock_apres' => 20,
         ]);
     }
 
@@ -437,7 +440,13 @@ class ProduitApiTest extends TestCase
     {
         Sanctum::actingAs($this->user, ['*']);
 
-        $produit = $this->makeProduit($this->org, ['qte_stock' => 50]);
+        $produit = $this->makeProduit($this->org, ['qte_stock' => 0]);
+        VarianteStock::create([
+            'organization_id' => $this->org->id,
+            'produit_variante_id' => $this->varianteId($produit),
+            'site_id' => $this->user->sites()->first()->id,
+            'qte_stock' => 50,
+        ]);
 
         $this->postJson(route('api.backoffice.produits.ajuster-stock', $produit), [
             'diminuer' => 15,

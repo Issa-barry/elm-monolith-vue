@@ -20,6 +20,8 @@ export interface InstallScenario {
     email?: string;
     password: string;
     domaineLabel: string;
+    /** Libellé exact de l'option à choisir dans le Select "Type de site" (ex: "Siège", "Usine"). */
+    siteTypeLabel: string;
     siteVille: string;
     siteQuartier: string;
 }
@@ -147,7 +149,11 @@ export async function loginAfterInstall(
     await expect(page).toHaveURL(/\/onboarding\/site/, { timeout: 20_000 });
 }
 
-/** Onboarding minimal (type + ville + quartier) → dashboard. */
+/**
+ * Onboarding minimal (type + ville + quartier) → dashboard. Sélectionne explicitement le type
+ * demandé (scenario.siteTypeLabel) plutôt que la première option, pour pouvoir ensuite vérifier
+ * le nom généré automatiquement ("{Type} de {Quartier}", cf. SiteNamingService::generateName()).
+ */
 export async function completeOnboarding(
     page: Page,
     scenario: InstallScenario,
@@ -157,7 +163,9 @@ export async function completeOnboarding(
     ).toBeVisible({ timeout: 15_000 });
 
     await page.getByRole('combobox').first().click();
-    await page.getByRole('option').first().click();
+    await page
+        .getByRole('option', { name: new RegExp(`^${scenario.siteTypeLabel}`, 'i') })
+        .click();
 
     await page.locator('#site-ville').fill(scenario.siteVille);
     await page.locator('#site-quartier').fill(scenario.siteQuartier);
@@ -165,6 +173,15 @@ export async function completeOnboarding(
     await page.getByRole('button', { name: /terminer et accéder à elm/i }).click();
 
     await expect(page).toHaveURL(/\/backoffice\/dashboard/, { timeout: 20_000 });
+
+    // Le nom généré automatiquement doit apparaître tel quel dans le bloc utilisateur du menu
+    // latéral (UserInfo.vue), sans le type dupliqué (ex: jamais "Usine de Usine de Matoto") —
+    // cf. Site::getLabelAttribute().
+    await expect(
+        page.getByText(`${scenario.siteTypeLabel} de ${scenario.siteQuartier}`, {
+            exact: true,
+        }),
+    ).toBeVisible({ timeout: 10_000 });
 }
 
 export { fillOtpCode, fillStep2Form, OTP_FIXED_CODE };

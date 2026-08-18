@@ -6,6 +6,9 @@ use App\Models\Categorie;
 use App\Models\Organization;
 use App\Models\Produit;
 use App\Models\ProduitType;
+use App\Models\Proprietaire;
+use App\Models\TypeVehicule;
+use App\Models\Vehicule;
 use Database\Seeders\ProduitTypeDefaultSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Concerns\HasAdminSetup;
@@ -198,6 +201,34 @@ class CategorieTest extends TestCase
             'nom' => 'Produit',
             'produit_type_id' => ProduitType::where('organization_id', $this->org->id)->where('code', 'service')->value('id'),
             'statut' => 'actif',
+        ]);
+
+        $this->actingAs($this->user)
+            ->delete(route('produits.categories.destroy', $categorie))
+            ->assertSessionHasErrors('delete');
+
+        $this->assertDatabaseHas('categories', ['id' => $categorie->id, 'deleted_at' => null]);
+    }
+
+    /**
+     * Une catégorie utilisée comme référence de capacité véhicule (vehicule_capacites) ne
+     * peut pas être supprimée — même garde-fou que "utilisée par un produit" ci-dessus, cf.
+     * Categorie::getIsUsedAttribute() et VehiculeCapaciteService.
+     */
+    public function test_destroy_refuse_si_categorie_utilisee_par_une_capacite_vehicule(): void
+    {
+        $categorie = $this->makeCategorie($this->org);
+        $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id]);
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'type_vehicule_id' => $type->id,
+            'proprietaire_id' => $proprietaire->id,
+        ]);
+        $vehicule->capacites()->create([
+            'organization_id' => $this->org->id,
+            'categorie_id' => $categorie->id,
+            'capacite_max' => 100,
         ]);
 
         $this->actingAs($this->user)

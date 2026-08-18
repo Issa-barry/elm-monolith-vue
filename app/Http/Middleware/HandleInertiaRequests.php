@@ -206,6 +206,7 @@ class HandleInertiaRequests extends Middleware
             'nom' => $site->nom,
             'type' => $site->type instanceof \BackedEnum ? $site->type->value : (string) $site->type,
             'type_label' => $site->type_label,
+            'label' => $site->label,
         ];
     }
 

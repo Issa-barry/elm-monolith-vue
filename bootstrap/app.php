@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureAccountIsActive;
+use App\Http\Middleware\EnsureOrganizationHasSite;
 use App\Http\Middleware\EnsurePasswordIsNotExpired;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
@@ -64,6 +65,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => RoleMiddleware::class,
             'module' => RequireModuleEnabled::class,
             'require.site' => RequireSiteAssigned::class,
+            'org.site.required' => EnsureOrganizationHasSite::class,
             'active.livreur' => RequireActiveLivreur::class,
             'account.active' => EnsureAccountIsActive::class,
             'password.not-expired' => EnsurePasswordIsNotExpired::class,

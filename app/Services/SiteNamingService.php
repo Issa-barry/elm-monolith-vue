@@ -3,37 +3,30 @@
 namespace App\Services;
 
 use App\Enums\SiteType;
-use App\Models\Site;
 
 /**
- * Nom généré automatiquement pour un site — "Type N Quartier" (ex: "Boutique 2 Kipé"),
- * numéroté par type au sein d'une même organisation. Utilisé par l'onboarding du premier site
- * (cf. InstallationService::creerPremierSite()), qui ne demande plus de nom à l'utilisateur.
+ * Nom généré automatiquement pour le premier site d'une organisation — "Type de Quartier" (ex:
+ * "Usine de Matoto"), utilisé par l'onboarding du premier site (cf.
+ * InstallationService::creerPremierSite()), qui ne demande plus de nom à l'utilisateur.
  *
- * Le préfixe de nommage vient du premier segment du label affiché (`SiteType::label()`),
- * pas du label complet : "Boutique / Point de vente" doit donner "Boutique 1 ...", pas
- * "Boutique / Point de vente 1 ...". Aucune liste de types dupliquée — toujours la même
- * source de vérité que le reste de l'application.
+ * Aucune numérotation : `sites.nom` n'a pas de contrainte d'unicité en base (seul `code`, généré
+ * séparément par Site::boot(), l'a) et le seul appelant actuel ne peut de toute façon créer qu'un
+ * seul site par organisation (gardé par EnsureOrganizationHasSite) — un numéro visible n'aurait
+ * donc aucune nécessité métier ici.
+ *
+ * Le nom généré est auto-descriptif ("Usine de Matoto") : voir Site::getLabelAttribute(), qui
+ * évite de re-préfixer le type par-dessus pour l'affichage (sites nommés manuellement, eux,
+ * restent un simple libellé court comme "Matoto").
  */
 class SiteNamingService
 {
-    public function nextName(string $organizationId, SiteType $type, string $quartier): string
+    public function generateName(SiteType $type, string $quartier): string
     {
+        // "Boutique / Point de vente" doit donner "Boutique de ...", pas "Boutique / Point de
+        // vente de ..." — même préfixe que Site::getLabelAttribute(), aucune liste de types
+        // dupliquée (toujours SiteType::label() comme source de vérité).
         $prefixe = explode(' / ', $type->label())[0];
-        $quartier = trim($quartier);
 
-        $numero = Site::where('organization_id', $organizationId)->where('type', $type->value)->count() + 1;
-        $nom = "{$prefixe} {$numero} {$quartier}";
-
-        // Filet best-effort (même principe que Site::boot() pour son `code`) : couvre le cas
-        // d'un site déjà nommé manuellement à l'identique, sans prétendre à une garantie
-        // transactionnelle stricte — le seul appelant actuel (onboarding du tout premier site)
-        // ne peut de toute façon jamais s'exécuter deux fois pour la même organisation.
-        while (Site::where('organization_id', $organizationId)->where('nom', $nom)->exists()) {
-            $numero++;
-            $nom = "{$prefixe} {$numero} {$quartier}";
-        }
-
-        return $nom;
+        return "{$prefixe} de ".trim($quartier);
     }
 }

@@ -18,6 +18,11 @@ interface DomaineOption {
 
 const props = defineProps<{
     domaines: DomaineOption[];
+    // Dérivé de InstallationService::isSaas() (InstallWizardController::show()) — jamais une
+    // deuxième interprétation du mode côté frontend. En on_premise, l'email devient obligatoire ;
+    // en saas il reste facultatif. Purement UX ici : la règle réelle est appliquée côté serveur
+    // (InstallWizardController::store() + InstallationService::install()).
+    isSaas: boolean;
 }>();
 
 // ELM n'est pour l'instant utilisable que depuis ces deux pays (cf. PhoneCountryInput) — une
@@ -127,6 +132,13 @@ const step2Phase = ref<Step2Phase>('form');
 
 const emailIsValidFormat = computed(() =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.admin.email.trim()),
+);
+// En on_premise, un email vide n'est jamais valide (obligatoire) ; en saas, vide est accepté
+// (facultatif) et seul un email réellement saisi doit avoir un format valide.
+const emailMeetsRequirement = computed(() =>
+    props.isSaas
+        ? form.admin.email.trim().length === 0 || emailIsValidFormat.value
+        : emailIsValidFormat.value,
 );
 const emailVerified = ref(false);
 const emailVerifiedFor = ref<string | null>(null);
@@ -276,7 +288,7 @@ const step2FormValid = computed(
         form.admin.nom.trim().length > 0 &&
         phoneInfo.value !== null &&
         form.admin.password.length > 0 &&
-        (form.admin.email.trim().length === 0 || emailIsValidFormat.value),
+        emailMeetsRequirement.value,
 );
 
 /**
@@ -472,7 +484,13 @@ function submit() {
                     </div>
 
                     <div class="grid gap-2">
-                        <Label for="admin-email">Email (facultatif)</Label>
+                        <Label for="admin-email"
+                            >Email
+                            <span v-if="!isSaas" class="text-destructive"
+                                >*</span
+                            >
+                            <template v-else> (facultatif)</template></Label
+                        >
                         <Input
                             id="admin-email"
                             v-model="form.admin.email"

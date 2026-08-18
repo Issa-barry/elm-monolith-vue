@@ -57,9 +57,12 @@ const displayName = computed(() => {
     return fullName || user.value?.name?.trim() || 'Utilisateur';
 });
 
+// site.label est calculé côté serveur (Site::getLabelAttribute()) — même source que
+// UserInfo.vue, pour que tous les écrans affichent le même nom sans reconstruire la
+// concaténation "{type} de {nom}" ici (risque de doublon avec un nom déjà auto-descriptif).
 const displaySite = computed(() => {
     if (!defaultSite.value) return 'Aucun site affecté';
-    return `${defaultSite.value.type_label} de ${defaultSite.value.nom}`;
+    return defaultSite.value.label;
 });
 
 const initials = computed(() =>

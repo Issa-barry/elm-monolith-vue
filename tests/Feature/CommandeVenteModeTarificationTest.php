@@ -56,18 +56,14 @@ class CommandeVenteModeTarificationTest extends TestCase
         );
     }
 
-    private function makeVehicule(int $capacite = 100): Vehicule
+    private function makeVehicule(): Vehicule
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
 
-        $vehicule = Vehicule::factory()->create([
+        return Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
         ]);
-        // Capacité portée par le type (décision produit du 16/08/2026), jamais le véhicule.
-        $vehicule->typeVehicule->update(['capacite_defaut' => $capacite]);
-
-        return $vehicule;
     }
 
     // ── store : total selon le contexte (véhicule / client partenaire) ──────

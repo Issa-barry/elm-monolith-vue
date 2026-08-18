@@ -83,11 +83,24 @@ class Categorie extends Model
         return $this->hasMany(Produit::class, 'categorie_id');
     }
 
+    /**
+     * Plafond de chargement configuré sur un véhicule pour cette catégorie — voir
+     * VehiculeCapaciteService. Une catégorie du catalogue peut servir à la fois de
+     * classification produit et de référence de capacité ; les deux usages partagent
+     * volontairement le même champ, il n'existe plus de notion de "groupe de capacité".
+     */
+    public function vehiculeCapacites(): HasMany
+    {
+        return $this->hasMany(VehiculeCapacite::class, 'categorie_id');
+    }
+
     // ── Accesseurs ────────────────────────────────────────────────────────────
 
     public function getIsUsedAttribute(): bool
     {
-        return $this->produits()->exists() || $this->enfants()->exists();
+        return $this->produits()->exists()
+            || $this->enfants()->exists()
+            || $this->vehiculeCapacites()->exists();
     }
 
     /**
