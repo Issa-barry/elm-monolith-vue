@@ -27,6 +27,7 @@ const scenario = {
     email: 'aminata2.e2e@gmail.com',
     password: 'Sup3r$ecretPwd99',
     domaineLabel: 'Commerce',
+    siteTypeLabel: 'Siège',
     siteVille: 'Conakry',
     siteQuartier: 'Kipé',
 };

@@ -39,7 +39,6 @@ interface VehiculeOption {
     id: string;
     nom_vehicule: string;
     immatriculation: string;
-    capacite_packs: number | null;
     livreur_nom: string | null;
     livreur_telephone: string | null;
     display?: string;
@@ -912,16 +911,6 @@ function submit(action: 'encaisser' | 'commande'): void {
                                                 <span class="font-mono">{{
                                                     option.immatriculation
                                                 }}</span>
-                                                <span
-                                                    v-if="
-                                                        option.capacite_packs !==
-                                                        null
-                                                    "
-                                                >
-                                                    -
-                                                    {{ option.capacite_packs }}
-                                                    packs
-                                                </span>
                                                 <span v-if="option.livreur_nom">
                                                     - {{ option.livreur_nom }}
                                                 </span>

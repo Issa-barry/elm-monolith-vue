@@ -110,7 +110,8 @@ class OnboardingSiteTest extends TestCase
 
     /**
      * Le nom n'est plus saisi pendant l'onboarding : généré automatiquement (cf.
-     * SiteNamingService) — "Siège 1 Matoto" pour le tout premier site d'une organisation.
+     * SiteNamingService::generateName()) — "Siège de Matoto" ("{Type} de {Quartier}"), jamais
+     * numéroté (aucune contrainte d'unicité réelle sur `sites.nom`, cf. docblock du service).
      */
     public function test_le_nom_du_site_est_genere_automatiquement(): void
     {
@@ -122,7 +123,8 @@ class OnboardingSiteTest extends TestCase
         ]);
 
         $site = Site::where('organization_id', $user->organization_id)->firstOrFail();
-        $this->assertSame('Siège 1 Matoto', $site->nom);
+        $this->assertSame('Siège de Matoto', $site->nom);
+        $this->assertNotSame('Siège de Siège Matoto', $site->nom);
     }
 
     /**

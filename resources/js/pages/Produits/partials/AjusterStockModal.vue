@@ -163,6 +163,25 @@ const motifOptions = computed(() => {
 
 const isAutre = computed(() => form.motif_type === 'autre');
 
+// Motif obligatoire : le type doit être renseigné, et si "autre" est sélectionné,
+// le détail ne peut pas être vide ou composé uniquement d'espaces (miroir de la
+// validation backend, cf. ProduitController::ajusterStock()).
+const motifValide = computed(() => {
+    if (!form.motif_type) return false;
+    if (form.motif_type === 'autre') return form.motif_detail.trim().length > 0;
+    return true;
+});
+
+// Validité globale du formulaire — centralisée ici plutôt que dispersée dans le
+// :disabled du bouton, pour ne jamais oublier une condition en ajoutant un champ.
+const formValide = computed(
+    () =>
+        !!form.site_id &&
+        (!aPlusieursVariantes.value || !!form.variante_id) &&
+        (!!form.augmenter || !!form.diminuer) &&
+        motifValide.value,
+);
+
 const stockActuel = computed(() => {
     if (!form.site_id) return props.produit.qte_stock ?? 0;
 
@@ -232,6 +251,10 @@ function formatNum(val: number): string {
 }
 
 function submit() {
+    if (form.processing || !formValide.value) return;
+
+    form.motif_detail = form.motif_detail.trim();
+
     form.post(`/backoffice/produits/${props.produit.id}/ajuster-stock`, {
         preserveScroll: true,
         onSuccess: () => close(),
@@ -495,12 +518,7 @@ function submit() {
                 <Button variant="outline" @click="close">Annuler</Button>
                 <Button
                     data-testid="stock-submit-button"
-                    :disabled="
-                        form.processing ||
-                        !form.site_id ||
-                        (aPlusieursVariantes && !form.variante_id) ||
-                        (!form.augmenter && !form.diminuer)
-                    "
+                    :disabled="form.processing || !formValide"
                     @click="submit"
                 >
                     Valider

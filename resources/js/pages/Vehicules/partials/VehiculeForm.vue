@@ -8,6 +8,10 @@ import AutoComplete from 'primevue/autocomplete';
 import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
 import { computed, ref, watch } from 'vue';
+import CapacitesEditor, {
+    type CapaciteRow,
+    type CategorieOption,
+} from './CapacitesEditor.vue';
 
 interface Option {
     value: number | string;
@@ -18,8 +22,6 @@ interface Option {
 interface TypeOption {
     value: string;
     label: string;
-    capacite_defaut: number;
-    capacite_defaut_bouteilles: number | null;
 }
 
 interface SiteOption {
@@ -27,7 +29,12 @@ interface SiteOption {
     nom: string;
 }
 
-interface CategorieOption {
+/**
+ * Propriété du véhicule (interne/partenaire) — sans rapport avec les Catégorie du catalogue
+ * produit utilisées comme référence de capacité (prop categoriesProduit ci-dessous). Nom
+ * distinct délibéré pour éviter toute confusion entre les deux notions.
+ */
+interface CategorieVehiculeOption {
     value: string;
     label: string;
 }
@@ -43,6 +50,7 @@ interface FormData {
     livraison_logistique: boolean;
     photo: File | null;
     is_active: boolean;
+    capacites: CapaciteRow[];
 }
 
 const props = defineProps<{
@@ -51,7 +59,8 @@ const props = defineProps<{
     processing: boolean;
     proprietaires: Option[];
     types: TypeOption[];
-    categoriesVehicule: CategorieOption[];
+    categoriesVehicule: CategorieVehiculeOption[];
+    categoriesProduit: CategorieOption[];
     photoUrl?: string | null;
     sites: SiteOption[];
     canChangeSite: boolean;
@@ -94,10 +103,6 @@ function removePhoto() {
 
 const currentSiteName = computed(
     () => props.sites.find((s) => s.id === props.form.site_id)?.nom ?? '—',
-);
-
-const selectedType = computed(() =>
-    props.types.find((t) => t.value === props.form.type_vehicule_id),
 );
 
 // ── AutoComplete : Propriétaire — toujours facultatif, pré-rempli par défaut
@@ -472,41 +477,22 @@ function handleSubmit() {
                         {{ errors.type_vehicule_id }}
                     </p>
                 </div>
-
-                <div class="sm:col-span-2">
-                    <Label class="mb-1.5 block">Capacité</Label>
-                    <p
-                        v-if="selectedType"
-                        class="rounded-lg border bg-muted/30 px-3 py-2 text-sm text-muted-foreground"
-                    >
-                        {{ selectedType.capacite_defaut }} sachets
-                        <template
-                            v-if="selectedType.capacite_defaut_bouteilles"
-                        >
-                            · {{ selectedType.capacite_defaut_bouteilles }}
-                            bouteilles
-                        </template>
-                    </p>
-                    <p
-                        v-else
-                        class="rounded-lg border bg-muted/30 px-3 py-2 text-sm text-muted-foreground"
-                    >
-                        Choisir un type pour voir sa capacité.
-                    </p>
-                    <p class="mt-1 text-xs text-muted-foreground">
-                        Définie sur le type de véhicule, pas ici —
-                        <Link
-                            href="/backoffice/type-vehicules"
-                            class="underline"
-                            >gérer les types</Link
-                        >.
-                    </p>
-                </div>
             </div>
         </div>
 
+        <!-- Capacités de chargement -->
+        <div class="order-4">
+            <CapacitesEditor
+                :model-value="form.capacites"
+                :categories-produit="categoriesProduit"
+                @update:model-value="
+                    $emit('update:form', { ...form, capacites: $event })
+                "
+            />
+        </div>
+
         <!-- Photo -->
-        <div class="order-4 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+        <div class="order-5 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
                 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
             >
@@ -566,7 +552,7 @@ function handleSubmit() {
         </div>
 
         <!-- Statut -->
-        <div class="order-5 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+        <div class="order-6 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
                 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
             >
@@ -607,7 +593,7 @@ function handleSubmit() {
         </div>
 
         <!-- Pied de page -->
-        <div class="order-6 hidden items-center justify-between sm:flex">
+        <div class="order-7 hidden items-center justify-between sm:flex">
             <a href="/backoffice/vehicules">
                 <Button type="button" variant="outline">Retour</Button>
             </a>
@@ -620,6 +606,6 @@ function handleSubmit() {
                 {{ processing ? 'Enregistrement…' : 'Enregistrer' }}
             </Button>
         </div>
-        <div class="order-7 h-20 sm:hidden" />
+        <div class="order-8 h-20 sm:hidden" />
     </form>
 </template>

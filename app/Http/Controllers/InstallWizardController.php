@@ -50,6 +50,11 @@ class InstallWizardController extends Controller
 
         return Inertia::render('Install/Wizard', [
             'domaines' => DomaineActivite::options(),
+            // Dérivé de InstallationService::isSaas() (config('app.deployment_mode')) — jamais une
+            // deuxième interprétation du mode côté frontend : le backend reste la seule source de
+            // vérité, ce booléen n'est qu'un affichage/UX (email obligatoire ou non), la validation
+            // réelle est de toute façon revalidée par InstallationService::install().
+            'isSaas' => $this->service->isSaas(),
         ]);
     }
 
@@ -167,7 +172,10 @@ class InstallWizardController extends Controller
             'admin.prenom' => 'required|string|max:100',
             'admin.nom' => 'required|string|max:100',
             'admin.telephone' => 'required|string',
-            'admin.email' => 'nullable|email:rfc,dns|max:255',
+            // Obligatoire en on_premise, facultatif en saas — même règle appliquée en aval par
+            // InstallationService::install() (seule source de vérité, revalidée indépendamment de
+            // cette règle-ci qui ne sert qu'à renvoyer une erreur tôt, avec le bon message).
+            'admin.email' => [$this->service->isSaas() ? 'nullable' : 'required', 'email:rfc,dns', 'max:255'],
             'admin.password' => 'required|string',
             // Le mot de passe est saisi une seule fois (pas de champ de confirmation dans le
             // formulaire) — `nullable` seulement pour ne pas casser un éventuel appel API qui en

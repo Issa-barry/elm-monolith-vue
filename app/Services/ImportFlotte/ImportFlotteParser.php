@@ -4,6 +4,7 @@ namespace App\Services\ImportFlotte;
 
 use App\Enums\CategorieVehicule;
 use App\Enums\TypeImportFlotte;
+use App\Models\Categorie;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
@@ -66,9 +67,19 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
  * valeur déjà enregistrée plutôt que de la remettre à "non" — un import ne doit jamais
  * effacer silencieusement un usage déjà configuré. Ceci dit, l'exécuteur
  * (ImportFlotteExecutor) ne réécrit de toute façon aucun champ d'un véhicule déjà
- * existant : cette ligne ne sert alors que d'ancrage pour ses livreurs/son équipe, comme
+ * existant (sauf la capacité, seule exception délibérée — voir son docblock de classe) :
+ * cette ligne ne sert alors que d'ancrage pour ses livreurs/son équipe, comme
  * documenté plus haut — le repli ci-dessus ne fait que garder l'aperçu cohérent avec ce
  * qui sera réellement appliqué.
+ *
+ * Capacité (colonnes vehicule_capacite_sachets / vehicule_capacite_bouteilles) : une valeur
+ * saisie devient une capacité maximale propre à ce véhicule dans vehicule_capacites, résolue
+ * contre la Categorie "Sachet eau"/"Bouteille" du catalogue produit de l'organisation (cf.
+ * CATEGORIE_SACHETS_NOM / CATEGORIE_BOUTEILLES_NOM, resoudreCategoriesCapacite()) — appliquée
+ * aussi bien à la création qu'à un véhicule déjà existant, contrairement au reste de la ligne.
+ * Aucun héritage depuis le type de véhicule : la capacité appartient exclusivement au véhicule
+ * (cf. VehiculeCapaciteService). Il n'existe plus de notion intermédiaire de "groupe de
+ * capacité" — la catégorie du catalogue produit EST directement la référence de capacité.
  */
 class ImportFlotteParser
 {
@@ -84,6 +95,18 @@ class ImportFlotteParser
      * centaines de lignes par import — 500 laisse une bonne marge.
      */
     private const MAX_LIGNES = 500;
+
+    /**
+     * Convention du gabarit Excel "flotte" ELM : les colonnes vehicule_capacite_sachets /
+     * vehicule_capacite_bouteilles ciblent la Categorie du catalogue produit portant ce nom
+     * exact dans l'organisation (comparaison insensible à la casse/espaces, cf.
+     * resoudreCategoriesCapacite()) — c'est une convention de CE gabarit, pas une notion codée
+     * en dur dans le moteur de capacité générique (VehiculeCapaciteService), qui ne raisonne
+     * qu'en categorie_id.
+     */
+    private const CATEGORIE_SACHETS_NOM = 'Sachet eau';
+
+    private const CATEGORIE_BOUTEILLES_NOM = 'Bouteille';
 
     public function analyser(string $absolutePath, string $organizationId, TypeImportFlotte $type = TypeImportFlotte::FLOTTE): array
     {
@@ -118,6 +141,7 @@ class ImportFlotteParser
         // tout le fichier pour ne le proposer en création qu'une seule fois —
         // voir resoudreProprietaire().
         $telephonesProprietairesVus = [];
+        [$categorieSachetsId, $categorieBouteillesId] = $this->resoudreCategoriesCapacite($organizationId);
 
         // Une même immatriculation ne doit apparaître qu'une seule fois dans
         // la feuille "vehicules" (contrairement au propriétaire, un véhicule
@@ -151,7 +175,7 @@ class ImportFlotteParser
                 continue;
             }
 
-            $groupes[] = $this->analyserGroupe($immat, $index + 2, $ligneVehicule, $lignesLivreursGroupe, $organizationId, $telephonesProprietairesVus);
+            $groupes[] = $this->analyserGroupe($immat, $index + 2, $ligneVehicule, $lignesLivreursGroupe, $organizationId, $telephonesProprietairesVus, $categorieSachetsId, $categorieBouteillesId);
         }
 
         // Lignes de la feuille "livreurs" dont l'immatriculation n'existe dans
@@ -269,10 +293,14 @@ class ImportFlotteParser
                     'nom_vehicule' => $vehicule->nom_vehicule,
                     // Champs de création non applicables (véhicule déjà en base, jamais
                     // recréé/modifié dans ce mode) — jamais lus par ImportFlotteExecutor
-                    // quand existe=true.
+                    // quand existe=true. capacite_packs/capacite_bouteilles à null : ce mode
+                    // (une seule feuille "livreurs") ne lit jamais de colonne de capacité, donc
+                    // ImportFlotteExecutor ne touchera à aucune capacité pour ces groupes.
                     'type_vehicule_id' => null,
                     'capacite_packs' => null,
                     'capacite_bouteilles' => null,
+                    'categorie_sachets_id' => null,
+                    'categorie_bouteilles_id' => null,
                     'livraison_vente' => null,
                     'livraison_logistique' => null,
                     'site_id' => null,
@@ -489,7 +517,26 @@ class ImportFlotteParser
         return null;
     }
 
-    private function analyserGroupe(string $immatriculation, int $numeroLigneVehicule, Collection $ligneVehicule, array $lignesLivreursGroupe, string $orgId, array &$telephonesProprietairesVus): array
+    /**
+     * Résout une fois par analyse (pas par ligne) les Categorie "Sachet eau"/"Bouteille" du
+     * catalogue produit de l'organisation, par nom normalisé (casse/espaces ignorés) — cf.
+     * CATEGORIE_SACHETS_NOM / CATEGORIE_BOUTEILLES_NOM. Une organisation qui ne suit pas cette
+     * convention de nommage (ou n'a pas encore créé ces catégories) obtient simplement null :
+     * les capacités importées pour cette colonne sont alors ignorées avec un avertissement,
+     * jamais une erreur bloquante.
+     *
+     * @return array{0: ?string, 1: ?string}
+     */
+    private function resoudreCategoriesCapacite(string $orgId): array
+    {
+        $resoudre = fn (string $nom): ?string => Categorie::where('organization_id', $orgId)
+            ->whereRaw('LOWER(TRIM(nom)) = ?', [mb_strtolower($nom)])
+            ->value('id');
+
+        return [$resoudre(self::CATEGORIE_SACHETS_NOM), $resoudre(self::CATEGORIE_BOUTEILLES_NOM)];
+    }
+
+    private function analyserGroupe(string $immatriculation, int $numeroLigneVehicule, Collection $ligneVehicule, array $lignesLivreursGroupe, string $orgId, array &$telephonesProprietairesVus, ?string $categorieSachetsId, ?string $categorieBouteillesId): array
     {
         $numerosLignesLivreurs = array_column($lignesLivreursGroupe, 'numero_ligne');
         $erreurs = [];
@@ -570,15 +617,24 @@ class ImportFlotteParser
         if ($erreurLivraisonLogistique) {
             $erreurs[] = "Usage logistique invalide : {$erreurLivraisonLogistique}";
         }
-        // Facultatives : laissées vides, le repli sur la capacité par défaut du
-        // type de véhicule s'applique (cf. VehiculeController::vehiculeData()).
+        // Facultatives : laissées vides, ce véhicule reste non plafonné (cf.
+        // VehiculeCapaciteService — plus aucun héritage depuis le type). Une valeur saisie
+        // devient une capacité maximale propre à CE véhicule (vehicule_capacites), pour la
+        // Categorie "Sachet eau"/"Bouteille" résolue une fois pour toute l'analyse — voir
+        // resoudreCategoriesCapacite().
         [$capacitePacks, $erreurCapacitePacks] = $this->toCapaciteOrNull($ligneVehicule['vehicule_capacite_sachets'] ?? null);
         if ($erreurCapacitePacks) {
             $erreurs[] = "Capacité sachets invalide : {$erreurCapacitePacks}";
+        } elseif ($capacitePacks !== null && $categorieSachetsId === null) {
+            $avertissements[] = 'Capacité sachets ignorée : aucune catégorie produit "'.self::CATEGORIE_SACHETS_NOM.'" dans cette organisation (Produits > Catégories).';
+            $capacitePacks = null;
         }
         [$capaciteBouteilles, $erreurCapaciteBouteilles] = $this->toCapaciteOrNull($ligneVehicule['vehicule_capacite_bouteilles'] ?? null);
         if ($erreurCapaciteBouteilles) {
             $erreurs[] = "Capacité bouteilles invalide : {$erreurCapaciteBouteilles}";
+        } elseif ($capaciteBouteilles !== null && $categorieBouteillesId === null) {
+            $avertissements[] = 'Capacité bouteilles ignorée : aucune catégorie produit "'.self::CATEGORIE_BOUTEILLES_NOM.'" dans cette organisation (Produits > Catégories).';
+            $capaciteBouteilles = null;
         }
 
         if ($nomVehicule === '') {
@@ -753,6 +809,11 @@ class ImportFlotteParser
                 'type_vehicule_id' => $type?->id,
                 'capacite_packs' => $capacitePacks,
                 'capacite_bouteilles' => $capaciteBouteilles,
+                // Résolus par resoudreCategoriesCapacite() — non-null uniquement quand la
+                // capacité correspondante a été saisie ET que la catégorie existe dans l'org
+                // (sinon $capacitePacks/$capaciteBouteilles sont déjà remis à null ci-dessus).
+                'categorie_sachets_id' => $categorieSachetsId,
+                'categorie_bouteilles_id' => $categorieBouteillesId,
                 'livraison_vente' => $livraisonVente,
                 'livraison_logistique' => $livraisonLogistique,
                 'site_id' => $site?->id,

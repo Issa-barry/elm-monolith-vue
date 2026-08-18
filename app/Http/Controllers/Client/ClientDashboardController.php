@@ -315,9 +315,7 @@ class ClientDashboardController extends Controller
                 'immatriculation' => $vehicule->immatriculation,
                 'type_label' => $vehicule->type_label,
                 'is_active' => (bool) $vehicule->is_active,
-                // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
-                // on retombe sur la capacité par défaut du type (cf. VehiculeController).
-                'capacite_packs' => $vehicule->capacite_packs ?? $vehicule->typeVehicule?->capacite_defaut,
+                'capacites' => $this->capacitesPayload($vehicule),
                 'photo_url' => $vehicule->photo_url,
             ])
             ->values()
@@ -330,7 +328,7 @@ class ClientDashboardController extends Controller
                 'immatriculation' => $vehicule->immatriculation,
                 'type_label' => $vehicule->type_label,
                 'is_active' => (bool) $vehicule->is_active,
-                'capacite_packs' => $vehicule->capacite_packs ?? $vehicule->typeVehicule?->capacite_defaut,
+                'capacites' => $this->capacitesPayload($vehicule),
                 'photo_url' => $vehicule->photo_url,
             ])
             ->values()
@@ -471,6 +469,18 @@ class ClientDashboardController extends Controller
         return [$organizationId, $client, $proprietaire, $livreur];
     }
 
+    /** @return array<int, array{categorie_nom: string, capacite_max: int}> */
+    private function capacitesPayload(Vehicule $vehicule): array
+    {
+        return $vehicule->capacites
+            ->map(fn ($c) => [
+                'categorie_nom' => $c->categorie->nom,
+                'capacite_max' => $c->capacite_max,
+            ])
+            ->values()
+            ->all();
+    }
+
     /**
      * @return Collection<int, Vehicule>
      */
@@ -485,7 +495,7 @@ class ClientDashboardController extends Controller
         }
 
         return Vehicule::query()
-            ->with('typeVehicule')
+            ->with(['typeVehicule', 'capacites.categorie'])
             ->where('organization_id', $organizationId)
             ->where(function ($query) use ($proprietaire, $livreur) {
                 if ($proprietaire !== null) {
@@ -509,7 +519,7 @@ class ClientDashboardController extends Controller
         }
 
         return Vehicule::query()
-            ->with('typeVehicule')
+            ->with(['typeVehicule', 'capacites.categorie'])
             ->where('organization_id', $organizationId)
             ->where('proprietaire_id', $proprietaire->id)
             ->orderBy('nom_vehicule')

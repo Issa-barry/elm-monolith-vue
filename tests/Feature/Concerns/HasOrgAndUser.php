@@ -27,13 +27,12 @@ trait HasOrgAndUser
         ]);
         $this->user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
 
-        // Types de véhicules par défaut
-        foreach ([['nom' => 'Camion', 'capacite_defaut' => 1000], ['nom' => 'Minibus', 'capacite_defaut' => 300], ['nom' => 'Tricycle', 'capacite_defaut' => 150]] as $type) {
+        // Types de véhicules par défaut — pure classification, aucune capacité (cf.
+        // VehiculeCapaciteService : la capacité appartient exclusivement au véhicule).
+        foreach (['Camion', 'Minibus', 'Tricycle'] as $nom) {
             TypeVehicule::create([
                 'organization_id' => $this->org->id,
-                'nom' => $type['nom'],
-                'capacite_defaut' => $type['capacite_defaut'],
-                'unite_capacite' => 'packs',
+                'nom' => $nom,
                 'is_active' => true,
             ]);
         }

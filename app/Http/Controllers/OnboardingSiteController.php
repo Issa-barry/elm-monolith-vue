@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\SiteType;
 use App\Models\Site;
 use App\Services\InstallationService;
+use App\Support\AuthRedirects;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -29,7 +30,7 @@ class OnboardingSiteController extends Controller
         $user = $request->user();
         $this->authorize('create', Site::class);
 
-        if (Site::where('organization_id', $user->organization_id)->exists()) {
+        if (! AuthRedirects::needsOnboarding($user)) {
             return redirect()->route('dashboard');
         }
 
@@ -49,7 +50,7 @@ class OnboardingSiteController extends Controller
         $this->authorize('create', Site::class);
 
         abort_if(
-            Site::where('organization_id', $user->organization_id)->exists(),
+            ! AuthRedirects::needsOnboarding($user),
             403,
             'Cette organisation possède déjà au moins un site.'
         );

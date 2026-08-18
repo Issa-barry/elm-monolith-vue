@@ -39,6 +39,13 @@ class UserControllerTest extends TestCase
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('super_admin');
 
+        // Une organisation sans aucun site force l'onboarding pour tout rôle, super_admin
+        // compris (cf. AuthRedirects::needsOnboarding, middleware EnsureOrganizationHasSite).
+        if (Site::where('organization_id', $org->id)->doesntExist()) {
+            $site = $this->createSite($org);
+            $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
+        }
+
         return $user;
     }
 
@@ -104,6 +111,8 @@ class UserControllerTest extends TestCase
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('manager');
+        $site = $this->createSite($org);
+        $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
 
         $this->actingAs($user)
             ->get(route('users.index'))

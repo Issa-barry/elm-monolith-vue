@@ -47,6 +47,8 @@ export interface AuthSite {
     nom: string;
     type: string;
     type_label: string;
+    /** "{Type} de {Nom}" calculé côté serveur (Site::getLabelAttribute()) — à afficher tel quel. */
+    label: string;
 }
 
 export interface Auth {

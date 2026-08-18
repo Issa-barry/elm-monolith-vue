@@ -65,7 +65,7 @@ class InstallApp extends Command
         $prenom = $this->ask('Prénom');
         $nom = $this->ask('Nom');
         $telephone = $this->askTelephone($service);
-        $email = $this->askEmail($otp);
+        $email = $this->askEmail($otp, required: ! $service->isSaas());
         $password = $this->askPassword($service);
 
         $this->newLine();
@@ -158,16 +158,24 @@ class InstallApp extends Command
     }
 
     /**
-     * Email facultatif — mais s'il est renseigné, un code est envoyé et doit être saisi
-     * correctement avant de poursuivre : même règle que l'assistant web (cf.
-     * InstallWizardController::verifyEmailCode(), InstallationService::EMAIL_OTP_CONTEXT), pour
-     * que CLI et web ne puissent jamais diverger sur "email saisi ≠ email vérifié".
+     * En on_premise, l'email devient obligatoire (boucle tant qu'il est vide) ; en saas il reste
+     * facultatif — même règle que l'assistant web (cf. InstallWizardController::store()), dérivée
+     * de InstallationService::isSaas(), jamais une interprétation propre à la CLI. Dans les deux
+     * cas, s'il est renseigné, un code est envoyé et doit être saisi correctement avant de
+     * poursuivre (cf. InstallWizardController::verifyEmailCode(), EMAIL_OTP_CONTEXT), pour que CLI
+     * et web ne puissent jamais diverger sur "email saisi ≠ email vérifié".
      */
-    private function askEmail(OtpService $otp): ?string
+    private function askEmail(OtpService $otp, bool $required): ?string
     {
-        $email = $this->ask('Email (facultatif)') ?: null;
-        if ($email === null) {
-            return null;
+        $email = null;
+        while ($email === null) {
+            $email = $this->ask($required ? 'Email' : 'Email (facultatif)') ?: null;
+            if ($email === null) {
+                if (! $required) {
+                    return null;
+                }
+                $this->error("L'adresse email est obligatoire pour cette installation.");
+            }
         }
 
         $this->sendEmailCode($otp, $email);

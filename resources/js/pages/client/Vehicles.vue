@@ -9,7 +9,7 @@ import { Head, useForm, usePage } from '@inertiajs/vue3';
 import { Car, Lock, Plus, X } from 'lucide-vue-next';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 
-const props = defineProps<{
+defineProps<{
     actor: ActorPayload;
     owner_vehicules: VehiculeOption[];
     type_vehicule_options: TypeVehiculeOption[];
@@ -62,16 +62,6 @@ function closeProposalModal() {
     }
     showProposalModal.value = false;
     form.clearErrors();
-}
-
-function onTypeVehiculeChange() {
-    const selectedType = props.type_vehicule_options.find(
-        (option) => option.value === form.type_vehicule,
-    );
-
-    if (selectedType) {
-        form.capacite_packs = selectedType.capacite_defaut;
-    }
 }
 
 function submitProposal() {
@@ -225,7 +215,21 @@ onMounted(() => {
                                     {{ vehicule.type_label }}
                                 </td>
                                 <td class="py-2 pr-4">
-                                    {{ vehicule.capacite_packs ?? '-' }}
+                                    <template
+                                        v-if="vehicule.capacites.length === 0"
+                                    >
+                                        -
+                                    </template>
+                                    <template v-else>
+                                        <span
+                                            v-for="(c, i) in vehicule.capacites"
+                                            :key="c.categorie_nom"
+                                        >
+                                            {{ i > 0 ? ' · ' : ''
+                                            }}{{ c.categorie_nom }} :
+                                            {{ c.capacite_max }}
+                                        </span>
+                                    </template>
                                 </td>
                                 <td class="py-2 pr-0">
                                     <span
@@ -348,7 +352,6 @@ onMounted(() => {
                                 <select
                                     v-model="form.type_vehicule"
                                     class="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                                    @change="onTypeVehiculeChange"
                                 >
                                     <option disabled value="">
                                         Selectionner un type

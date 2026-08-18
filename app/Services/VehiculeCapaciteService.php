@@ -6,70 +6,89 @@ use App\Models\Categorie;
 use App\Models\Produit;
 use App\Models\Vehicule;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
  * Centralise le contrôle "quantité vendue ≤ capacité du véhicule", utilisé par la vente web
- * (CommandeVenteController) et le PDV (PdvCheckoutService) — avant cette classe, chacun avait
- * sa propre copie du même calcul.
+ * (CommandeVenteController), le PDV (PdvCheckoutService) et les transferts logistiques
+ * (TransfertLogistiqueController).
  *
- * La capacité est désormais portée exclusivement par le TYPE de véhicule (décision produit du
- * 16/08/2026) — jamais par le véhicule lui-même, pour n'avoir qu'un seul endroit où la régler
- * (page Types de véhicules). Deux régimes, choisis automatiquement selon le type :
- * - Aucune ligne dans type_vehicule_capacites pour le type du véhicule → régime "legacy" : un
- *   seul plafond global (type_vehicules.capacite_defaut), toutes catégories de produit
- *   confondues. C'est le comportement historique, préservé tel quel pour ne rien casser sur la
- *   flotte existante.
- * - Au moins une ligne définie → régime "par catégorie" : chaque catégorie de produit vendue
- *   est comparée à SON propre plafond (capacité par défaut du type pour cette catégorie). Une
- *   catégorie vendue sans plafond défini n'est pas limitée. Les plafonds des différentes
- *   catégories sont indépendants (cumulables), pas partagés — décision produit du 10/08/2026 :
- *   un véhicule à 70 sachets + 100 bouteilles peut partir chargé des deux à la fois.
+ * La capacité est portée EXCLUSIVEMENT par le véhicule lui-même (vehicule_capacites), par
+ * catégorie du catalogue produit (Categorie — ex: "Sachet eau", "Bouteille") — décision produit
+ * du 17/08/2026 : il n'existe plus de notion intermédiaire de "groupe de capacité", la
+ * catégorie du produit EST directement la référence de capacité. Une seule source de vérité
+ * Produit → Catégorie → Capacité véhicule.
  *
- * Contrôle strict, sans exception de rôle (décision produit du 15/08/2026) : la capacité d'un
- * véhicule ne peut jamais être dépassée, quel que soit l'utilisateur. Il n'existe plus de
- * paramètre de bypass — l'ancien mécanisme reposait sur la permission ventes.qte.update, qui
- * ne sert plus qu'à autoriser la saisie manuelle du champ quantité côté formulaire, sans aucun
- * effet sur ce service.
+ * Décision produit du 17/08/2026 : plus aucun héritage/repli depuis TypeVehicule — le type d'un
+ * véhicule est une classification pure, changer le type d'un véhicule ne modifie jamais ses
+ * capacités. Un véhicule sans aucune ligne de capacité configurée n'est simplement pas limité.
+ *
+ * Les plafonds des différentes catégories sont indépendants (cumulables), pas partagés — un
+ * véhicule à 80 sachets + 160 bouteilles peut partir chargé des deux à la fois.
+ *
+ * Un produit sans catégorie n'est concerné par aucun contrôle (ne peut pas être rattaché à un
+ * compteur de capacité) — l'absence de configuration n'équivaut jamais à une capacité nulle.
+ *
+ * Contrôle strict, sans exception de rôle : la capacité d'un véhicule ne peut jamais être
+ * dépassée, quel que soit l'utilisateur.
  */
 class VehiculeCapaciteService
 {
     /**
-     * Capacité effective par catégorie pour le type de ce véhicule. Vide si aucune ligne n'a
-     * été configurée sur le type — dans ce cas l'appelant doit basculer sur le régime legacy.
+     * Capacité par catégorie pour ce véhicule précis. Vide si aucune ligne n'est configurée —
+     * dans ce cas le véhicule n'est simplement pas limité.
      *
      * @return Collection<string, int> categorie_id => capacite_max
      */
     public function capacitesParCategorie(Vehicule $vehicule): Collection
     {
-        $vehicule->loadMissing('typeVehicule.capacites');
+        $vehicule->loadMissing('capacites');
 
-        $capacites = collect();
-        foreach ($vehicule->typeVehicule?->capacites ?? [] as $c) {
-            $capacites->put($c->categorie_id, $c->capacite_max);
-        }
-
-        return $capacites;
+        return $vehicule->capacites->pluck('capacite_max', 'categorie_id');
     }
 
     /**
-     * Capacité globale legacy (toutes catégories confondues) — celle par défaut du type.
+     * @return array<int, array{categorie_id: string, categorie_nom: string, capacite_max: int}>
      */
-    public function capaciteGlobaleLegacy(Vehicule $vehicule): ?int
+    public function capacitesParCategorieAvecNoms(Vehicule $vehicule): array
     {
-        $vehicule->loadMissing('typeVehicule');
-        $capacite = $vehicule->typeVehicule?->capacite_defaut;
+        $vehicule->loadMissing('capacites.categorie');
 
-        return $capacite !== null ? (int) $capacite : null;
+        return $vehicule->capacites
+            ->map(fn ($c) => [
+                'categorie_id' => $c->categorie_id,
+                'categorie_nom' => $c->categorie?->nom ?? 'Catégorie',
+                'capacite_max' => $c->capacite_max,
+            ])
+            ->values()
+            ->all();
     }
 
     /**
-     * Vérifie que les lignes vendues respectent la capacité du véhicule choisi. $lignes est le
-     * tableau brut de la requête ([['produit_id' => ..., $qteKey => ...], ...]) — $qteKey vaut
-     * 'qte' côté vente web, 'quantite' côté PDV, seule différence entre les deux appelants.
+     * Remplace intégralement les lignes de capacité d'un véhicule.
      *
-     * Aucun dépassement n'est jamais toléré, pour aucun rôle : le seul levier disponible est
-     * $exigerChargementComplet (paramètre organisationnel, borne basse uniquement).
+     * @param  array<int, array{categorie_id: string, capacite_max: int}>  $lignes
+     */
+    public function syncCapacites(Vehicule $vehicule, array $lignes, string $orgId): void
+    {
+        DB::transaction(function () use ($vehicule, $lignes, $orgId) {
+            $vehicule->capacites()->delete();
+            foreach ($lignes as $ligne) {
+                $vehicule->capacites()->create([
+                    'organization_id' => $orgId,
+                    'categorie_id' => $ligne['categorie_id'],
+                    'capacite_max' => $ligne['capacite_max'],
+                ]);
+            }
+        });
+    }
+
+    /**
+     * Vérifie que les lignes vendues/chargées respectent la capacité du véhicule choisi.
+     * $lignes est le tableau brut de la requête ([['produit_id' => ..., $qteKey => ...], ...]) —
+     * $qteKey vaut 'qte' côté vente web, 'quantite' côté PDV, 'quantite_demandee' côté
+     * logistique, seule différence entre les appelants.
      *
      * @param  array<int, array<string, mixed>>  $lignes
      *
@@ -84,8 +103,6 @@ class VehiculeCapaciteService
         $capacitesParCategorie = $this->capacitesParCategorie($vehicule);
 
         if ($capacitesParCategorie->isEmpty()) {
-            $this->verifierGlobalLegacy($vehicule, $lignes, $qteKey, $exigerChargementComplet);
-
             return;
         }
 
@@ -95,8 +112,8 @@ class VehiculeCapaciteService
         $qteParCategorie = [];
         foreach ($lignes as $ligne) {
             $categorieId = $categorieParProduit[$ligne['produit_id'] ?? null] ?? null;
-            // Produit sans catégorie : pas concerné par un contrôle qui, par définition,
-            // se déclenche par catégorie — voir le régime legacy pour un plafond global.
+            // Produit sans catégorie : pas concerné par un contrôle qui, par définition, se
+            // déclenche par catégorie.
             if ($categorieId === null) {
                 continue;
             }
@@ -105,7 +122,7 @@ class VehiculeCapaciteService
 
         foreach ($qteParCategorie as $categorieId => $qte) {
             $max = $capacitesParCategorie->get($categorieId);
-            // Catégorie vendue mais sans plafond configuré pour ce véhicule : illimitée.
+            // Catégorie vendue mais sans plafond configuré pour ce véhicule : illimité.
             if ($max === null) {
                 continue;
             }
@@ -123,35 +140,6 @@ class VehiculeCapaciteService
                     'lignes' => "La quantité « {$nom} » ({$qte}) est inférieure à la capacité du véhicule pour cette catégorie ({$max}). Le chargement complet est obligatoire.",
                 ]);
             }
-        }
-    }
-
-    private function verifierGlobalLegacy(
-        Vehicule $vehicule,
-        array $lignes,
-        string $qteKey,
-        bool $exigerChargementComplet,
-    ): void {
-        $capacite = $this->capaciteGlobaleLegacy($vehicule);
-
-        if ($capacite === null) {
-            throw ValidationException::withMessages([
-                'vehicule_id' => 'Le véhicule sélectionné n\'a pas de capacité définie.',
-            ]);
-        }
-
-        $qteTotale = collect($lignes)->sum(fn (array $ligne): int => (int) ($ligne[$qteKey] ?? 0));
-
-        if ($qteTotale > $capacite) {
-            throw ValidationException::withMessages([
-                'lignes' => "La quantité totale ({$qteTotale} packs) dépasse la capacité du véhicule ({$capacite} packs maximum).",
-            ]);
-        }
-
-        if ($exigerChargementComplet && $qteTotale < $capacite) {
-            throw ValidationException::withMessages([
-                'lignes' => "La quantité totale ({$qteTotale} packs) est inférieure à la capacité du véhicule ({$capacite} packs). Le chargement complet est obligatoire.",
-            ]);
         }
     }
 }

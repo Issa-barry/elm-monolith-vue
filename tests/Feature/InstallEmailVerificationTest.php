@@ -13,9 +13,11 @@ use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 /**
- * Vérification par code de l'email du Super Admin pendant /install — facultative (l'email
- * lui-même reste facultatif), mais réelle : "email saisi ≠ email vérifié" tant que le code n'a
- * pas été validé (cf. InstallationService::install(), qui lit ce statut via OtpService).
+ * Vérification par code de l'email du Super Admin pendant /install — ces deux endpoints
+ * (send-code/verify-code) fonctionnent à l'identique quel que soit le mode de déploiement ;
+ * seule InstallationService::install() distingue si l'email lui-même est obligatoire (on_premise,
+ * cf. InstallWizardTest) ou facultatif (saas). Dans tous les cas : "email saisi ≠ email vérifié"
+ * tant que le code n'a pas été validé (cf. install(), qui lit ce statut via OtpService).
  *
  * `.env.testing` fixe OTP_FIXED_CODE=123456 (cf. config/otp.php) : chaque code généré en test
  * vaut donc toujours "123456", ce qui rend ces tests déterministes sans lire le contenu du mail.

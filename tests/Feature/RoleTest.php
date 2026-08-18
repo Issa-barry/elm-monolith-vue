@@ -33,13 +33,31 @@ class RoleTest extends TestCase
         return $user;
     }
 
+    // RoleController::index()/edit() n'exigent pas une permission précise mais gate sur
+    // isAdmin() (super_admin|admin_entreprise) : un rôle non-admin comme 'manager' est donc
+    // requis ici pour obtenir un vrai refus, une permission-only admin_entreprise ne suffit pas.
     private function userWithoutPermission(Organization $org): User
     {
-        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
         $user = User::factory()->create(['organization_id' => $org->id]);
-        $user->assignRole('admin_entreprise');
+        $user->assignRole('manager');
+        $this->attachSite($org, $user);
 
         return $user;
+    }
+
+    // Une organisation sans aucun site force l'onboarding pour tout rôle staff, super_admin
+    // compris (cf. AuthRedirects::needsOnboarding, middleware EnsureOrganizationHasSite) : sans
+    // site, ces requêtes back-office sont redirigées avant même d'atteindre le contrôleur testé.
+    private function attachSite(Organization $org, User $user): void
+    {
+        $site = Site::create([
+            'organization_id' => $org->id,
+            'nom' => 'Site Test',
+            'type' => 'depot',
+            'localisation' => 'Conakry',
+        ]);
+        $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
     }
 
     // ── index ─────────────────────────────────────────────────────────────────
@@ -151,6 +169,7 @@ class RoleTest extends TestCase
         Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('manager');
+        $this->attachSite($org, $user);
 
         $role = Role::firstOrCreate(['name' => 'commerciale', 'guard_name' => 'web']);
 
@@ -168,6 +187,7 @@ class RoleTest extends TestCase
 
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('super_admin');
+        $this->attachSite($org, $user);
 
         $role = Role::firstOrCreate(['name' => 'editeur', 'guard_name' => 'web']);
 
@@ -385,6 +405,7 @@ class RoleTest extends TestCase
         Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('manager');
+        $this->attachSite($org, $user);
 
         $this->actingAs($user)
             ->post(route('roles.store'), ['label' => "Chef d'agence"])
