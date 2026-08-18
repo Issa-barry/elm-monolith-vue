@@ -77,7 +77,7 @@ class EquipeLivraisonTest extends TestCase
     public function test_store_creates_equipe_avec_proprietaire_meme_org(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
-        $vehicule = $this->makeVehicule();
+        $vehicule = $this->makeVehicule($proprietaire->id);
 
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule->id]))
@@ -304,15 +304,48 @@ class EquipeLivraisonTest extends TestCase
             ->assertSessionHasErrors('membres.0.telephone');
     }
 
-    public function test_store_echoue_si_proprietaire_id_absent(): void
+    public function test_store_derive_toujours_le_proprietaire_depuis_le_vehicule(): void
     {
-        $vehicule = $this->makeVehicule();
-        $payload = $this->validPayload(0, ['vehicule_id' => $vehicule->id]);
-        unset($payload['proprietaire_id']);
+        // Le propriétaire de l'équipe n'est jamais celui envoyé par le client : il est
+        // systématiquement dérivé de Vehicule::proprietaire_id côté serveur — même absent du
+        // payload, même si le client tente d'en envoyer un autre (cf. store()).
+        $vraiProprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($vraiProprietaire->id);
+        $autreProprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+
+        $payload = $this->validPayload($autreProprietaire->id, ['vehicule_id' => $vehicule->id]);
 
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $payload)
-            ->assertSessionHasErrors('proprietaire_id');
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $this->assertDatabaseHas('equipes_livraison', [
+            'vehicule_id' => $vehicule->id,
+            'proprietaire_id' => $vraiProprietaire->id,
+        ]);
+        $this->assertDatabaseMissing('equipes_livraison', [
+            'vehicule_id' => $vehicule->id,
+            'proprietaire_id' => $autreProprietaire->id,
+        ]);
+    }
+
+    public function test_store_ignore_un_proprietaire_id_dune_autre_organisation_envoye_par_le_client(): void
+    {
+        // Même un proprietaire_id appartenant à une AUTRE organisation, envoyé par un client
+        // malveillant, n'a aucun effet : le serveur ne fait jamais confiance à cette valeur.
+        $vraiProprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($vraiProprietaire->id);
+        $autreOrg = Organization::factory()->create();
+        $proprietaireAutreOrg = Proprietaire::factory()->create(['organization_id' => $autreOrg->id]);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaireAutreOrg->id, ['vehicule_id' => $vehicule->id]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $this->assertDatabaseHas('equipes_livraison', [
+            'vehicule_id' => $vehicule->id,
+            'proprietaire_id' => $vraiProprietaire->id,
+        ]);
     }
 
     public function test_store_autorise_vehicule_interne_sans_proprietaire(): void
@@ -342,20 +375,47 @@ class EquipeLivraisonTest extends TestCase
         ]);
     }
 
-    public function test_store_echoue_si_proprietaire_autre_org(): void
+    public function test_store_autorise_partage_proprietaire_sur_vehicule_interne_avec_proprietaire_configure(): void
     {
-        $autreOrg = Organization::factory()->create();
-        $proprietaire = Proprietaire::factory()->create(['organization_id' => $autreOrg->id]);
+        // Régression : un véhicule "interne" (categorie=INTERNE) peut tout à fait avoir un
+        // propriétaire réel configuré (le propriétaire interne par défaut de l'organisation, cf.
+        // Proprietaire::interneParDefautId) — le partage propriétaire doit alors fonctionner
+        // exactement comme pour un véhicule partenaire : commission 950 = propriétaire 650 +
+        // livreur 300 (cas rapporté : véhicule "Abdoulaye").
+        $proprietaireInterne = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $this->org->update(['proprietaire_interne_id' => $proprietaireInterne->id]);
+        $vehiculeInterne = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'proprietaire_id' => $proprietaireInterne->id,
+            'categorie' => CategorieVehicule::INTERNE,
+        ]);
 
         $this->actingAs($this->user)
-            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id))
-            ->assertSessionHasErrors('proprietaire_id');
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaireInterne->id, [
+                'vehicule_id' => $vehiculeInterne->id,
+                'commission_unitaire_par_pack' => 950,
+                'montant_par_pack_proprietaire' => 650,
+                'membres' => [[
+                    'livreur_id' => null,
+                    'nom_complet' => 'Mamadou Diallo',
+                    'telephone' => '+224620000001', 'role' => 'chauffeur',
+                    'montant_par_pack' => 300, 'ordre' => 0,
+                ]],
+            ]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $this->assertDatabaseHas('equipes_livraison', [
+            'vehicule_id' => $vehiculeInterne->id,
+            'proprietaire_id' => $proprietaireInterne->id,
+            'commission_unitaire_par_pack' => 950,
+            'montant_par_pack_proprietaire' => 650,
+        ]);
     }
 
     public function test_store_persiste_taux_commission_proprietaire(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
-        $vehicule = $this->makeVehicule();
+        $vehicule = $this->makeVehicule($proprietaire->id);
 
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
@@ -591,9 +651,9 @@ class EquipeLivraisonTest extends TestCase
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $equipe = $this->makeEquipe($proprietaire->id);
-        $vehicule = $this->makeVehicule();
 
         $nouveauProprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($nouveauProprietaire->id);
 
         $this->actingAs($this->user)
             ->patch(route('equipes-livraison.update', $equipe), $this->validPayload($nouveauProprietaire->id, [
@@ -617,17 +677,23 @@ class EquipeLivraisonTest extends TestCase
         ]);
     }
 
-    public function test_update_echoue_si_proprietaire_autre_org(): void
+    public function test_update_ignore_un_proprietaire_id_dune_autre_organisation_envoye_par_le_client(): void
     {
-        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
-        $equipe = $this->makeEquipe($proprietaire->id);
+        $vraiProprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($vraiProprietaire->id);
+        $equipe = $this->makeEquipe($vraiProprietaire->id);
 
         $autreOrg = Organization::factory()->create();
         $autreProprietaire = Proprietaire::factory()->create(['organization_id' => $autreOrg->id]);
 
         $this->actingAs($this->user)
-            ->patch(route('equipes-livraison.update', $equipe), $this->validPayload($autreProprietaire->id))
-            ->assertSessionHasErrors('proprietaire_id');
+            ->patch(route('equipes-livraison.update', $equipe), $this->validPayload($autreProprietaire->id, ['vehicule_id' => $vehicule->id]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $this->assertDatabaseHas('equipes_livraison', [
+            'id' => $equipe->id,
+            'proprietaire_id' => $vraiProprietaire->id,
+        ]);
     }
 
     // ── destroy ───────────────────────────────────────────────────────────────
@@ -646,17 +712,22 @@ class EquipeLivraisonTest extends TestCase
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
-    private function makeVehicule(): Vehicule
+    /**
+     * $proprietaireId permet de rattacher le véhicule à un Proprietaire précis créé par
+     * l'appelant — le propriétaire d'une équipe est désormais toujours dérivé de
+     * Vehicule::proprietaire_id côté serveur (cf. EquipeLivraisonController), jamais du payload.
+     */
+    private function makeVehicule(?string $proprietaireId = null): Vehicule
     {
-        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $proprietaireId ??= Proprietaire::factory()->create(['organization_id' => $this->org->id])->id;
 
         return Vehicule::factory()->create([
             'organization_id' => $this->org->id,
-            'proprietaire_id' => $proprietaire->id,
+            'proprietaire_id' => $proprietaireId,
         ]);
     }
 
-    /** Source de vérité = categorie (jamais proprietaire_id) : EquipeLivraisonController::isVehiculePartenaire(). */
+    /** Source de vérité = Vehicule::proprietaire_id (jamais le payload de l'équipe). */
     private function makeVehiculeInterne(): Vehicule
     {
         return Vehicule::factory()->create([

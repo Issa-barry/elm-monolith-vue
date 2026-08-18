@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\TypeProprietaire;
 use App\Models\Organization;
 use App\Models\Personne;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -15,8 +16,17 @@ class ProprietaireFactory extends Factory
     {
         return [
             'organization_id' => Organization::factory(),
+            'type' => TypeProprietaire::PERSONNE_PHYSIQUE,
             'is_active' => true,
         ];
+    }
+
+    public function entreprise(string $raisonSociale = 'Entreprise Test SARL'): static
+    {
+        return $this->state(fn () => [
+            'type' => TypeProprietaire::ENTREPRISE,
+            'raison_sociale' => $raisonSociale,
+        ]);
     }
 
     /**

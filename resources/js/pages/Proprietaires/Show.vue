@@ -65,6 +65,10 @@ interface ProprietaireData {
     prenom: string;
     surnom: string | null;
     nom_complet: string;
+    type: string;
+    raison_sociale: string | null;
+    nom_affichage: string;
+    est_entreprise: boolean;
     email: string | null;
     telephone: string | null;
     code_phone_pays: string | null;
@@ -127,7 +131,7 @@ const toast = useToast();
 
 function confirmDefinirInterne() {
     confirm.require({
-        message: `Définir « ${props.proprietaire.nom_complet} » comme propriétaire interne par défaut de l'organisation ? Les véhicules "interne" sans propriétaire tiers choisi, ainsi que leurs commissions propriétaire, lui seront désormais rattachés.`,
+        message: `Définir « ${props.proprietaire.nom_affichage} » comme propriétaire interne par défaut de l'organisation ? Les véhicules "interne" sans propriétaire tiers choisi, ainsi que leurs commissions propriétaire, lui seront désormais rattachés.`,
         header: 'Confirmer le propriétaire interne',
         icon: 'pi pi-exclamation-triangle',
         rejectLabel: 'Annuler',
@@ -141,7 +145,7 @@ function confirmDefinirInterne() {
                         toast.add({
                             severity: 'success',
                             summary: 'Propriétaire interne défini',
-                            detail: `${props.proprietaire.nom_complet} est maintenant le propriétaire interne par défaut.`,
+                            detail: `${props.proprietaire.nom_affichage} est maintenant le propriétaire interne par défaut.`,
                             life: 3000,
                         }),
                 },
@@ -174,7 +178,7 @@ function formatGNF(val: number): string {
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
     { title: 'Proprietaires', href: '/backoffice/proprietaires' },
-    { title: props.proprietaire.nom_complet, href: '#' },
+    { title: props.proprietaire.nom_affichage, href: '#' },
 ];
 
 const locationLabel = computed(() => {
@@ -229,13 +233,13 @@ function closeLightbox() {
 </script>
 
 <template>
-    <Head :title="`${proprietaire.nom_complet} - Detail proprietaire`" />
+    <Head :title="`${proprietaire.nom_affichage} - Detail proprietaire`" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
         <div class="w-full space-y-6 p-4 sm:p-6">
             <DetailHeader
                 eyebrow="Propriétaire"
-                :title="proprietaire.nom_complet"
+                :title="proprietaire.nom_affichage"
                 :icon="UserRound"
                 :status-label="proprietaire.is_active ? 'Actif' : 'Inactif'"
                 :status-dot-class="
@@ -245,14 +249,22 @@ function closeLightbox() {
                 "
             >
                 <template #subtitle>
-                    <p class="mt-1 text-sm text-muted-foreground">
-                        {{ proprietaire.vehicules_count }} vehicule{{
-                            proprietaire.vehicules_count > 1 ? 's' : ''
-                        }}
-                        rattache{{
-                            proprietaire.vehicules_count > 1 ? 's' : ''
-                        }}
-                    </p>
+                    <div class="mt-1 flex items-center gap-2">
+                        <span
+                            v-if="proprietaire.est_entreprise"
+                            class="inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
+                            data-testid="proprietaire-type-badge"
+                            >Entreprise</span
+                        >
+                        <p class="text-sm text-muted-foreground">
+                            {{ proprietaire.vehicules_count }} vehicule{{
+                                proprietaire.vehicules_count > 1 ? 's' : ''
+                            }}
+                            rattache{{
+                                proprietaire.vehicules_count > 1 ? 's' : ''
+                            }}
+                        </p>
+                    </div>
                 </template>
                 <template #actions>
                     <Link href="/backoffice/proprietaires">
@@ -404,7 +416,28 @@ function closeLightbox() {
                     <div class="mt-5 grid gap-4 sm:grid-cols-2">
                         <div class="rounded-lg border bg-background p-4">
                             <p class="text-xs text-muted-foreground">
-                                Nom complet
+                                {{
+                                    proprietaire.est_entreprise
+                                        ? 'Raison sociale'
+                                        : 'Nom complet'
+                                }}
+                            </p>
+                            <p
+                                class="mt-1 text-sm font-medium"
+                                data-testid="proprietaire-nom-affichage"
+                            >
+                                {{ proprietaire.nom_affichage }}
+                            </p>
+                        </div>
+                        <div
+                            v-if="
+                                proprietaire.est_entreprise &&
+                                proprietaire.nom_complet.trim()
+                            "
+                            class="rounded-lg border bg-background p-4"
+                        >
+                            <p class="text-xs text-muted-foreground">
+                                Contact
                             </p>
                             <p class="mt-1 text-sm font-medium">
                                 {{ proprietaire.nom_complet }}
@@ -414,7 +447,13 @@ function closeLightbox() {
                             v-if="proprietaire.surnom"
                             class="rounded-lg border bg-background p-4"
                         >
-                            <p class="text-xs text-muted-foreground">Surnom</p>
+                            <p class="text-xs text-muted-foreground">
+                                {{
+                                    proprietaire.est_entreprise
+                                        ? 'Nom commercial / enseigne'
+                                        : 'Surnom'
+                                }}
+                            </p>
                             <p class="mt-1 text-sm font-medium">
                                 {{ proprietaire.surnom }}
                             </p>

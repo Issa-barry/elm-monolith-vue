@@ -31,11 +31,9 @@ interface VehiculeInfo {
     id: string;
     nom_vehicule: string;
     immatriculation: string;
-    // Propriété (tiers vs organisation) — indépendante des usages vente/logistique du
-    // véhicule, calculée côté serveur (cf. Vehicules/Show.vue::proprietaireEstTiers).
-    proprietaire_est_tiers: boolean;
     proprietaire_id: string | null;
     proprietaire_nom: string | null;
+    proprietaire_est_entreprise?: boolean;
 }
 
 interface MembreExistant {
@@ -121,10 +119,13 @@ const lignes = ref<LignePartage[]>([]);
 
 // ── Computed ────────────────────────────────────────────────────────────────
 
-const isExterne = computed(() => props.vehicule.proprietaire_est_tiers);
+// Un partage propriétaire est proposé dès que le véhicule a un propriétaire assigné (interne
+// par défaut ou tiers) — jamais dérivé de la catégorie du véhicule, cf. EquipeLivraisonController
+// (le propriétaire interne par défaut peut lui aussi avoir une part de commission).
+const hasProprietaire = computed(() => !!props.vehicule.proprietaire_id);
 
 const proprietaireNom = computed(() => {
-    if (!isExterne.value) return null;
+    if (!hasProprietaire.value) return null;
     const p = props.proprietaires.find(
         (p) => p.value === props.vehicule.proprietaire_id,
     );
@@ -272,11 +273,18 @@ function toMontant(taux: number, comm: number): number {
     return Math.round((taux / 100) * comm);
 }
 
+// Bénéficiaires dont le montant/taux a été saisi explicitement par l'utilisateur pendant cette
+// session d'édition — permet de compléter automatiquement le DERNIER bénéficiaire restant
+// (montant = commission - somme des autres) sans jamais inventer une répartition entre
+// plusieurs bénéficiaires encore non saisis (cf. spécification "auto-calcul du partage").
+const touchedIds = ref<Set<string>>(new Set());
+
 function buildLignes() {
+    touchedIds.value = new Set();
     const comm = commission.value > 0 ? commission.value : 950;
     const newLignes: LignePartage[] = [];
 
-    if (isExterne.value) {
+    if (hasProprietaire.value) {
         newLignes.push({
             id: 'proprietaire',
             label: `Propriétaire — ${proprietaireNom.value ?? '—'}`,
@@ -299,27 +307,70 @@ function buildLignes() {
     lignes.value = newLignes;
 }
 
+/**
+ * Complète automatiquement le seul bénéficiaire restant non saisi avec le reliquat
+ * (commission - somme des bénéficiaires déjà saisis) — jamais s'il reste 2+ bénéficiaires non
+ * saisis (répartition ambiguë) et jamais si le reliquat est négatif (dépassement, laissé tel
+ * quel pour que la validation normale signale l'erreur).
+ */
+function recomputeAutoFill(editedId: string) {
+    touchedIds.value.add(editedId);
+
+    if (lignes.value.length < 2) return;
+
+    const untouched = lignes.value.filter((l) => !touchedIds.value.has(l.id));
+    if (untouched.length !== 1) return;
+
+    const cible = untouched[0];
+    const sommeAutres = lignes.value
+        .filter((l) => l.id !== cible.id)
+        .reduce((s, l) => s + (l.montant || 0), 0);
+    const reste = commission.value - sommeAutres;
+    if (reste < 0) return;
+
+    cible.montant = Math.round(reste);
+    cible.taux = toTaux(cible.montant, commission.value);
+}
+
 watch(commission, (newComm) => {
     lignes.value.forEach((l) => {
         l.taux = toTaux(l.montant, newComm);
     });
+
+    if (touchedIds.value.size === 0) return;
+    const untouched = lignes.value.filter((l) => !touchedIds.value.has(l.id));
+    if (untouched.length !== 1 || lignes.value.length < 2) return;
+
+    const cible = untouched[0];
+    const sommeAutres = lignes.value
+        .filter((l) => l.id !== cible.id)
+        .reduce((s, l) => s + (l.montant || 0), 0);
+    const reste = newComm - sommeAutres;
+    if (reste < 0) return;
+
+    cible.montant = Math.round(reste);
+    cible.taux = toTaux(cible.montant, newComm);
 });
 
 function onMontantChange(ligne: LignePartage, val: number | null) {
     markChanged();
     ligne.montant = val ?? 0;
     ligne.taux = toTaux(ligne.montant, commission.value);
+    recomputeAutoFill(ligne.id);
 }
 
 function onTauxChange(ligne: LignePartage, val: number | null) {
     markChanged();
     ligne.taux = val ?? 0;
     ligne.montant = toMontant(ligne.taux, commission.value);
+    recomputeAutoFill(ligne.id);
 }
 
 const totalPartage = computed(() =>
     lignes.value.reduce((s, l) => s + (l.montant || 0), 0),
 );
+
+const resteARepartir = computed(() => commission.value - totalPartage.value);
 
 const partageValide = computed(
     () =>
@@ -332,7 +383,7 @@ function applyPartageToMembres() {
         const ligne = lignes.value.find((l) => l.id === `membre-${i}`);
         return { ...m, montant_par_pack: ligne?.montant ?? m.montant_par_pack };
     });
-    if (isExterne.value) {
+    if (hasProprietaire.value) {
         const propLigne = lignes.value.find((l) => l.id === 'proprietaire');
         montantProp.value = propLigne?.montant ?? 0;
     }
@@ -383,12 +434,12 @@ function formatPhone(local: string): string {
 function buildPayload() {
     return {
         vehicule_id: props.vehicule.id,
-        proprietaire_id: isExterne.value
-            ? props.vehicule.proprietaire_id
-            : null,
+        // proprietaire_id n'est jamais envoyé : toujours dérivé côté serveur depuis
+        // Vehicule::proprietaire_id (cf. EquipeLivraisonController), pour ne jamais désynchroniser
+        // l'équipe du propriétaire réel du véhicule.
         is_active: props.equipe?.is_active ?? true,
         commission_unitaire_par_pack: commission.value,
-        montant_par_pack_proprietaire: isExterne.value
+        montant_par_pack_proprietaire: hasProprietaire.value
             ? montantProp.value
             : null,
         membres: membres.value.map((m, i) => ({
@@ -734,6 +785,11 @@ const hasStep1Errors = computed(() =>
                                             '',
                                         )
                                     }}</span>
+                                    <span
+                                        v-if="vehicule.proprietaire_est_entreprise"
+                                        class="ml-1.5 inline-flex items-center rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
+                                        >Entreprise</span
+                                    >
                                 </template>
                                 <template v-else>{{ ligne.label }}</template>
                             </td>
@@ -812,8 +868,12 @@ const hasStep1Errors = computed(() =>
                 class="text-xs text-destructive"
             >
                 La somme ({{ totalPartage }} GNF) doit être égale à la
-                commission ({{ commission }} GNF). Différence :
-                {{ Math.abs(totalPartage - commission) }} GNF.
+                commission ({{ commission }} GNF).
+                {{
+                    resteARepartir > 0
+                        ? `Reste à répartir : ${resteARepartir} GNF.`
+                        : `Dépassement : ${Math.abs(resteARepartir)} GNF.`
+                }}
             </p>
         </div>
 
@@ -835,7 +895,7 @@ const hasStep1Errors = computed(() =>
                 </div>
 
                 <div
-                    v-if="isExterne && proprietaireNom"
+                    v-if="hasProprietaire && proprietaireNom"
                     class="rounded-lg border bg-muted/30 p-3"
                 >
                     <p

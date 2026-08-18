@@ -6,6 +6,13 @@ import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ArrowLeft, Save } from 'lucide-vue-next';
 import ProprietaireForm from './partials/ProprietaireForm.vue';
 
+interface TypeOption {
+    value: string;
+    label: string;
+}
+
+const props = defineProps<{ type_proprietaire_options: TypeOption[] }>();
+
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
     { title: 'Propriétaires', href: '/backoffice/proprietaires' },
@@ -13,8 +20,10 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const form = useForm({
+    type: 'personne_physique',
     nom: '',
     prenom: '',
+    raison_sociale: null as string | null,
     surnom: null as string | null,
     email: null as string | null,
     telephone: null as string | null,
@@ -70,6 +79,7 @@ function submit() {
                 :form="form"
                 :errors="form.errors"
                 :processing="form.processing"
+                :type-options="props.type_proprietaire_options"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />

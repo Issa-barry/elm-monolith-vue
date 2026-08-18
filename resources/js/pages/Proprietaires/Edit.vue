@@ -7,11 +7,18 @@ import { ArrowLeft, CheckCircle, Save } from 'lucide-vue-next';
 import { computed, watch } from 'vue';
 import ProprietaireForm from './partials/ProprietaireForm.vue';
 
+interface TypeOption {
+    value: string;
+    label: string;
+}
+
 interface ProprietaireData {
     id: number;
     nom: string;
     prenom: string;
     surnom: string | null;
+    type: string;
+    raison_sociale: string | null;
     email: string | null;
     telephone: string | null;
     adresse: string | null;
@@ -22,7 +29,10 @@ interface ProprietaireData {
     is_active: boolean;
 }
 
-const props = defineProps<{ proprietaire: ProprietaireData }>();
+const props = defineProps<{
+    proprietaire: ProprietaireData;
+    type_proprietaire_options: TypeOption[];
+}>();
 const page = usePage();
 const flashSuccess = computed(
     () => (page.props as any).flash?.success as string | undefined,
@@ -38,8 +48,10 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const form = useForm({
+    type: props.proprietaire.type,
     nom: props.proprietaire.nom,
     prenom: props.proprietaire.prenom,
+    raison_sociale: props.proprietaire.raison_sociale,
     surnom: props.proprietaire.surnom,
     email: props.proprietaire.email,
     telephone: props.proprietaire.telephone,
@@ -55,8 +67,10 @@ watch(
     () => props.proprietaire,
     (p) => {
         form.defaults({
+            type: p.type,
             nom: p.nom,
             prenom: p.prenom,
+            raison_sociale: p.raison_sociale,
             surnom: p.surnom,
             email: p.email,
             telephone: p.telephone,
@@ -136,6 +150,7 @@ function submit() {
                 :errors="form.errors"
                 :processing="form.processing"
                 :back-href="`/backoffice/proprietaires/${proprietaire.id}`"
+                :type-options="props.type_proprietaire_options"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />

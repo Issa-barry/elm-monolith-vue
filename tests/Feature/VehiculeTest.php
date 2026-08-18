@@ -809,6 +809,56 @@ class VehiculeTest extends TestCase
             );
     }
 
+    public function test_show_expose_le_proprietaire_dun_vehicule_interne(): void
+    {
+        // La catégorie (interne/partenaire) ne détermine jamais si le propriétaire est affiché
+        // — un véhicule interne a lui aussi un propriétaire réel (l'interne par défaut de
+        // l'organisation), qui doit apparaître exactement comme pour un véhicule partenaire.
+        $defaut = $this->defaultInterneProprietaire(['nom' => 'KEITA', 'prenom' => 'Saoudatou']);
+        $site = $this->user->sites()->first();
+        $typeVehicule = TypeVehicule::factory()->create(['organization_id' => $this->org->id]);
+
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'type_vehicule_id' => $typeVehicule->id,
+            'site_id' => $site->id,
+            'proprietaire_id' => $defaut->id,
+            'categorie' => 'interne',
+        ]);
+
+        $this->actingAs($this->user)
+            ->get(route('vehicules.show', $vehicule))
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Vehicules/Show')
+                ->where('vehicule.proprietaire_id', $defaut->id)
+                ->where('vehicule.proprietaire_nom_affichage', 'Saoudatou KEITA')
+            );
+    }
+
+    public function test_show_expose_le_propritaire_entreprise_dun_vehicule_interne(): void
+    {
+        $defaut = $this->defaultInterneProprietaire();
+        $defaut->update(['type' => 'entreprise', 'raison_sociale' => 'Eau La Maman SARL']);
+        $site = $this->user->sites()->first();
+        $typeVehicule = TypeVehicule::factory()->create(['organization_id' => $this->org->id]);
+
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'type_vehicule_id' => $typeVehicule->id,
+            'site_id' => $site->id,
+            'proprietaire_id' => $defaut->id,
+            'categorie' => 'interne',
+        ]);
+
+        $this->actingAs($this->user)
+            ->get(route('vehicules.show', $vehicule))
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Vehicules/Show')
+                ->where('vehicule.proprietaire_nom_affichage', 'Eau La Maman SARL')
+                ->where('vehicule.proprietaire_est_entreprise', true)
+            );
+    }
+
     public function test_show_expose_proprietaire_id_null_quand_aucun_proprietaire(): void
     {
         // Une fiche peut rester sans propriétaire (donnée historique antérieure à la règle

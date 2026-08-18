@@ -55,6 +55,11 @@ class VehiculeController extends Controller
             'categorie_label' => $v->categorie_label,
             'proprietaire_id' => $v->proprietaire_id,
             'proprietaire_nom' => $v->proprietaire ? trim($v->proprietaire->prenom.' '.$v->proprietaire->nom) : null,
+            // Libellé d'affichage unique (raison sociale pour une entreprise, sinon identité
+            // civile) — utilisé partout où le propriétaire est montré, y compris pour le
+            // propriétaire interne par défaut (peut lui aussi être une entreprise).
+            'proprietaire_nom_affichage' => $v->proprietaire?->nom_affichage,
+            'proprietaire_est_entreprise' => $v->proprietaire?->est_entreprise ?? false,
             'proprietaire_telephone' => $v->proprietaire?->telephone,
             'proprietaire_code_phone_pays' => $v->proprietaire?->code_phone_pays,
             'agence_nom' => $agence?->nom,
@@ -525,7 +530,7 @@ class VehiculeController extends Controller
             ->sortBy('nom')
             ->map(fn (Proprietaire $p) => [
                 'value' => $p->id,
-                'label' => trim("{$p->prenom} {$p->nom}"),
+                'label' => $p->nom_affichage,
                 'telephone' => $p->telephone,
             ])
             ->values()
