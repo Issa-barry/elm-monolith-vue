@@ -38,6 +38,7 @@ const props = defineProps<{
     default_site_id: string | null;
     can_change_site: boolean;
     default_proprietaire_id: string | null;
+    seuil_global_impayes: number;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -67,6 +68,7 @@ const form = useForm({
     photo: null as File | null,
     is_active: true,
     capacites: [] as CapaciteRow[],
+    seuil_dette_derogation: null as number | null,
 });
 
 const canSubmit = computed(() => {
@@ -132,6 +134,7 @@ function submit() {
                 :sites="sites"
                 :can-change-site="can_change_site"
                 :default-proprietaire-id="default_proprietaire_id"
+                :seuil-global-impayes="seuil_global_impayes"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />

@@ -2,11 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Enums\DeclencheurCommissionVente;
 use App\Models\CommandeVente;
 use App\Models\CommissionVente;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
+use App\Models\Parametre;
 use App\Models\Produit;
 use App\Models\Proprietaire;
 use App\Models\Site;
@@ -35,6 +37,12 @@ class CommandeVenteCommissionEligibiliteTest extends TestCase
     {
         parent::setUp();
         $this->initOrgAndUser(['ventes.read', 'ventes.create', 'ventes.update']);
+
+        // Ce fichier teste l'ÉLIGIBILITÉ (livraison_vente) à la commission générée au moment du
+        // chargement, indépendamment du déclencheur par défaut de l'organisation (devenu
+        // FACTURE_ENCAISSEE le 18/08/2026, cf. Parametre::getDeclencheurCommissionVente()) — fixé
+        // explicitement ici pour ne jamais dépendre de ce défaut.
+        Parametre::setDeclencheurCommissionVente($this->org->id, DeclencheurCommissionVente::CHARGEMENT_VALIDE);
 
         $this->defaultSite = Site::create([
             'organization_id' => $this->org->id,

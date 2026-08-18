@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\DeclencheurCommissionVente;
 use App\Enums\StatutCommandeVente;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
@@ -9,6 +10,7 @@ use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
 use App\Models\FactureVente;
 use App\Models\Livreur;
+use App\Models\Parametre;
 use App\Models\Produit;
 use App\Models\Proprietaire;
 use App\Models\Site;
@@ -42,6 +44,12 @@ class CommandeVenteStatutTest extends TestCase
     {
         parent::setUp();
         $this->initOrgAndUser(['ventes.read', 'ventes.create', 'ventes.update', 'ventes.delete']);
+
+        // Ce fichier teste le workflow de statut (dont la génération de commission au moment du
+        // chargement), indépendamment du déclencheur par défaut de l'organisation (devenu
+        // FACTURE_ENCAISSEE le 18/08/2026, cf. Parametre::getDeclencheurCommissionVente()) —
+        // fixé explicitement ici pour ne jamais dépendre de ce défaut.
+        Parametre::setDeclencheurCommissionVente($this->org->id, DeclencheurCommissionVente::CHARGEMENT_VALIDE);
 
         $this->defaultSite = Site::create([
             'organization_id' => $this->org->id,

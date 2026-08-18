@@ -42,6 +42,7 @@ interface VehiculeData {
     photo_url: string | null;
     is_active: boolean;
     equipe_id: number | null;
+    seuil_dette_derogation: number | null;
 }
 
 const props = defineProps<{
@@ -54,6 +55,7 @@ const props = defineProps<{
     can_change_site: boolean;
     default_proprietaire_id: string | null;
     capacites: CapaciteRow[];
+    seuil_global_impayes: number;
 }>();
 const page = usePage();
 const flashSuccess = computed(
@@ -80,6 +82,7 @@ const form = useForm({
     photo: null as File | null,
     is_active: props.vehicule.is_active,
     capacites: [...props.capacites] as CapaciteRow[],
+    seuil_dette_derogation: props.vehicule.seuil_dette_derogation,
 });
 
 const canSubmit = computed(() => {
@@ -168,6 +171,7 @@ function submit() {
                 :can-change-site="can_change_site"
                 :show-status-field="!!vehicule.equipe_id"
                 :default-proprietaire-id="default_proprietaire_id"
+                :seuil-global-impayes="seuil_global_impayes"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />

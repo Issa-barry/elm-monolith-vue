@@ -423,9 +423,13 @@ function onSeuilBlur() {
                                 Activer le blocage sur seuil d'impayes
                             </p>
                             <p class="mt-0.5 text-xs text-muted-foreground">
-                                Si active, la creation de commande est interdite
-                                lorsque la dette du client ou du vehicule
-                                depasse le seuil ci-dessous.
+                                Si active, la creation de commande est
+                                interdite lorsque la dette depasse le seuil
+                                applicable : la dette du vehicule si la vente
+                                lui est rattachee, sinon celle du client.
+                                Certains vehicules peuvent avoir un seuil
+                                specifique (page Vehicules), qui remplace
+                                alors le seuil global ci-dessous pour eux.
                             </p>
                         </div>
 

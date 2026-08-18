@@ -7,6 +7,7 @@ use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
 use App\Models\Organization;
+use App\Models\Parametre;
 use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\Site;
@@ -199,6 +200,154 @@ class VehiculeTest extends TestCase
             'livraison_vente' => true,
             'livraison_logistique' => false,
         ]);
+    }
+
+    // ── Seuil de dette spécifique (dérogation impayés) ──────────────────────────
+
+    public function test_create_expose_le_seuil_global_impayes(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 750_000);
+
+        $this->actingAs($this->user)
+            ->get(route('vehicules.create'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Vehicules/Create')
+                ->where('seuil_global_impayes', 750_000)
+            );
+    }
+
+    public function test_store_persiste_le_seuil_dette_derogation(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $site = $this->user->sites()->first();
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Camion dérogation',
+                'immatriculation' => 'RC-002-GN',
+                'type_vehicule_id' => $this->typeId(),
+                'proprietaire_id' => $proprietaire->id,
+                'categorie' => 'partenaire',
+                'site_id' => $site->id,
+                'is_active' => true,
+                'livraison_vente' => true,
+                'livraison_logistique' => false,
+                'seuil_dette_derogation' => 2_000_000,
+            ]);
+
+        $this->assertDatabaseHas('vehicules', [
+            'organization_id' => $this->org->id,
+            'immatriculation' => 'RC-002-GN',
+            'seuil_dette_derogation' => 2_000_000,
+        ]);
+    }
+
+    /** Omis du payload : le véhicule reste sans dérogation, hérite du seuil global — jamais 0 par défaut. */
+    public function test_store_sans_seuil_dette_derogation_reste_null(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $site = $this->user->sites()->first();
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Camion standard',
+                'immatriculation' => 'RC-003-GN',
+                'type_vehicule_id' => $this->typeId(),
+                'proprietaire_id' => $proprietaire->id,
+                'categorie' => 'partenaire',
+                'site_id' => $site->id,
+                'is_active' => true,
+                'livraison_vente' => true,
+                'livraison_logistique' => false,
+            ]);
+
+        $this->assertDatabaseHas('vehicules', [
+            'organization_id' => $this->org->id,
+            'immatriculation' => 'RC-003-GN',
+            'seuil_dette_derogation' => null,
+        ]);
+    }
+
+    public function test_store_rejette_un_seuil_dette_derogation_negatif(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $site = $this->user->sites()->first();
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Camion invalide',
+                'immatriculation' => 'RC-004-GN',
+                'type_vehicule_id' => $this->typeId(),
+                'proprietaire_id' => $proprietaire->id,
+                'categorie' => 'partenaire',
+                'site_id' => $site->id,
+                'is_active' => true,
+                'livraison_vente' => true,
+                'livraison_logistique' => false,
+                'seuil_dette_derogation' => -1,
+            ])
+            ->assertSessionHasErrors('seuil_dette_derogation');
+    }
+
+    public function test_update_modifie_le_seuil_dette_derogation(): void
+    {
+        $vehicule = $this->makeVehicule($this->org);
+
+        $this->actingAs($this->user)
+            ->put(route('vehicules.update', $vehicule), [
+                'nom_vehicule' => $vehicule->nom_vehicule,
+                'immatriculation' => $vehicule->immatriculation,
+                'type_vehicule_id' => $vehicule->type_vehicule_id,
+                'proprietaire_id' => $vehicule->proprietaire_id,
+                'categorie' => 'partenaire',
+                'site_id' => $vehicule->site_id,
+                'is_active' => true,
+                'livraison_vente' => true,
+                'livraison_logistique' => false,
+                'seuil_dette_derogation' => 5_000_000,
+            ])
+            ->assertRedirect(route('vehicules.edit', $vehicule));
+
+        $this->assertSame(5_000_000, $vehicule->fresh()->seuil_dette_derogation);
+    }
+
+    /** Effacer le champ (repasser à vide) doit rétablir l'héritage du seuil global. */
+    public function test_update_peut_retirer_la_derogation_en_revenant_a_null(): void
+    {
+        $vehicule = $this->makeVehicule($this->org);
+        $vehicule->update(['seuil_dette_derogation' => 5_000_000]);
+
+        $this->actingAs($this->user)
+            ->put(route('vehicules.update', $vehicule), [
+                'nom_vehicule' => $vehicule->nom_vehicule,
+                'immatriculation' => $vehicule->immatriculation,
+                'type_vehicule_id' => $vehicule->type_vehicule_id,
+                'proprietaire_id' => $vehicule->proprietaire_id,
+                'categorie' => 'partenaire',
+                'site_id' => $vehicule->site_id,
+                'is_active' => true,
+                'livraison_vente' => true,
+                'livraison_logistique' => false,
+                'seuil_dette_derogation' => null,
+            ])
+            ->assertRedirect(route('vehicules.edit', $vehicule));
+
+        $this->assertNull($vehicule->fresh()->seuil_dette_derogation);
+    }
+
+    public function test_edit_expose_le_seuil_dette_derogation_et_le_seuil_global(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 300_000);
+        $vehicule = $this->makeVehicule($this->org);
+        $vehicule->update(['seuil_dette_derogation' => 1_200_000]);
+
+        $this->actingAs($this->user)
+            ->get(route('vehicules.edit', $vehicule))
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Vehicules/Edit')
+                ->where('vehicule.seuil_dette_derogation', 1_200_000)
+                ->where('seuil_global_impayes', 300_000)
+            );
     }
 
     /**
