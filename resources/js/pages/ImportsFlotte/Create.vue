@@ -215,8 +215,9 @@ function submit() {
                     <p class="mt-2 text-sm text-muted-foreground">
                         <strong>vehicule_capacite_sachets</strong> et
                         <strong>vehicule_capacite_bouteilles</strong> sont
-                        facultatives : laissées vides, la capacité par défaut du
-                        type de véhicule s'applique.
+                        facultatives : laissées vides, le véhicule reste non
+                        plafonné pour cette catégorie (aucune capacité par
+                        défaut n'est héritée du type de véhicule).
                     </p>
                     <p class="mt-2 text-sm text-muted-foreground">
                         <strong>vehicule_livraison_vente</strong>

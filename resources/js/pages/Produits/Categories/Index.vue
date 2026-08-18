@@ -22,6 +22,7 @@ import { computed, ref } from 'vue';
 interface Categorie {
     id: string;
     nom: string;
+    reference: string;
     description: string | null;
     statut: string;
     statut_label: string;
@@ -239,6 +240,19 @@ function destroy(categorie: Categorie) {
                         detail: `« ${categorie.nom} » a été supprimée.`,
                         life: 3000,
                     }),
+                // Le backend reste l'autorité finale (ex: catégorie utilisée comme référence de
+                // capacité véhicule — non détectable côté client, cf. CategorieController::destroy()).
+                // Sans ce handler, un rejet backend échouait silencieusement : la ligne restait en
+                // place sans aucun message visible pour l'utilisateur.
+                onError: (errors) =>
+                    toast.add({
+                        severity: 'warn',
+                        summary: 'Suppression impossible',
+                        detail:
+                            errors.delete ??
+                            'Cette catégorie ne peut pas être supprimée.',
+                        life: 5000,
+                    }),
             });
         },
     });
@@ -331,18 +345,27 @@ function destroy(categorie: Categorie) {
                             }"
                         >
                             <td class="px-4 py-2.5">
-                                <span
-                                    class="font-medium"
+                                <div
                                     :style="{
                                         paddingLeft: `${c.depth * 20}px`,
                                     }"
                                 >
-                                    <span
-                                        v-if="c.depth > 0"
-                                        class="mr-1 text-muted-foreground"
-                                        >└</span
-                                    >{{ c.displayLabel }}
-                                </span>
+                                    <span class="font-medium">
+                                        <span
+                                            v-if="c.depth > 0"
+                                            class="mr-1 text-muted-foreground"
+                                            >└</span
+                                        >{{ c.displayLabel }}
+                                    </span>
+                                    <!-- Référence machine stable (cf. Categorie::reference) — utile pour
+                                    préparer un fichier d'import (ex: colonne capacite_BOUTEILLE_EAU),
+                                    jamais modifiable ici. -->
+                                    <div
+                                        class="font-mono text-xs text-muted-foreground"
+                                    >
+                                        Réf. {{ c.source.reference }}
+                                    </div>
+                                </div>
                             </td>
                             <td
                                 class="max-w-xs truncate px-4 py-2.5 text-muted-foreground"

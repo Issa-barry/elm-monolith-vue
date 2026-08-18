@@ -5,12 +5,12 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Capacité par catégorie de produit, propre à un véhicule (override) — cf. table jumelle
- * type_vehicule_capacites pour la capacité par défaut du type. Additive : ne touche pas
- * à vehicules.capacite_packs (ancien plafond global, conservé). Voir VehiculeCapaciteService :
- * un véhicule sans aucune ligne ici continue d'utiliser exclusivement capacite_packs — le
- * nouveau système par catégorie n'entre en jeu que si l'organisation l'a explicitement
- * configuré, pour ne rien casser sur la flotte existante.
+ * Capacité par catégorie de produit, propre à un véhicule — seule et unique source de vérité
+ * pour le plafond de chargement (décision produit du 17/08/2026, cf. VehiculeCapaciteService).
+ * `vehicules.capacite_packs`/`capacite_bouteilles` sont des colonnes historiques désormais
+ * mortes (plus jamais alimentées par le formulaire véhicule ni par l'import flotte) : cette
+ * table ne s'y replie plus — un véhicule sans aucune ligne ici est simplement non plafonné,
+ * jamais limité par une ancienne valeur globale.
  */
 return new class extends Migration
 {

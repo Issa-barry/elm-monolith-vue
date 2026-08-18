@@ -74,9 +74,12 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
  *
  * Capacité (colonnes vehicule_capacite_sachets / vehicule_capacite_bouteilles) : une valeur
  * saisie devient une capacité maximale propre à ce véhicule dans vehicule_capacites, résolue
- * contre la Categorie "Sachet eau"/"Bouteille" du catalogue produit de l'organisation (cf.
- * CATEGORIE_SACHETS_NOM / CATEGORIE_BOUTEILLES_NOM, resoudreCategoriesCapacite()) — appliquée
- * aussi bien à la création qu'à un véhicule déjà existant, contrairement au reste de la ligne.
+ * contre la Categorie dont la `reference` machine stable vaut CATEGORIE_SACHETS_REFERENCE /
+ * CATEGORIE_BOUTEILLES_REFERENCE (cf. resoudreCategoriesCapacite()) — appliquée aussi bien à la
+ * création qu'à un véhicule déjà existant, contrairement au reste de la ligne. Résolution par
+ * `reference` plutôt que par `nom` : le nom affiché ("Sachet d'eau"/"Bouteille d'eau" pour "elm")
+ * reste librement renommable par l'organisation sans jamais casser cette convention d'import
+ * (cf. Categorie::genererReferenceUnique() — identifiant immuable, généré une fois à la création).
  * Aucun héritage depuis le type de véhicule : la capacité appartient exclusivement au véhicule
  * (cf. VehiculeCapaciteService). Il n'existe plus de notion intermédiaire de "groupe de
  * capacité" — la catégorie du catalogue produit EST directement la référence de capacité.
@@ -98,15 +101,24 @@ class ImportFlotteParser
 
     /**
      * Convention du gabarit Excel "flotte" ELM : les colonnes vehicule_capacite_sachets /
-     * vehicule_capacite_bouteilles ciblent la Categorie du catalogue produit portant ce nom
-     * exact dans l'organisation (comparaison insensible à la casse/espaces, cf.
-     * resoudreCategoriesCapacite()) — c'est une convention de CE gabarit, pas une notion codée
-     * en dur dans le moteur de capacité générique (VehiculeCapaciteService), qui ne raisonne
-     * qu'en categorie_id.
+     * vehicule_capacite_bouteilles ciblent la Categorie du catalogue produit portant cette
+     * `reference` machine exacte dans l'organisation (cf. resoudreCategoriesCapacite(),
+     * Categorie::reference) — c'est une convention de CE gabarit, pas une notion codée en dur
+     * dans le moteur de capacité générique (VehiculeCapaciteService), qui ne raisonne qu'en
+     * categorie_id. Cible la `reference` plutôt que le `nom` affiché ("Sachet d'eau"/"Bouteille
+     * d'eau" pour "elm", cf. ProduitsSeeder) : un renommage de la catégorie par l'organisation
+     * ne casse jamais l'import.
      */
-    private const CATEGORIE_SACHETS_NOM = 'Sachet eau';
+    private const CATEGORIE_SACHETS_REFERENCE = 'SACHET_EAU';
 
-    private const CATEGORIE_BOUTEILLES_NOM = 'Bouteille';
+    private const CATEGORIE_BOUTEILLES_REFERENCE = 'BOUTEILLE_EAU';
+
+    /** Libellés uniquement utilisés dans les messages d'avertissement — la résolution
+     * elle-même se fait par CATEGORIE_SACHETS_REFERENCE / CATEGORIE_BOUTEILLES_REFERENCE, jamais
+     * par ce libellé. */
+    private const CATEGORIE_SACHETS_LABEL = "Sachet d'eau";
+
+    private const CATEGORIE_BOUTEILLES_LABEL = "Bouteille d'eau";
 
     public function analyser(string $absolutePath, string $organizationId, TypeImportFlotte $type = TypeImportFlotte::FLOTTE): array
     {
@@ -518,22 +530,22 @@ class ImportFlotteParser
     }
 
     /**
-     * Résout une fois par analyse (pas par ligne) les Categorie "Sachet eau"/"Bouteille" du
-     * catalogue produit de l'organisation, par nom normalisé (casse/espaces ignorés) — cf.
-     * CATEGORIE_SACHETS_NOM / CATEGORIE_BOUTEILLES_NOM. Une organisation qui ne suit pas cette
-     * convention de nommage (ou n'a pas encore créé ces catégories) obtient simplement null :
-     * les capacités importées pour cette colonne sont alors ignorées avec un avertissement,
-     * jamais une erreur bloquante.
+     * Résout une fois par analyse (pas par ligne) les Categorie de référence du catalogue
+     * produit de l'organisation, par `reference` machine stable — cf.
+     * CATEGORIE_SACHETS_REFERENCE / CATEGORIE_BOUTEILLES_REFERENCE, Categorie::reference. Une
+     * organisation qui n'a pas (encore) de catégorie portant cette référence obtient simplement
+     * null : les capacités importées pour cette colonne sont alors ignorées avec un
+     * avertissement, jamais une erreur bloquante.
      *
      * @return array{0: ?string, 1: ?string}
      */
     private function resoudreCategoriesCapacite(string $orgId): array
     {
-        $resoudre = fn (string $nom): ?string => Categorie::where('organization_id', $orgId)
-            ->whereRaw('LOWER(TRIM(nom)) = ?', [mb_strtolower($nom)])
+        $resoudre = fn (string $reference): ?string => Categorie::where('organization_id', $orgId)
+            ->where('reference', $reference)
             ->value('id');
 
-        return [$resoudre(self::CATEGORIE_SACHETS_NOM), $resoudre(self::CATEGORIE_BOUTEILLES_NOM)];
+        return [$resoudre(self::CATEGORIE_SACHETS_REFERENCE), $resoudre(self::CATEGORIE_BOUTEILLES_REFERENCE)];
     }
 
     private function analyserGroupe(string $immatriculation, int $numeroLigneVehicule, Collection $ligneVehicule, array $lignesLivreursGroupe, string $orgId, array &$telephonesProprietairesVus, ?string $categorieSachetsId, ?string $categorieBouteillesId): array
@@ -620,20 +632,20 @@ class ImportFlotteParser
         // Facultatives : laissées vides, ce véhicule reste non plafonné (cf.
         // VehiculeCapaciteService — plus aucun héritage depuis le type). Une valeur saisie
         // devient une capacité maximale propre à CE véhicule (vehicule_capacites), pour la
-        // Categorie "Sachet eau"/"Bouteille" résolue une fois pour toute l'analyse — voir
+        // Categorie dont le `code` résolu une fois pour toute l'analyse — voir
         // resoudreCategoriesCapacite().
         [$capacitePacks, $erreurCapacitePacks] = $this->toCapaciteOrNull($ligneVehicule['vehicule_capacite_sachets'] ?? null);
         if ($erreurCapacitePacks) {
             $erreurs[] = "Capacité sachets invalide : {$erreurCapacitePacks}";
         } elseif ($capacitePacks !== null && $categorieSachetsId === null) {
-            $avertissements[] = 'Capacité sachets ignorée : aucune catégorie produit "'.self::CATEGORIE_SACHETS_NOM.'" dans cette organisation (Produits > Catégories).';
+            $avertissements[] = 'Capacité sachets ignorée : aucune catégorie produit "'.self::CATEGORIE_SACHETS_LABEL.'" (référence "'.self::CATEGORIE_SACHETS_REFERENCE.'") dans cette organisation (Produits > Catégories).';
             $capacitePacks = null;
         }
         [$capaciteBouteilles, $erreurCapaciteBouteilles] = $this->toCapaciteOrNull($ligneVehicule['vehicule_capacite_bouteilles'] ?? null);
         if ($erreurCapaciteBouteilles) {
             $erreurs[] = "Capacité bouteilles invalide : {$erreurCapaciteBouteilles}";
         } elseif ($capaciteBouteilles !== null && $categorieBouteillesId === null) {
-            $avertissements[] = 'Capacité bouteilles ignorée : aucune catégorie produit "'.self::CATEGORIE_BOUTEILLES_NOM.'" dans cette organisation (Produits > Catégories).';
+            $avertissements[] = 'Capacité bouteilles ignorée : aucune catégorie produit "'.self::CATEGORIE_BOUTEILLES_LABEL.'" (référence "'.self::CATEGORIE_BOUTEILLES_REFERENCE.'") dans cette organisation (Produits > Catégories).';
             $capaciteBouteilles = null;
         }
 

@@ -347,6 +347,48 @@ class VehiculeCapaciteTest extends TestCase
             ->assertSessionHasErrors('lignes');
     }
 
+    /**
+     * Deux produits DIFFÉRENTS de la même catégorie doivent voir leurs quantités cumulées avant
+     * comparaison au plafond — jamais contrôlées indépendamment ligne par ligne (même règle que
+     * la vente web, cf. CommandeVenteTest::test_store_fails_when_multi_lines_total_exceed_vehicule_capacity).
+     */
+    public function test_pdv_plusieurs_produits_de_la_meme_categorie_sont_cumules(): void
+    {
+        $sachets = $this->makeCategorie($this->org, 'Sachet eau');
+        $typeVehicule = $this->makeTypeVehicule($this->org);
+        $vehicule = $this->makeVehicule($this->org, $typeVehicule);
+        $vehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachets->id, 'capacite_max' => 70]);
+
+        $produitA = $this->makeProduitAvecVariante($this->org, ['nom' => 'Sachet 350ml', 'categorie_id' => $sachets->id], ['prix_vente' => 1000]);
+        $produitB = $this->makeProduitAvecVariante($this->org, ['nom' => 'Sachet 500ml', 'categorie_id' => $sachets->id], ['prix_vente' => 1000]);
+        $this->makeStock($produitA, 200);
+        $this->makeStock($produitB, 200);
+
+        // 40 + 30 = 70 (exactement le plafond) : autorisé.
+        $this->actingAs($this->user)
+            ->post('/backoffice/pdv/checkout', [
+                'mode' => 'Livreur',
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $produitA->id, 'quantite' => 40],
+                    ['produit_id' => $produitB->id, 'quantite' => 30],
+                ],
+            ])
+            ->assertSessionDoesntHaveErrors('lignes');
+
+        // 40 + 31 = 71 > 70 : refusé, alors qu'aucune ligne prise isolément ne dépasse le plafond.
+        $this->actingAs($this->user)
+            ->post('/backoffice/pdv/checkout', [
+                'mode' => 'Livreur',
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $produitA->id, 'quantite' => 40],
+                    ['produit_id' => $produitB->id, 'quantite' => 31],
+                ],
+            ])
+            ->assertSessionHasErrors('lignes');
+    }
+
     // ── Saisie des capacités : formulaire véhicule (création/modification) ──────
 
     public function test_store_vehicule_avec_capacites_les_enregistre_atomiquement(): void
@@ -589,5 +631,36 @@ class VehiculeCapaciteTest extends TestCase
 
         $response->assertSessionDoesntHaveErrors('lignes');
         $this->assertDatabaseHas('transferts_logistiques', ['vehicule_id' => $vehicule->id]);
+    }
+
+    /**
+     * Même règle de cumul par catégorie que la vente/le PDV, appliquée aux transferts
+     * logistiques : deux produits différents de la même catégorie voient leurs quantités
+     * additionnées avant comparaison au plafond.
+     */
+    public function test_logistique_plusieurs_produits_de_la_meme_categorie_sont_cumules(): void
+    {
+        $sachets = $this->makeCategorie($this->org, 'Sachet eau');
+        $typeVehicule = $this->makeTypeVehicule($this->org);
+        $vehicule = $this->makeVehicule($this->org, $typeVehicule, logistique: true);
+        $vehicule->capacites()->create(['organization_id' => $this->org->id, 'categorie_id' => $sachets->id, 'capacite_max' => 70]);
+        $siteDestination = $this->makeSiteDestination($this->org);
+        $produitA = $this->makeProduitAvecVariante($this->org, ['nom' => 'Sachet 350ml', 'categorie_id' => $sachets->id], ['prix_vente' => 1000]);
+        $produitB = $this->makeProduitAvecVariante($this->org, ['nom' => 'Sachet 500ml', 'categorie_id' => $sachets->id], ['prix_vente' => 1000]);
+
+        // 40 + 31 = 71 > 70 : refusé, alors qu'aucune ligne prise isolément ne dépasse le plafond.
+        $response = $this->actingAs($this->user)
+            ->post(route('logistique.store'), [
+                'site_source_id' => $this->defaultSite->id,
+                'site_destination_id' => $siteDestination->id,
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [
+                    ['produit_id' => $produitA->id, 'quantite_demandee' => 40, 'notes' => ''],
+                    ['produit_id' => $produitB->id, 'quantite_demandee' => 31, 'notes' => ''],
+                ],
+            ]);
+
+        $response->assertSessionHasErrors('lignes');
+        $this->assertDatabaseMissing('transferts_logistiques', ['vehicule_id' => $vehicule->id]);
     }
 }
