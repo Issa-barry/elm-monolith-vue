@@ -376,12 +376,15 @@ test('création — capacités maximales de chargement saisies dans le formulair
     });
 
     // Étape 5 : elle doit aussi être pré-remplie sur la fiche Modifier (persistance réelle).
+    // Là aussi CapacitesEditor.vue est en édition inline : la valeur ne vit que dans
+    // l'attribut value de l'input, jamais dans le textContent du body (cf. Étape 2).
     await page.goto(`${page.url()}/edit`);
     await page.waitForURL(/\/vehicules\/[a-z0-9]+\/edit$/, { timeout: 15_000 });
     await expect(page.getByText(nomCategorie).last()).toBeVisible({
         timeout: 10_000,
     });
-    await expect(page.locator('body')).toContainText('1700', {
-        timeout: 10_000,
-    });
+    await expect(page.locator('input[inputmode="numeric"]').last()).toHaveValue(
+        '1700',
+        { timeout: 10_000 },
+    );
 });
