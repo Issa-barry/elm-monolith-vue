@@ -58,7 +58,9 @@ class AuthRedirects
         // rôle de l'utilisateur pouvait faire atterrir une organisation fraîche directement sur
         // le back-office sans site. Cf. rapport de bug "Aucun site affecté" (comportement
         // intermittent selon qu'une intended URL était ou non présente en session).
-        if (self::needsOnboarding($user)) {
+        // Ne s'applique qu'au staff : les routes /client/* ne sont jamais gardées par
+        // EnsureOrganizationHasSite (cf. routes/web.php), donc un client n'a rien à onboarder.
+        if (! $user?->hasAnyRole(self::CLIENT_ROLES) && self::needsOnboarding($user)) {
             $request->session()->forget('url.intended');
 
             return $default;

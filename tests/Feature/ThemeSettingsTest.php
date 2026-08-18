@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Organization;
 use App\Models\Parametre;
+use App\Models\Site;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
@@ -28,6 +29,7 @@ class ThemeSettingsTest extends TestCase
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('admin_entreprise');
         $user->givePermissionTo(['parametres.read', 'parametres.update']);
+        $this->attachSite($org, $user);
 
         return $user;
     }
@@ -37,8 +39,19 @@ class ThemeSettingsTest extends TestCase
         Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('admin_entreprise');
+        $this->attachSite($org, $user);
 
         return $user;
+    }
+
+    // Une organisation sans aucun site force l'onboarding pour tout rôle staff, super_admin
+    // compris (cf. AuthRedirects::needsOnboarding, middleware EnsureOrganizationHasSite) : sans
+    // site, la route dashboard (protégée par org.site.required) redirige avant même d'atteindre
+    // le contrôleur testé.
+    private function attachSite(Organization $org, User $user): void
+    {
+        $site = Site::factory()->for($org)->create();
+        $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
     }
 
     /** Simule la politique verrouillée de production : une seule valeur par axe. */

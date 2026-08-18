@@ -111,6 +111,8 @@ class UserControllerTest extends TestCase
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('manager');
+        $site = $this->createSite($org);
+        $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
 
         $this->actingAs($user)
             ->get(route('users.index'))
