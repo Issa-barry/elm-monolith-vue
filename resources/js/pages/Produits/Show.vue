@@ -97,6 +97,7 @@ interface Produit {
     statut: string;
     statut_label: string;
     prix_usine: number | null;
+    prix_usine_tricycle: number | null;
     prix_vente: number | null;
     prix_achat: number | null;
     cout: number | null;
@@ -693,11 +694,27 @@ const ajustements = props.mouvements.map((m) => ({
                                 class="h-3.5 w-3.5 text-muted-foreground"
                             />
                             <span class="text-xs text-muted-foreground"
-                                >Prix usine</span
+                                >Prix usine — Autres véhicules</span
                             >
                         </div>
                         <p class="text-base font-semibold">
                             {{ formatPrice(produit.prix_usine) }}
+                        </p>
+                    </div>
+                    <div
+                        v-if="produit.prix_usine_tricycle !== null"
+                        class="rounded-lg bg-muted/50 p-4"
+                    >
+                        <div class="mb-1 flex items-center gap-1.5">
+                            <Factory
+                                class="h-3.5 w-3.5 text-muted-foreground"
+                            />
+                            <span class="text-xs text-muted-foreground"
+                                >Prix usine — Tricycle</span
+                            >
+                        </div>
+                        <p class="text-base font-semibold">
+                            {{ formatPrice(produit.prix_usine_tricycle) }}
                         </p>
                     </div>
                     <div

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\CategorieTarifaireVehicule;
 use App\Models\Proprietaire;
 use App\Models\TypeVehicule;
 use App\Models\Vehicule;
@@ -82,6 +83,33 @@ class TypeVehiculeTest extends TestCase
         ]);
     }
 
+    public function test_store_accepte_une_categorie_tarifaire(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('type-vehicules.store'), [
+                'nom' => 'Tricycle Express',
+                'categorie_tarifaire' => CategorieTarifaireVehicule::TRICYCLE->value,
+                'is_active' => true,
+            ])
+            ->assertRedirect(route('type-vehicules.index'));
+
+        $this->assertDatabaseHas('type_vehicules', [
+            'organization_id' => $this->org->id,
+            'nom' => 'Tricycle Express',
+            'categorie_tarifaire' => CategorieTarifaireVehicule::TRICYCLE->value,
+        ]);
+    }
+
+    public function test_store_refuse_une_categorie_tarifaire_invalide(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('type-vehicules.store'), [
+                'nom' => 'Van',
+                'categorie_tarifaire' => 'valeur_inconnue',
+            ])
+            ->assertSessionHasErrors('categorie_tarifaire');
+    }
+
     public function test_store_fails_with_empty_data(): void
     {
         $this->actingAs($this->user)
@@ -133,6 +161,27 @@ class TypeVehiculeTest extends TestCase
         $this->assertDatabaseHas('type_vehicules', [
             'id' => $type->id,
             'nom' => 'Moto',
+        ]);
+    }
+
+    public function test_update_modifie_la_categorie_tarifaire(): void
+    {
+        $type = TypeVehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'categorie_tarifaire' => CategorieTarifaireVehicule::AUTRE_VEHICULE,
+        ]);
+
+        $this->actingAs($this->user)
+            ->put(route('type-vehicules.update', $type), [
+                'nom' => $type->nom,
+                'categorie_tarifaire' => CategorieTarifaireVehicule::TRICYCLE->value,
+                'is_active' => true,
+            ])
+            ->assertRedirect(route('type-vehicules.index'));
+
+        $this->assertDatabaseHas('type_vehicules', [
+            'id' => $type->id,
+            'categorie_tarifaire' => CategorieTarifaireVehicule::TRICYCLE->value,
         ]);
     }
 

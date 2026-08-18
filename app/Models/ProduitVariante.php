@@ -22,6 +22,7 @@ class ProduitVariante extends Model
         'sku',
         'code_barres',
         'prix_usine',
+        'prix_usine_tricycle',
         'prix_vente',
         'prix_achat',
         'cout',
@@ -34,6 +35,7 @@ class ProduitVariante extends Model
 
     protected $casts = [
         'prix_usine' => 'integer',
+        'prix_usine_tricycle' => 'integer',
         'prix_vente' => 'integer',
         'prix_achat' => 'integer',
         'cout' => 'integer',

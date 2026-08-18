@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Enums\CategorieTarifaireVehicule;
 use App\Models\Organization;
 use App\Models\TypeVehicule;
 use Illuminate\Database\Seeder;
@@ -16,14 +17,23 @@ use Illuminate\Database\Seeder;
  */
 class TypeVehiculesSeeder extends Seeder
 {
-    private const TYPES = ['Tricycle', 'Minibus', 'Camionette', 'Camion', 'Remorque'];
+    // Catégorie tarifaire par défaut (cf. App\Enums\CategorieTarifaireVehicule) : "Tricycle" est
+    // le seul type classé TRICYCLE d'origine, tous les autres démarrent en AUTRE_VEHICULE —
+    // reste modifiable ensuite par l'organisation via TypeVehiculeController.
+    private const TYPES = [
+        'Tricycle' => CategorieTarifaireVehicule::TRICYCLE,
+        'Minibus' => CategorieTarifaireVehicule::AUTRE_VEHICULE,
+        'Camionette' => CategorieTarifaireVehicule::AUTRE_VEHICULE,
+        'Camion' => CategorieTarifaireVehicule::AUTRE_VEHICULE,
+        'Remorque' => CategorieTarifaireVehicule::AUTRE_VEHICULE,
+    ];
 
     public static function seedPourOrganisation(string $organizationId): void
     {
-        foreach (self::TYPES as $nom) {
+        foreach (self::TYPES as $nom => $categorieTarifaire) {
             TypeVehicule::firstOrCreate(
                 ['organization_id' => $organizationId, 'nom' => $nom],
-                ['is_active' => true]
+                ['is_active' => true, 'categorie_tarifaire' => $categorieTarifaire]
             );
         }
     }

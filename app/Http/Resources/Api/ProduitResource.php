@@ -31,6 +31,7 @@ class ProduitResource extends JsonResource
             'statut' => $this->statut?->value,
             'statut_label' => $this->statut?->label(),
             'prix_usine' => $variante?->prix_usine,
+            'prix_usine_tricycle' => $variante?->prix_usine_tricycle,
             'prix_vente' => $variante?->prix_vente,
             'prix_achat' => $variante?->prix_achat,
             'cout' => $variante?->cout,

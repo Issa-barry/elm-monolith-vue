@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { login, randomDigits } from './helpers';
+import { login, randomDigits, selectOptionFromCombobox } from './helpers';
 
 const E2E_TYPE_PREFIX = 'E2EType-';
 
@@ -25,11 +25,21 @@ test('login + create type vehicule + verify in list + edit + delete', async ({
 
     await page.locator('#nom').fill(nom);
 
+    // Catégorie tarifaire — détermine le prix usine appliqué automatiquement selon le
+    // véhicule (cf. CategorieTarifaireVehicule, PrixUsineResolver).
+    await selectOptionFromCombobox(
+        page,
+        page.getByRole('combobox').first(),
+        /tricycle/i,
+    );
+
     await page.getByRole('button', { name: /créer/i }).click();
     await page.waitForURL(/\/type-vehicules$/, { timeout: 15_000 });
 
-    // Step 3: Verify in list
-    await expect(page.getByText(nom)).toBeVisible({ timeout: 10_000 });
+    // Step 3: Verify in list — nom et catégorie tarifaire
+    const createdRow = page.locator('tbody tr', { hasText: nom });
+    await expect(createdRow).toBeVisible({ timeout: 10_000 });
+    await expect(createdRow.getByText('Tricycle', { exact: true })).toBeVisible();
 
     // Step 4: Edit
     const row = page.locator('tbody tr', { hasText: nom });
@@ -71,7 +81,9 @@ test('default types appear in list', async ({ page }) => {
     await expect(
         page.getByRole('cell', { name: 'Camionette', exact: true }),
     ).toBeVisible({ timeout: 10_000 });
+    // "Tricycle" apparaît deux fois sur cette ligne : colonne Nom ET colonne Catégorie
+    // tarifaire (seeder par défaut, cf. TypeVehiculesSeeder) — .first() cible la colonne Nom.
     await expect(
-        page.getByRole('cell', { name: 'Tricycle', exact: true }),
+        page.getByRole('cell', { name: 'Tricycle', exact: true }).first(),
     ).toBeVisible({ timeout: 10_000 });
 });

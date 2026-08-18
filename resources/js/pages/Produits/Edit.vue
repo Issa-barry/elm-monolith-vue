@@ -50,6 +50,7 @@ interface Variante {
     sku: string | null;
     code_barres: string | null;
     prix_usine: number | null;
+    prix_usine_tricycle: number | null;
     prix_vente: number | null;
     prix_achat: number | null;
     cout: number | null;
@@ -68,6 +69,7 @@ interface ProduitData {
     produit_type_id: string;
     statut: string;
     prix_usine: number | null;
+    prix_usine_tricycle: number | null;
     prix_vente: number | null;
     prix_achat: number | null;
     cout: number | null;
@@ -117,6 +119,7 @@ const form = useForm({
     produit_type_id: props.produit.produit_type_id,
     statut: props.produit.statut,
     prix_usine: props.produit.prix_usine,
+    prix_usine_tricycle: props.produit.prix_usine_tricycle,
     prix_vente: props.produit.prix_vente,
     prix_achat: props.produit.prix_achat,
     cout: props.produit.cout,

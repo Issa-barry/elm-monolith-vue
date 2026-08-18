@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\CategorieTarifaireVehicule;
 use App\Models\TypeVehicule;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -27,6 +28,8 @@ class TypeVehiculeController extends Controller
                 'id' => $t->id,
                 'nom' => $t->nom,
                 'description' => $t->description,
+                'categorie_tarifaire' => $t->categorie_tarifaire?->value,
+                'categorie_tarifaire_label' => $t->categorie_tarifaire?->label(),
                 'is_active' => $t->is_active,
                 'vehicules_count' => $t->vehicules()->count(),
             ]);
@@ -40,7 +43,9 @@ class TypeVehiculeController extends Controller
     {
         $this->authorize('create', TypeVehicule::class);
 
-        return Inertia::render('TypeVehicules/Create');
+        return Inertia::render('TypeVehicules/Create', [
+            'categoriesTarifaires' => CategorieTarifaireVehicule::options(),
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -55,6 +60,7 @@ class TypeVehiculeController extends Controller
                 Rule::unique('type_vehicules', 'nom')->where('organization_id', $orgId),
             ],
             'description' => 'nullable|string|max:500',
+            'categorie_tarifaire' => ['nullable', Rule::in(CategorieTarifaireVehicule::values())],
             'is_active' => 'boolean',
         ], $this->messages());
 
@@ -73,8 +79,10 @@ class TypeVehiculeController extends Controller
                 'id' => $typeVehicule->id,
                 'nom' => $typeVehicule->nom,
                 'description' => $typeVehicule->description,
+                'categorie_tarifaire' => $typeVehicule->categorie_tarifaire?->value,
                 'is_active' => $typeVehicule->is_active,
             ],
+            'categoriesTarifaires' => CategorieTarifaireVehicule::options(),
         ]);
     }
 
@@ -92,6 +100,7 @@ class TypeVehiculeController extends Controller
                     ->ignore($typeVehicule->id),
             ],
             'description' => 'nullable|string|max:500',
+            'categorie_tarifaire' => ['nullable', Rule::in(CategorieTarifaireVehicule::values())],
             'is_active' => 'boolean',
         ], $this->messages());
 

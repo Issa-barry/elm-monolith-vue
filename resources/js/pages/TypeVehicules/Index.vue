@@ -12,6 +12,8 @@ interface TypeVehiculeRow {
     id: string;
     nom: string;
     description: string | null;
+    categorie_tarifaire: string | null;
+    categorie_tarifaire_label: string | null;
     is_active: boolean;
     vehicules_count: number;
 }
@@ -119,6 +121,7 @@ function destroy(id: string) {
                             class="border-b text-left text-xs font-semibold tracking-wider text-muted-foreground uppercase"
                         >
                             <th class="px-4 py-3">Nom</th>
+                            <th class="px-4 py-3">Catégorie tarifaire</th>
                             <th class="px-4 py-3 text-center">Statut</th>
                             <th class="px-4 py-3 text-center">Véhicules</th>
                             <th class="px-4 py-3" />
@@ -138,6 +141,9 @@ function destroy(id: string) {
                                 >
                                     {{ type.description }}
                                 </p>
+                            </td>
+                            <td class="px-4 py-3 text-muted-foreground">
+                                {{ type.categorie_tarifaire_label || '—' }}
                             </td>
                             <td class="px-4 py-3 text-center">
                                 <span
@@ -181,7 +187,7 @@ function destroy(id: string) {
                         </tr>
                         <tr v-if="typesFiltres.length === 0">
                             <td
-                                colspan="4"
+                                colspan="5"
                                 class="px-4 py-10 text-center text-sm text-muted-foreground"
                             >
                                 Aucun type de véhicule trouvé.
