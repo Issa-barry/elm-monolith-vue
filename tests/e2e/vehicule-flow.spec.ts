@@ -332,9 +332,11 @@ test('création — capacités maximales de chargement saisies dans le formulair
         await selectOptionFromCombobox(page, page.locator('#site_id'));
     }
 
-    await page
-        .getByRole('button', { name: /ajouter une capacité/i })
-        .click();
+    // "Ajouter une ligne" insère immédiatement une ligne éditable dans form.capacites — plus
+    // de bouton "Ajouter" intermédiaire à confirmer par ligne (ancien workflow à double
+    // validation supprimé) : on remplit directement la ligne, la validation (champ manquant,
+    // capacité <= 0) n'intervient qu'à la soumission globale du véhicule, ci-dessous.
+    await page.getByRole('button', { name: /ajouter une ligne/i }).click();
     const categorieDropdown = page
         .locator('label')
         .filter({ hasText: /^Catégorie de produit$/ })
@@ -342,23 +344,13 @@ test('création — capacités maximales de chargement saisies dans le formulair
         .getByRole('combobox');
     await selectOptionFromCombobox(page, categorieDropdown, nomCategorie);
     // PrimeVue InputNumber traite les frappes une par une (formatage interne) — .fill() pose
-    // la valeur DOM sans déclencher sa logique de parsing, laissant le v-model à null et le
-    // bouton "Ajouter" durablement désactivé (cf. tests/e2e/stock-ajustement.spec.ts) — c'est
-    // la cause réelle du bug "le bouton Ajouter disparaît" rapporté en usage manuel. Focus
-    // explicite puis blur en sortie pour forcer la validation/commit interne du composant
-    // avant de vérifier l'état du bouton (évite une course avec son cycle de rendu interne).
+    // la valeur DOM sans déclencher sa logique de parsing, laissant le v-model à null (cf.
+    // tests/e2e/stock-ajustement.spec.ts) : focus explicite puis blur en sortie pour forcer
+    // le commit interne du composant avant de continuer.
     const capaciteMaxInput = page.locator('input[inputmode="numeric"]').last();
     await capaciteMaxInput.click();
     await capaciteMaxInput.pressSequentially('1700');
     await capaciteMaxInput.blur();
-    // "Ajouter" ici n'est qu'un ajout à la liste locale du formulaire (pas de requête réseau) —
-    // distinct du bouton de soumission finale du véhicule, plus bas. Le bouton "Ajouter une
-    // capacité" est masqué (v-else) tant que ce panneau d'ajout est ouvert, donc ce nom exact
-    // ne désigne plus qu'un seul bouton à ce stade. Doit rester visible/activable tout du long.
-    const confirmerAjoutBtn = page.getByRole('button', { name: /^ajouter$/i });
-    await expect(confirmerAjoutBtn).toBeVisible();
-    await expect(confirmerAjoutBtn).toBeEnabled();
-    await confirmerAjoutBtn.click();
 
     await expect(page.getByText(nomCategorie).last()).toBeVisible({
         timeout: 5_000,

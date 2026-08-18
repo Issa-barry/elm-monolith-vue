@@ -485,6 +485,7 @@ function handleSubmit() {
             <CapacitesEditor
                 :model-value="form.capacites"
                 :categories-produit="categoriesProduit"
+                :errors="errors as Record<string, string>"
                 @update:model-value="
                     $emit('update:form', { ...form, capacites: $event })
                 "
