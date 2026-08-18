@@ -81,6 +81,7 @@ const activeTab = ref<'types' | 'droits'>('types');
 
 const toast = useToast();
 
+const search = ref('');
 const filters = ref({ global: { value: '', matchMode: 'contains' } });
 watch(search, (val) => {
     filters.value.global.value = val;

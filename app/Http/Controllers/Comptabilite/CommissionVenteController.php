@@ -14,6 +14,7 @@ use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\PaiementCommissionVente;
 use App\Models\Site;
+use App\Models\VehiculeCapacite;
 use App\Services\AuditLogService;
 use App\Services\CommissionAdjustmentService;
 use App\Services\CommissionStatusResolver;
@@ -80,11 +81,14 @@ class CommissionVenteController extends Controller
             ->whereNotNull('cp.livreur_id')
             ->whereNotIn('cp.statut', [StatutCommission::CREEE->value, StatutCommission::ANNULEE->value])
             ->leftJoin('livreurs', 'livreurs.id', '=', 'cp.livreur_id')
+            // telephone n'est plus une colonne physique de `livreurs` depuis la refonte
+            // Personne — jointure vers `personnes` requise (cf. App\Models\Livreur::$appends).
+            ->leftJoin('personnes AS livreurs_personnes', 'livreurs_personnes.id', '=', 'livreurs.personne_id')
             ->select(['cp.livreur_id AS beneficiaire_id'])
             ->selectRaw(
                 '"livreur"                        AS type_beneficiaire,
                  MAX(cp.beneficiaire_nom)         AS beneficiaire_nom,
-                 MAX(livreurs.telephone)          AS telephone,
+                 MAX(livreurs_personnes.telephone) AS telephone,
                  SUM(cp.montant_brut)             AS total_brut_cumule,
                  SUM(cp.frais_supplementaires)    AS total_frais,
                  SUM(COALESCE(cp.montant_actuel, cp.montant_net)) AS total_a_payer_cumule,
@@ -108,9 +112,11 @@ class CommissionVenteController extends Controller
 
         $partsParLivreur = CommissionPart::with([
             'commission.commande.site:id,nom',
-            'commission.vehicule:id,nom_vehicule,immatriculation,capacite_packs,type_vehicule_id,proprietaire_id',
+            'commission.vehicule:id,nom_vehicule,immatriculation,type_vehicule_id,proprietaire_id',
             'commission.vehicule.typeVehicule:id,nom',
-            'commission.vehicule.proprietaire:id,prenom,nom,telephone,code_phone_pays',
+            'commission.vehicule.proprietaire:id,personne_id',
+            'commission.vehicule.proprietaire.personne',
+            'commission.vehicule.capacites.categorie',
         ])
             ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
             ->where('type_beneficiaire', 'livreur')
@@ -139,9 +145,10 @@ class CommissionVenteController extends Controller
                 'nom' => $v->nom_vehicule,
                 'immatriculation' => $v->immatriculation,
                 'type' => $v->typeVehicule?->nom,
-                // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
-                // on retombe sur la capacité par défaut du type (cf. VehiculeController).
-                'capacite_packs' => $v->capacite_packs ?? $v->typeVehicule?->capacite_defaut,
+                'capacites' => $v->capacites->map(fn (VehiculeCapacite $c) => [
+                    'categorie_nom' => $c->categorie->nom,
+                    'capacite_max' => $c->capacite_max,
+                ])->values()->all(),
                 'proprietaire_nom' => $v->proprietaire
                     ? trim($v->proprietaire->prenom.' '.$v->proprietaire->nom)
                     : null,
@@ -659,7 +666,8 @@ class CommissionVenteController extends Controller
         $query = CommissionPart::with([
             'commission.commande.site:id,nom',
             'commission.vehicule:id,nom_vehicule,immatriculation',
-            'livreur:id,telephone',
+            'livreur:id,personne_id',
+            'livreur.personne',
         ])
             ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
             ->where('type_beneficiaire', 'livreur')

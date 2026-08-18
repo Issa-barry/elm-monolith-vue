@@ -18,27 +18,77 @@ class Proprietaire extends Model
         'is_active' => 'boolean',
     ];
 
+    // Identité (nom/prenom/surnom/email/telephone/adresse/ville/pays) portée par Personne —
+    // jamais de colonne équivalente ici, cf. accesseurs ci-dessous.
     protected $fillable = [
         'organization_id',
         'user_id',
-        'nom',
-        'prenom',
-        'surnom',
-        'email',
-        'telephone',
-        'adresse',
-        'ville',
-        'pays',
-        'code_pays',
-        'code_phone_pays',
+        'personne_id',
         'is_active',
     ];
 
-    // ── Accessor ──────────────────────────────────────────────────────────────
+    // Sans $appends, ces accesseurs (proxy vers Personne) sont silencieusement absents de
+    // toute sérialisation JSON/array du modèle brut (cf. incident User — HandleInertiaRequests).
+    protected $appends = [
+        'nom_complet', 'nom', 'prenom', 'surnom', 'email', 'telephone',
+        'adresse', 'ville', 'pays', 'code_pays', 'code_phone_pays',
+    ];
+
+    // ── Accesseurs — proxy en lecture seule vers Personne ───────────────────────
 
     public function getNomCompletAttribute(): string
     {
-        return trim("{$this->prenom} {$this->nom}");
+        return $this->personne?->nom_complet ?? '';
+    }
+
+    public function getNomAttribute(): ?string
+    {
+        return $this->personne?->nom;
+    }
+
+    public function getPrenomAttribute(): ?string
+    {
+        return $this->personne?->prenom;
+    }
+
+    public function getSurnomAttribute(): ?string
+    {
+        return $this->personne?->surnom;
+    }
+
+    public function getEmailAttribute(): ?string
+    {
+        return $this->personne?->email;
+    }
+
+    public function getTelephoneAttribute(): ?string
+    {
+        return $this->personne?->telephone;
+    }
+
+    public function getAdresseAttribute(): ?string
+    {
+        return $this->personne?->adresse;
+    }
+
+    public function getVilleAttribute(): ?string
+    {
+        return $this->personne?->ville;
+    }
+
+    public function getPaysAttribute(): ?string
+    {
+        return $this->personne?->pays;
+    }
+
+    public function getCodePaysAttribute(): ?string
+    {
+        return $this->personne?->code_pays;
+    }
+
+    public function getCodePhonePaysAttribute(): ?string
+    {
+        return $this->personne?->code_phone_pays;
     }
 
     // ── Relations ─────────────────────────────────────────────────────────────
@@ -48,14 +98,20 @@ class Proprietaire extends Model
         return $this->belongsTo(Organization::class);
     }
 
+    public function personne(): BelongsTo
+    {
+        return $this->belongsTo(Personne::class);
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
+    /** Les pièces d'identité appartiennent à la personne, pas à un rôle particulier. */
     public function piecesIdentite(): MorphMany
     {
-        return $this->morphMany(PieceIdentite::class, 'identifiable');
+        return $this->personne->piecesIdentite();
     }
 
     // Pas de pieceIdentiteActive() en MorphOne : plusieurs pièces de types
@@ -75,15 +131,18 @@ class Proprietaire extends Model
     }
 
     /**
-     * Propriétaire par défaut représentant l'organisation elle-même (voir
-     * database/seeders/ProprietairesSeeder.php) — assigné automatiquement à un véhicule quand
-     * aucun propriétaire tiers n'est explicitement choisi. Centralise ce qui était dupliqué
-     * entre VehiculeController et EquipeLivraisonController.
+     * Propriétaire par défaut représentant l'organisation elle-même — assigné automatiquement
+     * à un véhicule quand aucun propriétaire tiers n'est explicitement choisi. Centralise ce qui
+     * était dupliqué entre VehiculeController et EquipeLivraisonController.
+     *
+     * Source de vérité : Organization::proprietaire_interne_id (relation explicite par
+     * organisation, fixée à l'installation — cf. InstallationService::install()). N'infère
+     * plus jamais ce propriétaire d'un numéro de téléphone particulier : cette ancienne
+     * implémentation ne fonctionnait que pour l'organisation historique de démonstration
+     * seedée par ProprietairesSeeder, et renvoyait toujours null pour toute autre organisation.
      */
     public static function interneParDefautId(string $organizationId): ?string
     {
-        return static::where('organization_id', $organizationId)
-            ->where('telephone', '+224622602693')
-            ->value('id');
+        return Organization::where('id', $organizationId)->value('proprietaire_interne_id');
     }
 }

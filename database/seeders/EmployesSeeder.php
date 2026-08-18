@@ -9,6 +9,7 @@ use App\Enums\TypeEmploye;
 use App\Models\Contrat;
 use App\Models\Employe;
 use App\Models\Organization;
+use App\Models\Personne;
 use App\Models\Site;
 use App\Services\MatriculeService;
 use Illuminate\Database\Seeder;
@@ -69,16 +70,16 @@ class EmployesSeeder extends Seeder
         foreach ($employes as $data) {
             $siteModel = $data['employe']['site'];
 
+            $personne = Personne::resoudreOuCreer($org->id, [
+                'nom' => mb_strtoupper($data['employe']['nom'], 'UTF-8'),
+                'prenom' => mb_convert_case($data['employe']['prenom'], MB_CASE_TITLE, 'UTF-8'),
+                'email' => $data['employe']['email'],
+                'telephone' => $data['employe']['telephone'],
+            ]);
+
             $employe = Employe::firstOrCreate(
+                ['organization_id' => $org->id, 'personne_id' => $personne->id],
                 [
-                    'organization_id' => $org->id,
-                    'telephone' => $data['employe']['telephone'],
-                ],
-                [
-                    'nom' => mb_strtoupper($data['employe']['nom'], 'UTF-8'),
-                    'prenom' => mb_convert_case($data['employe']['prenom'], MB_CASE_TITLE, 'UTF-8'),
-                    'email' => $data['employe']['email'],
-                    'telephone' => $data['employe']['telephone'],
                     'type_employe' => $data['employe']['type_employe'],
                     'statut' => $data['employe']['statut'],
                     'site_id' => $siteModel->id,

@@ -5,7 +5,9 @@ namespace App\Services;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Intervention\Image\Drivers\Gd\Driver;
+use Intervention\Image\Exceptions\DecoderException;
 use Intervention\Image\ImageManager;
 
 class ImageService
@@ -54,7 +56,17 @@ class ImageService
 
     private function storeResized(UploadedFile $file, string $folder, int $maxWidth, int $maxHeight, int $quality): string
     {
-        $image = $this->manager->read($file->getRealPath());
+        // La validation Laravel `image` (getimagesize()) n'exclut pas les fichiers qu'un
+        // decodeur GD/Imagick refuse ensuite de lire pixel par pixel (variantes PNG limites,
+        // profils de couleur exotiques...) — sans ce catch, un fichier de ce type fait
+        // planter la requête en 500 au lieu d'un message d'erreur exploitable.
+        try {
+            $image = $this->manager->read($file->getRealPath());
+        } catch (DecoderException) {
+            throw ValidationException::withMessages([
+                'photo' => "Cette image n'a pas pu être traitée. Essayez un autre fichier (JPG, PNG ou WEBP).",
+            ]);
+        }
 
         // Réduire si trop grande (garde le ratio)
         if ($image->width() > $maxWidth || $image->height() > $maxHeight) {

@@ -2,10 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\DomaineActivite;
+use App\Http\Controllers\Concerns\HasOtpRateLimitResponse;
+use App\Mail\InstallEmailVerificationMail;
 use App\Services\InstallationService;
+use App\Services\OtpService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -26,6 +32,8 @@ use Inertia\Response;
  */
 class InstallWizardController extends Controller
 {
+    use HasOtpRateLimitResponse;
+
     public function __construct(private readonly InstallationService $service) {}
 
     public function show(Request $request): Response|RedirectResponse
@@ -40,7 +48,14 @@ class InstallWizardController extends Controller
             return Inertia::render('Install/Token');
         }
 
-        return Inertia::render('Install/Wizard');
+        return Inertia::render('Install/Wizard', [
+            'domaines' => DomaineActivite::options(),
+            // Dérivé de InstallationService::isSaas() (config('app.deployment_mode')) — jamais une
+            // deuxième interprétation du mode côté frontend : le backend reste la seule source de
+            // vérité, ce booléen n'est qu'un affichage/UX (email obligatoire ou non), la validation
+            // réelle est de toute façon revalidée par InstallationService::install().
+            'isSaas' => $this->service->isSaas(),
+        ]);
     }
 
     public function verifyToken(Request $request): RedirectResponse
@@ -82,6 +97,69 @@ class InstallWizardController extends Controller
         ]);
     }
 
+    /**
+     * Envoie un code à l'email saisi pour l'étape Super Admin — appelé uniquement quand
+     * l'utilisateur renseigne un email (facultatif). Le code n'est lié à aucun User (qui
+     * n'existe pas encore) : il vit uniquement dans le cache OTP, scopé par email
+     * (cf. InstallationService::EMAIL_OTP_CONTEXT), exactement comme AcceptInvitationController.
+     */
+    public function sendEmailCode(Request $request, OtpService $otp): JsonResponse
+    {
+        abort_if($this->service->isLocked(), 404);
+        $this->assertSaasTokenConfigured();
+        $this->ensureTokenVerified($request);
+
+        $request->validate(['email' => 'required|email:rfc,dns|max:255']);
+        $email = $request->string('email')->toString();
+
+        $wait = $otp->resendWaitSeconds($email, InstallationService::EMAIL_OTP_CONTEXT);
+        if ($wait > 0) {
+            return $this->tooManyRequestsResponse($wait);
+        }
+
+        $code = $otp->generate($email, InstallationService::EMAIL_OTP_CONTEXT);
+        Mail::to($email)->send(new InstallEmailVerificationMail($code));
+
+        return response()->json([
+            'sent' => true,
+            'cooldown_seconds' => $otp->resendCooldownSeconds(),
+        ]);
+    }
+
+    /**
+     * Vérifie le code saisi pour l'email de l'étape Super Admin. Ne crée rien en base : marque
+     * seulement le cache OTP comme vérifié pour cet email (lu par InstallationService::install()
+     * au moment du submit final) — un abandon en cours de route ne laisse donc aucune trace.
+     */
+    public function verifyEmailCode(Request $request, OtpService $otp): JsonResponse
+    {
+        abort_if($this->service->isLocked(), 404);
+        $this->assertSaasTokenConfigured();
+        $this->ensureTokenVerified($request);
+
+        $request->validate([
+            'email' => 'required|email:rfc,dns|max:255',
+            'code' => 'required|string|digits:6',
+        ]);
+        $email = $request->string('email')->toString();
+
+        if ($otp->tooManyAttempts($email, InstallationService::EMAIL_OTP_CONTEXT)) {
+            return response()->json(['error' => 'Trop de tentatives. Demandez un nouveau code.', 'reason' => 'locked'], 429);
+        }
+
+        if (! $otp->hasActiveCode($email, InstallationService::EMAIL_OTP_CONTEXT)) {
+            return response()->json(['error' => 'Votre code a expiré.', 'reason' => 'expired'], 422);
+        }
+
+        if (! $otp->verify($email, $request->input('code', ''), InstallationService::EMAIL_OTP_CONTEXT)) {
+            return response()->json(['error' => 'Code incorrect.', 'reason' => 'invalid'], 422);
+        }
+
+        $otp->markVerified($email, InstallationService::EMAIL_OTP_CONTEXT);
+
+        return response()->json(['verified' => true]);
+    }
+
     public function store(Request $request): Response
     {
         abort_if($this->service->isLocked(), 404);
@@ -90,15 +168,20 @@ class InstallWizardController extends Controller
 
         $data = $request->validate([
             'organisation.nom' => 'required|string|max:255',
+            'organisation.domaine' => ['required', 'string', Rule::in(array_column(DomaineActivite::cases(), 'value'))],
             'admin.prenom' => 'required|string|max:100',
             'admin.nom' => 'required|string|max:100',
             'admin.telephone' => 'required|string',
-            'admin.email' => 'nullable|email:rfc,dns|max:255',
+            // Obligatoire en on_premise, facultatif en saas — même règle appliquée en aval par
+            // InstallationService::install() (seule source de vérité, revalidée indépendamment de
+            // cette règle-ci qui ne sert qu'à renvoyer une erreur tôt, avec le bon message).
+            'admin.email' => [$this->service->isSaas() ? 'nullable' : 'required', 'email:rfc,dns', 'max:255'],
             'admin.password' => 'required|string',
-            'admin.password_confirmation' => 'required|string',
-            'catalogue.categories' => 'boolean',
-            'catalogue.options' => 'boolean',
-            'catalogue.types_vehicule' => 'boolean',
+            // Le mot de passe est saisi une seule fois (pas de champ de confirmation dans le
+            // formulaire) — `nullable` seulement pour ne pas casser un éventuel appel API qui en
+            // enverrait quand même un, auquel cas InstallationService le revalide (doit alors
+            // correspondre au mot de passe, cf. sa règle `confirmed`).
+            'admin.password_confirmation' => 'nullable|string',
         ]);
 
         // La complexité/confirmation du mot de passe est revalidée par InstallationService
@@ -106,7 +189,6 @@ class InstallWizardController extends Controller
         $this->service->install(
             organisation: $data['organisation'],
             admin: $data['admin'],
-            catalogue: $data['catalogue'] ?? [],
         );
 
         $request->session()->forget('install_token_verified');

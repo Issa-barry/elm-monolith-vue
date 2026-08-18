@@ -5,6 +5,10 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { ArrowLeft, CheckCircle, Save } from 'lucide-vue-next';
 import { computed } from 'vue';
+import {
+    type CapaciteRow,
+    type CategorieOption as CategorieProduitOption,
+} from './partials/CapacitesEditor.vue';
 import VehiculeForm from './partials/VehiculeForm.vue';
 
 interface Option {
@@ -14,8 +18,6 @@ interface Option {
 interface TypeOption {
     value: string;
     label: string;
-    capacite_defaut: number;
-    capacite_defaut_bouteilles: number | null;
 }
 
 interface SiteOption {
@@ -32,8 +34,6 @@ interface VehiculeData {
     nom_vehicule: string;
     immatriculation: string;
     type_vehicule_id: string | null;
-    capacite_packs: number | null;
-    capacite_bouteilles: number | null;
     site_id: string | null;
     proprietaire_id: number | null;
     categorie: string | null;
@@ -49,9 +49,11 @@ const props = defineProps<{
     proprietaires: Option[];
     types: TypeOption[];
     categories_vehicule: CategorieOption[];
+    categories_produit: CategorieProduitOption[];
     sites: SiteOption[];
     can_change_site: boolean;
     default_proprietaire_id: string | null;
+    capacites: CapaciteRow[];
 }>();
 const page = usePage();
 const flashSuccess = computed(
@@ -69,8 +71,6 @@ const form = useForm({
     nom_vehicule: props.vehicule.nom_vehicule,
     immatriculation: props.vehicule.immatriculation,
     type_vehicule_id: props.vehicule.type_vehicule_id,
-    capacite_packs: props.vehicule.capacite_packs,
-    capacite_bouteilles: props.vehicule.capacite_bouteilles,
     site_id: props.vehicule.site_id,
     proprietaire_id:
         props.vehicule.proprietaire_id ?? props.default_proprietaire_id,
@@ -79,6 +79,7 @@ const form = useForm({
     livraison_logistique: props.vehicule.livraison_logistique,
     photo: null as File | null,
     is_active: props.vehicule.is_active,
+    capacites: [...props.capacites] as CapaciteRow[],
 });
 
 const canSubmit = computed(() => {
@@ -161,6 +162,7 @@ function submit() {
                 :proprietaires="proprietaires"
                 :types="types"
                 :categories-vehicule="categories_vehicule"
+                :categories-produit="categories_produit"
                 :photo-url="vehicule.photo_url"
                 :sites="sites"
                 :can-change-site="can_change_site"

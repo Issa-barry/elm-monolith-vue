@@ -64,6 +64,9 @@ class ForcePasswordChangeTest extends TestCase
     {
         $user = $this->makeMustChangeUser();
         $user->update(['must_change_password' => false]);
+        // Site attaché : ce test vérifie la redirection "hors de force-change", pas l'onboarding
+        // du premier site (cf. AuthRedirects::defaultPathForUser, testé dans OnboardingSiteTest).
+        $user->sites()->attach(Site::factory()->create(['organization_id' => $user->organization_id])->id, ['is_default' => true]);
 
         $this->actingAs($user)
             ->get(route('password.force-change'))

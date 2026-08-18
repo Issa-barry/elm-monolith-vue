@@ -11,6 +11,7 @@ use App\Models\Organization;
 use App\Models\PaieLigne;
 use App\Models\PaiePeriode;
 use App\Models\PaieVariable;
+use App\Models\Personne;
 use App\Models\Site;
 use App\Models\User;
 use App\Services\PaieCalculService;
@@ -61,11 +62,17 @@ class PaieTest extends TestCase
         static $seq = 0;
         $seq++;
 
-        $employe = Employe::create([
+        $personne = Personne::create([
             'organization_id' => $this->org->id,
-            'matricule' => str_pad((string) $seq, 6, '0', STR_PAD_LEFT),
             'nom' => 'BARRY',
             'prenom' => 'Test',
+            'telephone' => '+224'.fake()->unique()->numerify('#########'),
+        ]);
+
+        $employe = Employe::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
+            'matricule' => str_pad((string) $seq, 6, '0', STR_PAD_LEFT),
             'type_employe' => 'interne',
             'statut' => 'actif',
         ]);

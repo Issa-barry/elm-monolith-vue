@@ -56,14 +56,13 @@ class CommandeVenteModeTarificationTest extends TestCase
         );
     }
 
-    private function makeVehicule(int $capacite = 100): Vehicule
+    private function makeVehicule(): Vehicule
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
 
         return Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
-            'capacite_packs' => $capacite,
         ]);
     }
 

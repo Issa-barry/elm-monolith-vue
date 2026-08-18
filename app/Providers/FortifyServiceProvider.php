@@ -6,7 +6,8 @@ use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
 use App\Features\ModuleFeature;
 use App\Models\Organization;
-use App\Models\User;
+use App\Models\Personne;
+use App\Models\UserAuthIdentity;
 use App\Services\ModuleService;
 use App\Services\PhoneNormalizer;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -75,7 +76,7 @@ class FortifyServiceProvider extends ServiceProvider
                 ]);
             }
 
-            $user = User::where('telephone', $phone)->first();
+            $user = UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_TELEPHONE, Personne::normaliserTelephone($phone));
 
             if (! $user || ! Hash::check($request->password, $user->password)) {
                 // Message en dur (comme les autres branches ci-dessous) plutôt que
@@ -233,6 +234,20 @@ class FortifyServiceProvider extends ServiceProvider
 
         RateLimiter::for('otp-verify', function (Request $request) {
             $throttleKey = Str::transliterate(Str::lower($request->input('telephone', '')).'|'.$request->ip());
+
+            return Limit::perMinute(10)->by($throttleKey);
+        });
+
+        // OTP (vérification email pendant /install) : mêmes plafonds que otp-send/otp-verify,
+        // mais clé composite email+IP — l'entrée de la requête est `email`, pas `telephone`.
+        RateLimiter::for('otp-email-send', function (Request $request) {
+            $throttleKey = Str::transliterate(Str::lower($request->input('email', '')).'|'.$request->ip());
+
+            return Limit::perMinute(5)->by($throttleKey);
+        });
+
+        RateLimiter::for('otp-email-verify', function (Request $request) {
+            $throttleKey = Str::transliterate(Str::lower($request->input('email', '')).'|'.$request->ip());
 
             return Limit::perMinute(10)->by($throttleKey);
         });

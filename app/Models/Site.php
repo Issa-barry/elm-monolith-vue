@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Str;
 
 class Site extends Model
 {
@@ -42,7 +43,7 @@ class Site extends Model
         ];
     }
 
-    protected $appends = ['type_label', 'statut_label'];
+    protected $appends = ['type_label', 'statut_label', 'label'];
 
     // ── Boot ──────────────────────────────────────────────────────────────────
 
@@ -80,6 +81,30 @@ class Site extends Model
         return $this->statut instanceof SiteStatut
             ? $this->statut->label()
             : '';
+    }
+
+    /**
+     * Libellé d'affichage complet — "{Type} de {Nom}" (ex: "Boutique de Matoto") — SOURCE UNIQUE
+     * utilisée partout où un site doit être affiché avec son type (UserInfo.vue, HeaderWidget.vue
+     * via HandleInertiaRequests::defaultSite()) : garantit le même rendu sur tous les écrans sans
+     * dupliquer cette concaténation côté frontend.
+     *
+     * Les sites nommés automatiquement à l'onboarding (cf. SiteNamingService::generateName()) ont
+     * déjà un `nom` auto-descriptif ("Usine de Matoto") — le préfixer à nouveau donnerait "Usine
+     * de Usine de Matoto". On détecte ce cas (nom commençant déjà par "{préfixe} de ") pour
+     * afficher `nom` tel quel ; les sites nommés manuellement (nom = simple libellé court, ex:
+     * "Matoto", cf. SitesSeeder) restent préfixés comme avant.
+     */
+    public function getLabelAttribute(): string
+    {
+        $nom = trim((string) $this->nom);
+        $prefixe = explode(' / ', $this->type_label)[0];
+
+        if (Str::startsWith(mb_strtolower($nom), mb_strtolower($prefixe).' de ')) {
+            return $nom;
+        }
+
+        return "{$prefixe} de {$nom}";
     }
 
     // ── Relations ─────────────────────────────────────────────────────────────

@@ -39,6 +39,13 @@ class UserControllerTest extends TestCase
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('super_admin');
 
+        // Une organisation sans aucun site force l'onboarding pour tout rôle, super_admin
+        // compris (cf. AuthRedirects::needsOnboarding, middleware EnsureOrganizationHasSite).
+        if (Site::where('organization_id', $org->id)->doesntExist()) {
+            $site = $this->createSite($org);
+            $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
+        }
+
         return $user;
     }
 
@@ -104,6 +111,8 @@ class UserControllerTest extends TestCase
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('manager');
+        $site = $this->createSite($org);
+        $user->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
 
         $this->actingAs($user)
             ->get(route('users.index'))
@@ -169,13 +178,14 @@ class UserControllerTest extends TestCase
         $this->actingAs($admin)
             ->post(route('users.store'), $this->validStoreData(['site_id' => $site->id]));
 
-        $created = User::where('nom', 'BARRY')->where('organization_id', $org->id)->first();
+        $created = User::whereHas('personne', fn ($q) => $q->where('nom', 'BARRY'))
+            ->where('organization_id', $org->id)
+            ->first();
         $this->assertNotNull($created);
-        $this->assertRedirect = route('users.edit', $created);
 
-        $this->assertDatabaseHas('users', [
+        $this->assertDatabaseHas('personnes', [
+            'id' => $created->personne_id,
             'nom' => 'BARRY',
-            'organization_id' => $org->id,
         ]);
     }
 
@@ -189,7 +199,7 @@ class UserControllerTest extends TestCase
         $response = $this->actingAs($admin)
             ->post(route('users.store'), $this->validStoreData(['site_id' => $site->id]));
 
-        $created = User::where('telephone', self::DEFAULT_PHONE)->first();
+        $created = User::whereHas('personne', fn ($q) => $q->where('telephone', self::DEFAULT_PHONE))->first();
         $response->assertRedirect(route('users.edit', $created));
     }
 
@@ -203,7 +213,7 @@ class UserControllerTest extends TestCase
         $this->actingAs($admin)
             ->post(route('users.store'), $this->validStoreData(['prenom' => 'mamadou', 'site_id' => $site->id]));
 
-        $this->assertDatabaseHas('users', ['prenom' => 'Mamadou']);
+        $this->assertDatabaseHas('personnes', ['prenom' => 'Mamadou']);
     }
 
     public function test_store_uppercases_nom(): void
@@ -216,7 +226,7 @@ class UserControllerTest extends TestCase
         $this->actingAs($admin)
             ->post(route('users.store'), $this->validStoreData(['nom' => 'barry', 'site_id' => $site->id]));
 
-        $this->assertDatabaseHas('users', ['nom' => 'BARRY']);
+        $this->assertDatabaseHas('personnes', ['nom' => 'BARRY']);
     }
 
     public function test_store_assigns_role_to_user(): void
@@ -229,7 +239,7 @@ class UserControllerTest extends TestCase
         $this->actingAs($admin)
             ->post(route('users.store'), $this->validStoreData(['role' => 'manager', 'site_id' => $site->id]));
 
-        $created = User::where('telephone', self::DEFAULT_PHONE)->first();
+        $created = User::whereHas('personne', fn ($q) => $q->where('telephone', self::DEFAULT_PHONE))->first();
         $this->assertNotNull($created);
         $this->assertTrue($created->hasRole('manager'));
     }
@@ -244,7 +254,7 @@ class UserControllerTest extends TestCase
         $this->actingAs($admin)
             ->post(route('users.store'), $this->validStoreData(['site_id' => $site->id]));
 
-        $created = User::where('telephone', self::DEFAULT_PHONE)->first();
+        $created = User::whereHas('personne', fn ($q) => $q->where('telephone', self::DEFAULT_PHONE))->first();
         $this->assertNotNull($created);
 
         $defaultSite = $created->sites()->wherePivot('is_default', true)->first();
@@ -263,7 +273,7 @@ class UserControllerTest extends TestCase
             ->post(route('users.store'), $this->validStoreData(['email' => null, 'site_id' => $site->id]))
             ->assertSessionDoesntHaveErrors();
 
-        $this->assertDatabaseHas('users', ['telephone' => self::DEFAULT_PHONE, 'email' => null]);
+        $this->assertDatabaseHas('personnes', ['telephone' => self::DEFAULT_PHONE, 'email' => null]);
     }
 
     public function test_store_fails_without_telephone(): void
@@ -424,8 +434,8 @@ class UserControllerTest extends TestCase
 
         $response->assertRedirect(route('users.edit', $target));
 
-        $this->assertDatabaseHas('users', [
-            'id' => $target->id,
+        $this->assertDatabaseHas('personnes', [
+            'id' => $target->personne_id,
             'prenom' => 'Fatoumata',
             'nom' => 'BAH',
         ]);

@@ -48,6 +48,7 @@ class SiteImportController extends Controller
         $reponse['execute'] = $resultat['succes'];
         if ($resultat['succes']) {
             $reponse['crees'] = $resultat['compteurs']['crees'];
+            $reponse['mis_a_jour'] = $resultat['compteurs']['mis_a_jour'];
             $reponse['existants_ignores'] = $resultat['compteurs']['existants_ignores'];
         }
 
@@ -59,11 +60,13 @@ class SiteImportController extends Controller
         $lignes = $analyse['lignes'];
         $nbErreur = count(array_filter($lignes, fn ($l) => $l['statut'] === 'erreur'));
         $nbExistant = count(array_filter($lignes, fn ($l) => $l['statut'] === 'existant'));
+        $nbMiseAJour = count(array_filter($lignes, fn ($l) => $l['statut'] === 'mise_a_jour'));
 
         return [
             'nb_lignes_total' => $analyse['nb_lignes_total'],
-            'nb_nouveaux' => count($lignes) - $nbErreur - $nbExistant,
+            'nb_nouveaux' => count($lignes) - $nbErreur - $nbExistant - $nbMiseAJour,
             'nb_existants' => $nbExistant,
+            'nb_mises_a_jour' => $nbMiseAJour,
             'nb_erreurs' => $nbErreur,
             'lignes' => $lignes,
         ];

@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Enums\TypePieceIdentite;
 use App\Models\Depense;
+use App\Models\Personne;
 use App\Models\PieceIdentite;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
+use App\Models\VehiculeCapacite;
 use App\Traits\PhoneHandlerTrait;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -23,9 +25,10 @@ class ProprietaireController extends Controller
     {
         $this->authorize('viewAny', Proprietaire::class);
 
-        $proprietaires = Proprietaire::where('organization_id', auth()->user()->organization_id)
-            ->orderBy('nom')
+        $proprietaires = Proprietaire::with('personne')
+            ->where('organization_id', auth()->user()->organization_id)
             ->get()
+            ->sortBy('nom')
             ->map(fn (Proprietaire $p) => [
                 'id' => $p->id,
                 'nom' => $p->nom,
@@ -40,7 +43,8 @@ class ProprietaireController extends Controller
                 'code_pays' => $p->code_pays,
                 'adresse' => $p->adresse,
                 'is_active' => $p->is_active,
-            ]);
+            ])
+            ->values();
 
         return Inertia::render('Proprietaires/Index', [
             'proprietaires' => $proprietaires,
@@ -87,7 +91,24 @@ class ProprietaireController extends Controller
             $this->assertEmailUniqueInOrg($data['email'], $orgId);
         }
 
-        Proprietaire::create([...$data, 'organization_id' => $orgId]);
+        $personne = Personne::resoudreOuCreer($orgId, [
+            'nom' => $data['nom'],
+            'prenom' => $data['prenom'],
+            'surnom' => $data['surnom'] ?? null,
+            'email' => $data['email'] ?? null,
+            'telephone' => $data['telephone'],
+            'code_pays' => $data['code_pays'],
+            'code_phone_pays' => $data['code_phone_pays'] ?? null,
+            'pays' => $data['pays'] ?? null,
+            'ville' => $data['ville'],
+            'adresse' => $data['adresse'] ?? null,
+        ]);
+
+        Proprietaire::create([
+            'organization_id' => $orgId,
+            'personne_id' => $personne->id,
+            'is_active' => $data['is_active'] ?? true,
+        ]);
 
         return redirect()->route('proprietaires.index')
             ->with('success', 'Propriétaire créé avec succès.');
@@ -127,7 +148,7 @@ class ProprietaireController extends Controller
         $this->authorize('view', $proprietaire);
 
         $vehicules = Vehicule::query()
-            ->with(['typeVehicule', 'equipe.livreurs'])
+            ->with(['typeVehicule', 'equipe.livreurs', 'capacites.categorie'])
             ->where('organization_id', auth()->user()->organization_id)
             ->where('proprietaire_id', $proprietaire->id)
             ->orderBy('nom_vehicule')
@@ -143,9 +164,10 @@ class ProprietaireController extends Controller
                     'immatriculation' => $vehicule->immatriculation,
                     'photo_url' => $vehicule->photo_url,
                     'type_label' => $vehicule->type_label,
-                    // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
-                    // on retombe sur la capacité par défaut du type (cf. VehiculeController).
-                    'capacite_packs' => $vehicule->capacite_packs ?? $vehicule->typeVehicule?->capacite_defaut,
+                    'capacites' => $vehicule->capacites->map(fn (VehiculeCapacite $c) => [
+                        'categorie_nom' => $c->categorie->nom,
+                        'capacite_max' => $c->capacite_max,
+                    ])->values()->all(),
                     // Propriété réelle du véhicule — plus jamais reconstruite depuis
                     // livraison_logistique (confusion usage/propriété corrigée, cf.
                     // Vehicule::categorie), affichée telle quelle par Proprietaires/Show.vue.
@@ -201,6 +223,7 @@ class ProprietaireController extends Controller
                 'is_active' => $proprietaire->is_active,
                 'vehicules_count' => $vehicules->count(),
                 'has_valid_identity_document' => $proprietaire->hasValidIdentityDocument(),
+                'is_proprietaire_interne' => $proprietaire->organization->proprietaire_interne_id === $proprietaire->id,
             ],
             'vehicules' => $vehicules,
             'depenses' => $depenses,
@@ -280,7 +303,20 @@ class ProprietaireController extends Controller
             $this->assertEmailUniqueInOrg($data['email'], $proprietaire->organization_id, $proprietaire->id);
         }
 
-        $proprietaire->update($data);
+        $proprietaire->personne->update([
+            'nom' => $data['nom'],
+            'prenom' => $data['prenom'],
+            'surnom' => $data['surnom'] ?? null,
+            'email' => $data['email'] ?? null,
+            'telephone' => $data['telephone'],
+            'telephone_normalise' => Personne::normaliserTelephone($data['telephone']),
+            'code_pays' => $data['code_pays'],
+            'code_phone_pays' => $data['code_phone_pays'] ?? null,
+            'pays' => $data['pays'] ?? null,
+            'ville' => $data['ville'],
+            'adresse' => $data['adresse'] ?? null,
+        ]);
+        $proprietaire->update(['is_active' => $data['is_active'] ?? $proprietaire->is_active]);
 
         return redirect()->route('proprietaires.edit', $proprietaire)
             ->with('success', 'Propriétaire mis à jour avec succès.');
@@ -295,11 +331,30 @@ class ProprietaireController extends Controller
             ->with('success', 'Propriétaire supprimé.');
     }
 
+    /**
+     * Désigne ce propriétaire comme le propriétaire interne par défaut de l'organisation
+     * (cf. Organization::proprietaireInterne()) — assigné automatiquement aux véhicules
+     * "interne" sans propriétaire tiers choisi, et aux commissions propriétaire associées.
+     * Seul moyen de régulariser/changer ce rattachement une fois l'installation terminée
+     * (jamais deviné à nouveau depuis un rôle, un téléphone ou l'import flotte).
+     */
+    public function definirInterne(Proprietaire $proprietaire): RedirectResponse
+    {
+        $this->authorize('update', $proprietaire);
+
+        $proprietaire->organization->forceFill([
+            'proprietaire_interne_id' => $proprietaire->id,
+        ])->save();
+
+        return redirect()->route('proprietaires.show', $proprietaire)
+            ->with('success', "{$proprietaire->nom_complet} est maintenant le propriétaire interne par défaut de l'organisation.");
+    }
+
     private function assertPhoneUniqueInOrg(string $phone, string $orgId, ?string $ignoreId = null): void
     {
         $exists = Proprietaire::where('organization_id', $orgId)
-            ->where('telephone', $phone)
             ->whereNull('deleted_at')
+            ->whereHas('personne', fn ($q) => $q->where('telephone_normalise', Personne::normaliserTelephone($phone)))
             ->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))
             ->exists();
 
@@ -313,8 +368,8 @@ class ProprietaireController extends Controller
     private function assertEmailUniqueInOrg(string $email, string $orgId, ?string $ignoreId = null): void
     {
         $exists = Proprietaire::where('organization_id', $orgId)
-            ->where('email', $email)
             ->whereNull('deleted_at')
+            ->whereHas('personne', fn ($q) => $q->where('email', $email))
             ->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))
             ->exists();
 

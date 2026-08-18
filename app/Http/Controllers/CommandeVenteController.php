@@ -228,19 +228,21 @@ class CommandeVenteController extends Controller
 
         if ($proprietaire) {
             $query->whereHas('vehicule.proprietaire', function ($q) use ($proprietaire) {
-                $q->where('nom', 'like', "%{$proprietaire}%")
-                    ->orWhere('prenom', 'like', "%{$proprietaire}%")
-                    ->orWhere('telephone', 'like', "%{$proprietaire}%");
+                $q->whereHas('personne', function ($p) use ($proprietaire) {
+                    $p->where('nom', 'like', "%{$proprietaire}%")
+                        ->orWhere('prenom', 'like', "%{$proprietaire}%")
+                        ->orWhere('telephone', 'like', "%{$proprietaire}%");
+                });
             });
         }
 
         if ($proprietaireNom = $request->input('proprietaire_nom')) {
-            $query->whereHas('vehicule.proprietaire', fn ($q) => $q->where('nom', 'like', "%{$proprietaireNom}%")
-                ->orWhere('prenom', 'like', "%{$proprietaireNom}%"));
+            $query->whereHas('vehicule.proprietaire', fn ($q) => $q->whereHas('personne', fn ($p) => $p->where('nom', 'like', "%{$proprietaireNom}%")
+                ->orWhere('prenom', 'like', "%{$proprietaireNom}%")));
         }
 
         if ($proprietaireTel = $request->input('proprietaire_telephone')) {
-            $query->whereHas('vehicule.proprietaire', fn ($q) => $q->where('telephone', 'like', "%{$proprietaireTel}%"));
+            $query->whereHas('vehicule.proprietaire', fn ($q) => $q->whereHas('personne', fn ($p) => $p->where('telephone', 'like', "%{$proprietaireTel}%")));
         }
 
         if ($livreur) {
@@ -249,22 +251,24 @@ class CommandeVenteController extends Controller
             // saisi/affiché côté Eau La Maman.
             $query->whereHas('vehicule.equipe.livreurs', function ($q) use ($livreur) {
                 $q->where('livreurs.nom_complet', 'like', "%{$livreur}%")
-                    ->orWhere('livreurs.nom', 'like', "%{$livreur}%")
-                    ->orWhere('livreurs.prenom', 'like', "%{$livreur}%")
-                    ->orWhere('livreurs.telephone', 'like', "%{$livreur}%");
+                    ->orWhereHas('personne', function ($p) use ($livreur) {
+                        $p->where('nom', 'like', "%{$livreur}%")
+                            ->orWhere('prenom', 'like', "%{$livreur}%")
+                            ->orWhere('telephone', 'like', "%{$livreur}%");
+                    });
             });
         }
 
         if ($livreurNom = $request->input('livreur_nom')) {
-            $query->whereHas('vehicule.equipe.livreurs', fn ($q) => $q->where('livreurs.nom', 'like', "%{$livreurNom}%"));
+            $query->whereHas('vehicule.equipe.livreurs', fn ($q) => $q->whereHas('personne', fn ($p) => $p->where('nom', 'like', "%{$livreurNom}%")));
         }
 
         if ($livreurPrenom = $request->input('livreur_prenom')) {
-            $query->whereHas('vehicule.equipe.livreurs', fn ($q) => $q->where('livreurs.prenom', 'like', "%{$livreurPrenom}%"));
+            $query->whereHas('vehicule.equipe.livreurs', fn ($q) => $q->whereHas('personne', fn ($p) => $p->where('prenom', 'like', "%{$livreurPrenom}%")));
         }
 
         if ($livreurTel = $request->input('livreur_telephone')) {
-            $query->whereHas('vehicule.equipe.livreurs', fn ($q) => $q->where('livreurs.telephone', 'like', "%{$livreurTel}%"));
+            $query->whereHas('vehicule.equipe.livreurs', fn ($q) => $q->whereHas('personne', fn ($p) => $p->where('telephone', 'like', "%{$livreurTel}%")));
         }
 
         if ($livreurRole = $request->input('livreur_role')) {
@@ -485,7 +489,7 @@ class CommandeVenteController extends Controller
                     'nom' => $vehicule->nom_vehicule,
                     'immatriculation' => $vehicule->immatriculation,
                     'type' => $vehicule->typeVehicule?->nom,
-                    'capacite_packs' => $vehicule->capacite_packs ?? $vehicule->typeVehicule?->capacite_defaut,
+                    'capacites' => $this->vehiculeCapaciteService->capacitesParCategorieAvecNoms($vehicule),
                     'proprietaire_nom' => $vehicule->proprietaire
                         ? trim($vehicule->proprietaire->prenom.' '.$vehicule->proprietaire->nom)
                         : null,
@@ -1088,7 +1092,6 @@ class CommandeVenteController extends Controller
         return Vehicule::with([
             'typeVehicule',
             'capacites.categorie',
-            'typeVehicule.capacites.categorie',
             'equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'chauffeur'),
             'equipe.membres.livreur',
         ])
@@ -1101,45 +1104,16 @@ class CommandeVenteController extends Controller
                 'id' => $v->id,
                 'nom_vehicule' => $v->nom_vehicule,
                 'immatriculation' => $v->immatriculation,
-                // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
-                // on retombe sur la capacité par défaut du type (cf. VehiculeController).
-                'capacite_packs' => ($c = $v->capacite_packs ?? $v->typeVehicule?->capacite_defaut) !== null
-                    ? (int) $c
-                    : null,
-                // Plafonds par catégorie (Sachet, Bouteille, ...) — même calcul que le contrôle
-                // serveur (VehiculeCapaciteService::capacitesParCategorie), pour que le
-                // frontend affiche exactement ce que le backend va vérifier. Vide tant que
-                // l'organisation n'a rien configuré : le formulaire retombe alors sur
-                // capacite_packs (régime legacy).
-                'capacites_categorie' => $this->capacitesCategorieProps($v),
+                // Plafonds par catégorie de produit (Sachet eau, Bouteille, ...), propres à ce
+                // véhicule — aucun héritage depuis le type, même calcul que le contrôle serveur
+                // (VehiculeCapaciteService::capacitesParCategorie), pour que le frontend affiche
+                // exactement ce que le backend va vérifier. Vide = véhicule non limité.
+                'capacites' => $this->vehiculeCapaciteService->capacitesParCategorieAvecNoms($v),
                 'livreur_nom' => $v->equipe?->livreurs->first()?->libelleAffichage(),
                 'livreur_telephone' => $v->equipe?->membres
                     ->firstWhere('role', 'chauffeur')
                     ?->livreur?->telephone,
             ]);
-    }
-
-    /**
-     * @return array<int, array{categorie_id: string, categorie_nom: string, capacite_max: int}>
-     */
-    private function capacitesCategorieProps(Vehicule $v): array
-    {
-        $noms = [];
-        foreach ($v->typeVehicule?->capacites ?? [] as $c) {
-            $noms[$c->categorie_id] = $c->categorie?->nom ?? 'Catégorie';
-        }
-        foreach ($v->capacites as $c) {
-            $noms[$c->categorie_id] = $c->categorie?->nom ?? 'Catégorie';
-        }
-
-        return $this->vehiculeCapaciteService->capacitesParCategorie($v)
-            ->map(fn (int $max, string $categorieId) => [
-                'categorie_id' => $categorieId,
-                'categorie_nom' => $noms[$categorieId] ?? 'Catégorie',
-                'capacite_max' => $max,
-            ])
-            ->values()
-            ->all();
     }
 
     private function clientsActifs(string $orgId): Collection

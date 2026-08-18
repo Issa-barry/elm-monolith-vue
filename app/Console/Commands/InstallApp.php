@@ -2,19 +2,25 @@
 
 namespace App\Console\Commands;
 
+use App\Enums\DomaineActivite;
+use App\Mail\InstallEmailVerificationMail;
 use App\Services\InstallationService;
+use App\Services\OtpService;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 
 /**
  * Première initialisation d'une organisation : crée (ou réutilise) l'organisation, le premier
- * compte super_admin, et optionnellement un catalogue de départ (catégories, options, types de
- * véhicule).
+ * compte super_admin et le catalogue de départ (types de produit, catégories adaptées au
+ * domaine, options, types de véhicule — systématique, plus un choix). Le premier site n'est plus
+ * créé ici : il se configure à la première connexion (onboarding, cf.
+ * OnboardingSiteController), même parcours qu'en web.
  *
  * Simple façade interactive autour de InstallationService — toute la logique métier (org,
- * super_admin, catalogue, installed_at) vit dans ce service, partagée avec l'assistant web
- * `/install` (InstallWizardController) : les deux chemins produisent exactement le même
- * résultat pour les mêmes réponses.
+ * super_admin, domaine, catalogue, installed_at, verrou on-premise) vit dans ce service, partagée
+ * avec l'assistant web `/install` (InstallWizardController) : les deux chemins produisent
+ * exactement le même résultat pour les mêmes réponses.
  *
  * Le mot de passe est choisi directement par la personne qui répond aux prompts (saisie
  * masquée, jamais affichée ni loguée) — pas de mot de passe généré ni de redéfinition forcée
@@ -26,7 +32,7 @@ class InstallApp extends Command
 
     protected $description = "Initialise une organisation (et son premier compte super_admin) — première mise en route de l'application";
 
-    public function handle(InstallationService $service): int
+    public function handle(InstallationService $service, OtpService $otp): int
     {
         $this->line('========================================');
         $this->line(' Installation de l\'application');
@@ -40,12 +46,15 @@ class InstallApp extends Command
             return self::FAILURE;
         }
 
-        if ($service->hasSuperAdmin($service->resolveOrganization($nomEntreprise))) {
+        if ($service->hasSuperAdminForName($nomEntreprise)) {
             $this->error('Cette organisation a déjà un compte super_admin — installation déjà faite.');
             $this->line("Pour ajouter d'autres comptes, utilisez le flux d'invitation de l'application.");
 
             return self::FAILURE;
         }
+
+        $this->newLine();
+        $domaine = $this->askDomaine();
 
         $this->newLine();
         $this->line('----------------------------------------');
@@ -56,28 +65,22 @@ class InstallApp extends Command
         $prenom = $this->ask('Prénom');
         $nom = $this->ask('Nom');
         $telephone = $this->askTelephone($service);
-        $email = $this->ask('Email (facultatif)') ?: null;
-        [$password, $confirmation] = $this->askPassword($service);
-
-        $categories = $this->confirm('Créer les catégories prédéfinies ?', true);
-        $options = $this->confirm('Installer la bibliothèque d\'options prédéfinies ?', true);
-        $typesVehicule = $this->confirm('Créer les types de véhicule prédéfinis (Tricycle, Minibus, Camionnette, Camion, Remorque) ?', true);
+        $email = $this->askEmail($otp, required: ! $service->isSaas());
+        $password = $this->askPassword($service);
 
         $this->newLine();
         $this->info('Création...');
 
         try {
             $org = $service->install(
-                organisation: ['nom' => $nomEntreprise],
+                organisation: ['nom' => $nomEntreprise, 'domaine' => $domaine->value],
                 admin: [
                     'prenom' => $prenom,
                     'nom' => $nom,
                     'telephone' => $telephone,
                     'email' => $email,
                     'password' => $password,
-                    'password_confirmation' => $confirmation,
                 ],
-                catalogue: ['categories' => $categories, 'options' => $options, 'types_vehicule' => $typesVehicule],
             );
         } catch (ValidationException $e) {
             foreach ($e->errors() as $messages) {
@@ -92,15 +95,9 @@ class InstallApp extends Command
         $this->line('✓ Entreprise prête : '.$org->name);
         $this->line('✓ Rôles et permissions initialisés');
         $this->line('✓ Super Admin créé');
-        if ($categories) {
-            $this->line('✓ Catégories créées');
-        }
-        if ($options) {
-            $this->line('✓ Options créées');
-        }
-        if ($typesVehicule) {
-            $this->line('✓ Types de véhicule créés');
-        }
+        $this->line('✓ Domaine d\'activité : '.$domaine->label());
+        $this->line('✓ Catalogue par défaut créé (types de produit, catégories, options, types de véhicule)');
+        $this->line('  Le premier site se configure à la première connexion.');
 
         $this->newLine();
         $this->line('========================================');
@@ -110,6 +107,26 @@ class InstallApp extends Command
         $this->warn("Pour des raisons de sécurité, le mot de passe saisi n'est jamais affiché ni conservé en clair.");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Menu à choix fermé (pas de saisie libre) — les 5 domaines sont fixes, cf.
+     * App\Enums\DomaineActivite.
+     */
+    private function askDomaine(): DomaineActivite
+    {
+        $labels = array_map(fn (DomaineActivite $d) => $d->label(), DomaineActivite::cases());
+        $choix = $this->choice("Domaine d'activité de l'entreprise", $labels, 0);
+
+        foreach (DomaineActivite::cases() as $domaine) {
+            if ($domaine->label() === $choix) {
+                return $domaine;
+            }
+        }
+
+        // Inatteignable en pratique ($this->choice ne renvoie qu'une des valeurs proposées),
+        // filet de sécurité seulement.
+        return DomaineActivite::AUTRE;
     }
 
     /**
@@ -141,19 +158,77 @@ class InstallApp extends Command
     }
 
     /**
-     * Saisie masquée (jamais affichée, jamais loguée) + confirmation — cf. Password::defaults()
-     * dans AppServiceProvider pour les règles de complexité (min 8, majuscule+minuscule, symbole).
-     *
-     * @return array{0: string, 1: string}
+     * En on_premise, l'email devient obligatoire (boucle tant qu'il est vide) ; en saas il reste
+     * facultatif — même règle que l'assistant web (cf. InstallWizardController::store()), dérivée
+     * de InstallationService::isSaas(), jamais une interprétation propre à la CLI. Dans les deux
+     * cas, s'il est renseigné, un code est envoyé et doit être saisi correctement avant de
+     * poursuivre (cf. InstallWizardController::verifyEmailCode(), EMAIL_OTP_CONTEXT), pour que CLI
+     * et web ne puissent jamais diverger sur "email saisi ≠ email vérifié".
      */
-    private function askPassword(InstallationService $service): array
+    private function askEmail(OtpService $otp, bool $required): ?string
+    {
+        $email = null;
+        while ($email === null) {
+            $email = $this->ask($required ? 'Email' : 'Email (facultatif)') ?: null;
+            if ($email === null) {
+                if (! $required) {
+                    return null;
+                }
+                $this->error("L'adresse email est obligatoire pour cette installation.");
+            }
+        }
+
+        $this->sendEmailCode($otp, $email);
+
+        while (true) {
+            $saisie = $this->ask('Code reçu par email (6 chiffres)') ?? '';
+
+            if ($otp->tooManyAttempts($email, InstallationService::EMAIL_OTP_CONTEXT)) {
+                $this->error('Trop de tentatives — envoi d\'un nouveau code.');
+                $this->sendEmailCode($otp, $email);
+
+                continue;
+            }
+
+            if (! $otp->hasActiveCode($email, InstallationService::EMAIL_OTP_CONTEXT)) {
+                $this->error('Ce code a expiré — envoi d\'un nouveau code.');
+                $this->sendEmailCode($otp, $email);
+
+                continue;
+            }
+
+            if (! $otp->verify($email, $saisie, InstallationService::EMAIL_OTP_CONTEXT)) {
+                $this->error('Code incorrect.');
+
+                continue;
+            }
+
+            $otp->markVerified($email, InstallationService::EMAIL_OTP_CONTEXT);
+            $this->line('✓ Email vérifié');
+
+            return $email;
+        }
+    }
+
+    private function sendEmailCode(OtpService $otp, string $email): void
+    {
+        $code = $otp->generate($email, InstallationService::EMAIL_OTP_CONTEXT);
+        Mail::to($email)->send(new InstallEmailVerificationMail($code));
+        $this->line("✓ Un code de vérification a été envoyé à {$email}.");
+    }
+
+    /**
+     * Saisie masquée (jamais affichée, jamais loguée), une seule fois — pas de confirmation, pour
+     * une installation plus rapide. Cf. Password::defaults() dans AppServiceProvider pour les
+     * règles de complexité (min 8, majuscule+minuscule, symbole).
+     */
+    private function askPassword(InstallationService $service): string
     {
         while (true) {
-            $password = $this->secret('Mot de passe (min. 8 caractères, majuscule + minuscule + symbole)');
-            $confirmation = $this->secret('Confirmer le mot de passe');
+            $password = $this->secret('Mot de passe (min. 8 caractères, majuscule + minuscule + symbole)') ?? '';
 
             try {
-                $service->validatePassword($password ?? '', $confirmation ?? '');
+                $service->validatePassword($password, $password);
             } catch (ValidationException $e) {
                 foreach ($e->errors()['password'] ?? [] as $message) {
                     $this->error($message);
@@ -162,7 +237,7 @@ class InstallApp extends Command
                 continue;
             }
 
-            return [$password, $confirmation];
+            return $password;
         }
     }
 }

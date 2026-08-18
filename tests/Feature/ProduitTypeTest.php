@@ -34,12 +34,12 @@ class ProduitTypeTest extends TestCase
 
     // ── provisioning par défaut ──────────────────────────────────────────────────
 
-    public function test_provisioning_cree_les_4_types_historiques(): void
+    public function test_provisioning_cree_les_5_types_historiques(): void
     {
         ProduitTypeDefaultSeeder::seedPourOrganisation($this->org->id);
 
         $codes = ProduitType::where('organization_id', $this->org->id)->pluck('code')->sort()->values()->all();
-        $this->assertSame(['achat_vente', 'fabricable', 'materiel', 'service'], $codes);
+        $this->assertSame(['achat_vente', 'fabricable', 'materiel', 'matiere_production', 'service'], $codes);
     }
 
     public function test_provisioning_reproduit_les_capacites_historiques(): void
@@ -61,7 +61,7 @@ class ProduitTypeTest extends TestCase
         ProduitTypeDefaultSeeder::seedPourOrganisation($this->org->id);
         ProduitTypeDefaultSeeder::seedPourOrganisation($this->org->id);
 
-        $this->assertSame(4, ProduitType::where('organization_id', $this->org->id)->count());
+        $this->assertSame(5, ProduitType::where('organization_id', $this->org->id)->count());
     }
 
     // ── index ─────────────────────────────────────────────────────────────────

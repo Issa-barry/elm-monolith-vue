@@ -64,11 +64,17 @@ jobs:
   e2e:
     name: E2E
     runs-on: ubuntu-latest
-    # Désactivé temporairement (2026-08-14) pour débloquer un merge urgent — échec
-    # proposition-vehicule-flow.spec.ts (fix déjà poussé, pas revérifié en CI) +
-    # échec de login E2E constaté en local sur base e2e fraîche (cause pas encore
-    # identifiée). Retirer ce `if: false` dès que les deux sont confirmés réglés.
-    if: false
+    # Réactivé le 16/08/2026. Historique : désactivé le 2026-08-14 pour débloquer un merge
+    # urgent (échec proposition-vehicule-flow.spec.ts + échec login E2E sur base e2e fraîche).
+    # Cause du login identifiée et corrigée le 16/08/2026 : les actions générées par
+    # Wayfinder (resources/js/actions/**) embarquent une URL absolue basée sur APP_URL,
+    # figée au moment du build. Le step "Build assets" ci-dessous compilait avec l'APP_URL
+    # de .env (:8000) au lieu de .env.e2e (:8080) → requêtes login bloquées par CORS,
+    # jamais un vrai problème de credentials. Fix : build sous APP_ENV=e2e (cf. step
+    # "Build assets" + npm run e2e:build en local) — login-flow.spec.ts revérifié en local,
+    # passe. proposition-vehicule-flow.spec.ts pas revérifié à fond : la re-vérification
+    # locale a buté sur global-setup.ts (création d'un transfert / attente de "N° transfert"),
+    # à surveiller sur le premier run CI après cette réactivation.
     # 118 tests en --workers=1 (session partagée, cf. step "Run full E2E tests") dépassent
     # maintenant systématiquement 55 min — le job était tué par le timeout avant même de
     # pouvoir échouer/réussir légitimement (jamais un vrai flake, cf. "Error: The operation
@@ -170,10 +176,14 @@ jobs:
           php artisan config:clear
           php artisan migrate:fresh --seed --env=e2e --force
 
+      # APP_ENV=e2e (pas juste VITE_*) : les actions Wayfinder générées pendant ce build
+      # (resources/js/actions/**) embarquent une URL absolue lue depuis config('app.url'),
+      # donc depuis .env.e2e (port 8080) et non .env (port 8000) — sinon le login E2E
+      # échoue systématiquement, bloqué par CORS (cf. commentaire du job ci-dessus).
       - name: Build assets
         env:
           VITE_SHOW_ENTITY_STATS_CARDS: 'true'
-        run: npm run build
+        run: npm run e2e:build
 
       # dev → pre-prod : full E2E suite
       # workers=1 : tous les tests partagent le même session cookie (chargé depuis

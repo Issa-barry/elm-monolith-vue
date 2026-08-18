@@ -2,11 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Enums\CategorieVehicule;
 use App\Enums\DeclencheurCommissionVente;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutCommission;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
+use App\Models\CommissionPart;
 use App\Models\CommissionVente;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
@@ -94,6 +96,45 @@ class CommissionTriggerVenteTest extends TestCase
             'taux_commission' => $tauxConvoyeur,
             'role' => 'convoyeur',
             'ordre' => 1,
+        ]);
+
+        return $vehicule->fresh();
+    }
+
+    /**
+     * Véhicule "interne", propriété du propriétaire interne configuré sur l'organisation (cf.
+     * Organization::proprietaireInterne()) — le fait qu'un véhicule soit interne ne doit jamais
+     * neutraliser sa commission propriétaire : elle suit le même moteur (CommissionCalculator)
+     * qu'un véhicule "partenaire", pour le même propriétaire économique de l'entreprise.
+     */
+    private function makeVehiculeInterneAvecEquipe(?Organization $org = null, float $tauxProprietaire = 70, float $tauxChauffeur = 30): Vehicule
+    {
+        $org ??= $this->org;
+        $proprietaireInterne = Proprietaire::factory()->create(['organization_id' => $org->id]);
+        $org->forceFill(['proprietaire_interne_id' => $proprietaireInterne->id])->save();
+
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $org->id,
+            'categorie' => CategorieVehicule::INTERNE,
+            'proprietaire_id' => $proprietaireInterne->id,
+            'capacite_packs' => 10,
+        ]);
+
+        $chauffeur = Livreur::factory()->create(['organization_id' => $org->id]);
+
+        $equipe = EquipeLivraison::create([
+            'organization_id' => $org->id,
+            'vehicule_id' => $vehicule->id,
+            'nom' => 'Équipe Interne Test',
+            'is_active' => true,
+            'taux_commission_proprietaire' => $tauxProprietaire,
+        ]);
+        EquipeLivreur::create([
+            'equipe_id' => $equipe->id,
+            'livreur_id' => $chauffeur->id,
+            'taux_commission' => $tauxChauffeur,
+            'role' => 'chauffeur',
+            'ordre' => 0,
         ]);
 
         return $vehicule->fresh();
@@ -223,6 +264,34 @@ class CommissionTriggerVenteTest extends TestCase
         CommissionGenerator::generateForCommandeIfMissing($commande->fresh());
 
         $this->assertEquals(1, CommissionVente::where('commande_vente_id', $commande->id)->count());
+    }
+
+    // ── Véhicule interne : commission propriétaire non neutralisée ──────────
+
+    /**
+     * Un véhicule "interne" génère une commission propriétaire pour le propriétaire interne de
+     * l'organisation exactement comme un véhicule "partenaire" pour son propriétaire tiers — la
+     * catégorie du véhicule ne doit jamais supprimer ni neutraliser cette commission (cf.
+     * Organization::proprietaireInterne()).
+     */
+    public function test_vehicule_interne_genere_une_commission_pour_le_proprietaire_interne(): void
+    {
+        $vehicule = $this->makeVehiculeInterneAvecEquipe(tauxProprietaire: 70, tauxChauffeur: 30);
+        $produit = $this->makeProduit();
+        ['commande' => $commande, 'ligne' => $ligne] = $this->creerCommandeAvecLigne($vehicule, $produit);
+
+        $commande = $this->validerChargementComplet($commande, $ligne);
+
+        $commission = CommissionVente::where('commande_vente_id', $commande->id)->firstOrFail();
+        $partProprietaire = CommissionPart::where('commission_vente_id', $commission->id)
+            ->where('type_beneficiaire', 'proprietaire')
+            ->first();
+
+        $this->assertNotNull($partProprietaire);
+        $this->assertSame($vehicule->proprietaire_id, $partProprietaire->proprietaire_id);
+        $this->assertSame($this->org->proprietaire_interne_id, $partProprietaire->proprietaire_id);
+        // Marge totale = (2000 - 1500) × 2 packs = 1000 ; part propriétaire à 70 % = 700.
+        $this->assertEqualsWithDelta(700.0, (float) $partProprietaire->montant_brut, 0.01);
     }
 
     // ── Cas silencieux (pas de commission, pas d'erreur) ────────────────────

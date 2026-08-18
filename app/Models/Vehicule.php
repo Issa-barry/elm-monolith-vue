@@ -159,6 +159,11 @@ class Vehicule extends Model
         return $this->hasMany(CommissionLogistique::class);
     }
 
+    /**
+     * Capacité maximale de chargement par catégorie de produit (Sachet eau, Bouteille...),
+     * propre à ce véhicule — seule et unique source de vérité, aucun héritage depuis le type
+     * (décision produit du 17/08/2026, cf. VehiculeCapaciteService::capacitesParCategorie()).
+     */
     public function capacites(): HasMany
     {
         return $this->hasMany(VehiculeCapacite::class);

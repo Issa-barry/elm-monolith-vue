@@ -20,6 +20,7 @@ use App\Models\VarianteStock;
 use App\Services\AuditLogService;
 use App\Services\DroitAjustementStockService;
 use App\Services\MediaService;
+use App\Services\MouvementStockService;
 use App\Services\ProduitService;
 use App\Services\StockStatutService;
 use Illuminate\Http\JsonResponse;
@@ -143,7 +144,16 @@ class ProduitController extends Controller
                 ? $siteStocksAll
                 : $siteStocksAll->filter(fn ($s) => in_array((string) $s->site_id, $siteIds, true));
 
-            $qteDisplay = $siteStocksScope->isNotEmpty() ? (int) $siteStocksScope->sum('qte_stock') : (int) ($p->qte_stock ?? 0);
+            // Sans filtre agence : agrégat réel si des lignes VarianteStock existent déjà,
+            // sinon repli sur l'agrégat legacy Produit::qte_stock (aucune meilleure source
+            // avant la première ventilation par site). Avec un filtre agence explicite : la
+            // somme scopée fait foi, 0 si l'agence n'a encore aucune ligne — JAMAIS de repli
+            // sur l'agrégat global, qui mélangerait le stock d'agences non sélectionnées
+            // (cf. régression multi-agences : filtrer une agence ne doit jamais afficher le
+            // total de toutes les agences).
+            $qteDisplay = empty($siteIds)
+                ? ($siteStocksAll->isNotEmpty() ? (int) $siteStocksAll->sum('qte_stock') : (int) ($p->qte_stock ?? 0))
+                : (int) $siteStocksScope->sum('qte_stock');
 
             // Seuil désormais unique au niveau PRODUIT (repli sur le seuil global de
             // l'organisation) — appliqué à chaque ligne variante × site individuellement,
@@ -379,7 +389,7 @@ class ProduitController extends Controller
             ->values();
 
         $mouvements = MouvementStock::whereIn('produit_variante_id', $varianteIds)
-            ->with(['createur:id,prenom,nom', 'site:id,nom,code', 'variante:id,combo_hash'])
+            ->with(['createur:id,personne_id', 'createur.personne', 'site:id,nom,code', 'variante:id,combo_hash'])
             ->orderByDesc('created_at')
             ->take(100)
             ->get()
@@ -512,7 +522,7 @@ class ProduitController extends Controller
         $varianteIds = $produit->variantes()->pluck('id');
 
         $ajustements = MouvementStock::whereIn('produit_variante_id', $varianteIds)
-            ->with(['createur:id,prenom,nom', 'site:id,nom,code'])
+            ->with(['createur:id,personne_id', 'createur.personne', 'site:id,nom,code'])
             ->orderByDesc('created_at')
             ->take(200)
             ->get()
@@ -666,7 +676,17 @@ class ProduitController extends Controller
             'augmenter' => ['nullable', 'integer', 'min:1'],
             'diminuer' => ['nullable', 'integer', 'min:1'],
             'motif_type' => ['required', Rule::in(MotifAjustementStock::validValues())],
-            'motif_detail' => ['required_if:motif_type,autre', 'nullable', 'string', 'max:500'],
+            'motif_detail' => [
+                'required_if:motif_type,autre',
+                'nullable',
+                'string',
+                'max:500',
+                function ($attribute, $value, $fail) {
+                    if ($value !== null && trim($value) === '') {
+                        $fail('Veuillez préciser le motif.');
+                    }
+                },
+            ],
         ], [
             'site_id.required' => 'Le site est obligatoire.',
             'site_id.exists' => 'Le site sélectionné est invalide.',
@@ -716,16 +736,7 @@ class ProduitController extends Controller
             throw ValidationException::withMessages(['motif_type' => 'Ce motif n\'est pas valide pour ce type d\'ajustement.']);
         }
 
-        $existingCount = VarianteStock::where('produit_variante_id', $variante->id)->count();
-        $varianteStock = VarianteStock::firstOrCreate(
-            ['produit_variante_id' => $variante->id, 'site_id' => $site->id],
-            [
-                'organization_id' => $produit->organization_id,
-                'qte_stock' => $existingCount === 0 ? (int) ($produit->qte_stock ?? 0) : 0,
-            ]
-        );
-
-        $stockAvant = $varianteStock->qte_stock;
+        $stockAvant = MouvementStockService::quantiteDisponible($variante->id, $site->id);
         $notes = MotifAjustementStock::from($data['motif_type'])->toNotesString($data['motif_detail'] ?? '');
 
         if ($hasDiminuer && (int) $data['diminuer'] > $stockAvant) {
@@ -736,31 +747,25 @@ class ProduitController extends Controller
 
         $quantite = $hasAugmenter ? (int) $data['augmenter'] : (int) $data['diminuer'];
         $type = $hasAugmenter ? 'entree' : 'sortie';
-        $stockApres = $hasAugmenter ? $stockAvant + $quantite : $stockAvant - $quantite;
 
-        DB::transaction(function () use ($produit, $varianteStock, $variante, $site, $type, $quantite, $stockAvant, $stockApres, $notes, $user) {
-            $varianteStock->update(['qte_stock' => $stockApres]);
-            $produit->resynchroniserQteStock();
-
-            MouvementStock::create([
-                'organization_id' => $produit->organization_id,
-                'site_id' => $site->id,
-                'produit_variante_id' => $variante->id,
-                'type' => $type,
-                'quantite' => $quantite,
-                'stock_avant' => $stockAvant,
-                'stock_apres' => $stockApres,
-                'notes' => $notes,
-                'created_by' => $user->id,
-            ]);
+        DB::transaction(function () use ($produit, $variante, $site, $type, $quantite, $notes, $user) {
+            $mouvement = MouvementStockService::appliquer(
+                varianteId: $variante->id,
+                siteId: $site->id,
+                orgId: $produit->organization_id,
+                type: $type,
+                quantite: $quantite,
+                userId: $user->id,
+                notes: $notes,
+            );
 
             $this->auditService->record(
                 $produit,
                 AuditEvent::STOCK_ADJUSTED,
                 $user,
-                ['qte_stock' => $stockAvant, 'site' => $site->nom],
+                ['qte_stock' => $mouvement->stock_avant, 'site' => $site->nom],
                 [
-                    'qte_stock' => $stockApres,
+                    'qte_stock' => $mouvement->stock_apres,
                     'site' => $site->nom,
                     'motif' => $notes,
                     'role' => $user->roles->first()?->name,

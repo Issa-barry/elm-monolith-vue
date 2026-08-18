@@ -479,13 +479,15 @@ class CommandeVenteStatutTest extends TestCase
         ]);
     }
 
-    public function test_valider_chargement_migre_le_stock_global_au_premier_mouvement_du_site(): void
+    public function test_valider_chargement_najamais_herite_du_stock_legacy_au_premier_mouvement_du_site(): void
     {
-        // Produit jamais touché par un ajustement manuel de stock : le seul
-        // stock connu est l'agrégat global Produit::qte_stock (pas encore de
-        // ligne variante_stocks pour aucun site). Le premier mouvement doit
-        // migrer cette valeur plutôt que de repartir de 0 (régression : un
-        // repli à 0 y écrasait ensuite l'agrégat via le recalcul du total).
+        // Produit jamais touché par un ajustement manuel de stock : le seul stock
+        // connu est l'agrégat global Produit::qte_stock (pas encore de ligne
+        // variante_stocks pour aucun site). Décision produit (régression
+        // multi-agences) : ce legacy n'est JAMAIS hérité implicitement par le
+        // premier site touché — l'ordre dans lequel les sites sont mouvementés ne
+        // doit jamais décider de l'agence propriétaire d'un stock historique non
+        // ventilé. Le site démarre à 0 et la sortie y est bornée à 0.
         ['commande' => $commande, 'ligne' => $ligne, 'produit' => $produit] = $this->makeCommandeWithLigne([
             'statut' => StatutCommandeVente::CHARGEMENT_EN_COURS,
         ]);
@@ -500,9 +502,9 @@ class CommandeVenteStatutTest extends TestCase
         $this->assertDatabaseHas('variante_stocks', [
             'produit_variante_id' => $produit->variantePrincipale()->first()->id,
             'site_id' => $this->defaultSite->id,
-            'qte_stock' => 920,
+            'qte_stock' => 0,
         ]);
-        $this->assertEquals(920, $produit->fresh()->qte_stock);
+        $this->assertEquals(0, $produit->fresh()->qte_stock);
     }
 
     public function test_valider_chargement_cree_le_stock_site_et_le_borne_a_zero_si_insuffisant(): void

@@ -13,16 +13,14 @@ class Livreur extends Model
 {
     use HasFactory, HasUlids, SoftDeletes;
 
+    // nom/prenom/telephone (identité civile) portés par Personne — jamais de colonne
+    // équivalente ici. nom_complet reste propre à ce rôle : désignation d'affichage
+    // (voir EquipeLivraisonController), pas nécessairement l'état civil de la personne.
     protected $fillable = [
         'organization_id',
         'user_id',
-        // Identité civile : conservée pour d'autres projets/usages éventuels,
-        // jamais affichée ni demandée dans l'interface Eau La Maman (voir
-        // EquipeLivraisonController). L'UI n'utilise que nom_complet.
-        'nom',
-        'prenom',
+        'personne_id',
         'nom_complet',
-        'telephone',
         'is_active',
     ];
 
@@ -30,7 +28,27 @@ class Livreur extends Model
         'is_active' => 'boolean',
     ];
 
-    // ── Accessor ──────────────────────────────────────────────────────────────
+    // Sans $appends, ces accesseurs (proxy vers Personne) sont silencieusement absents de
+    // toute sérialisation JSON/array du modèle brut (cf. incident User — HandleInertiaRequests).
+    // nom_complet n'a pas besoin d'être listé : c'est une vraie colonne, pas un accesseur.
+    protected $appends = ['nom', 'prenom', 'telephone'];
+
+    // ── Accesseurs — proxy en lecture seule vers Personne ───────────────────────
+
+    public function getNomAttribute(): ?string
+    {
+        return $this->personne?->nom;
+    }
+
+    public function getPrenomAttribute(): ?string
+    {
+        return $this->personne?->prenom;
+    }
+
+    public function getTelephoneAttribute(): ?string
+    {
+        return $this->personne?->telephone;
+    }
 
     /**
      * Libellé garanti non vide pour les usages internes qui ne tolèrent pas
@@ -66,6 +84,11 @@ class Livreur extends Model
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);
+    }
+
+    public function personne(): BelongsTo
+    {
+        return $this->belongsTo(Personne::class);
     }
 
     public function user(): BelongsTo

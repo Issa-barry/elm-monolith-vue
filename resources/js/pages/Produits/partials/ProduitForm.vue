@@ -438,6 +438,10 @@ const depasseLimiteVariantes = computed(
                     >
                         {{ errors.categorie_id }}
                     </p>
+                    <p v-else class="mt-1 text-xs text-muted-foreground">
+                        Sert aussi de référence pour le contrôle de capacité
+                        véhicule (Véhicules &gt; capacités par catégorie).
+                    </p>
                 </div>
 
                 <!-- Fournisseur -->

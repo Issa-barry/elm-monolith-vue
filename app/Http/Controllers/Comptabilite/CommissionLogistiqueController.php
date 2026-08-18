@@ -13,6 +13,7 @@ use App\Models\Depense;
 use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\Site;
+use App\Models\VehiculeCapacite;
 use App\Services\AuditLogService;
 use App\Services\CommissionAdjustmentService;
 use App\Services\CommissionPaymentService;
@@ -94,7 +95,10 @@ class CommissionLogistiqueController extends Controller
             ->values();
 
         $allLivreurIds = $rows->pluck('livreur_id')->filter()->unique()->values()->toArray();
-        $telephones = Livreur::whereIn('id', $allLivreurIds)->pluck('telephone', 'id');
+        $telephones = Livreur::with('personne')
+            ->whereIn('id', $allLivreurIds)
+            ->get()
+            ->mapWithKeys(fn (Livreur $l) => [$l->id => $l->telephone]);
 
         $fraisDepensesParLivreur = [];
         if (! empty($allLivreurIds)) {
@@ -113,9 +117,11 @@ class CommissionLogistiqueController extends Controller
         }
 
         $partsParLivreur = CommissionLogistiquePart::with([
-            'commission.vehicule:id,nom_vehicule,immatriculation,capacite_packs,type_vehicule_id,proprietaire_id',
+            'commission.vehicule:id,nom_vehicule,immatriculation,type_vehicule_id,proprietaire_id',
             'commission.vehicule.typeVehicule:id,nom',
-            'commission.vehicule.proprietaire:id,prenom,nom,telephone,code_phone_pays',
+            'commission.vehicule.proprietaire:id,personne_id',
+            'commission.vehicule.proprietaire.personne',
+            'commission.vehicule.capacites.categorie',
             'commission.transfert.siteSource:id,nom',
         ])
             ->whereIn('livreur_id', $allLivreurIds)
@@ -140,9 +146,10 @@ class CommissionLogistiqueController extends Controller
                 'nom' => $v->nom_vehicule,
                 'immatriculation' => $v->immatriculation,
                 'type' => $v->typeVehicule?->nom,
-                // Import flotte ne renseigne jamais capacite_packs sur le véhicule :
-                // on retombe sur la capacité par défaut du type (cf. VehiculeController).
-                'capacite_packs' => $v->capacite_packs ?? $v->typeVehicule?->capacite_defaut,
+                'capacites' => $v->capacites->map(fn (VehiculeCapacite $c) => [
+                    'categorie_nom' => $c->categorie->nom,
+                    'capacite_max' => $c->capacite_max,
+                ])->values()->all(),
                 'proprietaire_nom' => $v->proprietaire
                     ? trim($v->proprietaire->prenom.' '.$v->proprietaire->nom)
                     : null,
@@ -357,7 +364,7 @@ class CommissionLogistiqueController extends Controller
 
         $filteredPartIds = $filteredParts->pluck('id')->toArray();
 
-        $paymentsQuery = CommissionPayment::with('createur:id,prenom,nom')
+        $paymentsQuery = CommissionPayment::with(['createur:id,personne_id', 'createur.personne'])
             ->where('organization_id', $orgId)
             ->where('livreur_id', $livreurId)
             ->where('beneficiary_type', 'livreur')
@@ -605,7 +612,8 @@ class CommissionLogistiqueController extends Controller
         return CommissionLogistiquePart::with([
             'commission.transfert.siteSource:id,nom',
             'commission.vehicule:id,nom_vehicule,immatriculation',
-            'livreur:id,telephone',
+            'livreur:id,personne_id',
+            'livreur.personne',
         ])
             ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
             ->where('type_beneficiaire', 'livreur')

@@ -2,15 +2,21 @@
 
 namespace Tests\Feature;
 
+use App\Enums\DomaineActivite;
 use App\Models\AppInstallation;
 use App\Models\Categorie;
 use App\Models\OptionCatalogue;
 use App\Models\Organization;
+use App\Models\ProduitType;
 use App\Models\TypeVehicule;
 use App\Models\User;
+use App\Services\InstallationService;
+use App\Services\OtpService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\ValidationException;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -22,6 +28,14 @@ class InstallWizardTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * Email par défaut de payload() — pré-vérifié dans setUp() pour que tous les tests qui
+     * n'ont rien à voir avec la règle email (contenu du domaine, téléphone, mot de passe...)
+     * n'aient pas à répéter le cycle OTP. Depuis que l'email est obligatoire en on_premise (mode
+     * par défaut, cf. config/app.php), la quasi-totalité des posts /install en ont besoin.
+     */
+    private const DEFAULT_EMAIL = 'issa@gmail.com';
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -30,21 +44,28 @@ class InstallWizardTest extends TestCase
         // ailleurs (comportement métier) — le désactiver ici évite que le grand nombre de
         // requêtes de cette suite sur les mêmes routes /install* ne se percute lui-même.
         $this->withoutMiddleware(ThrottleRequests::class);
+
+        $this->preVerifyEmail(self::DEFAULT_EMAIL);
+    }
+
+    private function preVerifyEmail(string $email): void
+    {
+        app(OtpService::class)->generate($email, InstallationService::EMAIL_OTP_CONTEXT);
+        app(OtpService::class)->markVerified($email, InstallationService::EMAIL_OTP_CONTEXT);
     }
 
     private function payload(array $overrides = []): array
     {
         return array_replace_recursive([
-            'organisation' => ['nom' => 'ELM Test'],
+            'organisation' => ['nom' => 'ELM Test', 'domaine' => DomaineActivite::COMMERCE_DISTRIBUTION->value],
             'admin' => [
                 'prenom' => 'Issa',
                 'nom' => 'BARRY',
                 'telephone' => '+224622000000',
-                'email' => null,
+                'email' => self::DEFAULT_EMAIL,
                 'password' => 'Sup3r$ecretPwd',
                 'password_confirmation' => 'Sup3r$ecretPwd',
             ],
-            'catalogue' => ['categories' => false, 'options' => false, 'types_vehicule' => false],
         ], $overrides);
     }
 
@@ -76,15 +97,51 @@ class InstallWizardTest extends TestCase
 
         $this->get('/install')->assertInertia(fn ($page) => $page->component('Install/Token'));
 
+        // Deuxième admin distinct : email et téléphone doivent différer du premier
+        // (user_auth_identities.normalized_value est unique GLOBALEMENT, pas par organisation —
+        // cf. UserAuthIdentity). Un nouveau code doit aussi être vérifié pour cette adresse : le
+        // précédent, lié à self::DEFAULT_EMAIL, a été consommé (clear()) par la 1ère installation.
+        $this->preVerifyEmail('issa2@gmail.com');
+
         $this->withSession(['install_token_verified' => true])
             ->post('/install', $this->payload([
                 'organisation' => ['nom' => 'ELM Test 2'],
-                'admin' => ['telephone' => '+224622000001'],
+                'admin' => ['telephone' => '+224622000001', 'email' => 'issa2@gmail.com'],
             ]))
             ->assertOk();
 
         $this->assertSame(2, Organization::whereIn('name', ['ELM Test', 'ELM Test 2'])->count());
         $this->assertSame(2, AppInstallation::count());
+    }
+
+    /**
+     * Le nom ne doit jamais servir d'identité technique en SaaS — deux entreprises indépendantes
+     * peuvent légitimement porter le même nom commercial (cf. mémo idempotence corrigé).
+     */
+    public function test_deux_organisations_saas_peuvent_porter_le_meme_nom(): void
+    {
+        config(['app.deployment_mode' => 'saas', 'app.install_token' => 'ma-cle-secrete']);
+
+        $this->withSession(['install_token_verified' => true])
+            ->post('/install', $this->payload())
+            ->assertOk();
+
+        // Cf. commentaire de test_install_reste_accessible_apres_installation_en_saas : email et
+        // téléphone distincts (identité globale, pas scopée par organisation), nouveau code requis.
+        $this->preVerifyEmail('issa2@gmail.com');
+
+        $this->withSession(['install_token_verified' => true])
+            ->post('/install', $this->payload([
+                'admin' => ['telephone' => '+224622000001', 'email' => 'issa2@gmail.com'],
+            ]))
+            ->assertOk();
+
+        $this->assertSame(2, Organization::where('name', 'ELM Test')->count());
+        $this->assertSame(
+            2,
+            Organization::where('name', 'ELM Test')->pluck('id')->unique()->count(),
+            'les deux organisations doivent avoir un identifiant distinct'
+        );
     }
 
     public function test_install_saas_sans_token_configure_refuse_avec_erreur_serveur(): void
@@ -163,22 +220,27 @@ class InstallWizardTest extends TestCase
         $org = Organization::where('slug', 'elm-test')->firstOrFail();
         $this->assertSame('ELM Test', $org->name);
 
-        $user = User::where('telephone', '+224622000000')->firstOrFail();
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000000'))->firstOrFail();
         $this->assertTrue($user->hasRole('super_admin'));
         $this->assertTrue(Hash::check('Sup3r$ecretPwd', $user->password));
         $this->assertFalse($user->must_change_password);
     }
 
+    /**
+     * La détection pays/indicatif reste générique (PhoneCountryInfo/libphonenumber, cf.
+     * resolveTelephone()) — seule l'installation elle-même restreint ensuite à Guinée/Sierra
+     * Leone (cf. test_installation_refuse_un_numero_hors_guinee_sierra_leone), pas la résolution.
+     */
     public function test_pays_est_determine_depuis_le_telephone(): void
     {
         $this->post('/install', $this->payload([
-            'admin' => ['telephone' => '+33612345678'],
+            'admin' => ['telephone' => '+224622000000'],
         ]))->assertOk();
 
-        $user = User::where('telephone', '+33612345678')->firstOrFail();
-        $this->assertSame('FR', $user->code_pays);
-        $this->assertSame('France', $user->pays);
-        $this->assertSame('+33', $user->code_phone_pays);
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000000'))->firstOrFail();
+        $this->assertSame('GN', $user->code_pays);
+        $this->assertSame('Guinée', $user->pays);
+        $this->assertSame('+224', $user->code_phone_pays);
     }
 
     public function test_telephone_invalide_est_rejete(): void
@@ -197,45 +259,323 @@ class InstallWizardTest extends TestCase
         ]))->assertSessionHasErrors('admin.password');
     }
 
-    public function test_categories_oui_options_non(): void
+    /**
+     * Le formulaire /install ne comporte plus de champ "Confirmer le mot de passe" (installation
+     * plus rapide, saisie une seule fois) — le serveur ne doit pas l'exiger non plus.
+     */
+    public function test_installation_reussit_sans_champ_password_confirmation(): void
     {
-        $this->post('/install', $this->payload([
-            'catalogue' => ['categories' => true, 'options' => false],
-        ]))->assertOk();
+        $payload = [
+            'organisation' => ['nom' => 'ELM Test', 'domaine' => DomaineActivite::COMMERCE_DISTRIBUTION->value],
+            'admin' => [
+                'prenom' => 'Issa',
+                'nom' => 'BARRY',
+                'telephone' => '+224622000000',
+                'email' => self::DEFAULT_EMAIL,
+                'password' => 'Sup3r$ecretPwd',
+            ],
+        ];
 
-        $org = Organization::where('slug', 'elm-test')->firstOrFail();
-        $this->assertGreaterThan(0, Categorie::where('organization_id', $org->id)->count());
-        $this->assertSame(0, OptionCatalogue::where('organization_id', $org->id)->count());
+        $this->post('/install', $payload)
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Install/Success'));
+
+        $this->assertTrue(AppInstallation::isInstalled());
     }
 
-    public function test_categories_non_options_oui(): void
+    public function test_mot_de_passe_trop_faible_est_rejete(): void
     {
         $this->post('/install', $this->payload([
-            'catalogue' => ['categories' => false, 'options' => true],
-        ]))->assertOk();
+            'admin' => ['password' => 'faible', 'password_confirmation' => 'faible'],
+        ]))->assertSessionHasErrors('admin.password');
 
-        $org = Organization::where('slug', 'elm-test')->firstOrFail();
-        $this->assertSame(0, Categorie::where('organization_id', $org->id)->count());
-        $this->assertGreaterThan(0, OptionCatalogue::where('organization_id', $org->id)->count());
+        $this->assertFalse(AppInstallation::isInstalled());
     }
 
-    public function test_types_vehicule_oui(): void
+    public function test_email_est_persiste_et_marque_verifie_quand_le_code_a_ete_valide(): void
+    {
+        // example.com a un enregistrement MX "null" (RFC 7505, IANA) et est donc rejeté par la
+        // règle `email:dns` du contrôleur — utiliser un domaine mail réel pour ce test.
+        // (déjà pré-vérifié dans setUp() puisqu'il s'agit de self::DEFAULT_EMAIL)
+        $this->post('/install', $this->payload())->assertOk();
+
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000000'))->firstOrFail();
+        $this->assertSame(self::DEFAULT_EMAIL, $user->email);
+        $this->assertTrue($user->hasVerifiedEmail());
+    }
+
+    /**
+     * "Email saisi ≠ email vérifié" (cf. InstallationService::install()) : sans passer par
+     * sendEmailCode()/verifyEmailCode() au préalable, l'installation doit être refusée — jamais
+     * de verified_at renseigné du seul fait d'avoir tapé une adresse dans le formulaire. Adresse
+     * délibérément différente de self::DEFAULT_EMAIL (pré-vérifié dans setUp()).
+     */
+    public function test_installation_refusee_si_lemail_nest_jamais_ete_verifie(): void
     {
         $this->post('/install', $this->payload([
-            'catalogue' => ['types_vehicule' => true],
-        ]))->assertOk();
+            'admin' => ['email' => 'jamais-verifie@gmail.com'],
+        ]))->assertSessionHasErrors('admin.email');
 
-        $org = Organization::where('slug', 'elm-test')->firstOrFail();
-        $this->assertSame(5, TypeVehicule::where('organization_id', $org->id)->count());
-        $this->assertTrue(TypeVehicule::where('organization_id', $org->id)->where('nom', 'Minibus')->exists());
+        $this->assertFalse(AppInstallation::isInstalled());
+        $this->assertDatabaseMissing('organizations', ['slug' => 'elm-test']);
     }
 
-    public function test_installation_sans_catalogue_ne_cree_aucun_type_vehicule(): void
+    // ── Règle email selon le mode de déploiement ──────────────────────────────────
+
+    /**
+     * En on_premise (mode par défaut, cf. config/app.php), l'email du Super Admin devient
+     * obligatoire — contrairement au reste de l'application (Login, Register, invitations...),
+     * qui n'est pas concerné par cette règle propre à /install.
+     */
+    public function test_on_premise_refuse_linstallation_sans_email(): void
+    {
+        config(['app.deployment_mode' => 'on_premise']);
+
+        $this->post('/install', $this->payload([
+            'admin' => ['email' => null],
+        ]))->assertSessionHasErrors('admin.email');
+
+        $this->assertFalse(AppInstallation::isInstalled());
+    }
+
+    public function test_on_premise_refuse_un_email_au_format_invalide(): void
+    {
+        config(['app.deployment_mode' => 'on_premise']);
+
+        $this->post('/install', $this->payload([
+            'admin' => ['email' => 'pas-un-email'],
+        ]))->assertSessionHasErrors('admin.email');
+
+        $this->assertFalse(AppInstallation::isInstalled());
+    }
+
+    public function test_on_premise_email_verifie_permet_de_terminer_linstallation(): void
+    {
+        config(['app.deployment_mode' => 'on_premise']);
+
+        // self::DEFAULT_EMAIL est déjà pré-vérifié dans setUp().
+        $this->post('/install', $this->payload())
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Install/Success'));
+
+        $this->assertTrue(AppInstallation::isInstalled());
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000000'))->firstOrFail();
+        $this->assertTrue($user->hasVerifiedEmail());
+    }
+
+    public function test_saas_installation_reussit_sans_email(): void
+    {
+        config(['app.deployment_mode' => 'saas', 'app.install_token' => 'ma-cle-secrete']);
+
+        $this->withSession(['install_token_verified' => true])
+            ->post('/install', $this->payload(['admin' => ['email' => null]]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Install/Success'));
+
+        $this->assertTrue(AppInstallation::isInstalled());
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000000'))->firstOrFail();
+        $this->assertNull($user->email);
+    }
+
+    public function test_saas_avec_email_non_verifie_est_refuse(): void
+    {
+        config(['app.deployment_mode' => 'saas', 'app.install_token' => 'ma-cle-secrete']);
+
+        $this->withSession(['install_token_verified' => true])
+            ->post('/install', $this->payload(['admin' => ['email' => 'jamais-verifie@gmail.com']]))
+            ->assertSessionHasErrors('admin.email');
+
+        $this->assertFalse(AppInstallation::isInstalled());
+    }
+
+    public function test_saas_avec_email_verifie_reussit(): void
+    {
+        config(['app.deployment_mode' => 'saas', 'app.install_token' => 'ma-cle-secrete']);
+
+        // self::DEFAULT_EMAIL est déjà pré-vérifié dans setUp().
+        $this->withSession(['install_token_verified' => true])
+            ->post('/install', $this->payload())
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Install/Success'));
+
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000000'))->firstOrFail();
+        $this->assertSame(self::DEFAULT_EMAIL, $user->email);
+        $this->assertTrue($user->hasVerifiedEmail());
+    }
+
+    /**
+     * Le label affiché ("Email *" vs "Email (facultatif)") dépend de isSaas() — transmis tel quel
+     * au composant Vue, jamais recalculé indépendamment côté frontend (cf. Wizard.vue::isSaas).
+     */
+    public function test_le_wizard_expose_is_saas_au_frontend(): void
+    {
+        config(['app.deployment_mode' => 'on_premise']);
+        $this->get('/install')->assertInertia(fn ($page) => $page
+            ->component('Install/Wizard')
+            ->where('isSaas', false)
+        );
+
+        config(['app.deployment_mode' => 'saas', 'app.install_token' => 'ma-cle-secrete']);
+        $this->withSession(['install_token_verified' => true])
+            ->get('/install')
+            ->assertInertia(fn ($page) => $page
+                ->component('Install/Wizard')
+                ->where('isSaas', true)
+            );
+    }
+
+    /**
+     * Le sélecteur de pays de /install (PAYS_INSTALL dans Wizard.vue) restreint la saisie à
+     * Guinée/Sierra Leone côté UI ; InstallationService::install() applique la même restriction
+     * côté serveur (cf. TELEPHONE_PAYS_AUTORISES) pour qu'un appel direct à l'API ne puisse pas
+     * la contourner. Un numéro sierra-léonais valide doit être accepté de bout en bout.
+     */
+    public function test_installation_reussit_avec_un_numero_sierra_leonais(): void
+    {
+        $this->post('/install', $this->payload([
+            'admin' => ['telephone' => '+23276123456'],
+        ]))->assertOk();
+
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+23276123456'))->firstOrFail();
+        $this->assertSame('SL', $user->code_pays);
+        $this->assertSame('Sierra Leone', $user->pays);
+        $this->assertSame('+232', $user->code_phone_pays);
+    }
+
+    public function test_installation_refuse_un_numero_hors_guinee_sierra_leone(): void
+    {
+        $this->post('/install', $this->payload([
+            'admin' => ['telephone' => '+33612345678'],
+        ]))->assertSessionHasErrors('admin.telephone');
+
+        $this->assertFalse(AppInstallation::isInstalled());
+    }
+
+    public function test_catalogue_par_defaut_est_toujours_cree(): void
     {
         $this->post('/install', $this->payload())->assertOk();
 
         $org = Organization::where('slug', 'elm-test')->firstOrFail();
-        $this->assertSame(0, TypeVehicule::where('organization_id', $org->id)->count());
+        $this->assertGreaterThan(0, Categorie::where('organization_id', $org->id)->count());
+        $this->assertGreaterThan(0, OptionCatalogue::where('organization_id', $org->id)->count());
+        $this->assertSame(5, TypeVehicule::where('organization_id', $org->id)->count());
+        $this->assertTrue(TypeVehicule::where('organization_id', $org->id)->where('nom', 'Minibus')->exists());
+        $this->assertTrue(ProduitType::where('organization_id', $org->id)->where('code', 'matiere_production')->exists());
+    }
+
+    public function test_aucun_site_nest_cree_pendant_linstallation(): void
+    {
+        $this->post('/install', $this->payload())->assertOk();
+
+        $org = Organization::where('slug', 'elm-test')->firstOrFail();
+        $this->assertSame(0, $org->sites()->count());
+    }
+
+    /**
+     * Propriétaire interne par défaut (véhicules "interne", commissions propriétaire) créé et
+     * rattaché à l'organisation dès l'installation — plus jamais deviné depuis un numéro de
+     * téléphone codé en dur (cf. Organization::proprietaireInterne(), Proprietaire::interneParDefautId()).
+     */
+    public function test_propriétaire_interne_est_cree_et_rattache_a_lorganisation(): void
+    {
+        $this->post('/install', $this->payload())->assertOk();
+
+        $org = Organization::where('slug', 'elm-test')->firstOrFail();
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000000'))->firstOrFail();
+
+        $this->assertNotNull($org->proprietaire_interne_id);
+
+        $proprietaireInterne = $org->proprietaireInterne;
+        $this->assertNotNull($proprietaireInterne);
+        $this->assertSame($user->id, $proprietaireInterne->user_id);
+        $this->assertSame($user->nom, $proprietaireInterne->nom);
+        $this->assertSame($user->prenom, $proprietaireInterne->prenom);
+        $this->assertSame($user->telephone, $proprietaireInterne->telephone);
+        $this->assertSame($org->id, $proprietaireInterne->organization_id);
+    }
+
+    /**
+     * Deux organisations installées séparément ont chacune leur propre propriétaire interne —
+     * jamais partagé entre organisations (cf. Organization::proprietaire_interne_id, scoping
+     * strict par organization_id).
+     */
+    public function test_propriétaire_interne_nest_jamais_partage_entre_organisations(): void
+    {
+        config(['app.deployment_mode' => 'saas']);
+
+        app(InstallationService::class)->install(
+            organisation: ['nom' => 'Org A', 'domaine' => DomaineActivite::COMMERCE_DISTRIBUTION->value],
+            admin: [
+                'prenom' => 'Alpha', 'nom' => 'A', 'telephone' => '+224622111111',
+                'email' => null, 'password' => 'Sup3r$ecretPwd', 'password_confirmation' => 'Sup3r$ecretPwd',
+            ],
+        );
+        app(InstallationService::class)->install(
+            organisation: ['nom' => 'Org B', 'domaine' => DomaineActivite::COMMERCE_DISTRIBUTION->value],
+            admin: [
+                'prenom' => 'Beta', 'nom' => 'B', 'telephone' => '+224622222222',
+                'email' => null, 'password' => 'Sup3r$ecretPwd', 'password_confirmation' => 'Sup3r$ecretPwd',
+            ],
+        );
+
+        $orgA = Organization::where('slug', 'org-a')->firstOrFail();
+        $orgB = Organization::where('slug', 'org-b')->firstOrFail();
+
+        $this->assertNotSame($orgA->proprietaire_interne_id, $orgB->proprietaire_interne_id);
+        $this->assertSame($orgA->id, $orgA->proprietaireInterne->organization_id);
+        $this->assertSame($orgB->id, $orgB->proprietaireInterne->organization_id);
+    }
+
+    public function test_domaine_dactivite_est_persiste(): void
+    {
+        $this->post('/install', $this->payload([
+            'organisation' => ['domaine' => DomaineActivite::RESTAURATION->value],
+        ]))->assertOk();
+
+        $org = Organization::where('slug', 'elm-test')->firstOrFail();
+        $this->assertSame(DomaineActivite::RESTAURATION, $org->domaine_activite);
+
+        // Les catégories seedées reflètent le domaine choisi (Plats, pas Vêtements).
+        $this->assertTrue(Categorie::where('organization_id', $org->id)->where('nom', 'Plats')->exists());
+        $this->assertFalse(Categorie::where('organization_id', $org->id)->where('nom', 'Vêtements')->exists());
+    }
+
+    public function test_domaine_dactivite_obligatoire(): void
+    {
+        $this->post('/install', $this->payload([
+            'organisation' => ['domaine' => ''],
+        ]))->assertSessionHasErrors('organisation.domaine');
+
+        $this->assertFalse(AppInstallation::isInstalled());
+    }
+
+    public function test_domaine_dactivite_invalide_est_rejete(): void
+    {
+        $this->post('/install', $this->payload([
+            'organisation' => ['domaine' => 'pas-un-domaine'],
+        ]))->assertSessionHasErrors('organisation.domaine');
+    }
+
+    public function test_refuse_une_seconde_organisation_en_on_premise(): void
+    {
+        config(['app.deployment_mode' => 'on_premise']);
+
+        $this->post('/install', $this->payload())->assertOk();
+
+        // Le verrou web (isLocked → redirect login) ferme déjà /install normalement — ce test
+        // vérifie le filet de sécurité métier dans InstallationService lui-même, en simulant un
+        // appel qui contournerait isLocked() (ex: depuis la CLI, cf. InstallAppTest).
+        $service = app(InstallationService::class);
+
+        $this->expectException(ValidationException::class);
+
+        $service->install(
+            organisation: ['nom' => 'Autre Entreprise', 'domaine' => DomaineActivite::COMMERCE_DISTRIBUTION->value],
+            admin: [
+                'prenom' => 'Issa', 'nom' => 'BARRY', 'telephone' => '+224622000099', 'email' => null,
+                'password' => 'Sup3r$ecretPwd', 'password_confirmation' => 'Sup3r$ecretPwd',
+            ],
+        );
     }
 
     public function test_reutilise_organisation_existante_de_meme_nom_sans_dupliquer(): void

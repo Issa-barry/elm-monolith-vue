@@ -39,16 +39,6 @@ const typeLabelMap = computed(
         ),
 );
 
-function onTypeVehiculeChange() {
-    const selectedType = props.type_vehicule_options.find(
-        (option) => option.value === form.type_vehicule,
-    );
-
-    if (selectedType && !form.capacite_packs) {
-        form.capacite_packs = selectedType.capacite_defaut;
-    }
-}
-
 function submitProposal() {
     form.post('/client/propositions-vehicules', {
         preserveScroll: true,
@@ -159,7 +149,6 @@ function submitProposal() {
                                 <select
                                     v-model="form.type_vehicule"
                                     class="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                                    @change="onTypeVehiculeChange"
                                 >
                                     <option disabled value="">
                                         Selectionner un type

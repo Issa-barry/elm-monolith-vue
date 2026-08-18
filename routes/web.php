@@ -45,6 +45,7 @@ use App\Http\Controllers\FraisCommissionPartController;
 use App\Http\Controllers\InstallWizardController;
 use App\Http\Controllers\LivreurController;
 use App\Http\Controllers\MediaController;
+use App\Http\Controllers\OnboardingSiteController;
 use App\Http\Controllers\OptionCatalogueController;
 use App\Http\Controllers\PackingController;
 use App\Http\Controllers\PaieController;
@@ -126,6 +127,15 @@ Route::middleware('throttle:install')->group(function () {
     Route::post('install/phone-info', [InstallWizardController::class, 'resolvePhone'])->name('install.phone-info');
     Route::post('install', [InstallWizardController::class, 'store'])->name('install.store');
 });
+// Vérification de l'email du Super Admin par code (facultatif — cf. InstallWizardController) :
+// throttle dédié email+IP, distinct de `install` (10/min/IP tout court) pour rester cohérent
+// avec le anti-spam OTP déjà en place ailleurs (otp-send/otp-verify, cf. AcceptInvitationController).
+Route::post('install/email/send-code', [InstallWizardController::class, 'sendEmailCode'])
+    ->name('install.email.send-code')
+    ->middleware('throttle:otp-email-send');
+Route::post('install/email/verify-code', [InstallWizardController::class, 'verifyEmailCode'])
+    ->name('install.email.verify-code')
+    ->middleware('throttle:otp-email-verify');
 
 Route::get('/', function (Request $request) {
     $user = $request->user();
@@ -150,13 +160,22 @@ Route::get('/', function (Request $request) {
 
 Route::get('/sitemap.xml', SitemapController::class)->name('sitemap');
 
+// ── Onboarding du premier site (post-connexion) ────────────────────────────────
+// Hors du groupe 'org.site.required' (par construction : c'est justement l'absence de site
+// organisation qui amène ici, cf. EnsureOrganizationHasSite — l'appliquer ici créerait une
+// boucle de redirection) mais toujours authentifié.
+Route::middleware(['auth', 'account.active'])->prefix('onboarding')->name('onboarding.')->group(function () {
+    Route::get('site', [OnboardingSiteController::class, 'show'])->name('site.show');
+    Route::post('site', [OnboardingSiteController::class, 'store'])->name('site.store');
+});
+
 // ── Espace staff (back-office) ──────────────────────────────────────────────
 Route::prefix('backoffice')->group(function () {
     Route::get('dashboard', [DashboardController::class, 'index'])
-        ->middleware(['auth', 'account.active', 'password.not-expired', 'verified', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'require.site'])
+        ->middleware(['auth', 'account.active', 'password.not-expired', 'verified', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'org.site.required', 'require.site'])
         ->name('dashboard');
 
-    Route::middleware(['auth', 'account.active', 'password.not-expired', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'require.site'])->group(function () {
+    Route::middleware(['auth', 'account.active', 'password.not-expired', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'org.site.required', 'require.site'])->group(function () {
 
         // Messages de contact
         Route::get('contact-messages/unread-count', [ContactController::class, 'unreadCount'])->name('contact-messages.unread-count');
@@ -248,13 +267,13 @@ Route::prefix('backoffice')->group(function () {
             });
 
             Route::resource('type-vehicules', TypeVehiculeController::class)->except(['show']);
-            Route::put('type-vehicules/{typeVehicule}/capacites', [TypeVehiculeController::class, 'syncCapacites'])->name('type-vehicules.capacites.sync');
             Route::resource('vehicules', VehiculeController::class);
             Route::post('vehicules/{vehicule}/frais', [VehiculeController::class, 'storeFrais'])->name('vehicules.frais.store');
             Route::patch('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'updateFrais'])->name('vehicules.frais.update');
             Route::delete('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'destroyFrais'])->name('vehicules.frais.destroy');
-            Route::put('vehicules/{vehicule}/capacites', [VehiculeController::class, 'syncCapacites'])->name('vehicules.capacites.sync');
             Route::resource('proprietaires', ProprietaireController::class);
+            Route::post('proprietaires/{proprietaire}/definir-interne', [ProprietaireController::class, 'definirInterne'])
+                ->name('proprietaires.definir-interne');
 
             // Pièces d'identité (propriétaires uniquement pour le moment)
             Route::post('proprietaires/{proprietaire}/pieces-identite', [PieceIdentiteController::class, 'store'])
@@ -591,8 +610,8 @@ Route::middleware(['auth', 'role:client|proprietaire|livreur', 'active.livreur']
 });
 
 // ── Mot de passe provisoire (cf. app:install / must_change_password) ──────────
-// Volontairement hors du groupe backoffice ('role:...', 'require.site') : un compte tout
-// juste créé doit pouvoir définir son mot de passe avant même d'avoir un site rattaché.
+// Volontairement hors du groupe backoffice ('role:...', 'org.site.required', 'require.site') :
+// un compte tout juste créé doit pouvoir définir son mot de passe avant même d'avoir un site rattaché.
 Route::middleware(['auth', 'account.active'])->group(function () {
     Route::get('password/force-change', [ForcePasswordChangeController::class, 'show'])->name('password.force-change');
     Route::post('password/force-change', [ForcePasswordChangeController::class, 'update'])->name('password.force-change.update');

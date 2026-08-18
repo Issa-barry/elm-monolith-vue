@@ -19,6 +19,7 @@ use App\Models\FactureVente;
 use App\Models\Organization;
 use App\Models\Packing;
 use App\Models\Parametre;
+use App\Models\Personne;
 use App\Models\Prestataire;
 use App\Models\Produit;
 use App\Models\ProduitVariante;
@@ -203,10 +204,17 @@ class ModelTest extends TestCase
 
     public function test_proprietaire_nom_complet_concatenates_prenom_and_nom(): void
     {
-        $p = Proprietaire::create([
-            'organization_id' => $this->makeOrg()->id,
+        $orgId = $this->makeOrg()->id;
+        $personne = Personne::create([
+            'organization_id' => $orgId,
             'nom' => 'DIALLO',
             'prenom' => 'Mamadou',
+            'telephone' => '+224'.fake()->unique()->numerify('#########'),
+        ]);
+
+        $p = Proprietaire::create([
+            'organization_id' => $orgId,
+            'personne_id' => $personne->id,
         ]);
 
         $this->assertSame('Mamadou DIALLO', $p->nom_complet);
@@ -1008,7 +1016,9 @@ class ModelTest extends TestCase
 
     public function test_user_name_attribute(): void
     {
-        $user = User::factory()->make(['prenom' => 'Mamadou', 'nom' => 'DIALLO']);
+        $user = User::factory()->make();
+        $user->setRelation('personne', Personne::factory()->make(['prenom' => 'Mamadou', 'nom' => 'DIALLO']));
+
         $this->assertSame('Mamadou DIALLO', $user->name);
     }
 

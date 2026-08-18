@@ -188,11 +188,11 @@ class DepenseController extends Controller
             foreach (['employe' => 'employeBeneficiaire', 'livreur' => 'livreurBeneficiaire', 'proprietaire' => 'proprietaireBeneficiaire'] as $type => $relation) {
                 $items = Depense::where('organization_id', $orgId)
                     ->where('beneficiaire_type', $type)
-                    ->whereHas($relation, fn ($qb) => $qb
+                    ->whereHas($relation, fn ($qb) => $qb->whereHas('personne', fn ($p) => $p
                         ->where('nom', 'LIKE', $like)
                         ->orWhere('prenom', 'LIKE', $like)
-                    )
-                    ->with($relation.':id,nom,prenom')
+                    ))
+                    ->with([$relation, $relation.'.personne'])
                     ->get()
                     ->pluck($relation)
                     ->filter()
@@ -233,10 +233,10 @@ class DepenseController extends Controller
             foreach (['employe' => 'employeBeneficiaire', 'livreur' => 'livreurBeneficiaire', 'proprietaire' => 'proprietaireBeneficiaire'] as $type => $relation) {
                 $items = Depense::where('organization_id', $orgId)
                     ->where('beneficiaire_type', $type)
-                    ->whereHas($relation, fn ($qb) => $qb
+                    ->whereHas($relation, fn ($qb) => $qb->whereHas('personne', fn ($p) => $p
                         ->whereRaw("REPLACE(REPLACE(telephone, ' ', ''), '-', '') LIKE ?", [$likeTel])
-                    )
-                    ->with($relation.':id,nom,prenom,telephone')
+                    ))
+                    ->with([$relation, $relation.'.personne'])
                     ->get()
                     ->pluck($relation)
                     ->filter()
@@ -286,7 +286,7 @@ class DepenseController extends Controller
         $orgId = auth()->user()->organization_id;
 
         $vehicule = Vehicule::where('organization_id', $orgId)
-            ->with(['typeVehicule:id,nom', 'proprietaire:id,nom,prenom,telephone', 'site:id,nom'])
+            ->with(['typeVehicule:id,nom', 'proprietaire:id,personne_id', 'proprietaire.personne', 'site:id,nom'])
             ->find($id, ['id', 'nom_vehicule', 'immatriculation', 'type_vehicule_id', 'proprietaire_id', 'site_id', 'categorie']);
 
         if (! $vehicule) {
@@ -309,7 +309,7 @@ class DepenseController extends Controller
 
     private function buildProprietaireDetail(string $id, string $orgId): ?array
     {
-        $p = Proprietaire::where('organization_id', $orgId)->find($id, ['id', 'nom', 'prenom', 'telephone', 'adresse']);
+        $p = Proprietaire::with('personne')->where('organization_id', $orgId)->find($id);
         if (! $p) {
             return null;
         }
@@ -325,9 +325,9 @@ class DepenseController extends Controller
 
     private function buildLivreurDetail(string $id, string $orgId): ?array
     {
-        $l = Livreur::where('organization_id', $orgId)
-            ->with(['equipes:id,nom'])
-            ->find($id, ['id', 'nom', 'prenom', 'nom_complet', 'telephone']);
+        $l = Livreur::with(['personne', 'equipes:id,nom'])
+            ->where('organization_id', $orgId)
+            ->find($id);
 
         if (! $l) {
             return null;
@@ -344,9 +344,9 @@ class DepenseController extends Controller
 
     private function buildEmployeDetail(string $id, string $orgId): ?array
     {
-        $e = Employe::where('organization_id', $orgId)
-            ->with(['site:id,nom', 'contratActif'])
-            ->find($id, ['id', 'nom', 'prenom', 'telephone', 'site_id', 'type_employe']);
+        $e = Employe::with(['personne', 'site:id,nom', 'contratActif'])
+            ->where('organization_id', $orgId)
+            ->find($id);
 
         if (! $e) {
             return null;
@@ -814,36 +814,39 @@ class DepenseController extends Controller
                     )
                     ->orWhere(fn ($w2) => $w2
                         ->where('beneficiaire_type', 'employe')
-                        ->whereHas('employeBeneficiaire', function ($q) use ($like, $likeTel, $norm) {
-                            $q->where('nom', 'LIKE', $like)
+                        ->whereHas('employeBeneficiaire', fn ($q) => $q->whereHas('personne', function ($p) use ($like, $likeTel, $norm) {
+                            $p->where('nom', 'LIKE', $like)
                                 ->orWhere('prenom', 'LIKE', $like)
                                 ->orWhereRaw("CONCAT(prenom, ' ', nom) LIKE ?", [$like]);
                             if ($likeTel) {
-                                $q->orWhereRaw("{$norm} LIKE ?", [$likeTel]);
+                                $p->orWhereRaw("{$norm} LIKE ?", [$likeTel]);
                             }
-                        })
+                        }))
                     )
                     ->orWhere(fn ($w2) => $w2
                         ->where('beneficiaire_type', 'livreur')
                         ->whereHas('livreurBeneficiaire', function ($q) use ($like, $likeTel, $norm) {
-                            $q->where('nom', 'LIKE', $like)
-                                ->orWhere('prenom', 'LIKE', $like)
-                                ->orWhereRaw("CONCAT(prenom, ' ', nom) LIKE ?", [$like]);
-                            if ($likeTel) {
-                                $q->orWhereRaw("{$norm} LIKE ?", [$likeTel]);
-                            }
+                            $q->where('livreurs.nom_complet', 'LIKE', $like)
+                                ->orWhereHas('personne', function ($p) use ($like, $likeTel, $norm) {
+                                    $p->where('nom', 'LIKE', $like)
+                                        ->orWhere('prenom', 'LIKE', $like)
+                                        ->orWhereRaw("CONCAT(prenom, ' ', nom) LIKE ?", [$like]);
+                                    if ($likeTel) {
+                                        $p->orWhereRaw("{$norm} LIKE ?", [$likeTel]);
+                                    }
+                                });
                         })
                     )
                     ->orWhere(fn ($w2) => $w2
                         ->where('beneficiaire_type', 'proprietaire')
-                        ->whereHas('proprietaireBeneficiaire', function ($q) use ($like, $likeTel, $norm) {
-                            $q->where('nom', 'LIKE', $like)
+                        ->whereHas('proprietaireBeneficiaire', fn ($q) => $q->whereHas('personne', function ($p) use ($like, $likeTel, $norm) {
+                            $p->where('nom', 'LIKE', $like)
                                 ->orWhere('prenom', 'LIKE', $like)
                                 ->orWhereRaw("CONCAT(prenom, ' ', nom) LIKE ?", [$like]);
                             if ($likeTel) {
-                                $q->orWhereRaw("{$norm} LIKE ?", [$likeTel]);
+                                $p->orWhereRaw("{$norm} LIKE ?", [$likeTel]);
                             }
-                        })
+                        }))
                     );
             });
         }
@@ -856,12 +859,14 @@ class DepenseController extends Controller
 
             $query->where(function ($w) use ($like, $likeTel, $norm) {
                 $matchPersonne = function ($q) use ($like, $likeTel, $norm) {
-                    $q->where('nom', 'LIKE', $like)
-                        ->orWhere('prenom', 'LIKE', $like)
-                        ->orWhereRaw("CONCAT(prenom, ' ', nom) LIKE ?", [$like]);
-                    if ($likeTel) {
-                        $q->orWhereRaw("{$norm} LIKE ?", [$likeTel]);
-                    }
+                    $q->whereHas('personne', function ($p) use ($like, $likeTel, $norm) {
+                        $p->where('nom', 'LIKE', $like)
+                            ->orWhere('prenom', 'LIKE', $like)
+                            ->orWhereRaw("CONCAT(prenom, ' ', nom) LIKE ?", [$like]);
+                        if ($likeTel) {
+                            $p->orWhereRaw("{$norm} LIKE ?", [$likeTel]);
+                        }
+                    });
                 };
 
                 $w->where(fn ($w2) => $w2
@@ -869,7 +874,9 @@ class DepenseController extends Controller
                     ->whereHas('employeBeneficiaire', $matchPersonne)
                 )->orWhere(fn ($w2) => $w2
                     ->where('beneficiaire_type', 'livreur')
-                    ->whereHas('livreurBeneficiaire', $matchPersonne)
+                    ->whereHas('livreurBeneficiaire', fn ($q) => $q
+                        ->where('livreurs.nom_complet', 'LIKE', $like)
+                        ->orWhere($matchPersonne))
                 )->orWhere(fn ($w2) => $w2
                     ->where('beneficiaire_type', 'proprietaire')
                     ->whereHas('proprietaireBeneficiaire', $matchPersonne)
@@ -885,15 +892,17 @@ class DepenseController extends Controller
             $likeTel = '%'.($digits ?: $filters['telephone_concerne']).'%';
             $query->where(function ($w) use ($likeTel) {
                 $norm = "REPLACE(REPLACE(telephone, ' ', ''), '-', '')";
+                $matchTel = fn ($q) => $q->whereHas('personne', fn ($p) => $p->whereRaw("{$norm} LIKE ?", [$likeTel]));
+
                 $w->where(fn ($w2) => $w2
                     ->where('beneficiaire_type', 'employe')
-                    ->whereHas('employeBeneficiaire', fn ($q) => $q->whereRaw("{$norm} LIKE ?", [$likeTel]))
+                    ->whereHas('employeBeneficiaire', $matchTel)
                 )->orWhere(fn ($w2) => $w2
                     ->where('beneficiaire_type', 'livreur')
-                    ->whereHas('livreurBeneficiaire', fn ($q) => $q->whereRaw("{$norm} LIKE ?", [$likeTel]))
+                    ->whereHas('livreurBeneficiaire', $matchTel)
                 )->orWhere(fn ($w2) => $w2
                     ->where('beneficiaire_type', 'proprietaire')
-                    ->whereHas('proprietaireBeneficiaire', fn ($q) => $q->whereRaw("{$norm} LIKE ?", [$likeTel]))
+                    ->whereHas('proprietaireBeneficiaire', $matchTel)
                 );
             });
         }
@@ -980,7 +989,7 @@ class DepenseController extends Controller
             $ids = $items->pluck('beneficiaire_id')->unique()->values()->all();
 
             if ($type === 'vehicule') {
-                $models = Vehicule::with('proprietaire:id,nom,prenom,telephone')
+                $models = Vehicule::with(['proprietaire:id,personne_id', 'proprietaire.personne'])
                     ->findMany($ids, ['id', 'nom_vehicule', 'immatriculation', 'proprietaire_id']);
 
                 foreach ($models as $model) {
@@ -1004,20 +1013,16 @@ class DepenseController extends Controller
                     }
                 }
             } else {
-                $fields = match ($type) {
-                    'employe' => ['id', 'nom', 'prenom', 'telephone'],
-                    // Identité civile jamais utilisée côté Eau La Maman pour les
-                    // livreurs — voir Livreur::$fillable. nom/prenom restent
-                    // sélectionnés pour le repli de Livreur::libelleAffichage().
-                    'livreur' => ['id', 'nom', 'prenom', 'nom_complet', 'telephone'],
-                    'proprietaire' => ['id', 'nom', 'prenom', 'telephone'],
-                    default => ['id', 'nom', 'prenom'],
-                };
+                // Identité civile portée par Personne (nom/prenom/telephone) — nom_complet
+                // reste une colonne propre au livreur, utilisée en repli par libelleAffichage().
+                $fields = $type === 'livreur'
+                    ? ['id', 'personne_id', 'nom_complet']
+                    : ['id', 'personne_id'];
 
                 $models = match ($type) {
-                    'employe' => Employe::findMany($ids, $fields),
-                    'livreur' => Livreur::findMany($ids, $fields),
-                    'proprietaire' => Proprietaire::findMany($ids, $fields),
+                    'employe' => Employe::with('personne')->findMany($ids, $fields),
+                    'livreur' => Livreur::with('personne')->findMany($ids, $fields),
+                    'proprietaire' => Proprietaire::with('personne')->findMany($ids, $fields),
                     default => collect(),
                 };
 
@@ -1035,7 +1040,7 @@ class DepenseController extends Controller
 
     private function resolveVehiculeInfo(string $vehiculeId): array
     {
-        $vehicule = Vehicule::with('proprietaire:id,nom,prenom')
+        $vehicule = Vehicule::with(['proprietaire:id,personne_id', 'proprietaire.personne'])
             ->find($vehiculeId, ['id', 'nom_vehicule', 'immatriculation', 'proprietaire_id']);
 
         if (! $vehicule) {
@@ -1101,7 +1106,7 @@ class DepenseController extends Controller
     {
         return Vehicule::where('organization_id', $orgId)
             ->where('is_active', true)
-            ->with(['site:id,nom', 'proprietaire:id,nom,prenom'])
+            ->with(['site:id,nom', 'proprietaire:id,personne_id', 'proprietaire.personne'])
             ->orderBy('nom_vehicule')
             ->get(['id', 'nom_vehicule', 'immatriculation', 'categorie', 'site_id', 'proprietaire_id'])
             ->map(fn ($v) => [
@@ -1130,23 +1135,26 @@ class DepenseController extends Controller
 
     private function loadEmployes(string $orgId)
     {
-        return Employe::where('organization_id', $orgId)
+        return Employe::with('personne')
+            ->where('organization_id', $orgId)
             ->where('statut', 'actif')
-            ->orderBy('nom')
-            ->get(['id', 'nom', 'prenom', 'matricule'])
+            ->get(['id', 'personne_id', 'matricule'])
+            ->sortBy('nom')
             ->map(fn ($e) => [
                 'id' => $e->id,
                 'nom_complet' => trim("{$e->prenom} {$e->nom}"),
                 'matricule' => $e->matricule,
-            ]);
+            ])
+            ->values();
     }
 
     private function loadLivreurs(string $orgId)
     {
-        return Livreur::where('organization_id', $orgId)
+        return Livreur::with('personne')
+            ->where('organization_id', $orgId)
             ->where('is_active', true)
             ->orderBy('nom_complet')
-            ->get(['id', 'nom', 'prenom', 'nom_complet', 'telephone'])
+            ->get(['id', 'personne_id', 'nom_complet'])
             ->map(fn ($l) => [
                 'id' => $l->id,
                 'nom_complet' => $l->libelleAffichage(),
@@ -1155,14 +1163,16 @@ class DepenseController extends Controller
 
     private function loadProprietaires(string $orgId)
     {
-        return Proprietaire::where('organization_id', $orgId)
+        return Proprietaire::with('personne')
+            ->where('organization_id', $orgId)
             ->where('is_active', true)
-            ->orderBy('nom')
-            ->get(['id', 'nom', 'prenom'])
+            ->get(['id', 'personne_id'])
+            ->sortBy('nom')
             ->map(fn ($p) => [
                 'id' => $p->id,
                 'nom_complet' => trim("{$p->prenom} {$p->nom}"),
-            ]);
+            ])
+            ->values();
     }
 
     private function defaultSiteId(): ?string

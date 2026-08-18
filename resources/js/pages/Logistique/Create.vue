@@ -17,13 +17,19 @@ interface SiteOption {
     nom: string;
 }
 
+interface CapaciteCategorie {
+    categorie_id: string;
+    categorie_nom: string;
+    capacite_max: number;
+}
+
 interface VehiculeOption {
     id: number;
     nom_vehicule: string;
     immatriculation: string;
     equipe_livraison_id: number | null;
     equipe_nom: string | null;
-    capacite_packs: number | null;
+    capacites: CapaciteCategorie[];
 }
 
 interface EquipeOption {
@@ -34,6 +40,7 @@ interface EquipeOption {
 interface ProduitOption {
     id: number;
     nom: string;
+    categorie_id: string | null;
 }
 
 interface TransfertData {
@@ -139,8 +146,10 @@ function searchVehicule(event: { query: string }) {
 function onVehiculeSelect(v: VehiculeOption | null) {
     form.vehicule_id = v?.id ?? null;
     form.equipe_livraison_id = v?.equipe_livraison_id ?? null;
-    if (v?.capacite_packs != null && form.lignes.length === 1) {
-        form.lignes[0].quantite_demandee = v.capacite_packs;
+    // Pré-remplit l'unique ligne seulement quand ce véhicule n'a qu'un seul groupe de
+    // capacité configuré (sinon ambigu : lequel choisir ?).
+    if (v?.capacites.length === 1 && form.lignes.length === 1) {
+        form.lignes[0].quantite_demandee = v.capacites[0].capacite_max;
     }
 }
 
@@ -177,16 +186,9 @@ function onProduitSelect(index: number, p: ProduitOption | null) {
 // ── Gestion des lignes ────────────────────────────────────────────────────────
 
 function ajouterLigne() {
-    const remaining =
-        capaciteVehiculeSelectionne.value != null
-            ? Math.max(
-                  0,
-                  capaciteVehiculeSelectionne.value - quantiteTotale.value,
-              )
-            : 1;
     form.lignes.push({
         produit_id: null,
-        quantite_demandee: remaining,
+        quantite_demandee: 1,
         notes: '',
     });
     produitSelected.value.push(null);
@@ -204,18 +206,52 @@ const vehiculeSelectionne = computed(
     () => props.vehicules.find((v) => v.id === form.vehicule_id) ?? null,
 );
 
-const capaciteVehiculeSelectionne = computed(
-    () => vehiculeSelectionne.value?.capacite_packs ?? null,
-);
-
 const quantiteTotale = computed(() =>
     form.lignes.reduce((sum, l) => sum + (l.quantite_demandee ?? 0), 0),
 );
 
+// Plafonds par catégorie de produit du véhicule sélectionné — vide si aucune capacité n'est
+// configurée pour ce véhicule (non plafonné), exactement comme VehiculeCapaciteService côté
+// serveur (plus aucun héritage depuis le type).
+const capacitesSelectionnees = computed(
+    () => vehiculeSelectionne.value?.capacites ?? [],
+);
+
+// Quantité demandée regroupée par catégorie de produit, uniquement pour les catégories
+// présentes dans la commande et ayant un plafond configuré sur le véhicule sélectionné.
+const quantitesParCategorie = computed(() => {
+    const capacites = capacitesSelectionnees.value;
+    if (capacites.length === 0) return [];
+
+    const totaux = new Map<string, number>();
+    for (const ligne of form.lignes) {
+        const produit = props.produits.find((p) => p.id === ligne.produit_id);
+        const categorieId = produit?.categorie_id;
+        if (!categorieId) continue;
+        totaux.set(
+            categorieId,
+            (totaux.get(categorieId) ?? 0) + (ligne.quantite_demandee ?? 0),
+        );
+    }
+
+    return capacites
+        .filter((c) => totaux.has(c.categorie_id))
+        .map((c) => ({ ...c, qte: totaux.get(c.categorie_id) ?? 0 }));
+});
+
+function capaciteLigneClass(qte: number, max: number): string {
+    return qte > max
+        ? 'text-amber-600 dark:text-amber-400'
+        : 'text-emerald-600 dark:text-emerald-400';
+}
+
+// Un transfert peut charger moins que la capacité (pas d'exigence de "chargement complet" côté
+// logistique, contrairement à la vente) — il ne peut simplement jamais la dépasser. Véhicule
+// sans aucune capacité configurée = non plafonné, toujours conforme.
 const capaciteVehiculeConforme = computed(() => {
     if (form.vehicule_id === null) return true;
-    if (capaciteVehiculeSelectionne.value === null) return true;
-    return quantiteTotale.value === capaciteVehiculeSelectionne.value;
+    if (capacitesSelectionnees.value.length === 0) return true;
+    return quantitesParCategorie.value.every((c) => c.qte <= c.capacite_max);
 });
 
 // ── Validation locale ─────────────────────────────────────────────────────────
@@ -451,13 +487,29 @@ function submit() {
                                                 }}</span>
                                                 <span
                                                     v-if="
-                                                        option.capacite_packs !==
-                                                        null
+                                                        option.capacites
+                                                            .length > 0
                                                     "
                                                     class="before:mr-2 before:content-['·']"
                                                 >
-                                                    {{ option.capacite_packs }}
-                                                    sachets
+                                                    <template
+                                                        v-for="(
+                                                            c, i
+                                                        ) in option.capacites"
+                                                        :key="c.categorie_id"
+                                                    >
+                                                        {{ c.categorie_nom }}
+                                                        {{ c.capacite_max
+                                                        }}<template
+                                                            v-if="
+                                                                i <
+                                                                option.capacites
+                                                                    .length -
+                                                                    1
+                                                            "
+                                                            >,
+                                                        </template>
+                                                    </template>
                                                 </span>
                                                 <span
                                                     v-if="option.equipe_nom"
@@ -503,51 +555,33 @@ function submit() {
                             {{ form.errors.lignes }}
                         </p>
 
-                        <p
+                        <div
                             v-if="form.vehicule_id !== null"
-                            class="mb-3 text-xs"
-                            :class="
-                                capaciteVehiculeConforme
-                                    ? 'text-emerald-600 dark:text-emerald-400'
-                                    : 'text-amber-600 dark:text-amber-400'
-                            "
+                            class="mb-3 space-y-1 text-xs"
                         >
-                            Capacité véhicule:
-                            {{
-                                capaciteVehiculeSelectionne === null
-                                    ? 'non définie'
-                                    : `${capaciteVehiculeSelectionne} sachets`
-                            }}
-                            · Quantité saisie: {{ quantiteTotale }} packs
-                            <template
-                                v-if="capaciteVehiculeSelectionne !== null"
+                            <p
+                                v-if="capacitesSelectionnees.length === 0"
+                                class="text-muted-foreground"
                             >
-                                <span v-if="capaciteVehiculeConforme">
-                                    — capacité atteinte ✓</span
-                                >
-                                <span
-                                    v-else-if="
-                                        quantiteTotale <
-                                        capaciteVehiculeSelectionne
-                                    "
-                                >
+                                Véhicule non plafonné · Quantité saisie:
+                                {{ quantiteTotale }} packs
+                            </p>
+                            <p
+                                v-for="c in quantitesParCategorie"
+                                :key="c.categorie_id"
+                                :class="
+                                    capaciteLigneClass(c.qte, c.capacite_max)
+                                "
+                            >
+                                {{ c.categorie_nom }}: {{ c.qte }} /
+                                {{ c.capacite_max }}
+                                <span v-if="c.qte > c.capacite_max">
                                     —
-                                    {{
-                                        capaciteVehiculeSelectionne -
-                                        quantiteTotale
-                                    }}
-                                    pack(s) manquant(s)</span
+                                    {{ c.qte - c.capacite_max }} pack(s) en
+                                    trop</span
                                 >
-                                <span v-else>
-                                    —
-                                    {{
-                                        quantiteTotale -
-                                        capaciteVehiculeSelectionne
-                                    }}
-                                    pack(s) en trop</span
-                                >
-                            </template>
-                        </p>
+                            </p>
+                        </div>
 
                         <!-- Table desktop -->
                         <div

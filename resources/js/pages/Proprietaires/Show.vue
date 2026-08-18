@@ -7,7 +7,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     Car,
@@ -17,9 +17,12 @@ import {
     Pencil,
     Plus,
     Receipt,
+    ShieldCheck,
     UserRound,
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
+import { useConfirm } from 'primevue/useconfirm';
+import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 import PieceIdentiteSection from './partials/PieceIdentiteSection.vue';
 
@@ -72,6 +75,7 @@ interface ProprietaireData {
     is_active: boolean;
     vehicules_count: number;
     has_valid_identity_document: boolean;
+    is_proprietaire_interne: boolean;
 }
 
 interface EquipeMembre {
@@ -92,7 +96,7 @@ interface VehiculeRow {
     immatriculation: string | null;
     photo_url: string | null;
     type_label: string;
-    capacite_packs: number | null;
+    capacites: { categorie_nom: string; capacite_max: number }[];
     categorie: string | null;
     is_active: boolean;
     equipe_detail: EquipeDetail | null;
@@ -118,6 +122,34 @@ const props = defineProps<{
 }>();
 
 const { can } = usePermissions();
+const confirm = useConfirm();
+const toast = useToast();
+
+function confirmDefinirInterne() {
+    confirm.require({
+        message: `Définir « ${props.proprietaire.nom_complet} » comme propriétaire interne par défaut de l'organisation ? Les véhicules "interne" sans propriétaire tiers choisi, ainsi que leurs commissions propriétaire, lui seront désormais rattachés.`,
+        header: 'Confirmer le propriétaire interne',
+        icon: 'pi pi-exclamation-triangle',
+        rejectLabel: 'Annuler',
+        acceptLabel: 'Confirmer',
+        accept: () => {
+            router.post(
+                `/backoffice/proprietaires/${props.proprietaire.id}/definir-interne`,
+                {},
+                {
+                    onSuccess: () =>
+                        toast.add({
+                            severity: 'success',
+                            summary: 'Propriétaire interne défini',
+                            detail: `${props.proprietaire.nom_complet} est maintenant le propriétaire interne par défaut.`,
+                            life: 3000,
+                        }),
+                },
+            );
+        },
+    });
+}
+
 const activeTab = ref<
     'informations' | 'vehicules' | 'depenses' | 'piece_identite'
 >('informations');
@@ -341,15 +373,33 @@ function closeLightbox() {
                         >
                             Informations du proprietaire
                         </h2>
-                        <Link
-                            v-if="can('proprietaires.update')"
-                            :href="`/backoffice/proprietaires/${proprietaire.id}/edit`"
-                        >
-                            <Button size="sm" variant="outline">
-                                <Pencil class="mr-1.5 h-4 w-4" />
-                                Modifier
+                        <div class="flex items-center gap-2">
+                            <span
+                                v-if="proprietaire.is_proprietaire_interne"
+                                class="inline-flex items-center gap-1.5 rounded-lg bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary"
+                            >
+                                <ShieldCheck class="h-3.5 w-3.5" />
+                                Propriétaire interne de l'organisation
+                            </span>
+                            <Button
+                                v-else-if="can('proprietaires.update')"
+                                size="sm"
+                                variant="outline"
+                                @click="confirmDefinirInterne"
+                            >
+                                <ShieldCheck class="mr-1.5 h-4 w-4" />
+                                Définir comme propriétaire interne
                             </Button>
-                        </Link>
+                            <Link
+                                v-if="can('proprietaires.update')"
+                                :href="`/backoffice/proprietaires/${proprietaire.id}/edit`"
+                            >
+                                <Button size="sm" variant="outline">
+                                    <Pencil class="mr-1.5 h-4 w-4" />
+                                    Modifier
+                                </Button>
+                            </Link>
+                        </div>
                     </div>
                     <div class="mt-5 grid gap-4 sm:grid-cols-2">
                         <div class="rounded-lg border bg-background p-4">
@@ -544,11 +594,25 @@ function closeLightbox() {
                                         {{ vehicule.type_label }}
                                     </td>
                                     <td class="px-4 py-3">
-                                        {{
-                                            vehicule.capacite_packs !== null
-                                                ? `${vehicule.capacite_packs} sachets`
-                                                : '-'
-                                        }}
+                                        <template
+                                            v-if="
+                                                vehicule.capacites.length === 0
+                                            "
+                                        >
+                                            -
+                                        </template>
+                                        <template v-else>
+                                            <span
+                                                v-for="(
+                                                    c, i
+                                                ) in vehicule.capacites"
+                                                :key="c.categorie_nom"
+                                            >
+                                                {{ i > 0 ? ' · ' : ''
+                                                }}{{ c.categorie_nom }} :
+                                                {{ c.capacite_max }}
+                                            </span>
+                                        </template>
                                     </td>
                                     <td class="px-4 py-3">
                                         <div class="flex items-center gap-1.5">

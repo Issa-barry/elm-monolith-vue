@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use App\Enums\DomaineActivite;
 use App\Services\Comptabilite\PlanComptableBootstrapService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
@@ -15,9 +17,19 @@ class Organization extends Model
 {
     use HasFactory, HasUlids, SoftDeletes;
 
-    protected $fillable = ['name', 'slug', 'code', 'siret', 'logo_path', 'is_active'];
+    // proprietaire_interne_id volontairement absent : jamais assignable en masse, seulement
+    // via une affectation explicite (InstallationService::install(), migration de rattrapage,
+    // ou ProprietaireController) — jamais deviné depuis une requête utilisateur.
+    protected $fillable = ['name', 'slug', 'code', 'siret', 'logo_path', 'is_active', 'domaine_activite'];
 
     protected $appends = ['logo_url'];
+
+    protected function casts(): array
+    {
+        return [
+            'domaine_activite' => DomaineActivite::class,
+        ];
+    }
 
     protected static function boot(): void
     {
@@ -143,6 +155,19 @@ class Organization extends Model
     public function proprietaires(): HasMany
     {
         return $this->hasMany(Proprietaire::class);
+    }
+
+    /**
+     * Propriétaire économique de l'organisation elle-même — assigné automatiquement aux
+     * véhicules "interne" (cf. CategorieVehicule) et aux commissions propriétaire associées
+     * quand aucun tiers n'est explicitement choisi. Relation explicite par organisation
+     * (fixée à l'installation, cf. InstallationService::install()) : ne dérive jamais ce
+     * propriétaire d'un numéro de téléphone particulier, d'un rôle (super_admin/PDG) ou du
+     * premier utilisateur créé, pour rester correct même si l'admin change plus tard.
+     */
+    public function proprietaireInterne(): BelongsTo
+    {
+        return $this->belongsTo(Proprietaire::class, 'proprietaire_interne_id');
     }
 
     public function sites(): HasMany

@@ -15,6 +15,7 @@ use App\Models\CommissionPart;
 use App\Models\CommissionVente;
 use App\Models\Livreur;
 use App\Models\PaiementPeriode;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\TransfertLogistique;
 use App\Models\Vehicule;
@@ -47,10 +48,16 @@ class CommissionAjustementPropagationTest extends TestCase
 
     private function makeLivreur(string $nom = 'Diallo'): Livreur
     {
-        return Livreur::create([
+        $personne = Personne::create([
             'organization_id' => $this->org->id,
             'nom' => $nom,
             'prenom' => 'Mamadou',
+            'telephone' => '+224'.fake()->unique()->numerify('#########'),
+        ]);
+
+        return Livreur::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
             'nom_complet' => "Mamadou {$nom}",
             'is_active' => true,
         ]);
@@ -151,10 +158,16 @@ class CommissionAjustementPropagationTest extends TestCase
 
     public function test_index_proprietaire_reflete_le_montant_ajuste(): void
     {
-        $proprietaire = Proprietaire::create([
+        $personne = Personne::create([
             'organization_id' => $this->org->id,
             'nom' => 'Bah',
             'prenom' => 'Ibrahima',
+            'telephone' => '+224'.fake()->unique()->numerify('#########'),
+        ]);
+
+        $proprietaire = Proprietaire::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
         ]);
         ['part' => $part] = $this->makeCommissionVenteAvecPart(60000.0, 'proprietaire', $proprietaire);
 

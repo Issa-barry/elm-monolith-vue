@@ -420,14 +420,14 @@ function formatOnBlur(field: 'prenom' | 'nom' | 'ville' | 'adresse' | 'email') {
                         {{ errors.role }}
                     </p>
                 </div>
-                <div v-if="sites && sites.length">
+                <div>
                     <Label for="site_id" class="mb-1.5 block">
                         Site <span class="text-destructive">*</span>
                     </Label>
                     <Select
                         input-id="site_id"
                         :model-value="(form as any).site_id"
-                        :options="sites"
+                        :options="sites ?? []"
                         option-label="label"
                         option-value="value"
                         placeholder="Choisir un site"

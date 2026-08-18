@@ -32,16 +32,22 @@ class ProprietaireSearchProvider implements SearchProvider
     {
         $like = $this->likeTerm($query);
 
+        // nom/prenom/telephone ne sont plus des colonnes de `proprietaires` — l'identité civile
+        // est portée par Personne (cf. Proprietaire::$appends et sa docblock). Filtrer via
+        // whereHas('personne', ...) puis trier/limiter en collection (accesseurs, pas de colonne
+        // à ORDER BY) reproduit le pattern déjà utilisé par ProprietaireController::index().
         $rows = Proprietaire::query()
             ->where('organization_id', $user->organization_id)
-            ->where(function ($q) use ($like) {
+            ->whereHas('personne', function ($q) use ($like) {
                 $q->where('nom', 'like', $like)
                     ->orWhere('prenom', 'like', $like)
                     ->orWhere('telephone', 'like', $like);
             })
-            ->orderBy('nom')
-            ->limit($limit)
-            ->get(['id', 'nom', 'prenom', 'telephone']);
+            ->with('personne')
+            ->get(['id', 'personne_id'])
+            ->sortBy('nom')
+            ->take($limit)
+            ->values();
 
         return $rows->map(fn (Proprietaire $p) => new SearchResultItem(
             id: $p->id,

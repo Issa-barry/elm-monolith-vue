@@ -9,6 +9,7 @@ use App\Enums\TypeEmploye;
 use App\Models\Contrat;
 use App\Models\Employe;
 use App\Models\Organization;
+use App\Models\Personne;
 use App\Models\Site;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -52,11 +53,21 @@ class EmployeTest extends TestCase
 
     private function makeEmploye(array $overrides = []): Employe
     {
+        $orgId = $overrides['organization_id'] ?? $this->org->id;
+
+        $personne = Personne::create([
+            'organization_id' => $orgId,
+            'nom' => $overrides['nom'] ?? 'DIALLO',
+            'prenom' => $overrides['prenom'] ?? 'Mamadou',
+            'telephone' => $overrides['telephone'] ?? ('+224'.fake()->unique()->numerify('#########')),
+        ]);
+
+        unset($overrides['nom'], $overrides['prenom'], $overrides['telephone']);
+
         return Employe::create(array_merge([
-            'organization_id' => $this->org->id,
+            'organization_id' => $orgId,
+            'personne_id' => $personne->id,
             'matricule' => '000001',
-            'nom' => 'DIALLO',
-            'prenom' => 'Mamadou',
             'type_employe' => TypeEmploye::INTERNE->value,
             'statut' => StatutEmploye::ACTIF->value,
         ], $overrides));
@@ -215,8 +226,8 @@ class EmployeTest extends TestCase
         $otherOrg = Organization::factory()->create();
 
         // Same matricule allowed across different orgs
-        Employe::create(['organization_id' => $this->org->id,   'matricule' => '000001', 'nom' => 'A', 'prenom' => 'A', 'type_employe' => 'interne', 'statut' => 'actif']);
-        Employe::create(['organization_id' => $otherOrg->id,    'matricule' => '000001', 'nom' => 'B', 'prenom' => 'B', 'type_employe' => 'interne', 'statut' => 'actif']);
+        $this->makeEmploye(['organization_id' => $this->org->id, 'matricule' => '000001', 'nom' => 'A', 'prenom' => 'A']);
+        $this->makeEmploye(['organization_id' => $otherOrg->id, 'matricule' => '000001', 'nom' => 'B', 'prenom' => 'B']);
 
         $this->assertDatabaseCount('employes', 2);
     }
@@ -238,8 +249,11 @@ class EmployeTest extends TestCase
 
         $this->assertDatabaseHas('employes', [
             'id' => $employe->id,
-            'nom' => 'CAMARA',
             'statut' => 'suspendu',
+        ]);
+        $this->assertDatabaseHas('personnes', [
+            'id' => $employe->fresh()->personne_id,
+            'nom' => 'CAMARA',
         ]);
     }
 

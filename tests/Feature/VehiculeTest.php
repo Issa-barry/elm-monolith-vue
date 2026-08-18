@@ -2,10 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Models\Categorie;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
 use App\Models\Organization;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TypeVehicule;
@@ -32,6 +34,23 @@ class VehiculeTest extends TestCase
     private function typeId(): string
     {
         return TypeVehicule::where('organization_id', $this->org->id)->value('id');
+    }
+
+    /**
+     * Crée le propriétaire interne par défaut de $this->org et le rattache via
+     * Organization::proprietaire_interne_id (cf. InstallationService::install() en
+     * conditions réelles) — seule façon dont Proprietaire::interneParDefautId() peut
+     * désormais le retrouver, plus aucune magie sur le numéro de téléphone.
+     */
+    private function defaultInterneProprietaire(array $attributes = []): Proprietaire
+    {
+        $proprietaire = Proprietaire::factory()->create([
+            'organization_id' => $this->org->id,
+            ...$attributes,
+        ]);
+        $this->org->forceFill(['proprietaire_interne_id' => $proprietaire->id])->save();
+
+        return $proprietaire;
     }
 
     private function makeVehicule(Organization $org, ?bool $livraisonVente = null, ?bool $livraisonLogistique = null): Vehicule
@@ -93,44 +112,46 @@ class VehiculeTest extends TestCase
             ->assertStatus(403);
     }
 
-    public function test_index_falls_back_to_type_default_capacity_when_vehicule_has_none(): void
+    public function test_index_expose_la_capacite_propre_au_vehicule(): void
     {
-        // cas réel : véhicules créés par l'import flotte, qui ne saisit jamais
-        // de capacité propre au véhicule (voir ImportFlotteExecutor).
+        // Capacité portée exclusivement par le véhicule via vehicule_capacites (décision
+        // produit du 17/08/2026, cf. VehiculeCapaciteService) — TypeVehicule::capacite_defaut
+        // est une colonne morte, jamais lue ici même si elle est renseignée.
         $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'capacite_defaut' => 270]);
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
-        Vehicule::factory()->create([
+        $vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'type_vehicule_id' => $type->id,
             'proprietaire_id' => $proprietaire->id,
-            'capacite_packs' => null,
+        ]);
+        $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachet eau']);
+        $vehicule->capacites()->create([
+            'organization_id' => $this->org->id,
+            'categorie_id' => $categorie->id,
+            'capacite_max' => 90,
         ]);
 
         $this->actingAs($this->user)
             ->get(route('vehicules.index'))
             ->assertInertia(fn (Assert $page) => $page
-                ->where('vehicules.0.capacite_packs', 270)
+                ->where('vehicules.0.capacites.0.categorie_nom', 'Sachet eau')
+                ->where('vehicules.0.capacites.0.capacite_max', 90)
             );
     }
 
-    public function test_index_falls_back_to_type_default_capacite_bouteilles_when_vehicule_has_none(): void
+    public function test_index_expose_un_vehicule_sans_capacite_avec_un_tableau_vide(): void
     {
-        $type = TypeVehicule::factory()->create([
-            'organization_id' => $this->org->id,
-            'capacite_defaut_bouteilles' => 40,
-        ]);
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         Vehicule::factory()->create([
             'organization_id' => $this->org->id,
-            'type_vehicule_id' => $type->id,
+            'type_vehicule_id' => $this->typeId(),
             'proprietaire_id' => $proprietaire->id,
-            'capacite_bouteilles' => null,
         ]);
 
         $this->actingAs($this->user)
             ->get(route('vehicules.index'))
             ->assertInertia(fn (Assert $page) => $page
-                ->where('vehicules.0.capacite_bouteilles', 40)
+                ->where('vehicules.0.capacites', [])
             );
     }
 
@@ -160,7 +181,6 @@ class VehiculeTest extends TestCase
                 'proprietaire_id' => $proprietaire->id,
                 'categorie' => 'partenaire',
                 'site_id' => $site->id,
-                'capacite_packs' => 200,
                 'is_active' => true,
                 'livraison_vente' => true,
                 'livraison_logistique' => false,
@@ -181,7 +201,14 @@ class VehiculeTest extends TestCase
         ]);
     }
 
-    public function test_store_creates_vehicule_avec_capacite_bouteilles(): void
+    /**
+     * capacite_packs/capacite_bouteilles sont des colonnes mortes, plus jamais alimentées par
+     * le formulaire véhicule (décision produit du 17/08/2026 — la capacité se saisit désormais
+     * via le tableau `capacites`, résolu contre vehicule_capacites/Categorie) : un envoi
+     * malgré tout de ces clés (ancien client, requête forgée) n'a aucun effet, absentes de
+     * validationRules() donc silencieusement ignorées par Request::validate().
+     */
+    public function test_store_ignore_capacite_packs_et_bouteilles_envoyes_dans_le_payload(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $site = $this->user->sites()->first();
@@ -204,13 +231,14 @@ class VehiculeTest extends TestCase
         $this->assertDatabaseHas('vehicules', [
             'organization_id' => $this->org->id,
             'immatriculation' => 'MB-001-GN',
-            'capacite_packs' => 200,
-            'capacite_bouteilles' => 60,
+            'capacite_packs' => null,
+            'capacite_bouteilles' => null,
         ]);
     }
 
     public function test_store_creates_vehicule_logistique_seul(): void
     {
+        $this->defaultInterneProprietaire();
         $site = $this->user->sites()->first();
 
         $response = $this->actingAs($this->user)
@@ -220,7 +248,6 @@ class VehiculeTest extends TestCase
                 'type_vehicule_id' => $this->typeId(),
                 'categorie' => 'interne',
                 'site_id' => $site->id,
-                'capacite_packs' => 50,
                 'is_active' => true,
                 'livraison_vente' => false,
                 'livraison_logistique' => true,
@@ -243,6 +270,7 @@ class VehiculeTest extends TestCase
 
     public function test_store_accepte_usage_mixte(): void
     {
+        $this->defaultInterneProprietaire();
         $site = $this->user->sites()->first();
 
         $this->actingAs($this->user)
@@ -659,15 +687,10 @@ class VehiculeTest extends TestCase
 
     public function test_store_creates_vehicule_avec_proprietaire_par_defaut(): void
     {
-        // Cf. Proprietaire::interneParDefautId() : la fiche Proprietaire "Moussa
-        // SIDIBE" (téléphone +224622602693) est le propriétaire par défaut assigné
-        // à tout véhicule créé sans proprietaire_id explicite.
-        $defaut = Proprietaire::factory()->create([
-            'organization_id' => $this->org->id,
-            'nom' => 'SIDIBE',
-            'prenom' => 'Moussa',
-            'telephone' => '+224622602693',
-        ]);
+        // Cf. Proprietaire::interneParDefautId() : le propriétaire interne configuré sur
+        // l'organisation est assigné par défaut à tout véhicule créé sans proprietaire_id
+        // explicite.
+        $defaut = $this->defaultInterneProprietaire(['nom' => 'SIDIBE', 'prenom' => 'Moussa']);
         $site = $this->user->sites()->first();
 
         $response = $this->actingAs($this->user)
@@ -677,7 +700,6 @@ class VehiculeTest extends TestCase
                 'type_vehicule_id' => $this->typeId(),
                 'categorie' => 'interne',
                 'site_id' => $site->id,
-                'capacite_packs' => 50,
                 'is_active' => true,
                 'livraison_vente' => false,
                 'livraison_logistique' => true,
@@ -701,10 +723,7 @@ class VehiculeTest extends TestCase
     {
         // Un propriétaire explicite (différent du défaut) prime toujours sur la valeur
         // par défaut, quel que soit l'usage du véhicule.
-        Proprietaire::factory()->create([
-            'organization_id' => $this->org->id,
-            'telephone' => '+224622602693',
-        ]);
+        $this->defaultInterneProprietaire();
         $autre = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $site = $this->user->sites()->first();
 
@@ -716,7 +735,6 @@ class VehiculeTest extends TestCase
                 'proprietaire_id' => $autre->id,
                 'categorie' => 'partenaire',
                 'site_id' => $site->id,
-                'capacite_packs' => 50,
                 'is_active' => true,
                 'livraison_vente' => false,
                 'livraison_logistique' => true,
@@ -791,10 +809,7 @@ class VehiculeTest extends TestCase
 
     public function test_store_fails_partenaire_avec_proprietaire_interne_par_defaut(): void
     {
-        $defaut = Proprietaire::factory()->create([
-            'organization_id' => $this->org->id,
-            'telephone' => '+224622602693',
-        ]);
+        $defaut = $this->defaultInterneProprietaire();
         $site = $this->user->sites()->first();
 
         $this->actingAs($this->user)
@@ -836,6 +851,9 @@ class VehiculeTest extends TestCase
 
     public function test_store_succeeds_interne_sans_proprietaire(): void
     {
+        // Un propriétaire interne configuré sur l'organisation permet de créer un véhicule
+        // "interne" sans choisir explicitement de propriétaire — il y retombe automatiquement.
+        $defaut = $this->defaultInterneProprietaire();
         $site = $this->user->sites()->first();
 
         $this->actingAs($this->user)
@@ -853,7 +871,31 @@ class VehiculeTest extends TestCase
         $this->assertDatabaseHas('vehicules', [
             'immatriculation' => 'CAT-006-GN',
             'categorie' => 'interne',
+            'proprietaire_id' => $defaut->id,
         ]);
+    }
+
+    public function test_store_fails_interne_sans_proprietaire_interne_configure(): void
+    {
+        // Aucun propriétaire interne configuré sur l'organisation (cf. defaultInterneProprietaire()
+        // jamais appelé ici) : un véhicule "interne" sans propriétaire explicite ne doit jamais se
+        // retrouver silencieusement avec proprietaire_id = null (véhicule sans propriétaire
+        // économique, invisible des commissions) — erreur métier claire à la place.
+        $site = $this->user->sites()->first();
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Camion Interne Sans Defaut',
+                'immatriculation' => 'CAT-008-GN',
+                'type_vehicule_id' => $this->typeId(),
+                'categorie' => 'interne',
+                'site_id' => $site->id,
+                'livraison_vente' => true,
+                'livraison_logistique' => false,
+            ])
+            ->assertSessionHasErrors('categorie');
+
+        $this->assertDatabaseMissing('vehicules', ['immatriculation' => 'CAT-008-GN']);
     }
 
     public function test_store_succeeds_partenaire_avec_proprietaire_tiers(): void
@@ -939,7 +981,7 @@ class VehiculeTest extends TestCase
             'commission_unitaire_par_pack' => 100,
         ]);
 
-        $livreur = Livreur::create([
+        $livreur = Livreur::factory()->create([
             'organization_id' => $this->org->id,
             'nom_complet' => 'Chauffeur-1 ADAMA',
             'telephone' => '+224623000001',
@@ -971,6 +1013,70 @@ class VehiculeTest extends TestCase
         $this->actingAs($this->user)
             ->get(route('vehicules.show', $vehicule))
             ->assertStatus(403);
+    }
+
+    // ── proprietairesOptions() — régression Sentry (Unknown column 'nom' in order clause) ──
+    // après la refonte Personne : nom/prenom/telephone ne sont plus des colonnes physiques
+    // de `proprietaires`, `livreurs`, `employes` ni `users` (portées par `personnes`) — un
+    // ->orderBy('nom') direct sur ces tables lève SQLSTATE[42S22]. VehiculeController::show()
+    // charge proprietairesOptions() (liste "proprietaires" exposée pour le sélecteur de
+    // réassignation), qui exécute réellement cette requête.
+
+    public function test_show_expose_le_proprietaire_dans_la_liste_apres_creation_explicite_dune_personne(): void
+    {
+        // Reproduit le parcours métier réel : Personne créée d'abord, Proprietaire rattaché
+        // ensuite via personne_id — pas le raccourci de compatibilité de ProprietaireFactory.
+        $personne = Personne::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom' => 'DIALLO',
+            'prenom' => 'Mariama',
+        ]);
+        $proprietaire = Proprietaire::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
+            'is_active' => true,
+        ]);
+        $vehicule = $this->makeVehicule($this->org);
+        $vehicule->update(['proprietaire_id' => $proprietaire->id]);
+
+        $this->actingAs($this->user)
+            ->get(route('vehicules.show', $vehicule))
+            ->assertStatus(200)
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Vehicules/Show')
+                ->where('proprietaires', fn ($list) => collect($list)->contains(
+                    fn ($p) => $p['value'] === $proprietaire->id && $p['label'] === 'Mariama DIALLO'
+                ))
+            );
+    }
+
+    public function test_show_trie_la_liste_des_proprietaires_par_ordre_alphabetique(): void
+    {
+        // Ordre de création volontairement inverse de l'ordre alphabétique attendu : si une
+        // régression réintroduit ->orderBy('nom') sur la requête (colonne inexistante sur
+        // `proprietaires`), la requête lève une QueryException et la réponse ne serait plus
+        // 200 — ce test exécute la vraie requête SQL, pas seulement l'accesseur nom/prenom.
+        $vehicule = $this->makeVehicule($this->org);
+
+        Proprietaire::factory()->create(['organization_id' => $this->org->id, 'nom' => 'Zoumanigui', 'prenom' => 'Sekou']);
+        Proprietaire::factory()->create(['organization_id' => $this->org->id, 'nom' => 'Bah', 'prenom' => 'Aminata']);
+        Proprietaire::factory()->create(['organization_id' => $this->org->id, 'nom' => 'Kone', 'prenom' => 'Ibrahim']);
+
+        $this->actingAs($this->user)
+            ->get(route('vehicules.show', $vehicule))
+            ->assertStatus(200)
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Vehicules/Show')
+                ->where('proprietaires', function ($list) {
+                    $labels = collect($list)->pluck('label')->values()->all();
+                    $posBah = array_search('Aminata Bah', $labels, true);
+                    $posKone = array_search('Ibrahim Kone', $labels, true);
+                    $posZoumanigui = array_search('Sekou Zoumanigui', $labels, true);
+
+                    return $posBah !== false && $posKone !== false && $posZoumanigui !== false
+                        && $posBah < $posKone && $posKone < $posZoumanigui;
+                })
+            );
     }
 
     // ── unicité immatriculation ───────────────────────────────────────────────

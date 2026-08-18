@@ -11,9 +11,9 @@ use App\Models\Site;
 use App\Models\TypeVehicule;
 use App\Models\User;
 use App\Models\Vehicule;
-use App\Models\VehiculeCapacite;
 use App\Models\VehiculeFrais;
 use App\Services\ImageService;
+use App\Services\VehiculeCapaciteService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -26,6 +26,8 @@ use Inertia\Response;
 
 class VehiculeController extends Controller
 {
+    public function __construct(private readonly VehiculeCapaciteService $vehiculeCapaciteService) {}
+
     private function vehiculeData(Vehicule $v): array
     {
         $equipe = $v->equipe;
@@ -43,13 +45,9 @@ class VehiculeController extends Controller
             'immatriculation' => $v->immatriculation,
             'type_vehicule_id' => $v->type_vehicule_id,
             'type_label' => $v->type_label,
-            // Capacité propre au véhicule si définie (override), sinon celle
-            // par défaut de son type — c'est cette dernière qui est utilisée
-            // en pratique tant qu'aucune capacité spécifique n'a été saisie.
-            'capacite_packs' => $v->capacite_packs ?? $v->typeVehicule?->capacite_defaut,
-            // Deuxième unité (bouteilles), même repli — cf. capacite_packs.
-            // Reste null si ni le véhicule ni son type n'en transportent.
-            'capacite_bouteilles' => $v->capacite_bouteilles ?? $v->typeVehicule?->capacite_defaut_bouteilles,
+            // Capacités maximales de chargement, propres à CE véhicule (aucun héritage depuis
+            // le type — cf. VehiculeCapaciteService).
+            'capacites' => $this->vehiculeCapaciteService->capacitesParCategorieAvecNoms($v),
             'site_id' => $v->site_id,
             'site_nom' => $v->relationLoaded('site') ? $v->site?->nom : null,
             'categorie' => $v->categorie?->value,
@@ -86,17 +84,6 @@ class VehiculeController extends Controller
                 ])->values()->all()
                 : [],
             'frais_total' => $v->relationLoaded('frais') ? (float) $v->frais->sum('montant') : 0.0,
-            // Capacité par catégorie (nouveau régime, cf. VehiculeCapaciteService) — vide tant
-            // que l'organisation n'a rien configuré, auquel cas capacite_packs ci-dessus fait
-            // toujours foi seul.
-            'capacites' => $v->relationLoaded('capacites')
-                ? $v->capacites->map(fn (VehiculeCapacite $c) => [
-                    'id' => $c->id,
-                    'categorie_id' => $c->categorie_id,
-                    'categorie_nom' => $c->categorie?->nom,
-                    'capacite_max' => $c->capacite_max,
-                ])->values()->all()
-                : [],
             'livraison_vente' => $v->livraison_vente,
             'livraison_logistique' => $v->livraison_logistique,
             'usage_label' => $v->usage_label,
@@ -192,6 +179,7 @@ class VehiculeController extends Controller
             'proprietaires' => $this->proprietairesOptions(),
             'types' => $this->typesOptions(),
             'categories_vehicule' => CategorieVehicule::options(),
+            'categories_produit' => $this->categoriesProduitOptions(),
             'initial_proprietaire_id' => $initialProprietaireId,
             'sites' => $this->sitesOptions($user, $orgId),
             'default_site_id' => $defaultSiteId,
@@ -234,9 +222,16 @@ class VehiculeController extends Controller
             $data['photo_path'] = (new ImageService)->storeAsWebp($request->file('photo'), 'vehicules');
         }
 
-        unset($data['photo']);
+        $capacites = $data['capacites'] ?? [];
+        unset($data['photo'], $data['capacites']);
         $data['is_active'] = false; // inactif jusqu'à attribution d'une équipe
-        $vehicule = Vehicule::create([...$data, 'organization_id' => $orgId]);
+
+        $vehicule = DB::transaction(function () use ($data, $orgId, $capacites) {
+            $vehicule = Vehicule::create([...$data, 'organization_id' => $orgId]);
+            $this->vehiculeCapaciteService->syncCapacites($vehicule, $capacites, $orgId);
+
+            return $vehicule;
+        });
 
         return redirect()->route('vehicules.show', $vehicule)
             ->with('success', 'Véhicule créé avec succès.');
@@ -300,9 +295,6 @@ class VehiculeController extends Controller
             'depenses' => $depenses,
             'equipe' => $equipeData,
             'proprietaires' => $this->proprietairesOptions(),
-            // Catégories de dépenses (carburant/réparation/autre) — sans rapport avec
-            // Vehicule::categorie (INTERNE/PARTENAIRE), qui n'a pas de sélecteur sur cet écran.
-            'categories' => $this->categoriesOptions(),
             'default_proprietaire_id' => Proprietaire::interneParDefautId($vehicule->organization_id),
         ]);
     }
@@ -404,17 +396,35 @@ class VehiculeController extends Controller
 
         $user = auth()->user();
         $orgId = $user->organization_id;
-        $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'equipe.membres.livreur']);
+        $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'equipe.membres.livreur', 'capacites']);
 
         return Inertia::render('Vehicules/Edit', [
             'vehicule' => $this->vehiculeData($vehicule),
             'proprietaires' => $this->proprietairesOptions(),
             'types' => $this->typesOptions(),
             'categories_vehicule' => CategorieVehicule::options(),
+            'categories_produit' => $this->categoriesProduitOptions(),
             'sites' => $this->sitesOptions($user, $orgId),
             'can_change_site' => $user->isAdmin(),
             'default_proprietaire_id' => Proprietaire::interneParDefautId($orgId),
+            'capacites' => $vehicule->capacites->map(fn ($c) => [
+                'categorie_id' => $c->categorie_id,
+                'capacite_max' => $c->capacite_max,
+            ])->values()->all(),
         ]);
+    }
+
+    /**
+     * Catégories du catalogue produit, réutilisées telles quelles comme référence de capacité
+     * véhicule (Produit → Catégorie → Capacité véhicule) — pas de second référentiel dédié.
+     */
+    private function categoriesProduitOptions(): array
+    {
+        return Categorie::where('organization_id', auth()->user()->organization_id)
+            ->orderBy('nom')
+            ->get(['id', 'nom'])
+            ->map(fn (Categorie $c) => ['value' => $c->id, 'label' => $c->nom])
+            ->toArray();
     }
 
     public function update(Request $request, Vehicule $vehicule): RedirectResponse
@@ -449,8 +459,13 @@ class VehiculeController extends Controller
             $data['photo_path'] = $imageService->storeAsWebp($request->file('photo'), 'vehicules');
         }
 
-        unset($data['photo']);
-        $vehicule->update($data);
+        $capacites = $data['capacites'] ?? [];
+        unset($data['photo'], $data['capacites']);
+
+        DB::transaction(function () use ($vehicule, $data, $orgId, $capacites) {
+            $vehicule->update($data);
+            $this->vehiculeCapaciteService->syncCapacites($vehicule, $capacites, $orgId);
+        });
 
         // Un véhicule sans équipe ne peut pas être actif
         $vehicule->load('equipe');
@@ -491,75 +506,23 @@ class VehiculeController extends Controller
             ->map(fn (TypeVehicule $t) => [
                 'value' => $t->id,
                 'label' => $t->nom,
-                'capacite_defaut' => $t->capacite_defaut,
-                'capacite_defaut_bouteilles' => $t->capacite_defaut_bouteilles,
             ])
             ->toArray();
     }
 
-    private function categoriesOptions(): array
-    {
-        return Categorie::where('organization_id', auth()->user()->organization_id)
-            ->orderBy('nom')
-            ->get(['id', 'nom'])
-            ->map(fn (Categorie $c) => ['value' => $c->id, 'label' => $c->nom])
-            ->toArray();
-    }
-
-    /**
-     * Synchronise intégralement les capacités par catégorie du véhicule (supprime puis
-     * recrée) — plus simple qu'un CRUD ligne à ligne pour une petite liste éditée en bloc
-     * depuis le formulaire, et évite les soucis de contrainte unique(vehicule_id, categorie_id)
-     * lors d'un remplacement de catégorie sur une ligne existante.
-     */
-    public function syncCapacites(Request $request, Vehicule $vehicule): RedirectResponse
-    {
-        $this->authorize('update', $vehicule);
-
-        $orgId = auth()->user()->organization_id;
-
-        $data = $request->validate([
-            'capacites' => 'array',
-            'capacites.*.categorie_id' => [
-                'required', 'string',
-                Rule::exists('categories', 'id')->where('organization_id', $orgId),
-                'distinct',
-            ],
-            'capacites.*.capacite_max' => 'required|integer|min:1|max:99999',
-        ], [
-            'capacites.*.categorie_id.required' => 'La catégorie est obligatoire.',
-            'capacites.*.categorie_id.exists' => 'Catégorie invalide.',
-            'capacites.*.categorie_id.distinct' => 'Chaque catégorie ne peut avoir qu\'une seule ligne de capacité.',
-            'capacites.*.capacite_max.required' => 'La capacité est obligatoire.',
-            'capacites.*.capacite_max.min' => 'La capacité doit être supérieure à 0.',
-        ]);
-
-        DB::transaction(function () use ($data, $vehicule, $orgId) {
-            $vehicule->capacites()->delete();
-            foreach ($data['capacites'] ?? [] as $ligne) {
-                $vehicule->capacites()->create([
-                    'organization_id' => $orgId,
-                    'categorie_id' => $ligne['categorie_id'],
-                    'capacite_max' => $ligne['capacite_max'],
-                ]);
-            }
-        });
-
-        return redirect()->route('vehicules.show', $vehicule)
-            ->with('success', 'Capacités mises à jour.');
-    }
-
     private function proprietairesOptions(): array
     {
-        return Proprietaire::where('organization_id', auth()->user()->organization_id)
+        return Proprietaire::with('personne')
+            ->where('organization_id', auth()->user()->organization_id)
             ->where('is_active', true)
-            ->orderBy('nom')
             ->get()
+            ->sortBy('nom')
             ->map(fn (Proprietaire $p) => [
                 'value' => $p->id,
                 'label' => trim("{$p->prenom} {$p->nom}"),
                 'telephone' => $p->telephone,
             ])
+            ->values()
             ->toArray();
     }
 
@@ -586,17 +549,6 @@ class VehiculeController extends Controller
             ->wherePivot('is_default', true)
             ->select('sites.id')
             ->first()?->id;
-    }
-
-    /**
-     * Propriétaire par défaut des véhicules "interne" (propriété de
-     * l'organisation) — voir database/seeders/ProprietairesSeeder.php.
-     */
-    private function defaultProprietaireInterneId(string $orgId): ?string
-    {
-        return Proprietaire::where('organization_id', $orgId)
-            ->where('telephone', '+224622602693')
-            ->value('id');
     }
 
     /**
@@ -634,6 +586,8 @@ class VehiculeController extends Controller
     /**
      * Règles communes à store() et update() — seule la contrainte d'unicité
      * de l'immatriculation diffère (ignore() du véhicule courant en édition).
+     * `capacites` : saisies directement dans le même formulaire (pas d'étape séparée après
+     * l'enregistrement) — un tableau vide est valide (véhicule non limité).
      */
     private function validationRules(string $orgId, ?Vehicule $vehicule = null): array
     {
@@ -644,8 +598,6 @@ class VehiculeController extends Controller
                 'required', 'string',
                 Rule::exists('type_vehicules', 'id')->where('organization_id', $orgId)->whereNull('deleted_at'),
             ],
-            'capacite_packs' => 'nullable|integer|min:1|max:99999',
-            'capacite_bouteilles' => 'nullable|integer|min:1|max:99999',
             // Tout véhicule est rattaché à un site.
             'site_id' => [
                 'required', 'string',
@@ -664,6 +616,13 @@ class VehiculeController extends Controller
             'livraison_logistique' => 'required|boolean',
             'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
             'is_active' => 'boolean',
+            'capacites' => 'array',
+            'capacites.*.categorie_id' => [
+                'required', 'string',
+                Rule::exists('categories', 'id')->where('organization_id', $orgId),
+                'distinct',
+            ],
+            'capacites.*.capacite_max' => 'required|integer|min:1|max:99999',
         ];
     }
 
@@ -693,6 +652,17 @@ class VehiculeController extends Controller
     {
         $categorie = CategorieVehicule::from($data['categorie']);
         $interneId = Proprietaire::interneParDefautId($orgId);
+
+        // Un véhicule "interne" sans propriétaire tiers choisi doit toujours pouvoir retomber
+        // sur le propriétaire interne de l'organisation (cf. proprietaire_id ??= plus haut) —
+        // s'il n'est pas configuré, ne jamais laisser passer silencieusement proprietaire_id à
+        // null : ce serait un véhicule sans propriétaire économique, invisible des commissions.
+        if ($categorie === CategorieVehicule::INTERNE && $data['proprietaire_id'] === null && $interneId === null) {
+            throw ValidationException::withMessages([
+                'categorie' => "Aucun propriétaire interne n'est configuré pour cette organisation. Définissez-le (page Propriétaires) avant d'ajouter des véhicules internes.",
+            ]);
+        }
+
         $proprietaireEstTiers = $data['proprietaire_id'] !== null && $data['proprietaire_id'] !== $interneId;
 
         if ($categorie->coherentAvecProprietaireTiers($proprietaireEstTiers)) {
@@ -722,6 +692,11 @@ class VehiculeController extends Controller
             'photo.max' => 'La photo ne peut pas dépasser 3 Mo.',
             'livraison_vente.required' => 'Veuillez indiquer si ce véhicule est autorisé pour la vente.',
             'livraison_logistique.required' => 'Veuillez indiquer si ce véhicule est autorisé pour la logistique.',
+            'capacites.*.categorie_id.required' => 'La catégorie de produit est obligatoire.',
+            'capacites.*.categorie_id.exists' => 'Catégorie de produit invalide.',
+            'capacites.*.categorie_id.distinct' => 'Chaque catégorie ne peut avoir qu\'une seule ligne de capacité.',
+            'capacites.*.capacite_max.required' => 'La capacité est obligatoire.',
+            'capacites.*.capacite_max.min' => 'La capacité doit être supérieure à 0.',
         ];
     }
 }

@@ -6,8 +6,10 @@ use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
 use App\Models\ImportFlotte;
 use App\Models\Livreur;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
+use App\Models\VehiculeCapacite;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
@@ -15,6 +17,12 @@ use Illuminate\Support\Facades\Storage;
  * Exécute la création réelle des entités à partir d'une analyse déjà validée
  * (voir ImportFlotteParser). Tout-ou-rien : si un seul groupe est en erreur,
  * rien n'est enregistré.
+ *
+ * Exception à la règle "une ligne véhicule déjà existant ne sert que d'ancrage, jamais
+ * modifiée" (cf. executerGroupe()) : la capacité (upsertCapacite()) est mise à jour même pour un
+ * véhicule déjà en base, sur les groupes de capacité effectivement renseignés dans le fichier —
+ * une ré-importation avec des valeurs corrigées doit pouvoir corriger la flotte déjà configurée,
+ * contrairement aux autres champs (identité, équipe...).
  */
 class ImportFlotteExecutor
 {
@@ -62,6 +70,18 @@ class ImportFlotteExecutor
         ];
     }
 
+    private function upsertCapacite(string $orgId, string $vehiculeId, ?string $categorieId, ?int $capaciteMax): void
+    {
+        if ($categorieId === null || $capaciteMax === null) {
+            return;
+        }
+
+        VehiculeCapacite::updateOrCreate(
+            ['vehicule_id' => $vehiculeId, 'categorie_id' => $categorieId],
+            ['organization_id' => $orgId, 'capacite_max' => $capaciteMax]
+        );
+    }
+
     private function executerGroupe(array $groupe, string $orgId, array &$compteurs, array &$proprietairesParTelephone): void
     {
         $vData = $groupe['vehicule'];
@@ -79,14 +99,17 @@ class ImportFlotteExecutor
             } elseif (isset($proprietairesParTelephone[$p['telephone']])) {
                 $proprietaireId = $proprietairesParTelephone[$p['telephone']];
             } else {
-                $proprietaire = Proprietaire::create([
-                    'organization_id' => $orgId,
+                $personne = Personne::resoudreOuCreer($orgId, [
                     'nom' => $p['nom'],
                     'prenom' => $p['prenom'],
                     'telephone' => $p['telephone'],
                     'code_pays' => $p['code_pays'],
                     'pays' => $p['pays'],
                     'code_phone_pays' => $p['code_phone_pays'],
+                ]);
+                $proprietaire = Proprietaire::create([
+                    'organization_id' => $orgId,
+                    'personne_id' => $personne->id,
                     'is_active' => true,
                 ]);
                 $proprietaireId = $proprietaire->id;
@@ -108,8 +131,6 @@ class ImportFlotteExecutor
                 'nom_vehicule' => $vData['nom_vehicule'],
                 'immatriculation' => $groupe['immatriculation'],
                 'type_vehicule_id' => $vData['type_vehicule_id'],
-                'capacite_packs' => $vData['capacite_packs'],
-                'capacite_bouteilles' => $vData['capacite_bouteilles'],
                 'livraison_vente' => $vData['livraison_vente'],
                 'livraison_logistique' => $vData['livraison_logistique'],
                 'site_id' => $vData['site_id'],
@@ -122,6 +143,17 @@ class ImportFlotteExecutor
             $vehiculeId = $vehicule->id;
             $compteurs['vehicules_crees']++;
         }
+
+        // ── Capacité (propre à ce véhicule, aucun héritage depuis le type) ─────
+        // Contrairement au reste de ce bloc (une ligne "véhicule déjà existant" ne sert que
+        // d'ancrage pour ses livreurs/équipe, cf. docblock de classe), la capacité EST mise à
+        // jour même pour un véhicule déjà en base : une ré-importation avec des valeurs
+        // corrigées doit pouvoir corriger la flotte déjà configurée. `capacite_packs`/
+        // `capacite_bouteilles` restent null quand la colonne était vide OU que la catégorie
+        // correspondante n'existe pas dans l'organisation (cf.
+        // ImportFlotteParser::analyserGroupe()), auquel cas on ne touche à rien pour ce groupe.
+        $this->upsertCapacite($orgId, $vehiculeId, $vData['categorie_sachets_id'] ?? null, $vData['capacite_packs']);
+        $this->upsertCapacite($orgId, $vehiculeId, $vData['categorie_bouteilles_id'] ?? null, $vData['capacite_bouteilles']);
 
         // ── Équipe ───────────────────────────────────────────────────────────
         // Créée inactive : commission/montants à 0 (brouillon, cf.
@@ -194,10 +226,11 @@ class ImportFlotteExecutor
                 // vide en base : repli sur la désignation par défaut.
                 $nomComplet = $l['nom_complet'] ?? Livreur::designationParDefaut($l['role'], $roleCounts[$l['role']], $vData['nom_vehicule']);
 
+                $personneLivreur = Personne::resoudreOuCreer($orgId, ['telephone' => $l['telephone']]);
                 $livreur = Livreur::create([
                     'organization_id' => $orgId,
+                    'personne_id' => $personneLivreur->id,
                     'nom_complet' => $nomComplet,
-                    'telephone' => $l['telephone'],
                     'is_active' => true,
                 ]);
                 $livreurId = $livreur->id;

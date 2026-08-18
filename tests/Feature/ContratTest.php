@@ -7,6 +7,7 @@ use App\Enums\TypeContrat;
 use App\Models\Contrat;
 use App\Models\Employe;
 use App\Models\Organization;
+use App\Models\Personne;
 use App\Models\Site;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -56,11 +57,21 @@ class ContratTest extends TestCase
         static $seq = 0;
         $seq++;
 
+        $orgId = $overrides['organization_id'] ?? $this->org->id;
+
+        $personne = Personne::create([
+            'organization_id' => $orgId,
+            'nom' => $overrides['nom'] ?? 'DIALLO',
+            'prenom' => $overrides['prenom'] ?? 'Mamadou',
+            'telephone' => $overrides['telephone'] ?? ('+224'.fake()->unique()->numerify('#########')),
+        ]);
+
+        unset($overrides['nom'], $overrides['prenom'], $overrides['telephone']);
+
         return Employe::create(array_merge([
-            'organization_id' => $this->org->id,
+            'organization_id' => $orgId,
+            'personne_id' => $personne->id,
             'matricule' => str_pad((string) $seq, 6, '0', STR_PAD_LEFT),
-            'nom' => 'DIALLO',
-            'prenom' => 'Mamadou',
             'type_employe' => 'interne',
             'statut' => 'actif',
         ], $overrides));
@@ -245,14 +256,7 @@ class ContratTest extends TestCase
     public function test_store_rejects_employe_from_other_organization(): void
     {
         $otherOrg = Organization::factory()->create();
-        $otherEmploye = Employe::create([
-            'organization_id' => $otherOrg->id,
-            'matricule' => '999999',
-            'nom' => 'Autre',
-            'prenom' => 'Org',
-            'type_employe' => 'interne',
-            'statut' => 'actif',
-        ]);
+        $otherEmploye = $this->makeEmploye(['organization_id' => $otherOrg->id, 'matricule' => '999999', 'nom' => 'Autre', 'prenom' => 'Org']);
 
         $this->actingAs($this->user)
             ->post(route('contrats.store'), [
@@ -266,14 +270,7 @@ class ContratTest extends TestCase
     public function test_update_returns_403_for_other_organization(): void
     {
         $otherOrg = Organization::factory()->create();
-        $otherEmploye = Employe::create([
-            'organization_id' => $otherOrg->id,
-            'matricule' => '999998',
-            'nom' => 'Autre',
-            'prenom' => 'Org',
-            'type_employe' => 'interne',
-            'statut' => 'actif',
-        ]);
+        $otherEmploye = $this->makeEmploye(['organization_id' => $otherOrg->id, 'matricule' => '999998', 'nom' => 'Autre', 'prenom' => 'Org']);
         $contrat = $this->makeContrat($otherEmploye, ['organization_id' => $otherOrg->id]);
 
         $this->actingAs($this->user)

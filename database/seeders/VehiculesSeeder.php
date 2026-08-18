@@ -6,7 +6,7 @@ use App\Enums\CategorieVehicule;
 use App\Models\Categorie;
 use App\Models\EquipeLivraison;
 use App\Models\Organization;
-use App\Models\Proprietaire;
+use App\Models\Personne;
 use App\Models\Site;
 use App\Models\TypeVehicule as TypeVehiculeModel;
 use App\Models\Vehicule;
@@ -17,7 +17,10 @@ use Illuminate\Database\Seeder;
  * équipes. Tout véhicule est rattaché à un site — voir VehiculeController::store()/update().
  *
  * Le type ne fixe plus la capacité (cf. TypeVehiculesSeeder) : chaque véhicule
- * porte sa propre capacite_packs, indépendamment des autres véhicules du même type.
+ * porte sa propre capacite_packs, indépendamment des autres véhicules du même type. Ce champ
+ * n'est qu'informatif désormais — la capacité réellement appliquée par VehiculeCapaciteService
+ * vient de vehicule_capacites (une ligne "Bouteille" par véhicule, même valeur, créée ci-dessous)
+ * : sans cette ligne, capacite_packs n'a aucun effet et le véhicule n'est pas plafonné.
  *
  * Catégorie (propriété, cf. CategorieVehicule) et usage (vente/logistique) sont deux axes
  * indépendants — ce jeu de données a juste PARTENAIRE sur le groupe "vente" et INTERNE sur le
@@ -70,10 +73,17 @@ class VehiculesSeeder extends Seeder
             ->where('nom', 'Sonfonia')
             ->firstOrFail();
 
-        // Propriétaire par défaut des véhicules logistique — voir ProprietairesSeeder
-        // et Proprietaire::interneParDefautId().
-        $proprietaireInterne = Proprietaire::where('organization_id', $org->id)
-            ->where('telephone', '+224622602693')
+        // Propriétaire par défaut des véhicules logistique — assigné à l'organisation par
+        // ProprietairesSeeder (Organization::proprietaire_interne_id), voir
+        // Proprietaire::interneParDefautId().
+        $proprietaireInterne = $org->proprietaireInterne()->firstOrFail();
+
+        // Catégorie utilisée pour la ligne de capacité de démo de chaque véhicule (cf.
+        // ProduitsSeeder, exécuté avant ce seeder) — "Bouteille" car c'est la catégorie du
+        // produit par défaut ("Pack de 6 bouteilles") utilisé par les formulaires de
+        // vente/logistique et par les tests E2E.
+        $bouteille = Categorie::where('organization_id', $org->id)
+            ->where('nom', 'Bouteille')
             ->firstOrFail();
 
         $equipeParChauffeur = fn (string $tel) => EquipeLivraison::query()
@@ -81,8 +91,8 @@ class VehiculesSeeder extends Seeder
             ->whereHas('membres', fn ($q) => $q
                 ->where('role', 'chauffeur')
                 ->whereHas('livreur', fn ($q2) => $q2
-                    ->where('telephone', $tel)
                     ->where('organization_id', $org->id)
+                    ->whereHas('personne', fn ($q3) => $q3->where('telephone_normalise', Personne::normaliserTelephone($tel)))
                 )
             )
             ->firstOrFail();
@@ -254,13 +264,6 @@ class VehiculesSeeder extends Seeder
             ],
         ];
 
-        // Catégorie "Sachet" — provisionnée par ProduitsSeeder (doit tourner avant ce seeder,
-        // cf. DatabaseSeeder). Sert à faire basculer chaque véhicule de démo sur le régime "par
-        // catégorie" de VehiculeCapaciteService, avec le même plafond que capacite_packs
-        // ci-dessus (aucune donnée "Bouteille" fiable à seeder ici : reste à configurer via la
-        // fiche véhicule — VehiculeCapacitesCard — une fois de vraies capacités connues).
-        $sachet = Categorie::where('organization_id', $org->id)->where('nom', 'Sachet')->first();
-
         foreach ($vehicules as $data) {
             $equipeModel = $data['equipe'];
             unset($data['equipe']);
@@ -272,12 +275,10 @@ class VehiculesSeeder extends Seeder
 
             $equipeModel->update(['vehicule_id' => $vehicule->id]);
 
-            if ($sachet && $data['capacite_packs'] !== null) {
-                $vehicule->capacites()->updateOrCreate(
-                    ['categorie_id' => $sachet->id],
-                    ['organization_id' => $org->id, 'capacite_max' => $data['capacite_packs']]
-                );
-            }
+            $vehicule->capacites()->updateOrCreate(
+                ['organization_id' => $org->id, 'categorie_id' => $bouteille->id],
+                ['capacite_max' => $data['capacite_packs']]
+            );
         }
     }
 }

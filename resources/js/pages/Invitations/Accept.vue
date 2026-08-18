@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import InputError from '@/components/InputError.vue';
+import OtpCodeInput from '@/components/OtpCodeInput.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -202,10 +203,9 @@ const step = ref<Step>('phone');
 const loading = ref(false);
 
 const lookupError = ref('');
-const otpDigits = ref<string[]>(['', '', '', '', '', '']);
-const otpCode = computed(() => otpDigits.value.join(''));
-const otpInputs = ref<(HTMLInputElement | null)[]>([]);
+const otpCode = ref('');
 const otpError = ref('');
+const otpInput = ref<InstanceType<typeof OtpCodeInput> | null>(null);
 
 const DEFAULT_RESEND_COOLDOWN = 30;
 const resendSecondsLeft = ref(0);
@@ -387,11 +387,10 @@ async function resendCode() {
             { telephone: fullPhone.value },
         );
 
-        otpDigits.value = otpDigits.value.map(() => '');
+        otpInput.value?.clearAndFocus();
         resendSuccessMessage.value =
             'Un nouveau code vient de vous être envoyé.';
         startResendCountdown(data.cooldown_seconds ?? DEFAULT_RESEND_COOLDOWN);
-        otpInputs.value[0]?.focus();
     } catch (e: unknown) {
         otpError.value =
             e instanceof Error ? e.message : 'Une erreur est survenue.';
@@ -405,56 +404,9 @@ async function resendCode() {
 
 function backToPhone() {
     step.value = 'phone';
-    otpDigits.value = ['', '', '', '', '', ''];
+    otpCode.value = '';
     otpError.value = '';
     resendSuccessMessage.value = '';
-}
-
-function handleOtpInput(index: number, e: Event) {
-    const input = e.target as HTMLInputElement;
-    const raw = input.value.replace(/\D/g, '');
-
-    if (raw.length > 1) {
-        // Autofill SMS ou saisie rapide : répartit les chiffres à partir de cette case
-        raw.split('').forEach((d, i) => {
-            if (index + i < otpDigits.value.length) {
-                otpDigits.value[index + i] = d;
-            }
-        });
-        const lastIndex = Math.min(
-            index + raw.length - 1,
-            otpDigits.value.length - 1,
-        );
-        input.value = otpDigits.value[index];
-        otpInputs.value[lastIndex]?.focus();
-        return;
-    }
-
-    otpDigits.value[index] = raw;
-    input.value = raw;
-    if (raw && index < otpDigits.value.length - 1) {
-        otpInputs.value[index + 1]?.focus();
-    }
-}
-
-function handleOtpKeydown(index: number, e: KeyboardEvent) {
-    if (e.key === 'Backspace' && !otpDigits.value[index] && index > 0) {
-        otpInputs.value[index - 1]?.focus();
-    }
-}
-
-function handleOtpPaste(e: ClipboardEvent) {
-    const pasted = e.clipboardData?.getData('text').replace(/\D/g, '') ?? '';
-    if (!pasted) return;
-    e.preventDefault();
-
-    const digits = pasted.slice(0, otpDigits.value.length).split('');
-    digits.forEach((d, i) => {
-        otpDigits.value[i] = d;
-    });
-    otpInputs.value[
-        Math.min(digits.length, otpDigits.value.length - 1)
-    ]?.focus();
 }
 
 // ── Étape 4 : soumission finale ───────────────────────────────────────────────
@@ -709,30 +661,7 @@ function logoutAndGoToLogin() {
 
                 <div class="grid gap-2">
                     <Label>Code de vérification</Label>
-                    <div class="flex justify-between gap-2">
-                        <input
-                            v-for="(digit, index) in otpDigits"
-                            :key="index"
-                            :ref="
-                                (el) =>
-                                    (otpInputs[index] = el as HTMLInputElement)
-                            "
-                            :value="digit"
-                            type="text"
-                            inputmode="numeric"
-                            pattern="[0-9]*"
-                            maxlength="1"
-                            :tabindex="index + 1"
-                            :autofocus="index === 0"
-                            :autocomplete="
-                                index === 0 ? 'one-time-code' : 'off'
-                            "
-                            class="h-14 w-12 rounded-md border border-input bg-transparent text-center text-xl font-semibold shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                            @input="handleOtpInput(index, $event)"
-                            @keydown="handleOtpKeydown(index, $event)"
-                            @paste="handleOtpPaste"
-                        />
-                    </div>
+                    <OtpCodeInput ref="otpInput" v-model="otpCode" />
                     <InputError :message="otpError" />
                 </div>
 

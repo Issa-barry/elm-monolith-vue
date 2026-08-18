@@ -100,7 +100,7 @@ interface VehiculeDetail {
     nom: string;
     immatriculation: string | null;
     type: string | null;
-    capacite_packs: number | null;
+    capacites: { categorie_nom: string; capacite_max: number }[];
     proprietaire_nom: string | null;
     proprietaire_telephone: string | null;
     proprietaire_code_phone_pays: string | null;
@@ -1775,12 +1775,21 @@ function connectorIsActive(idx: number): boolean {
                 <div class="flex justify-between">
                     <span class="text-sm text-muted-foreground">Capacité</span>
                     <span class="text-sm font-medium">
-                        {{
-                            commande.vehicule_detail?.capacite_packs != null
-                                ? commande.vehicule_detail.capacite_packs +
-                                  ' packs'
-                                : '—'
-                        }}
+                        <template
+                            v-if="!commande.vehicule_detail?.capacites.length"
+                        >
+                            —
+                        </template>
+                        <template v-else>
+                            <span
+                                v-for="(c, i) in commande.vehicule_detail
+                                    .capacites"
+                                :key="c.categorie_nom"
+                            >
+                                {{ i > 0 ? ' · ' : '' }}{{ c.categorie_nom }} :
+                                {{ c.capacite_max }}
+                            </span>
+                        </template>
                     </span>
                 </div>
                 <div class="border-t pt-3">

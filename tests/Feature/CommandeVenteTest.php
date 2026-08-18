@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\StatutCommandeVente;
+use App\Models\Categorie;
 use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\FactureVente;
@@ -42,11 +43,27 @@ class CommandeVenteTest extends TestCase
         $this->user->sites()->attach($this->defaultSite->id, ['role' => 'employe', 'is_default' => true]);
     }
 
+    private ?Categorie $categorieDefaut = null;
+
+    /**
+     * Catégorie partagée par tous les produits/véhicules de ce fichier de tests — la capacité
+     * se contrôle par catégorie du catalogue produit (cf. VehiculeCapaciteService), donc un
+     * produit sans catégorie n'est jamais concerné par un contrôle, quelle que soit la capacité
+     * du véhicule.
+     */
+    private function defaultCategorie(): Categorie
+    {
+        return $this->categorieDefaut ??= Categorie::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Défaut',
+        ]);
+    }
+
     private function makeContext(Organization $org): array
     {
         $produit = $this->makeProduitAvecVariante(
             $org,
-            ['nom' => 'Rouleau'],
+            ['nom' => 'Rouleau', 'categorie_id' => $this->defaultCategorie()->id],
             ['prix_vente' => 2000, 'prix_usine' => 1500],
         );
 
@@ -54,12 +71,27 @@ class CommandeVenteTest extends TestCase
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $org->id,
             'proprietaire_id' => $proprietaire->id,
-            'capacite_packs' => 2,
         ]);
+        $this->setCapacite($vehicule, 2);
 
         $client = Client::factory()->create(['organization_id' => $org->id]);
 
         return compact('produit', 'vehicule', 'client');
+    }
+
+    /**
+     * Définit la capacité utilisée par les contrôles de ce test — portée exclusivement par le
+     * véhicule lui-même via vehicule_capacites (décision produit du 17/08/2026, cf.
+     * VehiculeCapaciteService), jamais par son type. updateOrCreate() car makeContext() a déjà
+     * posé une ligne à 2 pour cette catégorie — un second appel doit la remplacer, pas entrer
+     * en conflit avec la contrainte unique (vehicule_id, categorie_id).
+     */
+    private function setCapacite(Vehicule $vehicule, int $capacite): void
+    {
+        $vehicule->capacites()->updateOrCreate(
+            ['categorie_id' => $this->defaultCategorie()->id],
+            ['organization_id' => $this->org->id, 'capacite_max' => $capacite],
+        );
     }
 
     // ── index ─────────────────────────────────────────────────────────────────
@@ -104,7 +136,7 @@ class CommandeVenteTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Ventes/Create')
                 ->where('vehicules.0.id', $vehicule->id)
-                ->where('vehicules.0.capacite_packs', (int) $vehicule->capacite_packs)
+                ->where('vehicules.0.capacites.0.capacite_max', 2)
             );
     }
 
@@ -264,7 +296,7 @@ class CommandeVenteTest extends TestCase
     public function test_store_fails_when_total_quantite_exceeds_vehicule_capacity(): void
     {
         ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
-        $vehicule->update(['capacite_packs' => 5]);
+        $this->setCapacite($vehicule, 5);
 
         $this->actingAs($this->user)
             ->post(route('ventes.store'), [
@@ -281,7 +313,7 @@ class CommandeVenteTest extends TestCase
     public function test_store_succeeds_when_total_quantite_below_vehicule_capacity(): void
     {
         ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
-        $vehicule->update(['capacite_packs' => 10]);
+        $this->setCapacite($vehicule, 10);
 
         $this->actingAs($this->user)
             ->post(route('ventes.store'), [
@@ -298,10 +330,10 @@ class CommandeVenteTest extends TestCase
     public function test_store_fails_when_multi_lines_total_exceed_vehicule_capacity(): void
     {
         ['vehicule' => $vehicule] = $this->makeContext($this->org);
-        $vehicule->update(['capacite_packs' => 5]);
+        $this->setCapacite($vehicule, 5);
 
-        $p1 = $this->makeProduitAvecVariante($this->org, ['nom' => 'Px'], ['prix_vente' => 1000, 'prix_usine' => 800]);
-        $p2 = $this->makeProduitAvecVariante($this->org, ['nom' => 'Py'], ['prix_vente' => 1500, 'prix_usine' => 1000]);
+        $p1 = $this->makeProduitAvecVariante($this->org, ['nom' => 'Px', 'categorie_id' => $this->defaultCategorie()->id], ['prix_vente' => 1000, 'prix_usine' => 800]);
+        $p2 = $this->makeProduitAvecVariante($this->org, ['nom' => 'Py', 'categorie_id' => $this->defaultCategorie()->id], ['prix_vente' => 1500, 'prix_usine' => 1000]);
 
         $this->actingAs($this->user)
             ->post(route('ventes.store'), [
@@ -314,11 +346,11 @@ class CommandeVenteTest extends TestCase
             ->assertSessionHasErrors('lignes');
     }
 
-    public function test_store_falls_back_to_type_capacity_when_vehicule_capacite_packs_is_null(): void
+    public function test_store_ignore_la_capacite_par_defaut_du_type_vehicule_sans_capacite_est_illimite(): void
     {
-        // Véhicule importé via Import Flotte : capacite_packs n'est jamais renseigné
-        // sur le véhicule lui-même, seule la capacité par défaut du type s'applique
-        // (cf. VehiculeController::index / show, même comportement attendu ici).
+        // Décision produit du 17/08/2026 : TypeVehicule::capacite_defaut est une colonne morte,
+        // jamais lue — un véhicule sans ligne vehicule_capacites n'est simplement pas limité,
+        // quelle que soit la valeur historique portée par son type.
         ['produit' => $produit] = $this->makeContext($this->org);
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $typeVehicule = TypeVehicule::factory()->create([
@@ -329,14 +361,13 @@ class CommandeVenteTest extends TestCase
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
             'type_vehicule_id' => $typeVehicule->id,
-            'capacite_packs' => null,
         ]);
 
         $this->actingAs($this->user)
             ->post(route('ventes.store'), [
                 'vehicule_id' => $vehicule->id,
                 'lignes' => [
-                    ['produit_id' => $produit->id, 'qte' => 5, 'prix_vente' => 2000],
+                    ['produit_id' => $produit->id, 'qte' => 999, 'prix_vente' => 2000],
                 ],
             ])
             ->assertSessionDoesntHaveErrors();
@@ -349,7 +380,7 @@ class CommandeVenteTest extends TestCase
     public function test_store_accepts_qte_equal_to_vehicule_capacity(): void
     {
         ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
-        // capacite_packs = 2 définie dans makeContext
+        // Capacité du véhicule = 2, cf. makeContext()
 
         $this->actingAs($this->user)
             ->post(route('ventes.store'), [
@@ -366,10 +397,10 @@ class CommandeVenteTest extends TestCase
     public function test_store_accepts_multiple_lignes_summing_to_capacity(): void
     {
         ['vehicule' => $vehicule] = $this->makeContext($this->org);
-        $vehicule->update(['capacite_packs' => 10]);
+        $this->setCapacite($vehicule, 10);
 
-        $produit1 = $this->makeProduitAvecVariante($this->org, ['nom' => 'P1'], ['prix_vente' => 1000, 'prix_usine' => 800]);
-        $produit2 = $this->makeProduitAvecVariante($this->org, ['nom' => 'P2'], ['prix_vente' => 1500, 'prix_usine' => 1000]);
+        $produit1 = $this->makeProduitAvecVariante($this->org, ['nom' => 'P1', 'categorie_id' => $this->defaultCategorie()->id], ['prix_vente' => 1000, 'prix_usine' => 800]);
+        $produit2 = $this->makeProduitAvecVariante($this->org, ['nom' => 'P2', 'categorie_id' => $this->defaultCategorie()->id], ['prix_vente' => 1500, 'prix_usine' => 1000]);
 
         $this->actingAs($this->user)
             ->post(route('ventes.store'), [
@@ -433,7 +464,7 @@ class CommandeVenteTest extends TestCase
     public function test_store_fails_when_below_capacity_and_chargement_complet_required(): void
     {
         ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
-        $vehicule->update(['capacite_packs' => 10]);
+        $this->setCapacite($vehicule, 10);
         Parametre::setVentesAutorisationSaisieDessousQteMax($this->org->id, false);
 
         $this->actingAs($this->user)
@@ -451,7 +482,7 @@ class CommandeVenteTest extends TestCase
     public function test_store_succeeds_when_exactly_at_capacity_with_chargement_complet_required(): void
     {
         ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
-        $vehicule->update(['capacite_packs' => 3]);
+        $this->setCapacite($vehicule, 3);
         Parametre::setVentesAutorisationSaisieDessousQteMax($this->org->id, false);
 
         $this->actingAs($this->user)
@@ -469,7 +500,7 @@ class CommandeVenteTest extends TestCase
     public function test_store_below_capacity_still_allowed_when_param_enabled(): void
     {
         ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
-        $vehicule->update(['capacite_packs' => 10]);
+        $this->setCapacite($vehicule, 10);
         Parametre::setVentesAutorisationSaisieDessousQteMax($this->org->id, true);
 
         $this->actingAs($this->user)
@@ -489,7 +520,7 @@ class CommandeVenteTest extends TestCase
     public function test_update_accepts_qte_within_capacity(): void
     {
         ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
-        $vehicule->update(['capacite_packs' => 10]);
+        $this->setCapacite($vehicule, 10);
 
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
@@ -514,7 +545,7 @@ class CommandeVenteTest extends TestCase
     public function test_update_fails_when_total_quantite_exceeds_vehicule_capacity(): void
     {
         ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
-        $vehicule->update(['capacite_packs' => 5]);
+        $this->setCapacite($vehicule, 5);
 
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
@@ -537,10 +568,10 @@ class CommandeVenteTest extends TestCase
     public function test_update_fails_when_multi_lines_total_exceed_vehicule_capacity(): void
     {
         ['vehicule' => $vehicule] = $this->makeContext($this->org);
-        $vehicule->update(['capacite_packs' => 5]);
+        $this->setCapacite($vehicule, 5);
 
-        $p1 = $this->makeProduitAvecVariante($this->org, ['nom' => 'Pa'], ['prix_vente' => 1000, 'prix_usine' => 800]);
-        $p2 = $this->makeProduitAvecVariante($this->org, ['nom' => 'Pb'], ['prix_vente' => 1500, 'prix_usine' => 1000]);
+        $p1 = $this->makeProduitAvecVariante($this->org, ['nom' => 'Pa', 'categorie_id' => $this->defaultCategorie()->id], ['prix_vente' => 1000, 'prix_usine' => 800]);
+        $p2 = $this->makeProduitAvecVariante($this->org, ['nom' => 'Pb', 'categorie_id' => $this->defaultCategorie()->id], ['prix_vente' => 1500, 'prix_usine' => 1000]);
 
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
@@ -561,10 +592,10 @@ class CommandeVenteTest extends TestCase
             ->assertSessionHasErrors('lignes');
     }
 
-    public function test_update_falls_back_to_type_capacity_when_vehicule_capacite_packs_is_null(): void
+    public function test_update_ignore_la_capacite_par_defaut_du_type_vehicule_sans_capacite_est_illimite(): void
     {
-        // Véhicule importé via Import Flotte : capacite_packs n'est jamais renseigné
-        // sur le véhicule lui-même, seule la capacité par défaut du type s'applique.
+        // Décision produit du 17/08/2026 : TypeVehicule::capacite_defaut est une colonne morte,
+        // jamais lue — un véhicule sans ligne vehicule_capacites n'est simplement pas limité.
         ['produit' => $produit] = $this->makeContext($this->org);
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $typeVehicule = TypeVehicule::factory()->create([
@@ -575,7 +606,6 @@ class CommandeVenteTest extends TestCase
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
             'type_vehicule_id' => $typeVehicule->id,
-            'capacite_packs' => null,
         ]);
 
         $commande = CommandeVente::factory()->create([
@@ -590,7 +620,7 @@ class CommandeVenteTest extends TestCase
             ->put(route('ventes.update', $commande), [
                 'vehicule_id' => $vehicule->id,
                 'lignes' => [
-                    ['produit_id' => $produit->id, 'qte' => 5, 'prix_vente' => 2000],
+                    ['produit_id' => $produit->id, 'qte' => 999, 'prix_vente' => 2000],
                 ],
             ])
             ->assertSessionDoesntHaveErrors();
@@ -601,7 +631,7 @@ class CommandeVenteTest extends TestCase
     public function test_update_fails_when_below_capacity_and_chargement_complet_required(): void
     {
         ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
-        $vehicule->update(['capacite_packs' => 10]);
+        $this->setCapacite($vehicule, 10);
         Parametre::setVentesAutorisationSaisieDessousQteMax($this->org->id, false);
 
         $commande = CommandeVente::factory()->create([
@@ -625,7 +655,7 @@ class CommandeVenteTest extends TestCase
     public function test_update_succeeds_when_exactly_at_capacity_with_chargement_complet_required(): void
     {
         ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
-        $vehicule->update(['capacite_packs' => 5]);
+        $this->setCapacite($vehicule, 5);
         Parametre::setVentesAutorisationSaisieDessousQteMax($this->org->id, false);
 
         $commande = CommandeVente::factory()->create([
@@ -673,14 +703,14 @@ class CommandeVenteTest extends TestCase
     public function test_create_exposes_vehicule_capacity_for_new_ligne_default(): void
     {
         ['vehicule' => $vehicule] = $this->makeContext($this->org);
-        $vehicule->update(['capacite_packs' => 50]);
+        $this->setCapacite($vehicule, 50);
 
         $this->actingAs($this->user)
             ->get(route('ventes.create'))
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Ventes/Create')
                 ->has('vehicules', fn (Assert $v) => $v
-                    ->where('0.capacite_packs', 50)
+                    ->where('0.capacites.0.capacite_max', 50)
                     ->etc()
                 )
             );
@@ -713,7 +743,7 @@ class CommandeVenteTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Ventes/Edit')
                 ->where('vehicules.0.id', $vehicule->id)
-                ->where('vehicules.0.capacite_packs', (int) $vehicule->capacite_packs)
+                ->where('vehicules.0.capacites.0.capacite_max', 2)
             );
     }
 

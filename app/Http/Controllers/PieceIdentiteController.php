@@ -25,8 +25,11 @@ class PieceIdentiteController extends Controller
     {
         $data = $request->validated();
 
+        // La pièce appartient à la Personne, pas au rôle Proprietaire (cf.
+        // PieceIdentite::ALLOWED_IDENTIFIABLE_TYPES) — le dossier de stockage/segment
+        // reste organisé par le rôle qui a déclenché l'upload (ENTITE_SEGMENT).
         $this->service->creer(
-            $proprietaire,
+            $proprietaire->personne,
             self::ENTITE_SEGMENT,
             $data,
             $request->file('recto'),
@@ -40,7 +43,7 @@ class PieceIdentiteController extends Controller
 
     public function update(UpdatePieceIdentiteRequest $request, PieceIdentite $pieceIdentite): RedirectResponse
     {
-        $proprietaire = $pieceIdentite->identifiable;
+        $proprietaire = $pieceIdentite->identifiable->proprietaire;
         $data = $request->validated();
 
         $this->service->mettreAJour(
@@ -92,7 +95,7 @@ class PieceIdentiteController extends Controller
     {
         $this->authorize('delete', $pieceIdentite);
 
-        $proprietaire = $pieceIdentite->identifiable;
+        $proprietaire = $pieceIdentite->identifiable->proprietaire;
         $this->service->supprimer($pieceIdentite);
 
         return redirect()->route('proprietaires.show', $proprietaire)

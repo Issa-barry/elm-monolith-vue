@@ -2,7 +2,6 @@
 import DetailHeader from '@/components/DetailHeader.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
-import VehiculeCapacitesCard from '@/components/VehiculeCapacitesCard.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
@@ -72,20 +71,19 @@ interface ProprietaireOption {
     telephone?: string;
 }
 
+interface CapaciteRow {
+    categorie_id: string;
+    categorie_nom: string;
+    capacite_max: number;
+}
+
 interface VehiculeData {
     id: string;
     nom_vehicule: string;
     immatriculation: string;
     type_label: string;
     type_vehicule_id: string | null;
-    capacite_packs: number | null;
-    capacite_bouteilles: number | null;
-    capacites: Array<{
-        id: string;
-        categorie_id: string;
-        categorie_nom: string | null;
-        capacite_max: number;
-    }>;
+    capacites: CapaciteRow[];
     site_id: string | null;
     site_nom: string | null;
     categorie: 'interne' | 'partenaire';
@@ -106,7 +104,6 @@ const props = defineProps<{
     depenses: DepenseRow[];
     equipe: EquipeData | null;
     proprietaires: ProprietaireOption[];
-    categories: Array<{ value: string; label: string }>;
     default_proprietaire_id: string | null;
 }>();
 
@@ -256,16 +253,11 @@ function formatGNF(val: number): string {
                             {{ vehicule.type_label }}
                         </span>
                         <span
-                            v-if="vehicule.capacite_packs"
+                            v-for="c in vehicule.capacites"
+                            :key="c.categorie_id"
                             class="text-xs text-muted-foreground"
                         >
-                            {{ vehicule.capacite_packs }} sachets
-                        </span>
-                        <span
-                            v-if="vehicule.capacite_bouteilles"
-                            class="text-xs text-muted-foreground"
-                        >
-                            {{ vehicule.capacite_bouteilles }} bouteilles
+                            {{ c.categorie_nom }} : {{ c.capacite_max }}
                         </span>
                     </div>
                 </template>
@@ -462,23 +454,21 @@ function formatGNF(val: number): string {
                             </div>
                             <div class="rounded-lg border bg-background p-4">
                                 <p class="text-xs text-muted-foreground">
-                                    Capacité
+                                    Capacités maximales de chargement
                                 </p>
-                                <p class="mt-1 text-sm font-medium">
-                                    {{
-                                        vehicule.capacite_packs !== null
-                                            ? `${vehicule.capacite_packs} sachets`
-                                            : '—'
-                                    }}
-                                    <template
-                                        v-if="
-                                            vehicule.capacite_bouteilles !==
-                                            null
-                                        "
-                                    >
-                                        · {{ vehicule.capacite_bouteilles }}
-                                        bouteilles
-                                    </template>
+                                <p
+                                    v-if="vehicule.capacites.length === 0"
+                                    class="mt-1 text-sm font-medium"
+                                >
+                                    — (non plafonné)
+                                </p>
+                                <p
+                                    v-for="c in vehicule.capacites"
+                                    :key="c.categorie_id"
+                                    class="mt-1 text-sm font-medium"
+                                >
+                                    {{ c.categorie_nom }} :
+                                    {{ c.capacite_max }}
                                 </p>
                             </div>
                             <div class="rounded-lg border bg-background p-4">
@@ -521,15 +511,6 @@ function formatGNF(val: number): string {
                             </div>
                         </div>
                     </div>
-
-                    <VehiculeCapacitesCard
-                        v-if="can('vehicules.update')"
-                        class="mt-6 lg:col-start-2"
-                        :capacites="vehicule.capacites"
-                        :categories="categories"
-                        :capacite-legacy="vehicule.capacite_packs"
-                        :sync-url="`/backoffice/vehicules/${vehicule.id}/capacites`"
-                    />
                 </template>
 
                 <!-- Equipe tab -->
@@ -833,7 +814,6 @@ function formatGNF(val: number): string {
             nom_vehicule: vehicule.nom_vehicule,
             immatriculation: vehicule.immatriculation,
             proprietaire_est_tiers: proprietaireEstTiers,
-            capacite_packs: vehicule.capacite_packs,
             proprietaire_id: vehicule.proprietaire_id,
             proprietaire_nom: vehicule.proprietaire_nom,
         }"

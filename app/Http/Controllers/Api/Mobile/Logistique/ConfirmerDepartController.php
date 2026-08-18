@@ -26,7 +26,7 @@ class ConfirmerDepartController extends Controller
             ->when($user->organization_id, fn (Builder $q) => $q->where('organization_id', $user->organization_id))
             ->where(fn (Builder $q) => $q
                 ->where('user_id', $user->id)
-                ->when($user->telephone, fn (Builder $q2) => $q2->orWhere('telephone', $user->telephone)))
+                ->when($user->telephone, fn (Builder $q2) => $q2->orWhereHas('personne', fn (Builder $p) => $p->where('telephone', $user->telephone))))
             ->first();
 
         if (! $livreur || ! $livreur->equipes()->pluck('equipes_livraison.id')->contains($transfert->equipe_livraison_id)) {

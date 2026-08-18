@@ -71,6 +71,24 @@ class ProduitTypeDefaultSeeder extends Seeder
             'champ_prix_reference' => 'prix_achat',
             'position' => 3,
         ],
+        [
+            // Acheté et consommé pour fabriquer un autre produit (matière première, emballage,
+            // bouchon, étiquette...) — jamais vendu tel quel, distinct de `materiel` (acheté pour
+            // les besoins de l'entreprise, hors production) même si le comportement technique est
+            // proche : la distinction est l'intention métier, pas le comportement.
+            // Exemple : Matière de production (bouchon, préforme) → fabrication → Fabricable
+            // (pack d'eau) → vente.
+            'code' => 'matiere_production',
+            'nom' => 'Matière de production',
+            'gere_stock' => true,
+            'vendable' => false,
+            'achetable' => true,
+            'prix_achat_requis' => true,
+            'prix_usine_requis' => false,
+            'prix_vente_requis' => false,
+            'champ_prix_reference' => 'prix_achat',
+            'position' => 4,
+        ],
     ];
 
     public static function seedPourOrganisation(string $organizationId): void
@@ -88,6 +106,6 @@ class ProduitTypeDefaultSeeder extends Seeder
         $org = Organization::where('slug', 'elm')->firstOrFail();
         self::seedPourOrganisation($org->id);
 
-        $this->command->info('✓ Types de produit par défaut (Matériel, Service, Fabricable, Achat/Vente) prêts pour « elm ».');
+        $this->command->info('✓ Types de produit par défaut (Matériel, Service, Fabricable, Achat/Vente, Matière de production) prêts pour « elm ».');
     }
 }

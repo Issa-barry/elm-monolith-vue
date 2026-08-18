@@ -18,6 +18,7 @@ use App\Models\EquipeLivreur;
 use App\Models\Livreur;
 use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
+use App\Models\Personne;
 use App\Models\TransfertLogistique;
 use App\Models\User;
 use App\Models\Vehicule;
@@ -44,10 +45,16 @@ class CommissionAjustementTest extends TestCase
 
     private function makeLivreur(string $nom = 'Diallo'): Livreur
     {
-        return Livreur::create([
+        $personne = Personne::create([
             'organization_id' => $this->org->id,
             'nom' => $nom,
             'prenom' => 'Mamadou',
+            'telephone' => '+224'.fake()->unique()->numerify('#########'),
+        ]);
+
+        return Livreur::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
             'nom_complet' => "Mamadou {$nom}",
             'is_active' => true,
         ]);

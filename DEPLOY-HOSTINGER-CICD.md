@@ -50,13 +50,15 @@ Dans GitHub: `Settings` -> `Secrets and variables` -> `Actions` -> `New reposito
    ```bash
    php artisan key:generate
    php artisan migrate --force
-   php artisan db:seed --class=ProductionSeeder --force
+   php artisan db:seed --class=RolesAndPermissionsSeeder --force
    ln -s "$PWD/storage/app/public" "$PWD/public/storage" || true
    ```
+   Ces commandes ne font que de l'infrastructure (schema + permissions/roles globaux) :
+   `organizations` reste vide a l'issue de cette etape, quelle que soit l'instance.
    Puis, **depuis un navigateur**, ouvrir `https://ton-domaine/install` et suivre
-   l'assistant (Entreprise -> Super Admin -> Catalogue initial -> Resume). Aucun
-   slug n'est demande : il est genere automatiquement a partir du nom, modifiable
-   ensuite dans les parametres de l'entreprise. Le
+   l'assistant (Entreprise -> Super Admin -> Resume) : c'est lui, et lui seul, qui
+   cree l'organisation. Aucun slug n'est demande : il est genere automatiquement a
+   partir du nom, modifiable ensuite dans les parametres de l'entreprise. Le
    pipeline CI/CD ne lance jamais cette etape automatiquement : elle demande une
    saisie humaine (identite et mot de passe du Super Admin) qui n'a pas sa place
    dans un script de deploiement. L'assistant est protege par `APP_INSTALL_TOKEN`

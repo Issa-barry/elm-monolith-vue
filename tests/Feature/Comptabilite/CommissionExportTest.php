@@ -13,6 +13,7 @@ use App\Models\CommissionVente;
 use App\Models\Depense;
 use App\Models\DepenseType;
 use App\Models\Livreur;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
@@ -64,22 +65,32 @@ class CommissionExportTest extends TestCase
 
     private function makeLivreur(): Livreur
     {
-        return Livreur::create([
+        $personne = Personne::create([
             'organization_id' => $this->org->id,
             'nom' => 'Diallo',
             'prenom' => 'Mamadou',
             'telephone' => '622000001',
+        ]);
+
+        return Livreur::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
             'is_active' => true,
         ]);
     }
 
     private function makeProprietaire(): Proprietaire
     {
-        return Proprietaire::create([
+        $personne = Personne::create([
             'organization_id' => $this->org->id,
             'nom' => 'Barry',
             'prenom' => 'Ibrahima',
             'telephone' => '622000002',
+        ]);
+
+        return Proprietaire::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
             'is_active' => true,
         ]);
     }

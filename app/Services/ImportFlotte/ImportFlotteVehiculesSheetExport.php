@@ -35,9 +35,9 @@ class ImportFlotteVehiculesSheetExport implements FromArray, WithHeadings, WithT
     public function array(): array
     {
         // Une seule ligne par véhicule. vehicule_capacite_sachets et
-        // vehicule_capacite_bouteilles sont facultatives : laissées vides, la
-        // capacité par défaut du type de véhicule s'applique (cf.
-        // ImportFlotteParser). La commission d'équipe se configure après coup
+        // vehicule_capacite_bouteilles sont facultatives : laissées vides, le véhicule reste
+        // non plafonné pour cette catégorie — aucune capacité n'est portée par le type de
+        // véhicule (cf. ImportFlotteParser). La commission d'équipe se configure après coup
         // dans Équipes de livraison.
         //
         // vehicule_site est obligatoire pour tout véhicule, quel que soit son propriétaire.

@@ -3,10 +3,11 @@
 namespace Database\Seeders;
 
 use App\Models\Organization;
+use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\User;
+use App\Models\UserAuthIdentity;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -25,7 +26,7 @@ class ProprietairesSeeder extends Seeder
         $sansCompte = [
             [
                 // Propriétaire par défaut des véhicules "interne" (propriété de
-                // l'organisation) — voir VehiculeController::defaultProprietaireInterneId().
+                // l'organisation) — rattaché ci-dessous à Organization::proprietaire_interne_id.
                 // Distinct du compte User admin_entreprise "Moussa SIDIBÉ"
                 // (téléphone différent) : ici c'est une fiche Proprietaire, pas
                 // un utilisateur du back-office.
@@ -75,11 +76,34 @@ class ProprietairesSeeder extends Seeder
             ],
         ];
 
+        $proprietaireInterne = null;
         foreach ($sansCompte as $data) {
-            Proprietaire::firstOrCreate(
-                ['telephone' => $data['telephone'], 'organization_id' => $org->id],
-                [...$data, 'organization_id' => $org->id]
+            $personne = Personne::resoudreOuCreer($org->id, [
+                'nom' => $data['nom'],
+                'prenom' => $data['prenom'],
+                'email' => $data['email'],
+                'telephone' => $data['telephone'],
+                'adresse' => $data['adresse'],
+                'ville' => $data['ville'],
+            ]);
+
+            $proprietaire = Proprietaire::firstOrCreate(
+                ['personne_id' => $personne->id, 'organization_id' => $org->id],
+                ['is_active' => $data['is_active']]
             );
+
+            if ($data['telephone'] === '+224622602693') {
+                $proprietaireInterne = $proprietaire;
+            }
+        }
+
+        // Propriétaire interne par défaut de l'organisation "elm" — véhicules "interne" et
+        // commissions propriétaire associées (cf. Organization::proprietaireInterne(),
+        // Proprietaire::interneParDefautId()). Pour toute autre organisation, ce rattachement
+        // se fait à l'installation (InstallationService::install()), jamais via ce seeder de
+        // démonstration.
+        if ($proprietaireInterne && ! $org->proprietaire_interne_id) {
+            $org->forceFill(['proprietaire_interne_id' => $proprietaireInterne->id])->save();
         }
 
         // ── Propriétaires avec compte (accès portail client) ──────────────────
@@ -95,28 +119,44 @@ class ProprietairesSeeder extends Seeder
         ];
 
         foreach ($avecCompte as $data) {
+            $personne = Personne::resoudreOuCreer($org->id, [
+                'nom' => $data['nom'],
+                'prenom' => $data['prenom'],
+                'email' => $data['email'],
+                'telephone' => $data['telephone'],
+                'code_pays' => $data['code_pays'] ?? null,
+            ]);
+
             $user = User::updateOrCreate(
-                ['telephone' => $data['telephone']],
+                ['personne_id' => $personne->id],
+                ['password' => self::PASSWORD]
+            );
+            $user->authIdentities()->updateOrCreate(
+                ['type' => UserAuthIdentity::TYPE_TELEPHONE],
                 [
-                    'prenom' => $data['prenom'],
-                    'nom' => $data['nom'],
-                    'email' => $data['email'] ?? null,
-                    'email_verified_at' => isset($data['email']) ? now() : null,
-                    'password' => Hash::make(self::PASSWORD),
+                    'value' => $data['telephone'],
+                    'normalized_value' => Personne::normaliserTelephone($data['telephone']),
+                    'verified_at' => now(),
+                    'is_primary' => true,
                 ]
             );
+            if ($data['email'] ?? null) {
+                $user->authIdentities()->updateOrCreate(
+                    ['type' => UserAuthIdentity::TYPE_EMAIL],
+                    [
+                        'value' => $data['email'],
+                        'normalized_value' => UserAuthIdentity::normaliser(UserAuthIdentity::TYPE_EMAIL, $data['email']),
+                        'verified_at' => now(),
+                    ]
+                );
+            }
             $user->roles()->syncWithoutDetaching([$proprietaireRole->id]);
 
             Proprietaire::updateOrCreate(
-                ['telephone' => $data['telephone'], 'organization_id' => $org->id],
+                ['personne_id' => $personne->id, 'organization_id' => $org->id],
                 [
-                    'nom' => $data['nom'],
-                    'prenom' => $data['prenom'],
-                    'telephone' => $data['telephone'],
-                    'code_pays' => $data['code_pays'] ?? null,
                     'is_active' => $data['is_active'],
                     'user_id' => $user->id,
-                    'organization_id' => $org->id,
                 ]
             );
         }

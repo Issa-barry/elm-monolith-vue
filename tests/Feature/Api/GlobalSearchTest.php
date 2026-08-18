@@ -190,6 +190,32 @@ class GlobalSearchTest extends TestCase
         $this->assertSame('OrgTest Baba', $items[0]['title']);
     }
 
+    // ── proprietaires provider (identité portée par Personne, pas par une colonne directe) ────
+
+    public function test_proprietaires_provider_finds_by_nom_prenom_et_telephone(): void
+    {
+        $user = $this->makeStaffUser(['proprietaires.read']);
+        Sanctum::actingAs($user, ['*']);
+
+        $proprietaire = Proprietaire::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Kourouma',
+            'prenom' => 'Fode',
+            'telephone' => '+224622003462',
+        ]);
+
+        foreach (['Kourouma', 'Fode', '3462'] as $q) {
+            $items = $this->getJson(route('api.search.global', ['q' => $q, 'categories' => ['proprietaires']]))
+                ->assertOk()
+                ->json('results.proprietaires.items');
+
+            $this->assertCount(1, $items, "recherche « {$q} » devrait trouver le propriétaire");
+            $this->assertSame($proprietaire->id, $items[0]['id']);
+            $this->assertSame('Fode Kourouma', $items[0]['title']);
+            $this->assertSame('+224622003462', $items[0]['subtitle']);
+        }
+    }
+
     // ── categories filter ─────────────────────────────────────────────────────
 
     public function test_categories_filter_restricts_to_requested_providers(): void
