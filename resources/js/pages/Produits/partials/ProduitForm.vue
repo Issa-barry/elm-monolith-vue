@@ -197,8 +197,7 @@ function formatMontant(val: number): string {
 }
 
 const beneficeEstime = computed(() => {
-    if (props.form.prix_vente === null || props.form.cout === null)
-        return null;
+    if (props.form.prix_vente === null || props.form.cout === null) return null;
     return props.form.prix_vente - props.form.cout;
 });
 const margeEstimeePct = computed(() => {
