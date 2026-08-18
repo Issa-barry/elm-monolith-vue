@@ -1,3 +1,9 @@
+php artisan optimize:clear
+php artisan migrate --force
+php artisan optimize:clear
+php artisan optimize 
+
+
 # en DEV (a ne pas supprimer par IA)
 php artisan migrate:fresh --seed
 php artisan optimize:clear

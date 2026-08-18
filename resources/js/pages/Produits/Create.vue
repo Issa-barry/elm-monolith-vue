@@ -72,6 +72,7 @@ const form = useForm({
     produit_type_id: props.types[0]?.value ?? null,
     statut: 'actif',
     prix_usine: null as number | null,
+    prix_usine_tricycle: null as number | null,
     prix_vente: null as number | null,
     prix_achat: null as number | null,
     cout: null as number | null,

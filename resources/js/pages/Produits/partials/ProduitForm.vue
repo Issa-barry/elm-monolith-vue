@@ -61,6 +61,7 @@ interface Variante {
     sku: string | null;
     code_barres: string | null;
     prix_usine: number | null;
+    prix_usine_tricycle: number | null;
     prix_vente: number | null;
     prix_achat: number | null;
     cout: number | null;
@@ -77,6 +78,7 @@ interface FormData {
     produit_type_id: string | null;
     statut: string;
     prix_usine: number | null;
+    prix_usine_tricycle: number | null;
     prix_vente: number | null;
     prix_achat: number | null;
     cout: number | null;
@@ -725,13 +727,13 @@ const depasseLimiteVariantes = computed(
                 class="grid gap-4 sm:grid-cols-2 sm:gap-5"
                 :class="
                     prixRequis('prix_usine')
-                        ? 'lg:grid-cols-4'
+                        ? 'lg:grid-cols-5'
                         : 'lg:grid-cols-3'
                 "
             >
                 <div v-if="prixRequis('prix_usine')">
                     <Label for="prix_usine" class="mb-1.5 block"
-                        >Prix usine
+                        >Prix usine — Autres véhicules
                         <span
                             v-if="prixRequis('prix_usine')"
                             class="text-destructive"
@@ -764,6 +766,31 @@ const depasseLimiteVariantes = computed(
                         class="mt-1 text-xs text-destructive"
                     >
                         {{ errors.prix_usine }}
+                    </p>
+                </div>
+
+                <div v-if="prixRequis('prix_usine')">
+                    <Label for="prix_usine_tricycle" class="mb-1.5 block"
+                        >Prix usine — Tricycle</Label
+                    >
+                    <InputNumber
+                        input-id="prix_usine_tricycle"
+                        :model-value="form.prix_usine_tricycle"
+                        @update:model-value="
+                            $emit('update:form', {
+                                ...form,
+                                prix_usine_tricycle: $event,
+                            })
+                        "
+                        :min="0"
+                        :use-grouping="true"
+                        locale="fr-GN"
+                        class="w-full"
+                        input-class="w-full"
+                    />
+                    <p class="mt-1 text-xs text-muted-foreground">
+                        Optionnel — sans valeur, le tarif "Autres véhicules"
+                        s'applique aussi aux tricycles.
                     </p>
                 </div>
 

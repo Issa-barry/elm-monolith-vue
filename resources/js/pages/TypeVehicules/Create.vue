@@ -6,6 +6,16 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/vue3';
 import InputText from 'primevue/inputtext';
+import Select from 'primevue/select';
+
+interface CategorieTarifaireOption {
+    value: string;
+    label: string;
+}
+
+const props = defineProps<{
+    categoriesTarifaires: CategorieTarifaireOption[];
+}>();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
@@ -16,6 +26,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     nom: '',
     description: '',
+    categorie_tarifaire: null as string | null,
     is_active: true,
 });
 
@@ -73,6 +84,36 @@ function submit() {
                         class="w-full"
                         placeholder="Optionnel"
                     />
+                </div>
+
+                <div>
+                    <Label for="categorie_tarifaire" class="mb-1.5 block"
+                        >Catégorie tarifaire</Label
+                    >
+                    <Select
+                        input-id="categorie_tarifaire"
+                        v-model="form.categorie_tarifaire"
+                        :options="props.categoriesTarifaires"
+                        option-label="label"
+                        option-value="value"
+                        show-clear
+                        placeholder="Non classé (tarif « Autres véhicules »)"
+                        class="w-full"
+                        :class="{
+                            'p-invalid': form.errors.categorie_tarifaire,
+                        }"
+                    />
+                    <p class="mt-1 text-xs text-muted-foreground">
+                        Détermine le prix usine appliqué automatiquement sur les
+                        commandes livrées par ce type de véhicule (cf.
+                        tarification des produits).
+                    </p>
+                    <p
+                        v-if="form.errors.categorie_tarifaire"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ form.errors.categorie_tarifaire }}
+                    </p>
                 </div>
 
                 <div class="flex items-center gap-3">

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\CategorieTarifaireVehicule;
 use App\Enums\ModeTarification;
 use App\Enums\ProduitStatut;
 use App\Enums\StatutCommandeVente;
@@ -35,7 +36,7 @@ class PdvCheckoutService
 
         return DB::transaction(function () use ($data, $user, $siteId) {
             $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null);
-            [$lignesData, $total, $stockTrackedVarianteIds] = $this->buildLignes($data['lignes'], $user->organization_id, (string) $siteId, $context->modeTarification);
+            [$lignesData, $total, $stockTrackedVarianteIds] = $this->buildLignes($data['lignes'], $user->organization_id, (string) $siteId, $context->modeTarification, $context->categorieTarifaireVehicule);
 
             $commande = CommandeVente::create([
                 'organization_id' => $user->organization_id,
@@ -170,7 +171,7 @@ class PdvCheckoutService
      * tracer le mouvement). lockForUpdate() sur les stocks du site garantit
      * l'atomicité contre les ventes concurrentes sur ce même site.
      */
-    private function buildLignes(array $lignes, string $orgId, string $siteId, ModeTarification $mode): array
+    private function buildLignes(array $lignes, string $orgId, string $siteId, ModeTarification $mode, ?CategorieTarifaireVehicule $categorieTarifaire = null): array
     {
         $resolved = collect($lignes)->map(fn (array $ligne) => [
             'variante' => $this->resolveVariante($ligne, $orgId),
@@ -211,7 +212,7 @@ class PdvCheckoutService
             }
 
             $prixVente = (int) ($variante->prix_vente ?? 0);
-            $prixUsine = (int) ($variante->prix_usine ?? 0);
+            $prixUsine = PrixUsineResolver::resolve($variante, $categorieTarifaire);
             $totalLigne = $qte * ($mode === ModeTarification::PRIX_VENTE ? $prixVente : $prixUsine);
 
             $lignesData[] = [
