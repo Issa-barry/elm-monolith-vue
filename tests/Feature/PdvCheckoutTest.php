@@ -53,6 +53,15 @@ class PdvCheckoutTest extends TestCase
             ['nom' => 'Pack 30', 'type' => 'fabricable', 'qte_stock' => 100],
             ['prix_vente' => 5000, 'prix_usine' => 3000],
         );
+
+        // Stock ventilé par site (jamais d'agrégat legacy implicite) : le PDV vend
+        // depuis le stock réel du site, cf. PdvCheckoutService::buildLignes().
+        VarianteStock::create([
+            'organization_id' => $this->org->id,
+            'produit_variante_id' => $this->produit->variantePrincipale()->first()->id,
+            'site_id' => $this->site->id,
+            'qte_stock' => 100,
+        ]);
     }
 
     // ── GET /pdv ──────────────────────────────────────────────────────────────
@@ -168,12 +177,11 @@ class PdvCheckoutTest extends TestCase
             'localisation' => 'Conakry',
         ]);
         $variante = $this->produit->variantePrincipale()->first();
-        VarianteStock::create([
-            'organization_id' => $this->org->id,
-            'produit_variante_id' => $variante->id,
-            'site_id' => $this->site->id,
-            'qte_stock' => 50,
-        ]);
+        // setUp() a déjà créé la ligne VarianteStock de $this->site (100) — on l'ajuste
+        // à la valeur voulue par ce scénario plutôt que d'en recréer une (contrainte
+        // unique produit_variante_id + site_id).
+        VarianteStock::where('produit_variante_id', $variante->id)->where('site_id', $this->site->id)
+            ->update(['qte_stock' => 50]);
         VarianteStock::create([
             'organization_id' => $this->org->id,
             'produit_variante_id' => $variante->id,

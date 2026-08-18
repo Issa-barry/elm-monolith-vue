@@ -7,11 +7,10 @@ use App\Enums\StatutCommandeAchat;
 use App\Models\CommandeAchat;
 use App\Models\CommandeAchatLigne;
 use App\Models\Fournisseur;
-use App\Models\MouvementStock;
 use App\Models\Produit;
 use App\Models\ProduitVariante;
 use App\Models\Site;
-use App\Models\VarianteStock;
+use App\Services\MouvementStockService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -240,31 +239,16 @@ class CommandeAchatController extends Controller
      */
     private function entrerStockReception(CommandeAchatLigne $ligne, Site $site, string $orgId, int $qte, ?string $userId): void
     {
-        $variante = $ligne->variante;
-
-        $varianteStock = VarianteStock::firstOrCreate(
-            ['produit_variante_id' => $variante->id, 'site_id' => $site->id],
-            ['organization_id' => $orgId]
+        MouvementStockService::appliquer(
+            varianteId: $ligne->variante->id,
+            siteId: $site->id,
+            orgId: $orgId,
+            type: 'entree',
+            quantite: $qte,
+            sourceType: CommandeAchatLigne::class,
+            sourceId: $ligne->id,
+            userId: $userId,
         );
-
-        $stockAvant = $varianteStock->qte_stock;
-        $stockApres = $stockAvant + $qte;
-        $varianteStock->update(['qte_stock' => $stockApres]);
-
-        $variante->produit?->resynchroniserQteStock();
-
-        MouvementStock::create([
-            'organization_id' => $orgId,
-            'site_id' => $site->id,
-            'produit_variante_id' => $variante->id,
-            'type' => 'entree',
-            'quantite' => $qte,
-            'stock_avant' => $stockAvant,
-            'stock_apres' => $stockApres,
-            'source_type' => CommandeAchatLigne::class,
-            'source_id' => $ligne->id,
-            'created_by' => $userId,
-        ]);
     }
 
     private function resolveReceptionSite(?string $siteId, string $orgId): Site

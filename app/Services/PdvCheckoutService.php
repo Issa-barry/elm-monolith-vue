@@ -198,16 +198,10 @@ class PdvCheckoutService
 
             if ($produit->produitType->gere_stock) {
                 $stockTrackedVarianteIds[] = $variante->id;
-                $disponible = $stocksSite->get($variante->id)?->qte_stock;
-
-                // Aucune ligne VarianteStock pour cette variante, sur aucun site :
-                // stock jamais ventilé — on retombe sur l'agrégat legacy du produit parent
-                // (même convention que MouvementStockService::sortirStock()).
-                if ($disponible === null) {
-                    $disponible = VarianteStock::where('produit_variante_id', $variante->id)->exists()
-                        ? 0
-                        : (int) $produit->qte_stock;
-                }
+                // Aucune ligne VarianteStock pour cette variante sur ce site : 0 disponible,
+                // jamais de repli sur l'agrégat legacy du produit parent (qui ne renseigne
+                // sur aucune agence en particulier) — cf. MouvementStockService::quantiteDisponible().
+                $disponible = (int) ($stocksSite->get($variante->id)?->qte_stock ?? 0);
 
                 if ($disponible < $qte) {
                     throw ValidationException::withMessages([

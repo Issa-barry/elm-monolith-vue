@@ -10,11 +10,10 @@ use App\Http\Requests\Api\Produits\AjusterStockRequest;
 use App\Http\Requests\Api\Produits\StoreProduitRequest;
 use App\Http\Requests\Api\Produits\UpdateProduitRequest;
 use App\Http\Resources\Api\ProduitResource;
-use App\Models\MouvementStock;
 use App\Models\Produit;
-use App\Models\VarianteStock;
 use App\Services\AuditLogService;
 use App\Services\MediaService;
+use App\Services\MouvementStockService;
 use App\Services\ProduitService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -196,16 +195,7 @@ class ProduitController extends Controller
         // Ventilé par site (comme le flux backoffice) au lieu d'écrire Produit::qte_stock
         // directement — c'était une des deux incohérences relevées avant refonte (l'API
         // ne passait pas par le stock par site).
-        $existingCount = VarianteStock::where('produit_variante_id', $variante->id)->count();
-        $varianteStock = VarianteStock::firstOrCreate(
-            ['produit_variante_id' => $variante->id, 'site_id' => $site->id],
-            [
-                'organization_id' => $produit->organization_id,
-                'qte_stock' => $existingCount === 0 ? (int) ($produit->qte_stock ?? 0) : 0,
-            ]
-        );
-
-        $stockAvant = $varianteStock->qte_stock;
+        $stockAvant = MouvementStockService::quantiteDisponible($variante->id, $site->id);
 
         if ($hasDiminuer && (int) $data['diminuer'] > $stockAvant) {
             throw ValidationException::withMessages([
@@ -216,37 +206,30 @@ class ProduitController extends Controller
         $notes = MotifAjustementStock::from($data['motif_type'])->toNotesString($data['motif_detail'] ?? '');
 
         if ($hasAugmenter) {
-            $stockApres = $stockAvant + (int) $data['augmenter'];
             $type = 'entree';
             $quantite = (int) $data['augmenter'];
         } else {
-            $stockApres = $stockAvant - (int) $data['diminuer'];
             $type = 'sortie';
             $quantite = (int) $data['diminuer'];
         }
 
-        DB::transaction(function () use ($produit, $varianteStock, $variante, $type, $quantite, $stockAvant, $stockApres, $notes, $site, $user) {
-            $varianteStock->update(['qte_stock' => $stockApres]);
-            $produit->resynchroniserQteStock();
-
-            MouvementStock::create([
-                'organization_id' => $produit->organization_id,
-                'site_id' => $site->id,
-                'produit_variante_id' => $variante->id,
-                'type' => $type,
-                'quantite' => $quantite,
-                'stock_avant' => $stockAvant,
-                'stock_apres' => $stockApres,
-                'notes' => $notes,
-                'created_by' => $user->id,
-            ]);
+        DB::transaction(function () use ($produit, $variante, $type, $quantite, $notes, $site, $user) {
+            $mouvement = MouvementStockService::appliquer(
+                varianteId: $variante->id,
+                siteId: $site->id,
+                orgId: $produit->organization_id,
+                type: $type,
+                quantite: $quantite,
+                userId: $user->id,
+                notes: $notes,
+            );
 
             $this->auditService->record(
                 $produit,
                 AuditEvent::STOCK_ADJUSTED,
                 $user,
-                ['qte_stock' => $stockAvant],
-                ['qte_stock' => $stockApres, 'motif' => $notes],
+                ['qte_stock' => $mouvement->stock_avant],
+                ['qte_stock' => $mouvement->stock_apres, 'motif' => $notes],
             );
         });
 

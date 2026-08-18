@@ -819,6 +819,8 @@ class ProduitTest extends TestCase
 
     public function test_ajuster_stock_augmente_le_stock(): void
     {
+        // qte_stock=50 est un agrégat legacy, jamais ventilé par site (aucune ligne
+        // VarianteStock) : le site ajusté démarre à 0, il n'hérite jamais du legacy.
         $produit = $this->makeProduit($this->org, 50);
         $site = $this->defaultSite();
 
@@ -832,7 +834,7 @@ class ProduitTest extends TestCase
 
         $this->assertDatabaseHas('produits', [
             'id' => $produit->id,
-            'qte_stock' => 70,
+            'qte_stock' => 20,
         ]);
 
         $this->assertDatabaseHas('mouvements_stock', [
@@ -840,15 +842,21 @@ class ProduitTest extends TestCase
             'site_id' => $site->id,
             'type' => 'entree',
             'quantite' => 20,
-            'stock_avant' => 50,
-            'stock_apres' => 70,
+            'stock_avant' => 0,
+            'stock_apres' => 20,
         ]);
     }
 
     public function test_ajuster_stock_diminue_le_stock(): void
     {
-        $produit = $this->makeProduit($this->org, 50);
+        $produit = $this->makeProduit($this->org, 0);
         $site = $this->defaultSite();
+        VarianteStock::create([
+            'organization_id' => $this->org->id,
+            'produit_variante_id' => $this->varianteId($produit),
+            'site_id' => $site->id,
+            'qte_stock' => 50,
+        ]);
 
         $this->actingAs($this->user)
             ->post(route('produits.ajuster-stock', $produit), [
@@ -892,7 +900,7 @@ class ProduitTest extends TestCase
         $this->assertDatabaseHas('variante_stocks', [
             'produit_variante_id' => $varianteId,
             'site_id' => $site->id,
-            'qte_stock' => 60, // 50 migré + 10 ajout
+            'qte_stock' => 10, // jamais 60 : le legacy (50) n'est jamais hérité par le premier site touché
         ]);
     }
 
@@ -1046,7 +1054,8 @@ class ProduitTest extends TestCase
             ])
             ->assertRedirect();
 
-        $this->assertDatabaseHas('produits', ['id' => $produit->id, 'qte_stock' => 15]);
+        // Le site démarre à 0 (jamais hérité du legacy qte_stock=10) : 0 + 5 = 5.
+        $this->assertDatabaseHas('produits', ['id' => $produit->id, 'qte_stock' => 5]);
     }
 
     public function test_ajuster_stock_refuse_apres_achat_en_diminution(): void
