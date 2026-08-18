@@ -344,7 +344,11 @@ test('ajustement de stock — isolation entre deux agences distinctes', async ({
         await dialog.locator('[data-testid="stock-submit-button"]').click();
         await expect(dialog).toBeHidden({ timeout: 10_000 });
 
-        return label;
+        // Le label du dropdown est "Nom (Code)" mais le tableau "Stock par
+        // agence" affiche le code et le nom dans des <span> séparés (code
+        // d'abord) : on ne matche donc que sur le nom pour rester robuste
+        // au format d'affichage du tableau.
+        return label.replace(/\s*\([^)]*\)\s*$/, '');
     }
 
     function siteStockValue(siteName: string) {
