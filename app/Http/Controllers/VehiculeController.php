@@ -494,6 +494,31 @@ class VehiculeController extends Controller
             ->with('success', 'Véhicule mis à jour avec succès.');
     }
 
+    /**
+     * Bascule ON/OFF la dérogation directement depuis la fiche véhicule (Vehicules/Show.vue) —
+     * seul champ concerné, pas de payload complet ni de redirection vers Edit, contrairement à
+     * update(). Réutilise ensureDerogationCoherente() tel quel (même règle, jamais dupliquée) :
+     * impossible d'activer la dérogation si le type de véhicule n'a pas de plafond configuré.
+     * Même schéma que CategorieController::toggle().
+     */
+    public function toggleDerogation(Vehicule $vehicule): RedirectResponse
+    {
+        $this->authorize('update', $vehicule);
+
+        $nouvelEtat = ! $vehicule->derogation_impayes_autorisee;
+
+        $this->ensureDerogationCoherente([
+            'derogation_impayes_autorisee' => $nouvelEtat,
+            'type_vehicule_id' => $vehicule->type_vehicule_id,
+        ], $vehicule->organization_id);
+
+        $vehicule->update(['derogation_impayes_autorisee' => $nouvelEtat]);
+
+        $label = $nouvelEtat ? 'activée' : 'désactivée';
+
+        return back()->with('success', "Dérogation impayés {$label}.");
+    }
+
     public function destroy(Vehicule $vehicule): RedirectResponse
     {
         $this->authorize('delete', $vehicule);

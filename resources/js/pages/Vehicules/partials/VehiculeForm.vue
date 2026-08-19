@@ -69,24 +69,9 @@ const props = defineProps<{
     canChangeSite: boolean;
     showStatusField?: boolean;
     defaultProprietaireId?: number | string | null;
-    /** Seuil standard de dette (Paramètres > Ventes), affiché à titre indicatif — cf. section
-     * "Contrôle des impayés" ci-dessous. */
-    seuilGlobalImpayes?: number;
 }>();
 
 const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
-
-const selectedType = computed(
-    () =>
-        props.types.find((t) => t.value === props.form.type_vehicule_id) ??
-        null,
-);
-
-const typeHasDerogationConfiguree = computed(
-    () =>
-        selectedType.value?.seuil_derogation_impayes !== null &&
-        selectedType.value?.seuil_derogation_impayes !== undefined,
-);
 
 const photoPreview = ref<string | null>(props.photoUrl ?? null);
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -97,14 +82,6 @@ watch(
         if (!props.form.photo) photoPreview.value = url ?? null;
     },
 );
-
-const seuilGlobalImpayesLabel = computed(() => {
-    if (props.seuilGlobalImpayes === undefined) {
-        return null;
-    }
-
-    return `${new Intl.NumberFormat('fr-FR').format(props.seuilGlobalImpayes)} GNF`;
-});
 
 function onTypeChange(value: string) {
     const nouveauType = props.types.find((t) => t.value === value) ?? null;
@@ -527,69 +504,8 @@ function handleSubmit() {
             />
         </div>
 
-        <!-- Contrôle des impayés : dérogation via le type de véhicule -->
-        <div class="order-5 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
-            <h3
-                class="mb-1 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
-            >
-                Contrôle des impayés
-            </h3>
-            <p class="mb-4 text-xs text-muted-foreground">
-                Seuil standard actuel<span v-if="seuilGlobalImpayesLabel">
-                    : {{ seuilGlobalImpayesLabel }}</span
-                >. Le plafond de dérogation n'est pas saisi ici : il est
-                configuré sur le type de véhicule (page Types de véhicules).
-            </p>
-            <label class="flex cursor-pointer items-start gap-3">
-                <Checkbox
-                    id="derogation_impayes_autorisee"
-                    :model-value="form.derogation_impayes_autorisee"
-                    :disabled="!typeHasDerogationConfiguree"
-                    @update:model-value="
-                        $emit('update:form', {
-                            ...form,
-                            derogation_impayes_autorisee: $event === true,
-                        })
-                    "
-                />
-                <div>
-                    <span class="text-sm font-medium"
-                        >Autoriser la dérogation au seuil d'impayés</span
-                    >
-                    <p class="text-xs text-muted-foreground">
-                        <template v-if="!form.type_vehicule_id">
-                            Sélectionnez d'abord un type de véhicule.
-                        </template>
-                        <template v-else-if="typeHasDerogationConfiguree">
-                            Ce véhicule pourra atteindre
-                            {{
-                                new Intl.NumberFormat('fr-FR').format(
-                                    selectedType!.seuil_derogation_impayes!,
-                                )
-                            }}
-                            GNF de dette (seuil du type «
-                            {{ selectedType!.label }} »).
-                        </template>
-                        <template v-else>
-                            Aucun seuil de dérogation n'est configuré pour le
-                            type «
-                            {{ selectedType?.label }}
-                            » — configurez-le dans Types de véhicules avant de
-                            pouvoir activer cette option.
-                        </template>
-                    </p>
-                </div>
-            </label>
-            <p
-                v-if="errors.derogation_impayes_autorisee"
-                class="mt-2 text-xs text-destructive"
-            >
-                {{ errors.derogation_impayes_autorisee }}
-            </p>
-        </div>
-
         <!-- Photo -->
-        <div class="order-6 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+        <div class="order-5 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
                 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
             >
@@ -649,7 +565,7 @@ function handleSubmit() {
         </div>
 
         <!-- Statut -->
-        <div class="order-7 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+        <div class="order-6 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
                 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
             >
@@ -690,7 +606,7 @@ function handleSubmit() {
         </div>
 
         <!-- Pied de page -->
-        <div class="order-8 hidden items-center justify-between sm:flex">
+        <div class="order-7 hidden items-center justify-between sm:flex">
             <a href="/backoffice/vehicules">
                 <Button type="button" variant="outline">Retour</Button>
             </a>
@@ -703,6 +619,6 @@ function handleSubmit() {
                 {{ processing ? 'Enregistrement…' : 'Enregistrer' }}
             </Button>
         </div>
-        <div class="order-9 h-20 sm:hidden" />
+        <div class="order-8 h-20 sm:hidden" />
     </form>
 </template>
