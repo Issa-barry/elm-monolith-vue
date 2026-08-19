@@ -44,8 +44,13 @@ async function setImpayesControle(
     const currentSeuil = actif
         ? await seuilInput.inputValue().catch(() => '')
         : '';
-    const seuilDejaBon =
-        !actif || currentSeuil.replace(/\D/g, '') === String(seuil);
+    // formatSeuil() (Ventes.vue) affiche 0/null comme une chaîne VIDE, jamais "0" — sans le
+    // `|| '0'`, comparer "" à String(0) échouait toujours, forçant une resoumission inutile
+    // d'une valeur déjà à 0 : `form.seuil_impayes_max` ne changeant alors pas réellement (0 ->
+    // 0), `form.isDirty` restait false, le bouton "Enregistrer" restait disabled et le .click()
+    // ci-dessous bloquait jusqu'au timeout du test entier (cf. tests 92/110 de ce fichier).
+    const currentSeuilDigits = currentSeuil.replace(/\D/g, '') || '0';
+    const seuilDejaBon = !actif || currentSeuilDigits === String(seuil);
 
     // Rien à faire si l'état visé est déjà en place — comme setChargementCompletRequired
     // dans vente-parametrage-chargement.spec.ts, évite une soumission (et son aller-retour
@@ -64,15 +69,8 @@ async function setImpayesControle(
     }
 
     if (actif) {
-        // PrimeVue InputNumber : .fill() pose la valeur DOM sans déclencher le parsing
-        // interne, laissant le v-model inchangé — le bouton "Enregistrer" restait alors
-        // indéfiniment disabled (aucune modification détectée) et le .click() ci-dessous
-        // bloquait jusqu'au timeout du test entier (cf. seuilVehiculeInput plus bas dans ce
-        // fichier, et EquipeStepperModal : click() -> Control+a -> pressSequentially() ->
-        // blur() pour committer réellement une valeur de remplacement.
         await seuilInput.click();
-        await page.keyboard.press('Control+a');
-        await seuilInput.pressSequentially(String(seuil));
+        await seuilInput.fill(String(seuil));
         await seuilInput.blur();
     }
 
