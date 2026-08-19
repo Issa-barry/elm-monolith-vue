@@ -26,6 +26,7 @@ class CategorieController extends Controller
             ->map(fn (Categorie $c) => [
                 'id' => $c->id,
                 'nom' => $c->nom,
+                'reference' => $c->reference,
                 'description' => $c->description,
                 'statut' => $c->statut->value,
                 'statut_label' => $c->statut->label(),

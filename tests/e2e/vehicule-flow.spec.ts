@@ -332,9 +332,11 @@ test('création — capacités maximales de chargement saisies dans le formulair
         await selectOptionFromCombobox(page, page.locator('#site_id'));
     }
 
-    await page
-        .getByRole('button', { name: /ajouter une capacité/i })
-        .click();
+    // "Ajouter une ligne" insère immédiatement une ligne éditable dans form.capacites — plus
+    // de bouton "Ajouter" intermédiaire à confirmer par ligne (ancien workflow à double
+    // validation supprimé) : on remplit directement la ligne, la validation (champ manquant,
+    // capacité <= 0) n'intervient qu'à la soumission globale du véhicule, ci-dessous.
+    await page.getByRole('button', { name: /ajouter une ligne/i }).click();
     const categorieDropdown = page
         .locator('label')
         .filter({ hasText: /^Catégorie de produit$/ })
@@ -342,30 +344,29 @@ test('création — capacités maximales de chargement saisies dans le formulair
         .getByRole('combobox');
     await selectOptionFromCombobox(page, categorieDropdown, nomCategorie);
     // PrimeVue InputNumber traite les frappes une par une (formatage interne) — .fill() pose
-    // la valeur DOM sans déclencher sa logique de parsing, laissant le v-model à null et le
-    // bouton "Ajouter" durablement désactivé (cf. tests/e2e/stock-ajustement.spec.ts) — c'est
-    // la cause réelle du bug "le bouton Ajouter disparaît" rapporté en usage manuel. Focus
-    // explicite puis blur en sortie pour forcer la validation/commit interne du composant
-    // avant de vérifier l'état du bouton (évite une course avec son cycle de rendu interne).
-    const capaciteMaxInput = page.locator('input[inputmode="numeric"]').last();
+    // la valeur DOM sans déclencher sa logique de parsing, laissant le v-model à null (cf.
+    // tests/e2e/stock-ajustement.spec.ts) : focus explicite puis blur en sortie pour forcer
+    // le commit interne du composant avant de continuer.
+    // Scopé par label plutôt que `input[inputmode="numeric"]').last()` : un autre champ
+    // numérique peut apparaître plus bas dans le DOM de VehiculeForm.vue selon le contexte
+    // (ex: capacités multiples), donc `.last()` n'est pas fiable pour cibler spécifiquement
+    // la capacité.
+    const capaciteMaxInput = page
+        .locator('label')
+        .filter({ hasText: /^Capacité max$/ })
+        .locator('..')
+        .locator('input');
     await capaciteMaxInput.click();
     await capaciteMaxInput.pressSequentially('1700');
     await capaciteMaxInput.blur();
-    // "Ajouter" ici n'est qu'un ajout à la liste locale du formulaire (pas de requête réseau) —
-    // distinct du bouton de soumission finale du véhicule, plus bas. Le bouton "Ajouter une
-    // capacité" est masqué (v-else) tant que ce panneau d'ajout est ouvert, donc ce nom exact
-    // ne désigne plus qu'un seul bouton à ce stade. Doit rester visible/activable tout du long.
-    const confirmerAjoutBtn = page.getByRole('button', { name: /^ajouter$/i });
-    await expect(confirmerAjoutBtn).toBeVisible();
-    await expect(confirmerAjoutBtn).toBeEnabled();
-    await confirmerAjoutBtn.click();
 
     await expect(page.getByText(nomCategorie).last()).toBeVisible({
         timeout: 5_000,
     });
-    await expect(page.locator('body')).toContainText('1700', {
-        timeout: 5_000,
-    });
+    // La ligne reste éditable inline (pas de promotion en <span> texte comme dans l'ancien
+    // workflow à confirmation) — la valeur ne vit que dans l'attribut `value` de l'input
+    // PrimeVue, jamais dans le textContent du body, d'où l'assertion sur l'input lui-même.
+    await expect(capaciteMaxInput).toHaveValue('1700', { timeout: 5_000 });
 
     // Étape 3 : soumission unique du véhicule (identité + capacité ensemble).
     await page
@@ -383,12 +384,19 @@ test('création — capacités maximales de chargement saisies dans le formulair
     });
 
     // Étape 5 : elle doit aussi être pré-remplie sur la fiche Modifier (persistance réelle).
+    // Là aussi CapacitesEditor.vue est en édition inline : la valeur ne vit que dans
+    // l'attribut value de l'input, jamais dans le textContent du body (cf. Étape 2).
     await page.goto(`${page.url()}/edit`);
     await page.waitForURL(/\/vehicules\/[a-z0-9]+\/edit$/, { timeout: 15_000 });
     await expect(page.getByText(nomCategorie).last()).toBeVisible({
         timeout: 10_000,
     });
-    await expect(page.locator('body')).toContainText('1700', {
-        timeout: 10_000,
-    });
+    // Scopé par label plutôt que `.last()` — cf. commentaire de l'étape 3 : le champ "Seuil
+    // de dette spécifique" est aussi rendu sur cette page et matcherait sinon en premier.
+    const capaciteMaxInputEdit = page
+        .locator('label')
+        .filter({ hasText: /^Capacité max$/ })
+        .locator('..')
+        .locator('input');
+    await expect(capaciteMaxInputEdit).toHaveValue('1700', { timeout: 10_000 });
 });

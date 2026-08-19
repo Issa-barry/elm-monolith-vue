@@ -90,6 +90,8 @@ interface VehiculeData {
     categorie_label: string;
     proprietaire_id: string | null;
     proprietaire_nom: string | null;
+    proprietaire_nom_affichage: string | null;
+    proprietaire_est_entreprise: boolean;
     proprietaire_telephone: string | null;
     equipe_id: string | null;
     equipe_membres: EquipeMembre[];
@@ -97,6 +99,8 @@ interface VehiculeData {
     livraison_logistique: boolean;
     photo_url: string | null;
     is_active: boolean;
+    derogation_impayes_autorisee: boolean;
+    type_seuil_derogation_impayes: number | null;
 }
 
 const props = defineProps<{
@@ -105,14 +109,8 @@ const props = defineProps<{
     equipe: EquipeData | null;
     proprietaires: ProprietaireOption[];
     default_proprietaire_id: string | null;
+    seuil_global_impayes: number;
 }>();
-
-// Propriété (tiers ou organisation) — indépendante des usages vente/logistique,
-// cf. EquipeStepperModal (détermine si un partage propriétaire est saisi). Source de vérité :
-// vehicule.categorie (jamais re-déduit de proprietaire_id, cf. CategorieVehicule côté backend).
-const proprietaireEstTiers = computed(
-    () => props.vehicule.categorie === 'partenaire',
-);
 
 const { can } = usePermissions();
 const page = usePage();
@@ -176,6 +174,29 @@ const tauxLivreurs = computed(() =>
 function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
 }
+
+/**
+ * Même règle que SolvabiliteService::seuilApplicableVehicule() (côté affichage uniquement,
+ * jamais utilisée pour bloquer une opération) : dérogation active ET type configuré → seuil du
+ * type, sinon seuil standard des paramètres de vente.
+ */
+const derogationEffective = computed(
+    () =>
+        props.vehicule.derogation_impayes_autorisee &&
+        props.vehicule.type_seuil_derogation_impayes !== null,
+);
+
+const seuilImpayesApplicable = computed(() =>
+    derogationEffective.value
+        ? (props.vehicule.type_seuil_derogation_impayes as number)
+        : props.seuil_global_impayes,
+);
+
+const derogationOrigine = computed(() =>
+    derogationEffective.value
+        ? `Type de véhicule : ${props.vehicule.type_label}`
+        : 'Paramètres de vente',
+);
 </script>
 
 <template>
@@ -484,12 +505,24 @@ function formatGNF(val: number): string {
                                     Propriétaire
                                 </p>
                                 <template v-if="vehicule.proprietaire_id">
-                                    <p
-                                        class="mt-1 text-sm font-medium"
-                                        data-testid="proprietaire-nom"
-                                    >
-                                        {{ vehicule.proprietaire_nom }}
-                                    </p>
+                                    <div class="mt-1 flex items-center gap-1.5">
+                                        <p
+                                            class="text-sm font-medium"
+                                            data-testid="proprietaire-nom"
+                                        >
+                                            {{
+                                                vehicule.proprietaire_nom_affichage ??
+                                                vehicule.proprietaire_nom
+                                            }}
+                                        </p>
+                                        <span
+                                            v-if="
+                                                vehicule.proprietaire_est_entreprise
+                                            "
+                                            class="inline-flex items-center rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
+                                            >Entreprise</span
+                                        >
+                                    </div>
                                     <p
                                         class="mt-0.5 font-mono text-xs text-muted-foreground"
                                         data-testid="proprietaire-telephone"
@@ -508,6 +541,25 @@ function formatGNF(val: number): string {
                                         Aucun propriétaire rattaché
                                     </p>
                                 </template>
+                            </div>
+                            <div class="rounded-lg border bg-background p-4">
+                                <p class="text-xs text-muted-foreground">
+                                    Dérogation impayés
+                                </p>
+                                <p class="mt-1 text-sm font-medium">
+                                    {{
+                                        vehicule.derogation_impayes_autorisee
+                                            ? 'Active'
+                                            : 'Inactive'
+                                    }}
+                                </p>
+                                <p class="mt-1.5 text-xs text-muted-foreground">
+                                    Seuil applicable :
+                                    {{ formatGNF(seuilImpayesApplicable) }}
+                                </p>
+                                <p class="text-xs text-muted-foreground">
+                                    Origine : {{ derogationOrigine }}
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -813,9 +865,11 @@ function formatGNF(val: number): string {
             id: vehicule.id,
             nom_vehicule: vehicule.nom_vehicule,
             immatriculation: vehicule.immatriculation,
-            proprietaire_est_tiers: proprietaireEstTiers,
             proprietaire_id: vehicule.proprietaire_id,
-            proprietaire_nom: vehicule.proprietaire_nom,
+            proprietaire_nom:
+                vehicule.proprietaire_nom_affichage ??
+                vehicule.proprietaire_nom,
+            proprietaire_est_entreprise: vehicule.proprietaire_est_entreprise,
         }"
         :equipe="equipe"
         :proprietaires="proprietaires"

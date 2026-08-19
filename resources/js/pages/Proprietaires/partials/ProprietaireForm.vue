@@ -6,6 +6,7 @@ import { paysOptionsByName } from '@/lib/pays';
 import { Save } from 'lucide-vue-next';
 import Dropdown from 'primevue/dropdown';
 import InputText from 'primevue/inputtext';
+import SelectButton from 'primevue/selectbutton';
 import { computed } from 'vue';
 
 const PAYS_OPTIONS = paysOptionsByName;
@@ -14,9 +15,16 @@ function flagUrl(code: string) {
     return `https://flagcdn.com/20x15/${code.toLowerCase()}.png`;
 }
 
+interface TypeOption {
+    value: string;
+    label: string;
+}
+
 interface FormData {
+    type: string;
     nom: string;
     prenom: string;
+    raison_sociale: string | null;
     surnom: string | null;
     email: string | null;
     telephone: string | null;
@@ -33,7 +41,10 @@ const props = defineProps<{
     errors: Partial<Record<keyof FormData, string>>;
     processing: boolean;
     backHref?: string;
+    typeOptions: TypeOption[];
 }>();
+
+const isEntreprise = computed(() => props.form.type === 'entreprise');
 
 const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
 
@@ -109,59 +120,150 @@ function onTelephoneInput(value: string | null | undefined) {
         class="space-y-4 sm:space-y-6"
         @submit.prevent="emit('submit')"
     >
+        <!-- Type -->
+        <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+            <h3
+                class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
+            >
+                Type de propriétaire
+            </h3>
+            <SelectButton
+                :model-value="form.type"
+                @update:model-value="
+                    (val) => val && $emit('update:form', { ...form, type: val })
+                "
+                :options="typeOptions"
+                option-label="label"
+                option-value="value"
+                :allow-empty="false"
+                data-testid="proprietaire-type-select"
+            />
+            <p v-if="errors.type" class="mt-1 text-xs text-destructive">
+                {{ errors.type }}
+            </p>
+        </div>
+
         <!-- Identité -->
         <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
                 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
             >
-                Identité
+                {{ isEntreprise ? 'Entreprise' : 'Identité' }}
             </h3>
             <div class="grid gap-5 sm:grid-cols-2">
-                <div>
-                    <Label for="prenom" class="mb-1.5 block"
-                        >Prénom <span class="text-destructive">*</span></Label
+                <div v-if="isEntreprise" class="sm:col-span-2">
+                    <Label for="raison_sociale" class="mb-1.5 block"
+                        >Raison sociale
+                        <span class="text-destructive">*</span></Label
                     >
                     <InputText
-                        id="prenom"
-                        :model-value="form.prenom"
+                        id="raison_sociale"
+                        data-testid="raison-sociale-input"
+                        :model-value="form.raison_sociale ?? ''"
                         @update:model-value="
                             $emit('update:form', {
                                 ...form,
-                                prenom: String($event ?? ''),
+                                raison_sociale: $event || null,
                             })
                         "
                         class="w-full"
-                        :class="{ 'p-invalid': errors.prenom }"
+                        :class="{ 'p-invalid': errors.raison_sociale }"
                     />
                     <p
-                        v-if="errors.prenom"
+                        v-if="errors.raison_sociale"
                         class="mt-1 text-xs text-destructive"
                     >
-                        {{ errors.prenom }}
+                        {{ errors.raison_sociale }}
                     </p>
                 </div>
-                <div>
-                    <Label for="nom" class="mb-1.5 block"
-                        >Nom <span class="text-destructive">*</span></Label
+                <template v-if="!isEntreprise">
+                    <div>
+                        <Label for="prenom" class="mb-1.5 block"
+                            >Prénom
+                            <span class="text-destructive">*</span></Label
+                        >
+                        <InputText
+                            id="prenom"
+                            :model-value="form.prenom"
+                            @update:model-value="
+                                $emit('update:form', {
+                                    ...form,
+                                    prenom: String($event ?? ''),
+                                })
+                            "
+                            class="w-full"
+                            :class="{ 'p-invalid': errors.prenom }"
+                        />
+                        <p
+                            v-if="errors.prenom"
+                            class="mt-1 text-xs text-destructive"
+                        >
+                            {{ errors.prenom }}
+                        </p>
+                    </div>
+                    <div>
+                        <Label for="nom" class="mb-1.5 block"
+                            >Nom <span class="text-destructive">*</span></Label
+                        >
+                        <InputText
+                            id="nom"
+                            :model-value="form.nom"
+                            @update:model-value="
+                                $emit('update:form', {
+                                    ...form,
+                                    nom: String($event ?? ''),
+                                })
+                            "
+                            class="w-full"
+                            :class="{ 'p-invalid': errors.nom }"
+                        />
+                        <p
+                            v-if="errors.nom"
+                            class="mt-1 text-xs text-destructive"
+                        >
+                            {{ errors.nom }}
+                        </p>
+                    </div>
+                </template>
+                <div v-if="isEntreprise" class="sm:col-span-2">
+                    <Label for="prenom" class="mb-1.5 block"
+                        >Nom du contact</Label
                     >
-                    <InputText
-                        id="nom"
-                        :model-value="form.nom"
-                        @update:model-value="
-                            $emit('update:form', {
-                                ...form,
-                                nom: String($event ?? ''),
-                            })
-                        "
-                        class="w-full"
-                        :class="{ 'p-invalid': errors.nom }"
-                    />
-                    <p v-if="errors.nom" class="mt-1 text-xs text-destructive">
-                        {{ errors.nom }}
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <InputText
+                            id="prenom"
+                            :model-value="form.prenom"
+                            placeholder="Prénom du contact"
+                            @update:model-value="
+                                $emit('update:form', {
+                                    ...form,
+                                    prenom: String($event ?? ''),
+                                })
+                            "
+                            class="w-full"
+                        />
+                        <InputText
+                            id="nom"
+                            :model-value="form.nom"
+                            placeholder="Nom du contact"
+                            @update:model-value="
+                                $emit('update:form', {
+                                    ...form,
+                                    nom: String($event ?? ''),
+                                })
+                            "
+                            class="w-full"
+                        />
+                    </div>
+                    <p class="mt-1 text-xs text-muted-foreground">
+                        Facultatif — personne à contacter au sein de
+                        l'entreprise.
                     </p>
                 </div>
                 <div class="sm:col-span-2">
-                    <Label for="surnom" class="mb-1.5 block">Surnom</Label>
+                    <Label for="surnom" class="mb-1.5 block">{{
+                        isEntreprise ? 'Nom commercial / enseigne' : 'Surnom'
+                    }}</Label>
                     <InputText
                         id="surnom"
                         :model-value="form.surnom ?? ''"

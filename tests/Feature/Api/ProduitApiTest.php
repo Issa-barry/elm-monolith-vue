@@ -294,6 +294,7 @@ class ProduitApiTest extends TestCase
             'produit_type_id' => $this->typeId('fabricable'),
             'statut' => 'actif',
             'prix_usine' => 5100,
+            'prix_usine_tricycle' => 5000,
             'prix_vente' => 6000,
         ])->assertCreated();
     }
@@ -307,6 +308,7 @@ class ProduitApiTest extends TestCase
             'produit_type_id' => $this->typeId('fabricable'),
             'statut' => 'actif',
             'prix_usine' => 18000,
+            'prix_usine_tricycle' => 10000,
             'prix_vente' => 18000,
         ])
             ->assertUnprocessable()
@@ -342,6 +344,7 @@ class ProduitApiTest extends TestCase
             'produit_type_id' => $this->typeId('fabricable'),
             'statut' => 'actif',
             'prix_usine' => 5100,
+            'prix_usine_tricycle' => 5000,
             'prix_vente' => 6000,
         ]);
 

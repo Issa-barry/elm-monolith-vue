@@ -241,9 +241,17 @@ class Parametre extends Model
         Cache::forget(self::cacheKey($orgId, self::CLE_VENTES_AUTORISER_SAISIE_DESSOUS_QTE_MAX));
     }
 
+    /**
+     * Défaut ACTIF (décision produit du 18/08/2026, cf. discussion contrôle des impayés) : une
+     * organisation qui n'a jamais explicitement configuré ce paramètre veut, par construction,
+     * la règle stricte (aucune dette tolérée par défaut, cf. getVentesSeuilImpayesMax() = 0).
+     * N'affecte jamais une organisation ayant déjà une ligne `parametres` explicite (set() écrit
+     * une ligne réelle, ce fallback n'est lu que si aucune ligne n'existe) — donc aucune
+     * réactivation arbitraire d'un contrôle déjà désactivé volontairement.
+     */
     public static function isVentesControleImpayesActif(string $orgId): bool
     {
-        return (bool) self::get($orgId, self::CLE_VENTES_CONTROLE_IMPAYES_ACTIF, false);
+        return (bool) self::get($orgId, self::CLE_VENTES_CONTROLE_IMPAYES_ACTIF, true);
     }
 
     public static function getVentesSeuilImpayesMax(string $orgId): int
@@ -279,16 +287,16 @@ class Parametre extends Model
     // ── Déclencheurs de génération des commissions ──────────────────────────────
 
     /**
-     * Défaut CHARGEMENT_VALIDE : comportement historique de CommissionGenerator
-     * (commission créée dès la validation du chargement, cf. CommandeVenteService).
-     * Ne pas changer cette valeur par défaut sans mettre à jour les organisations
-     * existantes en conséquence — cf. CommissionTriggerService.
+     * Défaut FACTURE_ENCAISSEE (décision produit du 18/08/2026) — n'affecte que les
+     * organisations n'ayant jamais explicitement enregistré ce paramètre (cf. set() ci-dessous,
+     * qui écrit une ligne réelle en base) : une organisation ayant déjà choisi CHARGEMENT_VALIDE
+     * conserve son choix, jamais basculée arbitrairement par ce changement de fallback.
      */
     public static function getDeclencheurCommissionVente(string $orgId): DeclencheurCommissionVente
     {
-        $valeur = self::get($orgId, self::CLE_DECLENCHEUR_COMMISSION_VENTE, DeclencheurCommissionVente::CHARGEMENT_VALIDE->value);
+        $valeur = self::get($orgId, self::CLE_DECLENCHEUR_COMMISSION_VENTE, DeclencheurCommissionVente::FACTURE_ENCAISSEE->value);
 
-        return DeclencheurCommissionVente::tryFrom($valeur) ?? DeclencheurCommissionVente::CHARGEMENT_VALIDE;
+        return DeclencheurCommissionVente::tryFrom($valeur) ?? DeclencheurCommissionVente::FACTURE_ENCAISSEE;
     }
 
     public static function setDeclencheurCommissionVente(string $orgId, DeclencheurCommissionVente $declencheur): void

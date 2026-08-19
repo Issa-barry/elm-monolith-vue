@@ -25,12 +25,16 @@ use Illuminate\Validation\ValidationException;
 /**
  * Point d'entrée UNIQUE pour l'installation initiale de l'application — utilisé aussi bien par
  * `php artisan app:install` (InstallApp) que par l'assistant web (InstallWizardController).
- * Toute règle métier de l'installation (organisation, super_admin, catalogue de départ, marquage
- * installed_at) vit ici et nulle part ailleurs, pour que CLI et web ne puissent jamais diverger.
+ * Toute règle métier de l'installation (organisation, super_admin, catalogue de départ, premier
+ * site, marquage installed_at) vit ici et nulle part ailleurs, pour que CLI et web ne puissent
+ * jamais diverger.
  *
- * Le premier site de l'organisation N'EST PLUS créé ici (cf. creerPremierSite()) : install()
- * produit une organisation sans aucun site, complétée ensuite via l'onboarding post-connexion
- * (OnboardingSiteController, gardé par le middleware EnsureOrganizationHasSite).
+ * Le premier site de l'organisation est désormais créé DANS install() (cf. creerSite()), pour que
+ * l'installation laisse l'entreprise réellement prête à l'emploi — plus d'état intermédiaire
+ * "organisation installée mais sans site exploitable". OnboardingSiteController/creerPremierSite()
+ * restent un filet de sécurité pour les organisations historiques déjà sans site (avant ce
+ * changement) ou toute anomalie de migration, gardé par le middleware EnsureOrganizationHasSite,
+ * mais une installation neuve n'y passe plus jamais.
  */
 class InstallationService
 {
@@ -150,6 +154,19 @@ class InstallationService
         return $domaine;
     }
 
+    private function resolveSiteType(?string $value): SiteType
+    {
+        $type = $value !== null ? SiteType::tryFrom($value) : null;
+
+        if ($type === null) {
+            throw ValidationException::withMessages([
+                'site.type' => 'Le type de site est obligatoire.',
+            ]);
+        }
+
+        return $type;
+    }
+
     private function generateUniqueSlug(string $nom): string
     {
         $base = Str::slug($nom) ?: 'organisation';
@@ -217,15 +234,31 @@ class InstallationService
      *
      * @param  array{nom: string, domaine: string}  $organisation
      * @param  array{prenom: string, nom: string, telephone: string, email: ?string, password: string, password_confirmation?: string}  $admin
+     * @param  array{type: string, ville: string, quartier: string}  $site
      *
      * @throws ValidationException
      */
-    public function install(array $organisation, array $admin): Organization
+    public function install(array $organisation, array $admin, array $site): Organization
     {
-        return DB::transaction(function () use ($organisation, $admin) {
+        return DB::transaction(function () use ($organisation, $admin, $site) {
             RolesAndPermissionsSeeder::seedRolesEtPermissions();
 
             $domaine = $this->resolveDomaine($organisation['domaine'] ?? null);
+
+            // Validé tôt, avant toute écriture, comme le reste des champs obligatoires de cette
+            // méthode (téléphone, mot de passe...) — cf. docblock de classe : le premier site fait
+            // désormais partie intégrante de l'installation, jamais un état "à compléter plus tard".
+            $siteType = $this->resolveSiteType($site['type'] ?? null);
+            $siteVille = trim((string) ($site['ville'] ?? ''));
+            $siteQuartier = trim((string) ($site['quartier'] ?? ''));
+
+            if ($siteVille === '') {
+                throw ValidationException::withMessages(['site.ville' => 'La ville est obligatoire.']);
+            }
+            if ($siteQuartier === '') {
+                throw ValidationException::withMessages(['site.quartier' => 'Le quartier est obligatoire.']);
+            }
+
             $org = $this->resolveOrganization($organisation['nom'], $domaine);
 
             if (! $this->isSaas() && Organization::where('id', '!=', $org->id)->exists()) {
@@ -326,6 +359,13 @@ class InstallationService
             $user->syncRoles(['super_admin']);
             app(MatriculeService::class)->assignForUser($user);
 
+            // Premier site de l'organisation — téléphone et pays hérités du Super Admin qui vient
+            // d'être créé (mêmes informations déjà saisies/vérifiées ci-dessus), jamais redemandés.
+            // Rattache aussi le Super Admin à ce site comme site par défaut (cf. creerSite()) :
+            // sans ça, `default_site` resterait vide côté frontend (HandleInertiaRequests) alors
+            // qu'un site vient d'être créé, et require.site le bloquerait dès sa première connexion.
+            $this->creerSite($user, $siteType, $siteVille, $siteQuartier);
+
             // Propriétaire interne par défaut de l'organisation (véhicules "interne" et
             // commissions propriétaire associées, cf. Organization::proprietaireInterne()) —
             // réutilise la Personne du super_admin qui vient d'être saisie une seule fois,
@@ -370,40 +410,45 @@ class InstallationService
     }
 
     /**
-     * Crée le premier site d'une organisation, depuis l'onboarding post-connexion
-     * (OnboardingSiteController) — le site n'est plus créé pendant install() (cf. docblock de
-     * classe). Attache l'utilisateur (le super_admin qui vient de s'installer, dans l'immense
-     * majorité des cas) à ce site comme site par défaut, même pattern que
-     * UserController::store()/UserInvitationService::accepter() — sans ça, `default_site` resterait
-     * vide côté frontend (cf. HandleInertiaRequests::defaultSite()) alors qu'un site vient
-     * d'être créé.
-     *
-     * Onboarding volontairement minimal (type, ville, quartier) : tout ce qui peut être déduit
-     * ne se redemande pas — nom généré par SiteNamingService (cf. son docblock), téléphone et
-     * pays hérités du Super Admin qui installe (mêmes informations déjà saisies/vérifiées
-     * pendant install(), pas de raison de les redemander).
+     * Filet de sécurité pour une organisation historique qui n'a encore aucun site (créée avant
+     * que le premier site ne rejoigne install(), cf. docblock de classe) — utilisé par
+     * OnboardingSiteController, gardé par le middleware EnsureOrganizationHasSite. Une installation
+     * neuve n'y passe plus jamais.
      *
      * @param  array{type: string, ville: string, quartier: string}  $data
      */
     public function creerPremierSite(User $user, array $data): Site
     {
-        return DB::transaction(function () use ($user, $data) {
-            $type = SiteType::from($data['type']);
-            $quartier = trim($data['quartier']);
+        return DB::transaction(fn () => $this->creerSite(
+            $user,
+            SiteType::from($data['type']),
+            trim($data['ville']),
+            trim($data['quartier']),
+        ));
+    }
 
-            $site = Site::create([
-                'organization_id' => $user->organization_id,
-                'nom' => app(SiteNamingService::class)->generateName($type, $quartier),
-                'type' => $type->value,
-                'ville' => trim($data['ville']),
-                'quartier' => $quartier,
-                'telephone' => $user->telephone,
-                'pays' => $user->pays,
-            ]);
+    /**
+     * Crée un site et l'attache à $user comme site par défaut — même pattern que
+     * UserController::store()/UserInvitationService::accepter() — sans ça, `default_site` resterait
+     * vide côté frontend (cf. HandleInertiaRequests::defaultSite()) alors qu'un site vient d'être
+     * créé. Nom généré automatiquement (cf. SiteNamingService), téléphone et pays hérités de $user
+     * (jamais redemandés : déjà connus à ce stade, que l'appelant soit install() ou
+     * creerPremierSite()).
+     */
+    private function creerSite(User $user, SiteType $type, string $ville, string $quartier): Site
+    {
+        $site = Site::create([
+            'organization_id' => $user->organization_id,
+            'nom' => app(SiteNamingService::class)->generateName($type, $quartier),
+            'type' => $type->value,
+            'ville' => $ville,
+            'quartier' => $quartier,
+            'telephone' => $user->telephone,
+            'pays' => $user->pays,
+        ]);
 
-            $user->sites()->syncWithoutDetaching([$site->id => ['role' => 'employe', 'is_default' => true]]);
+        $user->sites()->syncWithoutDetaching([$site->id => ['role' => 'employe', 'is_default' => true]]);
 
-            return $site;
-        });
+        return $site;
     }
 }

@@ -40,6 +40,10 @@ interface FactureDetail {
 }
 
 interface SolvabiliteResult {
+    // Cible réellement contrôlée par le backend (SolvabiliteService) — 'vehicule' dès qu'un
+    // véhicule est sélectionné, 'client' seulement en repli (aucun véhicule), cf.
+    // commandeBloquee ci-dessous qui doit refléter exactement cette même priorité.
+    cible: 'vehicule' | 'client' | 'aucun';
     has_debt: boolean;
     status: 'aucun' | 'partiel' | 'impaye';
     unpaid_invoices_count: number;
@@ -49,6 +53,7 @@ interface SolvabiliteResult {
     last_invoice_date: string | null;
     controle_actif: boolean;
     seuil_impayes: number;
+    montant_disponible: number;
     blocked: boolean;
     depassement: number;
     factures: FactureDetail[];
@@ -177,19 +182,39 @@ function onVehiculeClear() {
     recomputeAllTotals();
 }
 
-// Pré-remplit la quantité de l'unique ligne à la capacité du véhicule — seulement quand ce
-// véhicule n'a qu'un seul groupe de capacité configuré (sinon ambigu : lequel choisir ?).
+// Pré-remplit la quantité de l'unique ligne à la capacité du véhicule POUR LA CATÉGORIE DU
+// PRODUIT déjà choisi sur cette ligne — seulement s'il n'y a qu'une seule ligne avec un produit
+// sélectionné (sinon ambigu : quelle ligne recevrait le plafond ?). Cible la capacité de la
+// catégorie du produit, pas "la seule capacité du véhicule au total" (ancienne condition, trop
+// fragile dès qu'un véhicule a plusieurs catégories plafonnées, ex: Sachet ET Bouteille — le
+// produit de cette ligne n'appartenant qu'à l'une des deux, l'autre ne doit pas empêcher le
+// pré-remplissage).
 function applyVehiculeCapacityOnSingleLine(vehicule: VehiculeOption | null) {
-    if (!vehicule || vehicule.capacites.length !== 1) {
+    if (!vehicule || form.lignes.length !== 1) {
         return;
     }
 
-    if (form.lignes.length !== 1) {
+    const ligne = form.lignes[0];
+    if (ligne.produit_id === null) {
         return;
     }
 
-    form.lignes[0].qte = vehicule.capacites[0].capacite_max;
-    form.lignes[0].total = computeLigneTotal(form.lignes[0]);
+    const categorieId = props.produits.find(
+        (p) => p.id === ligne.produit_id,
+    )?.categorie_id;
+    if (categorieId === null || categorieId === undefined) {
+        return;
+    }
+
+    const capacite = vehicule.capacites.find(
+        (c) => c.categorie_id === categorieId,
+    );
+    if (!capacite) {
+        return;
+    }
+
+    ligne.qte = capacite.capacite_max;
+    ligne.total = computeLigneTotal(ligne);
 }
 
 // ── Mode de tarification (montant à encaisser par l'usine) & éligibilité aux
@@ -503,10 +528,14 @@ onMounted(() => {
 const isCommandeLogistique = computed(() => form.vehicule_id !== null);
 
 // ── Blocage impayés ───────────────────────────────────────────────────────────
-const commandeBloquee = computed(
-    () =>
-        (vehiculeSolvabilite.value?.blocked ?? false) ||
-        (clientSolvabilite.value?.blocked ?? false),
+// Même règle que SolvabiliteService côté backend (véhicule prioritaire, client en repli
+// uniquement si aucun véhicule n'est sélectionné) — jamais un OU des deux indépendamment, sinon
+// le frontend bloquerait sur une dette client que le backend ignore complètement dès qu'un
+// véhicule est choisi (incohérence corrigée le 18/08/2026).
+const commandeBloquee = computed(() =>
+    form.vehicule_id
+        ? (vehiculeSolvabilite.value?.blocked ?? false)
+        : (clientSolvabilite.value?.blocked ?? false),
 );
 
 // ── Validation locale ────────────────────────────────────────────────────────
@@ -1027,9 +1056,17 @@ function confirmerEtCreer() {
                                 />
                             </div>
 
-                            <!-- Solvabilité client -->
+                            <!-- Solvabilité client — n'est le facteur de blocage QUE si aucun
+                            véhicule n'est sélectionné (le véhicule est alors prioritaire, cf.
+                            SolvabiliteService et commandeBloquee ci-dessus) : ces 4 panneaux
+                            restent tous masqués dès qu'un véhicule est choisi, même si un client
+                            est également renseigné, pour ne jamais laisser croire que la dette
+                            du client est prise en compte alors qu'elle ne l'est pas. -->
                             <div
-                                v-if="clientSolvabiliteLoading"
+                                v-if="
+                                    clientSolvabiliteLoading &&
+                                    !form.vehicule_id
+                                "
                                 class="mt-3 flex items-center gap-2 text-xs text-muted-foreground"
                             >
                                 <svg
@@ -1057,6 +1094,7 @@ function confirmerEtCreer() {
                             <!-- ✅ Aucun impayé -->
                             <p
                                 v-else-if="
+                                    !form.vehicule_id &&
                                     clientSolvabilite &&
                                     !clientSolvabilite.has_debt
                                 "
@@ -1069,6 +1107,7 @@ function confirmerEtCreer() {
                             <!-- ⚠ Dettes (dans les limites) -->
                             <div
                                 v-else-if="
+                                    !form.vehicule_id &&
                                     clientSolvabilite &&
                                     clientSolvabilite.has_debt &&
                                     !clientSolvabilite.blocked
@@ -1212,7 +1251,10 @@ function confirmerEtCreer() {
 
                             <!-- 🚫 Commande bloquée -->
                             <div
-                                v-else-if="clientSolvabilite?.blocked"
+                                v-else-if="
+                                    !form.vehicule_id &&
+                                    clientSolvabilite?.blocked
+                                "
                                 class="mt-3 rounded-xl border border-red-300 bg-red-100 p-3 dark:border-red-700 dark:bg-red-950/50"
                             >
                                 <div
@@ -1900,7 +1942,8 @@ function confirmerEtCreer() {
             <!-- Alertes -->
             <div
                 v-if="
-                    vehiculeSolvabilite?.has_debt || clientSolvabilite?.has_debt
+                    vehiculeSolvabilite?.has_debt ||
+                    (!form.vehicule_id && clientSolvabilite?.has_debt)
                 "
                 class="space-y-2 border-b border-border bg-amber-50 px-5 py-3 dark:bg-amber-950/20"
             >
@@ -1922,7 +1965,7 @@ function confirmerEtCreer() {
                     >
                 </div>
                 <div
-                    v-if="clientSolvabilite?.has_debt"
+                    v-if="!form.vehicule_id && clientSolvabilite?.has_debt"
                     class="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-300"
                 >
                     <span>⚠</span>

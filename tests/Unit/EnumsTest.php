@@ -263,8 +263,10 @@ class EnumsTest extends TestCase
         $service = new ProduitType(['prix_achat_requis' => false, 'prix_usine_requis' => false, 'prix_vente_requis' => false]);
         $this->assertSame([], $service->requiredPrices());
 
+        // prix_usine_tricycle dérivé de prix_usine_requis : les deux tarifs usine sont deux
+        // décisions tarifaires distinctes, jamais l'une déduite de l'autre.
         $fabricable = new ProduitType(['prix_achat_requis' => false, 'prix_usine_requis' => true, 'prix_vente_requis' => true]);
-        $this->assertSame(['prix_usine', 'prix_vente'], $fabricable->requiredPrices());
+        $this->assertSame(['prix_usine', 'prix_usine_tricycle', 'prix_vente'], $fabricable->requiredPrices());
 
         $achatVente = new ProduitType(['prix_achat_requis' => true, 'prix_usine_requis' => false, 'prix_vente_requis' => true]);
         $this->assertSame(['prix_achat', 'prix_vente'], $achatVente->requiredPrices());

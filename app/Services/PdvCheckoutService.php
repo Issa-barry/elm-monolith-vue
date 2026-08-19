@@ -19,7 +19,10 @@ use Illuminate\Validation\ValidationException;
 
 class PdvCheckoutService
 {
-    public function __construct(private readonly VehiculeCapaciteService $vehiculeCapaciteService) {}
+    public function __construct(
+        private readonly VehiculeCapaciteService $vehiculeCapaciteService,
+        private readonly SolvabiliteService $solvabiliteService,
+    ) {}
 
     /**
      * Enregistre une vente PDV directement en EN_COURS avec facture.
@@ -33,6 +36,15 @@ class PdvCheckoutService
         if ($data['mode'] === 'Livreur' && ! empty($data['vehicule_id'])) {
             $this->validateCapacite($data);
         }
+
+        // Même règle de solvabilité que le back-office (CommandeVenteController::store()), sur
+        // le même service — le PDV créait auparavant sa facture sans AUCUN contrôle d'impayés,
+        // quel que soit le paramétrage de l'organisation (trou identifié le 18/08/2026).
+        $this->solvabiliteService->enforcerOuEchouer(
+            $user->organization_id,
+            $data['vehicule_id'] ?? null,
+            $data['client_id'] ?? null,
+        );
 
         return DB::transaction(function () use ($data, $user, $siteId) {
             $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null);

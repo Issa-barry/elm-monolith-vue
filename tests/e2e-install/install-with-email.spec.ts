@@ -9,7 +9,6 @@
 import { expect, test } from '@playwright/test';
 import {
     completeInstallWizard,
-    completeOnboarding,
     fillOtpCode,
     fillStep2Form,
     loginAfterInstall,
@@ -117,7 +116,6 @@ test('installation avec email : code envoyé, vérifié, puis parcours complet j
 }) => {
     await completeInstallWizard(page, scenario);
     await loginAfterInstall(page, scenario);
-    await completeOnboarding(page, scenario);
 
     await expect(page.locator('body')).toBeVisible();
 });

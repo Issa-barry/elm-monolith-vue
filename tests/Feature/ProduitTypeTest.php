@@ -52,7 +52,9 @@ class ProduitTypeTest extends TestCase
 
         $fabricable = ProduitType::where('organization_id', $this->org->id)->where('code', 'fabricable')->firstOrFail();
         $this->assertTrue($fabricable->gere_stock);
-        $this->assertSame(['prix_usine', 'prix_vente'], $fabricable->requiredPrices());
+        // prix_usine_tricycle dérivé de prix_usine_requis (cf. ProduitType::requiredPrices()) :
+        // les deux tarifs usine sont deux décisions distinctes, jamais l'une déduite de l'autre.
+        $this->assertSame(['prix_usine', 'prix_usine_tricycle', 'prix_vente'], $fabricable->requiredPrices());
         $this->assertSame('prix_usine', $fabricable->champPrixReference());
     }
 

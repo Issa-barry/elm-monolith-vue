@@ -18,6 +18,7 @@ interface Option {
 interface TypeOption {
     value: string;
     label: string;
+    seuil_derogation_impayes: number | null;
 }
 
 interface SiteOption {
@@ -42,6 +43,7 @@ interface VehiculeData {
     photo_url: string | null;
     is_active: boolean;
     equipe_id: number | null;
+    derogation_impayes_autorisee: boolean;
 }
 
 const props = defineProps<{
@@ -54,6 +56,7 @@ const props = defineProps<{
     can_change_site: boolean;
     default_proprietaire_id: string | null;
     capacites: CapaciteRow[];
+    seuil_global_impayes: number;
 }>();
 const page = usePage();
 const flashSuccess = computed(
@@ -80,6 +83,7 @@ const form = useForm({
     photo: null as File | null,
     is_active: props.vehicule.is_active,
     capacites: [...props.capacites] as CapaciteRow[],
+    derogation_impayes_autorisee: props.vehicule.derogation_impayes_autorisee,
 });
 
 const canSubmit = computed(() => {
@@ -168,6 +172,7 @@ function submit() {
                 :can-change-site="can_change_site"
                 :show-status-field="!!vehicule.equipe_id"
                 :default-proprietaire-id="default_proprietaire_id"
+                :seuil-global-impayes="seuil_global_impayes"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />
