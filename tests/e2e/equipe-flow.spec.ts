@@ -218,10 +218,13 @@ test('créer une équipe depuis la fiche véhicule avec stepper', async ({
     await page.keyboard.type('200');
     await page.keyboard.press('Tab');
 
-    // Saisir le montant du membre dans le tableau de partage
+    // Saisir le montant du membre dans le tableau de partage — ciblé par son libellé
+    // (contient "Mamadou"), pas par position : une ligne "Propriétaire" peut désormais
+    // précéder la ligne membre dès que le véhicule a un propriétaire assigné (cf.
+    // EquipeStepperModal::hasProprietaire, plus jamais conditionné à la catégorie).
     const membreMontantInput = dialog
         .locator('tbody tr')
-        .first()
+        .filter({ hasText: /Mamadou/i })
         .locator('td')
         .nth(1)
         .locator('input');
@@ -257,6 +260,80 @@ test('créer une équipe depuis la fiche véhicule avec stepper', async ({
     await expect(page.getByText(/Mamadou/i).first()).toBeVisible({
         timeout: 10_000,
     });
+});
+
+test('étape 2 partage : saisir un montant complète automatiquement l\'unique bénéficiaire restant', async ({
+    page,
+}) => {
+    await openStepperModal(page);
+    const dialog = page
+        .locator('[role="dialog"]')
+        .filter({ hasText: /équipe/i });
+
+    // Ligne 0 auto-ajoutée : un seul chauffeur, pour maximiser les chances d'avoir
+    // exactement 2 bénéficiaires au total à l'étape Partage (chauffeur + propriétaire
+    // si le véhicule en a un, sinon chauffeur seul).
+    await selectOptionFromCombobox(
+        page,
+        page.getByTestId('role-dropdown-0'),
+        /chauffeur/i,
+    );
+    await page.getByTestId('nom-complet-0').fill('Auto Complete');
+    const phone0 = page.getByTestId('telephone-0');
+    await phone0.click();
+    await phone0.fill('620333444');
+
+    await dialog.getByRole('button', { name: /suivant/i }).click();
+    await expect(dialog.getByText(/partage/i).first()).toBeVisible({
+        timeout: 5_000,
+    });
+
+    const commissionInput = dialog.locator('input#step-commission');
+    await commissionInput.click();
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type('950');
+    await page.keyboard.press('Tab');
+
+    const rows = dialog.locator('tbody tr');
+    const rowCount = await rows.count();
+
+    if (rowCount === 2) {
+        // Exactement 2 bénéficiaires (propriétaire + chauffeur, ou chauffeur seul en 2
+        // lignes le cas échéant) : saisir le montant de la ligne "Auto Complete" doit
+        // compléter automatiquement l'autre ligne avec le reliquat (950 - saisi).
+        const chauffeurMontant = rows
+            .filter({ hasText: /Auto Complete/i })
+            .locator('td')
+            .nth(1)
+            .locator('input');
+        await chauffeurMontant.click();
+        await page.keyboard.press('Control+a');
+        await page.keyboard.type('650');
+        await page.keyboard.press('Tab');
+
+        const autreMontant = rows
+            .filter({ hasNotText: /Auto Complete/i })
+            .locator('td')
+            .nth(1)
+            .locator('input');
+        await expect(autreMontant).toHaveValue('300', { timeout: 5_000 });
+        await expect(dialog.getByText('✓ 100 %')).toBeVisible({
+            timeout: 5_000,
+        });
+    } else {
+        // 3+ bénéficiaires : aucune complétion automatique tant que 2+ lignes restent
+        // non saisies (répartition ambiguë) — cf. EquipeStepperModal::recomputeAutoFill.
+        const chauffeurMontant = rows
+            .filter({ hasText: /Auto Complete/i })
+            .locator('td')
+            .nth(1)
+            .locator('input');
+        await chauffeurMontant.click();
+        await page.keyboard.press('Control+a');
+        await page.keyboard.type('650');
+        await page.keyboard.press('Tab');
+        await expect(dialog.getByText('✓ 100 %')).not.toBeVisible();
+    }
 });
 
 test('equipe index ne propose pas de bouton création directe', async ({

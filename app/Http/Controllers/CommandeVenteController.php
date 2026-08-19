@@ -10,12 +10,10 @@ use App\Enums\MotifAnnulation;
 use App\Enums\ProduitStatut;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutCommission;
-use App\Enums\StatutFactureVente;
 use App\Jobs\NotifierLivreursCommandeVenteJob;
 use App\Models\AuditLog;
 use App\Models\Client;
 use App\Models\CommandeVente;
-use App\Models\FactureVente;
 use App\Models\Parametre;
 use App\Models\Produit;
 use App\Models\ProduitVariante;
@@ -25,6 +23,7 @@ use App\Services\AuditLogService;
 use App\Services\CommandeVenteActiviteService;
 use App\Services\CommandeVenteService;
 use App\Services\PrixUsineResolver;
+use App\Services\SolvabiliteService;
 use App\Services\VehiculeCapaciteService;
 use App\Services\VehiculeCommandeContextResolver;
 use Illuminate\Http\JsonResponse;
@@ -48,10 +47,16 @@ class CommandeVenteController extends Controller
     public function __construct(
         private readonly AuditLogService $auditService,
         private readonly VehiculeCapaciteService $vehiculeCapaciteService,
+        private readonly SolvabiliteService $solvabiliteService,
     ) {}
 
     // ── Check solvabilité ─────────────────────────────────────────────────────
 
+    /**
+     * Simple miroir de lecture de SolvabiliteService::evaluer() — jamais de logique de calcul
+     * ici, jamais de blocage : ce n'est qu'un aperçu pour guider l'utilisateur AVANT
+     * soumission. Le vrai gate est enforceImpayesBlocking() ci-dessous, sur le même service.
+     */
     public function checkSolvabilite(Request $request): JsonResponse
     {
         $request->validate([
@@ -60,82 +65,12 @@ class CommandeVenteController extends Controller
         ]);
 
         $orgId = auth()->user()->organization_id;
-        $vehiculeId = $request->input('vehicule_id');
-        $clientId = $request->input('client_id');
 
-        $controleActif = Parametre::isVentesControleImpayesActif($orgId);
-        $seuilMax = Parametre::getVentesSeuilImpayesMax($orgId);
-
-        if (! $vehiculeId && ! $clientId) {
-            return response()->json($this->emptySolvabilite($controleActif, $seuilMax));
-        }
-
-        $query = FactureVente::where('organization_id', $orgId)
-            ->whereIn('statut_facture', [StatutFactureVente::IMPAYEE->value, StatutFactureVente::PARTIEL->value])
-            ->with('encaissements')
-            ->orderByDesc('created_at');
-
-        if ($vehiculeId) {
-            $query->where('vehicule_id', $vehiculeId);
-        } else {
-            $query->whereHas('commande', fn ($q) => $q->where('client_id', $clientId));
-        }
-
-        $factures = $query->get();
-
-        if ($factures->isEmpty()) {
-            return response()->json($this->emptySolvabilite($controleActif, $seuilMax));
-        }
-
-        $totalRemaining = (int) round($factures->sum(fn ($f) => $f->montant_restant));
-        $totalEncaisse = (int) round($factures->sum(fn ($f) => $f->montant_encaisse));
-        $hasImpayee = $factures->contains(fn ($f) => $f->statut_facture === StatutFactureVente::IMPAYEE);
-        $derniere = $factures->first();
-
-        $blocked = $controleActif && $totalRemaining > $seuilMax;
-        $depassement = $blocked ? $totalRemaining - $seuilMax : 0;
-
-        return response()->json([
-            'has_debt' => true,
-            'status' => $hasImpayee ? 'impaye' : 'partiel',
-            'unpaid_invoices_count' => $factures->count(),
-            'total_remaining' => $totalRemaining,
-            'total_encaisse' => $totalEncaisse,
-            'last_invoice_reference' => $derniere->reference,
-            'last_invoice_date' => $derniere->created_at?->format('Y-m-d'),
-            'controle_actif' => $controleActif,
-            'seuil_impayes' => $seuilMax,
-            'blocked' => $blocked,
-            'depassement' => $depassement,
-            'factures' => $factures->map(fn ($f) => [
-                'commande_id' => $f->commande_vente_id,
-                'reference' => $f->reference,
-                'date' => $f->created_at?->format('Y-m-d'),
-                'montant' => (int) round((float) $f->montant_net),
-                'encaisse' => (int) round($f->montant_encaisse),
-                'restant' => (int) round($f->montant_restant),
-                'statut' => $f->statut_facture->value,
-                'statut_label' => $f->statut_facture->label(),
-            ])->values(),
-        ]);
-    }
-
-    private function emptySolvabilite(bool $controleActif = false, int $seuilMax = 0): array
-    {
-        return [
-            'has_debt' => false,
-            'status' => 'aucun',
-            'unpaid_invoices_count' => 0,
-            'total_remaining' => 0,
-            'total_encaisse' => 0,
-            'last_invoice_reference' => null,
-            'last_invoice_date' => null,
-            'controle_actif' => $controleActif,
-            'seuil_impayes' => $seuilMax,
-            'blocked' => false,
-            'depassement' => 0,
-            'factures' => [],
-        ];
+        return response()->json($this->solvabiliteService->evaluer(
+            $orgId,
+            $request->input('vehicule_id'),
+            $request->input('client_id'),
+        ));
     }
 
     // ── Index ─────────────────────────────────────────────────────────────────
@@ -753,33 +688,18 @@ class CommandeVenteController extends Controller
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
+    /**
+     * Seul appelant de SolvabiliteService::enforcerOuEchouer() côté back-office — voir
+     * PdvCheckoutService::checkout() pour l'appelant équivalent côté PDV, sur exactement le
+     * même service (jamais de calcul dupliqué).
+     */
     private function enforceImpayesBlocking(array $data, string $orgId): void
     {
-        if (! Parametre::isVentesControleImpayesActif($orgId)) {
-            return;
-        }
-
-        $seuilMax = Parametre::getVentesSeuilImpayesMax($orgId);
-        $vehiculeId = $data['vehicule_id'] ?? null;
-        $clientId = $data['client_id'] ?? null;
-
-        $query = FactureVente::where('organization_id', $orgId)
-            ->whereIn('statut_facture', [StatutFactureVente::IMPAYEE->value, StatutFactureVente::PARTIEL->value])
-            ->with('encaissements');
-
-        if ($vehiculeId) {
-            $query->where('vehicule_id', $vehiculeId);
-        } else {
-            $query->whereHas('commande', fn ($q) => $q->where('client_id', $clientId));
-        }
-
-        $totalRemaining = (int) round($query->get()->sum(fn ($f) => $f->montant_restant));
-
-        if ($totalRemaining > $seuilMax) {
-            throw ValidationException::withMessages([
-                'impayes' => 'Creation bloquee : le montant des impayes ('.number_format($totalRemaining, 0, ',', ' ').' GNF) depasse le seuil autorise ('.number_format($seuilMax, 0, ',', ' ').' GNF).',
-            ]);
-        }
+        $this->solvabiliteService->enforcerOuEchouer(
+            $orgId,
+            $data['vehicule_id'] ?? null,
+            $data['client_id'] ?? null,
+        );
     }
 
     private function getCommissionStatutGlobal(CommandeVente $commande): ?array

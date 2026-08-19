@@ -64,10 +64,8 @@ jobs:
   e2e:
     name: E2E
     runs-on: ubuntu-latest
-    # Désactivé temporairement (2026-08-18) pour débloquer le merge de la PR #384 —
-    # réactivation prévue le 2026-08-19. Retirer ce `if: false` dès que fait.
-    if: false
-    # Réactivé le 16/08/2026. Historique : désactivé le 2026-08-14 pour débloquer un merge
+    # Réactivé le 18/08/2026 (après désactivation temporaire pour la PR #384).
+    # Historique : désactivé le 2026-08-14 pour débloquer un merge
     # urgent (échec proposition-vehicule-flow.spec.ts + échec login E2E sur base e2e fraîche).
     # Cause du login identifiée et corrigée le 16/08/2026 : les actions générées par
     # Wayfinder (resources/js/actions/**) embarquent une URL absolue basée sur APP_URL,

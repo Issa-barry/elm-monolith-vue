@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Settings;
 
+use App\Enums\DeclencheurCommissionVente;
 use App\Models\Organization;
 use App\Models\Parametre;
 use App\Models\User;
@@ -158,19 +159,50 @@ class VenteParametrageTest extends TestCase
             ->assertSessionHasErrors('autoriser_saisie_dessous_qte_max');
     }
 
-    public function test_edit_exposes_declencheurs_commission_par_defaut(): void
+    /**
+     * Aucun Parametre::set... appelé : ces valeurs sont les défauts d'une organisation neuve
+     * (décision produit du 18/08/2026) — commission vente à l'encaissement de la facture,
+     * commission logistique à la réception (comportement historique, inchangé), contrôle des
+     * impayés actif avec seuil 0.
+     */
+    public function test_edit_exposes_les_nouveaux_defauts_dune_organisation_neuve(): void
     {
         $this->createRoles();
         $user = $this->createAuthorizedUser('parametres.read');
 
-        // Aucun Parametre::set... appelé : défauts alignés sur le comportement historique.
+        $this->actingAs($user)
+            ->get(route('settings.ventes.edit'))
+            ->assertStatus(200)
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('settings/Ventes')
+                ->where('declencheur_commission_vente', 'facture_encaissee')
+                ->where('declencheur_commission_logistique', 'reception_effectuee')
+                ->where('controle_impayes_actif', true)
+                ->where('seuil_impayes_max', 0)
+            );
+    }
+
+    /**
+     * Une organisation ayant déjà explicitement enregistré ses paramètres (peu importe la
+     * valeur) ne doit jamais être écrasée par le nouveau fallback — cf. Parametre::get(), qui
+     * ne lit le fallback qu'en l'absence de ligne réelle en base.
+     */
+    public function test_edit_respecte_les_parametres_deja_enregistres_explicitement(): void
+    {
+        $this->createRoles();
+        $user = $this->createAuthorizedUser('parametres.read');
+
+        Parametre::setVentesControleImpayes($user->organization_id, false, 500_000);
+        Parametre::setDeclencheurCommissionVente($user->organization_id, DeclencheurCommissionVente::CHARGEMENT_VALIDE);
+
         $this->actingAs($user)
             ->get(route('settings.ventes.edit'))
             ->assertStatus(200)
             ->assertInertia(fn (Assert $page) => $page
                 ->component('settings/Ventes')
                 ->where('declencheur_commission_vente', 'chargement_valide')
-                ->where('declencheur_commission_logistique', 'reception_effectuee')
+                ->where('controle_impayes_actif', false)
+                ->where('seuil_impayes_max', 500_000)
             );
     }
 

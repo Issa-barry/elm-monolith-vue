@@ -6,6 +6,7 @@ import { Link } from '@inertiajs/vue3';
 import { Building2, Save, Upload, X } from 'lucide-vue-next';
 import AutoComplete from 'primevue/autocomplete';
 import Dropdown from 'primevue/dropdown';
+import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import { computed, ref, watch } from 'vue';
 import CapacitesEditor, {
@@ -51,6 +52,7 @@ interface FormData {
     photo: File | null;
     is_active: boolean;
     capacites: CapaciteRow[];
+    seuil_dette_derogation: number | null;
 }
 
 const props = defineProps<{
@@ -66,6 +68,9 @@ const props = defineProps<{
     canChangeSite: boolean;
     showStatusField?: boolean;
     defaultProprietaireId?: number | string | null;
+    /** Seuil global de dette (Paramètres > Ventes), affiché à titre indicatif — cf. section
+     * "Contrôle des impayés" ci-dessous. */
+    seuilGlobalImpayes?: number;
 }>();
 
 const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
@@ -79,6 +84,14 @@ watch(
         if (!props.form.photo) photoPreview.value = url ?? null;
     },
 );
+
+const seuilGlobalImpayesLabel = computed(() => {
+    if (props.seuilGlobalImpayes === undefined) {
+        return null;
+    }
+
+    return `${new Intl.NumberFormat('fr-FR').format(props.seuilGlobalImpayes)} GNF`;
+});
 
 function onTypeChange(value: string) {
     emit('update:form', {
@@ -492,8 +505,53 @@ function handleSubmit() {
             />
         </div>
 
-        <!-- Photo -->
+        <!-- Contrôle des impayés : dérogation propre à ce véhicule -->
         <div class="order-5 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+            <h3
+                class="mb-1 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+            >
+                Contrôle des impayés
+            </h3>
+            <p class="mb-4 text-xs text-muted-foreground">
+                Facultatif. Laisser vide pour utiliser le seuil global des
+                ventes<span v-if="seuilGlobalImpayesLabel"
+                    >— seuil global actuel : {{ seuilGlobalImpayesLabel }}</span
+                >. Ce n'est pas la dette actuelle du véhicule, mais la limite de
+                dette autorisée avant blocage des nouvelles ventes.
+            </p>
+            <div class="max-w-xs">
+                <Label for="seuil_dette_derogation" class="mb-1.5 block text-sm"
+                    >Seuil de dette spécifique (GNF)</Label
+                >
+                <InputNumber
+                    input-id="seuil_dette_derogation"
+                    :model-value="form.seuil_dette_derogation"
+                    @update:model-value="
+                        $emit('update:form', {
+                            ...form,
+                            seuil_dette_derogation: $event,
+                        })
+                    "
+                    :min="0"
+                    :max="999999999"
+                    :use-grouping="false"
+                    placeholder="Seuil global"
+                    class="w-full"
+                    :class="{
+                        'p-invalid': errors.seuil_dette_derogation,
+                    }"
+                />
+                <p
+                    v-if="errors.seuil_dette_derogation"
+                    class="mt-1 text-xs text-destructive"
+                >
+                    {{ errors.seuil_dette_derogation }}
+                </p>
+            </div>
+        </div>
+
+        <!-- Photo -->
+        <div class="order-6 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
                 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
             >
@@ -553,7 +611,7 @@ function handleSubmit() {
         </div>
 
         <!-- Statut -->
-        <div class="order-6 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+        <div class="order-7 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
                 class="mb-4 text-sm font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
             >
@@ -594,7 +652,7 @@ function handleSubmit() {
         </div>
 
         <!-- Pied de page -->
-        <div class="order-7 hidden items-center justify-between sm:flex">
+        <div class="order-8 hidden items-center justify-between sm:flex">
             <a href="/backoffice/vehicules">
                 <Button type="button" variant="outline">Retour</Button>
             </a>
@@ -607,6 +665,6 @@ function handleSubmit() {
                 {{ processing ? 'Enregistrement…' : 'Enregistrer' }}
             </Button>
         </div>
-        <div class="order-8 h-20 sm:hidden" />
+        <div class="order-9 h-20 sm:hidden" />
     </form>
 </template>

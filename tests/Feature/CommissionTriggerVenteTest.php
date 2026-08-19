@@ -52,6 +52,14 @@ class CommissionTriggerVenteTest extends TestCase
         parent::setUp();
         $this->initOrgAndUser(['ventes.read', 'ventes.create', 'ventes.update']);
 
+        // Les tests de cette classe sans Parametre::set... explicite couvrent le déclencheur
+        // CHARGEMENT_VALIDE (cf. docblock de classe) — fixé ici explicitement car ce n'est plus
+        // le fallback par défaut de l'organisation depuis le 18/08/2026 (devenu FACTURE_ENCAISSEE,
+        // cf. Parametre::getDeclencheurCommissionVente()). La section "Déclencheur
+        // FACTURE_ENCAISSEE" plus bas appelle son propre Parametre::set..., qui prévaut sur
+        // celui-ci.
+        Parametre::setDeclencheurCommissionVente($this->org->id, DeclencheurCommissionVente::CHARGEMENT_VALIDE);
+
         $this->defaultSite = Site::create([
             'organization_id' => $this->org->id,
             'nom' => 'Site Test',

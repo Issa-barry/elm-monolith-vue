@@ -52,6 +52,10 @@ interface Proprietaire {
     prenom: string;
     surnom: string | null;
     nom_complet: string;
+    type: string;
+    raison_sociale: string | null;
+    nom_affichage: string;
+    est_entreprise: boolean;
     email: string | null;
     telephone: string | null;
     code_phone_pays: string | null;
@@ -118,7 +122,7 @@ const filteredProprietaires = computed(() => {
     if (!q) return list;
     return list.filter(
         (p) =>
-            p.nom_complet.toLowerCase().includes(q) ||
+            p.nom_affichage.toLowerCase().includes(q) ||
             (p.surnom ?? '').toLowerCase().includes(q) ||
             (p.email ?? '').toLowerCase().includes(q) ||
             (p.adresse ?? '').toLowerCase().includes(q) ||
@@ -132,7 +136,7 @@ const mobileFiltered = computed(() => {
     if (!q) return props.proprietaires;
     return props.proprietaires.filter(
         (p) =>
-            p.nom_complet.toLowerCase().includes(q) ||
+            p.nom_affichage.toLowerCase().includes(q) ||
             (p.surnom ?? '').toLowerCase().includes(q) ||
             (p.email ?? '').toLowerCase().includes(q) ||
             (p.adresse ?? '').toLowerCase().includes(q) ||
@@ -166,7 +170,7 @@ function formatLocation(
 
 function confirmDelete(p: Proprietaire) {
     confirm.require({
-        message: `Supprimer « ${p.nom_complet} » ? Cette action est irréversible.`,
+        message: `Supprimer « ${p.nom_affichage} » ? Cette action est irréversible.`,
         header: 'Confirmer la suppression',
         icon: 'pi pi-exclamation-triangle',
         rejectLabel: 'Annuler',
@@ -178,7 +182,7 @@ function confirmDelete(p: Proprietaire) {
                     toast.add({
                         severity: 'success',
                         summary: 'Supprimé',
-                        detail: `${p.nom_complet} a été supprimé.`,
+                        detail: `${p.nom_affichage} a été supprimé.`,
                         life: 3000,
                     }),
             });
@@ -247,7 +251,7 @@ function confirmDelete(p: Proprietaire) {
                     <div
                         class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground"
                     >
-                        {{ initials(p.nom_complet) }}
+                        {{ initials(p.nom_affichage) }}
                     </div>
 
                     <!-- Info -->
@@ -257,8 +261,13 @@ function confirmDelete(p: Proprietaire) {
                                 :href="`/backoffice/proprietaires/${p.id}`"
                                 class="hover:underline"
                             >
-                                {{ p.nom_complet }}
+                                {{ p.nom_affichage }}
                             </Link>
+                            <span
+                                v-if="p.est_entreprise"
+                                class="ml-1 inline-flex items-center rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
+                                >Entreprise</span
+                            >
                             <span
                                 v-if="p.surnom"
                                 class="font-normal text-muted-foreground"
@@ -467,15 +476,20 @@ function confirmDelete(p: Proprietaire) {
                                 <div
                                     class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground"
                                 >
-                                    {{ initials(data.nom_complet) }}
+                                    {{ initials(data.nom_affichage) }}
                                 </div>
                                 <div>
                                     <Link
                                         :href="`/backoffice/proprietaires/${data.id}`"
                                         class="font-medium hover:underline"
                                     >
-                                        {{ data.nom_complet }}
+                                        {{ data.nom_affichage }}
                                     </Link>
+                                    <span
+                                        v-if="data.est_entreprise"
+                                        class="ml-1 inline-flex items-center rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
+                                        >Entreprise</span
+                                    >
                                     <span
                                         v-if="data.surnom"
                                         class="ml-1 text-sm font-normal text-muted-foreground"

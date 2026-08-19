@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\StatutVerificationPieceIdentite;
+use App\Enums\TypeProprietaire;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -16,14 +17,19 @@ class Proprietaire extends Model
 
     protected $casts = [
         'is_active' => 'boolean',
+        'type' => TypeProprietaire::class,
     ];
 
     // Identité (nom/prenom/surnom/email/telephone/adresse/ville/pays) portée par Personne —
-    // jamais de colonne équivalente ici, cf. accesseurs ci-dessous.
+    // jamais de colonne équivalente ici, cf. accesseurs ci-dessous. `raison_sociale` reste ici
+    // (pas sur Personne, partagée avec User/Employe/Livreur) : seul un Proprietaire peut être
+    // une entreprise, `personne_id` désigne alors son contact (nom/téléphone), pas l'entreprise.
     protected $fillable = [
         'organization_id',
         'user_id',
         'personne_id',
+        'type',
+        'raison_sociale',
         'is_active',
     ];
 
@@ -32,7 +38,27 @@ class Proprietaire extends Model
     protected $appends = [
         'nom_complet', 'nom', 'prenom', 'surnom', 'email', 'telephone',
         'adresse', 'ville', 'pays', 'code_pays', 'code_phone_pays',
+        'nom_affichage', 'est_entreprise',
     ];
+
+    /**
+     * Libellé d'affichage unique utilisé partout où un propriétaire est montré (fiche véhicule,
+     * étape "Partage" de l'équipe, listings) : la raison sociale pour une entreprise, sinon
+     * l'identité civile du contact — jamais les deux mélangés.
+     */
+    public function getNomAffichageAttribute(): string
+    {
+        if ($this->type === TypeProprietaire::ENTREPRISE) {
+            return $this->raison_sociale ?? $this->nom_complet;
+        }
+
+        return $this->nom_complet;
+    }
+
+    public function getEstEntrepriseAttribute(): bool
+    {
+        return $this->type === TypeProprietaire::ENTREPRISE;
+    }
 
     // ── Accesseurs — proxy en lecture seule vers Personne ───────────────────────
 

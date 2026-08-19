@@ -6,6 +6,7 @@ use App\Enums\CategorieVehicule;
 use App\Models\Categorie;
 use App\Models\Depense;
 use App\Models\EquipeLivreur;
+use App\Models\Parametre;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TypeVehicule;
@@ -54,6 +55,11 @@ class VehiculeController extends Controller
             'categorie_label' => $v->categorie_label,
             'proprietaire_id' => $v->proprietaire_id,
             'proprietaire_nom' => $v->proprietaire ? trim($v->proprietaire->prenom.' '.$v->proprietaire->nom) : null,
+            // Libellé d'affichage unique (raison sociale pour une entreprise, sinon identité
+            // civile) — utilisé partout où le propriétaire est montré, y compris pour le
+            // propriétaire interne par défaut (peut lui aussi être une entreprise).
+            'proprietaire_nom_affichage' => $v->proprietaire?->nom_affichage,
+            'proprietaire_est_entreprise' => $v->proprietaire?->est_entreprise ?? false,
             'proprietaire_telephone' => $v->proprietaire?->telephone,
             'proprietaire_code_phone_pays' => $v->proprietaire?->code_phone_pays,
             'agence_nom' => $agence?->nom,
@@ -89,6 +95,9 @@ class VehiculeController extends Controller
             'usage_label' => $v->usage_label,
             'photo_url' => $v->photo_url,
             'is_active' => $v->is_active,
+            // Dérogation de contrôle des impayés propre à ce véhicule — null = hérite du seuil
+            // global de l'organisation (Paramètres > Ventes), cf. SolvabiliteService.
+            'seuil_dette_derogation' => $v->seuil_dette_derogation,
         ];
     }
 
@@ -185,6 +194,7 @@ class VehiculeController extends Controller
             'default_site_id' => $defaultSiteId,
             'can_change_site' => $canChangeSite,
             'default_proprietaire_id' => Proprietaire::interneParDefautId($orgId),
+            'seuil_global_impayes' => Parametre::getVentesSeuilImpayesMax($orgId),
         ]);
     }
 
@@ -411,6 +421,7 @@ class VehiculeController extends Controller
                 'categorie_id' => $c->categorie_id,
                 'capacite_max' => $c->capacite_max,
             ])->values()->all(),
+            'seuil_global_impayes' => Parametre::getVentesSeuilImpayesMax($orgId),
         ]);
     }
 
@@ -519,7 +530,7 @@ class VehiculeController extends Controller
             ->sortBy('nom')
             ->map(fn (Proprietaire $p) => [
                 'value' => $p->id,
-                'label' => trim("{$p->prenom} {$p->nom}"),
+                'label' => $p->nom_affichage,
                 'telephone' => $p->telephone,
             ])
             ->values()
@@ -616,6 +627,10 @@ class VehiculeController extends Controller
             'livraison_logistique' => 'required|boolean',
             'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
             'is_active' => 'boolean',
+            // Dérogation de contrôle des impayés propre à ce véhicule — null = hérite du seuil
+            // global (cf. migration 2026_08_18_000005, SolvabiliteService). Jamais négatif : un
+            // seuil ne "retire" pas de dette, au pire il retombe à 0 (aucune dette tolérée).
+            'seuil_dette_derogation' => 'nullable|integer|min:0|max:999999999',
             'capacites' => 'array',
             'capacites.*.categorie_id' => [
                 'required', 'string',
