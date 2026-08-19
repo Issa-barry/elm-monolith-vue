@@ -77,11 +77,14 @@ const props = defineProps<{
 const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
 
 const selectedType = computed(
-    () => props.types.find((t) => t.value === props.form.type_vehicule_id) ?? null,
+    () =>
+        props.types.find((t) => t.value === props.form.type_vehicule_id) ??
+        null,
 );
 
 const typeHasDerogationConfiguree = computed(
-    () => selectedType.value?.seuil_derogation_impayes !== null &&
+    () =>
+        selectedType.value?.seuil_derogation_impayes !== null &&
         selectedType.value?.seuil_derogation_impayes !== undefined,
 );
 

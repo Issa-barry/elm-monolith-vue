@@ -703,7 +703,8 @@ function submit() {
                 <!-- Étape 4 : Site principal -->
                 <div v-else-if="currentStep === 4" class="grid gap-5">
                     <div class="grid gap-2">
-                        <Label>Type de site
+                        <Label
+                            >Type de site
                             <span class="text-destructive">*</span></Label
                         >
                         <Select
@@ -716,7 +717,10 @@ function submit() {
                             :class="{ 'p-invalid': errorFor('site.type') }"
                         />
                         <button
-                            v-if="!showAllSiteTypes && types_tous.length > siteTypeSuggestions.length"
+                            v-if="
+                                !showAllSiteTypes &&
+                                types_tous.length > siteTypeSuggestions.length
+                            "
                             type="button"
                             class="justify-self-start text-xs font-medium text-primary underline underline-offset-4 transition-colors hover:text-primary/80"
                             @click="showAllSiteTypes = true"
@@ -798,7 +802,9 @@ function submit() {
                             Site principal
                         </h3>
                         <p class="text-sm">
-                            {{ siteNamePreview || siteTypeLabel(form.site.type) }}
+                            {{
+                                siteNamePreview || siteTypeLabel(form.site.type)
+                            }}
                         </p>
                         <p class="text-sm text-muted-foreground">
                             {{ form.site.ville }}, {{ form.site.quartier }}

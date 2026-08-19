@@ -21,7 +21,8 @@ const props = defineProps<{
 }>();
 
 const seuilStandardLabel = computed(
-    () => `${new Intl.NumberFormat('fr-FR').format(props.seuilStandardImpayes)} GNF`,
+    () =>
+        `${new Intl.NumberFormat('fr-FR').format(props.seuilStandardImpayes)} GNF`,
 );
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -125,9 +126,7 @@ function submit() {
                 </div>
 
                 <div>
-                    <Label
-                        for="seuil_derogation_impayes"
-                        class="mb-1.5 block"
+                    <Label for="seuil_derogation_impayes" class="mb-1.5 block"
                         >Seuil maximum de dérogation autorisé (GNF)</Label
                     >
                     <InputNumber

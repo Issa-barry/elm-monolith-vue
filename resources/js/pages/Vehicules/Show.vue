@@ -553,9 +553,7 @@ const derogationOrigine = computed(() =>
                                             : 'Inactive'
                                     }}
                                 </p>
-                                <p
-                                    class="mt-1.5 text-xs text-muted-foreground"
-                                >
+                                <p class="mt-1.5 text-xs text-muted-foreground">
                                     Seuil applicable :
                                     {{ formatGNF(seuilImpayesApplicable) }}
                                 </p>
