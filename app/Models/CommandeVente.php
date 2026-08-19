@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Auth;
 
@@ -124,6 +125,16 @@ class CommandeVente extends Model
     public function commissions(): HasMany
     {
         return $this->hasMany(CommissionVente::class, 'commande_vente_id');
+    }
+
+    /**
+     * Enveloppes générées par le nouveau moteur de commissions (Phase 1+, cf.
+     * CommissionEnveloppeGenerator) — coexiste avec commissions() (ancien schéma)
+     * tant que la bascule n'est pas terminée.
+     */
+    public function commissionsV2(): MorphMany
+    {
+        return $this->morphMany(CommissionEnveloppe::class, 'source');
     }
 
     public function activites(): HasMany
