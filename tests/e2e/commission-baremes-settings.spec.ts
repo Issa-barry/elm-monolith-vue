@@ -3,9 +3,9 @@ import { login } from './helpers';
 
 /**
  * Paramètres → Commissions (barèmes PAR_UNITE_VENDUE, Phase 2) — vérifie que
- * les cellules "—" du tableau sont réellement cliquables (pas juste
- * visuellement grisées) et que le cycle définir → afficher → modifier →
- * afficher fonctionne de bout en bout.
+ * l'action "Définir" est visible sans survol (pas seulement au hover, cf.
+ * correction UX) et que le cycle définir → afficher → modifier → afficher
+ * fonctionne de bout en bout.
  */
 
 test.beforeEach(async ({ page }) => {
@@ -27,11 +27,10 @@ test('définir un barème sur une cellule vide, puis le modifier', async ({
 
     const proprietaireCell = row.getByRole('button').first();
 
-    // Cellule vide ("—") : doit rester cliquable malgré son style grisé, et
-    // afficher une affordance claire au survol.
-    await expect(proprietaireCell).toContainText('—');
-    await proprietaireCell.hover();
+    // Cellule vide : l'action "Définir" doit être visible sans survol —
+    // jamais la seule façon de découvrir que la cellule est interactive.
     await expect(proprietaireCell).toContainText(/définir/i);
+    await expect(proprietaireCell).not.toContainText('—');
 
     await proprietaireCell.click();
     const dialog = page.getByRole('dialog', { name: /propriétaire/i });

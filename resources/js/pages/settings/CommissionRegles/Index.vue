@@ -83,10 +83,13 @@ function submit() {
     });
 }
 
-function formatMontant(m: Montant | null): string {
-    if (!m) return '—';
-
+function formatMontant(m: Montant): string {
     return `${new Intl.NumberFormat('fr-FR').format(m.montant)} GNF`;
+}
+
+function cellLabel(ligne: Ligne, cible: Cible): string {
+    const m = ligne.montants[cible.code];
+    return m ? formatMontant(m) : 'Définir';
 }
 </script>
 
@@ -159,33 +162,21 @@ function formatMontant(m: Montant | null): string {
                             <template #body="{ data }">
                                 <button
                                     type="button"
-                                    class="group flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted"
+                                    class="group flex w-full items-center justify-between gap-2 rounded-md border border-transparent px-2 py-1.5 text-left outline-none transition-colors hover:border-border hover:bg-muted focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                                     @click="openEdit(data, cible)"
                                 >
-                                    <template v-if="data.montants[cible.code]">
-                                        <span class="font-medium">
-                                            {{
-                                                formatMontant(
-                                                    data.montants[cible.code],
-                                                )
-                                            }}
-                                        </span>
-                                        <Pencil
-                                            class="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100"
-                                        />
-                                    </template>
-                                    <template v-else>
-                                        <span
-                                            class="text-muted-foreground group-hover:hidden"
-                                            >—</span
-                                        >
-                                        <span
-                                            class="hidden items-center gap-1 text-sm font-medium text-primary group-hover:flex"
-                                        >
-                                            <Plus class="h-3.5 w-3.5" />
-                                            Définir
-                                        </span>
-                                    </template>
+                                    <span
+                                        :class="[
+                                            data.montants[cible.code]
+                                                ? 'font-medium'
+                                                : 'text-muted-foreground',
+                                        ]"
+                                    >
+                                        {{ cellLabel(data, cible) }}
+                                    </span>
+                                    <Pencil
+                                        class="h-3.5 w-3.5 shrink-0 text-primary"
+                                    />
                                 </button>
                             </template>
                         </Column>
