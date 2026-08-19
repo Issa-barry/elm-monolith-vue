@@ -353,15 +353,25 @@ watch(commission, (newComm) => {
 });
 
 function onMontantChange(ligne: LignePartage, val: number | null) {
+    const nouveauMontant = val ?? 0;
+    // PrimeVue InputNumber ré-émet sa valeur courante au montage (écho, pas une saisie) —
+    // sans ce garde-fou, cet écho marquait la ligne comme "touchée" avant toute interaction
+    // réelle et empêchait recomputeAutoFill de jamais la considérer comme le seul bénéficiaire
+    // restant à compléter automatiquement.
+    if (nouveauMontant === ligne.montant) return;
+
     markChanged();
-    ligne.montant = val ?? 0;
+    ligne.montant = nouveauMontant;
     ligne.taux = toTaux(ligne.montant, commission.value);
     recomputeAutoFill(ligne.id);
 }
 
 function onTauxChange(ligne: LignePartage, val: number | null) {
+    const nouveauTaux = val ?? 0;
+    if (nouveauTaux === ligne.taux) return;
+
     markChanged();
-    ligne.taux = val ?? 0;
+    ligne.taux = nouveauTaux;
     ligne.montant = toMontant(ligne.taux, commission.value);
     recomputeAutoFill(ligne.id);
 }
