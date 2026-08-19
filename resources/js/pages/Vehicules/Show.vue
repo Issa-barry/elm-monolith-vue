@@ -571,6 +571,7 @@ function toggleDerogation() {
                                         Dérogation impayés
                                     </p>
                                     <Switch
+                                        aria-label="Dérogation impayés"
                                         :model-value="
                                             vehicule.derogation_impayes_autorisee
                                         "
