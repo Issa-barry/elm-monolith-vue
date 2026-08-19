@@ -59,3 +59,42 @@ test('définir un barème sur une cellule vide, puis le modifier', async ({
     await expect(proprietaireCell).toContainText('700');
     await expect(proprietaireCell).not.toContainText('650');
 });
+
+test('le champ montant bloque les caractères non numériques à la frappe et au collage', async ({
+    page,
+}) => {
+    await page.goto('/settings/commissions');
+
+    const row = page
+        .locator('tbody tr', { hasText: /toutes catégories/i })
+        .first();
+    await row.getByRole('button').first().click();
+
+    const dialog = page.getByRole('dialog', { name: /propriétaire/i });
+    await expect(dialog).toBeVisible({ timeout: 5_000 });
+    const montantInput = dialog.locator('#cr-montant');
+
+    // Frappe caractère par caractère (pressSequentially déclenche de vrais
+    // événements keydown, contrairement à fill()) : seuls les chiffres
+    // doivent apparaître, le reste bloqué avant même d'entrer dans le champ.
+    await montantInput.pressSequentially('5+5-5.5,5e5 5abc5');
+    await expect(montantInput).toHaveValue('55555555');
+
+    await montantInput.fill('');
+
+    // Collage : un texte collé contenant autre chose que des chiffres est
+    // nettoyé (seuls les chiffres conservés), jamais inséré tel quel.
+    await montantInput.evaluate((el) => {
+        const input = el as HTMLInputElement;
+        const dataTransfer = new DataTransfer();
+        dataTransfer.setData('text', '5+555-88');
+        input.dispatchEvent(
+            new ClipboardEvent('paste', {
+                clipboardData: dataTransfer,
+                bubbles: true,
+                cancelable: true,
+            }),
+        );
+    });
+    await expect(montantInput).toHaveValue('555588');
+});

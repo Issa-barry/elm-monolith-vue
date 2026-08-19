@@ -73,7 +73,50 @@ const dialogTitle = computed(() => {
     return `${editingCible.value.libelle} — ${editingLigne.value.libelle}`;
 });
 
+const MONTANT_INVALIDE = 'Saisissez un montant entier supérieur à 0 GNF.';
+
+// Bloque à la frappe tout caractère qui ne serait de toute façon jamais un
+// entier positif valide (signe, séparateur décimal, lettres...) — la
+// prévention prime sur la validation après coup (cf. GNF sans subdivision).
+function blockNonIntegerKeydown(e: KeyboardEvent) {
+    const pass = [
+        'Backspace',
+        'Delete',
+        'Tab',
+        'Escape',
+        'Enter',
+        'ArrowLeft',
+        'ArrowRight',
+        'Home',
+        'End',
+    ];
+    if (pass.includes(e.key)) return;
+    if (
+        (e.ctrlKey || e.metaKey) &&
+        ['a', 'c', 'v', 'x'].includes(e.key.toLowerCase())
+    )
+        return;
+    if (!/^\d$/.test(e.key)) e.preventDefault();
+}
+
+// Le blocage à la frappe ne couvre pas le collage — un texte collé "5+555"
+// contourne la frappe caractère par caractère. On remplace le champ entier
+// par les seuls chiffres du texte collé, jamais une insertion partielle.
+function onMontantPaste(e: ClipboardEvent) {
+    e.preventDefault();
+    const pasted = e.clipboardData?.getData('text') ?? '';
+    form.montant = pasted.replace(/\D/g, '');
+}
+
 function submit() {
+    form.clearErrors('montant');
+    // Filet de sécurité (ex: collage au clavier) — le blocage à la frappe
+    // empêche déjà la quasi-totalité des saisies invalides.
+    if (!/^\d+$/.test(String(form.montant).trim()) || Number(form.montant) <= 0) {
+        form.setError('montant', MONTANT_INVALIDE);
+        return;
+    }
+
     form.post('/settings/commissions', {
         preserveScroll: true,
         onSuccess: () => {
@@ -201,11 +244,12 @@ function cellLabel(ligne: Ligne, cible: Cible): string {
                 <Input
                     id="cr-montant"
                     v-model="form.montant"
-                    type="number"
-                    min="0"
-                    step="1"
+                    type="text"
+                    inputmode="numeric"
                     placeholder="ex: 600"
                     :class="{ 'border-destructive': form.errors.montant }"
+                    @keydown="blockNonIntegerKeydown"
+                    @paste="onMontantPaste"
                 />
                 <p v-if="form.errors.montant" class="mt-1 text-xs text-destructive">
                     {{ form.errors.montant }}

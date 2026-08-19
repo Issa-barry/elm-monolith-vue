@@ -155,4 +155,148 @@ class CommissionRegleControllerTest extends TestCase
             ])
             ->assertSessionHasErrors('categorie_id');
     }
+
+    // ── montant : entier strictement > 0 uniquement (GNF sans subdivision) ──
+    // "—" doit rester la seule représentation de "non configuré" — jamais
+    // "0 GNF", jamais une valeur décimale/négative/non numérique en base.
+
+    /** @test */
+    public function refuse_un_montant_a_zero(): void
+    {
+        $this->actingAs($this->user)
+            ->post('/settings/commissions', [
+                'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
+                'scope_type' => 'global',
+                'montant' => 0,
+            ])
+            ->assertSessionHasErrors('montant');
+
+        $this->assertDatabaseMissing('commission_regles', [
+            'organization_id' => $this->org->id,
+            'montant' => 0,
+        ]);
+    }
+
+    /** @test */
+    public function refuse_un_montant_negatif(): void
+    {
+        $this->actingAs($this->user)
+            ->post('/settings/commissions', [
+                'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
+                'scope_type' => 'global',
+                'montant' => -50,
+            ])
+            ->assertSessionHasErrors('montant');
+    }
+
+    /** @test */
+    public function refuse_un_montant_forme_intervalle(): void
+    {
+        $this->actingAs($this->user)
+            ->post('/settings/commissions', [
+                'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
+                'scope_type' => 'global',
+                'montant' => '0-5',
+            ])
+            ->assertSessionHasErrors('montant');
+    }
+
+    /** @test */
+    public function refuse_un_montant_decimal_avec_point(): void
+    {
+        $this->actingAs($this->user)
+            ->post('/settings/commissions', [
+                'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
+                'scope_type' => 'global',
+                'montant' => '600.50',
+            ])
+            ->assertSessionHasErrors('montant');
+    }
+
+    /** @test */
+    public function refuse_un_montant_decimal_avec_virgule(): void
+    {
+        $this->actingAs($this->user)
+            ->post('/settings/commissions', [
+                'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
+                'scope_type' => 'global',
+                'montant' => '600,50',
+            ])
+            ->assertSessionHasErrors('montant');
+    }
+
+    /** @test */
+    public function refuse_un_montant_texte(): void
+    {
+        $this->actingAs($this->user)
+            ->post('/settings/commissions', [
+                'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
+                'scope_type' => 'global',
+                'montant' => 'abc',
+            ])
+            ->assertSessionHasErrors('montant');
+    }
+
+    /** @test */
+    public function refuse_un_montant_vide(): void
+    {
+        $this->actingAs($this->user)
+            ->post('/settings/commissions', [
+                'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
+                'scope_type' => 'global',
+                'montant' => '',
+            ])
+            ->assertSessionHasErrors('montant');
+    }
+
+    /** @test */
+    public function accepte_un_montant_avec_espaces_en_bordure_car_trimme_globalement(): void
+    {
+        // Le middleware TrimStrings (global, tout le formulaire) trime les espaces
+        // en début/fin AVANT la validation — comportement standard Laravel, jamais
+        // à contourner pour ce seul champ : " 600 " est une saisie légitime.
+        $this->actingAs($this->user)
+            ->post('/settings/commissions', [
+                'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
+                'scope_type' => 'global',
+                'montant' => ' 600 ',
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('commission_regles', [
+            'organization_id' => $this->org->id,
+            'montant' => 600,
+        ]);
+    }
+
+    /** @test */
+    public function refuse_un_montant_avec_espace_interne(): void
+    {
+        // Un espace INTERNE ("6 00") n'est jamais retiré par le trim global
+        // (trim() ne touche que les bordures) — doit rester rejeté.
+        $this->actingAs($this->user)
+            ->post('/settings/commissions', [
+                'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
+                'scope_type' => 'global',
+                'montant' => '6 00',
+            ])
+            ->assertSessionHasErrors('montant');
+    }
+
+    /** @test */
+    public function accepte_un_entier_positif_valide(): void
+    {
+        $this->actingAs($this->user)
+            ->post('/settings/commissions', [
+                'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
+                'scope_type' => 'global',
+                'montant' => '600',
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('commission_regles', [
+            'organization_id' => $this->org->id,
+            'montant' => 600,
+        ]);
+    }
 }
