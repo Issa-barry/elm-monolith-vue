@@ -156,7 +156,7 @@ class CommissionEnveloppeGeneratorTest extends TestCase
         // Marge = (2000-1500) × 2 = 1000.
         $ancien = CommissionCalculator::fromCommande($commande->fresh(['lignes', 'vehicule.equipe.membres.livreur', 'vehicule.proprietaire']));
 
-        CommissionEnveloppeGenerator::genererPourCommandeVente($commande);
+        CommissionEnveloppeGenerator::genererPourCommandeVenteMargeLegacy($commande);
 
         $enveloppes = CommissionEnveloppe::where('source_type', CommandeVente::class)
             ->where('source_id', $commande->id)->get();
@@ -190,7 +190,7 @@ class CommissionEnveloppeGeneratorTest extends TestCase
         $produit = $this->makeProduit();
         ['commande' => $commande] = $this->creerCommandeValideeEtChargee($vehicule, $produit);
 
-        CommissionEnveloppeGenerator::genererPourCommandeVente($commande);
+        CommissionEnveloppeGenerator::genererPourCommandeVenteMargeLegacy($commande);
 
         $enveloppeProprietaire = CommissionEnveloppe::where('source_id', $commande->id)
             ->where('cible_type', 'proprietaire')->firstOrFail();
@@ -216,7 +216,7 @@ class CommissionEnveloppeGeneratorTest extends TestCase
         $produit = $this->makeProduit();
         ['commande' => $commande] = $this->creerCommandeValideeEtChargee($vehicule, $produit, quantite: 7);
 
-        CommissionEnveloppeGenerator::genererPourCommandeVente($commande);
+        CommissionEnveloppeGenerator::genererPourCommandeVenteMargeLegacy($commande);
 
         $enveloppeLivraison = CommissionEnveloppe::where('source_id', $commande->id)
             ->where('cible_type', 'equipe_livraison')->firstOrFail();
@@ -255,7 +255,7 @@ class CommissionEnveloppeGeneratorTest extends TestCase
 
         // Ne doit jamais lancer d'exception : l'appelant (ex: un contrôleur
         // d'encaissement) ne doit jamais voir son propre traitement interrompu.
-        CommissionEnveloppeGenerator::genererPourCommandeVente($commande);
+        CommissionEnveloppeGenerator::genererPourCommandeVenteMargeLegacy($commande);
 
         $this->assertTrue(true, 'Aucune exception levée — assertion explicite du contrat.');
     }
@@ -271,7 +271,7 @@ class CommissionEnveloppeGeneratorTest extends TestCase
 
         $this->corrompreEquipe($vehicule);
 
-        CommissionEnveloppeGenerator::genererPourCommandeVente($commande);
+        CommissionEnveloppeGenerator::genererPourCommandeVenteMargeLegacy($commande);
 
         $this->assertDatabaseMissing('commission_enveloppes', [
             'source_type' => CommandeVente::class,
@@ -292,7 +292,7 @@ class CommissionEnveloppeGeneratorTest extends TestCase
         $produit = $this->makeProduit();
         ['commande' => $commande] = $this->creerCommandeValideeEtChargee($vehicule, $produit);
 
-        CommissionEnveloppeGenerator::genererPourCommandeVente($commande);
+        CommissionEnveloppeGenerator::genererPourCommandeVenteMargeLegacy($commande);
 
         $tentative = CommissionGenerationAttempt::where('source_id', $commande->id)->firstOrFail();
         $this->assertEquals(CommissionGenerationStatut::SUCCES, $tentative->statut);
@@ -309,13 +309,13 @@ class CommissionEnveloppeGeneratorTest extends TestCase
         $produit = $this->makeProduit();
         ['commande' => $commande] = $this->creerCommandeValideeEtChargee($vehicule, $produit);
 
-        CommissionEnveloppeGenerator::genererPourCommandeVente($commande);
+        CommissionEnveloppeGenerator::genererPourCommandeVenteMargeLegacy($commande);
         $nbEnveloppesApres1erAppel = CommissionEnveloppe::where('source_id', $commande->id)->count();
 
         // Rejoue (ex: double déclenchement concurrent) : reconnu comme déjà généré,
         // ne constitue même pas une nouvelle "tentative" — cohérent avec le
         // comportement déjà existant de CommissionGenerator::generateForCommandeIfMissing().
-        CommissionEnveloppeGenerator::genererPourCommandeVente($commande->fresh());
+        CommissionEnveloppeGenerator::genererPourCommandeVenteMargeLegacy($commande->fresh());
 
         $this->assertEquals($nbEnveloppesApres1erAppel, CommissionEnveloppe::where('source_id', $commande->id)->count());
         $this->assertEquals(1, CommissionGenerationAttempt::where('source_id', $commande->id)->count());
@@ -331,7 +331,7 @@ class CommissionEnveloppeGeneratorTest extends TestCase
         ['commande' => $commande] = $this->creerCommandeValideeEtChargee($vehicule, $produit);
 
         $this->corrompreEquipe($vehicule);
-        CommissionEnveloppeGenerator::genererPourCommandeVente($commande);
+        CommissionEnveloppeGenerator::genererPourCommandeVenteMargeLegacy($commande);
 
         $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commande->id]);
         $this->assertEquals(
@@ -343,7 +343,7 @@ class CommissionEnveloppeGeneratorTest extends TestCase
         $vehicule->loadMissing('equipe.membres');
         $vehicule->equipe->membres->first()->update(['taux_commission' => 20]);
 
-        CommissionEnveloppeGenerator::genererPourCommandeVente($commande->fresh());
+        CommissionEnveloppeGenerator::genererPourCommandeVenteMargeLegacy($commande->fresh());
 
         $this->assertDatabaseHas('commission_enveloppes', ['source_id' => $commande->id, 'cible_type' => 'proprietaire']);
         $this->assertDatabaseHas('commission_enveloppes', ['source_id' => $commande->id, 'cible_type' => 'equipe_livraison']);
@@ -355,7 +355,7 @@ class CommissionEnveloppeGeneratorTest extends TestCase
         $this->assertEquals(CommissionGenerationStatut::SUCCES, $tentatives[1]->statut);
 
         // Une troisième tentative (rejeu) ne duplique toujours rien.
-        CommissionEnveloppeGenerator::genererPourCommandeVente($commande->fresh());
+        CommissionEnveloppeGenerator::genererPourCommandeVenteMargeLegacy($commande->fresh());
         $this->assertEquals(2, CommissionEnveloppe::where('source_id', $commande->id)->count());
         $this->assertEquals(2, CommissionGenerationAttempt::where('source_id', $commande->id)->count());
     }
@@ -368,7 +368,7 @@ class CommissionEnveloppeGeneratorTest extends TestCase
         $produit = $this->makeProduit();
         ['commande' => $commande] = $this->creerCommandeValideeEtChargee($vehicule, $produit);
 
-        CommissionEnveloppeGenerator::genererPourCommandeVente($commande);
+        CommissionEnveloppeGenerator::genererPourCommandeVenteMargeLegacy($commande);
 
         $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commande->id]);
         $this->assertDatabaseMissing('commission_generation_attempts', ['source_id' => $commande->id]);

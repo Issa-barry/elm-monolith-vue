@@ -52,6 +52,9 @@ interface MembreEquipeDetail {
     role: string;
     montant_par_pack: number;
     taux_commission: number;
+    // Part de l'enveloppe Livraison (Phase 2) — alias de taux_commission, seule
+    // valeur éditée par la popup équipe véhicule désormais.
+    part_pourcentage: number;
     ordre: number;
 }
 
@@ -111,6 +114,7 @@ const props = defineProps<{
     proprietaires: ProprietaireOption[];
     default_proprietaire_id: string | null;
     seuil_global_impayes: number;
+    bareme_commission: { proprietaire: number | null; livraison: number | null };
 }>();
 
 const { can } = usePermissions();
@@ -903,5 +907,6 @@ function toggleDerogation() {
         }"
         :equipe="equipe"
         :proprietaires="proprietaires"
+        :bareme-commission="bareme_commission"
     />
 </template>

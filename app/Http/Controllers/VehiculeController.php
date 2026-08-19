@@ -3,7 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Enums\CategorieVehicule;
+use App\Enums\CommissionScopeType;
+use App\Enums\CommissionUniteCalcul;
 use App\Models\Categorie;
+use App\Models\CommissionCibleType;
+use App\Models\CommissionProcessus;
+use App\Models\CommissionRegle;
 use App\Models\Depense;
 use App\Models\EquipeLivreur;
 use App\Models\Parametre;
@@ -287,6 +292,9 @@ class VehiculeController extends Controller
                     'role' => $role,
                     'montant_par_pack' => (float) $m->montant_par_pack,
                     'taux_commission' => (float) $m->taux_commission,
+                    // Alias Phase 2 : part de l'enveloppe Livraison, seule valeur que la
+                    // popup équipe véhicule édite désormais (cf. EquipeStepperModal.vue).
+                    'part_pourcentage' => (float) $m->taux_commission,
                     'ordre' => $m->ordre,
                     'numero' => $roleCounts[$role],
                 ];
@@ -311,6 +319,7 @@ class VehiculeController extends Controller
             'proprietaires' => $this->proprietairesOptions(),
             'default_proprietaire_id' => Proprietaire::interneParDefautId($vehicule->organization_id),
             'seuil_global_impayes' => Parametre::getVentesSeuilImpayesMax($vehicule->organization_id),
+            'bareme_commission' => $this->baremeCommissionActuel($vehicule->organization_id),
         ]);
     }
 
@@ -553,6 +562,42 @@ class VehiculeController extends Controller
                 'seuil_derogation_impayes' => $t->seuil_derogation_impayes,
             ])
             ->toArray();
+    }
+
+    /**
+     * Barème "Propriétaire" / "Livraison" actuellement configuré au niveau
+     * global (Paramètres → Commissions) — sert d'aperçu en lecture seule dans
+     * la popup équipe véhicule (montant Propriétaire, référence indicative
+     * pour la répartition Livraison). Null si aucun barème global n'existe
+     * encore pour la cible (décision AMOA #4 : absence de règle = rien à
+     * afficher, jamais une erreur).
+     */
+    private function baremeCommissionActuel(string $orgId): array
+    {
+        $processus = CommissionProcessus::where('organization_id', $orgId)
+            ->where('code', CommissionProcessus::CODE_VENTE)
+            ->first();
+
+        if (! $processus) {
+            return ['proprietaire' => null, 'livraison' => null];
+        }
+
+        $lire = fn (string $cible) => CommissionRegle::where('organization_id', $orgId)
+            ->where('processus_id', $processus->id)
+            ->where('cible_type', $cible)
+            ->where('scope_type', CommissionScopeType::GLOBAL->value)
+            ->whereNull('scope_id')
+            ->where('unite_calcul', CommissionUniteCalcul::PAR_UNITE_VENDUE->value)
+            ->where('statut', 'active')
+            ->value('montant');
+
+        $proprietaire = $lire(CommissionCibleType::CODE_PROPRIETAIRE);
+        $livraison = $lire(CommissionCibleType::CODE_EQUIPE_LIVRAISON);
+
+        return [
+            'proprietaire' => $proprietaire !== null ? (float) $proprietaire : null,
+            'livraison' => $livraison !== null ? (float) $livraison : null,
+        ];
     }
 
     private function proprietairesOptions(): array
