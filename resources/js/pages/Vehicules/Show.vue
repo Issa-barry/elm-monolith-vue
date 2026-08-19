@@ -99,7 +99,8 @@ interface VehiculeData {
     livraison_logistique: boolean;
     photo_url: string | null;
     is_active: boolean;
-    seuil_dette_derogation: number | null;
+    derogation_impayes_autorisee: boolean;
+    type_seuil_derogation_impayes: number | null;
 }
 
 const props = defineProps<{
@@ -173,6 +174,29 @@ const tauxLivreurs = computed(() =>
 function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
 }
+
+/**
+ * Même règle que SolvabiliteService::seuilApplicableVehicule() (côté affichage uniquement,
+ * jamais utilisée pour bloquer une opération) : dérogation active ET type configuré → seuil du
+ * type, sinon seuil standard des paramètres de vente.
+ */
+const derogationEffective = computed(
+    () =>
+        props.vehicule.derogation_impayes_autorisee &&
+        props.vehicule.type_seuil_derogation_impayes !== null,
+);
+
+const seuilImpayesApplicable = computed(() =>
+    derogationEffective.value
+        ? (props.vehicule.type_seuil_derogation_impayes as number)
+        : props.seuil_global_impayes,
+);
+
+const derogationOrigine = computed(() =>
+    derogationEffective.value
+        ? `Type de véhicule : ${props.vehicule.type_label}`
+        : 'Paramètres de vente',
+);
 </script>
 
 <template>
@@ -522,35 +546,22 @@ function formatGNF(val: number): string {
                                 <p class="text-xs text-muted-foreground">
                                     Dérogation impayés
                                 </p>
-                                <template
-                                    v-if="
-                                        vehicule.seuil_dette_derogation !==
-                                        null
-                                    "
+                                <p class="mt-1 text-sm font-medium">
+                                    {{
+                                        vehicule.derogation_impayes_autorisee
+                                            ? 'Active'
+                                            : 'Inactive'
+                                    }}
+                                </p>
+                                <p
+                                    class="mt-1.5 text-xs text-muted-foreground"
                                 >
-                                    <p class="mt-1 text-sm font-medium">
-                                        {{
-                                            formatGNF(
-                                                vehicule.seuil_dette_derogation,
-                                            )
-                                        }}
-                                    </p>
-                                    <p
-                                        class="mt-0.5 text-xs text-muted-foreground"
-                                    >
-                                        Remplace le seuil global pour ce
-                                        véhicule
-                                    </p>
-                                </template>
-                                <template v-else>
-                                    <p
-                                        class="mt-1 text-sm text-muted-foreground"
-                                    >
-                                        Aucune — seuil global appliqué ({{
-                                            formatGNF(seuil_global_impayes)
-                                        }})
-                                    </p>
-                                </template>
+                                    Seuil applicable :
+                                    {{ formatGNF(seuilImpayesApplicable) }}
+                                </p>
+                                <p class="text-xs text-muted-foreground">
+                                    Origine : {{ derogationOrigine }}
+                                </p>
                             </div>
                         </div>
                     </div>

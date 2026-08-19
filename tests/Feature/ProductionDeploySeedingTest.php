@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\DomaineActivite;
+use App\Enums\SiteType;
 use App\Models\AppInstallation;
 use App\Models\Organization;
 use App\Services\InstallationService;
@@ -58,6 +59,11 @@ class ProductionDeploySeedingTest extends TestCase
                 'email' => self::EMAIL,
                 'password' => 'Sup3r$ecretPwd',
                 'password_confirmation' => 'Sup3r$ecretPwd',
+            ],
+            'site' => [
+                'type' => SiteType::SIEGE->value,
+                'ville' => 'Conakry',
+                'quartier' => 'Matoto',
             ],
         ], $overrides);
     }

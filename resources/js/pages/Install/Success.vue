@@ -15,9 +15,9 @@ import { CheckCircle2 } from 'lucide-vue-next';
         <div class="flex flex-col items-center gap-6 text-center">
             <CheckCircle2 class="h-14 w-14 text-emerald-500" />
             <p class="text-sm text-muted-foreground">
-                Installation terminée avec succès. Connectez-vous avec le numéro
-                de téléphone et le mot de passe que vous venez de définir — une
-                dernière étape vous attend pour configurer votre premier site.
+                Installation terminée avec succès. Connectez-vous avec le
+                numéro de téléphone et le mot de passe que vous venez de
+                définir pour accéder directement à votre back-office.
             </p>
             <Link href="/login" class="w-full">
                 <Button class="w-full">Se connecter</Button>

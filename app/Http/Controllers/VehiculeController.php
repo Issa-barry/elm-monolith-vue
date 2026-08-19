@@ -95,9 +95,12 @@ class VehiculeController extends Controller
             'usage_label' => $v->usage_label,
             'photo_url' => $v->photo_url,
             'is_active' => $v->is_active,
-            // Dérogation de contrôle des impayés propre à ce véhicule — null = hérite du seuil
-            // global de l'organisation (Paramètres > Ventes), cf. SolvabiliteService.
-            'seuil_dette_derogation' => $v->seuil_dette_derogation,
+            // Dérogation de contrôle des impayés : le véhicule ne fait que décider s'il a le
+            // droit d'utiliser le plafond de son type — le montant est porté par
+            // TypeVehicule::seuil_derogation_impayes, jamais par le véhicule (cf.
+            // SolvabiliteService::seuilApplicableVehicule()).
+            'derogation_impayes_autorisee' => $v->derogation_impayes_autorisee,
+            'type_seuil_derogation_impayes' => $v->relationLoaded('typeVehicule') ? $v->typeVehicule?->seuil_derogation_impayes : null,
         ];
     }
 
@@ -227,6 +230,7 @@ class VehiculeController extends Controller
         // l'organisation elle-même (propriétaire par défaut).
         $data['proprietaire_id'] ??= Proprietaire::interneParDefautId($orgId);
         $this->ensureCategorieCoherente($data, $orgId);
+        $this->ensureDerogationCoherente($data, $orgId);
 
         if ($request->hasFile('photo')) {
             $data['photo_path'] = (new ImageService)->storeAsWebp($request->file('photo'), 'vehicules');
@@ -464,6 +468,7 @@ class VehiculeController extends Controller
 
         $data['proprietaire_id'] ??= Proprietaire::interneParDefautId($orgId);
         $this->ensureCategorieCoherente($data, $orgId);
+        $this->ensureDerogationCoherente($data, $orgId);
 
         if ($request->hasFile('photo')) {
             $imageService = new ImageService;
@@ -518,6 +523,9 @@ class VehiculeController extends Controller
             ->map(fn (TypeVehicule $t) => [
                 'value' => $t->id,
                 'label' => $t->nom,
+                // Permet au formulaire véhicule de savoir si la dérogation peut être activée
+                // pour le type sélectionné, sans requête supplémentaire — cf. VehiculeForm.vue.
+                'seuil_derogation_impayes' => $t->seuil_derogation_impayes,
             ])
             ->toArray();
     }
@@ -628,10 +636,10 @@ class VehiculeController extends Controller
             'livraison_logistique' => 'required|boolean',
             'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
             'is_active' => 'boolean',
-            // Dérogation de contrôle des impayés propre à ce véhicule — null = hérite du seuil
-            // global (cf. migration 2026_08_18_000005, SolvabiliteService). Jamais négatif : un
-            // seuil ne "retire" pas de dette, au pire il retombe à 0 (aucune dette tolérée).
-            'seuil_dette_derogation' => 'nullable|integer|min:0|max:999999999',
+            // Le véhicule ne fait que demander à bénéficier du plafond dérogatoire de son type
+            // (cf. ensureDerogationCoherente()) — aucun montant saisi ici, porté par
+            // TypeVehicule::seuil_derogation_impayes.
+            'derogation_impayes_autorisee' => 'boolean',
             'capacites' => 'array',
             'capacites.*.categorie_id' => [
                 'required', 'string',
@@ -690,6 +698,30 @@ class VehiculeController extends Controller
                 ? 'Un véhicule partenaire doit avoir un véritable propriétaire tiers (le propriétaire interne par défaut ne peut pas être utilisé).'
                 : 'Un véhicule interne ne peut pas avoir de propriétaire tiers — laissez le propriétaire vide ou choisissez le propriétaire interne.',
         ]);
+    }
+
+    /**
+     * Un véhicule ne peut activer la dérogation que si son type de véhicule a un seuil
+     * dérogatoire configuré — sinon le toggle serait un chèque en blanc sans plafond réel
+     * (SolvabiliteService::seuilApplicableVehicule() retombe alors sur le seuil global en
+     * filet de sécurité, mais l'UI ne doit jamais laisser croire à une dérogation active qui
+     * n'en est pas une, cf. cadrage du 19/08/2026).
+     */
+    private function ensureDerogationCoherente(array $data, string $orgId): void
+    {
+        if (empty($data['derogation_impayes_autorisee'])) {
+            return;
+        }
+
+        $type = TypeVehicule::where('organization_id', $orgId)
+            ->whereKey($data['type_vehicule_id'])
+            ->first();
+
+        if ($type?->seuil_derogation_impayes === null) {
+            throw ValidationException::withMessages([
+                'derogation_impayes_autorisee' => "Impossible d'activer la dérogation : aucun seuil de dérogation n'est configuré pour le type de véhicule « {$type?->nom} ».",
+            ]);
+        }
     }
 
     private function messages(): array

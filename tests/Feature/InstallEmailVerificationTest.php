@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\DomaineActivite;
+use App\Enums\SiteType;
 use App\Mail\InstallEmailVerificationMail;
 use App\Models\AppInstallation;
 use App\Services\InstallationService;
@@ -140,6 +141,11 @@ class InstallEmailVerificationTest extends TestCase
                 'telephone' => '+224622000000',
                 'email' => self::EMAIL,
                 'password' => 'Sup3r$ecretPwd',
+            ],
+            'site' => [
+                'type' => SiteType::SIEGE->value,
+                'ville' => 'Conakry',
+                'quartier' => 'Matoto',
             ],
         ];
 

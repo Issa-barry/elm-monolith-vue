@@ -66,7 +66,7 @@ enum DomaineActivite: string
     }
 
     /**
-     * @return array<int, array{value: string, label: string, description: string}>
+     * @return array<int, array{value: string, label: string, description: string, site_types: array<int, array{value: string, label: string}>}>
      */
     public static function options(): array
     {
@@ -74,6 +74,10 @@ enum DomaineActivite: string
             'value' => $c->value,
             'label' => $c->label(),
             'description' => $c->description(),
+            // Types de site suggérés pour ce domaine (cf. siteTypes()) — exposés ici pour que
+            // l'étape "Site principal" du wizard d'installation (Install/Wizard.vue) puisse les
+            // mettre en avant dès que le domaine est choisi, sans dupliquer cette liste côté front.
+            'site_types' => array_map(fn (SiteType $t) => ['value' => $t->value, 'label' => $t->label()], $c->siteTypes()),
         ], self::cases());
     }
 }

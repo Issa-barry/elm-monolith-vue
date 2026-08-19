@@ -149,19 +149,57 @@ test.describe('Paramètres > Ventes — défauts contrôle des impayés et commi
     });
 });
 
-// ── Véhicule — seuil de dette spécifique (dérogation) ───────────────────────
+// ── Type de véhicule — seuil dérogatoire d'impayés ──────────────────────────
+// Note : contrairement à /backoffice/vehicules et /backoffice/clients, la suppression sur
+// /backoffice/type-vehicules passe par un window.confirm() natif (pas le menu "..." +
+// modale attendus par registerCleanup()/cleanupRowsByPrefix()) et reste bloquée tant qu'un
+// véhicule y est rattaché — les types créés par ces tests ne sont donc volontairement pas
+// nettoyés automatiquement (clutter de test à faible risque, jamais lu par une organisation
+// réelle grâce au préfixe PREFIX).
+
+async function createTypeVehiculeInApp(
+    page: Page,
+    nom: string,
+    seuilDerogation: number | null,
+): Promise<void> {
+    await page.goto('/backoffice/type-vehicules/create');
+    await expect(page).toHaveURL(/\/type-vehicules\/create$/, {
+        timeout: 20_000,
+    });
+
+    await page.locator('#nom').fill(nom);
+
+    if (seuilDerogation !== null) {
+        // PrimeVue InputNumber : click() -> pressSequentially() -> blur() pour committer le
+        // v-model (fill() seul pose la valeur DOM sans déclencher le parsing interne).
+        const seuilInput = page.locator('#seuil_derogation_impayes');
+        await seuilInput.click();
+        await seuilInput.pressSequentially(String(seuilDerogation));
+        await seuilInput.blur();
+    }
+
+    await page.getByRole('button', { name: /créer/i }).click();
+    await expect(page).toHaveURL(/\/type-vehicules$/, { timeout: 15_000 });
+}
+
+// ── Véhicule — dérogation au seuil d'impayés (portée par le type de véhicule) ──
 
 async function createVehiculeInApp(
     page: Page,
     nomVehicule: string,
     immatriculation: string,
+    typeVehiculeName?: string | RegExp,
 ): Promise<void> {
     await page.goto('/backoffice/vehicules/create');
     await expect(page).toHaveURL(/\/vehicules\/create$/, { timeout: 20_000 });
 
     await page.locator('#nom_vehicule').fill(nomVehicule);
     await page.locator('#immatriculation').fill(immatriculation);
-    await selectOptionFromCombobox(page, page.locator('#type_vehicule'));
+    await selectOptionFromCombobox(
+        page,
+        page.locator('#type_vehicule'),
+        typeVehiculeName,
+    );
     if (
         await page
             .locator('#site_id')
@@ -181,17 +219,20 @@ async function createVehiculeInApp(
     await page.waitForURL(/\/vehicules\/[a-z0-9]{20,}$/, { timeout: 15_000 });
 }
 
-test.describe('Véhicule — seuil de dette spécifique', () => {
-    test('un véhicule sans seuil spécifique affiche le rappel du seuil global (héritage)', async ({
+test.describe("Véhicule — dérogation au seuil d'impayés", () => {
+    test("un véhicule dont le type n'a aucun seuil dérogatoire configuré ne peut pas activer la dérogation", async ({
         page,
     }) => {
         await login(page);
         const unique = `${Date.now()}-${randomDigits(3)}`;
+        const typeName = `${PREFIX} TypeSansDerog ${unique}`;
 
+        await createTypeVehiculeInApp(page, typeName, null);
         await createVehiculeInApp(
             page,
-            `${PREFIX} Seuil ${unique}`,
+            `${PREFIX} SansDerog ${unique}`,
             `E2EIMP-A-${unique.slice(-5)}`,
+            typeName,
         );
         await page.goto(`${page.url()}/edit`);
         await expect(page).toHaveURL(/\/vehicules\/[a-z0-9]{20,}\/edit$/, {
@@ -200,27 +241,32 @@ test.describe('Véhicule — seuil de dette spécifique', () => {
         await page.waitForLoadState('networkidle');
 
         await expect(page.locator('body')).toContainText(
-            /seuil de dette spécifique/i,
+            /autoriser la dérogation au seuil d'impayés/i,
             { timeout: 15_000 },
         );
         await expect(page.locator('body')).toContainText(
-            /seuil global actuel/i,
+            /aucun seuil de dérogation n'est configuré/i,
             { timeout: 10_000 },
         );
-        const seuilVehiculeInput = page.locator('#seuil_dette_derogation');
-        await expect(seuilVehiculeInput).toHaveValue('');
+        const toggle = page.getByRole('checkbox', {
+            name: /autoriser la dérogation/i,
+        });
+        await expect(toggle).toBeDisabled();
     });
 
-    test('configurer un seuil spécifique sur un véhicule persiste après rechargement', async ({
+    test('un véhicule dont le type a un seuil dérogatoire configuré peut activer la dérogation, et cela persiste après rechargement', async ({
         page,
     }) => {
         await login(page);
         const unique = `${Date.now()}-${randomDigits(3)}`;
+        const typeName = `${PREFIX} TypeAvecDerog ${unique}`;
 
+        await createTypeVehiculeInApp(page, typeName, 2_000_000);
         await createVehiculeInApp(
             page,
-            `${PREFIX} Derogation ${unique}`,
+            `${PREFIX} AvecDerog ${unique}`,
             `E2EIMP-B-${unique.slice(-5)}`,
+            typeName,
         );
         const showUrl = page.url();
 
@@ -230,12 +276,11 @@ test.describe('Véhicule — seuil de dette spécifique', () => {
         });
         await page.waitForLoadState('networkidle');
 
-        // PrimeVue InputNumber : click() -> pressSequentially() -> blur() pour committer le
-        // v-model (fill() seul pose la valeur DOM sans déclencher le parsing interne).
-        const seuilVehiculeInput = page.locator('#seuil_dette_derogation');
-        await seuilVehiculeInput.click();
-        await seuilVehiculeInput.pressSequentially('2000000');
-        await seuilVehiculeInput.blur();
+        const toggle = page.getByRole('checkbox', {
+            name: /autoriser la dérogation/i,
+        });
+        await expect(toggle).toBeEnabled();
+        await toggle.check();
 
         await page
             .locator('#vehicule-form button[type="submit"]:visible')
@@ -246,10 +291,9 @@ test.describe('Véhicule — seuil de dette spécifique', () => {
         });
 
         await page.reload();
-        await expect(page.locator('#seuil_dette_derogation')).toHaveValue(
-            '2000000',
-            { timeout: 10_000 },
-        );
+        await expect(
+            page.getByRole('checkbox', { name: /autoriser la dérogation/i }),
+        ).toBeChecked({ timeout: 10_000 });
     });
 });
 
@@ -258,8 +302,9 @@ test.describe('Véhicule — seuil de dette spécifique', () => {
 // immédiatement en IMPAYEE dès la création (CommandeVenteService::creerFactureDirecte()) —
 // une vente rattachée à un véhicule ne bascule sa facture en IMPAYEE qu'à la validation du
 // chargement, une étape supplémentaire hors du périmètre de ce scénario. La dérogation
-// spécifique à un véhicule (seuil_dette_derogation) applique EXACTEMENT la même règle de
-// blocage — couverte en profondeur par tests/Feature/SolvabiliteImpayesTest.php et
+// portée par le type de véhicule (TypeVehicule::seuil_derogation_impayes +
+// Vehicule::derogation_impayes_autorisee) applique EXACTEMENT la même règle de blocage —
+// couverte en profondeur par tests/Feature/SolvabiliteImpayesTest.php et
 // tests/Unit/SolvabiliteServiceTest.php.
 
 async function createClientInApp(page: Page, nomComplet: string, tel: string): Promise<void> {

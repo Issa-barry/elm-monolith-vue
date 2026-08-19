@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Enums\DomaineActivite;
+use App\Enums\SiteType;
 use App\Mail\InstallEmailVerificationMail;
 use App\Services\InstallationService;
 use App\Services\OtpService;
@@ -12,15 +13,14 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Première initialisation d'une organisation : crée (ou réutilise) l'organisation, le premier
- * compte super_admin et le catalogue de départ (types de produit, catégories adaptées au
- * domaine, options, types de véhicule — systématique, plus un choix). Le premier site n'est plus
- * créé ici : il se configure à la première connexion (onboarding, cf.
- * OnboardingSiteController), même parcours qu'en web.
+ * compte super_admin, le catalogue de départ (types de produit, catégories adaptées au domaine,
+ * options, types de véhicule — systématique, plus un choix) et le premier site — l'installation
+ * laisse l'entreprise réellement prête à l'emploi, même parcours qu'en web (InstallWizardController).
  *
  * Simple façade interactive autour de InstallationService — toute la logique métier (org,
- * super_admin, domaine, catalogue, installed_at, verrou on-premise) vit dans ce service, partagée
- * avec l'assistant web `/install` (InstallWizardController) : les deux chemins produisent
- * exactement le même résultat pour les mêmes réponses.
+ * super_admin, domaine, catalogue, premier site, installed_at, verrou on-premise) vit dans ce
+ * service, partagée avec l'assistant web `/install` (InstallWizardController) : les deux chemins
+ * produisent exactement le même résultat pour les mêmes réponses.
  *
  * Le mot de passe est choisi directement par la personne qui répond aux prompts (saisie
  * masquée, jamais affichée ni loguée) — pas de mot de passe généré ni de redéfinition forcée
@@ -69,6 +69,14 @@ class InstallApp extends Command
         $password = $this->askPassword($service);
 
         $this->newLine();
+        $this->line('----------------------------------------');
+        $this->line('Site principal');
+        $this->line('----------------------------------------');
+        $this->newLine();
+
+        $site = $this->askSite($domaine);
+
+        $this->newLine();
         $this->info('Création...');
 
         try {
@@ -81,6 +89,7 @@ class InstallApp extends Command
                     'email' => $email,
                     'password' => $password,
                 ],
+                site: $site,
             );
         } catch (ValidationException $e) {
             foreach ($e->errors() as $messages) {
@@ -92,12 +101,14 @@ class InstallApp extends Command
             return self::FAILURE;
         }
 
+        $premierSite = $org->sites()->first();
+
         $this->line('✓ Entreprise prête : '.$org->name);
         $this->line('✓ Rôles et permissions initialisés');
         $this->line('✓ Super Admin créé');
         $this->line('✓ Domaine d\'activité : '.$domaine->label());
         $this->line('✓ Catalogue par défaut créé (types de produit, catégories, options, types de véhicule)');
-        $this->line('  Le premier site se configure à la première connexion.');
+        $this->line('✓ Site principal créé : '.($premierSite?->nom ?? '—'));
 
         $this->newLine();
         $this->line('========================================');
@@ -127,6 +138,54 @@ class InstallApp extends Command
         // Inatteignable en pratique ($this->choice ne renvoie qu'une des valeurs proposées),
         // filet de sécurité seulement.
         return DomaineActivite::AUTRE;
+    }
+
+    /**
+     * Type/ville/quartier du premier site — volontairement minimal (cf. InstallationService::
+     * creerSite() pour le nom généré automatiquement et le téléphone/pays hérités du Super Admin).
+     * Les types suggérés par le domaine (cf. DomaineActivite::siteTypes()) sont mis en avant en
+     * tête de liste (et présélectionnés), mais tous les types restent choisissables — même
+     * comportement que "Voir tous les types" côté wizard web (Install/Wizard.vue).
+     *
+     * @return array{type: string, ville: string, quartier: string}
+     */
+    private function askSite(DomaineActivite $domaine): array
+    {
+        $suggeres = $domaine->siteTypes();
+        $autres = array_filter(SiteType::cases(), fn (SiteType $t) => ! in_array($t, $suggeres, true));
+        $tous = [...$suggeres, ...$autres];
+
+        $labels = array_map(fn (SiteType $t) => $t->label(), $tous);
+        $choix = $this->choice('Type de site', $labels, 0);
+
+        $type = null;
+        foreach ($tous as $t) {
+            if ($t->label() === $choix) {
+                $type = $t;
+                break;
+            }
+        }
+        // Inatteignable en pratique ($this->choice ne renvoie qu'une des valeurs proposées),
+        // filet de sécurité seulement.
+        $type ??= SiteType::AUTRE;
+
+        $ville = null;
+        while (! $ville) {
+            $ville = $this->ask('Ville');
+            if (! $ville) {
+                $this->error('La ville est obligatoire.');
+            }
+        }
+
+        $quartier = null;
+        while (! $quartier) {
+            $quartier = $this->ask('Quartier');
+            if (! $quartier) {
+                $this->error('Le quartier est obligatoire.');
+            }
+        }
+
+        return ['type' => $type->value, 'ville' => $ville, 'quartier' => $quartier];
     }
 
     /**

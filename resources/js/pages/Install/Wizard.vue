@@ -10,14 +10,23 @@ import { Head, useForm } from '@inertiajs/vue3';
 import { Check, Eye, EyeOff } from 'lucide-vue-next';
 import { computed, onUnmounted, ref, watch } from 'vue';
 
+interface SiteTypeOption {
+    value: string;
+    label: string;
+}
+
 interface DomaineOption {
     value: string;
     label: string;
     description: string;
+    site_types: SiteTypeOption[];
 }
 
 const props = defineProps<{
     domaines: DomaineOption[];
+    // Liste complète des types de site (App\Enums\SiteType) — repli quand les types suggérés par
+    // le domaine choisi (domaines[].site_types) ne conviennent pas.
+    types_tous: SiteTypeOption[];
     // Dérivé de InstallationService::isSaas() (InstallWizardController::show()) — jamais une
     // deuxième interprétation du mode côté frontend. En on_premise, l'email devient obligatoire ;
     // en saas il reste facultatif. Purement UX ici : la règle réelle est appliquée côté serveur
@@ -37,6 +46,7 @@ const STEP_LABELS = [
     'Entreprise',
     'Super Administrateur',
     "Domaine d'activité",
+    'Site principal',
     'Résumé',
 ];
 const currentStep = ref(1);
@@ -50,6 +60,7 @@ const form = useForm({
         email: '',
         password: '',
     },
+    site: { type: '', ville: '', quartier: '' },
 });
 
 const showPassword = ref(false);
@@ -326,6 +337,41 @@ const domaineLabel = computed(
             ?.label ?? '',
 );
 
+// ── Étape 4 : Site principal ─────────────────────────────────────────────────
+// Types suggérés par le domaine choisi à l'étape précédente (cf. DomaineActivite::siteTypes()) —
+// "Voir tous les types" reste disponible pour ne jamais bloquer un cas non prévu par la suggestion.
+const showAllSiteTypes = ref(false);
+const siteTypeSuggestions = computed(
+    () =>
+        props.domaines.find((d) => d.value === form.organisation.domaine)
+            ?.site_types ?? props.types_tous,
+);
+const siteTypeOptions = computed(() =>
+    showAllSiteTypes.value ? props.types_tous : siteTypeSuggestions.value,
+);
+
+function siteTypeLabel(value: string): string {
+    return props.types_tous.find((t) => t.value === value)?.label ?? '';
+}
+
+// Aperçu du nom généré automatiquement (même règle que SiteNamingService::generateName() côté
+// serveur, qui reste la seule source de vérité — cet aperçu n'est jamais envoyé au serveur).
+const siteNamePreview = computed(() => {
+    const quartier = form.site.quartier.trim();
+    if (!form.site.type || !quartier) return '';
+
+    const prefixe = siteTypeLabel(form.site.type).split(' / ')[0];
+
+    return `${prefixe} de ${quartier}`;
+});
+
+const step4Valid = computed(
+    () =>
+        form.site.type.length > 0 &&
+        form.site.ville.trim().length > 0 &&
+        form.site.quartier.trim().length > 0,
+);
+
 // ── Navigation ────────────────────────────────────────────────────────────────
 function nextStep() {
     if (currentStep.value < STEP_LABELS.length) currentStep.value++;
@@ -337,15 +383,16 @@ function previousStep() {
 function submit() {
     form.post('/install', {
         preserveScroll: true,
-        // Les erreurs de admin.* / organisation.* sont validées côté serveur au moment du
-        // submit final (étape 4, Résumé) mais leur <InputError> vit dans le markup des étapes
-        // 1-3, qui ne sont pas rendues à ce moment-là — sans ce renvoi, l'erreur reste
+        // Les erreurs de admin.* / organisation.* / site.* sont validées côté serveur au moment
+        // du submit final (étape 5, Résumé) mais leur <InputError> vit dans le markup des étapes
+        // 1-4, qui ne sont pas rendues à ce moment-là — sans ce renvoi, l'erreur reste
         // invisible et le bouton "Terminer" semble ne rien faire.
         onError: (errors) => {
             const firstKey = Object.keys(errors)[0];
             if (!firstKey) return;
             if (firstKey.startsWith('admin.')) currentStep.value = 2;
             else if (firstKey === 'organisation.domaine') currentStep.value = 3;
+            else if (firstKey.startsWith('site.')) currentStep.value = 4;
             else if (firstKey.startsWith('organisation.'))
                 currentStep.value = 1;
         },
@@ -652,7 +699,74 @@ function submit() {
                     <InputError :message="errorFor('organisation.domaine')" />
                 </div>
 
-                <!-- Étape 4 : Résumé -->
+                <!-- Étape 4 : Site principal -->
+                <div v-else-if="currentStep === 4" class="grid gap-5">
+                    <div class="grid gap-2">
+                        <p class="text-sm font-medium">
+                            Type de site
+                            <span class="text-destructive">*</span>
+                        </p>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button
+                                v-for="t in siteTypeOptions"
+                                :key="t.value"
+                                type="button"
+                                class="rounded-lg border p-2.5 text-center text-sm font-medium transition-colors"
+                                :class="
+                                    form.site.type === t.value
+                                        ? 'border-primary bg-primary/5'
+                                        : 'border-border hover:bg-muted/50'
+                                "
+                                @click="form.site.type = t.value"
+                            >
+                                {{ t.label }}
+                            </button>
+                        </div>
+                        <button
+                            v-if="!showAllSiteTypes && types_tous.length > siteTypeSuggestions.length"
+                            type="button"
+                            class="justify-self-start text-xs font-medium text-primary underline underline-offset-4 transition-colors hover:text-primary/80"
+                            @click="showAllSiteTypes = true"
+                        >
+                            Voir tous les types
+                        </button>
+                        <InputError :message="errorFor('site.type')" />
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="grid gap-2">
+                            <Label for="site-ville"
+                                >Ville
+                                <span class="text-destructive">*</span></Label
+                            >
+                            <Input id="site-ville" v-model="form.site.ville" />
+                            <InputError :message="errorFor('site.ville')" />
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="site-quartier"
+                                >Quartier
+                                <span class="text-destructive">*</span></Label
+                            >
+                            <Input
+                                id="site-quartier"
+                                v-model="form.site.quartier"
+                            />
+                            <InputError :message="errorFor('site.quartier')" />
+                        </div>
+                    </div>
+
+                    <p
+                        v-if="siteNamePreview"
+                        class="text-xs text-muted-foreground"
+                    >
+                        Nom du site :
+                        <span class="font-medium text-foreground">{{
+                            siteNamePreview
+                        }}</span>
+                    </p>
+                </div>
+
+                <!-- Étape 5 : Résumé -->
                 <div v-else class="grid gap-5">
                     <div>
                         <h3
@@ -684,11 +798,24 @@ function submit() {
                             {{ form.admin.email }}
                         </p>
                     </div>
+                    <div>
+                        <h3
+                            class="mb-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                        >
+                            Site principal
+                        </h3>
+                        <p class="text-sm">
+                            {{ siteNamePreview || siteTypeLabel(form.site.type) }}
+                        </p>
+                        <p class="text-sm text-muted-foreground">
+                            {{ form.site.ville }}, {{ form.site.quartier }}
+                        </p>
+                    </div>
                     <p class="text-xs text-muted-foreground">
                         Le catalogue de départ (types de produit, catégories,
-                        options, types de véhicule) est créé automatiquement et
-                        adapté à votre domaine d'activité — modifiable ensuite.
-                        Le premier site se configure à la première connexion.
+                        options, types de véhicule) et le site principal
+                        ci-dessus sont créés automatiquement avec votre
+                        entreprise — tout est modifiable ensuite.
                     </p>
                     <InputError :message="errorFor('organisation.nom')" />
                 </div>
@@ -731,6 +858,14 @@ function submit() {
                     v-else-if="currentStep === 3"
                     type="button"
                     :disabled="!step3Valid"
+                    @click="nextStep"
+                >
+                    Suivant
+                </Button>
+                <Button
+                    v-else-if="currentStep === 4"
+                    type="button"
+                    :disabled="!step4Valid"
                     @click="nextStep"
                 >
                     Suivant

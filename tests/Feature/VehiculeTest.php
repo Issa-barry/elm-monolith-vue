@@ -202,7 +202,7 @@ class VehiculeTest extends TestCase
         ]);
     }
 
-    // ── Seuil de dette spécifique (dérogation impayés) ──────────────────────────
+    // ── Dérogation au contrôle des impayés (via le type de véhicule) ────────────
 
     public function test_create_expose_le_seuil_global_impayes(): void
     {
@@ -216,34 +216,35 @@ class VehiculeTest extends TestCase
             );
     }
 
-    public function test_store_persiste_le_seuil_dette_derogation(): void
+    public function test_store_active_la_derogation_quand_le_type_a_un_seuil_configure(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'seuil_derogation_impayes' => 2_000_000]);
         $site = $this->user->sites()->first();
 
         $this->actingAs($this->user)
             ->post(route('vehicules.store'), [
                 'nom_vehicule' => 'Camion dérogation',
                 'immatriculation' => 'RC-002-GN',
-                'type_vehicule_id' => $this->typeId(),
+                'type_vehicule_id' => $type->id,
                 'proprietaire_id' => $proprietaire->id,
                 'categorie' => 'partenaire',
                 'site_id' => $site->id,
                 'is_active' => true,
                 'livraison_vente' => true,
                 'livraison_logistique' => false,
-                'seuil_dette_derogation' => 2_000_000,
+                'derogation_impayes_autorisee' => true,
             ]);
 
         $this->assertDatabaseHas('vehicules', [
             'organization_id' => $this->org->id,
             'immatriculation' => 'RC-002-GN',
-            'seuil_dette_derogation' => 2_000_000,
+            'derogation_impayes_autorisee' => true,
         ]);
     }
 
-    /** Omis du payload : le véhicule reste sans dérogation, hérite du seuil global — jamais 0 par défaut. */
-    public function test_store_sans_seuil_dette_derogation_reste_null(): void
+    /** Omis du payload : le véhicule reste sans dérogation, jamais activée par défaut. */
+    public function test_store_sans_derogation_impayes_autorisee_reste_false(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $site = $this->user->sites()->first();
@@ -264,11 +265,12 @@ class VehiculeTest extends TestCase
         $this->assertDatabaseHas('vehicules', [
             'organization_id' => $this->org->id,
             'immatriculation' => 'RC-003-GN',
-            'seuil_dette_derogation' => null,
+            'derogation_impayes_autorisee' => false,
         ]);
     }
 
-    public function test_store_rejette_un_seuil_dette_derogation_negatif(): void
+    /** Le type par défaut créé par HasOrgAndUser n'a aucun seuil_derogation_impayes configuré. */
+    public function test_store_rejette_lactivation_de_la_derogation_si_le_type_nest_pas_configure(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $site = $this->user->sites()->first();
@@ -284,70 +286,117 @@ class VehiculeTest extends TestCase
                 'is_active' => true,
                 'livraison_vente' => true,
                 'livraison_logistique' => false,
-                'seuil_dette_derogation' => -1,
+                'derogation_impayes_autorisee' => true,
             ])
-            ->assertSessionHasErrors('seuil_dette_derogation');
+            ->assertSessionHasErrors('derogation_impayes_autorisee');
+
+        $this->assertDatabaseMissing('vehicules', ['immatriculation' => 'RC-004-GN']);
     }
 
-    public function test_update_modifie_le_seuil_dette_derogation(): void
+    public function test_update_active_la_derogation(): void
     {
+        $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'seuil_derogation_impayes' => 5_000_000]);
         $vehicule = $this->makeVehicule($this->org);
+        $vehicule->update(['type_vehicule_id' => $type->id]);
 
         $this->actingAs($this->user)
             ->put(route('vehicules.update', $vehicule), [
                 'nom_vehicule' => $vehicule->nom_vehicule,
                 'immatriculation' => $vehicule->immatriculation,
-                'type_vehicule_id' => $vehicule->type_vehicule_id,
+                'type_vehicule_id' => $type->id,
                 'proprietaire_id' => $vehicule->proprietaire_id,
                 'categorie' => 'partenaire',
                 'site_id' => $vehicule->site_id,
                 'is_active' => true,
                 'livraison_vente' => true,
                 'livraison_logistique' => false,
-                'seuil_dette_derogation' => 5_000_000,
+                'derogation_impayes_autorisee' => true,
             ])
             ->assertRedirect(route('vehicules.edit', $vehicule));
 
-        $this->assertSame(5_000_000, $vehicule->fresh()->seuil_dette_derogation);
+        $this->assertTrue($vehicule->fresh()->derogation_impayes_autorisee);
     }
 
-    /** Effacer le champ (repasser à vide) doit rétablir l'héritage du seuil global. */
-    public function test_update_peut_retirer_la_derogation_en_revenant_a_null(): void
+    /** Repasser le toggle à false désactive la dérogation. */
+    public function test_update_peut_desactiver_la_derogation(): void
     {
+        $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'seuil_derogation_impayes' => 5_000_000]);
         $vehicule = $this->makeVehicule($this->org);
-        $vehicule->update(['seuil_dette_derogation' => 5_000_000]);
+        $vehicule->update(['type_vehicule_id' => $type->id, 'derogation_impayes_autorisee' => true]);
 
         $this->actingAs($this->user)
             ->put(route('vehicules.update', $vehicule), [
                 'nom_vehicule' => $vehicule->nom_vehicule,
                 'immatriculation' => $vehicule->immatriculation,
-                'type_vehicule_id' => $vehicule->type_vehicule_id,
+                'type_vehicule_id' => $type->id,
                 'proprietaire_id' => $vehicule->proprietaire_id,
                 'categorie' => 'partenaire',
                 'site_id' => $vehicule->site_id,
                 'is_active' => true,
                 'livraison_vente' => true,
                 'livraison_logistique' => false,
-                'seuil_dette_derogation' => null,
+                'derogation_impayes_autorisee' => false,
             ])
             ->assertRedirect(route('vehicules.edit', $vehicule));
 
-        $this->assertNull($vehicule->fresh()->seuil_dette_derogation);
+        $this->assertFalse($vehicule->fresh()->derogation_impayes_autorisee);
     }
 
-    public function test_edit_expose_le_seuil_dette_derogation_et_le_seuil_global(): void
+    public function test_edit_expose_la_derogation_le_seuil_du_type_et_le_seuil_global(): void
     {
         Parametre::setVentesControleImpayes($this->org->id, true, 300_000);
+        $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'seuil_derogation_impayes' => 1_200_000]);
         $vehicule = $this->makeVehicule($this->org);
-        $vehicule->update(['seuil_dette_derogation' => 1_200_000]);
+        $vehicule->update(['type_vehicule_id' => $type->id, 'derogation_impayes_autorisee' => true]);
 
         $this->actingAs($this->user)
             ->get(route('vehicules.edit', $vehicule))
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Vehicules/Edit')
-                ->where('vehicule.seuil_dette_derogation', 1_200_000)
+                ->where('vehicule.derogation_impayes_autorisee', true)
                 ->where('seuil_global_impayes', 300_000)
             );
+    }
+
+    public function test_show_expose_le_seuil_du_type_pour_lorigine_de_la_derogation(): void
+    {
+        $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'seuil_derogation_impayes' => 4_000_000]);
+        $vehicule = $this->makeVehicule($this->org);
+        $vehicule->update(['type_vehicule_id' => $type->id, 'derogation_impayes_autorisee' => true]);
+
+        $this->actingAs($this->user)
+            ->get(route('vehicules.show', $vehicule))
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Vehicules/Show')
+                ->where('vehicule.derogation_impayes_autorisee', true)
+                ->where('vehicule.type_seuil_derogation_impayes', 4_000_000)
+            );
+    }
+
+    /** Un véhicule fraîchement créé n'a jamais la dérogation activée par défaut. */
+    public function test_store_creates_vehicule_avec_derogation_desactivee_par_defaut(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $site = $this->user->sites()->first();
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Camion défaut',
+                'immatriculation' => 'RC-005-GN',
+                'type_vehicule_id' => $this->typeId(),
+                'proprietaire_id' => $proprietaire->id,
+                'categorie' => 'partenaire',
+                'site_id' => $site->id,
+                'is_active' => true,
+                'livraison_vente' => true,
+                'livraison_logistique' => false,
+            ]);
+
+        $vehicule = Vehicule::where('organization_id', $this->org->id)
+            ->where('immatriculation', 'RC-005-GN')
+            ->firstOrFail();
+
+        $this->assertFalse($vehicule->derogation_impayes_autorisee);
     }
 
     /**

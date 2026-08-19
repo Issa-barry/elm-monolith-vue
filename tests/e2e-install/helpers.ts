@@ -1,6 +1,10 @@
 /**
- * Helpers spécifiques au parcours /install → /onboarding/site → back-office, testé de bout en
- * bout sur une base fraîchement migrée (jamais seedée, cf. playwright.install.config.ts).
+ * Helpers spécifiques au parcours /install → back-office, testé de bout en bout sur une base
+ * fraîchement migrée (jamais seedée, cf. playwright.install.config.ts). Le premier site est
+ * désormais configuré DANS le wizard (étape "Site principal", cf. InstallationService::install()) :
+ * plus de passage par /onboarding/site pour une installation neuve (ce parcours reste un filet de
+ * sécurité pour les organisations historiques, couvert côté Feature par OnboardingSiteTest, pas
+ * ici).
  *
  * Vérification email : formulaire principal (prénom/nom/téléphone/email/mot de passe) rempli en
  * entier, puis "Suivant" bascule — uniquement si un email est renseigné — vers un état dédié
@@ -78,7 +82,7 @@ async function fillStep2Form(page: Page, scenario: InstallScenario): Promise<voi
 
 /**
  * Étape 1 (Entreprise) → étape 2 (Super Admin, avec vérification email optionnelle) → étape 3
- * (Domaine) → étape 4 (Résumé) → soumission. S'arrête sur Install/Success.
+ * (Domaine) → étape 4 (Site principal) → étape 5 (Résumé) → soumission. S'arrête sur Install/Success.
  */
 export async function completeInstallWizard(
     page: Page,
@@ -122,7 +126,18 @@ export async function completeInstallWizard(
         .click();
     await page.getByRole('button', { name: /suivant/i }).click();
 
-    // ── Étape 4 : Résumé ──────────────────────────────────────────────────────
+    // ── Étape 4 : Site principal ────────────────────────────────────────────
+    // Sélectionne explicitement le type demandé (scenario.siteTypeLabel) plutôt que la première
+    // option suggérée, pour pouvoir ensuite vérifier le nom généré automatiquement ("{Type} de
+    // {Quartier}", cf. SiteNamingService::generateName()).
+    await page
+        .getByRole('button', { name: scenario.siteTypeLabel, exact: true })
+        .click();
+    await page.locator('#site-ville').fill(scenario.siteVille);
+    await page.locator('#site-quartier').fill(scenario.siteQuartier);
+    await page.getByRole('button', { name: /suivant/i }).click();
+
+    // ── Étape 5 : Résumé ──────────────────────────────────────────────────────
     await expect(
         page.getByRole('button', { name: /terminer l'installation/i }),
     ).toBeEnabled({ timeout: 10_000 });
@@ -133,7 +148,11 @@ export async function completeInstallWizard(
     ).toBeVisible({ timeout: 30_000 });
 }
 
-/** Depuis Install/Success : clique "Se connecter", se reconnecte, atteint l'onboarding. */
+/**
+ * Depuis Install/Success : clique "Se connecter", se reconnecte. Le premier site ayant déjà été
+ * créé pendant /install (étape "Site principal"), l'utilisateur atterrit directement sur le
+ * back-office — plus de détour par /onboarding/site pour une installation neuve.
+ */
 export async function loginAfterInstall(
     page: Page,
     scenario: InstallScenario,
@@ -146,41 +165,20 @@ export async function loginAfterInstall(
     await page.locator('input[name="password"]').fill(scenario.password);
     await page.getByRole('button', { name: /se connecter/i }).click();
 
-    await expect(page).toHaveURL(/\/onboarding\/site/, { timeout: 20_000 });
-}
-
-/**
- * Onboarding minimal (type + ville + quartier) → dashboard. Sélectionne explicitement le type
- * demandé (scenario.siteTypeLabel) plutôt que la première option, pour pouvoir ensuite vérifier
- * le nom généré automatiquement ("{Type} de {Quartier}", cf. SiteNamingService::generateName()).
- */
-export async function completeOnboarding(
-    page: Page,
-    scenario: InstallScenario,
-): Promise<void> {
-    await expect(
-        page.getByRole('heading', { name: /configurons votre premier site/i }),
-    ).toBeVisible({ timeout: 15_000 });
-
-    await page.getByRole('combobox').first().click();
-    await page
-        .getByRole('option', { name: new RegExp(`^${scenario.siteTypeLabel}`, 'i') })
-        .click();
-
-    await page.locator('#site-ville').fill(scenario.siteVille);
-    await page.locator('#site-quartier').fill(scenario.siteQuartier);
-
-    await page.getByRole('button', { name: /terminer et accéder à elm/i }).click();
-
     await expect(page).toHaveURL(/\/backoffice\/dashboard/, { timeout: 20_000 });
 
     // Le nom généré automatiquement doit apparaître tel quel dans le bloc utilisateur du menu
-    // latéral (UserInfo.vue), sans le type dupliqué (ex: jamais "Usine de Usine de Matoto") —
-    // cf. Site::getLabelAttribute().
+    // latéral (NavUser.vue/UserInfo.vue), sans le type dupliqué (ex: jamais "Usine de Usine de
+    // Matoto") — cf. Site::getLabelAttribute(). Locator scopé au bloc utilisateur
+    // (data-test="sidebar-menu-button") plutôt qu'à toute la page : le dashboard affiche aussi le
+    // site par défaut dans son en-tête (HeaderWidget.vue), un getByText() global sur toute la page
+    // matcherait donc deux éléments (strict mode violation).
     await expect(
-        page.getByText(`${scenario.siteTypeLabel} de ${scenario.siteQuartier}`, {
-            exact: true,
-        }),
+        page
+            .locator('[data-test="sidebar-menu-button"]')
+            .getByText(`${scenario.siteTypeLabel} de ${scenario.siteQuartier}`, {
+                exact: true,
+            }),
     ).toBeVisible({ timeout: 10_000 });
 }
 

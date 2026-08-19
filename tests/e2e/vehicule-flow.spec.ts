@@ -347,11 +347,10 @@ test('création — capacités maximales de chargement saisies dans le formulair
     // la valeur DOM sans déclencher sa logique de parsing, laissant le v-model à null (cf.
     // tests/e2e/stock-ajustement.spec.ts) : focus explicite puis blur en sortie pour forcer
     // le commit interne du composant avant de continuer.
-    // Scopé par label plutôt que `input[inputmode="numeric"]').last()` : VehiculeForm.vue a
-    // désormais un second InputNumber ("Seuil de dette spécifique") plus bas dans le DOM, donc
-    // `.last()` ciblait ce champ-là au lieu de la capacité — la valeur atterrissait dans
-    // seuil_dette_derogation et capacite_max restait null, rejeté par la validation backend
-    // (capacites.*.capacite_max required), d'où le formulaire qui ne quittait jamais /create.
+    // Scopé par label plutôt que `input[inputmode="numeric"]').last()` : un autre champ
+    // numérique peut apparaître plus bas dans le DOM de VehiculeForm.vue selon le contexte
+    // (ex: capacités multiples), donc `.last()` n'est pas fiable pour cibler spécifiquement
+    // la capacité.
     const capaciteMaxInput = page
         .locator('label')
         .filter({ hasText: /^Capacité max$/ })

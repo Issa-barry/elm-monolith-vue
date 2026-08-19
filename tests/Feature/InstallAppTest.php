@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\DomaineActivite;
+use App\Enums\SiteType;
 use App\Models\AppInstallation;
 use App\Models\Categorie;
 use App\Models\OptionCatalogue;
@@ -106,6 +107,9 @@ class InstallAppTest extends TestCase
             ->expectsQuestion('Email', 'issa@gmail.com')
             ->expectsQuestion('Code reçu par email (6 chiffres)', '123456')
             ->expectsQuestion('Mot de passe (min. 8 caractères, majuscule + minuscule + symbole)', 'Sup3r$ecretPwd')
+            ->expectsQuestion('Type de site', SiteType::SIEGE->label())
+            ->expectsQuestion('Ville', 'Conakry')
+            ->expectsQuestion('Quartier', 'Matoto')
             ->assertExitCode(1);
 
         $this->assertDatabaseMissing('personnes', ['telephone' => '+224622000099']);
@@ -124,12 +128,28 @@ class InstallAppTest extends TestCase
         $this->assertTrue(ProduitType::where('organization_id', $org->id)->where('code', 'matiere_production')->exists());
     }
 
-    public function test_aucun_site_nest_cree_pendant_linstallation(): void
+    /**
+     * Le premier site fait désormais partie intégrante de l'installation CLI aussi (cf.
+     * InstallationService::install()) — même comportement que le wizard web (cf. InstallWizardTest).
+     */
+    public function test_le_site_principal_est_cree_pendant_linstallation(): void
     {
-        $this->runInstall()->assertExitCode(0);
+        $this->runInstall(siteType: SiteType::USINE, siteVille: 'Conakry', siteQuartier: 'Matoto')
+            ->assertExitCode(0);
 
         $org = Organization::where('slug', 'elm-test')->firstOrFail();
-        $this->assertSame(0, $org->sites()->count());
+        $this->assertSame(1, $org->sites()->count());
+
+        $site = $org->sites()->firstOrFail();
+        $this->assertSame(SiteType::USINE, $site->type);
+        $this->assertSame('Conakry', $site->ville);
+        $this->assertSame('Matoto', $site->quartier);
+        $this->assertSame('Usine de Matoto', $site->nom);
+
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000000'))->firstOrFail();
+        $pivot = $user->sites()->wherePivot('is_default', true)->first();
+        $this->assertNotNull($pivot);
+        $this->assertSame($site->id, $pivot->id);
     }
 
     /**
@@ -171,6 +191,9 @@ class InstallAppTest extends TestCase
             ->expectsQuestion('Email', 'autre@gmail.com')
             ->expectsQuestion('Code reçu par email (6 chiffres)', '123456')
             ->expectsQuestion('Mot de passe (min. 8 caractères, majuscule + minuscule + symbole)', 'Sup3r$ecretPwd')
+            ->expectsQuestion('Type de site', SiteType::SIEGE->label())
+            ->expectsQuestion('Ville', 'Conakry')
+            ->expectsQuestion('Quartier', 'Matoto')
             ->assertExitCode(1);
 
         $this->assertSame(1, Organization::count());
@@ -188,6 +211,9 @@ class InstallAppTest extends TestCase
             ->expectsQuestion('Téléphone (format international, ex: +224622000000)', '+224622000000')
             ->expectsQuestion('Email (facultatif)', '')
             ->expectsQuestion('Mot de passe (min. 8 caractères, majuscule + minuscule + symbole)', 'Sup3r$ecretPwd')
+            ->expectsQuestion('Type de site', SiteType::SIEGE->label())
+            ->expectsQuestion('Ville', 'Conakry')
+            ->expectsQuestion('Quartier', 'Matoto')
             ->assertExitCode(0);
 
         $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000000'))->firstOrFail();

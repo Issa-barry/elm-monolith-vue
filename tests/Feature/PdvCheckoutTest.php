@@ -15,6 +15,7 @@ use App\Models\Parametre;
 use App\Models\Produit;
 use App\Models\Proprietaire;
 use App\Models\Site;
+use App\Models\TypeVehicule;
 use App\Models\User;
 use App\Models\VarianteStock;
 use App\Models\Vehicule;
@@ -429,15 +430,17 @@ class PdvCheckoutTest extends TestCase
         $this->assertSame(2, CommandeVente::where('vehicule_id', $vehicule->id)->count());
     }
 
-    /** Le seuil spécifique du véhicule (dérogation) s'applique aussi côté PDV — même service. */
-    public function test_checkout_mode_livreur_autorise_grace_au_seuil_specifique_du_vehicule(): void
+    /** La dérogation via le type de véhicule s'applique aussi côté PDV — même service. */
+    public function test_checkout_mode_livreur_autorise_grace_a_la_derogation_du_type_de_vehicule(): void
     {
         Parametre::setVentesControleImpayes($this->org->id, true, 0);
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'seuil_derogation_impayes' => 2_000_000]);
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
-            'seuil_dette_derogation' => 2_000_000,
+            'type_vehicule_id' => $type->id,
+            'derogation_impayes_autorisee' => true,
         ]);
         $this->makeDetteVehicule(1_500_000, $vehicule->id);
 

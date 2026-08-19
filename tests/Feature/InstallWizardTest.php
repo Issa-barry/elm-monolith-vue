@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\DomaineActivite;
+use App\Enums\SiteType;
 use App\Models\AppInstallation;
 use App\Models\Categorie;
 use App\Models\OptionCatalogue;
@@ -65,6 +66,11 @@ class InstallWizardTest extends TestCase
                 'email' => self::DEFAULT_EMAIL,
                 'password' => 'Sup3r$ecretPwd',
                 'password_confirmation' => 'Sup3r$ecretPwd',
+            ],
+            'site' => [
+                'type' => SiteType::SIEGE->value,
+                'ville' => 'Conakry',
+                'quartier' => 'Matoto',
             ],
         ], $overrides);
     }
@@ -274,6 +280,11 @@ class InstallWizardTest extends TestCase
                 'email' => self::DEFAULT_EMAIL,
                 'password' => 'Sup3r$ecretPwd',
             ],
+            'site' => [
+                'type' => SiteType::SIEGE->value,
+                'ville' => 'Conakry',
+                'quartier' => 'Matoto',
+            ],
         ];
 
         $this->post('/install', $payload)
@@ -463,12 +474,107 @@ class InstallWizardTest extends TestCase
         $this->assertTrue(ProduitType::where('organization_id', $org->id)->where('code', 'matiere_production')->exists());
     }
 
-    public function test_aucun_site_nest_cree_pendant_linstallation(): void
+    /**
+     * Le premier site fait désormais partie intégrante de l'installation (cf. InstallationService::
+     * install()) — plus d'état intermédiaire "organisation installée mais sans site exploitable".
+     */
+    public function test_le_site_principal_est_cree_pendant_linstallation(): void
+    {
+        $this->post('/install', $this->payload([
+            'site' => ['type' => SiteType::USINE->value, 'ville' => 'Conakry', 'quartier' => 'Matoto'],
+        ]))->assertOk();
+
+        $org = Organization::where('slug', 'elm-test')->firstOrFail();
+        $this->assertSame(1, $org->sites()->count());
+
+        $site = $org->sites()->firstOrFail();
+        $this->assertSame(SiteType::USINE, $site->type);
+        $this->assertSame('Conakry', $site->ville);
+        $this->assertSame('Matoto', $site->quartier);
+        $this->assertSame('Usine de Matoto', $site->nom);
+    }
+
+    /**
+     * Nom généré automatiquement ("{Type} de {Quartier}", cf. SiteNamingService) — jamais saisi
+     * par l'utilisateur pendant l'installation.
+     */
+    public function test_le_nom_du_site_principal_est_genere_automatiquement(): void
+    {
+        $this->post('/install', $this->payload([
+            'site' => ['type' => SiteType::BOUTIQUE->value, 'ville' => 'Conakry', 'quartier' => 'Sonfonia'],
+        ]))->assertOk();
+
+        $org = Organization::where('slug', 'elm-test')->firstOrFail();
+        $site = $org->sites()->firstOrFail();
+        $this->assertSame('Boutique de Sonfonia', $site->nom);
+    }
+
+    /**
+     * Téléphone et pays hérités du Super Admin qui vient d'être créé — jamais redemandés pendant
+     * l'installation (cf. InstallationService::creerSite()).
+     */
+    public function test_le_site_principal_herite_du_telephone_et_du_pays_du_super_admin(): void
     {
         $this->post('/install', $this->payload())->assertOk();
 
         $org = Organization::where('slug', 'elm-test')->firstOrFail();
-        $this->assertSame(0, $org->sites()->count());
+        $site = $org->sites()->firstOrFail();
+
+        $this->assertSame('+224622000000', $site->telephone);
+        $this->assertSame('Guinée', $site->pays);
+    }
+
+    /**
+     * Le Super Admin doit pouvoir utiliser immédiatement le site créé — sans ce rattachement,
+     * `default_site` resterait vide côté frontend et require.site bloquerait sa première connexion.
+     */
+    public function test_le_super_admin_est_rattache_au_site_principal_comme_site_par_defaut(): void
+    {
+        $this->post('/install', $this->payload())->assertOk();
+
+        $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000000'))->firstOrFail();
+        $org = Organization::where('slug', 'elm-test')->firstOrFail();
+        $site = $org->sites()->firstOrFail();
+
+        $pivot = $user->sites()->wherePivot('is_default', true)->first();
+        $this->assertNotNull($pivot);
+        $this->assertSame($site->id, $pivot->id);
+    }
+
+    public function test_le_type_de_site_est_obligatoire(): void
+    {
+        $this->post('/install', $this->payload([
+            'site' => ['type' => ''],
+        ]))->assertSessionHasErrors('site.type');
+
+        $this->assertFalse(AppInstallation::isInstalled());
+    }
+
+    public function test_un_type_de_site_invalide_est_rejete(): void
+    {
+        $this->post('/install', $this->payload([
+            'site' => ['type' => 'pas-un-type'],
+        ]))->assertSessionHasErrors('site.type');
+
+        $this->assertFalse(AppInstallation::isInstalled());
+    }
+
+    public function test_la_ville_du_site_principal_est_obligatoire(): void
+    {
+        $this->post('/install', $this->payload([
+            'site' => ['ville' => ''],
+        ]))->assertSessionHasErrors('site.ville');
+
+        $this->assertFalse(AppInstallation::isInstalled());
+    }
+
+    public function test_le_quartier_du_site_principal_est_obligatoire(): void
+    {
+        $this->post('/install', $this->payload([
+            'site' => ['quartier' => ''],
+        ]))->assertSessionHasErrors('site.quartier');
+
+        $this->assertFalse(AppInstallation::isInstalled());
     }
 
     /**
@@ -509,6 +615,7 @@ class InstallWizardTest extends TestCase
                 'prenom' => 'Alpha', 'nom' => 'A', 'telephone' => '+224622111111',
                 'email' => null, 'password' => 'Sup3r$ecretPwd', 'password_confirmation' => 'Sup3r$ecretPwd',
             ],
+            site: ['type' => SiteType::SIEGE->value, 'ville' => 'Conakry', 'quartier' => 'Matoto'],
         );
         app(InstallationService::class)->install(
             organisation: ['nom' => 'Org B', 'domaine' => DomaineActivite::COMMERCE_DISTRIBUTION->value],
@@ -516,6 +623,7 @@ class InstallWizardTest extends TestCase
                 'prenom' => 'Beta', 'nom' => 'B', 'telephone' => '+224622222222',
                 'email' => null, 'password' => 'Sup3r$ecretPwd', 'password_confirmation' => 'Sup3r$ecretPwd',
             ],
+            site: ['type' => SiteType::SIEGE->value, 'ville' => 'Conakry', 'quartier' => 'Matoto'],
         );
 
         $orgA = Organization::where('slug', 'org-a')->firstOrFail();
@@ -575,6 +683,7 @@ class InstallWizardTest extends TestCase
                 'prenom' => 'Issa', 'nom' => 'BARRY', 'telephone' => '+224622000099', 'email' => null,
                 'password' => 'Sup3r$ecretPwd', 'password_confirmation' => 'Sup3r$ecretPwd',
             ],
+            site: ['type' => SiteType::SIEGE->value, 'ville' => 'Conakry', 'quartier' => 'Matoto'],
         );
     }
 

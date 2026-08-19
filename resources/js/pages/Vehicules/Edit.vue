@@ -18,6 +18,7 @@ interface Option {
 interface TypeOption {
     value: string;
     label: string;
+    seuil_derogation_impayes: number | null;
 }
 
 interface SiteOption {
@@ -42,7 +43,7 @@ interface VehiculeData {
     photo_url: string | null;
     is_active: boolean;
     equipe_id: number | null;
-    seuil_dette_derogation: number | null;
+    derogation_impayes_autorisee: boolean;
 }
 
 const props = defineProps<{
@@ -82,7 +83,7 @@ const form = useForm({
     photo: null as File | null,
     is_active: props.vehicule.is_active,
     capacites: [...props.capacites] as CapaciteRow[],
-    seuil_dette_derogation: props.vehicule.seuil_dette_derogation,
+    derogation_impayes_autorisee: props.vehicule.derogation_impayes_autorisee,
 });
 
 const canSubmit = computed(() => {
