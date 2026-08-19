@@ -4,6 +4,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ArrowLeft, Save } from 'lucide-vue-next';
+import { ref } from 'vue';
 import ProduitForm from './partials/ProduitForm.vue';
 
 interface Option {
@@ -11,11 +12,14 @@ interface Option {
     label: string;
 }
 
-// `required_prices`/`gere_stock` (cf. ProduitTypeController::typesOptions()) pilotent
-// l'affichage du "*" sur les prix obligatoires et de la section Stock, dans ProduitForm.vue.
+// `required_prices`/`gere_stock` (cf. ProduitController::typesOptions()) pilotent l'affichage
+// du "*" sur les prix obligatoires et de la section Stock, dans ProduitForm.vue.
+// `achetable`/`vendable` pilotent la visibilité (applicabilité) de prix_achat/prix_vente.
 interface ProduitTypeOption extends Option {
     gere_stock: boolean;
     required_prices: string[];
+    achetable: boolean;
+    vendable: boolean;
 }
 
 interface Categorie {
@@ -64,6 +68,10 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Nouveau produit', href: '/backoffice/produits/create' },
 ];
 
+// Expose canSubmit (champs obligatoires + marge usine bloquante) pour désactiver le bouton
+// sticky mobile, physiquement hors du <form> (relié via l'attribut HTML form="produit-form").
+const produitFormRef = ref<InstanceType<typeof ProduitForm> | null>(null);
+
 const form = useForm({
     nom: '',
     categorie_id: null as string | null,
@@ -72,6 +80,7 @@ const form = useForm({
     produit_type_id: props.types[0]?.value ?? null,
     statut: 'actif',
     prix_usine: null as number | null,
+    prix_usine_tricycle: null as number | null,
     prix_vente: null as number | null,
     prix_achat: null as number | null,
     cout: null as number | null,
@@ -127,6 +136,7 @@ function submit() {
         <!-- ─── Formulaire ─── -->
         <div class="mx-auto max-w-4xl p-4 sm:p-6">
             <ProduitForm
+                ref="produitFormRef"
                 :form="form"
                 :errors="form.errors"
                 :types="types"
@@ -150,7 +160,9 @@ function submit() {
             <button
                 type="submit"
                 form="produit-form"
-                :disabled="form.processing"
+                :disabled="
+                    form.processing || !(produitFormRef?.canSubmit ?? true)
+                "
                 class="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-transform active:scale-[0.98] disabled:opacity-60"
             >
                 <Spinner v-if="form.processing" class="h-4 w-4" />

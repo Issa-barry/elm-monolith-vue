@@ -79,11 +79,13 @@ class VehiculesSeeder extends Seeder
         $proprietaireInterne = $org->proprietaireInterne()->firstOrFail();
 
         // Catégorie utilisée pour la ligne de capacité de démo de chaque véhicule (cf.
-        // ProduitsSeeder, exécuté avant ce seeder) — "Bouteille" car c'est la catégorie du
+        // ProduitsSeeder, exécuté avant ce seeder) — "Bouteille d'eau" car c'est la catégorie du
         // produit par défaut ("Pack de 6 bouteilles") utilisé par les formulaires de
-        // vente/logistique et par les tests E2E.
+        // vente/logistique et par les tests E2E. Résolue par `reference` (stable, jamais
+        // régénérée au renommage) plutôt que par `nom` — cf.
+        // ImportFlotteParser::CATEGORIE_BOUTEILLES_REFERENCE, même convention.
         $bouteille = Categorie::where('organization_id', $org->id)
-            ->where('nom', 'Bouteille')
+            ->where('reference', 'BOUTEILLE_EAU')
             ->firstOrFail();
 
         $equipeParChauffeur = fn (string $tel) => EquipeLivraison::query()

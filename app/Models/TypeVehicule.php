@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\CategorieTarifaireVehicule;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -24,6 +25,8 @@ class TypeVehicule extends Model
         'organization_id',
         'nom',
         'description',
+        'categorie_tarifaire',
+        'seuil_derogation_impayes',
         'is_active',
     ];
 
@@ -31,6 +34,8 @@ class TypeVehicule extends Model
     {
         return [
             'is_active' => 'boolean',
+            'categorie_tarifaire' => CategorieTarifaireVehicule::class,
+            'seuil_derogation_impayes' => 'integer',
         ];
     }
 

@@ -31,6 +31,8 @@ interface EquipeData {
     vehicule_categorie: string | null;
     vehicule_capacites: { categorie_nom: string; capacite_max: number }[];
     proprietaire_nom: string | null;
+    proprietaire_nom_affichage?: string | null;
+    proprietaire_est_entreprise?: boolean;
     proprietaire_telephone: string | null;
     taux_commission_proprietaire: number | null;
     nb_membres: number;
@@ -157,7 +159,16 @@ function membreLabel(membre: Membre): string {
                         Propriétaire
                     </p>
                     <p class="mt-2 text-sm font-medium">
-                        {{ equipe.proprietaire_nom || '—' }}
+                        {{
+                            equipe.proprietaire_nom_affichage ||
+                            equipe.proprietaire_nom ||
+                            '—'
+                        }}
+                        <span
+                            v-if="equipe.proprietaire_est_entreprise"
+                            class="ml-1 inline-flex items-center rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
+                            >Entreprise</span
+                        >
                     </p>
                     <p class="mt-1 text-xs text-muted-foreground">
                         {{

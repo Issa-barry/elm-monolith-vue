@@ -2,7 +2,16 @@
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Image, Layers, Plus, Save, X } from 'lucide-vue-next';
+import {
+    AlertTriangle,
+    Image,
+    Layers,
+    Plus,
+    Save,
+    TrendingDown,
+    TrendingUp,
+    X,
+} from 'lucide-vue-next';
 import Dropdown from 'primevue/dropdown';
 import Editor from 'primevue/editor';
 import InputNumber from 'primevue/inputnumber';
@@ -26,12 +35,17 @@ interface Option {
     label: string;
 }
 
-// `required_prices`/`gere_stock` (cf. ProduitTypeController::typesOptions() côté backend,
-// seule source de vérité, remplace l'ancien enum figé) pilotent le "*" affiché sur les prix
-// obligatoires et l'affichage de la section Stock pour le type sélectionné.
+// `required_prices`/`gere_stock` (cf. ProduitController::typesOptions() côté backend, seule
+// source de vérité) pilotent le "*" affiché sur les prix obligatoires et l'affichage de la
+// section Stock pour le type sélectionné. `achetable`/`vendable` pilotent une notion distincte,
+// l'applicabilité fonctionnelle (même champs que ceux qui filtrent les flux achat/vente) : un
+// prix peut être applicable sans être obligatoire — ne jamais confondre les deux (cf. analyse
+// tarification tricycle/applicabilité).
 interface ProduitTypeOption extends Option {
     gere_stock: boolean;
     required_prices: string[];
+    achetable: boolean;
+    vendable: boolean;
 }
 
 interface Categorie {
@@ -61,6 +75,7 @@ interface Variante {
     sku: string | null;
     code_barres: string | null;
     prix_usine: number | null;
+    prix_usine_tricycle: number | null;
     prix_vente: number | null;
     prix_achat: number | null;
     cout: number | null;
@@ -77,6 +92,7 @@ interface FormData {
     produit_type_id: string | null;
     statut: string;
     prix_usine: number | null;
+    prix_usine_tricycle: number | null;
     prix_vente: number | null;
     prix_achat: number | null;
     cout: number | null;
@@ -146,6 +162,17 @@ const requiredPrices = computed(
 function prixRequis(champ: string): boolean {
     return requiredPrices.value.includes(champ);
 }
+// Applicabilité (visibilité du champ) — distincte de l'obligation ci-dessus. prix_achat/
+// prix_vente suivent achetable/vendable (un type peut accepter un prix facultatif sans
+// l'exiger) ; prix_usine/prix_usine_tricycle restent pilotés par leur obligation, faute de
+// notion "applicable mais facultatif" pertinente pour ce prix dans ce domaine.
+const prixAchatApplicable = computed(
+    () => selectedType.value?.achetable ?? true,
+);
+const prixVenteApplicable = computed(
+    () => selectedType.value?.vendable ?? true,
+);
+
 // Rouge dès qu'un champ requis est vide ET que le formulaire a déjà été refusé une fois pour
 // ce motif — le backend regroupe toutes les erreurs de prix sous la clé `produit_type_id` (un
 // seul message listant les champs manquants), jamais sous le champ lui-même individuellement.
@@ -156,6 +183,97 @@ function prixInvalide(champ: string, valeur: number | null): boolean {
         (valeur === null || valeur === undefined)
     );
 }
+
+// ── Résumé de rentabilité (aperçu live, purement informatif) ────────────────
+// Le backend reste seul juge de ce qui est accepté (ProduitService::validerPrixSelonType) —
+// ce bloc ne fait qu'anticiper visuellement la même règle pour éviter un aller-retour serveur
+// inutile. Bénéfice/marge basés sur le coût de revient (jamais obligatoire, jamais bloquant) ;
+// seuil de marge faible = 10 %, cohérent avec le seuil déjà évoqué pour le chantier marge
+// (cf. mémoire "Prix produit & marge — spec cible").
+const SEUIL_MARGE_FAIBLE_PCT = 10;
+
+function formatMontant(val: number): string {
+    return new Intl.NumberFormat('fr-FR').format(Math.round(val));
+}
+
+const beneficeEstime = computed(() => {
+    if (props.form.prix_vente === null || props.form.cout === null) return null;
+    return props.form.prix_vente - props.form.cout;
+});
+const margeEstimeePct = computed(() => {
+    if (beneficeEstime.value === null || !props.form.prix_vente) return null;
+    return (beneficeEstime.value / props.form.prix_vente) * 100;
+});
+type EtatRentabilite = 'perte' | 'faible' | 'saine';
+const etatRentabilite = computed<EtatRentabilite | null>(() => {
+    if (margeEstimeePct.value === null) return null;
+    if (margeEstimeePct.value <= 0) return 'perte';
+    if (margeEstimeePct.value < SEUIL_MARGE_FAIBLE_PCT) return 'faible';
+    return 'saine';
+});
+
+// Marge de commission par catégorie tarifaire — simple différence, purement indicative (le
+// calcul réel/officiel reste CommissionCalculator côté serveur, sur les montants snapshotés).
+const margeCommissionAutresVehicules = computed(() => {
+    if (
+        !prixRequis('prix_usine') ||
+        props.form.prix_vente === null ||
+        props.form.prix_usine === null
+    )
+        return null;
+    return props.form.prix_vente - props.form.prix_usine;
+});
+const margeCommissionTricycle = computed(() => {
+    if (
+        !prixRequis('prix_usine') ||
+        props.form.prix_vente === null ||
+        props.form.prix_usine_tricycle === null
+    )
+        return null;
+    return props.form.prix_vente - props.form.prix_usine_tricycle;
+});
+
+// ── Blocage bouton Enregistrer ───────────────────────────────────────────────
+// Anticipe côté client exactement la règle bloquante déjà appliquée côté serveur
+// (prix_vente doit être strictement supérieur à prix_usine ET prix_usine_tricycle quand
+// requis) — le coût de revient, lui, ne bloque jamais (warning fort uniquement, cf.
+// etatRentabilite === 'perte'), le métier peut vendre à perte volontairement (promotion,
+// liquidation, produit d'appel...).
+const margeUsineBloquante = computed(() => {
+    if (!prixRequis('prix_usine') || props.form.prix_vente === null)
+        return false;
+    const depasseAutresVehicules =
+        props.form.prix_usine !== null &&
+        props.form.prix_vente <= props.form.prix_usine;
+    const depasseTricycle =
+        props.form.prix_usine_tricycle !== null &&
+        props.form.prix_vente <= props.form.prix_usine_tricycle;
+
+    return depasseAutresVehicules || depasseTricycle;
+});
+
+const champsObligatoiresManquants = computed(() => {
+    if (
+        !props.form.nom?.trim() ||
+        !props.form.produit_type_id ||
+        !props.form.statut
+    )
+        return true;
+
+    return requiredPrices.value.some((champ) => {
+        const valeur = (props.form as unknown as Record<string, unknown>)[
+            champ
+        ];
+
+        return valeur === null || valeur === undefined || valeur === '';
+    });
+});
+
+const canSubmit = computed(
+    () => !champsObligatoiresManquants.value && !margeUsineBloquante.value,
+);
+
+defineExpose({ canSubmit });
 
 // ── Alerte de stock faible ──────────────────────────────────────────────────
 const seuilSpecifique = computed({
@@ -721,17 +839,21 @@ const depasseLimiteVariantes = computed(
                 ajustable ensuite individuellement.
             </p>
 
+            <!--
+                Grille fluide auto-fit : le navigateur détermine seul le nombre de colonnes
+                selon la largeur réellement disponible (jamais de nombre de colonnes codé en
+                dur/calculé en JS) — chaque champ garde une largeur confortable (min 15rem) et
+                passe naturellement à la ligne suivante sans laisser de trou quand un champ
+                conditionnel (prix_achat/prix_vente) est absent. L'ordre du DOM ci-dessous EST
+                l'ordre visuel (pas de `order-*`) : Coût de revient reste toujours en dernier
+                simplement parce qu'il est écrit en dernier.
+            -->
             <div
-                class="grid gap-4 sm:grid-cols-2 sm:gap-5"
-                :class="
-                    prixRequis('prix_usine')
-                        ? 'lg:grid-cols-4'
-                        : 'lg:grid-cols-3'
-                "
+                class="grid grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] gap-4 sm:gap-5"
             >
                 <div v-if="prixRequis('prix_usine')">
                     <Label for="prix_usine" class="mb-1.5 block"
-                        >Prix usine
+                        >Prix usine — Autres véhicules
                         <span
                             v-if="prixRequis('prix_usine')"
                             class="text-destructive"
@@ -767,7 +889,79 @@ const depasseLimiteVariantes = computed(
                     </p>
                 </div>
 
-                <div>
+                <div v-if="prixRequis('prix_usine')">
+                    <Label for="prix_usine_tricycle" class="mb-1.5 block"
+                        >Prix usine — Tricycle
+                        <span class="text-destructive">*</span></Label
+                    >
+                    <InputNumber
+                        input-id="prix_usine_tricycle"
+                        :model-value="form.prix_usine_tricycle"
+                        @update:model-value="
+                            $emit('update:form', {
+                                ...form,
+                                prix_usine_tricycle: $event,
+                            })
+                        "
+                        :min="0"
+                        :use-grouping="true"
+                        locale="fr-GN"
+                        class="w-full"
+                        input-class="w-full"
+                        :class="{
+                            'p-invalid': prixInvalide(
+                                'prix_usine_tricycle',
+                                form.prix_usine_tricycle,
+                            ),
+                        }"
+                    />
+                    <p
+                        v-if="errors.prix_usine_tricycle"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.prix_usine_tricycle }}
+                    </p>
+                </div>
+
+                <div v-if="prixVenteApplicable">
+                    <Label for="prix_vente" class="mb-1.5 block"
+                        >Prix vente
+                        <span
+                            v-if="prixRequis('prix_vente')"
+                            class="text-destructive"
+                            >*</span
+                        ></Label
+                    >
+                    <InputNumber
+                        input-id="prix_vente"
+                        :model-value="form.prix_vente"
+                        @update:model-value="
+                            $emit('update:form', {
+                                ...form,
+                                prix_vente: $event,
+                            })
+                        "
+                        :min="0"
+                        :use-grouping="true"
+                        locale="fr-GN"
+                        class="w-full"
+                        input-class="w-full"
+                        :class="{
+                            'p-invalid': prixInvalide(
+                                'prix_vente',
+                                form.prix_vente,
+                            ),
+                        }"
+                    />
+                    <p
+                        v-if="errors.prix_vente"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ errors.prix_vente }}
+                    </p>
+                </div>
+
+                <div v-if="prixAchatApplicable">
                     <Label for="prix_achat" class="mb-1.5 block"
                         >Prix achat
                         <span
@@ -806,44 +1000,6 @@ const depasseLimiteVariantes = computed(
                 </div>
 
                 <div>
-                    <Label for="prix_vente" class="mb-1.5 block"
-                        >Prix vente
-                        <span
-                            v-if="prixRequis('prix_vente')"
-                            class="text-destructive"
-                            >*</span
-                        ></Label
-                    >
-                    <InputNumber
-                        input-id="prix_vente"
-                        :model-value="form.prix_vente"
-                        @update:model-value="
-                            $emit('update:form', {
-                                ...form,
-                                prix_vente: $event,
-                            })
-                        "
-                        :min="0"
-                        :use-grouping="true"
-                        locale="fr-GN"
-                        class="w-full"
-                        input-class="w-full"
-                        :class="{
-                            'p-invalid': prixInvalide(
-                                'prix_vente',
-                                form.prix_vente,
-                            ),
-                        }"
-                    />
-                    <p
-                        v-if="errors.prix_vente"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ errors.prix_vente }}
-                    </p>
-                </div>
-
-                <div>
                     <Label for="cout" class="mb-1.5 block"
                         >Coût de revient</Label
                     >
@@ -859,6 +1015,76 @@ const depasseLimiteVariantes = computed(
                         class="w-full"
                         input-class="w-full"
                     />
+                </div>
+            </div>
+
+            <!--
+                Résumé de rentabilité — aperçu live, informatif uniquement (le backend reste
+                seul juge à l'enregistrement). Petit bloc discret sous la grille, pas une
+                carte séparée.
+            -->
+            <div
+                v-if="
+                    etatRentabilite !== null ||
+                    margeCommissionAutresVehicules !== null ||
+                    margeCommissionTricycle !== null
+                "
+                class="mt-4 space-y-1.5 border-t pt-4 text-xs sm:mt-5 sm:pt-5"
+            >
+                <div
+                    v-if="etatRentabilite !== null"
+                    class="flex items-center gap-1.5 font-medium"
+                    :class="{
+                        'text-destructive': etatRentabilite === 'perte',
+                        'text-amber-600': etatRentabilite === 'faible',
+                        'text-emerald-600': etatRentabilite === 'saine',
+                    }"
+                >
+                    <TrendingDown
+                        v-if="etatRentabilite === 'perte'"
+                        class="h-3.5 w-3.5 shrink-0"
+                    />
+                    <AlertTriangle
+                        v-else-if="etatRentabilite === 'faible'"
+                        class="h-3.5 w-3.5 shrink-0"
+                    />
+                    <TrendingUp v-else class="h-3.5 w-3.5 shrink-0" />
+
+                    <span v-if="etatRentabilite === 'perte'">
+                        Perte estimée :
+                        {{ formatMontant(Math.abs(beneficeEstime!)) }} GNF /
+                        unité
+                    </span>
+                    <span v-else-if="etatRentabilite === 'faible'">
+                        Marge faible : {{ formatMontant(beneficeEstime!) }} GNF
+                        ({{ Math.round(margeEstimeePct!) }} %)
+                    </span>
+                    <span v-else>
+                        Bénéfice estimé : +{{
+                            formatMontant(beneficeEstime!)
+                        }}
+                        GNF / unité — Marge {{ Math.round(margeEstimeePct!) }}
+                        %
+                    </span>
+                </div>
+
+                <div
+                    v-if="
+                        margeCommissionAutresVehicules !== null ||
+                        margeCommissionTricycle !== null
+                    "
+                    class="flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground"
+                >
+                    <span>Marge commission —</span>
+                    <span v-if="margeCommissionAutresVehicules !== null">
+                        Autres véhicules :
+                        {{ formatMontant(margeCommissionAutresVehicules) }}
+                        GNF
+                    </span>
+                    <span v-if="margeCommissionTricycle !== null">
+                        Tricycle :
+                        {{ formatMontant(margeCommissionTricycle) }} GNF
+                    </span>
                 </div>
             </div>
         </div>
@@ -1084,7 +1310,7 @@ const depasseLimiteVariantes = computed(
             <a href="/backoffice/produits">
                 <Button type="button" variant="outline"> Retour </Button>
             </a>
-            <Button type="submit" :disabled="processing">
+            <Button type="submit" :disabled="processing || !canSubmit">
                 <Save class="mr-2 h-4 w-4" />
                 {{ processing ? 'Enregistrement…' : 'Enregistrer' }}
             </Button>

@@ -303,7 +303,12 @@ test('ajustement de stock — isolation entre deux agences distinctes', async ({
     await page.goto('/backoffice/produits/create');
     await page.locator('#nom').fill(productName);
     await page.locator('#code_barres').fill(`E2ESTK-${unique}`);
+    // PrimeVue InputNumber ne committe la valeur dans le v-model qu'au blur (jamais sur le
+    // simple événement "input" déclenché par .fill()) — sans ce blur explicite, le bouton
+    // "Enregistrer" (bloqué tant que canSubmit est faux, cf. ProduitForm.vue) reste
+    // indéfiniment désactivé puisque le clic qui déclencherait le blur n'a jamais lieu.
     await page.locator('#prix_achat').fill('1000');
+    await page.locator('#prix_achat').blur();
     await page.getByRole('button', { name: /^enregistrer$/i }).click();
     await expect(page).toHaveURL(/\/produits\/[^/]+$/);
 

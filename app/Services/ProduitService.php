@@ -12,7 +12,7 @@ class ProduitService
 {
     /** Champs de produit_variantes portés par le formulaire Produit (variante par défaut/générées). */
     private const CHAMPS_VARIANTE = [
-        'code_barres', 'prix_usine', 'prix_vente', 'prix_achat', 'cout',
+        'code_barres', 'prix_usine', 'prix_usine_tricycle', 'prix_vente', 'prix_achat', 'cout',
     ];
 
     public function __construct(private VarianteService $varianteService) {}
@@ -146,6 +146,7 @@ class ProduitService
     {
         $labels = [
             'prix_usine' => 'prix usine',
+            'prix_usine_tricycle' => 'prix usine tricycle',
             'prix_vente' => 'prix de vente',
             'prix_achat' => "prix d'achat",
         ];
@@ -177,6 +178,21 @@ class ProduitService
                 'champ' => 'prix_vente',
                 'message' => "Le prix de vente doit être strictement supérieur au {$labels[$champReference]}.",
             ];
+        }
+
+        // Tarif tricycle : contrôlé indépendamment du tarif "autres véhicules" ci-dessus — une
+        // marge correcte sur l'un ne doit jamais masquer une marge nulle/négative sur l'autre.
+        // Uniquement pertinent quand prix_usine est le champ de référence du type ET que la
+        // variante définit effectivement un tarif tricycle (jamais forcé sur les types où
+        // prix_usine lui-même n'a pas de sens, cf. ProduitType::champPrixReference()).
+        if ($champReference === 'prix_usine') {
+            $tricycle = $donneesPrix['prix_usine_tricycle'] ?? null;
+            if ($tricycle !== null && $tricycle !== '' && $vente <= (float) $tricycle) {
+                return [
+                    'champ' => 'prix_vente',
+                    'message' => 'Le prix de vente doit être strictement supérieur au prix usine tricycle.',
+                ];
+            }
         }
 
         return null;

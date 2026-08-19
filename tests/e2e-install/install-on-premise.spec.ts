@@ -3,14 +3,15 @@
  * l'email du Super Admin est obligatoire :
  *   /install → Entreprise → Super Administrateur → email vide bloque "Suivant" (libellé "Email *",
  *   jamais "(facultatif)") → email renseigné + mot de passe → Suivant → vérification email →
- *   Domaine d'activité → Résumé → installation → /onboarding/site → Type=Usine, Ville=Conakry,
- *   Quartier=Matoto → back-office affichant "Usine de Matoto" (jamais "Usine de Usine Matoto").
+ *   Domaine d'activité → Site principal (Type=Usine, Ville=Conakry, Quartier=Matoto) → Résumé →
+ *   installation → connexion directe sur le back-office affichant "Usine de Matoto" (jamais
+ *   "Usine de Usine Matoto").
  *
  * Run: npx playwright test --config=playwright.install.config.ts tests/e2e-install/install-on-premise.spec.ts
  * Base de données requise : fraîchement migrée, jamais seedée.
  */
 import { expect, test } from '@playwright/test';
-import { completeInstallWizard, completeOnboarding, loginAfterInstall } from './helpers';
+import { completeInstallWizard, loginAfterInstall } from './helpers';
 
 test.setTimeout(120_000);
 
@@ -59,9 +60,8 @@ test('installation complète avec Type=Usine, Ville=Conakry, Quartier=Matoto aff
 
     await completeInstallWizard(page, scenario);
     await loginAfterInstall(page, scenario);
-    await completeOnboarding(page, scenario);
 
-    // completeOnboarding() a déjà vérifié la présence exacte de "Usine de Matoto" dans le bloc
+    // loginAfterInstall() a déjà vérifié la présence exacte de "Usine de Matoto" dans le bloc
     // utilisateur (UserInfo.vue) — on vérifie ici, en plus, l'absence explicite du doublon signalé.
     await expect(page.getByText('Usine de Usine de Matoto')).toHaveCount(0);
     await expect(page.getByText('Usine de Usine Matoto')).toHaveCount(0);

@@ -5,18 +5,35 @@ import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/vue3';
+import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
+import Select from 'primevue/select';
+import { computed } from 'vue';
 
 interface TypeVehiculeData {
     id: string;
     nom: string;
     description: string | null;
+    categorie_tarifaire: string | null;
+    seuil_derogation_impayes: number | null;
     is_active: boolean;
+}
+
+interface CategorieTarifaireOption {
+    value: string;
+    label: string;
 }
 
 const props = defineProps<{
     type: TypeVehiculeData;
+    categoriesTarifaires: CategorieTarifaireOption[];
+    seuilStandardImpayes: number;
 }>();
+
+const seuilStandardLabel = computed(
+    () =>
+        `${new Intl.NumberFormat('fr-FR').format(props.seuilStandardImpayes)} GNF`,
+);
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
@@ -28,6 +45,8 @@ const form = useForm({
     _method: 'PUT',
     nom: props.type.nom,
     description: props.type.description ?? '',
+    categorie_tarifaire: props.type.categorie_tarifaire,
+    seuil_derogation_impayes: props.type.seuil_derogation_impayes,
     is_active: props.type.is_active,
 });
 
@@ -87,6 +106,65 @@ function submit() {
                         class="w-full"
                         placeholder="Optionnel"
                     />
+                </div>
+
+                <div>
+                    <Label for="categorie_tarifaire" class="mb-1.5 block"
+                        >Catégorie tarifaire</Label
+                    >
+                    <Select
+                        input-id="categorie_tarifaire"
+                        v-model="form.categorie_tarifaire"
+                        :options="props.categoriesTarifaires"
+                        option-label="label"
+                        option-value="value"
+                        show-clear
+                        placeholder="Non classé (tarif « Autres véhicules »)"
+                        class="w-full"
+                        :class="{
+                            'p-invalid': form.errors.categorie_tarifaire,
+                        }"
+                    />
+                    <p class="mt-1 text-xs text-muted-foreground">
+                        Détermine le prix usine appliqué automatiquement sur les
+                        commandes livrées par ce type de véhicule (cf.
+                        tarification des produits).
+                    </p>
+                    <p
+                        v-if="form.errors.categorie_tarifaire"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ form.errors.categorie_tarifaire }}
+                    </p>
+                </div>
+
+                <div>
+                    <Label for="seuil_derogation_impayes" class="mb-1.5 block"
+                        >Seuil maximum de dérogation autorisé (GNF)</Label
+                    >
+                    <InputNumber
+                        input-id="seuil_derogation_impayes"
+                        v-model="form.seuil_derogation_impayes"
+                        :min="0"
+                        :max="999999999"
+                        :use-grouping="false"
+                        placeholder="Aucun (dérogation impossible pour ce type)"
+                        class="w-full"
+                        :class="{
+                            'p-invalid': form.errors.seuil_derogation_impayes,
+                        }"
+                    />
+                    <p class="mt-1 text-xs text-muted-foreground">
+                        Seuil standard actuel : {{ seuilStandardLabel }}. Un
+                        véhicule de ce type ne peut activer la dérogation au
+                        contrôle des impayés que si ce champ est renseigné.
+                    </p>
+                    <p
+                        v-if="form.errors.seuil_derogation_impayes"
+                        class="mt-1 text-xs text-destructive"
+                    >
+                        {{ form.errors.seuil_derogation_impayes }}
+                    </p>
                 </div>
 
                 <div class="flex items-center gap-3">

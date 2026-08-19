@@ -3,15 +3,19 @@
 namespace Tests\Feature;
 
 use App\Enums\StatutCommandeVente;
+use App\Enums\StatutFactureVente;
 use App\Models\Categorie;
 use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
+use App\Models\FactureVente;
 use App\Models\Fournisseur;
 use App\Models\Organization;
+use App\Models\Parametre;
 use App\Models\Produit;
 use App\Models\Proprietaire;
 use App\Models\Site;
+use App\Models\TypeVehicule;
 use App\Models\User;
 use App\Models\VarianteStock;
 use App\Models\Vehicule;
@@ -362,5 +366,133 @@ class PdvCheckoutTest extends TestCase
             'mode' => 'Vente rapide',
             'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 1]],
         ])->assertRedirect(route('login'));
+    }
+
+    // ── Contrôle des impayés — même règle qu'au back-office, sur SolvabiliteService ─
+    // (trou identifié le 18/08/2026 : le PDV créait auparavant sa facture sans AUCUN contrôle,
+    // quel que soit le paramétrage de l'organisation — cf. PdvCheckoutService::checkout()).
+
+    /** Facture IMPAYEE rattachée à un véhicule, via sa commande — même helper que CommandeVenteTest. */
+    private function makeDetteVehicule(int $montant, string $vehiculeId): FactureVente
+    {
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->site->id,
+            'vehicule_id' => $vehiculeId,
+        ]);
+
+        return FactureVente::create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->site->id,
+            'vehicule_id' => $vehiculeId,
+            'commande_vente_id' => $commande->id,
+            'montant_brut' => $montant,
+            'montant_net' => $montant,
+            'statut_facture' => StatutFactureVente::IMPAYEE->value,
+        ]);
+    }
+
+    public function test_checkout_mode_livreur_bloque_quand_dette_vehicule_depasse_le_seuil(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 100_000);
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id, 'proprietaire_id' => $proprietaire->id]);
+        $this->makeDetteVehicule(150_000, $vehicule->id);
+
+        $this->actingAs($this->user)
+            ->post('/backoffice/pdv/checkout', [
+                'mode' => 'Livreur',
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 1]],
+            ])
+            ->assertSessionHasErrors('impayes');
+
+        // makeDetteVehicule() a déjà créé une commande pour ce véhicule : seule la tentative
+        // PDV a échoué, aucune commande supplémentaire.
+        $this->assertSame(1, CommandeVente::where('vehicule_id', $vehicule->id)->count());
+    }
+
+    public function test_checkout_mode_livreur_autorise_sous_le_seuil(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 100_000);
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id, 'proprietaire_id' => $proprietaire->id]);
+        $this->makeDetteVehicule(50_000, $vehicule->id);
+
+        $this->actingAs($this->user)
+            ->post('/backoffice/pdv/checkout', [
+                'mode' => 'Livreur',
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 1]],
+            ])
+            ->assertSessionDoesntHaveErrors('impayes');
+
+        $this->assertSame(2, CommandeVente::where('vehicule_id', $vehicule->id)->count());
+    }
+
+    /** La dérogation via le type de véhicule s'applique aussi côté PDV — même service. */
+    public function test_checkout_mode_livreur_autorise_grace_a_la_derogation_du_type_de_vehicule(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 0);
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'seuil_derogation_impayes' => 2_000_000]);
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'proprietaire_id' => $proprietaire->id,
+            'type_vehicule_id' => $type->id,
+            'derogation_impayes_autorisee' => true,
+        ]);
+        $this->makeDetteVehicule(1_500_000, $vehicule->id);
+
+        $this->actingAs($this->user)
+            ->post('/backoffice/pdv/checkout', [
+                'mode' => 'Livreur',
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 1]],
+            ])
+            ->assertSessionDoesntHaveErrors('impayes');
+    }
+
+    public function test_checkout_mode_client_bloque_quand_dette_client_depasse_le_seuil(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 100_000);
+        $client = Client::factory()->create(['organization_id' => $this->org->id]);
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->site->id,
+            'client_id' => $client->id,
+        ]);
+        FactureVente::create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->site->id,
+            'commande_vente_id' => $commande->id,
+            'montant_brut' => 150_000,
+            'montant_net' => 150_000,
+            'statut_facture' => StatutFactureVente::IMPAYEE->value,
+        ]);
+
+        $this->actingAs($this->user)
+            ->post('/backoffice/pdv/checkout', [
+                'mode' => 'Client',
+                'client_id' => $client->id,
+                'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 1]],
+            ])
+            ->assertSessionHasErrors('impayes');
+    }
+
+    /**
+     * Mode "Vente rapide" : ni véhicule ni client, donc rien à contrôler — ne doit jamais être
+     * bloqué par le contrôle des impayés, même avec le contrôle actif par défaut.
+     */
+    public function test_checkout_vente_rapide_nest_jamais_bloquee_par_le_controle_impayes(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 0);
+
+        $this->actingAs($this->user)
+            ->post('/backoffice/pdv/checkout', [
+                'mode' => 'Vente rapide',
+                'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 1]],
+            ])
+            ->assertSessionDoesntHaveErrors('impayes');
     }
 }

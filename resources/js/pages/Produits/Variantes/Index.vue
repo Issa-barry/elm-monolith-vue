@@ -24,6 +24,7 @@ interface VarianteRow {
     sku: string | null;
     code_barres: string | null;
     prix_usine: number | null;
+    prix_usine_tricycle: number | null;
     prix_vente: number | null;
     prix_achat: number | null;
     cout: number | null;
@@ -38,6 +39,11 @@ const props = defineProps<{
         nom: string;
         type_nom: string | null;
         prix_usine_requis: boolean;
+        // cf. ProduitForm.vue : achetable/vendable pilotent la visibilité (applicabilité) de
+        // prix_achat/prix_vente, distincte de leur obligation — même règle reproduite ici pour
+        // ne jamais diverger entre création/édition du produit simple et éditeur groupé.
+        achetable: boolean;
+        vendable: boolean;
     };
     variantes: VarianteRow[];
 }>();
@@ -55,6 +61,8 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const prixUsineRequis = computed(() => props.produit.prix_usine_requis);
+const prixAchatApplicable = computed(() => props.produit.achetable);
+const prixVenteApplicable = computed(() => props.produit.vendable);
 
 // ── État éditable ────────────────────────────────────────────────────────────
 // Copie locale éditable + snapshot d'origine pour calculer le diff à l'enregistrement
@@ -69,6 +77,7 @@ function estModifiee(row: VarianteRow): boolean {
     return (
         row.code_barres !== orig.code_barres ||
         row.prix_usine !== orig.prix_usine ||
+        row.prix_usine_tricycle !== orig.prix_usine_tricycle ||
         row.prix_vente !== orig.prix_vente ||
         row.prix_achat !== orig.prix_achat ||
         row.cout !== orig.cout ||
@@ -135,6 +144,7 @@ function enregistrer() {
                 id: r.id,
                 code_barres: r.code_barres,
                 prix_usine: r.prix_usine,
+                prix_usine_tricycle: r.prix_usine_tricycle,
                 prix_vente: r.prix_vente,
                 prix_achat: r.prix_achat,
                 cout: r.cout,
@@ -247,15 +257,31 @@ function enregistrer() {
                             <th class="px-2 py-2 text-left">Variante</th>
                             <th class="px-2 py-2 text-left">Référence</th>
                             <th class="px-2 py-2 text-left">Code-barres</th>
+                            <th class="px-2 py-2 text-right">Coût</th>
                             <th
                                 v-if="prixUsineRequis"
                                 class="px-2 py-2 text-right"
                             >
-                                Prix usine
+                                Prix usine — Autres véhicules *
                             </th>
-                            <th class="px-2 py-2 text-right">Prix achat</th>
-                            <th class="px-2 py-2 text-right">Prix vente</th>
-                            <th class="px-2 py-2 text-right">Coût</th>
+                            <th
+                                v-if="prixUsineRequis"
+                                class="px-2 py-2 text-right"
+                            >
+                                Prix usine — Tricycle *
+                            </th>
+                            <th
+                                v-if="prixAchatApplicable"
+                                class="px-2 py-2 text-right"
+                            >
+                                Prix achat
+                            </th>
+                            <th
+                                v-if="prixVenteApplicable"
+                                class="px-2 py-2 text-right"
+                            >
+                                Prix vente
+                            </th>
                             <th class="px-2 py-2 text-left">Statut</th>
                         </tr>
                     </thead>
@@ -286,6 +312,16 @@ function enregistrer() {
                                     class="h-7 w-32 text-xs"
                                 />
                             </td>
+                            <td class="px-2">
+                                <InputNumber
+                                    v-model="row.cout"
+                                    :min="0"
+                                    :use-grouping="true"
+                                    locale="fr-GN"
+                                    class="w-24"
+                                    input-class="h-7 w-24 text-xs text-right"
+                                />
+                            </td>
                             <td v-if="prixUsineRequis" class="px-2">
                                 <InputNumber
                                     v-model="row.prix_usine"
@@ -296,7 +332,17 @@ function enregistrer() {
                                     input-class="h-7 w-28 text-xs text-right"
                                 />
                             </td>
-                            <td class="px-2">
+                            <td v-if="prixUsineRequis" class="px-2">
+                                <InputNumber
+                                    v-model="row.prix_usine_tricycle"
+                                    :min="0"
+                                    :use-grouping="true"
+                                    locale="fr-GN"
+                                    class="w-28"
+                                    input-class="h-7 w-28 text-xs text-right"
+                                />
+                            </td>
+                            <td v-if="prixAchatApplicable" class="px-2">
                                 <InputNumber
                                     v-model="row.prix_achat"
                                     :min="0"
@@ -306,7 +352,7 @@ function enregistrer() {
                                     input-class="h-7 w-28 text-xs text-right"
                                 />
                             </td>
-                            <td class="px-2">
+                            <td v-if="prixVenteApplicable" class="px-2">
                                 <InputNumber
                                     v-model="row.prix_vente"
                                     :min="0"
@@ -314,16 +360,6 @@ function enregistrer() {
                                     locale="fr-GN"
                                     class="w-28"
                                     input-class="h-7 w-28 text-xs text-right"
-                                />
-                            </td>
-                            <td class="px-2">
-                                <InputNumber
-                                    v-model="row.cout"
-                                    :min="0"
-                                    :use-grouping="true"
-                                    locale="fr-GN"
-                                    class="w-24"
-                                    input-class="h-7 w-24 text-xs text-right"
                                 />
                             </td>
                             <td class="px-2">

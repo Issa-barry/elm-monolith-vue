@@ -60,6 +60,13 @@ class ProduitController extends Controller
                 'label' => $t->nom,
                 'gere_stock' => $t->gere_stock,
                 'required_prices' => $t->requiredPrices(),
+                // Applicabilité fonctionnelle (déjà utilisée pour filtrer les flux
+                // achat/vente, cf. CommandeAchatController/CommandeVenteController/
+                // PdvController) — réutilisée ici pour piloter la visibilité des champs
+                // prix_achat/prix_vente dans le formulaire, distincte de l'obligation de
+                // saisie (*_requis, cf. required_prices ci-dessus).
+                'achetable' => $t->achetable,
+                'vendable' => $t->vendable,
             ]);
     }
 
@@ -198,6 +205,7 @@ class ProduitController extends Controller
                 'statut_label' => $p->statut?->label(),
                 'image_url' => $p->image_url,
                 'prix_usine' => $variantePrincipale?->prix_usine,
+                'prix_usine_tricycle' => $variantePrincipale?->prix_usine_tricycle,
                 'prix_vente' => $variantePrincipale?->prix_vente,
                 'prix_achat' => $variantePrincipale?->prix_achat,
                 'cout' => $variantePrincipale?->cout,
@@ -464,9 +472,14 @@ class ProduitController extends Controller
                 'produit_type_id' => $produit->produit_type_id,
                 'type_nom' => $produit->produitType?->nom,
                 'prix_usine_requis' => (bool) $produit->produitType?->prix_usine_requis,
+                // cf. typesOptions()/variantesIndex() : achetable/vendable pilotent la
+                // visibilité de prix_achat/prix_vente dans VarianteEditModal.vue.
+                'achetable' => (bool) ($produit->produitType?->achetable ?? true),
+                'vendable' => (bool) ($produit->produitType?->vendable ?? true),
                 'statut' => $produit->statut?->value,
                 'statut_label' => $produit->statut?->label(),
                 'prix_usine' => $variantePrincipale?->prix_usine,
+                'prix_usine_tricycle' => $variantePrincipale?->prix_usine_tricycle,
                 'prix_vente' => $variantePrincipale?->prix_vente,
                 'prix_achat' => $variantePrincipale?->prix_achat,
                 'cout' => $variantePrincipale?->cout,
@@ -496,7 +509,11 @@ class ProduitController extends Controller
                     'libelle' => $v->libelle,
                     'sku' => $v->sku,
                     'code_barres' => $v->code_barres,
+                    'prix_usine' => $v->prix_usine,
+                    'prix_usine_tricycle' => $v->prix_usine_tricycle,
                     'prix_vente' => $v->prix_vente,
+                    'prix_achat' => $v->prix_achat,
+                    'cout' => $v->cout,
                     'is_default' => $v->is_default,
                     'is_active' => $v->is_active,
                     'options' => $this->varianteOptions($v),
@@ -567,6 +584,7 @@ class ProduitController extends Controller
                 'produit_type_id' => $produit->produit_type_id,
                 'statut' => $produit->statut?->value,
                 'prix_usine' => $variantePrincipale?->prix_usine,
+                'prix_usine_tricycle' => $variantePrincipale?->prix_usine_tricycle,
                 'prix_vente' => $variantePrincipale?->prix_vente,
                 'prix_achat' => $variantePrincipale?->prix_achat,
                 'cout' => $variantePrincipale?->cout,
@@ -581,6 +599,7 @@ class ProduitController extends Controller
                     'sku' => $v->sku,
                     'code_barres' => $v->code_barres,
                     'prix_usine' => $v->prix_usine,
+                    'prix_usine_tricycle' => $v->prix_usine_tricycle,
                     'prix_vente' => $v->prix_vente,
                     'prix_achat' => $v->prix_achat,
                     'cout' => $v->cout,
@@ -790,6 +809,7 @@ class ProduitController extends Controller
         $data = $request->validate([
             'code_barres' => 'nullable|string|max:100',
             'prix_usine' => 'nullable|integer|min:0',
+            'prix_usine_tricycle' => 'nullable|integer|min:0',
             'prix_vente' => 'nullable|integer|min:0',
             'prix_achat' => 'nullable|integer|min:0',
             'cout' => 'nullable|integer|min:0',
@@ -800,7 +820,7 @@ class ProduitController extends Controller
         // Valide les prix EFFECTIFS (valeurs déjà sur la variante, écrasées par celles envoyées)
         // — même logique que ProduitService::mettreAJourSimple() pour ne pas rejeter une mise à
         // jour partielle qui ne touche pas au prix.
-        $champsVariante = ['prix_usine', 'prix_vente', 'prix_achat'];
+        $champsVariante = ['prix_usine', 'prix_usine_tricycle', 'prix_vente', 'prix_achat'];
         $donneesEffectives = array_merge(
             Arr::only($variante->getAttributes(), $champsVariante),
             Arr::only($data, $champsVariante),
@@ -830,6 +850,10 @@ class ProduitController extends Controller
                 'nom' => $produit->nom,
                 'type_nom' => $produit->produitType?->nom,
                 'prix_usine_requis' => (bool) $produit->produitType?->prix_usine_requis,
+                // cf. typesOptions() : achetable/vendable pilotent la visibilité de
+                // prix_achat/prix_vente, indépendamment de leur caractère obligatoire.
+                'achetable' => (bool) ($produit->produitType?->achetable ?? true),
+                'vendable' => (bool) ($produit->produitType?->vendable ?? true),
             ],
             'variantes' => $produit->variantes->map(fn (ProduitVariante $v) => [
                 'id' => $v->id,
@@ -862,13 +886,14 @@ class ProduitController extends Controller
             'variantes.*.id' => ['required', 'string'],
             'variantes.*.code_barres' => ['nullable', 'string', 'max:100'],
             'variantes.*.prix_usine' => ['nullable', 'integer', 'min:0'],
+            'variantes.*.prix_usine_tricycle' => ['nullable', 'integer', 'min:0'],
             'variantes.*.prix_vente' => ['nullable', 'integer', 'min:0'],
             'variantes.*.prix_achat' => ['nullable', 'integer', 'min:0'],
             'variantes.*.cout' => ['nullable', 'integer', 'min:0'],
             'variantes.*.is_active' => ['boolean'],
         ]);
 
-        $champsVariante = ['prix_usine', 'prix_vente', 'prix_achat'];
+        $champsVariante = ['prix_usine', 'prix_usine_tricycle', 'prix_vente', 'prix_achat'];
 
         DB::transaction(function () use ($produit, $data, $champsVariante) {
             foreach ($data['variantes'] as $ligne) {
@@ -968,6 +993,7 @@ class ProduitController extends Controller
             ],
             'statut' => 'required|in:'.implode(',', ProduitStatut::values()),
             'prix_usine' => 'nullable|integer|min:0',
+            'prix_usine_tricycle' => 'nullable|integer|min:0',
             'prix_vente' => 'nullable|integer|min:0',
             'prix_achat' => 'nullable|integer|min:0',
             'cout' => 'nullable|integer|min:0',
@@ -1022,6 +1048,7 @@ class ProduitController extends Controller
             'prix_vente' => $variante?->prix_vente,
             'prix_achat' => $variante?->prix_achat,
             'prix_usine' => $variante?->prix_usine,
+            'prix_usine_tricycle' => $variante?->prix_usine_tricycle,
             'cout' => $variante?->cout,
             'qte_stock' => $produit->qte_stock,
             'seuil_alerte_stock' => $produit->seuil_alerte_stock,

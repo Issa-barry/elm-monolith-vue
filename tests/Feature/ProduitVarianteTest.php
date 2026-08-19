@@ -59,6 +59,7 @@ class ProduitVarianteTest extends TestCase
             'produit_type_id' => $this->typeId('fabricable'),
             'statut' => 'actif',
             'prix_usine' => 4000,
+            'prix_usine_tricycle' => 3800,
             'prix_vente' => 5000,
         ]);
 

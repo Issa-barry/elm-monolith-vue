@@ -25,6 +25,7 @@ class Vehicule extends Model
         'type_vehicule_id',
         'capacite_packs',
         'capacite_bouteilles',
+        'derogation_impayes_autorisee',
         'proprietaire_id',
         'categorie',
         'livraison_vente',
@@ -72,6 +73,7 @@ class Vehicule extends Model
             'livraison_logistique' => 'boolean',
             'capacite_packs' => 'integer',
             'capacite_bouteilles' => 'integer',
+            'derogation_impayes_autorisee' => 'boolean',
         ];
     }
 

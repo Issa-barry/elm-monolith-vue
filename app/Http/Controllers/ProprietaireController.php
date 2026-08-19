@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\TypePieceIdentite;
+use App\Enums\TypeProprietaire;
 use App\Models\Depense;
 use App\Models\Personne;
 use App\Models\PieceIdentite;
@@ -35,6 +36,10 @@ class ProprietaireController extends Controller
                 'prenom' => $p->prenom,
                 'surnom' => $p->surnom,
                 'nom_complet' => trim("{$p->prenom} {$p->nom}"),
+                'type' => $p->type->value,
+                'raison_sociale' => $p->raison_sociale,
+                'nom_affichage' => $p->nom_affichage,
+                'est_entreprise' => $p->est_entreprise,
                 'email' => $p->email,
                 'telephone' => $p->telephone,
                 'code_phone_pays' => $p->code_phone_pays,
@@ -55,7 +60,9 @@ class ProprietaireController extends Controller
     {
         $this->authorize('create', Proprietaire::class);
 
-        return Inertia::render('Proprietaires/Create');
+        return Inertia::render('Proprietaires/Create', [
+            'type_proprietaire_options' => TypeProprietaire::options(),
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -66,8 +73,10 @@ class ProprietaireController extends Controller
         abort_if(! $orgId, 403, "Votre compte n'est associé à aucune organisation.");
 
         $data = $request->validate([
-            'nom' => 'required|string|max:255',
-            'prenom' => 'required|string|max:255',
+            'type' => ['required', Rule::enum(TypeProprietaire::class)],
+            'nom' => 'required_if:type,personne_physique|nullable|string|max:255',
+            'prenom' => 'required_if:type,personne_physique|nullable|string|max:255',
+            'raison_sociale' => 'required_if:type,entreprise|nullable|string|max:255',
             'surnom' => 'nullable|string|max:100',
             'email' => 'nullable|email:rfc,dns|max:255',
             'telephone' => ['required', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/'],
@@ -92,8 +101,8 @@ class ProprietaireController extends Controller
         }
 
         $personne = Personne::resoudreOuCreer($orgId, [
-            'nom' => $data['nom'],
-            'prenom' => $data['prenom'],
+            'nom' => $data['nom'] ?? null,
+            'prenom' => $data['prenom'] ?? null,
             'surnom' => $data['surnom'] ?? null,
             'email' => $data['email'] ?? null,
             'telephone' => $data['telephone'],
@@ -107,6 +116,8 @@ class ProprietaireController extends Controller
         Proprietaire::create([
             'organization_id' => $orgId,
             'personne_id' => $personne->id,
+            'type' => $data['type'],
+            'raison_sociale' => $data['type'] === TypeProprietaire::ENTREPRISE->value ? $data['raison_sociale'] : null,
             'is_active' => $data['is_active'] ?? true,
         ]);
 
@@ -131,6 +142,8 @@ class ProprietaireController extends Controller
                 'nom' => $proprietaire->nom,
                 'prenom' => $proprietaire->prenom,
                 'surnom' => $proprietaire->surnom,
+                'type' => $proprietaire->type->value,
+                'raison_sociale' => $proprietaire->raison_sociale,
                 'email' => $proprietaire->email,
                 'telephone' => $telephone,
                 'adresse' => $proprietaire->adresse,
@@ -140,6 +153,7 @@ class ProprietaireController extends Controller
                 'code_phone_pays' => $codePhonePays,
                 'is_active' => $proprietaire->is_active,
             ],
+            'type_proprietaire_options' => TypeProprietaire::options(),
         ]);
     }
 
@@ -213,6 +227,10 @@ class ProprietaireController extends Controller
                 'prenom' => $proprietaire->prenom,
                 'surnom' => $proprietaire->surnom,
                 'nom_complet' => $proprietaire->nom_complet,
+                'type' => $proprietaire->type->value,
+                'raison_sociale' => $proprietaire->raison_sociale,
+                'nom_affichage' => $proprietaire->nom_affichage,
+                'est_entreprise' => $proprietaire->est_entreprise,
                 'email' => $proprietaire->email,
                 'telephone' => $proprietaire->telephone,
                 'code_phone_pays' => $proprietaire->code_phone_pays,
@@ -278,8 +296,10 @@ class ProprietaireController extends Controller
         $this->authorize('update', $proprietaire);
 
         $data = $request->validate([
-            'nom' => 'required|string|max:255',
-            'prenom' => 'required|string|max:255',
+            'type' => ['required', Rule::enum(TypeProprietaire::class)],
+            'nom' => 'required_if:type,personne_physique|nullable|string|max:255',
+            'prenom' => 'required_if:type,personne_physique|nullable|string|max:255',
+            'raison_sociale' => 'required_if:type,entreprise|nullable|string|max:255',
             'surnom' => 'nullable|string|max:100',
             'email' => 'nullable|email:rfc,dns|max:255',
             'telephone' => ['required', 'string', 'regex:/^[+0-9][0-9\s\-(). ]{4,24}$/'],
@@ -304,8 +324,8 @@ class ProprietaireController extends Controller
         }
 
         $proprietaire->personne->update([
-            'nom' => $data['nom'],
-            'prenom' => $data['prenom'],
+            'nom' => $data['nom'] ?? null,
+            'prenom' => $data['prenom'] ?? null,
             'surnom' => $data['surnom'] ?? null,
             'email' => $data['email'] ?? null,
             'telephone' => $data['telephone'],
@@ -316,7 +336,11 @@ class ProprietaireController extends Controller
             'ville' => $data['ville'],
             'adresse' => $data['adresse'] ?? null,
         ]);
-        $proprietaire->update(['is_active' => $data['is_active'] ?? $proprietaire->is_active]);
+        $proprietaire->update([
+            'type' => $data['type'],
+            'raison_sociale' => $data['type'] === TypeProprietaire::ENTREPRISE->value ? $data['raison_sociale'] : null,
+            'is_active' => $data['is_active'] ?? $proprietaire->is_active,
+        ]);
 
         return redirect()->route('proprietaires.edit', $proprietaire)
             ->with('success', 'Propriétaire mis à jour avec succès.');
@@ -383,6 +407,10 @@ class ProprietaireController extends Controller
     private function validationMessages(): array
     {
         return [
+            'type.required' => 'Le type de propriétaire est obligatoire.',
+            'nom.required_if' => 'Le nom est obligatoire pour une personne physique.',
+            'prenom.required_if' => 'Le prénom est obligatoire pour une personne physique.',
+            'raison_sociale.required_if' => 'La raison sociale est obligatoire pour une entreprise.',
             'nom.required' => 'Le nom est obligatoire.',
             'prenom.required' => 'Le prénom est obligatoire.',
             'email.email' => "L'adresse email est invalide.",

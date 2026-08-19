@@ -56,6 +56,7 @@ class ProduitServicePrixTest extends TestCase
         $produit = $this->creer([
             'type' => 'fabricable',
             'prix_usine' => 5100,
+            'prix_usine_tricycle' => 5000,
             'prix_vente' => 6000,
         ]);
 
@@ -69,6 +70,7 @@ class ProduitServicePrixTest extends TestCase
         $this->creer([
             'type' => 'fabricable',
             'prix_usine' => 18000,
+            'prix_usine_tricycle' => 10000,
             'prix_vente' => 18000,
         ]);
     }
@@ -80,6 +82,7 @@ class ProduitServicePrixTest extends TestCase
         $this->creer([
             'type' => 'fabricable',
             'prix_usine' => 18000,
+            'prix_usine_tricycle' => 10000,
             'prix_vente' => 17999,
         ]);
     }
@@ -92,6 +95,118 @@ class ProduitServicePrixTest extends TestCase
         } catch (ValidationException $e) {
             $this->assertArrayHasKey('produit_type_id', $e->errors());
         }
+    }
+
+    // ── Tarif tricycle : contrôlé indépendamment du tarif "autres véhicules" ────
+
+    public function test_fabricable_accepte_prix_usine_tricycle_valide(): void
+    {
+        $produit = $this->creer([
+            'type' => 'fabricable',
+            'prix_usine' => 5100,
+            'prix_usine_tricycle' => 5050,
+            'prix_vente' => 6000,
+        ]);
+
+        $this->assertSame(5050, $produit->variantes->first()->prix_usine_tricycle);
+    }
+
+    public function test_fabricable_refuse_si_prix_usine_tricycle_egal_au_prix_vente(): void
+    {
+        $this->expectException(ValidationException::class);
+
+        $this->creer([
+            'type' => 'fabricable',
+            'prix_usine' => 5100,
+            'prix_usine_tricycle' => 6000,
+            'prix_vente' => 6000,
+        ]);
+    }
+
+    public function test_fabricable_refuse_si_prix_usine_tricycle_superieur_au_prix_vente(): void
+    {
+        $this->expectException(ValidationException::class);
+
+        $this->creer([
+            'type' => 'fabricable',
+            'prix_usine' => 5100,
+            'prix_usine_tricycle' => 6100,
+            'prix_vente' => 6000,
+        ]);
+    }
+
+    /** Le tarif standard valide ne doit jamais masquer une marge tricycle invalide. */
+    public function test_fabricable_refuse_marge_tricycle_invalide_meme_si_marge_standard_valide(): void
+    {
+        try {
+            $this->creer([
+                'type' => 'fabricable',
+                'prix_usine' => 5100,
+                'prix_usine_tricycle' => 6000,
+                'prix_vente' => 6000,
+            ]);
+            $this->fail('ValidationException attendue : marge tricycle nulle.');
+        } catch (ValidationException $e) {
+            $this->assertArrayHasKey('prix_vente', $e->errors());
+        }
+    }
+
+    public function test_fabricable_refuse_si_prix_usine_tricycle_absent(): void
+    {
+        // Décision métier : les deux tarifs sont deux décisions distinctes, jamais l'un déduit
+        // de l'autre — dès que prix_usine est requis, prix_usine_tricycle l'est tout autant
+        // (cf. ProduitType::requiredPrices()), aucun repli implicite autorisé.
+        try {
+            $this->creer([
+                'type' => 'fabricable',
+                'prix_usine' => 5100,
+                'prix_vente' => 6000,
+            ]);
+            $this->fail('ValidationException attendue : prix_usine_tricycle absent.');
+        } catch (ValidationException $e) {
+            $this->assertArrayHasKey('produit_type_id', $e->errors());
+        }
+    }
+
+    public function test_achat_vente_nimpose_aucune_regle_sur_prix_usine_tricycle(): void
+    {
+        // champPrixReference() = 'prix_achat' pour ACHAT_VENTE : prix_usine_tricycle n'a pas de
+        // sens ici, jamais forcé même si renseigné à une valeur incohérente.
+        $produit = $this->creer([
+            'type' => 'achat_vente',
+            'prix_achat' => 100000,
+            'prix_usine_tricycle' => 999999,
+            'prix_vente' => 120000,
+        ]);
+
+        $this->assertSame(120000, $produit->variantes->first()->prix_vente);
+    }
+
+    public function test_deux_variantes_ont_des_tarifs_tricycle_totalement_independants(): void
+    {
+        $produit = $this->service->creer([
+            'organization_id' => $this->org->id,
+            'nom' => 'Eau en bouteille',
+            'produit_type_id' => $this->typeId('fabricable'),
+            'statut' => 'actif',
+            'prix_usine' => 15000,
+            'prix_usine_tricycle' => 14700,
+            'prix_vente' => 17000,
+            'options' => [
+                ['nom' => 'Contenance', 'valeurs' => ['350ml', '500ml']],
+            ],
+        ])->fresh(['variantes']);
+
+        $variante350 = $produit->variantes->first();
+        $variante500 = $produit->variantes->last();
+
+        $variante500->update(['prix_usine' => 18000, 'prix_usine_tricycle' => 17500, 'prix_vente' => 20000]);
+
+        $variante350->refresh();
+        $variante500->refresh();
+
+        $this->assertSame(14700, $variante350->prix_usine_tricycle);
+        $this->assertSame(17500, $variante500->prix_usine_tricycle);
     }
 
     // ── ACHAT_VENTE ───────────────────────────────────────────────────────────
@@ -161,7 +276,7 @@ class ProduitServicePrixTest extends TestCase
 
     public function test_update_partiel_prix_vente_seul_est_valide_contre_le_prix_usine_persiste(): void
     {
-        $produit = $this->creer(['type' => 'fabricable', 'prix_usine' => 18000, 'prix_vente' => 20000]);
+        $produit = $this->creer(['type' => 'fabricable', 'prix_usine' => 18000, 'prix_usine_tricycle' => 17000, 'prix_vente' => 20000]);
 
         // PATCH ne renvoie que prix_vente ; prix_usine (18000) doit être récupéré depuis la
         // variante persistée pour la comparaison — pas traité comme absent.
@@ -175,7 +290,7 @@ class ProduitServicePrixTest extends TestCase
 
     public function test_update_partiel_prix_usine_seul_est_valide_contre_le_prix_vente_persiste(): void
     {
-        $produit = $this->creer(['type' => 'fabricable', 'prix_usine' => 5100, 'prix_vente' => 6000]);
+        $produit = $this->creer(['type' => 'fabricable', 'prix_usine' => 5100, 'prix_usine_tricycle' => 5000, 'prix_vente' => 6000]);
 
         // PATCH ne renvoie que prix_usine ; prix_vente (6000) doit être récupéré depuis la
         // variante persistée. 6100 > 6000 => incohérent.
@@ -189,7 +304,7 @@ class ProduitServicePrixTest extends TestCase
 
     public function test_update_partiel_sans_toucher_au_prix_reste_valide(): void
     {
-        $produit = $this->creer(['type' => 'fabricable', 'prix_usine' => 5100, 'prix_vente' => 6000]);
+        $produit = $this->creer(['type' => 'fabricable', 'prix_usine' => 5100, 'prix_usine_tricycle' => 5000, 'prix_vente' => 6000]);
 
         $produit = $this->service->mettreAJourSimple($produit, ['nom' => 'Nouveau nom']);
 
@@ -211,6 +326,7 @@ class ProduitServicePrixTest extends TestCase
         $produit = $this->service->mettreAJourSimple($produit, [
             'produit_type_id' => $this->typeId('fabricable'),
             'prix_usine' => 100000,
+            'prix_usine_tricycle' => 90000,
             'prix_vente' => 120000,
         ]);
 
@@ -241,8 +357,11 @@ class ProduitServicePrixTest extends TestCase
         // "is_default" (cf. test_store_avec_options_genere_les_variantes), donc le formulaire
         // principal — qui n'envoie que le type + des prix "globaux", jamais une variante en
         // particulier — ne touche RÉELLEMENT aucune des deux. Elles ont prix_achat=8000/
-        // prix_vente=10000/prix_usine=null : valide pour ACHAT_VENTE, mais FABRICABLE exige
-        // prix_usine, absent sur les deux. Le changement doit donc être refusé.
+        // prix_vente=10000/prix_usine=null/prix_usine_tricycle=null : valide pour ACHAT_VENTE,
+        // mais FABRICABLE exige les deux (cf. requiredPrices()), absents sur les deux. Le
+        // payload fournit ici les deux tarifs (effective-data du formulaire principal cohérente)
+        // pour isoler le test sur le vrai scénario visé : la cascade vers les variantes
+        // secondaires, pas un simple champ manquant sur le formulaire lui-même.
         $produit = $this->creerProduitMultiVariantes();
         $ancienTypeId = $produit->produit_type_id;
 
@@ -250,9 +369,10 @@ class ProduitServicePrixTest extends TestCase
             $this->service->mettreAJourSimple($produit, [
                 'produit_type_id' => $this->typeId('fabricable'),
                 'prix_usine' => 8000,
+                'prix_usine_tricycle' => 7500,
                 'prix_vente' => 10000,
             ]);
-            $this->fail('ValidationException attendue : ni "Noir" ni "Blanc" n\'ont de prix_usine.');
+            $this->fail('ValidationException attendue : ni "Noir" ni "Blanc" n\'ont de prix_usine/prix_usine_tricycle.');
         } catch (ValidationException $e) {
             $this->assertArrayHasKey('produit_type_id', $e->errors());
         }
@@ -268,14 +388,16 @@ class ProduitServicePrixTest extends TestCase
         $produit = $this->creerProduitMultiVariantes();
 
         // Les deux variantes ont prix_achat=8000/prix_vente=10000 : compatibles avec FABRICABLE
-        // en réinterprétant prix_achat comme prix_usine (même valeur numérique 8000 < 10000).
+        // en réinterprétant prix_achat comme prix_usine/prix_usine_tricycle (mêmes valeurs
+        // numériques, chacune < 10000).
         foreach ($produit->variantes as $variante) {
-            $variante->update(['prix_usine' => 8000]);
+            $variante->update(['prix_usine' => 8000, 'prix_usine_tricycle' => 7500]);
         }
 
         $produit = $this->service->mettreAJourSimple($produit->fresh(), [
             'produit_type_id' => $this->typeId('fabricable'),
             'prix_usine' => 8000,
+            'prix_usine_tricycle' => 7500,
             'prix_vente' => 10000,
         ]);
 

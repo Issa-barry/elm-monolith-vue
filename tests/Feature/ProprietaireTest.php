@@ -72,6 +72,7 @@ class ProprietaireTest extends TestCase
     {
         $this->actingAs($this->user)
             ->post(route('proprietaires.store'), [
+                'type' => 'personne_physique',
                 'nom' => 'Camara',
                 'prenom' => 'Ibrahima',
                 'telephone' => '622000001',
@@ -87,17 +88,67 @@ class ProprietaireTest extends TestCase
         ]);
     }
 
-    public function test_store_fails_with_empty_data(): void
+    public function test_store_creates_proprietaire_entreprise_and_redirects(): void
     {
         $this->actingAs($this->user)
+            ->post(route('proprietaires.store'), [
+                'type' => 'entreprise',
+                'raison_sociale' => 'Transports Fatoumata SARL',
+                'telephone' => '622000001',
+                'code_pays' => 'GN',
+                'ville' => 'Conakry',
+                'is_active' => true,
+            ])
+            ->assertRedirect(route('proprietaires.index'));
+
+        // Comme Fournisseur/Prestataire (même trait de normalisation), raison_sociale est mise
+        // en Title Case — cohérence volontaire avec les entités existantes.
+        $this->assertDatabaseHas('proprietaires', [
+            'type' => 'entreprise',
+            'raison_sociale' => 'Transports Fatoumata Sarl',
+            'organization_id' => $this->org->id,
+        ]);
+    }
+
+    public function test_store_entreprise_fails_sans_raison_sociale(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('proprietaires.store'), [
+                'type' => 'entreprise',
+                'telephone' => '622000001',
+                'code_pays' => 'GN',
+                'ville' => 'Conakry',
+            ])
+            ->assertSessionHasErrors('raison_sociale');
+    }
+
+    public function test_store_fails_with_empty_data(): void
+    {
+        // type absent → nom/prenom ne sont pas encore "required_if:type,personne_physique"
+        // (la condition ne peut être évaluée) : seule l'absence de type elle-même est signalée,
+        // cf. test_store_fails_personne_physique_sans_nom_prenom pour le cas type connu.
+        $this->actingAs($this->user)
             ->post(route('proprietaires.store'), [])
-            ->assertSessionHasErrors(['nom', 'prenom', 'telephone', 'code_pays', 'ville']);
+            ->assertSessionHasErrors(['type', 'telephone', 'code_pays', 'ville']);
+    }
+
+    public function test_store_fails_personne_physique_sans_nom_prenom(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('proprietaires.store'), [
+                'type' => 'personne_physique',
+                'telephone' => '622000001',
+                'code_pays' => 'GN',
+                'ville' => 'Conakry',
+            ])
+            ->assertSessionHasErrors(['nom', 'prenom']);
     }
 
     public function test_store_fails_with_invalid_code_pays(): void
     {
         $this->actingAs($this->user)
             ->post(route('proprietaires.store'), [
+                'type' => 'personne_physique',
                 'nom' => 'Camara',
                 'prenom' => 'Ibrahima',
                 'telephone' => '622000001',
@@ -225,6 +276,39 @@ class ProprietaireTest extends TestCase
             );
     }
 
+    public function test_show_expose_nom_affichage_et_badge_entreprise(): void
+    {
+        $proprietaire = Proprietaire::factory()->entreprise('Fatoumata Logistique SARL')->create([
+            'organization_id' => $this->org->id,
+        ]);
+
+        $this->actingAs($this->user)
+            ->get(route('proprietaires.show', $proprietaire))
+            ->assertStatus(200)
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('proprietaire.est_entreprise', true)
+                ->where('proprietaire.raison_sociale', 'Fatoumata Logistique SARL')
+                ->where('proprietaire.nom_affichage', 'Fatoumata Logistique SARL')
+            );
+    }
+
+    public function test_show_expose_nom_affichage_pour_une_personne_physique(): void
+    {
+        $proprietaire = Proprietaire::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom' => 'KEITA',
+            'prenom' => 'Saoudatou',
+        ]);
+
+        $this->actingAs($this->user)
+            ->get(route('proprietaires.show', $proprietaire))
+            ->assertStatus(200)
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('proprietaire.est_entreprise', false)
+                ->where('proprietaire.nom_affichage', 'Saoudatou KEITA')
+            );
+    }
+
     public function test_show_returns_403_for_other_organization(): void
     {
         $otherOrg = Organization::factory()->create();
@@ -243,6 +327,7 @@ class ProprietaireTest extends TestCase
 
         $this->actingAs($this->user)
             ->put(route('proprietaires.update', $proprietaire), [
+                'type' => 'personne_physique',
                 'nom' => 'Balde',
                 'prenom' => 'Thierno',
                 'telephone' => '622000002',
@@ -258,13 +343,35 @@ class ProprietaireTest extends TestCase
         ]);
     }
 
+    public function test_update_bascule_proprietaire_vers_entreprise(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+
+        $this->actingAs($this->user)
+            ->put(route('proprietaires.update', $proprietaire), [
+                'type' => 'entreprise',
+                'raison_sociale' => 'Balde Transports SARL',
+                'telephone' => '622000002',
+                'code_pays' => 'GN',
+                'ville' => 'Kindia',
+                'is_active' => true,
+            ])
+            ->assertRedirect(route('proprietaires.edit', $proprietaire));
+
+        $this->assertDatabaseHas('proprietaires', [
+            'id' => $proprietaire->id,
+            'type' => 'entreprise',
+            'raison_sociale' => 'Balde Transports Sarl',
+        ]);
+    }
+
     public function test_update_fails_with_missing_required_fields(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
 
         $this->actingAs($this->user)
             ->put(route('proprietaires.update', $proprietaire), [])
-            ->assertSessionHasErrors(['nom', 'prenom', 'telephone', 'code_pays', 'ville']);
+            ->assertSessionHasErrors(['type', 'telephone', 'code_pays', 'ville']);
     }
 
     // ── unicité par organisation ──────────────────────────────────────────────
@@ -278,6 +385,7 @@ class ProprietaireTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('proprietaires.store'), [
+                'type' => 'personne_physique',
                 'nom' => 'Diallo',
                 'prenom' => 'Mamadou',
                 'telephone' => '622000001', // même numéro, format local → canonique +224622000001
@@ -297,6 +405,7 @@ class ProprietaireTest extends TestCase
 
         $this->actingAs($this->user)
             ->post(route('proprietaires.store'), [
+                'type' => 'personne_physique',
                 'nom' => 'Diallo',
                 'prenom' => 'Mamadou',
                 'telephone' => '622000002',
@@ -319,6 +428,7 @@ class ProprietaireTest extends TestCase
 
         $this->actingAs($this->user)
             ->put(route('proprietaires.update', $proprietaire), [
+                'type' => 'personne_physique',
                 'nom' => 'Diallo',
                 'prenom' => 'Mamadou',
                 'telephone' => '622000001', // son propre numéro → doit passer
@@ -349,6 +459,7 @@ class ProprietaireTest extends TestCase
 
         $this->actingAs($this->user)
             ->put(route('proprietaires.update', $proprietaire), [
+                'type' => 'personne_physique',
                 'nom' => 'Diallo',
                 'prenom' => 'Mamadou',
                 'telephone' => '622000002', // numéro déjà pris par l'autre propriétaire

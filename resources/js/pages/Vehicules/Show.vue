@@ -2,6 +2,7 @@
 import DetailHeader from '@/components/DetailHeader.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
@@ -90,6 +91,8 @@ interface VehiculeData {
     categorie_label: string;
     proprietaire_id: string | null;
     proprietaire_nom: string | null;
+    proprietaire_nom_affichage: string | null;
+    proprietaire_est_entreprise: boolean;
     proprietaire_telephone: string | null;
     equipe_id: string | null;
     equipe_membres: EquipeMembre[];
@@ -97,6 +100,8 @@ interface VehiculeData {
     livraison_logistique: boolean;
     photo_url: string | null;
     is_active: boolean;
+    derogation_impayes_autorisee: boolean;
+    type_seuil_derogation_impayes: number | null;
 }
 
 const props = defineProps<{
@@ -105,14 +110,8 @@ const props = defineProps<{
     equipe: EquipeData | null;
     proprietaires: ProprietaireOption[];
     default_proprietaire_id: string | null;
+    seuil_global_impayes: number;
 }>();
-
-// Propriété (tiers ou organisation) — indépendante des usages vente/logistique,
-// cf. EquipeStepperModal (détermine si un partage propriétaire est saisi). Source de vérité :
-// vehicule.categorie (jamais re-déduit de proprietaire_id, cf. CategorieVehicule côté backend).
-const proprietaireEstTiers = computed(
-    () => props.vehicule.categorie === 'partenaire',
-);
 
 const { can } = usePermissions();
 const page = usePage();
@@ -175,6 +174,58 @@ const tauxLivreurs = computed(() =>
 
 function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
+}
+
+/**
+ * Même règle que SolvabiliteService::seuilApplicableVehicule() (côté affichage uniquement,
+ * jamais utilisée pour bloquer une opération) : dérogation active ET type configuré → seuil du
+ * type, sinon seuil standard des paramètres de vente.
+ */
+const derogationEffective = computed(
+    () =>
+        props.vehicule.derogation_impayes_autorisee &&
+        props.vehicule.type_seuil_derogation_impayes !== null,
+);
+
+const seuilImpayesApplicable = computed(() =>
+    derogationEffective.value
+        ? (props.vehicule.type_seuil_derogation_impayes as number)
+        : props.seuil_global_impayes,
+);
+
+/**
+ * Bascule la dérogation directement depuis la fiche (VehiculeController::toggleDerogation()) —
+ * pas de mise à jour optimiste : le Switch reste piloté par `vehicule.derogation_impayes_autorisee`
+ * (jamais par un état local), donc un succès l'actualise via le rechargement Inertia consécutif à
+ * la redirection back(), et un échec le laisse inchangé sans rien à "annuler" manuellement.
+ */
+const derogationProcessing = ref(false);
+
+function toggleDerogation() {
+    if (derogationProcessing.value) return;
+    derogationProcessing.value = true;
+
+    router.patch(
+        `/backoffice/vehicules/${props.vehicule.id}/toggle-derogation`,
+        {},
+        {
+            preserveScroll: true,
+            onError: (errors) => {
+                toast.add({
+                    severity: 'error',
+                    summary: 'Dérogation impayés',
+                    detail:
+                        errors.derogation_impayes_autorisee ??
+                        'Impossible de mettre à jour la dérogation.',
+                    life: 5000,
+                    group: 'top',
+                });
+            },
+            onFinish: () => {
+                derogationProcessing.value = false;
+            },
+        },
+    );
 }
 </script>
 
@@ -277,15 +328,6 @@ function formatGNF(val: number): string {
                         <Button variant="outline" size="sm">
                             <ArrowLeft class="mr-1.5 h-4 w-4" />
                             Liste de véhicules
-                        </Button>
-                    </Link>
-                    <Link
-                        v-if="can('vehicules.update')"
-                        :href="`/backoffice/vehicules/${vehicule.id}/edit`"
-                    >
-                        <Button size="sm">
-                            <Pencil class="mr-1.5 h-4 w-4" />
-                            Modifier
                         </Button>
                     </Link>
                 </template>
@@ -484,12 +526,24 @@ function formatGNF(val: number): string {
                                     Propriétaire
                                 </p>
                                 <template v-if="vehicule.proprietaire_id">
-                                    <p
-                                        class="mt-1 text-sm font-medium"
-                                        data-testid="proprietaire-nom"
-                                    >
-                                        {{ vehicule.proprietaire_nom }}
-                                    </p>
+                                    <div class="mt-1 flex items-center gap-1.5">
+                                        <p
+                                            class="text-sm font-medium"
+                                            data-testid="proprietaire-nom"
+                                        >
+                                            {{
+                                                vehicule.proprietaire_nom_affichage ??
+                                                vehicule.proprietaire_nom
+                                            }}
+                                        </p>
+                                        <span
+                                            v-if="
+                                                vehicule.proprietaire_est_entreprise
+                                            "
+                                            class="inline-flex items-center rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
+                                            >Entreprise</span
+                                        >
+                                    </div>
                                     <p
                                         class="mt-0.5 font-mono text-xs text-muted-foreground"
                                         data-testid="proprietaire-telephone"
@@ -508,6 +562,34 @@ function formatGNF(val: number): string {
                                         Aucun propriétaire rattaché
                                     </p>
                                 </template>
+                            </div>
+                            <div class="rounded-lg border bg-background p-4">
+                                <div
+                                    class="flex items-center justify-between gap-3"
+                                >
+                                    <p class="text-sm font-medium">
+                                        Dérogation impayés
+                                    </p>
+                                    <Switch
+                                        aria-label="Dérogation impayés"
+                                        :model-value="
+                                            vehicule.derogation_impayes_autorisee
+                                        "
+                                        :disabled="
+                                            derogationProcessing ||
+                                            !can('vehicules.update')
+                                        "
+                                        @update:model-value="toggleDerogation()"
+                                    />
+                                </div>
+                                <p class="mt-1.5 text-xs text-muted-foreground">
+                                    {{
+                                        derogationEffective
+                                            ? 'Plafond autorisé'
+                                            : 'Seuil applicable'
+                                    }}
+                                    : {{ formatGNF(seuilImpayesApplicable) }}
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -813,9 +895,11 @@ function formatGNF(val: number): string {
             id: vehicule.id,
             nom_vehicule: vehicule.nom_vehicule,
             immatriculation: vehicule.immatriculation,
-            proprietaire_est_tiers: proprietaireEstTiers,
             proprietaire_id: vehicule.proprietaire_id,
-            proprietaire_nom: vehicule.proprietaire_nom,
+            proprietaire_nom:
+                vehicule.proprietaire_nom_affichage ??
+                vehicule.proprietaire_nom,
+            proprietaire_est_entreprise: vehicule.proprietaire_est_entreprise,
         }"
         :equipe="equipe"
         :proprietaires="proprietaires"

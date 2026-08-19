@@ -11,6 +11,7 @@ use App\Models\TypeVehicule;
 use App\Models\Vehicule;
 use Database\Seeders\ProduitTypeDefaultSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
@@ -119,6 +120,35 @@ class CategorieTest extends TestCase
             ->assertSessionHasErrors('parent_id');
     }
 
+    /**
+     * `reference` : identifiant machine stable dérivé du nom (en MAJUSCULES), jamais
+     * exposé/saisissable via le formulaire — même pattern que ProduitType::code (cf.
+     * ProduitTypeTest::test_store_genere_un_code_slug_stable()). Sert de référence robuste à
+     * l'import flotte (ImportFlotteParser::resoudreCategoriesCapacite()).
+     */
+    public function test_store_genere_une_reference_stable(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('produits.categories.store'), ['nom' => "Bouteille d'eau"])
+            ->assertRedirect();
+
+        $categorie = Categorie::where('organization_id', $this->org->id)->where('nom', "Bouteille d'eau")->firstOrFail();
+        $this->assertNotEmpty($categorie->reference);
+        $this->assertSame(Str::upper($categorie->reference), $categorie->reference, 'la référence doit toujours être en majuscules');
+    }
+
+    public function test_store_genere_des_references_distinctes_pour_des_noms_qui_se_ressemblent(): void
+    {
+        $premiere = $this->makeCategorie($this->org, ['nom' => 'Boissons']);
+
+        $this->actingAs($this->user)
+            ->post(route('produits.categories.store'), ['nom' => 'Boissons '])
+            ->assertRedirect();
+
+        $seconde = Categorie::where('organization_id', $this->org->id)->where('id', '!=', $premiere->id)->firstOrFail();
+        $this->assertNotSame($premiere->reference, $seconde->reference);
+    }
+
     // ── update ────────────────────────────────────────────────────────────────
 
     public function test_update_modifies_categorie(): void
@@ -130,6 +160,24 @@ class CategorieTest extends TestCase
             ->assertRedirect();
 
         $this->assertDatabaseHas('categories', ['id' => $categorie->id, 'nom' => 'Nouveau nom']);
+    }
+
+    /**
+     * Le renommage d'une catégorie ne doit jamais régénérer sa `reference` — c'est précisément
+     * ce qui la rend utilisable comme référence stable par l'import flotte malgré un renommage
+     * (cf. ImportFlotteParser, ImportFlotteTest::test_confirm_resout_la_capacite_meme_apres_renommage_de_la_categorie()).
+     */
+    public function test_update_ne_change_jamais_la_reference(): void
+    {
+        $categorie = $this->makeCategorie($this->org, ['nom' => "Sachet d'eau"]);
+        $referenceInitiale = $categorie->reference;
+        $this->assertNotEmpty($referenceInitiale);
+
+        $this->actingAs($this->user)
+            ->put(route('produits.categories.update', $categorie), ['nom' => 'Sachets 25 unités'])
+            ->assertRedirect();
+
+        $this->assertSame($referenceInitiale, $categorie->fresh()->reference);
     }
 
     public function test_update_refuse_de_se_definir_comme_son_propre_parent(): void

@@ -33,18 +33,21 @@ class VehiculeCommandeContextResolver
     {
         if ($vehiculeId) {
             $vehicule = Vehicule::query()
-                ->select(['id', 'livraison_vente'])
+                ->select(['id', 'livraison_vente', 'type_vehicule_id'])
+                ->with('typeVehicule:id,categorie_tarifaire')
                 ->find($vehiculeId);
 
             return new VehiculeCommandeContext(
                 ModeTarification::PRIX_VENTE,
                 (bool) ($vehicule?->livraison_vente ?? true),
+                $vehicule?->typeVehicule?->categorie_tarifaire,
             );
         }
 
         // Sans véhicule de flotte : CommissionGenerator exige de toute façon un véhicule, donc
         // commissionEligible est toujours false ici — seule la tarification varie selon le
-        // client.
+        // client. Pas de catégorie tarifaire non plus : aucun véhicule de flotte impliqué,
+        // PrixUsineResolver retombe sur le tarif "autres véhicules" par défaut.
         $client = $clientId ? Client::query()->select(['id', 'type'])->find($clientId) : null;
         $modeTarification = $client?->type === ClientType::EXTERNE
             ? ModeTarification::PRIX_USINE

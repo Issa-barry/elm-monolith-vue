@@ -22,6 +22,8 @@ interface Option {
 interface TypeOption {
     value: string;
     label: string;
+    /** null = aucune dérogation configurée pour ce type (cf. TypeVehicules/Edit.vue). */
+    seuil_derogation_impayes: number | null;
 }
 
 interface SiteOption {
@@ -51,6 +53,7 @@ interface FormData {
     photo: File | null;
     is_active: boolean;
     capacites: CapaciteRow[];
+    derogation_impayes_autorisee: boolean;
 }
 
 const props = defineProps<{
@@ -81,9 +84,18 @@ watch(
 );
 
 function onTypeChange(value: string) {
+    const nouveauType = props.types.find((t) => t.value === value) ?? null;
+    const derogationEncoreValide =
+        nouveauType?.seuil_derogation_impayes !== null &&
+        nouveauType?.seuil_derogation_impayes !== undefined;
+
     emit('update:form', {
         ...props.form,
         type_vehicule_id: value,
+        // Le plafond dérogatoire dépend du type — si le nouveau type n'en a aucun de
+        // configuré, une dérogation restée active n'aurait plus aucun sens.
+        derogation_impayes_autorisee:
+            props.form.derogation_impayes_autorisee && derogationEncoreValide,
     });
 }
 
@@ -485,6 +497,7 @@ function handleSubmit() {
             <CapacitesEditor
                 :model-value="form.capacites"
                 :categories-produit="categoriesProduit"
+                :errors="errors as Record<string, string>"
                 @update:model-value="
                     $emit('update:form', { ...form, capacites: $event })
                 "

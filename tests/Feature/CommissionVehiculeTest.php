@@ -597,8 +597,11 @@ class CommissionVehiculeTest extends TestCase
         $user = $this->makeUser($org);
         $vehicule = $this->makeVehicule($org);
 
-        $livreurA = Livreur::factory()->create(['organization_id' => $org->id]);
-        $livreurB = Livreur::factory()->create(['organization_id' => $org->id]);
+        // Téléphones fixés explicitement : un téléphone généré aléatoirement par la factory
+        // pourrait par hasard contenir la sous-chaîne "4800" et faire matcher les deux
+        // livreurs via CommissionSearchService::matchesPhone, rendant ce test flaky.
+        $livreurA = Livreur::factory()->create(['organization_id' => $org->id, 'telephone' => '+224622000101']);
+        $livreurB = Livreur::factory()->create(['organization_id' => $org->id, 'telephone' => '+224622000102']);
 
         $comm = $this->makeCommission($org, $vehicule);
         $this->makePart($comm, $livreurA, ['beneficiaire_nom' => 'Livreur A', 'montant_net' => 4800]);
