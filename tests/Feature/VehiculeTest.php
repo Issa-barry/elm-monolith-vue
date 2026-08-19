@@ -399,6 +399,61 @@ class VehiculeTest extends TestCase
         $this->assertFalse($vehicule->derogation_impayes_autorisee);
     }
 
+    // ── toggle-derogation (fiche véhicule, cf. Vehicules/Show.vue) ──────────────
+
+    public function test_toggle_derogation_active_puis_desactive(): void
+    {
+        $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'seuil_derogation_impayes' => 5_000_000]);
+        $vehicule = $this->makeVehicule($this->org);
+        $vehicule->update(['type_vehicule_id' => $type->id]);
+
+        $this->actingAs($this->user)
+            ->patch(route('vehicules.toggle-derogation', $vehicule))
+            ->assertRedirect();
+        $this->assertTrue($vehicule->fresh()->derogation_impayes_autorisee);
+
+        $this->actingAs($this->user)
+            ->patch(route('vehicules.toggle-derogation', $vehicule))
+            ->assertRedirect();
+        $this->assertFalse($vehicule->fresh()->derogation_impayes_autorisee);
+    }
+
+    /** Même règle que store()/update() : pas de dérogation sans plafond configuré sur le type. */
+    public function test_toggle_derogation_refuse_lactivation_si_le_type_nest_pas_configure(): void
+    {
+        $vehicule = $this->makeVehicule($this->org);
+        $vehicule->update(['type_vehicule_id' => $this->typeId()]);
+
+        $this->actingAs($this->user)
+            ->patch(route('vehicules.toggle-derogation', $vehicule))
+            ->assertSessionHasErrors('derogation_impayes_autorisee');
+
+        $this->assertFalse($vehicule->fresh()->derogation_impayes_autorisee);
+    }
+
+    /** Désactiver reste toujours possible, même si le type n'a pas (ou plus) de plafond configuré. */
+    public function test_toggle_derogation_desactive_sans_condition_sur_le_type(): void
+    {
+        $vehicule = $this->makeVehicule($this->org);
+        $vehicule->update(['type_vehicule_id' => $this->typeId(), 'derogation_impayes_autorisee' => true]);
+
+        $this->actingAs($this->user)
+            ->patch(route('vehicules.toggle-derogation', $vehicule))
+            ->assertRedirect();
+
+        $this->assertFalse($vehicule->fresh()->derogation_impayes_autorisee);
+    }
+
+    public function test_toggle_derogation_returns_403_for_other_organization(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $vehicule = $this->makeVehicule($otherOrg);
+
+        $this->actingAs($this->user)
+            ->patch(route('vehicules.toggle-derogation', $vehicule))
+            ->assertStatus(403);
+    }
+
     /**
      * capacite_packs/capacite_bouteilles sont des colonnes mortes, plus jamais alimentées par
      * le formulaire véhicule (décision produit du 17/08/2026 — la capacité se saisit désormais

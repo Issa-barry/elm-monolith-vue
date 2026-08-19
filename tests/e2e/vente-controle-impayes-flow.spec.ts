@@ -74,7 +74,10 @@ async function setImpayesControle(
         await seuilInput.blur();
     }
 
-    await page.getByRole('button', { name: /enregistrer/i }).last().click();
+    await page
+        .getByRole('button', { name: /enregistrer/i })
+        .last()
+        .click();
     await expect(page.locator('body')).toContainText(/mis a jour/i, {
         timeout: 10_000,
     });
@@ -121,9 +124,10 @@ test.describe('Paramètres > Ventes — défauts contrôle des impayés et commi
             timeout: 20_000,
         });
 
-        await expect(
-            page.locator('body'),
-        ).toContainText(/l'encaissement de la facture/i, { timeout: 10_000 });
+        await expect(page.locator('body')).toContainText(
+            /l'encaissement de la facture/i,
+            { timeout: 10_000 },
+        );
         await expect(page.locator('body')).toContainText(/à la réception/i, {
             timeout: 10_000,
         });
@@ -220,6 +224,10 @@ async function createVehiculeInApp(
 }
 
 test.describe("Véhicule — dérogation au seuil d'impayés", () => {
+    // Le contrôle (un Switch, cf. resources/js/components/ui/switch/Switch.vue) vit désormais
+    // directement sur la fiche véhicule (Vehicules/Show.vue) — plus sur Edit, où createVehiculeInApp()
+    // atterrit déjà après création. Accessible via son aria-label ("Dérogation impayés").
+
     test("un véhicule dont le type n'a aucun seuil dérogatoire configuré ne peut pas activer la dérogation", async ({
         page,
     }) => {
@@ -234,24 +242,23 @@ test.describe("Véhicule — dérogation au seuil d'impayés", () => {
             `E2EIMP-A-${unique.slice(-5)}`,
             typeName,
         );
-        await page.goto(`${page.url()}/edit`);
-        await expect(page).toHaveURL(/\/vehicules\/[a-z0-9]{20,}\/edit$/, {
-            timeout: 15_000,
-        });
         await page.waitForLoadState('networkidle');
 
-        await expect(page.locator('body')).toContainText(
-            /autoriser la dérogation au seuil d'impayés/i,
-            { timeout: 15_000 },
-        );
-        await expect(page.locator('body')).toContainText(
-            /aucun seuil de dérogation n'est configuré/i,
-            { timeout: 10_000 },
-        );
-        const toggle = page.getByRole('checkbox', {
-            name: /autoriser la dérogation/i,
+        const toggle = page.getByRole('switch', {
+            name: /dérogation impayés/i,
         });
-        await expect(toggle).toBeDisabled();
+        await expect(toggle).toBeVisible({ timeout: 15_000 });
+        await expect(toggle).toHaveAttribute('aria-checked', 'false');
+
+        await toggle.click();
+
+        // VehiculeController::toggleDerogation() rejette (ensureDerogationCoherente() — même
+        // règle que store()/update()) : erreur affichée en toast, le switch reste désactivé
+        // puisqu'aucune redirection réussie n'a rechargé les props.
+        await expect(
+            page.getByText(/aucun seuil de dérogation n'est configuré/i),
+        ).toBeVisible({ timeout: 10_000 });
+        await expect(toggle).toHaveAttribute('aria-checked', 'false');
     });
 
     test('un véhicule dont le type a un seuil dérogatoire configuré peut activer la dérogation, et cela persiste après rechargement', async ({
@@ -268,32 +275,24 @@ test.describe("Véhicule — dérogation au seuil d'impayés", () => {
             `E2EIMP-B-${unique.slice(-5)}`,
             typeName,
         );
-        const showUrl = page.url();
-
-        await page.goto(`${showUrl}/edit`);
-        await expect(page).toHaveURL(/\/vehicules\/[a-z0-9]{20,}\/edit$/, {
-            timeout: 15_000,
-        });
         await page.waitForLoadState('networkidle');
 
-        const toggle = page.getByRole('checkbox', {
-            name: /autoriser la dérogation/i,
+        const toggle = page.getByRole('switch', {
+            name: /dérogation impayés/i,
         });
         await expect(toggle).toBeEnabled();
-        await toggle.check();
+        await toggle.click();
 
-        await page
-            .locator('#vehicule-form button[type="submit"]:visible')
-            .first()
-            .click();
-        await expect(page.locator('body')).toContainText(/mis à jour/i, {
-            timeout: 10_000,
-        });
+        await expect(page.locator('body')).toContainText(
+            /dérogation impayés activée/i,
+            { timeout: 10_000 },
+        );
+        await expect(toggle).toHaveAttribute('aria-checked', 'true');
 
         await page.reload();
         await expect(
-            page.getByRole('checkbox', { name: /autoriser la dérogation/i }),
-        ).toBeChecked({ timeout: 10_000 });
+            page.getByRole('switch', { name: /dérogation impayés/i }),
+        ).toHaveAttribute('aria-checked', 'true', { timeout: 10_000 });
     });
 });
 
@@ -307,11 +306,18 @@ test.describe("Véhicule — dérogation au seuil d'impayés", () => {
 // couverte en profondeur par tests/Feature/SolvabiliteImpayesTest.php et
 // tests/Unit/SolvabiliteServiceTest.php.
 
-async function createClientInApp(page: Page, nomComplet: string, tel: string): Promise<void> {
+async function createClientInApp(
+    page: Page,
+    nomComplet: string,
+    tel: string,
+): Promise<void> {
     await page.goto('/backoffice/clients/create');
     await page.locator('#nom_complet').fill(nomComplet);
 
-    const paysCombo = page.locator('#client-form').getByRole('combobox').first();
+    const paysCombo = page
+        .locator('#client-form')
+        .getByRole('combobox')
+        .first();
     await selectOptionFromCombobox(page, paysCombo, /guin(?!.*bissau)/i);
 
     await page.locator('#telephone').fill(tel);
@@ -319,7 +325,9 @@ async function createClientInApp(page: Page, nomComplet: string, tel: string): P
         .locator('#client-form button[type="submit"]:visible')
         .first()
         .click();
-    await expect(page).toHaveURL(/\/clients\/[a-z0-9]+\/edit$/, { timeout: 15_000 });
+    await expect(page).toHaveURL(/\/clients\/[a-z0-9]+\/edit$/, {
+        timeout: 15_000,
+    });
 }
 
 /**
@@ -329,7 +337,10 @@ async function createClientInApp(page: Page, nomComplet: string, tel: string): P
  * mis à jour côté client, où `blocked` retombe silencieusement sur `false` par défaut
  * (cf. Ventes/Create.vue, `clientSolvabilite.value?.blocked ?? false`).
  */
-async function selectClientOnVenteForm(page: Page, nomComplet: string): Promise<void> {
+async function selectClientOnVenteForm(
+    page: Page,
+    nomComplet: string,
+): Promise<void> {
     const input = page.getByPlaceholder('Nom, prénom, téléphone…');
     await input.click();
     await input.fill(nomComplet);
