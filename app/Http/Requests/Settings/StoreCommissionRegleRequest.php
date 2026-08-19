@@ -25,13 +25,16 @@ class StoreCommissionRegleRequest extends FormRequest
             ])],
             'scope_type' => ['required', Rule::in(['categorie', 'global'])],
             'categorie_id' => ['required_if:scope_type,categorie', 'nullable', 'string', 'exists:categories,id'],
-            // Entier strictement > 0, sans décimales : le GNF n'a pas de subdivision
-            // monétaire dans cette application, et une commission à 0 serait
-            // indiscernable d'une cellule non configurée ("—") côté affichage — cf.
-            // Paramètres → Commissions (CommissionRegles/Index.vue::cellLabel()).
+            // Entier positif ou nul, sans décimales : le GNF n'a pas de subdivision
+            // monétaire dans cette application. 0 est une valeur métier légitime
+            // (ex: exclure explicitement le propriétaire d'une catégorie précise
+            // plutôt que d'hériter silencieusement du barème global) — jamais
+            // ambigu avec une cellule non configurée ("—") côté affichage, puisque
+            // c'est l'EXISTENCE de la règle qui distingue les deux, pas sa valeur
+            // (cf. Paramètres → Commissions, CommissionRegles/Index.vue::cellLabel()).
             // La regex ferme la porte à un contournement du filtre "integer" de PHP
             // (ex: " 600 ", "600 ") qu'un appel API direct pourrait tenter.
-            'montant' => ['required', 'regex:/^\d+$/', 'integer', 'min:1', 'max:99999999'],
+            'montant' => ['required', 'regex:/^\d+$/', 'integer', 'min:0', 'max:99999999'],
             'effective_from' => ['nullable', 'date'],
         ];
     }
@@ -41,10 +44,10 @@ class StoreCommissionRegleRequest extends FormRequest
         return [
             'cible_type.required' => 'La cible est obligatoire.',
             'categorie_id.required_if' => 'Choisissez une catégorie, ou passez en portée globale.',
-            'montant.required' => 'Saisissez un montant entier supérieur à 0 GNF.',
-            'montant.regex' => 'Saisissez un montant entier supérieur à 0 GNF.',
-            'montant.integer' => 'Saisissez un montant entier supérieur à 0 GNF.',
-            'montant.min' => 'Saisissez un montant entier supérieur à 0 GNF.',
+            'montant.required' => 'Saisissez un montant entier, 0 ou plus.',
+            'montant.regex' => 'Saisissez un montant entier, 0 ou plus.',
+            'montant.integer' => 'Saisissez un montant entier, 0 ou plus.',
+            'montant.min' => 'Saisissez un montant entier, 0 ou plus.',
         ];
     }
 }

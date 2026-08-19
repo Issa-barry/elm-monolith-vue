@@ -73,7 +73,7 @@ const dialogTitle = computed(() => {
     return `${editingCible.value.libelle} — ${editingLigne.value.libelle}`;
 });
 
-const MONTANT_INVALIDE = 'Saisissez un montant entier supérieur à 0 GNF.';
+const MONTANT_INVALIDE = 'Saisissez un montant entier, 0 ou plus.';
 
 // Bloque à la frappe tout caractère qui ne serait de toute façon jamais un
 // entier positif valide (signe, séparateur décimal, lettres...) — la
@@ -111,8 +111,9 @@ function onMontantPaste(e: ClipboardEvent) {
 function submit() {
     form.clearErrors('montant');
     // Filet de sécurité (ex: collage au clavier) — le blocage à la frappe
-    // empêche déjà la quasi-totalité des saisies invalides.
-    if (!/^\d+$/.test(String(form.montant).trim()) || Number(form.montant) <= 0) {
+    // empêche déjà la quasi-totalité des saisies invalides. 0 est autorisé
+    // (valeur métier légitime, ex: exclure explicitement une catégorie).
+    if (!/^\d+$/.test(String(form.montant).trim())) {
         form.setError('montant', MONTANT_INVALIDE);
         return;
     }

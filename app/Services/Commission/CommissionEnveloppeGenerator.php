@@ -19,6 +19,7 @@ use App\Models\CommissionGenerationAttempt;
 use App\Models\CommissionGroupeMembre;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
+use App\Models\EquipeLivraisonPartageCategorie;
 use App\Services\CommissionCalculator;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -242,14 +243,59 @@ class CommissionEnveloppeGenerator
                     continue;
                 }
 
+                // Toujours synchronisé pour disposer d'un CommissionGroupe stable (cible_id,
+                // traçabilité inchangée) — sa propre logique de rescale/blended % n'est en
+                // revanche plus utilisée pour le calcul du montant ci-dessous : le partage
+                // Livraison est désormais défini PAR CATÉGORIE (décision AMOA post-Phase 2),
+                // jamais un seul pourcentage valable pour toute la commande.
                 $groupe = CommissionGroupeSyncService::syncEquipeLivraisonVehicule($vehicule);
-                $membresActifs = $groupe->membresActifsA($earnedAt);
 
-                try {
-                    $parts = CommissionRepartitionEngine::repartir($montantTotal, $membresActifs);
-                } catch (InvalidArgumentException $e) {
-                    $erreurs[] = "Cible {$cibleCode} : {$e->getMessage()}";
+                $parCategorie = collect($contributions)->groupBy(
+                    fn (array $c) => $c['categorie']?->id ?? 'sans_categorie'
+                );
 
+                $montantParBeneficiaire = [];
+                $typeParBeneficiaire = [];
+                $repartitionEchouee = false;
+
+                foreach ($parCategorie as $categorieId => $contribsCategorie) {
+                    if ($categorieId === 'sans_categorie') {
+                        $erreurs[] = "Cible {$cibleCode} : une ligne sans catégorie ne peut pas résoudre de partage Livraison.";
+                        $repartitionEchouee = true;
+
+                        continue;
+                    }
+
+                    $montantCategorie = round((float) $contribsCategorie->sum('montant'), 2);
+
+                    $partages = EquipeLivraisonPartageCategorie::where('equipe_id', $vehicule->equipe->id)
+                        ->where('categorie_id', $categorieId)
+                        ->get();
+
+                    if ($partages->isEmpty()) {
+                        $erreurs[] = "Cible {$cibleCode} : partage non configuré pour cette équipe sur la catégorie {$categorieId} — à régulariser.";
+                        $repartitionEchouee = true;
+
+                        continue;
+                    }
+
+                    try {
+                        $partsCategorie = CommissionRepartitionEngine::repartir($montantCategorie, $partages);
+                    } catch (InvalidArgumentException $e) {
+                        $erreurs[] = "Cible {$cibleCode} : {$e->getMessage()}";
+                        $repartitionEchouee = true;
+
+                        continue;
+                    }
+
+                    foreach ($partsCategorie as $p) {
+                        $beneficiaireId = $p['beneficiaire_id'];
+                        $montantParBeneficiaire[$beneficiaireId] = ($montantParBeneficiaire[$beneficiaireId] ?? 0.0) + $p['montant'];
+                        $typeParBeneficiaire[$beneficiaireId] = $p['beneficiaire_type'];
+                    }
+                }
+
+                if ($repartitionEchouee) {
                     continue;
                 }
 
@@ -257,12 +303,14 @@ class CommissionEnveloppeGenerator
                     'montant' => $montantTotal,
                     'cible_id' => $groupe->id,
                     'contributions' => $contributions,
-                    'parts' => array_map(fn ($p) => [
-                        'beneficiaire_type' => $p['beneficiaire_type'],
-                        'beneficiaire_id' => $p['beneficiaire_id'],
-                        'taux' => $p['part_pourcentage'],
-                        'montant' => $p['montant'],
-                    ], $parts),
+                    // Un seul taux "de la commande" n'existe plus (il varie par catégorie) —
+                    // laissé null, jamais un pourcentage moyen trompeur.
+                    'parts' => array_map(fn (string $beneficiaireId) => [
+                        'beneficiaire_type' => $typeParBeneficiaire[$beneficiaireId],
+                        'beneficiaire_id' => $beneficiaireId,
+                        'taux' => null,
+                        'montant' => round($montantParBeneficiaire[$beneficiaireId], 2),
+                    ], array_keys($montantParBeneficiaire)),
                 ];
             }
         }

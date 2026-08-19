@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\EquipeLivraison;
+use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
 use App\Models\Personne;
@@ -33,8 +34,11 @@ use Inertia\Response as InertiaResponse;
  *
  *  - V2 (uniquement pour une organisation explicitement basculée) : le
  *    propriétaire n'appartient plus au partage, son montant vient du barème
- *    Paramètres → Commissions ; les livreurs se partagent 100 % via
- *    part_pourcentage, stocké directement dans equipe_livreurs.taux_commission.
+ *    Paramètres → Commissions ; les livreurs se partagent 100 % PAR CATÉGORIE
+ *    (equipe_livraison_partages_categorie), jamais un seul pourcentage global
+ *    — chaque catégorie ayant son propre barème Livraison, son partage entre
+ *    livreurs est lui aussi défini indépendamment. Absence de partage pour une
+ *    catégorie = non configuré, jamais déduit (décision AMOA post-Phase 2).
  *
  * Ne JAMAIS mélanger les deux : une organisation legacy ne doit jamais recevoir
  * un payload V2 (et inversement) — cf. tests/Feature/EquipeLivraisonTest.php.
@@ -69,8 +73,8 @@ class EquipeLivraisonController extends Controller
         $nomVehicule = $vehiculeSelectionne?->nom_vehicule ?? '';
 
         if (MoteurCommissionResolver::estV2($orgId)) {
-            $data = $request->validate($this->rulesV2($orgId, null), $this->messages());
-            $this->validatePartageV2($data['membres']);
+            $data = $request->validate($this->rulesV2($request, $orgId, null), $this->messages());
+            $this->validatePartagesCategorieV2($data['partages_categorie'] ?? []);
             $this->validateUniquePhones($data['membres']);
             $this->validateMembresExclusivite($data['membres'], $orgId);
 
@@ -86,18 +90,21 @@ class EquipeLivraisonController extends Controller
                 Vehicule::whereKey($data['vehicule_id'])->update(['is_active' => true]);
 
                 $designations = $this->designationsParDefaut($data['membres'], $nomVehicule);
+                $livreurIdParOrdre = [];
                 foreach ($data['membres'] as $index => $m) {
                     $livreur = $this->resolveOrCreateLivreur($m, $orgId, $designations[$index]);
+                    $livreurIdParOrdre[$m['ordre'] ?? $index] = $livreur->id;
 
                     EquipeLivreur::create([
                         'equipe_id' => $equipe->id,
                         'livreur_id' => $livreur->id,
                         'role' => $m['role'],
-                        'taux_commission' => (float) $m['part_pourcentage'],
                         'taux_commission_logistique' => $m['taux_commission_logistique'] ?? null,
                         'ordre' => $m['ordre'] ?? $index,
                     ]);
                 }
+
+                $this->syncPartagesCategorieV2($equipe->id, $data['partages_categorie'] ?? [], $livreurIdParOrdre);
             });
         } else {
             $data = $request->validate($this->rulesLegacy($orgId, null), $this->messages());
@@ -169,8 +176,8 @@ class EquipeLivraisonController extends Controller
         $nomVehicule = $vehiculeSelectionne?->nom_vehicule ?? '';
 
         if (MoteurCommissionResolver::estV2($orgId)) {
-            $data = $request->validate($this->rulesV2($orgId, $equipes_livraison->id), $this->messages());
-            $this->validatePartageV2($data['membres']);
+            $data = $request->validate($this->rulesV2($request, $orgId, $equipes_livraison->id), $this->messages());
+            $this->validatePartagesCategorieV2($data['partages_categorie'] ?? []);
             $this->validateUniquePhones($data['membres']);
             $this->validateMembresExclusivite($data['membres'], $orgId, $equipes_livraison->id);
 
@@ -189,18 +196,21 @@ class EquipeLivraisonController extends Controller
                 $equipes_livraison->membres()->delete();
 
                 $designations = $this->designationsParDefaut($data['membres'], $nomVehicule);
+                $livreurIdParOrdre = [];
                 foreach ($data['membres'] as $index => $m) {
                     $livreur = $this->resolveOrCreateLivreur($m, $orgId, $designations[$index]);
+                    $livreurIdParOrdre[$m['ordre'] ?? $index] = $livreur->id;
 
                     EquipeLivreur::create([
                         'equipe_id' => $equipes_livraison->id,
                         'livreur_id' => $livreur->id,
                         'role' => $m['role'],
-                        'taux_commission' => (float) $m['part_pourcentage'],
                         'taux_commission_logistique' => $m['taux_commission_logistique'] ?? null,
                         'ordre' => $m['ordre'] ?? $index,
                     ]);
                 }
+
+                $this->syncPartagesCategorieV2($equipes_livraison->id, $data['partages_categorie'] ?? [], $livreurIdParOrdre);
             });
         } else {
             $data = $request->validate($this->rulesLegacy($orgId, $equipes_livraison->id), $this->messages());
@@ -277,7 +287,7 @@ class EquipeLivraisonController extends Controller
 
     // ── Règles de validation, par moteur ─────────────────────────────────────
 
-    private function rulesV2(string $orgId, ?string $excludeEquipeId): array
+    private function rulesV2(Request $request, string $orgId, ?string $excludeEquipeId): array
     {
         return [
             'is_active' => 'boolean',
@@ -291,12 +301,27 @@ class EquipeLivraisonController extends Controller
             'membres.*.nom_complet' => 'nullable|string|max:150',
             'membres.*.telephone' => ['required', 'string', 'regex:/^\+224\d{9}$/'],
             'membres.*.role' => ['required', Rule::in(['chauffeur', 'convoyeur'])],
-            // Part de l'enveloppe Livraison (%) — plus un montant GNF calé sur un ancien pot
-            // partagé avec le propriétaire (cf. Phase 2 : le propriétaire n'appartient plus au
-            // même partage, son montant vient désormais du barème Paramètres → Commissions).
-            'membres.*.part_pourcentage' => 'required|numeric|min:0|max:100',
             'membres.*.taux_commission_logistique' => 'nullable|numeric|min:0|max:100',
             'membres.*.ordre' => 'nullable|integer|min:0',
+            // Partage Livraison PAR CATÉGORIE (décision AMOA post-Phase 2) : plus un seul
+            // pourcentage par membre valable pour toutes les catégories — chaque catégorie
+            // ayant son propre barème Livraison, son partage entre livreurs est lui aussi
+            // défini indépendamment (cf. validatePartagesCategorieV2()).
+            'partages_categorie' => 'nullable|array',
+            'partages_categorie.*.categorie_id' => [
+                'required', 'string',
+                Rule::exists('categories', 'id')->where('organization_id', $orgId),
+            ],
+            'partages_categorie.*.parts' => 'required|array|min:1',
+            'partages_categorie.*.parts.*.part_pourcentage' => 'required|numeric|min:0|max:100',
+            'partages_categorie.*.parts.*.membre_ordre' => [
+                'required', 'integer', 'min:0',
+                function ($attribute, $value, $fail) use ($request) {
+                    if ($value >= count($request->input('membres', []))) {
+                        $fail("Le membre référencé (ordre {$value}) n'existe pas dans l'équipe.");
+                    }
+                },
+            ],
         ];
     }
 
@@ -521,23 +546,52 @@ class EquipeLivraisonController extends Controller
     }
 
     /**
-     * Voie V2 : vérifie que la somme des parts des livreurs totalise 100 % — le
-     * propriétaire n'appartient plus à ce partage (décision AMOA #1), son
-     * montant vient du barème Paramètres → Commissions.
+     * Voie V2 : vérifie que, POUR CHAQUE catégorie soumise, la somme des parts
+     * des livreurs totalise 100 % — le propriétaire n'appartient jamais à ce
+     * partage (décision AMOA #1), son montant vient du barème Paramètres →
+     * Commissions. Une catégorie absente du payload n'est simplement pas
+     * validée ici (elle reste "non configurée" pour cette équipe, cf.
+     * CommissionEnveloppeGenerator qui bloque alors sa génération).
      */
-    private function validatePartageV2(array $membres): void
+    private function validatePartagesCategorieV2(array $partagesCategorie): void
     {
-        $total = array_reduce(
-            $membres,
-            fn (float $sum, array $m): float => $sum + (float) ($m['part_pourcentage'] ?? 0),
-            0.0
-        );
+        foreach ($partagesCategorie as $pc) {
+            $total = array_reduce(
+                $pc['parts'],
+                fn (float $sum, array $p): float => $sum + (float) ($p['part_pourcentage'] ?? 0),
+                0.0
+            );
 
-        if (abs($total - 100.0) > 0.01) {
-            abort(422, sprintf(
-                'La somme des parts (%.2f %%) doit être égale à 100 %%.',
-                $total
-            ));
+            if (abs($total - 100.0) > 0.01) {
+                abort(422, sprintf(
+                    'La somme des parts (%.2f %%) doit être égale à 100 %% pour chaque catégorie.',
+                    $total
+                ));
+            }
+        }
+    }
+
+    /**
+     * Remplace intégralement le partage Livraison par catégorie de cette
+     * équipe — jamais de fusion partielle avec l'existant, exactement comme
+     * $equipe->membres()->delete() + recréation pour les membres eux-mêmes.
+     * $livreurIdParOrdre résout la position déclarée côté payload
+     * (membre_ordre, jamais stable côté client pour un nouveau membre sans
+     * livreur_id) vers le Livreur réellement créé/résolu par resolveOrCreateLivreur().
+     */
+    private function syncPartagesCategorieV2(string $equipeId, array $partagesCategorie, array $livreurIdParOrdre): void
+    {
+        EquipeLivraisonPartageCategorie::where('equipe_id', $equipeId)->delete();
+
+        foreach ($partagesCategorie as $pc) {
+            foreach ($pc['parts'] as $p) {
+                EquipeLivraisonPartageCategorie::create([
+                    'equipe_id' => $equipeId,
+                    'categorie_id' => $pc['categorie_id'],
+                    'livreur_id' => $livreurIdParOrdre[$p['membre_ordre']],
+                    'part_pourcentage' => (float) $p['part_pourcentage'],
+                ]);
+            }
         }
     }
 
@@ -625,9 +679,12 @@ class EquipeLivraisonController extends Controller
             'membres.*.role.in' => 'Le rôle doit être chauffeur ou convoyeur.',
             'membres.*.montant_par_pack.required' => 'Le montant par pack est obligatoire.',
             'membres.*.montant_par_pack.min' => 'Le montant par pack ne peut pas être négatif.',
-            'membres.*.part_pourcentage.required' => 'La part est obligatoire.',
-            'membres.*.part_pourcentage.min' => 'La part ne peut pas être négative.',
-            'membres.*.part_pourcentage.max' => 'La part ne peut pas dépasser 100 %.',
+            'partages_categorie.*.categorie_id.required' => 'La catégorie est obligatoire.',
+            'partages_categorie.*.categorie_id.exists' => 'La catégorie sélectionnée est introuvable.',
+            'partages_categorie.*.parts.required' => 'Le partage doit avoir au moins un bénéficiaire.',
+            'partages_categorie.*.parts.*.part_pourcentage.required' => 'La part est obligatoire.',
+            'partages_categorie.*.parts.*.part_pourcentage.min' => 'La part ne peut pas être négative.',
+            'partages_categorie.*.parts.*.part_pourcentage.max' => 'La part ne peut pas dépasser 100 %.',
         ];
     }
 }

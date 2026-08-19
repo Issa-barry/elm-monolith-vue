@@ -9,6 +9,7 @@ use App\Enums\CommissionStrategieAncrageSite;
 use App\Enums\CommissionUniteCalcul;
 use App\Enums\DeclencheurCommissionVente;
 use App\Enums\StatutCommandeVente;
+use App\Models\Categorie;
 use App\Models\CommandeVente;
 use App\Models\CommissionCibleType;
 use App\Models\CommissionEnveloppe;
@@ -66,9 +67,13 @@ class EquipeLivraisonMoteurRoundTripTest extends TestCase
         $this->user->sites()->attach($this->defaultSite->id, ['role' => 'employe', 'is_default' => true]);
     }
 
-    private function makeProduit(): Produit
+    private function makeProduit(?string $categorieId = null): Produit
     {
-        return $this->makeProduitAvecVariante($this->org, ['nom' => 'Produit Test'], ['prix_vente' => 2000, 'prix_usine' => 1500]);
+        return $this->makeProduitAvecVariante(
+            $this->org,
+            ['nom' => 'Produit Test', 'categorie_id' => $categorieId],
+            ['prix_vente' => 2000, 'prix_usine' => 1500],
+        );
     }
 
     private function validerVente(Vehicule $vehicule, Produit $produit, int $quantite): CommandeVente
@@ -203,6 +208,8 @@ class EquipeLivraisonMoteurRoundTripTest extends TestCase
             'statut' => 'active',
         ]);
 
+        $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachets', 'statut' => 'actif']);
+
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
@@ -210,15 +217,22 @@ class EquipeLivraisonMoteurRoundTripTest extends TestCase
             'capacite_packs' => 10,
         ]);
 
-        // Popup V2 : le propriétaire n'est jamais dans le payload, un seul livreur à 100 %.
+        // Popup V2 : le propriétaire n'est jamais dans le payload ; le partage
+        // Livraison est défini PAR CATÉGORIE (décision AMOA post-Phase 2), un
+        // seul livreur à 100 % pour l'unique catégorie vendue ici.
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), [
                 'vehicule_id' => $vehicule->id,
                 'is_active' => true,
                 'membres' => [[
                     'livreur_id' => null, 'nom_complet' => 'Mamadou Diallo',
-                    'telephone' => '+224620000001', 'role' => 'chauffeur',
-                    'part_pourcentage' => 100, 'ordre' => 0,
+                    'telephone' => '+224620000001', 'role' => 'chauffeur', 'ordre' => 0,
+                ]],
+                'partages_categorie' => [[
+                    'categorie_id' => $categorie->id,
+                    'parts' => [
+                        ['membre_ordre' => 0, 'part_pourcentage' => 100],
+                    ],
                 ]],
             ])
             ->assertRedirectContains('/backoffice/vehicules/');
@@ -229,7 +243,7 @@ class EquipeLivraisonMoteurRoundTripTest extends TestCase
         $this->assertNull($equipe->montant_par_pack_proprietaire);
         $this->assertNull($equipe->taux_commission_proprietaire);
 
-        $produit = $this->makeProduit();
+        $produit = $this->makeProduit($categorie->id);
         $commande = $this->validerVente($vehicule, $produit, quantite: 5);
 
         // L'ancien moteur ne doit JAMAIS tourner pour cette organisation.

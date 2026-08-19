@@ -47,8 +47,13 @@ interface MembreExistant {
     telephone: string;
     role: string;
     montant_par_pack: number;
-    part_pourcentage: number;
     ordre: number;
+}
+
+/** V2 uniquement — partage Livraison déjà enregistré, groupé par catégorie. */
+interface PartageCategorieExistant {
+    categorie_id: string;
+    parts: Array<{ livreur_id: string; part_pourcentage: number }>;
 }
 
 interface EquipeExistante {
@@ -60,6 +65,7 @@ interface EquipeExistante {
     proprietaire_id: string | null;
     proprietaire_nom: string | null;
     membres: MembreExistant[];
+    partages_categorie: PartageCategorieExistant[];
 }
 
 interface MembreLigne {
@@ -68,7 +74,6 @@ interface MembreLigne {
     nom_complet: string; // facultatif — surnom ou désignation opérationnelle
     telephone: string; // 9 chiffres locaux
     montant_par_pack: number;
-    part_pourcentage: number;
     ordre: number;
     _errors: Partial<Record<'role' | 'telephone', string>>;
 }
@@ -86,6 +91,16 @@ interface BaremeCommission {
     livraison: number | null;
 }
 
+/** V2 uniquement — barème Livraison résolu pour une catégorie (cf. conception
+ * cible : les barèmes Livraison varient par catégorie, donc le partage entre
+ * livreurs est lui aussi défini par catégorie, jamais un seul pourcentage
+ * valable pour toute la commande). */
+interface BaremeLivraisonCategorie {
+    categorie_id: string;
+    categorie_nom: string;
+    montant: number;
+}
+
 const props = defineProps<{
     visible: boolean;
     vehicule: VehiculeInfo;
@@ -93,6 +108,7 @@ const props = defineProps<{
     proprietaires: ProprietaireOption[];
     moteurCommission: 'legacy' | 'v2';
     baremeCommission: BaremeCommission;
+    baremesLivraisonCategories: BaremeLivraisonCategorie[];
 }>();
 
 const emit = defineEmits<{
@@ -173,19 +189,6 @@ const partProprietaireDuBareme = computed(() => {
     return parseFloat(((p / (p + l)) * 100).toFixed(2));
 });
 
-// V2 uniquement — ligne informative du propriétaire au sein du même tableau
-// que les livreurs (repère visuel conservé de l'ancienne popup), jamais
-// éditable ici et jamais comptée dans le partage à 100 % des livreurs.
-const proprietaireReadonlyRow = computed(() => {
-    if (!hasProprietaire.value) return null;
-    return {
-        badge: 'PROPRIÉTAIRE',
-        label: proprietaireNom.value ?? '—',
-        montant: montantProprietaire.value,
-        pct: partProprietaireDuBareme.value,
-    };
-});
-
 // ── Init ────────────────────────────────────────────────────────────────────
 
 watch(
@@ -207,7 +210,6 @@ watch(
                     ? m.telephone.slice(GUINEA_PREFIX.length)
                     : m.telephone.replace(/\D/g, '').slice(-9),
                 montant_par_pack: m.montant_par_pack,
-                part_pourcentage: m.part_pourcentage,
                 ordre: m.ordre,
                 _errors: {},
             }));
@@ -221,7 +223,6 @@ watch(
                     nom_complet: '',
                     telephone: '',
                     montant_par_pack: 0,
-                    part_pourcentage: 0,
                     ordre: 0,
                     _errors: {},
                 },
@@ -242,7 +243,6 @@ function addLigne() {
         nom_complet: '',
         telephone: '',
         montant_par_pack: 0,
-        part_pourcentage: 0,
         ordre: membres.value.length,
         _errors: {},
     });
@@ -313,12 +313,8 @@ function goToStep2() {
     if (isLegacy.value) {
         buildLignes();
         if (commission.value <= 0) commission.value = 950;
-    } else if (
-        membres.value.length === 1 &&
-        membres.value[0].part_pourcentage === 0
-    ) {
-        // Un seul membre : 100 % automatiquement (rien à répartir).
-        membres.value[0].part_pourcentage = 100;
+    } else {
+        initPartagesParCategorie();
     }
     step.value = 2;
 }
@@ -450,37 +446,69 @@ function applyPartageToMembres() {
     }
 }
 
-// ── Étape 2 (V2) : Partage livreurs uniquement, propriétaire hors partage ──
+// ── Étape 2 (V2) : Partage livreurs PAR CATÉGORIE, propriétaire hors partage ─
+// Chaque catégorie ayant son propre barème Livraison (Paramètres →
+// Commissions), son partage entre livreurs est lui aussi défini
+// indépendamment — jamais un seul pourcentage valable pour toute la commande
+// (décision AMOA post-Phase 2).
 
-const partageMembres = computed<CommissionShareMembre[]>(() => {
+const partagesParCategorie = ref<Record<string, CommissionShareMembre[]>>({});
+
+function membreLabels(): string[] {
     const roleCounts: Record<string, number> = {};
-    return membres.value.map((m, i) => {
+    return membres.value.map((m) => {
         roleCounts[m.role] = (roleCounts[m.role] ?? 0) + 1;
-        return {
-            id: `membre-${i}`,
-            label: membreLabel(m.role, roleCounts[m.role], m.nom_complet),
-            part_pourcentage: m.part_pourcentage,
-        };
+        return membreLabel(m.role, roleCounts[m.role], m.nom_complet);
     });
-});
+}
 
-function onPartageUpdate(list: CommissionShareMembre[]) {
-    markChanged();
-    list.forEach((l) => {
-        const idx = parseInt(l.id.replace('membre-', ''), 10);
-        if (membres.value[idx]) {
-            membres.value[idx].part_pourcentage = l.part_pourcentage;
+function initPartagesParCategorie() {
+    const labels = membreLabels();
+    const result: Record<string, CommissionShareMembre[]> = {};
+
+    for (const cat of props.baremesLivraisonCategories) {
+        const existant = props.equipe?.partages_categorie?.find(
+            (pc) => pc.categorie_id === cat.categorie_id,
+        );
+
+        const parts = membres.value.map((m, i) => {
+            const partExistante = m.livreur_id
+                ? existant?.parts.find((p) => p.livreur_id === m.livreur_id)
+                : undefined;
+            return {
+                id: `membre-${i}`,
+                label: labels[i],
+                part_pourcentage: partExistante?.part_pourcentage ?? 0,
+            };
+        });
+
+        // Un seul membre pour cette catégorie : 100 % automatiquement (rien à répartir).
+        if (parts.length === 1 && parts[0].part_pourcentage === 0) {
+            parts[0].part_pourcentage = 100;
         }
-    });
+
+        result[cat.categorie_id] = parts;
+    }
+
+    partagesParCategorie.value = result;
+}
+
+function onPartageCategorieUpdate(
+    categorieId: string,
+    list: CommissionShareMembre[],
+) {
+    markChanged();
+    partagesParCategorie.value = {
+        ...partagesParCategorie.value,
+        [categorieId]: list,
+    };
 }
 
 // ── Partage : total/validité (branché selon le moteur) ─────────────────────
 
 const totalPartage = computed(() => {
-    if (isLegacy.value) {
-        return lignes.value.reduce((s, l) => s + (l.montant || 0), 0);
-    }
-    return membres.value.reduce((s, m) => s + (m.part_pourcentage || 0), 0);
+    // Legacy uniquement — total unique, propriétaire inclus.
+    return lignes.value.reduce((s, l) => s + (l.montant || 0), 0);
 });
 
 const resteARepartir = computed(() => commission.value - totalPartage.value);
@@ -492,7 +520,15 @@ const partageValide = computed(() => {
             Math.abs(totalPartage.value - commission.value) < 0.01
         );
     }
-    return Math.abs(totalPartage.value - 100) < 0.01;
+    // V2 : CHAQUE catégorie ayant un barème Livraison doit totaliser 100 % —
+    // aucune n'est facultative, jamais une répartition égale déduite pour
+    // celle qu'on aurait oublié de configurer.
+    if (props.baremesLivraisonCategories.length === 0) return false;
+    return props.baremesLivraisonCategories.every((cat) => {
+        const parts = partagesParCategorie.value[cat.categorie_id] ?? [];
+        const total = parts.reduce((s, p) => s + (p.part_pourcentage || 0), 0);
+        return parts.length > 0 && Math.abs(total - 100) < 0.01;
+    });
 });
 
 function goToStep3() {
@@ -536,11 +572,17 @@ function formatPhone(local: string): string {
     return `+224 ${d.slice(0, 3)} ${d.slice(3, 5)} ${d.slice(5, 7)} ${d.slice(7)}`;
 }
 
-/** V2 uniquement — montant estimé d'un membre = barème Livraison (indicatif) × sa part. */
-function montantEstime(pct: number): string {
-    if (montantLivraison.value === null) return `${pct} %`;
-    const montant = Math.round((pct / 100) * montantLivraison.value);
-    return `${formatGNF(montant)} • ${pct} %`;
+/** V2 uniquement — montant estimé d'un membre pour une catégorie = barème
+ * Livraison de cette catégorie × sa part. */
+function montantEstimeCategorie(categorieId: string, membreIndex: number): string {
+    const cat = props.baremesLivraisonCategories.find(
+        (c) => c.categorie_id === categorieId,
+    );
+    const part = partagesParCategorie.value[categorieId]?.[membreIndex];
+    if (!cat || !part) return '—';
+
+    const montant = Math.round((part.part_pourcentage / 100) * cat.montant);
+    return `${formatGNF(montant)} • ${part.part_pourcentage} %`;
 }
 
 // ── Soumission ──────────────────────────────────────────────────────────────
@@ -579,8 +621,16 @@ function buildPayload() {
             nom_complet: m.nom_complet.trim() || null,
             telephone: `${GUINEA_PREFIX}${m.telephone}`,
             role: m.role,
-            part_pourcentage: m.part_pourcentage,
             ordre: i,
+        })),
+        partages_categorie: props.baremesLivraisonCategories.map((cat) => ({
+            categorie_id: cat.categorie_id,
+            parts: (partagesParCategorie.value[cat.categorie_id] ?? []).map(
+                (p) => ({
+                    membre_ordre: parseInt(p.id.replace('membre-', ''), 10),
+                    part_pourcentage: p.part_pourcentage,
+                }),
+            ),
         })),
     };
 }
@@ -1011,34 +1061,69 @@ const hasStep1Errors = computed(() =>
             </p>
         </div>
 
-        <!-- ── Étape 2 (V2) : Partage livreurs uniquement ──────────────────── -->
+        <!-- ── Étape 2 (V2) : Partage livreurs PAR CATÉGORIE ───────────────── -->
         <div v-else-if="step === 2" class="space-y-5">
-            <!-- Commission livraison — lecture seule, vient du barème -->
-            <div class="rounded-lg border bg-muted/30 p-3">
+            <!-- Propriétaire — montant indicatif, jamais éditable ici (issu du
+                 barème global Paramètres → Commissions, hors partage) -->
+            <div
+                v-if="hasProprietaire"
+                class="rounded-lg border bg-primary/5 p-3"
+            >
                 <p
                     class="text-xs font-medium tracking-wider text-muted-foreground uppercase"
                 >
-                    Commission livraison
+                    Propriétaire — {{ proprietaireNom }}
                 </p>
-                <p class="mt-1 text-sm font-semibold">
-                    {{ formatGNF(montantLivraison) }}
-                    <span class="font-normal text-muted-foreground"
-                        >/ unité</span
+                <p class="mt-1 text-sm font-semibold text-primary">
+                    {{ formatGNF(montantProprietaire) }}
+                    <span
+                        v-if="partProprietaireDuBareme !== null"
+                        class="font-normal text-muted-foreground"
+                    >
+                        • {{ partProprietaireDuBareme }} %</span
                     >
                 </p>
                 <p class="mt-1 text-xs text-muted-foreground">
-                    Défini dans Paramètres → Commissions. Répartissez-la
-                    ci-dessous entre les livreurs.
+                    Hors partage — vient du barème Propriétaire, jamais
+                    modifiable ici.
                 </p>
             </div>
 
-            <CommissionShareEditor
-                :model-value="partageMembres"
-                :enveloppe-montant="montantLivraison"
-                :readonly-row="proprietaireReadonlyRow"
-                total-label="Total Livraison"
-                @update:model-value="onPartageUpdate"
-            />
+            <div
+                v-if="baremesLivraisonCategories.length === 0"
+                class="rounded-lg border border-dashed py-8 text-center text-sm text-muted-foreground"
+            >
+                Aucun barème Livraison configuré. Définissez-en un dans
+                Paramètres → Commissions avant de configurer le partage.
+            </div>
+
+            <div
+                v-for="cat in baremesLivraisonCategories"
+                :key="cat.categorie_id"
+                class="space-y-2"
+            >
+                <div class="rounded-lg border bg-muted/30 p-3">
+                    <p
+                        class="text-xs font-medium tracking-wider text-muted-foreground uppercase"
+                    >
+                        {{ cat.categorie_nom }}
+                    </p>
+                    <p class="mt-1 text-sm font-semibold">
+                        {{ formatGNF(cat.montant) }}
+                        <span class="font-normal text-muted-foreground"
+                            >/ unité — Livraison</span
+                        >
+                    </p>
+                </div>
+
+                <CommissionShareEditor
+                    :model-value="partagesParCategorie[cat.categorie_id] ?? []"
+                    :enveloppe-montant="cat.montant"
+                    @update:model-value="
+                        (list) => onPartageCategorieUpdate(cat.categorie_id, list)
+                    "
+                />
+            </div>
         </div>
 
         <!-- ── Étape 3 (LEGACY) : Récapitulatif ────────────────────────────── -->
@@ -1174,20 +1259,29 @@ const hasStep1Errors = computed(() =>
                     <p
                         class="text-xs font-medium tracking-wider text-muted-foreground uppercase"
                     >
-                        Commission livraison
+                        Catégories Livraison
                     </p>
                     <p class="mt-1 text-sm font-semibold">
-                        {{ formatGNF(montantLivraison) }}
+                        {{ baremesLivraisonCategories.length }}
                     </p>
                 </div>
             </div>
 
-            <div class="overflow-hidden rounded-lg border">
-                <div class="border-b bg-muted/30 px-4 py-2.5">
+            <div
+                v-for="cat in baremesLivraisonCategories"
+                :key="cat.categorie_id"
+                class="overflow-hidden rounded-lg border"
+            >
+                <div
+                    class="flex items-center justify-between border-b bg-muted/30 px-4 py-2.5"
+                >
                     <p
                         class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
                     >
-                        Membres ({{ membres.length }})
+                        {{ cat.categorie_nom }}
+                    </p>
+                    <p class="text-xs font-medium text-muted-foreground">
+                        {{ formatGNF(cat.montant) }} / unité
                     </p>
                 </div>
                 <table class="w-full text-sm">
@@ -1219,7 +1313,7 @@ const hasStep1Errors = computed(() =>
                             <td
                                 class="px-4 py-2.5 text-right font-mono text-xs"
                             >
-                                {{ montantEstime(m.part_pourcentage) }}
+                                {{ montantEstimeCategorie(cat.categorie_id, i) }}
                             </td>
                         </tr>
                     </tbody>

@@ -19,6 +19,7 @@ use App\Models\CommissionGenerationAttempt;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
 use App\Models\EquipeLivraison;
+use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
 use App\Models\Produit;
@@ -38,6 +39,11 @@ use Tests\TestCase;
  * barèmes fixes PAR_UNITE_VENDUE par catégorie/produit/variante, résolus via
  * CommissionRegleResolver. Le pont Phase 1 (MARGE_OPERATION) n'est jamais
  * exercé par ces tests — cf. CommissionParitePhase1Test pour lui.
+ *
+ * Partage Livraison PAR CATÉGORIE (décision AMOA post-Phase 2) : le partage
+ * entre livreurs est désormais défini par catégorie
+ * (equipe_livraison_partages_categorie), jamais un seul pourcentage valable
+ * pour toute la commande — cf. definirPartageCategorie().
  */
 class CommissionEnveloppeGeneratorReglesTest extends TestCase
 {
@@ -87,7 +93,8 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
         ]);
     }
 
-    private function makeVehiculeAvecEquipe(array $tauxMembres): Vehicule
+    /** @return array{vehicule: Vehicule, equipe: EquipeLivraison, livreurs: array<int, Livreur>} */
+    private function makeVehiculeAvecEquipe(int $nbLivreurs = 1): array
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $vehicule = Vehicule::factory()->create([
@@ -101,21 +108,34 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
             'vehicule_id' => $vehicule->id,
             'nom' => 'Équipe Test',
             'is_active' => true,
-            'taux_commission_proprietaire' => 0,
         ]);
 
-        foreach ($tauxMembres as $i => $taux) {
+        $livreurs = [];
+        for ($i = 0; $i < $nbLivreurs; $i++) {
             $livreur = Livreur::factory()->create(['organization_id' => $this->org->id]);
             EquipeLivreur::create([
                 'equipe_id' => $equipe->id,
                 'livreur_id' => $livreur->id,
-                'taux_commission' => $taux,
                 'role' => $i === 0 ? 'chauffeur' : 'convoyeur',
                 'ordre' => $i,
             ]);
+            $livreurs[] = $livreur;
         }
 
-        return $vehicule->fresh();
+        return ['vehicule' => $vehicule->fresh(), 'equipe' => $equipe, 'livreurs' => $livreurs];
+    }
+
+    /** @param  array<string, float>  $partsParLivreurId */
+    private function definirPartageCategorie(EquipeLivraison $equipe, Categorie $categorie, array $partsParLivreurId): void
+    {
+        foreach ($partsParLivreurId as $livreurId => $pct) {
+            EquipeLivraisonPartageCategorie::create([
+                'equipe_id' => $equipe->id,
+                'categorie_id' => $categorie->id,
+                'livreur_id' => $livreurId,
+                'part_pourcentage' => $pct,
+            ]);
+        }
     }
 
     private function makeProduit(?string $categorieId = null): Produit
@@ -163,11 +183,17 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
     /** @test */
     public function genere_selon_le_bareme_global_quand_aucune_regle_categorie_nexiste(): void
     {
+        $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachets', 'statut' => 'actif']);
         $this->creerRegle(CommissionCibleType::CODE_PROPRIETAIRE, 600);
         $this->creerRegle(CommissionCibleType::CODE_EQUIPE_LIVRAISON, 300);
 
-        $vehicule = $this->makeVehiculeAvecEquipe([60, 40]);
-        $produit = $this->makeProduit();
+        ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreurs' => $livreurs] = $this->makeVehiculeAvecEquipe(2);
+        $this->definirPartageCategorie($equipe, $categorie, [
+            $livreurs[0]->id => 60,
+            $livreurs[1]->id => 40,
+        ]);
+
+        $produit = $this->makeProduit($categorie->id);
         $commande = $this->creerCommandeAvecLignes($vehicule, [[$produit, 5]]);
 
         CommissionEnveloppeGenerator::genererPourCommandeVente($commande);
@@ -194,7 +220,9 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
         $this->creerRegle(CommissionCibleType::CODE_PROPRIETAIRE, 800, CommissionScopeType::CATEGORIE, $categorie->id); // catégorie
         $this->creerRegle(CommissionCibleType::CODE_EQUIPE_LIVRAISON, 300);
 
-        $vehicule = $this->makeVehiculeAvecEquipe([100]);
+        ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreurs' => $livreurs] = $this->makeVehiculeAvecEquipe(1);
+        $this->definirPartageCategorie($equipe, $categorie, [$livreurs[0]->id => 100]);
+
         $produit = $this->makeProduit($categorie->id);
         $commande = $this->creerCommandeAvecLignes($vehicule, [[$produit, 4]]);
 
@@ -207,10 +235,10 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
         $this->assertSame($categorie->id, $ligneTrace->categorie_id_snapshot);
     }
 
-    // ── Multi-catégories : une seule enveloppe, plusieurs lignes ─────────────
+    // ── Multi-catégories : une seule enveloppe agrégée, partage propre à chacune ─
 
     /** @test */
-    public function une_commande_multi_categories_produit_une_seule_enveloppe_par_cible(): void
+    public function une_commande_multi_categories_produit_une_seule_enveloppe_agregeant_des_partages_distincts(): void
     {
         $sachets = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachets', 'statut' => 'actif']);
         $bouteilles = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Bouteilles', 'statut' => 'actif']);
@@ -220,7 +248,14 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
         $this->creerRegle(CommissionCibleType::CODE_PROPRIETAIRE, 600, CommissionScopeType::CATEGORIE, $sachets->id);
         $this->creerRegle(CommissionCibleType::CODE_PROPRIETAIRE, 800, CommissionScopeType::CATEGORIE, $bouteilles->id);
 
-        $vehicule = $this->makeVehiculeAvecEquipe([100]);
+        ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreurs' => $livreurs] = $this->makeVehiculeAvecEquipe(2);
+        [$chauffeur, $convoyeur] = $livreurs;
+
+        // Partage DISTINCT par catégorie — exactement le scénario métier motivant
+        // cette évolution : 50/50 sur Sachets, 60/40 sur Bouteilles.
+        $this->definirPartageCategorie($equipe, $sachets, [$chauffeur->id => 50, $convoyeur->id => 50]);
+        $this->definirPartageCategorie($equipe, $bouteilles, [$chauffeur->id => 60, $convoyeur->id => 40]);
+
         $produitSachets = $this->makeProduit($sachets->id);
         $produitBouteilles = $this->makeProduit($bouteilles->id);
 
@@ -245,6 +280,20 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
 
         // Deux lignes justificatives par enveloppe (une par catégorie contributrice).
         $this->assertEquals(2, CommissionEnveloppeLigne::where('enveloppe_id', $enveloppeLiv->id)->count());
+
+        // Parts agrégées sur les DEUX catégories, chacune avec son propre partage :
+        // chauffeur = 50%×30000 + 60%×20000 = 15000 + 12000 = 27000.
+        // convoyeur = 50%×30000 + 40%×20000 = 15000 + 8000 = 23000.
+        $partChauffeur = CommissionEnveloppePart::where('enveloppe_id', $enveloppeLiv->id)
+            ->where('beneficiaire_id', $chauffeur->id)->firstOrFail();
+        $partConvoyeur = CommissionEnveloppePart::where('enveloppe_id', $enveloppeLiv->id)
+            ->where('beneficiaire_id', $convoyeur->id)->firstOrFail();
+
+        $this->assertEqualsWithDelta(27000.0, (float) $partChauffeur->montant_brut, 0.01);
+        $this->assertEqualsWithDelta(23000.0, (float) $partConvoyeur->montant_brut, 0.01);
+        // Le taux "de la commande" n'existe plus (il varie par catégorie) — jamais
+        // un pourcentage moyen trompeur.
+        $this->assertNull($partChauffeur->taux_repartition_snapshot);
     }
 
     // ── Absence de règle = 0, jamais un blocage (décision AMOA #4) ───────────
@@ -255,7 +304,7 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
         $categorieSansRegle = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Non configurée', 'statut' => 'actif']);
         // Aucune règle créée du tout, ni globale ni catégorie.
 
-        $vehicule = $this->makeVehiculeAvecEquipe([100]);
+        ['vehicule' => $vehicule] = $this->makeVehiculeAvecEquipe(1);
         $produit = $this->makeProduit($categorieSansRegle->id);
         $commande = $this->creerCommandeAvecLignes($vehicule, [[$produit, 3]]);
 
@@ -293,5 +342,32 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
 
         $tentative = CommissionGenerationAttempt::where('source_id', $commande->id)->firstOrFail();
         $this->assertEquals(CommissionGenerationStatut::ERREUR, $tentative->statut);
+    }
+
+    // ── Catégorie sans partage configuré = à régulariser, jamais de répartition
+    // implicite (décision AMOA post-Phase 2) ─────────────────────────────────
+
+    /** @test */
+    public function une_categorie_sans_partage_configure_bloque_toute_la_generation_sans_repartition_implicite(): void
+    {
+        $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachets', 'statut' => 'actif']);
+        $this->creerRegle(CommissionCibleType::CODE_PROPRIETAIRE, 600);
+        $this->creerRegle(CommissionCibleType::CODE_EQUIPE_LIVRAISON, 300);
+
+        // Équipe existante, MAIS jamais de partage défini pour cette catégorie.
+        ['vehicule' => $vehicule] = $this->makeVehiculeAvecEquipe(2);
+
+        $produit = $this->makeProduit($categorie->id);
+        $commande = $this->creerCommandeAvecLignes($vehicule, [[$produit, 5]]);
+
+        CommissionEnveloppeGenerator::genererPourCommandeVente($commande);
+
+        // Tout-ou-rien : ni propriétaire ni livraison, jamais un partage égal déduit.
+        $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commande->id]);
+        $this->assertDatabaseMissing('equipe_livraison_partages_categorie', ['equipe_id' => $vehicule->equipe->id]);
+
+        $tentative = CommissionGenerationAttempt::where('source_id', $commande->id)->firstOrFail();
+        $this->assertEquals(CommissionGenerationStatut::ERREUR, $tentative->statut);
+        $this->assertStringContainsString('partage non configuré', $tentative->motif_erreur);
     }
 }

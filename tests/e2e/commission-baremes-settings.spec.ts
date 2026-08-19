@@ -102,3 +102,39 @@ test('le champ montant bloque les caractères non numériques à la frappe et au
     });
     await expect(montantInput).toHaveValue('555588');
 });
+
+test('un montant à 0 est accepté et enregistré — 0 GNF signifie "aucune commission", distinct de "—" non configuré', async ({
+    page,
+}) => {
+    await page.goto('/settings/commissions');
+
+    const row = page
+        .locator('tbody tr', { hasText: /toutes catégories/i })
+        .first();
+    // Colonne Livraison (jamais touchée par les autres tests de ce fichier,
+    // qui n'éditent que Propriétaire) — évite toute dépendance à l'ordre des tests.
+    const livraisonCell = row.getByRole('button').nth(1);
+
+    await livraisonCell.click();
+    const dialog = page.getByRole('dialog', { name: /livraison/i });
+    await expect(dialog).toBeVisible({ timeout: 5_000 });
+
+    await dialog.locator('#cr-montant').fill('0');
+    await dialog.getByRole('button', { name: /enregistrer/i }).click();
+
+    await expect(dialog).toBeHidden({ timeout: 10_000 });
+    await expect(page.getByText(/barème enregistré/i)).toBeVisible({
+        timeout: 5_000,
+    });
+
+    // "0 GNF" affiché explicitement — jamais confondu avec "—" (non configuré).
+    await expect(livraisonCell).toContainText('0 GNF');
+    await expect(livraisonCell).not.toContainText('—');
+    await expect(livraisonCell).not.toContainText(/définir/i);
+
+    // Rouvrir : la valeur 0 doit être fidèlement restituée, pas vide.
+    await livraisonCell.click();
+    await expect(dialog).toBeVisible({ timeout: 5_000 });
+    await expect(dialog.locator('#cr-montant')).toHaveValue('0');
+    await dialog.getByRole('button', { name: /annuler/i }).click();
+});

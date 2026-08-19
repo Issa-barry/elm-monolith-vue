@@ -156,12 +156,14 @@ class CommissionRegleControllerTest extends TestCase
             ->assertSessionHasErrors('categorie_id');
     }
 
-    // ── montant : entier strictement > 0 uniquement (GNF sans subdivision) ──
-    // "—" doit rester la seule représentation de "non configuré" — jamais
-    // "0 GNF", jamais une valeur décimale/négative/non numérique en base.
+    // ── montant : entier positif ou nul uniquement (GNF sans subdivision) ───
+    // 0 est une valeur métier légitime (ex: exclure explicitement le
+    // propriétaire d'une catégorie précise plutôt que d'hériter silencieusement
+    // du barème global) — jamais ambigu avec "—" (non configuré), puisque
+    // c'est l'EXISTENCE de la règle qui distingue les deux états, pas sa valeur.
 
     /** @test */
-    public function refuse_un_montant_a_zero(): void
+    public function accepte_un_montant_a_zero(): void
     {
         $this->actingAs($this->user)
             ->post('/settings/commissions', [
@@ -169,9 +171,9 @@ class CommissionRegleControllerTest extends TestCase
                 'scope_type' => 'global',
                 'montant' => 0,
             ])
-            ->assertSessionHasErrors('montant');
+            ->assertRedirect();
 
-        $this->assertDatabaseMissing('commission_regles', [
+        $this->assertDatabaseHas('commission_regles', [
             'organization_id' => $this->org->id,
             'montant' => 0,
         ]);

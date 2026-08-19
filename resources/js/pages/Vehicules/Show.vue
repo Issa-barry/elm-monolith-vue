@@ -52,10 +52,13 @@ interface MembreEquipeDetail {
     role: string;
     montant_par_pack: number;
     taux_commission: number;
-    // Part de l'enveloppe Livraison (Phase 2) — alias de taux_commission, seule
-    // valeur éditée par la popup équipe véhicule désormais.
-    part_pourcentage: number;
     ordre: number;
+}
+
+/** V2 uniquement — partage Livraison déjà enregistré, groupé par catégorie. */
+interface PartageCategorieDetail {
+    categorie_id: string;
+    parts: Array<{ livreur_id: string; part_pourcentage: number }>;
 }
 
 interface EquipeData {
@@ -67,6 +70,7 @@ interface EquipeData {
     proprietaire_id: string | null;
     proprietaire_nom: string | null;
     membres: MembreEquipeDetail[];
+    partages_categorie: PartageCategorieDetail[];
 }
 
 interface ProprietaireOption {
@@ -107,6 +111,15 @@ interface VehiculeData {
     type_seuil_derogation_impayes: number | null;
 }
 
+/** V2 uniquement — barème Livraison résolu par catégorie (cf. décision AMOA
+ * post-Phase 2 : le partage entre livreurs est lui aussi défini par
+ * catégorie, jamais un seul pourcentage valable pour toute la commande). */
+interface BaremeLivraisonCategorie {
+    categorie_id: string;
+    categorie_nom: string;
+    montant: number;
+}
+
 const props = defineProps<{
     vehicule: VehiculeData;
     depenses: DepenseRow[];
@@ -115,6 +128,7 @@ const props = defineProps<{
     default_proprietaire_id: string | null;
     seuil_global_impayes: number;
     bareme_commission: { proprietaire: number | null; livraison: number | null };
+    baremes_livraison_categories: BaremeLivraisonCategorie[];
     moteur_commission: 'legacy' | 'v2';
 }>();
 
@@ -909,6 +923,7 @@ function toggleDerogation() {
         :equipe="equipe"
         :proprietaires="proprietaires"
         :bareme-commission="bareme_commission"
+        :baremes-livraison-categories="baremes_livraison_categories"
         :moteur-commission="moteur_commission"
     />
 </template>
