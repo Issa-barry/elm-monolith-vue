@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { Head, useForm } from '@inertiajs/vue3';
 import { Check, Eye, EyeOff } from 'lucide-vue-next';
+import Select from 'primevue/select';
 import { computed, onUnmounted, ref, watch } from 'vue';
 
 interface SiteTypeOption {
@@ -702,26 +703,18 @@ function submit() {
                 <!-- Étape 4 : Site principal -->
                 <div v-else-if="currentStep === 4" class="grid gap-5">
                     <div class="grid gap-2">
-                        <p class="text-sm font-medium">
-                            Type de site
-                            <span class="text-destructive">*</span>
-                        </p>
-                        <div class="grid grid-cols-2 gap-2">
-                            <button
-                                v-for="t in siteTypeOptions"
-                                :key="t.value"
-                                type="button"
-                                class="rounded-lg border p-2.5 text-center text-sm font-medium transition-colors"
-                                :class="
-                                    form.site.type === t.value
-                                        ? 'border-primary bg-primary/5'
-                                        : 'border-border hover:bg-muted/50'
-                                "
-                                @click="form.site.type = t.value"
-                            >
-                                {{ t.label }}
-                            </button>
-                        </div>
+                        <Label>Type de site
+                            <span class="text-destructive">*</span></Label
+                        >
+                        <Select
+                            v-model="form.site.type"
+                            :options="siteTypeOptions"
+                            option-label="label"
+                            option-value="value"
+                            placeholder="Sélectionner…"
+                            class="w-full"
+                            :class="{ 'p-invalid': errorFor('site.type') }"
+                        />
                         <button
                             v-if="!showAllSiteTypes && types_tous.length > siteTypeSuggestions.length"
                             type="button"

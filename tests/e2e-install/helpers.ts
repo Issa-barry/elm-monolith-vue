@@ -129,9 +129,11 @@ export async function completeInstallWizard(
     // ── Étape 4 : Site principal ────────────────────────────────────────────
     // Sélectionne explicitement le type demandé (scenario.siteTypeLabel) plutôt que la première
     // option suggérée, pour pouvoir ensuite vérifier le nom généré automatiquement ("{Type} de
-    // {Quartier}", cf. SiteNamingService::generateName()).
+    // {Quartier}", cf. SiteNamingService::generateName()). Menu déroulant PrimeVue (comme
+    // Onboarding/Site.vue) — seul combobox visible sur cette étape.
+    await page.getByRole('combobox').first().click();
     await page
-        .getByRole('button', { name: scenario.siteTypeLabel, exact: true })
+        .getByRole('option', { name: new RegExp(`^${scenario.siteTypeLabel}`, 'i') })
         .click();
     await page.locator('#site-ville').fill(scenario.siteVille);
     await page.locator('#site-quartier').fill(scenario.siteQuartier);
