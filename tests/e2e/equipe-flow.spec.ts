@@ -205,32 +205,29 @@ test('créer une équipe depuis la fiche véhicule avec stepper', async ({
         'Mamadou Diallo',
     );
 
-    // Passer à l'étape 2
+    // Passer à l'étape 2 — organisation LEGACY (comportement par défaut tant
+    // qu'aucun commission_processus n'a été explicitement activé) : le
+    // véhicule de test a un propriétaire par défaut (seed E2E), donc la
+    // répartition affiche 2 bénéficiaires — propriétaire ET chauffeur — avec
+    // Montant (GNF) ET % éditables sur les deux colonnes, plus le champ
+    // "Commission unitaire par pack" qui pilote le total à répartir.
     await dialog.getByRole('button', { name: /suivant/i }).click();
     await expect(dialog.getByText(/partage/i).first()).toBeVisible({
         timeout: 5_000,
     });
+    await expect(page.locator('#step-commission')).toBeVisible();
 
-    // Saisir commission
-    const commissionInput = dialog.locator('input#step-commission');
-    await commissionInput.click();
-    await page.keyboard.press('Control+a');
-    await page.keyboard.type('200');
-    await page.keyboard.press('Tab');
-
-    // Saisir le montant du membre dans le tableau de partage — ciblé par son libellé
-    // (contient "Mamadou"), pas par position : une ligne "Propriétaire" peut désormais
-    // précéder la ligne membre dès que le véhicule a un propriétaire assigné (cf.
-    // EquipeStepperModal::hasProprietaire, plus jamais conditionné à la catégorie).
-    const membreMontantInput = dialog
+    // Saisir la part (%) du chauffeur complète automatiquement le propriétaire
+    // avec le reliquat (cf. EquipeStepperModal::recomputeAutoFill, legacy).
+    const membrePartInput = dialog
         .locator('tbody tr')
         .filter({ hasText: /Mamadou/i })
         .locator('td')
-        .nth(1)
+        .nth(2)
         .locator('input');
-    await membreMontantInput.click();
+    await membrePartInput.click();
     await page.keyboard.press('Control+a');
-    await page.keyboard.type('200');
+    await page.keyboard.type('100');
     await page.keyboard.press('Tab');
 
     await expect(dialog.getByText('✓ 100 %')).toBeVisible({ timeout: 5_000 });
@@ -241,9 +238,11 @@ test('créer une équipe depuis la fiche véhicule avec stepper', async ({
         timeout: 5_000,
     });
 
-    // Vérifier le récap
+    // Récap legacy : montant GNF par membre (pas de %, cf. gabarit original).
+    // Le chauffeur ayant 100 % de la commission par défaut (950 GNF), le
+    // propriétaire se retrouve à 0 GNF.
     await expect(dialog.getByText(/Mamadou/i).first()).toBeVisible();
-    await expect(dialog.getByText(/200 GNF/i).first()).toBeVisible();
+    await expect(dialog.getByText(/950 GNF/i).first()).toBeVisible();
 
     // Enregistrer
     await dialog.getByRole('button', { name: /enregistrer l'équipe/i }).click();
@@ -262,7 +261,7 @@ test('créer une équipe depuis la fiche véhicule avec stepper', async ({
     });
 });
 
-test('étape 2 partage : saisir un montant complète automatiquement l\'unique bénéficiaire restant', async ({
+test('étape 2 partage : saisir une part complète automatiquement l\'unique bénéficiaire restant', async ({
     page,
 }) => {
     await openStepperModal(page);
@@ -270,9 +269,11 @@ test('étape 2 partage : saisir un montant complète automatiquement l\'unique b
         .locator('[role="dialog"]')
         .filter({ hasText: /équipe/i });
 
-    // Ligne 0 auto-ajoutée : un seul chauffeur, pour maximiser les chances d'avoir
-    // exactement 2 bénéficiaires au total à l'étape Partage (chauffeur + propriétaire
-    // si le véhicule en a un, sinon chauffeur seul).
+    // Ligne 0 auto-ajoutée : chauffeur. Organisation LEGACY (par défaut) : le
+    // véhicule de test a un propriétaire par défaut (seed E2E), donc l'étape
+    // Partage affiche déjà 2 bénéficiaires (chauffeur + propriétaire) sans
+    // qu'il soit nécessaire d'ajouter un second membre pour tester
+    // l'auto-complétion du reliquat.
     await selectOptionFromCombobox(
         page,
         page.getByTestId('role-dropdown-0'),
@@ -288,52 +289,33 @@ test('étape 2 partage : saisir un montant complète automatiquement l\'unique b
         timeout: 5_000,
     });
 
-    const commissionInput = dialog.locator('input#step-commission');
-    await commissionInput.click();
+    // Exactement 2 bénéficiaires (chauffeur + propriétaire) : saisir la part de
+    // "Auto Complete" doit compléter automatiquement l'autre ligne avec le
+    // reliquat (100 % - saisi). 60/40 (pas 65/35) : la commission par défaut
+    // (950 GNF) ne se divise pas proprement à 65/35 — l'auto-complétion passe
+    // par un arrondi GNF intermédiaire (65 % de 950 = 617,5 → 618 GNF, dont le
+    // reliquat en % n'est plus exactement 35,00) ; 60/40 donne des montants GNF
+    // entiers (570/380) donc un pourcentage exact des deux côtés.
+    const rows = dialog.locator('tbody tr');
+    const chauffeurPart = rows
+        .filter({ hasText: /Auto Complete/i })
+        .locator('td')
+        .nth(2)
+        .locator('input');
+    await chauffeurPart.click();
     await page.keyboard.press('Control+a');
-    await page.keyboard.type('950');
+    await page.keyboard.type('60');
     await page.keyboard.press('Tab');
 
-    const rows = dialog.locator('tbody tr');
-    const rowCount = await rows.count();
-
-    if (rowCount === 2) {
-        // Exactement 2 bénéficiaires (propriétaire + chauffeur, ou chauffeur seul en 2
-        // lignes le cas échéant) : saisir le montant de la ligne "Auto Complete" doit
-        // compléter automatiquement l'autre ligne avec le reliquat (950 - saisi).
-        const chauffeurMontant = rows
-            .filter({ hasText: /Auto Complete/i })
-            .locator('td')
-            .nth(1)
-            .locator('input');
-        await chauffeurMontant.click();
-        await page.keyboard.press('Control+a');
-        await page.keyboard.type('650');
-        await page.keyboard.press('Tab');
-
-        const autreMontant = rows
-            .filter({ hasNotText: /Auto Complete/i })
-            .locator('td')
-            .nth(1)
-            .locator('input');
-        await expect(autreMontant).toHaveValue('300', { timeout: 5_000 });
-        await expect(dialog.getByText('✓ 100 %')).toBeVisible({
-            timeout: 5_000,
-        });
-    } else {
-        // 3+ bénéficiaires : aucune complétion automatique tant que 2+ lignes restent
-        // non saisies (répartition ambiguë) — cf. EquipeStepperModal::recomputeAutoFill.
-        const chauffeurMontant = rows
-            .filter({ hasText: /Auto Complete/i })
-            .locator('td')
-            .nth(1)
-            .locator('input');
-        await chauffeurMontant.click();
-        await page.keyboard.press('Control+a');
-        await page.keyboard.type('650');
-        await page.keyboard.press('Tab');
-        await expect(dialog.getByText('✓ 100 %')).not.toBeVisible();
-    }
+    const autrePart = rows
+        .filter({ hasNotText: /Auto Complete/i })
+        .locator('td')
+        .nth(2)
+        .locator('input');
+    await expect(autrePart).toHaveValue('40 %', { timeout: 5_000 });
+    await expect(dialog.getByText('✓ 100 %')).toBeVisible({
+        timeout: 5_000,
+    });
 });
 
 test('equipe index ne propose pas de bouton création directe', async ({

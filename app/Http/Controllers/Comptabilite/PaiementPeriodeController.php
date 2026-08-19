@@ -10,6 +10,7 @@ use App\Models\Organization;
 use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
 use App\Services\AuditLogService;
+use App\Services\Commission\MoteurCommissionResolver;
 use App\Services\CommissionAdjustmentService;
 use App\Services\Comptabilite\FicheComptabilisationService;
 use App\Services\PeriodeCalculatorService;
@@ -173,16 +174,25 @@ class PaiementPeriodeController extends Controller
         // (aucun concept de véhicule pour les périodes salarié).
         $vehicules = [];
         if (in_array($periode->type, [TypePeriodePaiement::LIVREUR, TypePeriodePaiement::PROPRIETAIRE], true)) {
+            $estV2 = MoteurCommissionResolver::estV2($periode->organization_id);
+
             $vehicules = $this->avecMontantsPayes(
-                collect(CommissionAdjustmentService::vehiculesParPeriode($periode)),
+                collect($estV2 ? CommissionAdjustmentService::vehiculesParPeriodeV2($periode) : CommissionAdjustmentService::vehiculesParPeriode($periode)),
                 $periode,
                 $allFiches,
+                $estV2,
             );
 
             if (array_filter($filters)) {
-                $beneficiairesParVehicule = collect(CommissionAdjustmentService::groupesParCommission($periode))
-                    ->groupBy(fn (array $g) => $g['vehicule_id'] ?? '__sans_vehicule__')
-                    ->map(fn ($groupes) => $groupes->flatMap(fn (array $g) => $g['parts'])->pluck('beneficiaire_nom'));
+                $beneficiairesParVehicule = $estV2
+                    ? collect(CommissionAdjustmentService::groupesParCommissionV2($periode))
+                        ->groupBy(fn (array $g) => $g['vehicule_id'] ?? '__sans_vehicule__')
+                        ->map(fn ($groupes) => $groupes->flatMap(fn (array $g) => $g['parts'])
+                            ->map(fn ($p) => $p->resoudreBeneficiaire()?->nom_complet)
+                            ->filter())
+                    : collect(CommissionAdjustmentService::groupesParCommission($periode))
+                        ->groupBy(fn (array $g) => $g['vehicule_id'] ?? '__sans_vehicule__')
+                        ->map(fn ($groupes) => $groupes->flatMap(fn (array $g) => $g['parts'])->pluck('beneficiaire_nom'));
 
                 $vehicules = $vehicules->filter(function (array $v) use ($filters, $beneficiairesParVehicule) {
                     if (! empty($filters['vehicule'])) {
@@ -246,7 +256,7 @@ class PaiementPeriodeController extends Controller
      * @param  Collection<int, PaiementFiche>  $allFiches
      * @return Collection<int, array>
      */
-    private function avecMontantsPayes(Collection $vehicules, PaiementPeriode $periode, Collection $allFiches): Collection
+    private function avecMontantsPayes(Collection $vehicules, PaiementPeriode $periode, Collection $allFiches, bool $estV2 = false): Collection
     {
         if ($vehicules->isEmpty()) {
             return $vehicules;
@@ -254,18 +264,24 @@ class PaiementPeriodeController extends Controller
 
         $fichesParBeneficiaire = $allFiches->keyBy(fn ($f) => "{$f->beneficiaire_type}:{$f->beneficiaire_id}");
 
-        $beneficiairesParVehicule = collect(CommissionAdjustmentService::groupesParCommission($periode))
-            ->groupBy(fn (array $g) => $g['vehicule_id'] ?? '__sans_vehicule__')
-            ->map(fn ($groupes) => $groupes->flatMap(fn (array $g) => $g['parts'])
-                ->map(function ($p) {
-                    return match (true) {
-                        (bool) $p->livreur_id => "livreur:{$p->livreur_id}",
-                        (bool) $p->proprietaire_id => "proprietaire:{$p->proprietaire_id}",
-                        default => null,
-                    };
-                })
-                ->filter()
-                ->unique());
+        $beneficiairesParVehicule = $estV2
+            ? collect(CommissionAdjustmentService::groupesParCommissionV2($periode))
+                ->groupBy(fn (array $g) => $g['vehicule_id'] ?? '__sans_vehicule__')
+                ->map(fn ($groupes) => $groupes->flatMap(fn (array $g) => $g['parts'])
+                    ->map(fn ($p) => "{$p->beneficiaire_type}:{$p->beneficiaire_id}")
+                    ->unique())
+            : collect(CommissionAdjustmentService::groupesParCommission($periode))
+                ->groupBy(fn (array $g) => $g['vehicule_id'] ?? '__sans_vehicule__')
+                ->map(fn ($groupes) => $groupes->flatMap(fn (array $g) => $g['parts'])
+                    ->map(function ($p) {
+                        return match (true) {
+                            (bool) $p->livreur_id => "livreur:{$p->livreur_id}",
+                            (bool) $p->proprietaire_id => "proprietaire:{$p->proprietaire_id}",
+                            default => null,
+                        };
+                    })
+                    ->filter()
+                    ->unique());
 
         return $vehicules->map(function (array $v) use ($beneficiairesParVehicule, $fichesParBeneficiaire) {
             $cle = $v['vehicule_id'] ?? '__sans_vehicule__';
@@ -312,14 +328,22 @@ class PaiementPeriodeController extends Controller
     {
         $this->authorize('valider', $periode);
 
-        $nonValidees = CommissionAdjustmentService::partsNonValidees($periode);
+        // Critique : sans ce branchement, les méthodes Legacy interrogeraient
+        // uniquement commission_parts (toujours vide pour une organisation V2)
+        // et renverraient systématiquement "aucun écart / rien à valider" —
+        // une période V2 pourrait alors être validée sans jamais vérifier que
+        // ses CommissionEnveloppePart sont réellement validées/équilibrées.
+        $estV2 = in_array($periode->type, [TypePeriodePaiement::LIVREUR, TypePeriodePaiement::PROPRIETAIRE], true)
+            && MoteurCommissionResolver::estV2($periode->organization_id);
+
+        $nonValidees = $estV2 ? CommissionAdjustmentService::partsNonValideesV2($periode) : CommissionAdjustmentService::partsNonValidees($periode);
         if ($nonValidees->isNotEmpty()) {
             $n = $nonValidees->count();
 
             return back()->with('error', "{$n} commission".($n > 1 ? 's' : '').' non validée'.($n > 1 ? 's' : '').". Passez par l'écran d'ajustement avant de valider la période.");
         }
 
-        $resume = CommissionAdjustmentService::resumeEcarts($periode);
+        $resume = $estV2 ? CommissionAdjustmentService::resumeEcartsV2($periode) : CommissionAdjustmentService::resumeEcarts($periode);
         if (! empty($resume['par_vehicule'])) {
             $ecart = $resume['ecart'];
             $abs = number_format(abs($ecart), 0, ',', ' ');
@@ -337,7 +361,7 @@ class PaiementPeriodeController extends Controller
 
         // Seul moment où les commissions de vente encore CREEE de cette période
         // deviennent payables — cf. CommissionAdjustmentService::activerCommissionsCreees().
-        $nbCommissionsActivees = CommissionAdjustmentService::activerCommissionsCreees($periode);
+        $nbCommissionsActivees = $estV2 ? CommissionAdjustmentService::activerCommissionsCreeesV2($periode) : CommissionAdjustmentService::activerCommissionsCreees($periode);
 
         app(AuditLogService::class)->record($periode, AuditEvent::VALIDATED, auth()->user(), null, null, [
             'module' => 'periodes_paiement',

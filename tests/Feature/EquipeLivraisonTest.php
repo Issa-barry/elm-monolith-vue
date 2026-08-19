@@ -3,7 +3,13 @@
 namespace Tests\Feature;
 
 use App\Enums\CategorieVehicule;
+use App\Enums\CommissionActivationStatut;
+use App\Enums\CommissionStrategieAncrageSite;
+use App\Models\Categorie;
+use App\Models\CommissionProcessus;
 use App\Models\EquipeLivraison;
+use App\Models\EquipeLivraisonPartageCategorie;
+use App\Models\EquipeLivreur;
 use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\Proprietaire;
@@ -13,6 +19,24 @@ use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
+/**
+ * Bascule LEGACY/V2 (cf. MoteurCommissionResolver, correction post-Phase 2) :
+ *
+ *  - Section LEGACY (aucun commission_processus ACTIF, comportement PAR DÉFAUT) :
+ *    reprend EXACTEMENT le contrat pré-Phase 2 — commission_unitaire_par_pack /
+ *    montant_par_pack_proprietaire / taux_commission_proprietaire / montant_par_pack
+ *    restent alimentés comme avant, pour que CommissionCalculator (seul moteur à
+ *    générer de vraies commissions tant qu'une organisation n'a pas explicitement
+ *    basculé) continue de fonctionner à 100 % après toute modification d'équipe.
+ *
+ *  - Section V2 (organisation ayant explicitement activé son commission_processus
+ *    "vente", cf. activerV2()) : le propriétaire n'appartient plus au partage, les
+ *    livreurs se partagent 100 % via part_pourcentage — les champs legacy ci-dessus
+ *    restent à leur valeur par défaut, jamais alimentés.
+ *
+ * Ne jamais mélanger les deux payloads : une organisation legacy ne doit jamais
+ * recevoir un payload V2 (et inversement) — cf. EquipeLivraisonController.
+ */
 class EquipeLivraisonTest extends TestCase
 {
     use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
@@ -72,7 +96,7 @@ class EquipeLivraisonTest extends TestCase
             ->assertStatus(403);
     }
 
-    // ── store ─────────────────────────────────────────────────────────────────
+    // ── store (LEGACY) ───────────────────────────────────────────────────────
 
     public function test_store_creates_equipe_avec_proprietaire_meme_org(): void
     {
@@ -356,7 +380,7 @@ class EquipeLivraisonTest extends TestCase
             ->post(route('equipes-livraison.store'), $this->validPayload(0, [
                 'vehicule_id' => $vehiculeInterne->id,
                 'proprietaire_id' => null,
-                'nom' => 'Ã‰quipe Interne',
+                'nom' => 'Équipe Interne',
                 'commission_unitaire_par_pack' => 30,
                 'montant_par_pack_proprietaire' => null,
                 'membres' => [[
@@ -645,7 +669,7 @@ class EquipeLivraisonTest extends TestCase
             ->assertSessionHasErrors('membres.0.telephone');
     }
 
-    // ── update ────────────────────────────────────────────────────────────────
+    // ── update (LEGACY) ──────────────────────────────────────────────────────
 
     public function test_update_modifie_equipe_et_redirige(): void
     {
@@ -708,6 +732,312 @@ class EquipeLivraisonTest extends TestCase
             ->assertRedirect(route('equipes-livraison.index'));
 
         $this->assertSoftDeleted('equipes_livraison', ['id' => $equipe->id]);
+    }
+
+    // ── V2 (commission_processus "vente" ACTIF) ─────────────────────────────
+    // Partage Livraison PAR CATÉGORIE (décision AMOA post-Phase 2) : plus un
+    // seul part_pourcentage par membre valable pour toute la commande — le
+    // payload envoie désormais partages_categorie[], corrélé aux membres via
+    // membre_ordre (index dans membres[], jamais livreur_id : un nouveau
+    // membre n'a pas encore d'id côté client).
+
+    private function activerV2(): void
+    {
+        CommissionProcessus::create([
+            'organization_id' => $this->org->id,
+            'code' => CommissionProcessus::CODE_VENTE,
+            'libelle' => 'Vente',
+            'declencheur' => 'chargement_valide',
+            'strategie_ancrage_site' => CommissionStrategieAncrageSite::OPERATION->value,
+            'statut' => CommissionActivationStatut::ACTIF->value,
+        ]);
+    }
+
+    private function categorieDefaut(): Categorie
+    {
+        return Categorie::firstOrCreate(
+            ['organization_id' => $this->org->id, 'nom' => 'Sachets'],
+            ['statut' => 'actif'],
+        );
+    }
+
+    private function validPayloadV2(array $overrides = []): array
+    {
+        $categorie = $this->categorieDefaut();
+
+        return array_merge([
+            'is_active' => true,
+            'membres' => [
+                [
+                    'livreur_id' => null,
+                    'nom_complet' => 'Mamadou Diallo',
+                    'telephone' => '+224620000001',
+                    'role' => 'chauffeur',
+                    'ordre' => 0,
+                ],
+            ],
+            'partages_categorie' => [
+                [
+                    'categorie_id' => $categorie->id,
+                    'parts' => [
+                        ['membre_ordre' => 0, 'part_pourcentage' => 100],
+                    ],
+                ],
+            ],
+        ], $overrides);
+    }
+
+    public function test_v2_store_creates_equipe_sans_alimenter_les_champs_legacy(): void
+    {
+        $this->activerV2();
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($proprietaire->id);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayloadV2(['vehicule_id' => $vehicule->id]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $equipe = EquipeLivraison::where('organization_id', $this->org->id)->firstOrFail();
+        $membre = EquipeLivreur::where('equipe_id', $equipe->id)->firstOrFail();
+
+        $this->assertDatabaseHas('equipe_livraison_partages_categorie', [
+            'equipe_id' => $equipe->id,
+            'categorie_id' => $this->categorieDefaut()->id,
+            'livreur_id' => $membre->livreur_id,
+            'part_pourcentage' => 100,
+        ]);
+        // Jamais alimentés pour une organisation V2 : le propriétaire vient du
+        // barème (Paramètres → Commissions), pas de ce contrôleur ; le partage
+        // vit désormais par catégorie, jamais sur equipe_livreurs.taux_commission.
+        $this->assertSame(0.0, (float) $membre->taux_commission);
+        $this->assertSame(0.0, (float) $equipe->commission_unitaire_par_pack);
+        $this->assertNull($equipe->montant_par_pack_proprietaire);
+        $this->assertNull($equipe->taux_commission_proprietaire);
+    }
+
+    public function test_v2_store_derive_toujours_le_proprietaire_depuis_le_vehicule(): void
+    {
+        $this->activerV2();
+        $vraiProprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($vraiProprietaire->id);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayloadV2(['vehicule_id' => $vehicule->id]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $this->assertDatabaseHas('equipes_livraison', [
+            'vehicule_id' => $vehicule->id,
+            'proprietaire_id' => $vraiProprietaire->id,
+        ]);
+    }
+
+    public function test_v2_store_creates_equipe_avec_partage_distinct_par_categorie(): void
+    {
+        $this->activerV2();
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($proprietaire->id);
+        $sachets = $this->categorieDefaut();
+        $bouteilles = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Bouteilles', 'statut' => 'actif']);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayloadV2([
+                'vehicule_id' => $vehicule->id,
+                'membres' => [
+                    [
+                        'livreur_id' => null, 'nom_complet' => 'Mamadou Diallo',
+                        'telephone' => '+224620000001', 'role' => 'chauffeur', 'ordre' => 0,
+                    ],
+                    [
+                        'livreur_id' => null, 'nom_complet' => 'Ibrahima Barry',
+                        'telephone' => '+224620000002', 'role' => 'convoyeur', 'ordre' => 1,
+                    ],
+                ],
+                // Partage DIFFÉRENT selon la catégorie — exactement le scénario
+                // métier motivant cette évolution.
+                'partages_categorie' => [
+                    [
+                        'categorie_id' => $sachets->id,
+                        'parts' => [
+                            ['membre_ordre' => 0, 'part_pourcentage' => 50],
+                            ['membre_ordre' => 1, 'part_pourcentage' => 50],
+                        ],
+                    ],
+                    [
+                        'categorie_id' => $bouteilles->id,
+                        'parts' => [
+                            ['membre_ordre' => 0, 'part_pourcentage' => 60],
+                            ['membre_ordre' => 1, 'part_pourcentage' => 40],
+                        ],
+                    ],
+                ],
+            ]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $equipe = EquipeLivraison::where('organization_id', $this->org->id)->firstOrFail();
+        $chauffeur = EquipeLivreur::where('equipe_id', $equipe->id)->where('role', 'chauffeur')->firstOrFail();
+        $convoyeur = EquipeLivreur::where('equipe_id', $equipe->id)->where('role', 'convoyeur')->firstOrFail();
+
+        $this->assertDatabaseHas('equipe_livraison_partages_categorie', [
+            'equipe_id' => $equipe->id, 'categorie_id' => $sachets->id,
+            'livreur_id' => $chauffeur->livreur_id, 'part_pourcentage' => 50,
+        ]);
+        $this->assertDatabaseHas('equipe_livraison_partages_categorie', [
+            'equipe_id' => $equipe->id, 'categorie_id' => $bouteilles->id,
+            'livreur_id' => $chauffeur->livreur_id, 'part_pourcentage' => 60,
+        ]);
+        $this->assertDatabaseHas('equipe_livraison_partages_categorie', [
+            'equipe_id' => $equipe->id, 'categorie_id' => $bouteilles->id,
+            'livreur_id' => $convoyeur->livreur_id, 'part_pourcentage' => 40,
+        ]);
+    }
+
+    public function test_v2_store_echoue_si_somme_des_parts_depasse_100_pour_une_categorie(): void
+    {
+        $this->activerV2();
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($proprietaire->id);
+        $categorie = $this->categorieDefaut();
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayloadV2([
+                'vehicule_id' => $vehicule->id,
+                'membres' => [
+                    [
+                        'livreur_id' => null, 'nom_complet' => 'A',
+                        'telephone' => '+224620000001', 'role' => 'chauffeur', 'ordre' => 0,
+                    ],
+                    [
+                        'livreur_id' => null, 'nom_complet' => 'B',
+                        'telephone' => '+224620000002', 'role' => 'convoyeur', 'ordre' => 1,
+                    ],
+                ],
+                'partages_categorie' => [[
+                    'categorie_id' => $categorie->id,
+                    'parts' => [
+                        ['membre_ordre' => 0, 'part_pourcentage' => 70],
+                        ['membre_ordre' => 1, 'part_pourcentage' => 50],
+                    ],
+                ]],
+            ]))
+            ->assertStatus(422);
+    }
+
+    public function test_v2_store_echoue_si_somme_des_parts_inferieure_a_100_pour_une_categorie(): void
+    {
+        $this->activerV2();
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($proprietaire->id);
+        $categorie = $this->categorieDefaut();
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayloadV2([
+                'vehicule_id' => $vehicule->id,
+                'partages_categorie' => [[
+                    'categorie_id' => $categorie->id,
+                    'parts' => [
+                        ['membre_ordre' => 0, 'part_pourcentage' => 60],
+                    ],
+                ]],
+            ]))
+            ->assertStatus(422);
+    }
+
+    public function test_v2_store_rejette_une_part_par_membre_hors_bornes(): void
+    {
+        $this->activerV2();
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($proprietaire->id);
+        $categorie = $this->categorieDefaut();
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayloadV2([
+                'vehicule_id' => $vehicule->id,
+                'partages_categorie' => [[
+                    'categorie_id' => $categorie->id,
+                    'parts' => [
+                        ['membre_ordre' => 0, 'part_pourcentage' => 150],
+                    ],
+                ]],
+            ]))
+            ->assertSessionHasErrors('partages_categorie.0.parts.0.part_pourcentage');
+    }
+
+    public function test_v2_store_rejette_un_membre_ordre_qui_ne_correspond_a_aucun_membre(): void
+    {
+        $this->activerV2();
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($proprietaire->id);
+        $categorie = $this->categorieDefaut();
+
+        // Un seul membre (index 0), mais le partage référence l'index 5 : inexistant.
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayloadV2([
+                'vehicule_id' => $vehicule->id,
+                'partages_categorie' => [[
+                    'categorie_id' => $categorie->id,
+                    'parts' => [
+                        ['membre_ordre' => 5, 'part_pourcentage' => 100],
+                    ],
+                ]],
+            ]))
+            ->assertSessionHasErrors('partages_categorie.0.parts.0.membre_ordre');
+    }
+
+    public function test_v2_update_conserve_les_champs_legacy_a_leur_valeur_par_defaut(): void
+    {
+        $this->activerV2();
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($proprietaire->id);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayloadV2(['vehicule_id' => $vehicule->id]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $equipe = EquipeLivraison::where('organization_id', $this->org->id)->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->patch(route('equipes-livraison.update', $equipe), $this->validPayloadV2(['vehicule_id' => $vehicule->id]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $equipe->refresh();
+        $this->assertSame(0.0, (float) $equipe->commission_unitaire_par_pack);
+        $this->assertNull($equipe->montant_par_pack_proprietaire);
+        $this->assertNull($equipe->taux_commission_proprietaire);
+    }
+
+    public function test_v2_update_remplace_integralement_le_partage_categorie_precedent(): void
+    {
+        $this->activerV2();
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($proprietaire->id);
+        $categorie = $this->categorieDefaut();
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayloadV2(['vehicule_id' => $vehicule->id]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $equipe = EquipeLivraison::where('organization_id', $this->org->id)->firstOrFail();
+        $membre = EquipeLivreur::where('equipe_id', $equipe->id)->firstOrFail();
+
+        // Modifier : même membre, mais nouvelle part pour la même catégorie —
+        // ne doit jamais laisser coexister l'ancienne (100) et la nouvelle (100).
+        $this->actingAs($this->user)
+            ->patch(route('equipes-livraison.update', $equipe), $this->validPayloadV2([
+                'vehicule_id' => $vehicule->id,
+                'membres' => [[
+                    'livreur_id' => $membre->livreur_id,
+                    'nom_complet' => 'Mamadou Diallo',
+                    'telephone' => '+224620000001', 'role' => 'chauffeur', 'ordre' => 0,
+                ]],
+            ]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $this->assertEquals(
+            1,
+            EquipeLivraisonPartageCategorie::where('equipe_id', $equipe->id)
+                ->where('categorie_id', $categorie->id)
+                ->count(),
+        );
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

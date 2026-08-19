@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ImportFlotteController;
+use App\Http\Controllers\Settings\CommissionRegleController;
 use App\Http\Controllers\Settings\DepenseParametrageController;
 use App\Http\Controllers\Settings\DepenseTypeController;
 use App\Http\Controllers\Settings\ModuleController;
@@ -51,6 +52,9 @@ Route::middleware('auth')->group(function () {
 
     Route::get('settings/ventes', [VenteParametrageController::class, 'edit'])->name('settings.ventes.edit');
     Route::put('settings/ventes', [VenteParametrageController::class, 'update'])->name('settings.ventes.update');
+
+    Route::get('settings/commissions', [CommissionRegleController::class, 'index'])->name('settings.commissions.index');
+    Route::post('settings/commissions', [CommissionRegleController::class, 'store'])->name('settings.commissions.store');
 
     Route::get('settings/produits', [StockAjustementController::class, 'edit'])->name('settings.produits');
     Route::put('settings/produits', [StockAjustementController::class, 'update'])->name('settings.produits.update');

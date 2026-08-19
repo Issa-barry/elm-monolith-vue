@@ -3,8 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Enums\CategorieVehicule;
+use App\Enums\CommissionScopeType;
+use App\Enums\CommissionUniteCalcul;
 use App\Models\Categorie;
+use App\Models\CommissionCibleType;
+use App\Models\CommissionProcessus;
+use App\Models\CommissionRegle;
 use App\Models\Depense;
+use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\EquipeLivreur;
 use App\Models\Parametre;
 use App\Models\Proprietaire;
@@ -13,6 +19,7 @@ use App\Models\TypeVehicule;
 use App\Models\User;
 use App\Models\Vehicule;
 use App\Models\VehiculeFrais;
+use App\Services\Commission\MoteurCommissionResolver;
 use App\Services\ImageService;
 use App\Services\VehiculeCapaciteService;
 use Illuminate\Http\RedirectResponse;
@@ -301,6 +308,9 @@ class VehiculeController extends Controller
                 'proprietaire_id' => $equipe->proprietaire_id,
                 'proprietaire_nom' => $equipe->proprietaire ? trim("{$equipe->proprietaire->prenom} {$equipe->proprietaire->nom}") : null,
                 'membres' => $membres,
+                // Partage Livraison PAR CATÉGORIE existant (V2) — clé par livreur_id,
+                // la popup résout elle-même l'index membre correspondant côté client.
+                'partages_categorie' => $this->partagesCategorieExistants($equipe->id),
             ];
         }
 
@@ -311,6 +321,15 @@ class VehiculeController extends Controller
             'proprietaires' => $this->proprietairesOptions(),
             'default_proprietaire_id' => Proprietaire::interneParDefautId($vehicule->organization_id),
             'seuil_global_impayes' => Parametre::getVentesSeuilImpayesMax($vehicule->organization_id),
+            // Barème Propriétaire + Livraison PAR CATÉGORIE (V2) — seule source de
+            // vérité utilisée à la fois par la popup équipe et par la fiche véhicule
+            // (cf. décision AMOA post-Phase 2 : plus de montant global blended, un
+            // barème par cible peut différer d'une catégorie à l'autre).
+            'baremes_commission_categories' => $this->baremesCommissionParCategorie($vehicule->organization_id),
+            // Source de vérité UNIQUE (cf. MoteurCommissionResolver) — jamais déduite
+            // localement dans la popup : une organisation "legacy" garde l'ancienne
+            // UX à l'identique, une organisation "v2" bascule sur la nouvelle.
+            'moteur_commission' => MoteurCommissionResolver::estV2($vehicule->organization_id) ? 'v2' : 'legacy',
         ]);
     }
 
@@ -553,6 +572,105 @@ class VehiculeController extends Controller
                 'seuil_derogation_impayes' => $t->seuil_derogation_impayes,
             ])
             ->toArray();
+    }
+
+    /**
+     * Barème Propriétaire ET Livraison résolus PAR CATÉGORIE (V2) — seule
+     * source de vérité utilisée à la fois par la fiche véhicule et par la
+     * popup équipe (remplace l'ancien baremeCommissionActuel(), qui ne lisait
+     * que le scope GLOBAL et affichait "0 GNF" dès qu'un barème n'existait
+     * qu'au niveau catégorie — cf. incident : Bouteille d'eau = 500 GNF
+     * Propriétaire configuré par catégorie, popup affichait pourtant "0 GNF").
+     * Catégorie exacte prioritaire sur la règle globale (même waterfall que
+     * CommissionRegleResolver, restreint au scope catégorie/global puisque la
+     * popup équipe ne connaît jamais de variante/produit précis à l'avance).
+     *
+     * Catégorie incluse dès qu'AU MOINS UN des deux montants résolus est
+     * strictement positif — les deux cibles sont indépendantes : Propriétaire
+     * peut être positif pendant que Livraison vaut 0 pour la même catégorie
+     * (et inversement), 0 GNF restant une valeur métier valide ("configuré,
+     * mais rien à distribuer sur cette cible"). Catégorie exclue seulement si
+     * les DEUX valent 0 : rien à afficher pour elle nulle part.
+     */
+    private function baremesCommissionParCategorie(string $orgId): array
+    {
+        $processus = CommissionProcessus::where('organization_id', $orgId)
+            ->where('code', CommissionProcessus::CODE_VENTE)
+            ->first();
+
+        if (! $processus) {
+            return [];
+        }
+
+        $reglesActives = CommissionRegle::where('organization_id', $orgId)
+            ->where('processus_id', $processus->id)
+            ->whereIn('cible_type', [CommissionCibleType::CODE_PROPRIETAIRE, CommissionCibleType::CODE_EQUIPE_LIVRAISON])
+            ->where('unite_calcul', CommissionUniteCalcul::PAR_UNITE_VENDUE->value)
+            ->where('statut', 'active')
+            ->get();
+
+        $resoudre = function (string $cibleType) use ($reglesActives): array {
+            $regles = $reglesActives->where('cible_type', $cibleType);
+
+            $global = $regles->first(fn (CommissionRegle $r) => $r->scope_type === CommissionScopeType::GLOBAL && $r->scope_id === null)?->montant;
+
+            $parCategorie = $regles
+                ->filter(fn (CommissionRegle $r) => $r->scope_type === CommissionScopeType::CATEGORIE)
+                ->keyBy('scope_id')
+                ->map(fn (CommissionRegle $r) => (float) $r->montant);
+
+            return [$global !== null ? (float) $global : null, $parCategorie];
+        };
+
+        [$proprietaireGlobal, $proprietaireParCategorie] = $resoudre(CommissionCibleType::CODE_PROPRIETAIRE);
+        [$livraisonGlobal, $livraisonParCategorie] = $resoudre(CommissionCibleType::CODE_EQUIPE_LIVRAISON);
+
+        return Categorie::where('organization_id', $orgId)
+            ->where('statut', 'actif')
+            ->orderBy('position')
+            ->orderBy('nom')
+            ->get()
+            ->map(function (Categorie $c) use ($proprietaireParCategorie, $proprietaireGlobal, $livraisonParCategorie, $livraisonGlobal) {
+                $montantProprietaire = $proprietaireParCategorie->get($c->id) ?? $proprietaireGlobal ?? 0.0;
+                $montantLivraison = $livraisonParCategorie->get($c->id) ?? $livraisonGlobal ?? 0.0;
+
+                if ($montantProprietaire <= 0 && $montantLivraison <= 0) {
+                    return null;
+                }
+
+                return [
+                    'categorie_id' => $c->id,
+                    'categorie_nom' => $c->nom,
+                    'montant_proprietaire' => (float) $montantProprietaire,
+                    'montant_livraison' => (float) $montantLivraison,
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Partage Livraison PAR CATÉGORIE déjà enregistré pour cette équipe —
+     * groupé par catégorie, chaque part identifiée par livreur_id (la popup
+     * résout elle-même l'index membre correspondant côté client, jamais par
+     * membre_ordre ici puisque l'ordre peut légitimement différer d'un
+     * chargement à l'autre).
+     */
+    private function partagesCategorieExistants(string $equipeId): array
+    {
+        return EquipeLivraisonPartageCategorie::where('equipe_id', $equipeId)
+            ->get()
+            ->groupBy('categorie_id')
+            ->map(fn (Collection $parts, string $categorieId) => [
+                'categorie_id' => $categorieId,
+                'parts' => $parts->map(fn (EquipeLivraisonPartageCategorie $p) => [
+                    'livreur_id' => $p->livreur_id,
+                    'part_pourcentage' => (float) $p->part_pourcentage,
+                ])->values()->all(),
+            ])
+            ->values()
+            ->all();
     }
 
     private function proprietairesOptions(): array

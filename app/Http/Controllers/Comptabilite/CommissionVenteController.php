@@ -8,14 +8,17 @@ use App\Enums\StatutCommission;
 use App\Enums\StatutDepense;
 use App\Enums\TypePeriodePaiement;
 use App\Http\Controllers\Controller;
+use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionPart;
 use App\Models\Depense;
 use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\PaiementCommissionVente;
+use App\Models\PaiementFichePaiement;
 use App\Models\Site;
 use App\Models\VehiculeCapacite;
 use App\Services\AuditLogService;
+use App\Services\Commission\MoteurCommissionResolver;
 use App\Services\CommissionAdjustmentService;
 use App\Services\CommissionStatusResolver;
 use App\Services\CommissionVenteCalculatorService;
@@ -58,6 +61,10 @@ class CommissionVenteController extends Controller
     public function index(Request $request): Response
     {
         abort_unless(auth()->user()->can('comptabilite.read'), 403);
+
+        if (MoteurCommissionResolver::estV2(auth()->user()->organization_id)) {
+            return $this->indexV2($request);
+        }
 
         $user = auth()->user();
         $orgId = $user->organization_id;
@@ -275,11 +282,224 @@ class CommissionVenteController extends Controller
         ]);
     }
 
+    /**
+     * Miroir V2 de index() — mêmes props Inertia, source CommissionEnveloppePart
+     * au lieu de CommissionPart. Volumes bien plus modestes qu'en Legacy
+     * (par organisation, pas fleet-wide), d'où un calcul en collection plutôt
+     * qu'une agrégation SQL brute : plus simple à garder correct, la
+     * performance n'est pas un enjeu à cette échelle.
+     *
+     * Paiement : jamais depuis cet écran pour V2 — `can_pay` est toujours
+     * false et payerLivreur() refuse toute écriture (cf. décision AMOA — une
+     * seule chaîne de paiement V2, via Fiches de paiement uniquement).
+     */
+    private function indexV2(Request $request): Response
+    {
+        $user = auth()->user();
+        $orgId = $user->organization_id;
+        $search = trim((string) $request->input('search', ''));
+        $filtreStatut = $this->scalarInput($request, 'statut');
+        $filtrePeriode = $this->scalarInput($request, 'periode');
+        if ($filtrePeriode !== '' && ! preg_match('/^\d{4}-\d{2}-(P1|P2|M)$/', $filtrePeriode)) {
+            $filtrePeriode = '';
+        }
+
+        $isAdmin = $user->isAdmin();
+        $sites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
+        $siteIds = ! $isAdmin ? $this->siteScope->accessibleSiteIds($user)->all() : [];
+        $filtreSiteIds = $isAdmin ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
+
+        $query = CommissionEnveloppePart::with([
+            'enveloppe.source.site:id,nom',
+            'enveloppe.source.vehicule:id,nom_vehicule,immatriculation,type_vehicule_id,proprietaire_id',
+            'enveloppe.source.vehicule.typeVehicule:id,nom',
+            'enveloppe.source.vehicule.proprietaire:id,personne_id',
+            'enveloppe.source.vehicule.proprietaire.personne',
+            'enveloppe.source.vehicule.capacites.categorie',
+        ])
+            ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_LIVREUR)
+            ->whereNotIn('statut', [StatutCommission::CREEE->value, StatutCommission::ANNULEE->value])
+            ->whereHas('enveloppe', function ($q) use ($orgId, $filtrePeriode) {
+                $q->where('organization_id', $orgId);
+                if ($filtrePeriode !== '') {
+                    [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
+                    $q->whereBetween('earned_at', [$debut, $fin]);
+                }
+            });
+
+        if ($isAdmin && ! empty($filtreSiteIds)) {
+            $query->whereHas('enveloppe.source', fn ($q) => $q->whereIn('site_id', $filtreSiteIds));
+        } elseif (! $isAdmin && ! empty($siteIds)) {
+            $query->whereHas('enveloppe.source', fn ($q) => $q->whereIn('site_id', $siteIds));
+        }
+
+        $allParts = $query->get();
+        $partsParLivreur = $allParts->groupBy('beneficiaire_id');
+
+        $allLivreurIds = $partsParLivreur->keys()->map(fn ($id) => (string) $id)->all();
+        $fraisDepensesParLivreur = CommissionVenteCalculatorService::fraisDepensesParLivreur($orgId, $allLivreurIds, $filtrePeriode);
+
+        $agencesParLivreur = $partsParLivreur->map(fn ($parts) => $parts
+            ->pluck('enveloppe.source.site.nom')->filter()->unique()->sort()->implode(', '));
+
+        $vehiculesParLivreur = $partsParLivreur->map(fn ($parts) => $parts
+            ->pluck('enveloppe.source.vehicule')->filter()->unique('id')
+            ->map(fn ($v) => [
+                'nom' => $v->nom_vehicule,
+                'immatriculation' => $v->immatriculation,
+                'type' => $v->typeVehicule?->nom,
+                'capacites' => $v->capacites->map(fn (VehiculeCapacite $c) => [
+                    'categorie_nom' => $c->categorie->nom,
+                    'capacite_max' => $c->capacite_max,
+                ])->values()->all(),
+                'proprietaire_nom' => $v->proprietaire
+                    ? trim($v->proprietaire->prenom.' '.$v->proprietaire->nom)
+                    : null,
+                'proprietaire_telephone' => $v->proprietaire?->telephone,
+                'proprietaire_code_phone_pays' => $v->proprietaire?->code_phone_pays,
+            ])
+            ->values());
+
+        $premiereEcheanceParLivreur = $partsParLivreur->map(function ($parts) {
+            return $parts
+                ->filter(fn (CommissionEnveloppePart $p) => in_array($p->statut, [StatutCommission::IMPAYE, StatutCommission::PARTIEL], true))
+                ->pluck('enveloppe.earned_at')
+                ->filter()
+                ->sort()
+                ->first();
+        });
+
+        $periodesParDate = app(PeriodePaiementService::class)->getPeriodsForDates(
+            $orgId,
+            TypePeriodePaiement::LIVREUR,
+            $premiereEcheanceParLivreur->values(),
+        );
+        $labelsParStatut = ['impaye' => 'Impayé', 'partiel' => 'Partiel', 'paye' => 'Payé', 'annulee' => 'Annulée'];
+        $periodesUniques = $periodesParDate->values()->unique('id');
+        $teamStatusParPeriode = $periodesUniques->mapWithKeys(
+            fn ($periode) => [$periode->id => CommissionAdjustmentService::statutValidationParBeneficiaireV2($periode)]
+        );
+
+        $beneficiaires = $partsParLivreur->map(function (Collection $parts, string $livreurId) use (
+            $agencesParLivreur, $vehiculesParLivreur, $fraisDepensesParLivreur,
+            $premiereEcheanceParLivreur, $periodesParDate, $labelsParStatut, $teamStatusParPeriode,
+        ) {
+            $premier = $parts->first();
+            $fraisDepenses = $fraisDepensesParLivreur[$livreurId] ?? 0.0;
+
+            $resume = CommissionVenteCalculatorService::calculerResume(
+                (float) $parts->sum('montant_brut'),
+                0.0, // pas de frais_supplementaires sur CommissionEnveloppePart
+                (float) $parts->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer),
+                $fraisDepenses,
+                (float) $parts->sum('montant_verse'),
+            );
+
+            $premiereEcheance = $premiereEcheanceParLivreur->get($livreurId);
+            $periode = $premiereEcheance
+                ? $periodesParDate->get(PeriodePaiementService::debutKeyForDate(Carbon::parse($premiereEcheance)))
+                : null;
+            $teamStatus = $periode ? ($teamStatusParPeriode[$periode->id]["livreur:{$livreurId}"] ?? null) : null;
+
+            $resolved = CommissionStatusResolver::resolve(
+                $periode,
+                $teamStatus,
+                $resume['statut'],
+                $labelsParStatut[$resume['statut']] ?? $resume['statut'],
+            );
+            // V2 : jamais payable depuis cet écran, le paiement passe uniquement
+            // par Fiches de paiement (cf. décision AMOA — une seule chaîne).
+            $resolved['can_pay'] = false;
+
+            $beneficiaire = $premier->resoudreBeneficiaire();
+
+            return [
+                'beneficiaire_id' => $livreurId,
+                'beneficiaire_nom' => $beneficiaire?->nom_complet ?? '—',
+                'telephone' => $beneficiaire?->telephone,
+                'agence' => $agencesParLivreur->get($livreurId),
+                'vehicules' => $vehiculesParLivreur->get($livreurId, collect())->values()->all(),
+                'total_brut_cumule' => $resume['brut'],
+                'total_frais' => $resume['frais'],
+                'total_net_cumule' => $resume['net'],
+                'total_verse' => $resume['verse'],
+                'solde_restant' => $resume['reste'],
+                'remaining_amount' => $resume['reste'],
+                'nb_commandes' => $parts->pluck('enveloppe_id')->unique()->count(),
+                'statut_global' => $resume['statut'],
+                ...$resolved,
+            ];
+        })->values();
+
+        if ($filtreStatut !== '') {
+            $beneficiaires = $beneficiaires->filter(fn ($b) => $b['statut_global'] === $filtreStatut);
+        }
+
+        if ($search !== '') {
+            $s = mb_strtolower($search);
+            $beneficiaires = $beneficiaires->filter(
+                fn ($b) => str_contains(mb_strtolower((string) $b['beneficiaire_nom']), $s)
+                    || str_contains(preg_replace('/\D/', '', (string) ($b['telephone'] ?? '')), preg_replace('/\D/', '', $search))
+            );
+        }
+
+        $list = $beneficiaires->values();
+
+        $kpis = [
+            'nb_livreurs' => $list->count(),
+            'total_brut' => (float) $list->sum('total_brut_cumule'),
+            'total_net' => (float) $list->sum('total_net_cumule'),
+            'total_verse' => (float) $list->sum('total_verse'),
+            'solde_total' => (float) $list->sum('solde_restant'),
+        ];
+
+        $earliestDate = CommissionEnveloppePart::where('beneficiaire_type', CommissionEnveloppePart::TYPE_LIVREUR)
+            ->whereHas('enveloppe', fn ($q) => $q->where('organization_id', $orgId))
+            ->join('commission_enveloppes', 'commission_enveloppes.id', '=', 'commission_enveloppe_parts.enveloppe_id')
+            ->min('commission_enveloppes.earned_at');
+
+        $periodesDisponibles = $earliestDate
+            ? PeriodeComptableService::periodesDisponibles(Carbon::parse($earliestDate))
+            : [];
+
+        $periodeCourante = PeriodeComptableService::periodeCouranteLivreur();
+
+        $dateAffichee = $filtrePeriode !== ''
+            ? PeriodeComptableService::dateRangeForCode($filtrePeriode)[0]
+            : now();
+        $periodeAffichee = app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::LIVREUR, $dateAffichee);
+
+        return Inertia::render('Comptabilite/CommissionVente/Index', [
+            'beneficiaires' => $list,
+            'kpis' => $kpis,
+            'search' => $search,
+            'filtre_statut' => $filtreStatut,
+            'filtre_site_ids' => $filtreSiteIds,
+            'selected_periode' => $filtrePeriode,
+            'periodes_disponibles' => $periodesDisponibles,
+            'periode_courante' => $periodeCourante,
+            'periode_affichee' => $periodeAffichee ? [
+                'id' => $periodeAffichee->id,
+                'reference' => $periodeAffichee->reference,
+                'statut' => $periodeAffichee->statut->value,
+                'statut_label' => $periodeAffichee->statut_label,
+            ] : null,
+            'sites' => $sites,
+            // V2 : jamais de paiement direct depuis cet écran, quel que soit le
+            // droit "comptabilite.payer" — cf. can_pay forcé à false ci-dessus.
+            'can_payer' => false,
+        ]);
+    }
+
     public function showLivreur(Request $request, string $livreurId): Response
     {
         abort_unless(auth()->user()->can('comptabilite.read'), 403);
 
         $orgId = auth()->user()->organization_id;
+
+        if (MoteurCommissionResolver::estV2($orgId)) {
+            return $this->showLivreurV2($request, $livreurId, $orgId);
+        }
 
         $livreur = Livreur::find($livreurId);
         $nom = $livreur ? $livreur->libelleAffichage() : '—';
@@ -531,9 +751,275 @@ class CommissionVenteController extends Controller
         ]);
     }
 
+    /**
+     * Miroir V2 de showLivreur() — mêmes props, source CommissionEnveloppePart.
+     * `payable`/`can_payer` toujours false : le paiement V2 passe uniquement
+     * par Fiches de paiement (cf. décision AMOA — une seule chaîne de
+     * paiement pour V2, jamais un second circuit direct sur cet écran).
+     */
+    private function showLivreurV2(Request $request, string $livreurId, string $orgId): Response
+    {
+        $livreur = Livreur::find($livreurId);
+        $nom = $livreur ? $livreur->libelleAffichage() : '—';
+
+        $allParts = CommissionEnveloppePart::with(['enveloppe.source.site', 'enveloppe.source.vehicule'])
+            ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_LIVREUR)
+            ->where('beneficiaire_id', $livreurId)
+            ->where('statut', '!=', StatutCommission::CREEE->value)
+            ->whereHas('enveloppe', fn ($q) => $q->where('organization_id', $orgId))
+            ->orderByDesc('enveloppe_id')
+            ->get();
+
+        $periodeCourante = PeriodeComptableService::periodeCouranteLivreur();
+        $filters = CommissionDetailFilters::fromRequest($request, $periodeCourante);
+        $periodeFilter = $filters['periode'];
+        $vehiculeIds = $filters['vehicule_ids'];
+        $siteIds = $filters['site_ids'];
+
+        $earliestCommission = $allParts
+            ->filter(fn (CommissionEnveloppePart $p) => $p->enveloppe?->earned_at !== null)
+            ->sortBy(fn (CommissionEnveloppePart $p) => $p->enveloppe->earned_at)
+            ->first();
+        $earliestDate = $earliestCommission?->enveloppe?->earned_at ?? now();
+        $periodesDisponibles = PeriodeComptableService::periodesDisponibles(Carbon::parse($earliestDate));
+
+        $vehiculesDisponibles = $allParts
+            ->map(fn (CommissionEnveloppePart $p) => $p->enveloppe?->source?->vehicule)
+            ->filter()
+            ->unique('id')
+            ->sortBy('nom_vehicule')
+            ->map(fn ($v) => ['id' => $v->id, 'nom' => $v->nom_vehicule, 'immatriculation' => $v->immatriculation])
+            ->values();
+
+        $agencesDisponibles = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
+
+        $filteredParts = $allParts->filter(function (CommissionEnveloppePart $p) use ($periodeFilter, $vehiculeIds, $siteIds) {
+            $source = $p->enveloppe?->source;
+
+            if ($periodeFilter !== '') {
+                $earnedAt = $p->enveloppe?->earned_at;
+                if (! $earnedAt || PeriodeComptableService::codeForLivreur(Carbon::parse($earnedAt)) !== $periodeFilter) {
+                    return false;
+                }
+            }
+
+            if (! empty($vehiculeIds) && ! in_array($source?->vehicule_id, $vehiculeIds, true)) {
+                return false;
+            }
+
+            if (! empty($siteIds) && ! in_array($source?->site_id, $siteIds, true)) {
+                return false;
+            }
+
+            return true;
+        });
+
+        $fraisDepenses = CommissionVenteCalculatorService::fraisDepenseLivreur(
+            $orgId,
+            $livreurId,
+            $periodeFilter !== '' ? $periodeFilter : null,
+            $siteIds,
+        );
+        $resume = CommissionVenteCalculatorService::calculerResume(
+            (float) $filteredParts->sum('montant_brut'),
+            0.0,
+            (float) $filteredParts->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer),
+            $fraisDepenses,
+            (float) $filteredParts->sum('montant_verse'),
+        );
+
+        if ($resume['statut'] !== StatutCommission::PAYE->value) {
+            $earliestUnpaidDate = $filteredParts
+                ->filter(fn (CommissionEnveloppePart $p) => in_array($p->statut, [StatutCommission::IMPAYE, StatutCommission::PARTIEL], true))
+                ->map(fn (CommissionEnveloppePart $p) => $p->enveloppe?->earned_at)
+                ->filter()
+                ->sort()
+                ->first();
+            $periodeResolue = $earliestUnpaidDate
+                ? app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::LIVREUR, Carbon::parse($earliestUnpaidDate))
+                : null;
+        } else {
+            $periodeResolue = app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::LIVREUR, now());
+        }
+
+        $teamStatus = $periodeResolue
+            ? (CommissionAdjustmentService::statutValidationParBeneficiaireV2($periodeResolue)["livreur:{$livreurId}"] ?? null)
+            : null;
+
+        $labelsParStatut = ['impaye' => 'Impayé', 'partiel' => 'Partiel', 'paye' => 'Payé', 'annulee' => 'Annulée'];
+        $statutCommission = CommissionStatusResolver::resolve(
+            $periodeResolue,
+            $teamStatus,
+            $resume['statut'],
+            $labelsParStatut[$resume['statut']] ?? $resume['statut'],
+        );
+        // V2 : jamais payable depuis cet écran, cf. docblock de showLivreurV2().
+        $statutCommission['can_pay'] = false;
+        $payable = false;
+
+        $periodeStats = null;
+        if ($periodeFilter !== '' && $filteredParts->isNotEmpty()) {
+            $netPeriode = (float) $filteredParts->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer);
+            $versePeriode = (float) $filteredParts->sum('montant_verse');
+            $restePeriode = max(0.0, $netPeriode - $versePeriode);
+            $periodeStats = [
+                'code' => $periodeFilter,
+                'label' => PeriodeComptableService::labelForCode($periodeFilter),
+                'total_commission' => $netPeriode,
+                'total_verse' => $versePeriode,
+                'reste' => $restePeriode,
+            ];
+        }
+
+        $historiqueCommandes = $filteredParts
+            ->groupBy('enveloppe_id')
+            ->map(function (Collection $partsGroup) {
+                $first = $partsGroup->first();
+                $enveloppe = $first->enveloppe;
+                $source = $enveloppe?->source;
+                $periodeCode = $enveloppe?->earned_at
+                    ? PeriodeComptableService::codeForLivreur(Carbon::parse($enveloppe->earned_at))
+                    : null;
+
+                $montantAPayer = (float) $partsGroup->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer);
+                $montantVerse = (float) $partsGroup->sum('montant_verse');
+
+                return [
+                    'commission_id' => $enveloppe?->id,
+                    'reference' => $source?->reference,
+                    'date' => $enveloppe?->earned_at ? Carbon::parse($enveloppe->earned_at)->format(self::DATE_FORMAT) : null,
+                    'site' => $source?->site?->nom,
+                    'vehicule' => $source?->vehicule ? [
+                        'id' => $source->vehicule->id,
+                        'nom' => $source->vehicule->nom_vehicule,
+                        'immatriculation' => $source->vehicule->immatriculation,
+                    ] : null,
+                    'montant_brut' => (float) $partsGroup->sum('montant_brut'),
+                    'frais' => 0.0,
+                    'montant' => $montantAPayer,
+                    'paye' => $montantVerse,
+                    'reste' => max(0.0, $montantAPayer - $montantVerse),
+                    'statut' => $first->statut?->label(),
+                    'statut_dot_class' => $first->statut instanceof StatutCommission ? $first->statut->dotClass() : 'bg-zinc-400 dark:bg-zinc-500',
+                    'periode' => $periodeCode,
+                    'periode_label' => $periodeCode ? PeriodeComptableService::labelForCode($periodeCode) : null,
+                ];
+            })
+            ->values();
+
+        $historiquePaiementsQuery = PaiementFichePaiement::with('createur')
+            ->whereHas('fiche', fn ($q) => $q->where('organization_id', $orgId)
+                ->where('beneficiaire_type', 'livreur')
+                ->where('beneficiaire_id', $livreurId))
+            ->orderByDesc('date_paiement');
+
+        if ($periodeFilter !== '') {
+            [$debutPaiement, $finPaiement] = PeriodeComptableService::dateRangeForCode($periodeFilter);
+            $historiquePaiementsQuery->whereBetween('date_paiement', [$debutPaiement->toDateString(), $finPaiement->toDateString().' 23:59:59']);
+        }
+
+        $historiquePaiements = $historiquePaiementsQuery
+            ->get()
+            ->map(fn ($p) => [
+                'id' => $p->id,
+                'paid_at' => $p->date_paiement?->format(self::DATE_FORMAT),
+                'montant' => (float) $p->montant,
+                'mode_paiement' => $p->mode_paiement instanceof ModePaiement
+                    ? $p->mode_paiement->label()
+                    : (string) $p->mode_paiement,
+                'note' => $p->note,
+                'created_by' => $p->createur?->name,
+            ]);
+
+        $expensesQuery = Depense::with(['user', 'validateur', 'depenseType:id,libelle'])
+            ->where('organization_id', $orgId)
+            ->where('beneficiaire_type', 'livreur')
+            ->where('beneficiaire_id', $livreurId)
+            ->where('statut', StatutDepense::VALIDE->value);
+
+        if ($periodeFilter !== '') {
+            [$debut, $fin] = PeriodeComptableService::dateRangeForCode($periodeFilter);
+            $expensesQuery->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString().' 23:59:59']);
+        }
+
+        if (! empty($siteIds)) {
+            $expensesQuery->whereIn('site_id', $siteIds);
+        }
+
+        $expenses = $expensesQuery
+            ->orderByDesc('date_depense')
+            ->get()
+            ->map(fn (Depense $d) => [
+                'id' => $d->id,
+                'date' => $d->date_depense?->format(self::DATE_FORMAT),
+                'type' => $d->depenseType?->libelle ?? '—',
+                'commentaire' => $d->commentaire,
+                'saisi_par' => $d->user?->name,
+                'validateur' => $d->validateur?->name,
+                'vehicule' => null,
+                'montant' => (float) $d->montant,
+            ]);
+
+        $periodeRange = ['debut' => null, 'fin' => null];
+        if ($periodeFilter !== '') {
+            [$debutRange, $finRange] = PeriodeComptableService::dateRangeForCode($periodeFilter);
+            $periodeRange = ['debut' => $debutRange->toDateString(), 'fin' => $finRange->toDateString()];
+        }
+
+        return Inertia::render('Comptabilite/CommissionVente/Livreur/Show', [
+            'livreur' => [
+                'id' => $livreurId,
+                'nom' => $nom,
+                'telephone' => $livreur?->telephone,
+            ],
+            'commission_summary' => CommissionSummaryFormatter::format(
+                $resume['brut'],
+                $resume['frais'],
+                $resume['net'],
+                $resume['verse'],
+                $resume['reste'],
+            ),
+            'commission_details' => $historiqueCommandes,
+            'payments' => $historiquePaiements,
+            'expenses' => $expenses,
+            'modes_paiement' => ModePaiement::options(),
+            'periode_courante' => $periodeCourante,
+            'periode_courante_label' => PeriodeComptableService::labelForCode($periodeCourante),
+            'selected_periode' => $periodeFilter,
+            'periodes_disponibles' => $periodesDisponibles,
+            'periode_stats' => $periodeStats,
+            'payable' => $payable,
+            'statut_commission' => $statutCommission,
+            'periode_affichee' => $periodeResolue ? [
+                'id' => $periodeResolue->id,
+                'reference' => $periodeResolue->reference,
+                'statut' => $periodeResolue->statut->value,
+                'statut_label' => $periodeResolue->statut_label,
+            ] : null,
+            'filters' => [
+                'periode' => $periodeFilter,
+                'vehicule_ids' => $vehiculeIds,
+                'site_ids' => $siteIds,
+                'periode_range' => $periodeRange,
+            ],
+            'vehicules_disponibles' => $vehiculesDisponibles,
+            'agences_disponibles' => $agencesDisponibles,
+            'can_payer' => false,
+        ]);
+    }
+
     public function payerLivreur(Request $request, string $livreurId): RedirectResponse
     {
         abort_unless(auth()->user()->can('comptabilite.payer'), 403);
+
+        // V2 : jamais de paiement direct depuis cet écran, même en contournant
+        // l'UI (can_pay y est toujours false) — la seule chaîne de paiement
+        // valide passe par Fiches de paiement (cf. décision AMOA).
+        abort_if(
+            MoteurCommissionResolver::estV2(auth()->user()->organization_id),
+            422,
+            'Cette organisation utilise le nouveau moteur de commissions : le paiement se fait exclusivement depuis Comptabilité > Fiches de paiement.'
+        );
 
         $data = $request->validate([
             'montant' => ['required', 'numeric', 'min:0.01'],

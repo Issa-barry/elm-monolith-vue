@@ -6,6 +6,8 @@ use App\Enums\MotifAjustementCommission;
 use App\Enums\OrigineCommissionPart;
 use App\Enums\StatutCommission;
 use App\Enums\StatutValidationEquipe;
+use App\Models\CommissionEnveloppe;
+use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
 use App\Models\CommissionPart;
@@ -16,6 +18,8 @@ use App\Models\PaiementFicheLigne;
 use App\Models\PaiementPeriode;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -653,6 +657,419 @@ class CommissionAdjustmentService
             foreach ($parts as $part) {
                 if (! $part->estValidee()) {
                     self::validerPart($part, $user);
+                    $count++;
+                }
+            }
+        });
+
+        return $count;
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // ── V2 : mêmes opérations, sur CommissionEnveloppePart ──────────────────
+    //
+    // Dupliquées plutôt que fusionnées avec les méthodes ci-dessus (union
+    // CommissionPart|CommissionLogistiquePart) : CommissionEnveloppePart n'a ni
+    // livreur_id/proprietaire_id, ni vehicule_id direct (résolu via
+    // enveloppe->source), ni beneficiaire_nom — merger les deux formes aurait
+    // exigé de réécrire des méthodes déjà testées en production, avec un
+    // risque de régression Legacy pour un bénéfice de factorisation limité.
+    // Logistique n'est jamais concerné par V2 (cf. MoteurCommissionResolver,
+    // scope limité au processus "vente") : ces méthodes ne couvrent donc que
+    // la vente V2, jamais la logistique.
+    // ═════════════════════════════════════════════════════════════════════════
+
+    /** @return Collection<int, CommissionEnveloppePart> */
+    public static function partsPourPeriodeV2(PaiementPeriode $periode): Collection
+    {
+        $ficheIds = $periode->fiches()->pluck('id');
+
+        $partIds = PaiementFicheLigne::whereIn('fiche_id', $ficheIds)
+            ->where('source_type', CommissionEnveloppePart::class)
+            ->pluck('source_id')
+            ->unique();
+
+        return CommissionEnveloppePart::whereIn('id', $partIds)
+            ->with(['enveloppe.source', 'validateur'])
+            ->get();
+    }
+
+    /** Parts encore non validées et non payées/partiellement payées bloquant la validation de la période. */
+    public static function partsNonValideesV2(PaiementPeriode $periode): Collection
+    {
+        return self::partsPourPeriodeV2($periode)
+            ->filter(fn (CommissionEnveloppePart $part) => ! $part->estValidee() && (float) $part->montant_verse <= 0.0)
+            ->values();
+    }
+
+    /**
+     * Miroir V2 de activerCommissionsCreees() — bascule CREEE→IMPAYE (ou PAYE
+     * si montant nul) toutes les CommissionEnveloppePart de vente encore
+     * CREEE de cette période, ainsi que leur CommissionEnveloppe parente.
+     */
+    public static function activerCommissionsCreeesV2(PaiementPeriode $periode): int
+    {
+        $parts = self::partsPourPeriodeV2($periode)
+            ->filter(fn (CommissionEnveloppePart $part) => $part->statut === StatutCommission::CREEE);
+
+        $count = 0;
+
+        foreach ($parts->groupBy('enveloppe_id') as $groupe) {
+            /** @var CommissionEnveloppe $enveloppe */
+            $enveloppe = $groupe->first()->enveloppe;
+            if (! $enveloppe || $enveloppe->statut !== StatutCommission::CREEE) {
+                continue;
+            }
+
+            $enveloppe->update([
+                'statut' => ((float) $enveloppe->montant_total > 0
+                    ? StatutCommission::IMPAYE
+                    : StatutCommission::PAYE)->value,
+            ]);
+
+            foreach ($groupe as $part) {
+                $part->update([
+                    'statut' => ((float) $part->montant_net > 0
+                        ? StatutCommission::IMPAYE
+                        : StatutCommission::PAYE)->value,
+                ]);
+            }
+
+            $count++;
+        }
+
+        return $count;
+    }
+
+    /**
+     * Miroir V2 de groupesParCommission() — regroupe par enveloppe (véhicule
+     * résolu via enveloppe->source, la CommandeVente à l'origine du gain).
+     *
+     * @return list<array{type: string, commission_id: string, reference: string, vehicule_id: ?string, vehicule_nom: ?string, vehicule_immat: ?string, theorique: float, ajuste: float, ecart: float, parts: Collection<int, CommissionEnveloppePart>}>
+     */
+    public static function groupesParCommissionV2(PaiementPeriode $periode): array
+    {
+        return self::partsPourPeriodeV2($periode)
+            ->groupBy('enveloppe_id')
+            ->map(function (Collection $groupe) {
+                /** @var CommissionEnveloppe $enveloppe */
+                $enveloppe = $groupe->first()->enveloppe;
+                $vehicule = $enveloppe?->source?->vehicule;
+
+                return [
+                    // 'vente_v2' et non 'vente' : le contrôleur d'ajustement distingue les
+                    // deux pour router resolvePart() vers CommissionEnveloppePart, et pour
+                    // que la liste "commissions_vente" (remplaçant Legacy, non porté en V2 —
+                    // cf. CommissionAjustementController) reste naturellement vide pour V2.
+                    'type' => 'vente_v2',
+                    'commission_id' => $enveloppe->id,
+                    'reference' => $enveloppe->source?->reference ?? $enveloppe->id,
+                    'vehicule_id' => $vehicule?->id,
+                    'vehicule_nom' => $vehicule?->nom_vehicule,
+                    'vehicule_immat' => $vehicule?->immatriculation,
+                    'theorique' => round((float) $groupe->sum('montant_net'), 2),
+                    'ajuste' => round((float) $groupe->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer), 2),
+                    'parts' => $groupe,
+                ];
+            })
+            ->map(fn (array $g) => [...$g, 'ecart' => round($g['ajuste'] - $g['theorique'], 2)])
+            ->values()
+            ->all();
+    }
+
+    /** Miroir V2 de vehiculesParPeriode(). */
+    public static function vehiculesParPeriodeV2(PaiementPeriode $periode): array
+    {
+        return collect(self::groupesParCommissionV2($periode))
+            ->groupBy(fn (array $g) => $g['vehicule_id'] ?? '__sans_vehicule__')
+            ->map(function (\Illuminate\Support\Collection $groupesDuVehicule) {
+                $premier = $groupesDuVehicule->first();
+                $parts = $groupesDuVehicule->flatMap(fn (array $g) => $g['parts']);
+                $beneficiaires = $parts->pluck('beneficiaire_id')->filter()->unique();
+
+                $theorique = round((float) $groupesDuVehicule->sum('theorique'), 2);
+                $ajuste = round((float) $groupesDuVehicule->sum('ajuste'), 2);
+                $ecart = round($ajuste - $theorique, 2);
+
+                return [
+                    'vehicule_id' => $premier['vehicule_id'],
+                    'vehicule_nom' => $premier['vehicule_nom'] ?? 'Sans véhicule',
+                    'vehicule_immat' => $premier['vehicule_immat'],
+                    'nb_membres' => $beneficiaires->count(),
+                    'nb_commandes' => $groupesDuVehicule->count(),
+                    'theorique' => $theorique,
+                    'ajuste' => $ajuste,
+                    'ecart' => $ecart,
+                    'equilibre' => abs($ecart) <= 0.01,
+                    'statut_validation' => self::statutValidationPourPartsV2($parts)->value,
+                ];
+            })
+            ->sortBy('vehicule_nom')
+            ->values()
+            ->all();
+    }
+
+    /** @param  \Illuminate\Support\Collection<int, CommissionEnveloppePart>  $parts */
+    public static function statutValidationPourPartsV2(\Illuminate\Support\Collection $parts): StatutValidationEquipe
+    {
+        if ($parts->isEmpty()) {
+            return StatutValidationEquipe::A_VERIFIER;
+        }
+
+        $total = $parts->count();
+        $payees = $parts->filter(fn (CommissionEnveloppePart $p) => $p->isPaye())->count();
+        $validees = $parts->filter(fn (CommissionEnveloppePart $p) => ! $p->isPaye() && $p->estValidee())->count();
+        $enAttente = $total - $payees - $validees;
+
+        return match (true) {
+            $payees === $total => StatutValidationEquipe::PAYEE,
+            $enAttente === 0 => StatutValidationEquipe::VALIDEE,
+            $enAttente === $total => StatutValidationEquipe::A_VERIFIER,
+            default => StatutValidationEquipe::A_REVERIFIER,
+        };
+    }
+
+    /**
+     * Miroir V2 de statutValidationParBeneficiaire().
+     *
+     * @return array<string, StatutValidationEquipe> indexé par "{type}:{id}"
+     */
+    public static function statutValidationParBeneficiaireV2(PaiementPeriode $periode): array
+    {
+        $groupesParVehicule = collect(self::groupesParCommissionV2($periode))
+            ->groupBy(fn (array $g) => $g['vehicule_id'] ?? '__sans_vehicule__');
+
+        $result = [];
+
+        foreach ($groupesParVehicule as $groupesDuVehicule) {
+            $parts = $groupesDuVehicule->flatMap(fn (array $g) => $g['parts']);
+            $statutVehicule = self::statutValidationPourPartsV2($parts);
+
+            foreach ($parts as $part) {
+                $cle = "{$part->beneficiaire_type}:{$part->beneficiaire_id}";
+                if (! isset($result[$cle]) || self::rangValidation($statutVehicule) < self::rangValidation($result[$cle])) {
+                    $result[$cle] = $statutVehicule;
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    /** Miroir V2 de groupesParVehicule(). */
+    public static function groupesParVehiculeV2(PaiementPeriode $periode, ?string $vehiculeId): array
+    {
+        return collect(self::groupesParCommissionV2($periode))
+            ->filter(fn (array $g) => ($g['vehicule_id'] ?? null) === $vehiculeId)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Miroir V2 de beneficiairesParVehicule().
+     *
+     * @return list<array{cle: string, type_beneficiaire: string, beneficiaire_nom: string, beneficiaire_telephone: ?string, theorique: float, ajuste: float, ecart: float, est_validee: bool, peut_etre_ajustee: bool, parts: Collection<int, array{part: CommissionEnveloppePart, type: string, reference: string}>}>
+     */
+    public static function beneficiairesParVehiculeV2(PaiementPeriode $periode, ?string $vehiculeId): array
+    {
+        $lignes = collect(self::groupesParVehiculeV2($periode, $vehiculeId))
+            ->flatMap(fn (array $g) => $g['parts']->map(fn (CommissionEnveloppePart $part) => [
+                'part' => $part,
+                'type' => $g['type'],
+                'reference' => $g['reference'],
+            ]));
+
+        $designationsParLivreur = self::designationsEquipeParVehicule($vehiculeId);
+
+        return $lignes
+            ->groupBy(fn (array $l) => $l['part']->beneficiaire_type.':'.$l['part']->beneficiaire_id)
+            ->map(function (\Illuminate\Support\Collection $lignesDuBeneficiaire) use ($designationsParLivreur) {
+                $premierPart = $lignesDuBeneficiaire->first()['part'];
+                $beneficiaire = $premierPart->resoudreBeneficiaire();
+                $theorique = round((float) $lignesDuBeneficiaire->sum(fn (array $l) => (float) $l['part']->montant_net), 2);
+                $ajuste = round((float) $lignesDuBeneficiaire->sum(fn (array $l) => $l['part']->montant_a_payer), 2);
+
+                return [
+                    'cle' => $premierPart->beneficiaire_type.':'.$premierPart->beneficiaire_id,
+                    'type_beneficiaire' => $premierPart->beneficiaire_type,
+                    'beneficiaire_nom' => self::beneficiaireNomAfficheV2($premierPart, $beneficiaire, $designationsParLivreur),
+                    'beneficiaire_telephone' => $beneficiaire?->telephone ?? null,
+                    'theorique' => $theorique,
+                    'ajuste' => $ajuste,
+                    'ecart' => round($ajuste - $theorique, 2),
+                    'est_validee' => $lignesDuBeneficiaire->every(fn (array $l) => $l['part']->estValidee()),
+                    'peut_etre_ajustee' => $lignesDuBeneficiaire->contains(fn (array $l) => $l['part']->peutEtreAjustee()),
+                    'parts' => $lignesDuBeneficiaire->values(),
+                ];
+            })
+            ->sortBy('beneficiaire_nom')
+            ->values()
+            ->all();
+    }
+
+    /** Cf. beneficiaireNomAffiche() — CommissionEnveloppePart n'a pas de beneficiaire_nom propre, résolu depuis le modèle bénéficiaire. */
+    private static function beneficiaireNomAfficheV2(CommissionEnveloppePart $part, ?Model $beneficiaire, array $designationsParLivreur): string
+    {
+        if ($beneficiaire === null) {
+            return '—';
+        }
+
+        if ($part->beneficiaire_type !== CommissionEnveloppePart::TYPE_LIVREUR) {
+            return $beneficiaire->nom_complet ?? trim(($beneficiaire->prenom ?? '').' '.($beneficiaire->nom ?? ''));
+        }
+
+        $aUnNomSaisi = $beneficiaire->nom_complet || trim("{$beneficiaire->prenom} {$beneficiaire->nom}") !== '';
+
+        return $aUnNomSaisi
+            ? ($beneficiaire->nom_complet ?? trim("{$beneficiaire->prenom} {$beneficiaire->nom}"))
+            : ($designationsParLivreur[$part->beneficiaire_id] ?? '—');
+    }
+
+    /** Miroir V2 de resumeEcarts(). */
+    public static function resumeEcartsV2(PaiementPeriode $periode): array
+    {
+        $vehicules = collect(self::vehiculesParPeriodeV2($periode));
+
+        return [
+            'theorique' => round((float) $vehicules->sum('theorique'), 2),
+            'ajuste' => round((float) $vehicules->sum('ajuste'), 2),
+            'ecart' => round((float) $vehicules->sum('ecart'), 2),
+            'par_vehicule' => $vehicules
+                ->reject(fn (array $v) => $v['equilibre'])
+                ->map(fn (array $v) => collect($v)->only(['vehicule_id', 'vehicule_nom', 'vehicule_immat', 'theorique', 'ajuste', 'ecart'])->all())
+                ->values()
+                ->all(),
+        ];
+    }
+
+    /** Miroir V2 de ajusterMontant(). */
+    public static function ajusterMontantEnveloppePart(
+        CommissionEnveloppePart $part,
+        float $nouveauMontant,
+        MotifAjustementCommission $motif,
+        ?string $commentaire,
+        User $user,
+    ): void {
+        if (! $part->peutEtreAjustee()) {
+            throw new \LogicException('Cette commission est déjà entièrement versée, elle ne peut plus être ajustée.');
+        }
+
+        $ancienMontant = $part->montant_a_payer;
+        $nouveauMontant = max(0.0, round($nouveauMontant, 2));
+
+        DB::transaction(function () use ($part, $ancienMontant, $nouveauMontant, $motif, $commentaire, $user) {
+            CommissionPartAdjustment::create([
+                'commission_part_type' => $part::class,
+                'commission_part_id' => $part->id,
+                'ancien_montant' => $ancienMontant,
+                'nouveau_montant' => $nouveauMontant,
+                'motif' => $motif,
+                'commentaire' => $commentaire,
+                'created_by' => $user->id,
+            ]);
+
+            $part->montant_actuel = $nouveauMontant;
+            if ($nouveauMontant !== $ancienMontant) {
+                $part->validated_at = null;
+            }
+            $part->save();
+
+            if ($nouveauMontant !== $ancienMontant) {
+                self::invaliderPeriodesV2($part);
+            }
+        });
+    }
+
+    /**
+     * Miroir V2 de ajusterMontantGroupe().
+     *
+     * @param  iterable<CommissionEnveloppePart>  $parts
+     */
+    public static function ajusterMontantGroupeV2(
+        iterable $parts,
+        float $nouveauTotal,
+        MotifAjustementCommission $motif,
+        ?string $commentaire,
+        User $user,
+    ): void {
+        $parts = collect($parts);
+        $nouveauTotal = max(0.0, round($nouveauTotal, 2));
+
+        $ajustables = $parts->filter(fn (CommissionEnveloppePart $p) => $p->peutEtreAjustee())->values();
+        $montantFige = round((float) $parts->reject(fn (CommissionEnveloppePart $p) => $p->peutEtreAjustee())->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer), 2);
+
+        if ($nouveauTotal < $montantFige) {
+            throw new \LogicException("Le montant ne peut pas être inférieur à {$montantFige} GNF déjà versé sur ce bénéficiaire.");
+        }
+
+        if ($ajustables->isEmpty()) {
+            return;
+        }
+
+        $aRepartir = round($nouveauTotal - $montantFige, 2);
+        $poidsTotal = round((float) $ajustables->sum(fn (CommissionEnveloppePart $p) => (float) $p->montant_net), 2);
+        $dernierIndex = $ajustables->count() - 1;
+        $reparti = 0.0;
+
+        DB::transaction(function () use ($ajustables, $aRepartir, $poidsTotal, $dernierIndex, $motif, $commentaire, $user, &$reparti) {
+            foreach ($ajustables as $index => $part) {
+                if ($index === $dernierIndex) {
+                    $montant = round($aRepartir - $reparti, 2);
+                } else {
+                    $poids = $poidsTotal > 0 ? (float) $part->montant_net / $poidsTotal : 1 / $ajustables->count();
+                    $montant = round($aRepartir * $poids, 2);
+                }
+
+                $montant = max(0.0, $montant);
+                $reparti += $montant;
+
+                self::ajusterMontantEnveloppePart($part, $montant, $motif, $commentaire, $user);
+            }
+        });
+    }
+
+    public static function declarerAbsenceV2(
+        CommissionEnveloppePart $part,
+        ?string $commentaire,
+        User $user,
+    ): void {
+        self::ajusterMontantEnveloppePart($part, 0.0, MotifAjustementCommission::ABSENCE, $commentaire, $user);
+    }
+
+    /** Miroir V2 de invaliderPeriodes() — date résolue via enveloppe->earned_at. */
+    private static function invaliderPeriodesV2(CommissionEnveloppePart $part): void
+    {
+        $part->loadMissing('enveloppe');
+        $date = $part->enveloppe?->earned_at;
+        $orgId = $part->enveloppe?->organization_id;
+
+        if (! $date || ! $orgId) {
+            return;
+        }
+
+        app(PeriodeCalculatorService::class)->recalculerPeriodesConcernees($orgId, Carbon::parse($date));
+    }
+
+    public static function validerEnveloppePart(CommissionEnveloppePart $part, User $user): void
+    {
+        if ($part->estValidee()) {
+            return;
+        }
+
+        $part->validated_by = $user->id;
+        $part->validated_at = now();
+        $part->save();
+    }
+
+    /** @param  iterable<CommissionEnveloppePart>  $parts */
+    public static function validerLotV2(iterable $parts, User $user): int
+    {
+        $count = 0;
+
+        DB::transaction(function () use ($parts, $user, &$count) {
+            foreach ($parts as $part) {
+                if (! $part->estValidee()) {
+                    self::validerEnveloppePart($part, $user);
                     $count++;
                 }
             }

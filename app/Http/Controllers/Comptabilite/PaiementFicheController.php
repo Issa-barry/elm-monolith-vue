@@ -6,6 +6,7 @@ use App\Enums\ModePaiement;
 use App\Enums\StatutFichePaiement;
 use App\Enums\StatutValidationEquipe;
 use App\Http\Controllers\Controller;
+use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionLogistiquePart;
 use App\Models\CommissionPart;
 use App\Models\Depense;
@@ -14,6 +15,7 @@ use App\Models\PaiementFiche;
 use App\Models\PaiementFicheLigne;
 use App\Models\PaiementPeriode;
 use App\Models\Site;
+use App\Services\Commission\MoteurCommissionResolver;
 use App\Services\CommissionAdjustmentService;
 use App\Services\CommissionStatusResolver;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -62,11 +64,15 @@ class PaiementFicheController extends Controller
             ->paginate(30)
             ->withQueryString();
 
+        $estV2 = MoteurCommissionResolver::estV2($orgId);
+
         $teamStatusParPeriode = collect();
         if ($type !== 'salarie') {
             $periodesUniques = $fiches->getCollection()->pluck('periode')->filter()->unique('id');
             foreach ($periodesUniques as $p) {
-                $teamStatusParPeriode[$p->id] = CommissionAdjustmentService::statutValidationParBeneficiaire($p);
+                $teamStatusParPeriode[$p->id] = $estV2
+                    ? CommissionAdjustmentService::statutValidationParBeneficiaireV2($p)
+                    : CommissionAdjustmentService::statutValidationParBeneficiaire($p);
             }
         }
 
@@ -120,7 +126,9 @@ class PaiementFicheController extends Controller
 
         $teamStatusParPeriode = collect();
         if ($fiche->beneficiaire_type !== 'salarie' && $fiche->periode !== null) {
-            $teamStatusParPeriode[$fiche->periode->id] = CommissionAdjustmentService::statutValidationParBeneficiaire($fiche->periode);
+            $teamStatusParPeriode[$fiche->periode->id] = MoteurCommissionResolver::estV2($fiche->organization_id)
+                ? CommissionAdjustmentService::statutValidationParBeneficiaireV2($fiche->periode)
+                : CommissionAdjustmentService::statutValidationParBeneficiaire($fiche->periode);
         }
 
         return Inertia::render('Comptabilite/Fiches/Show', [
@@ -311,6 +319,7 @@ class PaiementFicheController extends Controller
             $morphTo->morphWith([
                 CommissionPart::class => ['commission.vehicule'],
                 CommissionLogistiquePart::class => ['commission.vehicule'],
+                CommissionEnveloppePart::class => ['enveloppe.source.vehicule'],
                 Depense::class => ['vehiculeBeneficiaire'],
             ]);
         };
@@ -323,6 +332,7 @@ class PaiementFicheController extends Controller
 
         $vehicule = match (true) {
             $source instanceof CommissionPart, $source instanceof CommissionLogistiquePart => $source->commission?->vehicule,
+            $source instanceof CommissionEnveloppePart => $source->enveloppe?->source?->vehicule,
             $source instanceof Depense && $source->beneficiaire_type === 'vehicule' => $source->vehiculeBeneficiaire,
             default => null,
         };

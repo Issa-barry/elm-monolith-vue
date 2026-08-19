@@ -7,11 +7,21 @@ use App\Enums\StatutCommission;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 /**
  * La part individuelle finale d'un bénéficiaire sur une CommissionEnveloppe.
  * Nommée `commission_enveloppe_parts` pour ne pas entrer en collision avec
  * la table `commission_parts` de l'ancien schéma (les deux coexistent).
+ *
+ * Équivalent V2 de CommissionPart pour tout ce qui est paiement/ajustement —
+ * mêmes méthodes métier (recalculStatut, isPaye, isPayable, estValidee,
+ * peutEtreAjustee), volontairement dupliquées plutôt que factorisées avec
+ * l'ancien schéma pour ne jamais risquer de régression legacy en touchant
+ * CommissionPart. Seule différence : le paiement est alloué via
+ * CommissionEnveloppePaiementItem (pas de VersementCommission côté V2, table
+ * legacy uniquement).
  */
 class CommissionEnveloppePart extends Model
 {
@@ -32,6 +42,7 @@ class CommissionEnveloppePart extends Model
         'taux_repartition_snapshot',
         'montant_brut',
         'montant_net',
+        'montant_verse',
         'montant_actuel',
         'statut',
         'origine',
@@ -39,12 +50,15 @@ class CommissionEnveloppePart extends Model
         'validated_at',
     ];
 
+    protected $appends = ['montant_restant'];
+
     protected function casts(): array
     {
         return [
             'taux_repartition_snapshot' => 'decimal:2',
             'montant_brut' => 'decimal:2',
             'montant_net' => 'decimal:2',
+            'montant_verse' => 'decimal:2',
             'montant_actuel' => 'decimal:2',
             'statut' => StatutCommission::class,
             'origine' => OrigineCommissionPart::class,
@@ -52,10 +66,7 @@ class CommissionEnveloppePart extends Model
         ];
     }
 
-    public function getMontantAPayerAttribute(): float
-    {
-        return (float) ($this->montant_actuel ?? $this->montant_net);
-    }
+    // ── Relations ─────────────────────────────────────────────────────────────
 
     public function enveloppe(): BelongsTo
     {
@@ -65,6 +76,75 @@ class CommissionEnveloppePart extends Model
     public function validateur(): BelongsTo
     {
         return $this->belongsTo(User::class, 'validated_by');
+    }
+
+    public function paiementItems(): HasMany
+    {
+        return $this->hasMany(CommissionEnveloppePaiementItem::class, 'commission_enveloppe_part_id');
+    }
+
+    public function adjustments(): MorphMany
+    {
+        return $this->morphMany(CommissionPartAdjustment::class, 'commission_part')->latest('created_at');
+    }
+
+    // ── Accessors ─────────────────────────────────────────────────────────────
+
+    /** Montant réellement dû : ajusté par un responsable, sinon montant théorique net. */
+    public function getMontantAPayerAttribute(): float
+    {
+        return (float) ($this->montant_actuel ?? $this->montant_net);
+    }
+
+    public function getMontantRestantAttribute(): float
+    {
+        return max(0.0, $this->montant_a_payer - (float) $this->montant_verse);
+    }
+
+    // ── Métier ────────────────────────────────────────────────────────────────
+
+    public function isPaye(): bool
+    {
+        return $this->statut === StatutCommission::PAYE;
+    }
+
+    public function isPayable(): bool
+    {
+        return $this->statut instanceof StatutCommission && $this->statut->isPayable();
+    }
+
+    public function estValidee(): bool
+    {
+        return $this->validated_at !== null;
+    }
+
+    /** Une part déjà entièrement versée ne doit plus pouvoir être ajustée ou validée. */
+    public function peutEtreAjustee(): bool
+    {
+        return ! $this->isPaye();
+    }
+
+    /**
+     * Recalcule montant_verse + statut à partir des paiements réels.
+     * Puis déclenche le recalcul global de l'enveloppe parente.
+     */
+    public function recalculStatut(): bool
+    {
+        $verse = (float) $this->paiementItems()->sum('amount_allocated');
+        $aPayer = $this->montant_a_payer;
+
+        $this->montant_verse = $verse;
+
+        $this->statut = match (true) {
+            $aPayer > 0 && $verse >= $aPayer => StatutCommission::PAYE,
+            $verse > 0 => StatutCommission::PARTIEL,
+            default => StatutCommission::IMPAYE,
+        };
+
+        $saved = $this->saveQuietly();
+        $this->enveloppe->recalculStatutGlobal();
+
+        return $saved;
     }
 
     public function resoudreBeneficiaire(): ?Model

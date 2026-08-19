@@ -7,6 +7,7 @@ use App\Services\JournalTresorerieService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 
@@ -78,5 +79,15 @@ class PaiementFichePaiement extends Model
     public function createur(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /**
+     * Allocation de ce paiement sur les CommissionEnveloppePart (V2 uniquement,
+     * cf. CommissionEnveloppePartAllocationService) — toujours vide pour un
+     * paiement d'une fiche Legacy.
+     */
+    public function enveloppeItems(): HasMany
+    {
+        return $this->hasMany(CommissionEnveloppePaiementItem::class, 'paiement_id');
     }
 }
