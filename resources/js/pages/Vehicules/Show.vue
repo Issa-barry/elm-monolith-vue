@@ -99,6 +99,7 @@ interface VehiculeData {
     livraison_logistique: boolean;
     photo_url: string | null;
     is_active: boolean;
+    seuil_dette_derogation: number | null;
 }
 
 const props = defineProps<{
@@ -107,6 +108,7 @@ const props = defineProps<{
     equipe: EquipeData | null;
     proprietaires: ProprietaireOption[];
     default_proprietaire_id: string | null;
+    seuil_global_impayes: number;
 }>();
 
 const { can } = usePermissions();
@@ -513,6 +515,40 @@ function formatGNF(val: number): string {
                                         class="mt-1 text-sm text-muted-foreground"
                                     >
                                         Aucun propriétaire rattaché
+                                    </p>
+                                </template>
+                            </div>
+                            <div class="rounded-lg border bg-background p-4">
+                                <p class="text-xs text-muted-foreground">
+                                    Dérogation impayés
+                                </p>
+                                <template
+                                    v-if="
+                                        vehicule.seuil_dette_derogation !==
+                                        null
+                                    "
+                                >
+                                    <p class="mt-1 text-sm font-medium">
+                                        {{
+                                            formatGNF(
+                                                vehicule.seuil_dette_derogation,
+                                            )
+                                        }}
+                                    </p>
+                                    <p
+                                        class="mt-0.5 text-xs text-muted-foreground"
+                                    >
+                                        Remplace le seuil global pour ce
+                                        véhicule
+                                    </p>
+                                </template>
+                                <template v-else>
+                                    <p
+                                        class="mt-1 text-sm text-muted-foreground"
+                                    >
+                                        Aucune — seuil global appliqué ({{
+                                            formatGNF(seuil_global_impayes)
+                                        }})
                                     </p>
                                 </template>
                             </div>

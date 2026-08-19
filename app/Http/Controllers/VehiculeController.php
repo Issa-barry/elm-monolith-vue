@@ -306,6 +306,7 @@ class VehiculeController extends Controller
             'equipe' => $equipeData,
             'proprietaires' => $this->proprietairesOptions(),
             'default_proprietaire_id' => Proprietaire::interneParDefautId($vehicule->organization_id),
+            'seuil_global_impayes' => Parametre::getVentesSeuilImpayesMax($vehicule->organization_id),
         ]);
     }
 
