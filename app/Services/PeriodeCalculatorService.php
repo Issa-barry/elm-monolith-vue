@@ -8,6 +8,7 @@ use App\Enums\StatutFichePaiement;
 use App\Enums\StatutPeriodePaiement;
 use App\Enums\TypeLignePaiement;
 use App\Enums\TypePeriodePaiement;
+use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionLogistiquePart;
 use App\Models\CommissionPart;
 use App\Models\Depense;
@@ -17,6 +18,7 @@ use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
 use App\Models\PaieVariable;
 use App\Models\Proprietaire;
+use App\Services\Commission\MoteurCommissionResolver;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -40,9 +42,17 @@ class PeriodeCalculatorService
                 ->get()
                 ->each(fn (PaiementFiche $f) => $f->forceDelete());
 
+            // Le vente V2 remplace uniquement la source "commission vente" —
+            // logistique et dépenses restent le même moteur legacy quel que
+            // soit l'engagement V2 de l'organisation (cf. MoteurCommissionResolver,
+            // scope V2 limité au processus "vente"), d'où deux méthodes
+            // parallèles plutôt qu'un simple branchement interne : jamais de
+            // risque de régression sur calculerLivreurs()/calculerProprietaires().
+            $estV2 = MoteurCommissionResolver::estV2($periode->organization_id);
+
             $nbFiches = match ($periode->type) {
-                TypePeriodePaiement::LIVREUR => $this->calculerLivreurs($periode),
-                TypePeriodePaiement::PROPRIETAIRE => $this->calculerProprietaires($periode),
+                TypePeriodePaiement::LIVREUR => $estV2 ? $this->calculerLivreursV2($periode) : $this->calculerLivreurs($periode),
+                TypePeriodePaiement::PROPRIETAIRE => $estV2 ? $this->calculerProprietairesV2($periode) : $this->calculerProprietaires($periode),
                 TypePeriodePaiement::SALARIE => $this->calculerSalaries($periode),
             };
 
@@ -141,13 +151,22 @@ class PeriodeCalculatorService
 
         $type = $periode->type === TypePeriodePaiement::LIVREUR ? 'livreur' : 'proprietaire';
 
-        $commParts = CommissionPart::where('type_beneficiaire', $type)
-            ->whereNotNull("{$type}_id")
-            ->whereHas('commission', function ($q) use ($periode, $orgId) {
-                $q->where('organization_id', $orgId)
-                    ->whereBetween('created_at', [$periode->date_debut->startOfDay(), $periode->date_fin->endOfDay()]);
-            })
-            ->selectRaw('COUNT(*) as n, SUM(COALESCE(montant_actuel, montant_net)) as s, MAX(updated_at) as m')->first();
+        // V2 : la source "commission vente" est commission_enveloppe_parts, jamais
+        // commission_parts (toujours vide pour une organisation V2) — sans cette
+        // branche, le hash resterait figé après le premier calcul et un nouveau
+        // gain V2 ne déclencherait plus jamais de recalcul automatique.
+        $commParts = MoteurCommissionResolver::estV2($orgId)
+            ? CommissionEnveloppePart::where('beneficiaire_type', $type)
+                ->whereHas('enveloppe', fn ($q) => $q->where('organization_id', $orgId)
+                    ->whereBetween('earned_at', [$periode->date_debut, $periode->date_fin]))
+                ->selectRaw('COUNT(*) as n, SUM(COALESCE(montant_actuel, montant_net)) as s, MAX(updated_at) as m')->first()
+            : CommissionPart::where('type_beneficiaire', $type)
+                ->whereNotNull("{$type}_id")
+                ->whereHas('commission', function ($q) use ($periode, $orgId) {
+                    $q->where('organization_id', $orgId)
+                        ->whereBetween('created_at', [$periode->date_debut->startOfDay(), $periode->date_fin->endOfDay()]);
+                })
+                ->selectRaw('COUNT(*) as n, SUM(COALESCE(montant_actuel, montant_net)) as s, MAX(updated_at) as m')->first();
 
         $logParts = CommissionLogistiquePart::where('type_beneficiaire', $type)
             ->whereNotNull("{$type}_id")
@@ -358,6 +377,239 @@ class PeriodeCalculatorService
                     'ordre' => $ordre++,
                 ]);
                 $this->accumulerSite($montantParSite, $part->commission->commande?->site_id, $montant);
+            }
+
+            foreach ($logParts->get($proprietaireId, collect()) as $part) {
+                if ($part->isPaye()) {
+                    continue;
+                }
+                $ref = $part->commission->transfert->reference ?? '—';
+                $montant = $part->montant_a_payer;
+                $lignes->push([
+                    'source_type' => CommissionLogistiquePart::class,
+                    'source_id' => $part->id,
+                    'type_ligne' => TypeLignePaiement::COMMISSION_LOGISTIQUE->value,
+                    'libelle' => 'Commission logistique '.$ref,
+                    'montant' => $montant,
+                    'ordre' => $ordre++,
+                ]);
+                $site = $part->commission->transfert ? CommissionLogistiqueService::resolveSiteResponsable($part->commission->transfert) : null;
+                $this->accumulerSite($montantParSite, $site, $montant);
+            }
+
+            foreach ($depensesProprietaire->get($proprietaireId, collect()) as $dep) {
+                $lignes->push([
+                    'source_type' => Depense::class,
+                    'source_id' => $dep->id,
+                    'type_ligne' => TypeLignePaiement::DEPENSE->value,
+                    'libelle' => $dep->depenseType?->libelle ?? 'Dépense',
+                    'montant' => -(float) $dep->montant,
+                    'ordre' => $ordre++,
+                ]);
+            }
+
+            foreach ($depensesVehicule->get($proprietaireId, collect()) as $dep) {
+                $lignes->push([
+                    'source_type' => Depense::class,
+                    'source_id' => $dep->id,
+                    'type_ligne' => TypeLignePaiement::DEPENSE->value,
+                    'libelle' => $dep->depenseType?->libelle ?? 'Dépense véhicule',
+                    'montant' => -(float) $dep->montant,
+                    'ordre' => $ordre++,
+                ]);
+            }
+
+            if ($lignes->isEmpty()) {
+                continue;
+            }
+
+            $this->creerFiche($periode, 'proprietaire', $proprietaireId, $proprietaire->nom_complet, $this->resolveSitePrincipal($montantParSite), $lignes);
+            $count++;
+        }
+
+        return $count;
+    }
+
+    /**
+     * Miroir V2 de calculerLivreurs() — seule la source "commission vente"
+     * change (CommissionEnveloppePart au lieu de CommissionPart, fenêtrée sur
+     * enveloppe.earned_at plutôt que commission.commande.created_at) ;
+     * logistique et dépenses restent le moteur legacy inchangé, ce dernier
+     * n'étant jamais concerné par le statut V2 d'une organisation (cf.
+     * MoteurCommissionResolver, scope limité au processus "vente").
+     */
+    private function calculerLivreursV2(PaiementPeriode $periode): int
+    {
+        $orgId = $periode->organization_id;
+
+        $commParts = CommissionEnveloppePart::where('beneficiaire_type', CommissionEnveloppePart::TYPE_LIVREUR)
+            ->where('statut', '!=', StatutCommission::ANNULEE->value)
+            ->whereHas('enveloppe', fn ($q) => $q->where('organization_id', $orgId)
+                ->whereBetween('earned_at', [$periode->date_debut, $periode->date_fin]))
+            ->with(['enveloppe.source'])
+            ->get()
+            ->groupBy('beneficiaire_id');
+
+        $logParts = CommissionLogistiquePart::where('type_beneficiaire', 'livreur')
+            ->whereNotNull('livreur_id')
+            ->where('statut', '!=', StatutCommission::ANNULEE->value)
+            ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
+            ->whereBetween('earned_at', [$periode->date_debut, $periode->date_fin])
+            ->with(['commission.transfert', 'livreur'])
+            ->get()
+            ->groupBy('livreur_id');
+
+        $depenses = Depense::where('organization_id', $orgId)
+            ->where('statut', StatutDepense::VALIDE)
+            ->where('beneficiaire_type', 'livreur')
+            ->whereNotNull('beneficiaire_id')
+            ->whereBetween('date_depense', [$periode->date_debut, $periode->date_fin])
+            ->with('depenseType')
+            ->get()
+            ->groupBy('beneficiaire_id');
+
+        $livreurIds = $commParts->keys()->merge($logParts->keys())->unique();
+
+        $count = 0;
+
+        foreach ($livreurIds as $livreurId) {
+            $livreur = Livreur::find($livreurId);
+            if (! $livreur) {
+                continue;
+            }
+
+            $ordre = 1;
+            $lignes = collect();
+            $montantParSite = [];
+
+            foreach ($commParts->get($livreurId, collect()) as $part) {
+                // Cf. calculerLivreurs() : une part déjà intégralement versée ne doit
+                // plus jamais réapparaître dans une fiche.
+                if ($part->isPaye()) {
+                    continue;
+                }
+                $ref = $part->enveloppe->source?->reference ?? '—';
+                $montant = $part->montant_a_payer;
+                $lignes->push([
+                    'source_type' => CommissionEnveloppePart::class,
+                    'source_id' => $part->id,
+                    'type_ligne' => TypeLignePaiement::COMMISSION_VENTE->value,
+                    'libelle' => 'Commission vente '.$ref,
+                    'montant' => $montant,
+                    'ordre' => $ordre++,
+                ]);
+                $this->accumulerSite($montantParSite, $part->enveloppe->source?->site_id, $montant);
+            }
+
+            foreach ($logParts->get($livreurId, collect()) as $part) {
+                if ($part->isPaye()) {
+                    continue;
+                }
+                $ref = $part->commission->transfert->reference ?? '—';
+                $montant = $part->montant_a_payer;
+                $lignes->push([
+                    'source_type' => CommissionLogistiquePart::class,
+                    'source_id' => $part->id,
+                    'type_ligne' => TypeLignePaiement::COMMISSION_LOGISTIQUE->value,
+                    'libelle' => 'Commission logistique '.$ref,
+                    'montant' => $montant,
+                    'ordre' => $ordre++,
+                ]);
+                $site = $part->commission->transfert ? CommissionLogistiqueService::resolveSiteResponsable($part->commission->transfert) : null;
+                $this->accumulerSite($montantParSite, $site, $montant);
+            }
+
+            foreach ($depenses->get($livreurId, collect()) as $dep) {
+                $lignes->push([
+                    'source_type' => Depense::class,
+                    'source_id' => $dep->id,
+                    'type_ligne' => TypeLignePaiement::DEPENSE->value,
+                    'libelle' => $dep->depenseType?->libelle ?? 'Dépense',
+                    'montant' => -(float) $dep->montant,
+                    'ordre' => $ordre++,
+                ]);
+            }
+
+            if ($lignes->isEmpty()) {
+                continue;
+            }
+
+            $this->creerFiche($periode, 'livreur', $livreurId, $livreur->libelleAffichage(), $this->resolveSitePrincipal($montantParSite), $lignes);
+            $count++;
+        }
+
+        return $count;
+    }
+
+    /** Miroir V2 de calculerProprietaires() — cf. calculerLivreursV2(). */
+    private function calculerProprietairesV2(PaiementPeriode $periode): int
+    {
+        $orgId = $periode->organization_id;
+
+        $commParts = CommissionEnveloppePart::where('beneficiaire_type', CommissionEnveloppePart::TYPE_PROPRIETAIRE)
+            ->where('statut', '!=', StatutCommission::ANNULEE->value)
+            ->whereHas('enveloppe', fn ($q) => $q->where('organization_id', $orgId)
+                ->whereBetween('earned_at', [$periode->date_debut, $periode->date_fin]))
+            ->with(['enveloppe.source'])
+            ->get()
+            ->groupBy('beneficiaire_id');
+
+        $logParts = CommissionLogistiquePart::where('type_beneficiaire', 'proprietaire')
+            ->whereNotNull('proprietaire_id')
+            ->where('statut', '!=', StatutCommission::ANNULEE->value)
+            ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
+            ->whereBetween('earned_at', [$periode->date_debut, $periode->date_fin])
+            ->with(['commission.transfert', 'proprietaire'])
+            ->get()
+            ->groupBy('proprietaire_id');
+
+        $depensesProprietaire = Depense::where('organization_id', $orgId)
+            ->where('statut', StatutDepense::VALIDE)
+            ->where('beneficiaire_type', 'proprietaire')
+            ->whereNotNull('beneficiaire_id')
+            ->whereBetween('date_depense', [$periode->date_debut, $periode->date_fin])
+            ->with('depenseType')
+            ->get()
+            ->groupBy('beneficiaire_id');
+
+        $depensesVehicule = Depense::where('organization_id', $orgId)
+            ->where('statut', StatutDepense::VALIDE)
+            ->where('beneficiaire_type', 'vehicule')
+            ->whereNotNull('beneficiaire_id')
+            ->whereBetween('date_depense', [$periode->date_debut, $periode->date_fin])
+            ->with(['vehiculeBeneficiaire', 'depenseType'])
+            ->get()
+            ->groupBy(fn ($d) => $d->vehiculeBeneficiaire?->proprietaire_id);
+
+        $proprietaireIds = $commParts->keys()->merge($logParts->keys())->unique();
+
+        $count = 0;
+
+        foreach ($proprietaireIds as $proprietaireId) {
+            $proprietaire = Proprietaire::find($proprietaireId);
+            if (! $proprietaire) {
+                continue;
+            }
+
+            $ordre = 1;
+            $lignes = collect();
+            $montantParSite = [];
+
+            foreach ($commParts->get($proprietaireId, collect()) as $part) {
+                if ($part->isPaye()) {
+                    continue;
+                }
+                $ref = $part->enveloppe->source?->reference ?? '—';
+                $montant = $part->montant_a_payer;
+                $lignes->push([
+                    'source_type' => CommissionEnveloppePart::class,
+                    'source_id' => $part->id,
+                    'type_ligne' => TypeLignePaiement::COMMISSION_VENTE->value,
+                    'libelle' => 'Commission vente '.$ref,
+                    'montant' => $montant,
+                    'ordre' => $ordre++,
+                ]);
+                $this->accumulerSite($montantParSite, $part->enveloppe->source?->site_id, $montant);
             }
 
             foreach ($logParts->get($proprietaireId, collect()) as $part) {

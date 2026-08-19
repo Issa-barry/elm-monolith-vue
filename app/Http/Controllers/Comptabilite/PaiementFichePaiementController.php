@@ -8,6 +8,8 @@ use App\Http\Controllers\Controller;
 use App\Models\PaiementFiche;
 use App\Models\PaiementFichePaiement;
 use App\Services\AuditLogService;
+use App\Services\Commission\MoteurCommissionResolver;
+use App\Services\CommissionEnveloppePartAllocationService;
 use App\Services\PeriodePayabilityChecker;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -38,7 +40,7 @@ class PaiementFichePaiementController extends Controller
             'note' => ['nullable', 'string'],
         ]);
 
-        PaiementFichePaiement::create([
+        $paiement = PaiementFichePaiement::create([
             'fiche_id' => $fiche->id,
             'organization_id' => $fiche->organization_id,
             'site_id' => $fiche->site_id,
@@ -50,6 +52,15 @@ class PaiementFichePaiementController extends Controller
             'date_paiement' => $data['date_paiement'],
             'note' => $data['note'] ?? null,
         ]);
+
+        // V2 uniquement : reporte ce paiement sur les CommissionEnveloppePart
+        // sous-jacentes de la fiche, pour que Commission vente/propriétaire
+        // restent synchronisées avec ce paiement (cf. décision AMOA — une
+        // seule chaîne de paiement, jamais deux circuits pour V2). Sans effet
+        // pour une fiche Legacy (comportement 100% inchangé).
+        if (MoteurCommissionResolver::estV2($fiche->organization_id)) {
+            CommissionEnveloppePartAllocationService::allouer($fiche, $paiement);
+        }
 
         $montantFmt = number_format((float) $data['montant'], 0, ',', "\u{202F}");
         app(AuditLogService::class)->record($fiche, AuditEvent::PAID, auth()->user(), null, null, [
@@ -81,6 +92,10 @@ class PaiementFichePaiementController extends Controller
             'montant' => (float) $paiement->montant,
             'description' => "Paiement de {$montantFmt} GNF annulé pour {$fiche->beneficiaire_nom}",
         ]);
+
+        if (MoteurCommissionResolver::estV2($fiche->organization_id)) {
+            CommissionEnveloppePartAllocationService::desallouer($paiement);
+        }
 
         $paiement->delete();
 
