@@ -122,7 +122,11 @@ function submit() {
         preserveScroll: true,
         onSuccess: () => {
             showDialog.value = false;
-            toast.add({ severity: 'success', summary: 'Barème enregistré', life: 3000 });
+            toast.add({
+                severity: 'success',
+                summary: 'Barème enregistré',
+                life: 3000,
+            });
         },
     });
 }
@@ -206,7 +210,7 @@ function cellLabel(ligne: Ligne, cible: Cible): string {
                             <template #body="{ data }">
                                 <button
                                     type="button"
-                                    class="group flex w-full items-center justify-between gap-2 rounded-md border border-transparent px-2 py-1.5 text-left outline-none transition-colors hover:border-border hover:bg-muted focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                                    class="group flex w-full items-center justify-between gap-2 rounded-md border border-transparent px-2 py-1.5 text-left transition-colors outline-none hover:border-border hover:bg-muted focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                                     @click="openEdit(data, cible)"
                                 >
                                     <span
@@ -239,8 +243,12 @@ function cellLabel(ligne: Ligne, cible: Cible): string {
     >
         <form class="space-y-4 pt-2 pb-1" @submit.prevent="submit">
             <div>
-                <Label for="cr-montant" class="mb-1.5 block text-xs font-medium">
-                    Montant (GNF / unité) <span class="text-destructive">*</span>
+                <Label
+                    for="cr-montant"
+                    class="mb-1.5 block text-xs font-medium"
+                >
+                    Montant (GNF / unité)
+                    <span class="text-destructive">*</span>
                 </Label>
                 <Input
                     id="cr-montant"
@@ -252,7 +260,10 @@ function cellLabel(ligne: Ligne, cible: Cible): string {
                     @keydown="blockNonIntegerKeydown"
                     @paste="onMontantPaste"
                 />
-                <p v-if="form.errors.montant" class="mt-1 text-xs text-destructive">
+                <p
+                    v-if="form.errors.montant"
+                    class="mt-1 text-xs text-destructive"
+                >
                     {{ form.errors.montant }}
                 </p>
                 <p class="mt-1.5 text-xs text-muted-foreground">

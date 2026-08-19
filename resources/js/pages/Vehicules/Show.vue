@@ -127,7 +127,10 @@ const props = defineProps<{
     proprietaires: ProprietaireOption[];
     default_proprietaire_id: string | null;
     seuil_global_impayes: number;
-    bareme_commission: { proprietaire: number | null; livraison: number | null };
+    bareme_commission: {
+        proprietaire: number | null;
+        livraison: number | null;
+    };
     baremes_livraison_categories: BaremeLivraisonCategorie[];
     moteur_commission: 'legacy' | 'v2';
 }>();

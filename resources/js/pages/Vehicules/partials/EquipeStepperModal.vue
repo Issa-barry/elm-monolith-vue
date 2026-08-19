@@ -170,9 +170,7 @@ const stepTitle = computed(() =>
 // V2 uniquement — commission propriétaire : montant fixe du barème (Paramètres →
 // Commissions), jamais saisi ici : le propriétaire ne participe plus au partage
 // des livreurs (décision AMOA #1 — deux enveloppes distinctes, plus un pot commun).
-const montantProprietaire = computed(
-    () => props.baremeCommission.proprietaire,
-);
+const montantProprietaire = computed(() => props.baremeCommission.proprietaire);
 // V2 uniquement — montant Livraison : sert de référence pour la saisie Montant/%
 // des livreurs, le montant réel dépend de la catégorie vendue à chaque vente
 // (cf. conception cible §0.2.2/§0.3).
@@ -574,7 +572,10 @@ function formatPhone(local: string): string {
 
 /** V2 uniquement — montant estimé d'un membre pour une catégorie = barème
  * Livraison de cette catégorie × sa part. */
-function montantEstimeCategorie(categorieId: string, membreIndex: number): string {
+function montantEstimeCategorie(
+    categorieId: string,
+    membreIndex: number,
+): string {
     const cat = props.baremesLivraisonCategories.find(
         (c) => c.categorie_id === categorieId,
     );
@@ -1120,7 +1121,8 @@ const hasStep1Errors = computed(() =>
                     :model-value="partagesParCategorie[cat.categorie_id] ?? []"
                     :enveloppe-montant="cat.montant"
                     @update:model-value="
-                        (list) => onPartageCategorieUpdate(cat.categorie_id, list)
+                        (list) =>
+                            onPartageCategorieUpdate(cat.categorie_id, list)
                     "
                 />
             </div>
@@ -1313,7 +1315,9 @@ const hasStep1Errors = computed(() =>
                             <td
                                 class="px-4 py-2.5 text-right font-mono text-xs"
                             >
-                                {{ montantEstimeCategorie(cat.categorie_id, i) }}
+                                {{
+                                    montantEstimeCategorie(cat.categorie_id, i)
+                                }}
                             </td>
                         </tr>
                     </tbody>

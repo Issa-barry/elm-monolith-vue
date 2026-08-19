@@ -170,7 +170,9 @@ defineExpose({ valide });
                     <td class="px-3 py-2.5 text-sm font-semibold">Total</td>
                     <td
                         class="px-3 py-2.5 text-right font-mono text-sm font-semibold"
-                        :class="valide ? 'text-emerald-600' : 'text-destructive'"
+                        :class="
+                            valide ? 'text-emerald-600' : 'text-destructive'
+                        "
                     >
                         {{ enveloppeMontant ? `${totalMontant} GNF` : '—' }}
                     </td>
