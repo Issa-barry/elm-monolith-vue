@@ -347,7 +347,16 @@ test('création — capacités maximales de chargement saisies dans le formulair
     // la valeur DOM sans déclencher sa logique de parsing, laissant le v-model à null (cf.
     // tests/e2e/stock-ajustement.spec.ts) : focus explicite puis blur en sortie pour forcer
     // le commit interne du composant avant de continuer.
-    const capaciteMaxInput = page.locator('input[inputmode="numeric"]').last();
+    // Scopé par label plutôt que `input[inputmode="numeric"]').last()` : VehiculeForm.vue a
+    // désormais un second InputNumber ("Seuil de dette spécifique") plus bas dans le DOM, donc
+    // `.last()` ciblait ce champ-là au lieu de la capacité — la valeur atterrissait dans
+    // seuil_dette_derogation et capacite_max restait null, rejeté par la validation backend
+    // (capacites.*.capacite_max required), d'où le formulaire qui ne quittait jamais /create.
+    const capaciteMaxInput = page
+        .locator('label')
+        .filter({ hasText: /^Capacité max$/ })
+        .locator('..')
+        .locator('input');
     await capaciteMaxInput.click();
     await capaciteMaxInput.pressSequentially('1700');
     await capaciteMaxInput.blur();
@@ -383,8 +392,12 @@ test('création — capacités maximales de chargement saisies dans le formulair
     await expect(page.getByText(nomCategorie).last()).toBeVisible({
         timeout: 10_000,
     });
-    await expect(page.locator('input[inputmode="numeric"]').last()).toHaveValue(
-        '1700',
-        { timeout: 10_000 },
-    );
+    // Scopé par label plutôt que `.last()` — cf. commentaire de l'étape 3 : le champ "Seuil
+    // de dette spécifique" est aussi rendu sur cette page et matcherait sinon en premier.
+    const capaciteMaxInputEdit = page
+        .locator('label')
+        .filter({ hasText: /^Capacité max$/ })
+        .locator('..')
+        .locator('input');
+    await expect(capaciteMaxInputEdit).toHaveValue('1700', { timeout: 10_000 });
 });

@@ -64,8 +64,15 @@ async function setImpayesControle(
     }
 
     if (actif) {
+        // PrimeVue InputNumber : .fill() pose la valeur DOM sans déclencher le parsing
+        // interne, laissant le v-model inchangé — le bouton "Enregistrer" restait alors
+        // indéfiniment disabled (aucune modification détectée) et le .click() ci-dessous
+        // bloquait jusqu'au timeout du test entier (cf. seuilVehiculeInput plus bas dans ce
+        // fichier, et EquipeStepperModal : click() -> Control+a -> pressSequentially() ->
+        // blur() pour committer réellement une valeur de remplacement.
         await seuilInput.click();
-        await seuilInput.fill(String(seuil));
+        await page.keyboard.press('Control+a');
+        await seuilInput.pressSequentially(String(seuil));
         await seuilInput.blur();
     }
 
@@ -168,7 +175,12 @@ async function createVehiculeInApp(
     await page.getByRole('checkbox', { name: /livraison vente/i }).check();
 
     await page.getByTestId('vehicle-form-submit').click();
-    await page.waitForURL(/\/vehicules\/[a-z0-9]+$/, { timeout: 15_000 });
+    // {20,} exclut "/vehicules/create" (qui matcherait [a-z0-9]+ puisque "create" est
+    // lui-même tout en minuscules) — un ULID fait 26 caractères, cf. vehicule-flow.spec.ts.
+    // Sans cette borne, waitForURL se résout immédiatement sur l'URL courante (déjà
+    // "create") au lieu d'attendre la vraie navigation post-soumission, et la suite du test
+    // navigue vers "/vehicules/create/edit" (404).
+    await page.waitForURL(/\/vehicules\/[a-z0-9]{20,}$/, { timeout: 15_000 });
 }
 
 test.describe('Véhicule — seuil de dette spécifique', () => {
@@ -184,7 +196,7 @@ test.describe('Véhicule — seuil de dette spécifique', () => {
             `E2EIMP-A-${unique.slice(-5)}`,
         );
         await page.goto(`${page.url()}/edit`);
-        await expect(page).toHaveURL(/\/vehicules\/[a-z0-9]+\/edit$/, {
+        await expect(page).toHaveURL(/\/vehicules\/[a-z0-9]{20,}\/edit$/, {
             timeout: 15_000,
         });
         await page.waitForLoadState('networkidle');
@@ -215,7 +227,7 @@ test.describe('Véhicule — seuil de dette spécifique', () => {
         const showUrl = page.url();
 
         await page.goto(`${showUrl}/edit`);
-        await expect(page).toHaveURL(/\/vehicules\/[a-z0-9]+\/edit$/, {
+        await expect(page).toHaveURL(/\/vehicules\/[a-z0-9]{20,}\/edit$/, {
             timeout: 15_000,
         });
         await page.waitForLoadState('networkidle');
@@ -313,7 +325,19 @@ test('vente client sous le seuil autorisée, la même dette dépassant un seuil 
         .locator('#vente-form button[type="submit"]:visible')
         .first()
         .click();
-    await expect(page).toHaveURL(/\/ventes\/[a-z0-9]+$/, { timeout: 15_000 });
+
+    // La soumission ouvre un dialog de confirmation — cliquer "Confirmer et créer" (cf.
+    // facture-flow.spec.ts) : sans ce clic, form.post() ne part jamais et l'URL reste sur
+    // "/ventes/create", ce que le regex ci-dessous matcherait quand même à tort ("create"
+    // est alphanumérique) si on ne l'excluait pas explicitement.
+    const confirmerEtCreerBtn = page.getByRole('button', {
+        name: /confirmer et créer/i,
+    });
+    await expect(confirmerEtCreerBtn).toBeVisible({ timeout: 10_000 });
+    await confirmerEtCreerBtn.click();
+    await expect(page).toHaveURL(/\/ventes\/(?!create)[a-z0-9]+$/, {
+        timeout: 15_000,
+    });
 
     // Seuil abaissé à 0 : la dette de la vente précédente dépasse désormais le seuil — toute
     // nouvelle vente pour ce même client doit être bloquée.
@@ -323,7 +347,10 @@ test('vente client sous le seuil autorisée, la même dette dépassant un seuil 
     await expect(page).toHaveURL(/\/ventes\/create$/, { timeout: 20_000 });
     await selectClientOnVenteForm(page, nomClient);
 
-    await expect(page.locator('body')).toContainText(/impay/i, {
+    // "Commande bloquée — seuil dépassé" (blocage côté client, pas de véhicule sélectionné
+    // ici) — l'autre variante ("— facture impayée", blocage côté véhicule) ne s'applique pas
+    // à ce scénario, cf. Ventes/Create.vue lignes ~905 et ~1266.
+    await expect(page.locator('body')).toContainText(/commande bloquée/i, {
         timeout: 10_000,
     });
     const submitBtn = page
