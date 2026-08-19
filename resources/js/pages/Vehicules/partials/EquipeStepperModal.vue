@@ -3,6 +3,7 @@ import CommissionShareEditor, {
     type CommissionShareMembre,
 } from '@/components/commission/CommissionShareEditor.vue';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 import { router } from '@inertiajs/vue3';
 import {
     Check,
@@ -13,6 +14,7 @@ import {
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
+import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import { computed, reactive, ref, watch } from 'vue';
 
@@ -44,6 +46,7 @@ interface MembreExistant {
     nom_complet: string | null;
     telephone: string;
     role: string;
+    montant_par_pack: number;
     part_pourcentage: number;
     ordre: number;
 }
@@ -51,6 +54,9 @@ interface MembreExistant {
 interface EquipeExistante {
     id: string;
     is_active: boolean;
+    commission_unitaire_par_pack: number;
+    montant_par_pack_proprietaire: number | null;
+    taux_commission_proprietaire: number | null;
     proprietaire_id: string | null;
     proprietaire_nom: string | null;
     membres: MembreExistant[];
@@ -61,9 +67,18 @@ interface MembreLigne {
     role: string;
     nom_complet: string; // facultatif — surnom ou désignation opérationnelle
     telephone: string; // 9 chiffres locaux
+    montant_par_pack: number;
     part_pourcentage: number;
     ordre: number;
     _errors: Partial<Record<'role' | 'telephone', string>>;
+}
+
+/** Legacy uniquement — ligne du tableau montant/% (propriétaire + membres). */
+interface LignePartage {
+    id: string;
+    label: string;
+    montant: number;
+    taux: number;
 }
 
 interface BaremeCommission {
@@ -76,6 +91,7 @@ const props = defineProps<{
     vehicule: VehiculeInfo;
     equipe: EquipeExistante | null;
     proprietaires: ProprietaireOption[];
+    moteurCommission: 'legacy' | 'v2';
     baremeCommission: BaremeCommission;
 }>();
 
@@ -110,8 +126,13 @@ function confirmClose() {
 }
 
 const membres = ref<MembreLigne[]>([]);
+const commission = ref(0); // legacy uniquement
+const montantProp = ref(0); // legacy uniquement
+const lignes = ref<LignePartage[]>([]); // legacy uniquement
 
 // ── Computed ────────────────────────────────────────────────────────────────
+
+const isLegacy = computed(() => props.moteurCommission === 'legacy');
 
 // Un partage propriétaire est proposé dès que le véhicule a un propriétaire assigné (interne
 // par défaut ou tiers) — jamais dérivé de la catégorie du véhicule, cf. EquipeLivraisonController
@@ -130,20 +151,21 @@ const stepTitle = computed(() =>
     props.equipe ? "Modifier l'équipe" : "Configurer l'équipe",
 );
 
-// Commission propriétaire — montant fixe du barème (Paramètres → Commissions),
-// jamais saisi ici : le propriétaire ne participe plus au partage des livreurs
-// (décision AMOA #1 — deux enveloppes distinctes, plus un pot commun).
+// V2 uniquement — commission propriétaire : montant fixe du barème (Paramètres →
+// Commissions), jamais saisi ici : le propriétaire ne participe plus au partage
+// des livreurs (décision AMOA #1 — deux enveloppes distinctes, plus un pot commun).
 const montantProprietaire = computed(
     () => props.baremeCommission.proprietaire,
 );
-// Montant Livraison — indicatif uniquement dans cette popup : sert de référence
-// pour la saisie Montant/% des livreurs, le montant réel dépend de la catégorie
-// vendue à chaque vente (cf. conception cible §0.2.2/§0.3).
+// V2 uniquement — montant Livraison : sert de référence pour la saisie Montant/%
+// des livreurs, le montant réel dépend de la catégorie vendue à chaque vente
+// (cf. conception cible §0.2.2/§0.3).
 const montantLivraison = computed(() => props.baremeCommission.livraison);
 
-// Poids informatif du propriétaire dans le total des deux barèmes affichés —
-// dénominateur différent de la part des livreurs dans l'enveloppe Livraison
-// (cf. conception cible §0.3.2, ne jamais confondre les deux pourcentages).
+// V2 uniquement — poids informatif du propriétaire dans le total des deux
+// barèmes affichés — dénominateur différent de la part des livreurs dans
+// l'enveloppe Livraison (cf. conception cible §0.3.2, ne jamais confondre les
+// deux pourcentages).
 const partProprietaireDuBareme = computed(() => {
     const p = montantProprietaire.value;
     const l = montantLivraison.value;
@@ -171,10 +193,13 @@ watch(
                 telephone: m.telephone.startsWith(GUINEA_PREFIX)
                     ? m.telephone.slice(GUINEA_PREFIX.length)
                     : m.telephone.replace(/\D/g, '').slice(-9),
+                montant_par_pack: m.montant_par_pack,
                 part_pourcentage: m.part_pourcentage,
                 ordre: m.ordre,
                 _errors: {},
             }));
+            commission.value = props.equipe.commission_unitaire_par_pack;
+            montantProp.value = props.equipe.montant_par_pack_proprietaire ?? 0;
         } else {
             membres.value = [
                 {
@@ -182,16 +207,19 @@ watch(
                     role: '',
                     nom_complet: '',
                     telephone: '',
+                    montant_par_pack: 0,
                     part_pourcentage: 0,
                     ordre: 0,
                     _errors: {},
                 },
             ];
+            commission.value = 950;
+            montantProp.value = 0;
         }
     },
 );
 
-// ── Étape 1 : Membres ───────────────────────────────────────────────────────
+// ── Étape 1 : Membres (partagée legacy/V2) ─────────────────────────────────
 
 function addLigne() {
     markChanged();
@@ -200,6 +228,7 @@ function addLigne() {
         role: '',
         nom_complet: '',
         telephone: '',
+        montant_par_pack: 0,
         part_pourcentage: 0,
         ordre: membres.value.length,
         _errors: {},
@@ -268,14 +297,147 @@ function validateStep1(): boolean {
 function goToStep2() {
     if (!validateStep1()) return;
     markChanged();
-    // Un seul membre : 100 % automatiquement (rien à répartir).
-    if (membres.value.length === 1 && membres.value[0].part_pourcentage === 0) {
+    if (isLegacy.value) {
+        buildLignes();
+        if (commission.value <= 0) commission.value = 950;
+    } else if (
+        membres.value.length === 1 &&
+        membres.value[0].part_pourcentage === 0
+    ) {
+        // Un seul membre : 100 % automatiquement (rien à répartir).
         membres.value[0].part_pourcentage = 100;
     }
     step.value = 2;
 }
 
-// ── Étape 2 : Partage (livreurs uniquement) ─────────────────────────────────
+// ── Étape 2 (legacy) : Partage montant/% incluant le propriétaire ──────────
+
+function toTaux(montant: number, comm: number): number {
+    if (!comm || comm <= 0) return 0;
+    return parseFloat(((montant / comm) * 100).toFixed(2));
+}
+
+function toMontant(taux: number, comm: number): number {
+    return Math.round((taux / 100) * comm);
+}
+
+// Bénéficiaires dont le montant/taux a été saisi explicitement par l'utilisateur pendant cette
+// session d'édition — permet de compléter automatiquement le DERNIER bénéficiaire restant
+// (montant = commission - somme des autres) sans jamais inventer une répartition entre
+// plusieurs bénéficiaires encore non saisis (cf. spécification "auto-calcul du partage").
+const touchedIds = ref<Set<string>>(new Set());
+
+function buildLignes() {
+    touchedIds.value = new Set();
+    const comm = commission.value > 0 ? commission.value : 950;
+    const newLignes: LignePartage[] = [];
+
+    if (hasProprietaire.value) {
+        newLignes.push({
+            id: 'proprietaire',
+            label: `Propriétaire — ${proprietaireNom.value ?? '—'}`,
+            montant: montantProp.value,
+            taux: toTaux(montantProp.value, comm),
+        });
+    }
+
+    const roleCounts: Record<string, number> = {};
+    membres.value.forEach((m, i) => {
+        roleCounts[m.role] = (roleCounts[m.role] ?? 0) + 1;
+        newLignes.push({
+            id: `membre-${i}`,
+            label: membreLabel(m.role, roleCounts[m.role], m.nom_complet),
+            montant: m.montant_par_pack,
+            taux: toTaux(m.montant_par_pack, comm),
+        });
+    });
+
+    lignes.value = newLignes;
+}
+
+/**
+ * Complète automatiquement le seul bénéficiaire restant non saisi avec le reliquat
+ * (commission - somme des bénéficiaires déjà saisis) — jamais s'il reste 2+ bénéficiaires non
+ * saisis (répartition ambiguë) et jamais si le reliquat est négatif (dépassement, laissé tel
+ * quel pour que la validation normale signale l'erreur).
+ */
+function recomputeAutoFill(editedId: string) {
+    touchedIds.value.add(editedId);
+
+    if (lignes.value.length < 2) return;
+
+    const untouched = lignes.value.filter((l) => !touchedIds.value.has(l.id));
+    if (untouched.length !== 1) return;
+
+    const cible = untouched[0];
+    const sommeAutres = lignes.value
+        .filter((l) => l.id !== cible.id)
+        .reduce((s, l) => s + (l.montant || 0), 0);
+    const reste = commission.value - sommeAutres;
+    if (reste < 0) return;
+
+    cible.montant = Math.round(reste);
+    cible.taux = toTaux(cible.montant, commission.value);
+}
+
+watch(commission, (newComm) => {
+    if (!isLegacy.value) return;
+
+    lignes.value.forEach((l) => {
+        l.taux = toTaux(l.montant, newComm);
+    });
+
+    if (touchedIds.value.size === 0) return;
+    const untouched = lignes.value.filter((l) => !touchedIds.value.has(l.id));
+    if (untouched.length !== 1 || lignes.value.length < 2) return;
+
+    const cible = untouched[0];
+    const sommeAutres = lignes.value
+        .filter((l) => l.id !== cible.id)
+        .reduce((s, l) => s + (l.montant || 0), 0);
+    const reste = newComm - sommeAutres;
+    if (reste < 0) return;
+
+    cible.montant = Math.round(reste);
+    cible.taux = toTaux(cible.montant, newComm);
+});
+
+function onMontantChange(ligne: LignePartage, val: number | null) {
+    const nouveauMontant = val ?? 0;
+    // PrimeVue InputNumber ré-émet sa valeur courante au montage (écho, pas une saisie) —
+    // sans ce garde-fou, cet écho marquait la ligne comme "touchée" avant toute interaction
+    // réelle et empêchait recomputeAutoFill de jamais la considérer comme le seul bénéficiaire
+    // restant à compléter automatiquement.
+    if (nouveauMontant === ligne.montant) return;
+
+    markChanged();
+    ligne.montant = nouveauMontant;
+    ligne.taux = toTaux(ligne.montant, commission.value);
+    recomputeAutoFill(ligne.id);
+}
+
+function onTauxChange(ligne: LignePartage, val: number | null) {
+    const nouveauTaux = val ?? 0;
+    if (nouveauTaux === ligne.taux) return;
+
+    markChanged();
+    ligne.taux = nouveauTaux;
+    ligne.montant = toMontant(ligne.taux, commission.value);
+    recomputeAutoFill(ligne.id);
+}
+
+function applyPartageToMembres() {
+    membres.value = membres.value.map((m, i) => {
+        const ligne = lignes.value.find((l) => l.id === `membre-${i}`);
+        return { ...m, montant_par_pack: ligne?.montant ?? m.montant_par_pack };
+    });
+    if (hasProprietaire.value) {
+        const propLigne = lignes.value.find((l) => l.id === 'proprietaire');
+        montantProp.value = propLigne?.montant ?? 0;
+    }
+}
+
+// ── Étape 2 (V2) : Partage livreurs uniquement, propriétaire hors partage ──
 
 const partageMembres = computed<CommissionShareMembre[]>(() => {
     const roleCounts: Record<string, number> = {};
@@ -299,14 +461,30 @@ function onPartageUpdate(list: CommissionShareMembre[]) {
     });
 }
 
-const totalPartage = computed(() =>
-    membres.value.reduce((s, m) => s + (m.part_pourcentage || 0), 0),
-);
+// ── Partage : total/validité (branché selon le moteur) ─────────────────────
 
-const partageValide = computed(() => Math.abs(totalPartage.value - 100) < 0.01);
+const totalPartage = computed(() => {
+    if (isLegacy.value) {
+        return lignes.value.reduce((s, l) => s + (l.montant || 0), 0);
+    }
+    return membres.value.reduce((s, m) => s + (m.part_pourcentage || 0), 0);
+});
+
+const resteARepartir = computed(() => commission.value - totalPartage.value);
+
+const partageValide = computed(() => {
+    if (isLegacy.value) {
+        return (
+            commission.value > 0 &&
+            Math.abs(totalPartage.value - commission.value) < 0.01
+        );
+    }
+    return Math.abs(totalPartage.value - 100) < 0.01;
+});
 
 function goToStep3() {
     if (!partageValide.value) return;
+    if (isLegacy.value) applyPartageToMembres();
     step.value = 3;
 }
 
@@ -345,7 +523,7 @@ function formatPhone(local: string): string {
     return `+224 ${d.slice(0, 3)} ${d.slice(3, 5)} ${d.slice(5, 7)} ${d.slice(7)}`;
 }
 
-/** Montant estimé d'un membre = barème Livraison (indicatif) × sa part. */
+/** V2 uniquement — montant estimé d'un membre = barème Livraison (indicatif) × sa part. */
 function montantEstime(pct: number): string {
     if (montantLivraison.value === null) return `${pct} %`;
     const montant = Math.round((pct / 100) * montantLivraison.value);
@@ -355,12 +533,34 @@ function montantEstime(pct: number): string {
 // ── Soumission ──────────────────────────────────────────────────────────────
 
 function buildPayload() {
-    return {
+    const base = {
         vehicule_id: props.vehicule.id,
         // proprietaire_id n'est jamais envoyé : toujours dérivé côté serveur depuis
         // Vehicule::proprietaire_id (cf. EquipeLivraisonController), pour ne jamais désynchroniser
         // l'équipe du propriétaire réel du véhicule.
         is_active: props.equipe?.is_active ?? true,
+    };
+
+    if (isLegacy.value) {
+        return {
+            ...base,
+            commission_unitaire_par_pack: commission.value,
+            montant_par_pack_proprietaire: hasProprietaire.value
+                ? montantProp.value
+                : null,
+            membres: membres.value.map((m, i) => ({
+                livreur_id: m.livreur_id ?? null,
+                nom_complet: m.nom_complet.trim() || null,
+                telephone: `${GUINEA_PREFIX}${m.telephone}`,
+                role: m.role,
+                montant_par_pack: m.montant_par_pack,
+                ordre: i,
+            })),
+        };
+    }
+
+    return {
+        ...base,
         membres: membres.value.map((m, i) => ({
             livreur_id: m.livreur_id ?? null,
             nom_complet: m.nom_complet.trim() || null,
@@ -502,7 +702,7 @@ const hasStep1Errors = computed(() =>
             <p v-for="(msg, key) in serverErrors" :key="key">{{ msg }}</p>
         </div>
 
-        <!-- ── Étape 1 : Membres ─────────────────────────────────────────── -->
+        <!-- ── Étape 1 : Membres (partagée legacy/V2) ──────────────────────── -->
         <div v-if="step === 1" class="space-y-4">
             <p v-if="membres.length > 0" class="text-sm text-muted-foreground">
                 <span class="font-medium text-foreground">{{
@@ -631,7 +831,174 @@ const hasStep1Errors = computed(() =>
             </p>
         </div>
 
-        <!-- ── Étape 2 : Partage (livreurs uniquement) ─────────────────────── -->
+        <!-- ── Étape 2 (LEGACY) : Partage montant/% incluant le propriétaire ── -->
+        <div v-else-if="step === 2 && isLegacy" class="space-y-5">
+            <div>
+                <Label
+                    for="step-commission"
+                    class="mb-1.5 block text-xs font-medium"
+                >
+                    Commission unitaire par pack (GNF)
+                    <span class="text-destructive">*</span>
+                </Label>
+                <InputNumber
+                    :model-value="commission || null"
+                    placeholder="0"
+                    input-id="step-commission"
+                    :min="1"
+                    :max-fraction-digits="0"
+                    suffix=" GNF"
+                    class="w-full"
+                    :input-style="{ textAlign: 'right', width: '100%' }"
+                    @update:model-value="commission = $event ?? 0"
+                />
+                <p class="mt-1 text-xs text-muted-foreground">
+                    Montant total à répartir entre tous les bénéficiaires.
+                </p>
+            </div>
+
+            <div
+                v-if="lignes.length > 0"
+                class="overflow-hidden rounded-lg border"
+            >
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b bg-muted/40">
+                            <th
+                                class="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground"
+                            >
+                                Bénéficiaire
+                            </th>
+                            <th
+                                class="px-3 py-2.5 text-right text-xs font-medium text-muted-foreground"
+                            >
+                                Montant (GNF)
+                            </th>
+                            <th
+                                class="w-32 px-3 py-2.5 text-right text-xs font-medium text-muted-foreground"
+                            >
+                                %
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="ligne in lignes"
+                            :key="ligne.id"
+                            class="border-b last:border-b-0"
+                            :class="
+                                ligne.id === 'proprietaire'
+                                    ? 'bg-primary/5'
+                                    : ''
+                            "
+                        >
+                            <td class="px-3 py-2 text-sm">
+                                <template v-if="ligne.id === 'proprietaire'">
+                                    <span
+                                        class="mr-1.5 inline-flex items-center rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold tracking-wide text-primary-foreground uppercase"
+                                        >Propriétaire</span
+                                    >
+                                    <span class="font-medium text-primary">{{
+                                        ligne.label.replace(
+                                            'Propriétaire — ',
+                                            '',
+                                        )
+                                    }}</span>
+                                    <span
+                                        v-if="
+                                            vehicule.proprietaire_est_entreprise
+                                        "
+                                        class="ml-1.5 inline-flex items-center rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
+                                        >Entreprise</span
+                                    >
+                                </template>
+                                <template v-else>{{ ligne.label }}</template>
+                            </td>
+                            <td class="px-3 py-2">
+                                <InputNumber
+                                    :model-value="ligne.montant || null"
+                                    placeholder="0"
+                                    :min="0"
+                                    :max="commission"
+                                    :max-fraction-digits="0"
+                                    class="w-full"
+                                    :input-style="{
+                                        textAlign: 'right',
+                                        width: '100%',
+                                    }"
+                                    @update:model-value="
+                                        onMontantChange(ligne, $event)
+                                    "
+                                />
+                            </td>
+                            <td class="px-3 py-2">
+                                <InputNumber
+                                    :model-value="ligne.taux || null"
+                                    placeholder="0 %"
+                                    :min="0"
+                                    :max="100"
+                                    :max-fraction-digits="2"
+                                    suffix=" %"
+                                    :disabled="!commission || commission <= 0"
+                                    class="w-full"
+                                    :input-style="{
+                                        textAlign: 'right',
+                                        width: '100%',
+                                    }"
+                                    @update:model-value="
+                                        onTauxChange(ligne, $event)
+                                    "
+                                />
+                            </td>
+                        </tr>
+                    </tbody>
+                    <tfoot>
+                        <tr class="border-t bg-muted/20">
+                            <td class="px-3 py-2.5 text-sm font-semibold">
+                                Total
+                            </td>
+                            <td
+                                class="px-3 py-2.5 text-right font-mono text-sm font-semibold"
+                                :class="
+                                    partageValide
+                                        ? 'text-emerald-600'
+                                        : 'text-destructive'
+                                "
+                            >
+                                {{ totalPartage }} GNF
+                            </td>
+                            <td
+                                class="px-3 py-2.5 text-right font-mono text-xs"
+                            >
+                                <span
+                                    v-if="partageValide"
+                                    class="font-semibold text-emerald-600"
+                                    >✓ 100 %</span
+                                >
+                                <span v-else class="text-destructive"
+                                    >≠ {{ commission }} GNF</span
+                                >
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            <p
+                v-if="!partageValide && lignes.length > 0 && commission > 0"
+                class="text-xs text-destructive"
+            >
+                La somme ({{ totalPartage }} GNF) doit être égale à la
+                commission ({{ commission }} GNF).
+                {{
+                    resteARepartir > 0
+                        ? `Reste à répartir : ${resteARepartir} GNF.`
+                        : `Dépassement : ${Math.abs(resteARepartir)} GNF.`
+                }}
+            </p>
+        </div>
+
+        <!-- ── Étape 2 (V2) : Partage livreurs uniquement ──────────────────── -->
         <div v-else-if="step === 2" class="space-y-5">
             <!-- Commission livraison — lecture seule, vient du barème -->
             <div class="rounded-lg border bg-muted/30 p-3">
@@ -659,7 +1026,98 @@ const hasStep1Errors = computed(() =>
             />
         </div>
 
-        <!-- ── Étape 3 : Récapitulatif ───────────────────────────────────── -->
+        <!-- ── Étape 3 (LEGACY) : Récapitulatif ────────────────────────────── -->
+        <div v-else-if="step === 3 && isLegacy" class="space-y-4">
+            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div class="rounded-lg border bg-muted/30 p-3">
+                    <p
+                        class="text-xs font-medium tracking-wider text-muted-foreground uppercase"
+                    >
+                        Véhicule
+                    </p>
+                    <p class="mt-1 text-sm font-semibold">
+                        {{ vehicule.nom_vehicule }}
+                    </p>
+                    <p class="font-mono text-xs text-muted-foreground">
+                        {{ vehicule.immatriculation }}
+                    </p>
+                </div>
+
+                <div
+                    v-if="hasProprietaire && proprietaireNom"
+                    class="rounded-lg border bg-muted/30 p-3"
+                >
+                    <p
+                        class="text-xs font-medium tracking-wider text-muted-foreground uppercase"
+                    >
+                        Propriétaire
+                    </p>
+                    <p class="mt-1 text-sm font-semibold">
+                        {{ proprietaireNom }}
+                    </p>
+                    <p class="text-xs text-muted-foreground">
+                        Part : {{ formatGNF(montantProp) }}
+                    </p>
+                </div>
+
+                <div class="rounded-lg border bg-muted/30 p-3">
+                    <p
+                        class="text-xs font-medium tracking-wider text-muted-foreground uppercase"
+                    >
+                        Commission / pack
+                    </p>
+                    <p class="mt-1 text-sm font-semibold">
+                        {{ formatGNF(commission) }}
+                    </p>
+                </div>
+            </div>
+
+            <div class="overflow-hidden rounded-lg border">
+                <div class="border-b bg-muted/30 px-4 py-2.5">
+                    <p
+                        class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                    >
+                        Membres ({{ membres.length }})
+                    </p>
+                </div>
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr
+                            class="border-b text-left text-xs text-muted-foreground"
+                        >
+                            <th class="px-4 py-2 font-medium">Membre</th>
+                            <th class="px-4 py-2 font-medium">Téléphone</th>
+                            <th class="px-4 py-2 text-right font-medium">
+                                Part
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        <tr v-for="(m, i) in membres" :key="i">
+                            <td class="px-4 py-2.5 font-medium">
+                                {{
+                                    m.nom_complet.trim()
+                                        ? `${roleLabel(m.role, i)} — ${m.nom_complet.trim()}`
+                                        : roleLabel(m.role, i)
+                                }}
+                            </td>
+                            <td
+                                class="px-4 py-2.5 font-mono text-xs text-muted-foreground"
+                            >
+                                {{ formatPhone(m.telephone) }}
+                            </td>
+                            <td
+                                class="px-4 py-2.5 text-right font-mono text-xs"
+                            >
+                                {{ formatGNF(m.montant_par_pack) }}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ── Étape 3 (V2) : Récapitulatif ────────────────────────────────── -->
         <div v-else-if="step === 3" class="space-y-4">
             <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <div class="rounded-lg border bg-muted/30 p-3">

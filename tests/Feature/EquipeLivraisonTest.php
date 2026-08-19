@@ -3,6 +3,9 @@
 namespace Tests\Feature;
 
 use App\Enums\CategorieVehicule;
+use App\Enums\CommissionActivationStatut;
+use App\Enums\CommissionStrategieAncrageSite;
+use App\Models\CommissionProcessus;
 use App\Models\EquipeLivraison;
 use App\Models\Livreur;
 use App\Models\Organization;
@@ -14,12 +17,22 @@ use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 /**
- * Phase 2 (cf. conception cible) : le propriétaire n'appartient plus au même
- * partage que les livreurs — commission_unitaire_par_pack /
- * montant_par_pack_proprietaire / taux_commission_proprietaire ne sont plus
- * alimentés par ce contrôleur (gel volontaire, cf. EquipeLivraisonController).
- * Les livreurs se partagent 100 % via `part_pourcentage`, stocké directement
- * dans equipe_livreurs.taux_commission.
+ * Bascule LEGACY/V2 (cf. MoteurCommissionResolver, correction post-Phase 2) :
+ *
+ *  - Section LEGACY (aucun commission_processus ACTIF, comportement PAR DÉFAUT) :
+ *    reprend EXACTEMENT le contrat pré-Phase 2 — commission_unitaire_par_pack /
+ *    montant_par_pack_proprietaire / taux_commission_proprietaire / montant_par_pack
+ *    restent alimentés comme avant, pour que CommissionCalculator (seul moteur à
+ *    générer de vraies commissions tant qu'une organisation n'a pas explicitement
+ *    basculé) continue de fonctionner à 100 % après toute modification d'équipe.
+ *
+ *  - Section V2 (organisation ayant explicitement activé son commission_processus
+ *    "vente", cf. activerV2()) : le propriétaire n'appartient plus au partage, les
+ *    livreurs se partagent 100 % via part_pourcentage — les champs legacy ci-dessus
+ *    restent à leur valeur par défaut, jamais alimentés.
+ *
+ * Ne jamais mélanger les deux payloads : une organisation legacy ne doit jamais
+ * recevoir un payload V2 (et inversement) — cf. EquipeLivraisonController.
  */
 class EquipeLivraisonTest extends TestCase
 {
@@ -42,13 +55,15 @@ class EquipeLivraisonTest extends TestCase
             'nom' => 'Équipe Test',
             'is_active' => true,
             'proprietaire_id' => $proprietaireId,
+            'commission_unitaire_par_pack' => 100,
+            'montant_par_pack_proprietaire' => 70,
             'membres' => [
                 [
                     'livreur_id' => null,
                     'nom_complet' => 'Mamadou Diallo',
                     'telephone' => '+224620000001',
                     'role' => 'chauffeur',
-                    'part_pourcentage' => 100,
+                    'montant_par_pack' => 30,
                     'ordre' => 0,
                 ],
             ],
@@ -78,7 +93,7 @@ class EquipeLivraisonTest extends TestCase
             ->assertStatus(403);
     }
 
-    // ── store ─────────────────────────────────────────────────────────────────
+    // ── store (LEGACY) ───────────────────────────────────────────────────────
 
     public function test_store_creates_equipe_avec_proprietaire_meme_org(): void
     {
@@ -93,27 +108,8 @@ class EquipeLivraisonTest extends TestCase
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
             'vehicule_id' => $vehicule->id,
+            'taux_commission_proprietaire' => 70,
         ]);
-        $this->assertDatabaseHas('equipe_livreurs', [
-            'taux_commission' => 100,
-        ]);
-    }
-
-    public function test_store_ne_touche_jamais_les_champs_commission_proprietaire_legacy(): void
-    {
-        // Gel volontaire (Phase 2) : ces trois colonnes restent à leur valeur par défaut,
-        // plus jamais alimentées par ce contrôleur — cf. EquipeLivraisonController::store().
-        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
-        $vehicule = $this->makeVehicule($proprietaire->id);
-
-        $this->actingAs($this->user)
-            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule->id]))
-            ->assertRedirectContains('/backoffice/vehicules/');
-
-        $equipe = EquipeLivraison::where('organization_id', $this->org->id)->firstOrFail();
-        $this->assertSame(0.0, (float) $equipe->commission_unitaire_par_pack);
-        $this->assertNull($equipe->montant_par_pack_proprietaire);
-        $this->assertNull($equipe->taux_commission_proprietaire);
     }
 
     public function test_store_persiste_telephone_normalise_e164(): void
@@ -145,7 +141,7 @@ class EquipeLivraisonTest extends TestCase
                     'livreur_id' => null,
                     'nom_complet' => 'Chauffeur 1',
                     'telephone' => '+224620000001', 'role' => 'chauffeur',
-                    'part_pourcentage' => 100, 'ordre' => 0,
+                    'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
             ]))
             ->assertRedirectContains('/backoffice/vehicules/');
@@ -174,7 +170,7 @@ class EquipeLivraisonTest extends TestCase
                 'membres' => [[
                     'livreur_id' => null,
                     'telephone' => '+224620000001', 'role' => 'chauffeur',
-                    'part_pourcentage' => 100, 'ordre' => 0,
+                    'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
             ]))
             ->assertRedirectContains('/backoffice/vehicules/');
@@ -202,17 +198,17 @@ class EquipeLivraisonTest extends TestCase
                         'livreur_id' => null,
                         'nom_complet' => 'Mamadou Diallo',
                         'telephone' => '+224620000001', 'role' => 'chauffeur',
-                        'part_pourcentage' => 50, 'ordre' => 0,
+                        'montant_par_pack' => 15, 'ordre' => 0,
                     ],
                     [
                         'livreur_id' => null,
                         'telephone' => '+224620000002', 'role' => 'convoyeur',
-                        'part_pourcentage' => 25, 'ordre' => 1,
+                        'montant_par_pack' => 8, 'ordre' => 1,
                     ],
                     [
                         'livreur_id' => null,
                         'telephone' => '+224620000003', 'role' => 'convoyeur',
-                        'part_pourcentage' => 25, 'ordre' => 2,
+                        'montant_par_pack' => 7, 'ordre' => 2,
                     ],
                 ],
             ]))
@@ -236,18 +232,20 @@ class EquipeLivraisonTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
                 'vehicule_id' => $vehicule->id,
+                'commission_unitaire_par_pack' => 100,
+                'montant_par_pack_proprietaire' => 40,
                 'membres' => [
                     [
                         'livreur_id' => null,
                         'nom_complet' => 'Petit Moussa',
                         'telephone' => '+224620000001', 'role' => 'chauffeur',
-                        'part_pourcentage' => 50, 'ordre' => 0,
+                        'montant_par_pack' => 30, 'ordre' => 0,
                     ],
                     [
                         'livreur_id' => null,
                         'nom_complet' => 'Doudou',
                         'telephone' => '+224620000002', 'role' => 'convoyeur',
-                        'part_pourcentage' => 50, 'ordre' => 1,
+                        'montant_par_pack' => 30, 'ordre' => 1,
                     ],
                 ],
             ]))
@@ -283,7 +281,7 @@ class EquipeLivraisonTest extends TestCase
                     'livreur_id' => $livreur->id,
                     'nom_complet' => 'Nouveau Surnom',
                     'telephone' => '+224620000001', 'role' => 'chauffeur',
-                    'part_pourcentage' => 100, 'ordre' => 0,
+                    'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
             ]))
             ->assertRedirectContains('/backoffice/vehicules/');
@@ -304,7 +302,7 @@ class EquipeLivraisonTest extends TestCase
                     'livreur_id' => null,
                     'nom_complet' => 'Mamadou Diallo',
                     'telephone' => '+224abc123456', 'role' => 'chauffeur',
-                    'part_pourcentage' => 100, 'ordre' => 0,
+                    'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
             ]))
             ->assertSessionHasErrors('membres.0.telephone');
@@ -321,7 +319,7 @@ class EquipeLivraisonTest extends TestCase
                     'livreur_id' => null,
                     'nom_complet' => 'Mamadou Diallo',
                     'telephone' => '+22462012345', 'role' => 'chauffeur',
-                    'part_pourcentage' => 100, 'ordre' => 0,
+                    'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
             ]))
             ->assertSessionHasErrors('membres.0.telephone');
@@ -380,11 +378,13 @@ class EquipeLivraisonTest extends TestCase
                 'vehicule_id' => $vehiculeInterne->id,
                 'proprietaire_id' => null,
                 'nom' => 'Équipe Interne',
+                'commission_unitaire_par_pack' => 30,
+                'montant_par_pack_proprietaire' => null,
                 'membres' => [[
                     'livreur_id' => null,
                     'nom_complet' => 'Mamadou Diallo',
                     'telephone' => '+224620000001', 'role' => 'chauffeur',
-                    'part_pourcentage' => 100, 'ordre' => 0,
+                    'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
             ]))
             ->assertRedirectContains('/backoffice/vehicules/');
@@ -396,12 +396,13 @@ class EquipeLivraisonTest extends TestCase
         ]);
     }
 
-    public function test_store_autorise_vehicule_interne_avec_proprietaire_configure(): void
+    public function test_store_autorise_partage_proprietaire_sur_vehicule_interne_avec_proprietaire_configure(): void
     {
         // Régression : un véhicule "interne" (categorie=INTERNE) peut tout à fait avoir un
         // propriétaire réel configuré (le propriétaire interne par défaut de l'organisation, cf.
-        // Proprietaire::interneParDefautId) — la création d'équipe fonctionne alors exactement
-        // comme pour un véhicule partenaire (cas rapporté : véhicule "Abdoulaye").
+        // Proprietaire::interneParDefautId) — le partage propriétaire doit alors fonctionner
+        // exactement comme pour un véhicule partenaire : commission 950 = propriétaire 650 +
+        // livreur 300 (cas rapporté : véhicule "Abdoulaye").
         $proprietaireInterne = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $this->org->update(['proprietaire_interne_id' => $proprietaireInterne->id]);
         $vehiculeInterne = Vehicule::factory()->create([
@@ -413,59 +414,74 @@ class EquipeLivraisonTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaireInterne->id, [
                 'vehicule_id' => $vehiculeInterne->id,
+                'commission_unitaire_par_pack' => 950,
+                'montant_par_pack_proprietaire' => 650,
+                'membres' => [[
+                    'livreur_id' => null,
+                    'nom_complet' => 'Mamadou Diallo',
+                    'telephone' => '+224620000001', 'role' => 'chauffeur',
+                    'montant_par_pack' => 300, 'ordre' => 0,
+                ]],
             ]))
             ->assertRedirectContains('/backoffice/vehicules/');
 
         $this->assertDatabaseHas('equipes_livraison', [
             'vehicule_id' => $vehiculeInterne->id,
             'proprietaire_id' => $proprietaireInterne->id,
+            'commission_unitaire_par_pack' => 950,
+            'montant_par_pack_proprietaire' => 650,
         ]);
     }
 
-    // ── validation somme des parts = 100 % (Phase 2) ─────────────────────────
-
-    public function test_store_echoue_si_somme_des_parts_depasse_100(): void
+    public function test_store_persiste_taux_commission_proprietaire(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
-        $vehicule = $this->makeVehicule();
+        $vehicule = $this->makeVehicule($proprietaire->id);
 
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
                 'vehicule_id' => $vehicule->id,
-                'membres' => [
-                    [
-                        'livreur_id' => null, 'nom_complet' => 'A',
-                        'telephone' => '+224620000001', 'role' => 'chauffeur',
-                        'part_pourcentage' => 70, 'ordre' => 0,
-                    ],
-                    [
-                        'livreur_id' => null, 'nom_complet' => 'B',
-                        'telephone' => '+224620000002', 'role' => 'convoyeur',
-                        'part_pourcentage' => 50, 'ordre' => 1,
-                    ],
-                ],
+                'commission_unitaire_par_pack' => 100,
+                'montant_par_pack_proprietaire' => 75.50,
+                'membres' => [[
+                    'livreur_id' => null,
+                    'nom_complet' => 'Mamadou Diallo',
+                    'telephone' => '+224620000001', 'role' => 'chauffeur',
+                    'montant_par_pack' => 24.50, 'ordre' => 0,
+                ]],
             ]))
-            ->assertStatus(422);
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $equipe = EquipeLivraison::where('organization_id', $this->org->id)
+            ->where('proprietaire_id', $proprietaire->id)
+            ->first();
+
+        $this->assertNotNull($equipe);
+        $this->assertEquals(75.50, (float) $equipe->taux_commission_proprietaire);
     }
 
-    public function test_store_echoue_si_somme_des_parts_inferieure_a_100(): void
+    public function test_store_echoue_si_montants_depassent_commission(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $vehicule = $this->makeVehicule();
 
+        // proprietaire 80 + livreur 30 = 110 ≠ commission 100
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
                 'vehicule_id' => $vehicule->id,
+                'commission_unitaire_par_pack' => 100,
+                'montant_par_pack_proprietaire' => 80,
                 'membres' => [[
-                    'livreur_id' => null, 'nom_complet' => 'A',
+                    'livreur_id' => null,
+                    'nom_complet' => 'Mamadou Diallo',
                     'telephone' => '+224620000001', 'role' => 'chauffeur',
-                    'part_pourcentage' => 60, 'ordre' => 0,
+                    'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
             ]))
             ->assertStatus(422);
     }
 
-    public function test_store_accepte_une_part_par_membre_hors_bornes_rejetee(): void
+    public function test_store_echoue_si_montant_proprietaire_negatif(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $vehicule = $this->makeVehicule();
@@ -473,13 +489,30 @@ class EquipeLivraisonTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
                 'vehicule_id' => $vehicule->id,
+                'montant_par_pack_proprietaire' => -1,
+            ]))
+            ->assertSessionHasErrors('montant_par_pack_proprietaire');
+    }
+
+    public function test_store_echoue_si_total_montants_different_de_commission(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule();
+
+        // propriétaire 60 + livreur 30 = 90 ≠ commission 100 → doit échouer
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'vehicule_id' => $vehicule->id,
+                'commission_unitaire_par_pack' => 100,
+                'montant_par_pack_proprietaire' => 60,
                 'membres' => [[
-                    'livreur_id' => null, 'nom_complet' => 'A',
+                    'livreur_id' => null,
+                    'nom_complet' => 'Mamadou Diallo',
                     'telephone' => '+224620000001', 'role' => 'chauffeur',
-                    'part_pourcentage' => 150, 'ordre' => 0,
+                    'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
             ]))
-            ->assertSessionHasErrors('membres.0.part_pourcentage');
+            ->assertStatus(422);
     }
 
     public function test_store_echoue_sans_membre(): void
@@ -510,7 +543,7 @@ class EquipeLivraisonTest extends TestCase
                     'livreur_id' => null,
                     'nom_complet' => 'Ibrahima Barry',
                     'telephone' => '+224620000002', 'role' => 'chauffeur',
-                    'part_pourcentage' => 100, 'ordre' => 0,
+                    'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
             ]))
             ->assertSessionHasErrors('vehicule_id');
@@ -540,7 +573,7 @@ class EquipeLivraisonTest extends TestCase
                     'livreur_id' => null,
                     'nom_complet' => 'Mamadou Diallo',
                     'telephone' => '+224620000002', 'role' => 'chauffeur',
-                    'part_pourcentage' => 100, 'ordre' => 0,
+                    'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
             ]))
             ->assertRedirectContains('/backoffice/vehicules/');
@@ -566,7 +599,7 @@ class EquipeLivraisonTest extends TestCase
                     'nom_complet' => 'Mamadou Diallo',
                     'telephone' => '+224620000001',
                     'role' => 'chauffeur',
-                    'part_pourcentage' => 100, 'ordre' => 0,
+                    'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
             ]))
             ->assertSessionHasErrors('membres.0.telephone');
@@ -609,7 +642,7 @@ class EquipeLivraisonTest extends TestCase
                     'livreur_id' => null,
                     'nom_complet' => 'Ibrahima Barry',
                     'telephone' => '+224620000002', 'role' => 'chauffeur',
-                    'part_pourcentage' => 100, 'ordre' => 0,
+                    'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
             ]))
             ->assertRedirectContains('/backoffice/vehicules/');
@@ -627,13 +660,13 @@ class EquipeLivraisonTest extends TestCase
                     'nom_complet' => 'Mamadou Diallo',
                     'telephone' => '+224620000001',
                     'role' => 'chauffeur',
-                    'part_pourcentage' => 100, 'ordre' => 0,
+                    'montant_par_pack' => 30, 'ordre' => 0,
                 ]],
             ]))
             ->assertSessionHasErrors('membres.0.telephone');
     }
 
-    // ── update ────────────────────────────────────────────────────────────────
+    // ── update (LEGACY) ──────────────────────────────────────────────────────
 
     public function test_update_modifie_equipe_et_redirige(): void
     {
@@ -646,11 +679,13 @@ class EquipeLivraisonTest extends TestCase
         $this->actingAs($this->user)
             ->patch(route('equipes-livraison.update', $equipe), $this->validPayload($nouveauProprietaire->id, [
                 'vehicule_id' => $vehicule->id,
+                'commission_unitaire_par_pack' => 100,
+                'montant_par_pack_proprietaire' => 55,
                 'membres' => [[
                     'livreur_id' => null,
                     'nom_complet' => 'Mamadou Diallo',
                     'telephone' => '+224620000001', 'role' => 'chauffeur',
-                    'part_pourcentage' => 100, 'ordre' => 0,
+                    'montant_par_pack' => 45, 'ordre' => 0,
                 ]],
             ]))
             ->assertRedirectContains('/backoffice/vehicules/');
@@ -659,29 +694,8 @@ class EquipeLivraisonTest extends TestCase
             'id' => $equipe->id,
             'proprietaire_id' => $nouveauProprietaire->id,
             'vehicule_id' => $vehicule->id,
+            'taux_commission_proprietaire' => 55,
         ]);
-        $this->assertDatabaseHas('equipe_livreurs', [
-            'equipe_id' => $equipe->id,
-            'taux_commission' => 100,
-        ]);
-    }
-
-    public function test_update_ne_modifie_jamais_taux_commission_proprietaire_legacy(): void
-    {
-        // Gel volontaire (Phase 2) : la valeur pré-existante (60, cf. makeEquipe())
-        // reste inchangée après une modification via ce contrôleur.
-        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
-        $equipe = $this->makeEquipe($proprietaire->id);
-        $vehicule = $this->makeVehicule($proprietaire->id);
-
-        $this->actingAs($this->user)
-            ->patch(route('equipes-livraison.update', $equipe), $this->validPayload($proprietaire->id, [
-                'vehicule_id' => $vehicule->id,
-            ]))
-            ->assertRedirectContains('/backoffice/vehicules/');
-
-        $equipe->refresh();
-        $this->assertEquals(60.0, (float) $equipe->taux_commission_proprietaire);
     }
 
     public function test_update_ignore_un_proprietaire_id_dune_autre_organisation_envoye_par_le_client(): void
@@ -715,6 +729,187 @@ class EquipeLivraisonTest extends TestCase
             ->assertRedirect(route('equipes-livraison.index'));
 
         $this->assertSoftDeleted('equipes_livraison', ['id' => $equipe->id]);
+    }
+
+    // ── V2 (commission_processus "vente" ACTIF) ─────────────────────────────
+
+    private function activerV2(): void
+    {
+        CommissionProcessus::create([
+            'organization_id' => $this->org->id,
+            'code' => CommissionProcessus::CODE_VENTE,
+            'libelle' => 'Vente',
+            'declencheur' => 'chargement_valide',
+            'strategie_ancrage_site' => CommissionStrategieAncrageSite::OPERATION->value,
+            'statut' => CommissionActivationStatut::ACTIF->value,
+        ]);
+    }
+
+    private function validPayloadV2(array $overrides = []): array
+    {
+        return array_merge([
+            'is_active' => true,
+            'membres' => [
+                [
+                    'livreur_id' => null,
+                    'nom_complet' => 'Mamadou Diallo',
+                    'telephone' => '+224620000001',
+                    'role' => 'chauffeur',
+                    'part_pourcentage' => 100,
+                    'ordre' => 0,
+                ],
+            ],
+        ], $overrides);
+    }
+
+    public function test_v2_store_creates_equipe_sans_alimenter_les_champs_legacy(): void
+    {
+        $this->activerV2();
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($proprietaire->id);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayloadV2(['vehicule_id' => $vehicule->id]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $equipe = EquipeLivraison::where('organization_id', $this->org->id)->firstOrFail();
+
+        $this->assertDatabaseHas('equipe_livreurs', [
+            'equipe_id' => $equipe->id,
+            'taux_commission' => 100,
+        ]);
+        // Jamais alimentés pour une organisation V2 : le propriétaire vient du
+        // barème (Paramètres → Commissions), pas de ce contrôleur.
+        $this->assertSame(0.0, (float) $equipe->commission_unitaire_par_pack);
+        $this->assertNull($equipe->montant_par_pack_proprietaire);
+        $this->assertNull($equipe->taux_commission_proprietaire);
+    }
+
+    public function test_v2_store_derive_toujours_le_proprietaire_depuis_le_vehicule(): void
+    {
+        $this->activerV2();
+        $vraiProprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($vraiProprietaire->id);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayloadV2(['vehicule_id' => $vehicule->id]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $this->assertDatabaseHas('equipes_livraison', [
+            'vehicule_id' => $vehicule->id,
+            'proprietaire_id' => $vraiProprietaire->id,
+        ]);
+    }
+
+    public function test_v2_store_creates_equipe_avec_plusieurs_livreurs_partage_100_pourcent(): void
+    {
+        $this->activerV2();
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($proprietaire->id);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayloadV2([
+                'vehicule_id' => $vehicule->id,
+                'membres' => [
+                    [
+                        'livreur_id' => null, 'nom_complet' => 'Mamadou Diallo',
+                        'telephone' => '+224620000001', 'role' => 'chauffeur',
+                        'part_pourcentage' => 60, 'ordre' => 0,
+                    ],
+                    [
+                        'livreur_id' => null, 'nom_complet' => 'Ibrahima Barry',
+                        'telephone' => '+224620000002', 'role' => 'convoyeur',
+                        'part_pourcentage' => 40, 'ordre' => 1,
+                    ],
+                ],
+            ]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $this->assertDatabaseHas('equipe_livreurs', ['taux_commission' => 60]);
+        $this->assertDatabaseHas('equipe_livreurs', ['taux_commission' => 40]);
+    }
+
+    public function test_v2_store_echoue_si_somme_des_parts_depasse_100(): void
+    {
+        $this->activerV2();
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($proprietaire->id);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayloadV2([
+                'vehicule_id' => $vehicule->id,
+                'membres' => [
+                    [
+                        'livreur_id' => null, 'nom_complet' => 'A',
+                        'telephone' => '+224620000001', 'role' => 'chauffeur',
+                        'part_pourcentage' => 70, 'ordre' => 0,
+                    ],
+                    [
+                        'livreur_id' => null, 'nom_complet' => 'B',
+                        'telephone' => '+224620000002', 'role' => 'convoyeur',
+                        'part_pourcentage' => 50, 'ordre' => 1,
+                    ],
+                ],
+            ]))
+            ->assertStatus(422);
+    }
+
+    public function test_v2_store_echoue_si_somme_des_parts_inferieure_a_100(): void
+    {
+        $this->activerV2();
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($proprietaire->id);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayloadV2([
+                'vehicule_id' => $vehicule->id,
+                'membres' => [[
+                    'livreur_id' => null, 'nom_complet' => 'A',
+                    'telephone' => '+224620000001', 'role' => 'chauffeur',
+                    'part_pourcentage' => 60, 'ordre' => 0,
+                ]],
+            ]))
+            ->assertStatus(422);
+    }
+
+    public function test_v2_store_rejette_une_part_par_membre_hors_bornes(): void
+    {
+        $this->activerV2();
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($proprietaire->id);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayloadV2([
+                'vehicule_id' => $vehicule->id,
+                'membres' => [[
+                    'livreur_id' => null, 'nom_complet' => 'A',
+                    'telephone' => '+224620000001', 'role' => 'chauffeur',
+                    'part_pourcentage' => 150, 'ordre' => 0,
+                ]],
+            ]))
+            ->assertSessionHasErrors('membres.0.part_pourcentage');
+    }
+
+    public function test_v2_update_conserve_les_champs_legacy_a_leur_valeur_par_defaut(): void
+    {
+        $this->activerV2();
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($proprietaire->id);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayloadV2(['vehicule_id' => $vehicule->id]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $equipe = EquipeLivraison::where('organization_id', $this->org->id)->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->patch(route('equipes-livraison.update', $equipe), $this->validPayloadV2(['vehicule_id' => $vehicule->id]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $equipe->refresh();
+        $this->assertSame(0.0, (float) $equipe->commission_unitaire_par_pack);
+        $this->assertNull($equipe->montant_par_pack_proprietaire);
+        $this->assertNull($equipe->taux_commission_proprietaire);
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

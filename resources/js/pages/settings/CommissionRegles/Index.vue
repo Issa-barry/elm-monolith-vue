@@ -162,22 +162,30 @@ function formatMontant(m: Montant | null): string {
                                     class="group flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted"
                                     @click="openEdit(data, cible)"
                                 >
-                                    <span
-                                        :class="[
-                                            data.montants[cible.code]
-                                                ? 'font-medium'
-                                                : 'text-muted-foreground',
-                                        ]"
-                                    >
-                                        {{
-                                            formatMontant(
-                                                data.montants[cible.code],
-                                            )
-                                        }}
-                                    </span>
-                                    <Pencil
-                                        class="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100"
-                                    />
+                                    <template v-if="data.montants[cible.code]">
+                                        <span class="font-medium">
+                                            {{
+                                                formatMontant(
+                                                    data.montants[cible.code],
+                                                )
+                                            }}
+                                        </span>
+                                        <Pencil
+                                            class="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100"
+                                        />
+                                    </template>
+                                    <template v-else>
+                                        <span
+                                            class="text-muted-foreground group-hover:hidden"
+                                            >—</span
+                                        >
+                                        <span
+                                            class="hidden items-center gap-1 text-sm font-medium text-primary group-hover:flex"
+                                        >
+                                            <Plus class="h-3.5 w-3.5" />
+                                            Définir
+                                        </span>
+                                    </template>
                                 </button>
                             </template>
                         </Column>

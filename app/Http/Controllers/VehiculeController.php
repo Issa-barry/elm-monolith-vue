@@ -12,6 +12,7 @@ use App\Models\CommissionRegle;
 use App\Models\Depense;
 use App\Models\EquipeLivreur;
 use App\Models\Parametre;
+use App\Services\Commission\MoteurCommissionResolver;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TypeVehicule;
@@ -320,6 +321,10 @@ class VehiculeController extends Controller
             'default_proprietaire_id' => Proprietaire::interneParDefautId($vehicule->organization_id),
             'seuil_global_impayes' => Parametre::getVentesSeuilImpayesMax($vehicule->organization_id),
             'bareme_commission' => $this->baremeCommissionActuel($vehicule->organization_id),
+            // Source de vérité UNIQUE (cf. MoteurCommissionResolver) — jamais déduite
+            // localement dans la popup : une organisation "legacy" garde l'ancienne
+            // UX à l'identique, une organisation "v2" bascule sur la nouvelle.
+            'moteur_commission' => MoteurCommissionResolver::estV2($vehicule->organization_id) ? 'v2' : 'legacy',
         ]);
     }
 

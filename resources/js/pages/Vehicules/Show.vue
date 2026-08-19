@@ -115,6 +115,7 @@ const props = defineProps<{
     default_proprietaire_id: string | null;
     seuil_global_impayes: number;
     bareme_commission: { proprietaire: number | null; livraison: number | null };
+    moteur_commission: 'legacy' | 'v2';
 }>();
 
 const { can } = usePermissions();
@@ -908,5 +909,6 @@ function toggleDerogation() {
         :equipe="equipe"
         :proprietaires="proprietaires"
         :bareme-commission="bareme_commission"
+        :moteur-commission="moteur_commission"
     />
 </template>

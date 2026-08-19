@@ -28,12 +28,14 @@ use InvalidArgumentException;
 
 /**
  * Moteur générique de génération d'enveloppes — nouveau schéma parallèle
- * (cf. conception cible §B). Point d'entrée à appeler UNIQUEMENT après le
- * commit de l'opération métier qui déclenche la génération (encaissement,
- * réception...), jamais à l'intérieur de sa transaction : chaque méthode
- * publique ouvre sa PROPRE transaction, isolée, et n'échoue jamais de façon à
- * faire annuler l'opération appelante (décision AMOA #2, round 2 — cf. §0.1.2
- * de la conception cible).
+ * (cf. conception cible §B). Chaque méthode publique ouvre sa PROPRE
+ * transaction, isolée, et n'échoue jamais de façon à faire annuler l'opération
+ * appelante : toute erreur est interceptée et tracée dans
+ * commission_generation_attempts, jamais relancée vers l'appelant (décision
+ * AMOA #2, round 2 — cf. §0.1.2 de la conception cible). Cette isolation rend
+ * l'appel sans risque même imbriqué dans la transaction métier déclenchante
+ * (chargement, encaissement...) — appelé en tout dernier, une fois toutes les
+ * écritures métier de l'opération faites.
  *
  * Deux voies de génération coexistent :
  *  - `genererPourCommandeVente()` — la voie RÉELLE (Phase 2+), barèmes fixes
@@ -44,10 +46,10 @@ use InvalidArgumentException;
  *    l'ancien moteur). Ne jamais l'exposer comme une option métier, ne jamais
  *    l'appeler depuis un nouveau code.
  *
- * Volontairement PAS encore branché sur le déclencheur réel
- * (CommissionTriggerService / EncaissementVente) : le nouveau moteur reste
- * inerte pour toutes les organisations tant qu'aucun `commission_processus`
- * n'a été activé pour elles.
+ * Branché sur le déclencheur réel via CommissionTriggerService::genererCommissionVente(),
+ * qui bascule vers `genererPourCommandeVente()` uniquement pour les organisations
+ * ayant explicitement activé leur `commission_processus` (cf. MoteurCommissionResolver) —
+ * inerte pour toutes les autres.
  */
 class CommissionEnveloppeGenerator
 {
