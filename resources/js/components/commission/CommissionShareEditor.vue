@@ -20,11 +20,30 @@ export interface CommissionShareMembre {
     part_pourcentage: number;
 }
 
-const props = defineProps<{
-    modelValue: CommissionShareMembre[];
-    enveloppeMontant: number | null;
-    readonly?: boolean;
-}>();
+/**
+ * Ligne informative non éditable affichée AVANT les bénéficiaires du partage
+ * (ex : le propriétaire d'un véhicule, dont le montant vient directement d'un
+ * autre barème et ne participe jamais au partage à 100 % ci-dessous) — garde
+ * le repère visuel d'un tableau unique "tous les bénéficiaires", sans jamais
+ * entrer dans le calcul du total/de la validité du partage.
+ */
+export interface CommissionShareReadonlyRow {
+    badge?: string;
+    label: string;
+    montant: number | null;
+    pct: number | null;
+}
+
+const props = withDefaults(
+    defineProps<{
+        modelValue: CommissionShareMembre[];
+        enveloppeMontant: number | null;
+        readonly?: boolean;
+        readonlyRow?: CommissionShareReadonlyRow | null;
+        totalLabel?: string;
+    }>(),
+    { totalLabel: 'Total' },
+);
 
 const emit = defineEmits<{
     'update:modelValue': [CommissionShareMembre[]];
@@ -99,6 +118,10 @@ const valide = computed(
     () => props.modelValue.length > 0 && Math.abs(total.value - 100) < 0.01,
 );
 
+function formatMontantReadonly(montant: number | null): string {
+    return montant === null ? '—' : `${new Intl.NumberFormat('fr-FR').format(montant)} GNF`;
+}
+
 defineExpose({ valide });
 </script>
 
@@ -125,6 +148,30 @@ defineExpose({ valide });
                 </tr>
             </thead>
             <tbody>
+                <!-- Ligne informative (ex: propriétaire) — jamais éditable, jamais
+                     comptée dans le total/la validité du partage ci-dessous. -->
+                <tr v-if="readonlyRow" class="border-b bg-primary/5">
+                    <td class="px-3 py-2 text-sm">
+                        <span
+                            v-if="readonlyRow.badge"
+                            class="mr-1.5 inline-flex items-center rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold tracking-wide text-primary-foreground uppercase"
+                            >{{ readonlyRow.badge }}</span
+                        >
+                        <span class="font-medium text-primary">{{
+                            readonlyRow.label
+                        }}</span>
+                    </td>
+                    <td class="px-3 py-2 text-right font-mono text-sm">
+                        {{ formatMontantReadonly(readonlyRow.montant) }}
+                    </td>
+                    <td class="px-3 py-2 text-right font-mono text-sm">
+                        {{
+                            readonlyRow.pct !== null
+                                ? `${readonlyRow.pct} %`
+                                : '—'
+                        }}
+                    </td>
+                </tr>
                 <tr
                     v-for="m in modelValue"
                     :key="m.id"
@@ -167,7 +214,9 @@ defineExpose({ valide });
             </tbody>
             <tfoot>
                 <tr class="border-t bg-muted/20">
-                    <td class="px-3 py-2.5 text-sm font-semibold">Total</td>
+                    <td class="px-3 py-2.5 text-sm font-semibold">
+                        {{ totalLabel }}
+                    </td>
                     <td
                         class="px-3 py-2.5 text-right font-mono text-sm font-semibold"
                         :class="valide ? 'text-emerald-600' : 'text-destructive'"

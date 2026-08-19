@@ -173,6 +173,19 @@ const partProprietaireDuBareme = computed(() => {
     return parseFloat(((p / (p + l)) * 100).toFixed(2));
 });
 
+// V2 uniquement — ligne informative du propriétaire au sein du même tableau
+// que les livreurs (repère visuel conservé de l'ancienne popup), jamais
+// éditable ici et jamais comptée dans le partage à 100 % des livreurs.
+const proprietaireReadonlyRow = computed(() => {
+    if (!hasProprietaire.value) return null;
+    return {
+        badge: 'PROPRIÉTAIRE',
+        label: proprietaireNom.value ?? '—',
+        montant: montantProprietaire.value,
+        pct: partProprietaireDuBareme.value,
+    };
+});
+
 // ── Init ────────────────────────────────────────────────────────────────────
 
 watch(
@@ -1022,6 +1035,8 @@ const hasStep1Errors = computed(() =>
             <CommissionShareEditor
                 :model-value="partageMembres"
                 :enveloppe-montant="montantLivraison"
+                :readonly-row="proprietaireReadonlyRow"
+                total-label="Total Livraison"
                 @update:model-value="onPartageUpdate"
             />
         </div>

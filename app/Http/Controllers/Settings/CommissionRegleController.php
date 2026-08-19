@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Settings;
 use App\Enums\CommissionActivationStatut;
 use App\Enums\CommissionMode;
 use App\Enums\CommissionRegleStatut;
-use App\Enums\CommissionScopeType;
 use App\Enums\CommissionStrategieAncrageSite;
 use App\Enums\CommissionUniteCalcul;
 use App\Http\Controllers\Controller;
@@ -14,6 +13,7 @@ use App\Models\Categorie;
 use App\Models\CommissionCibleType;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
+use App\Models\Parametre;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
@@ -110,7 +110,7 @@ class CommissionRegleController extends Controller
             ['organization_id' => $orgId, 'code' => CommissionProcessus::CODE_VENTE],
             [
                 'libelle' => 'Vente',
-                'declencheur' => \App\Models\Parametre::getDeclencheurCommissionVente($orgId)->value,
+                'declencheur' => Parametre::getDeclencheurCommissionVente($orgId)->value,
                 'strategie_ancrage_site' => CommissionStrategieAncrageSite::OPERATION->value,
                 'statut' => CommissionActivationStatut::INACTIF->value,
             ],

@@ -3,13 +3,14 @@
 namespace Tests\Feature;
 
 use App\Enums\CommissionActivationStatut;
+use App\Enums\CommissionGenerationStatut;
 use App\Enums\CommissionMode;
 use App\Enums\CommissionScopeType;
 use App\Enums\CommissionStrategieAncrageSite;
 use App\Enums\CommissionUniteCalcul;
 use App\Enums\StatutCommandeVente;
-use App\Models\CommandeVente;
 use App\Models\Categorie;
+use App\Models\CommandeVente;
 use App\Models\CommissionCibleType;
 use App\Models\CommissionEnveloppe;
 use App\Models\CommissionEnveloppeLigne;
@@ -263,7 +264,7 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
         $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commande->id]);
 
         $tentative = CommissionGenerationAttempt::where('source_id', $commande->id)->firstOrFail();
-        $this->assertEquals(\App\Enums\CommissionGenerationStatut::SUCCES, $tentative->statut, 'Absence de règle = succès avec zéro enveloppe, jamais une erreur.');
+        $this->assertEquals(CommissionGenerationStatut::SUCCES, $tentative->statut, 'Absence de règle = succès avec zéro enveloppe, jamais une erreur.');
     }
 
     // ── Groupe invalide bloque toute la génération (tout ou rien) ───────────
@@ -291,6 +292,6 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
         $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commande->id]);
 
         $tentative = CommissionGenerationAttempt::where('source_id', $commande->id)->firstOrFail();
-        $this->assertEquals(\App\Enums\CommissionGenerationStatut::ERREUR, $tentative->statut);
+        $this->assertEquals(CommissionGenerationStatut::ERREUR, $tentative->statut);
     }
 }

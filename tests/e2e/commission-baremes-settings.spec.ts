@@ -74,6 +74,10 @@ test('le champ montant bloque les caractères non numériques à la frappe et au
     await expect(dialog).toBeVisible({ timeout: 5_000 });
     const montantInput = dialog.locator('#cr-montant');
 
+    // Champ potentiellement déjà pré-rempli (règle existante réutilisée d'un
+    // run précédent) — repartir d'un champ vide avant de taper.
+    await montantInput.fill('');
+
     // Frappe caractère par caractère (pressSequentially déclenche de vrais
     // événements keydown, contrairement à fill()) : seuls les chiffres
     // doivent apparaître, le reste bloqué avant même d'entrer dans le champ.
