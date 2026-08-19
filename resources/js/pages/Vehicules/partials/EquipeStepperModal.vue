@@ -86,19 +86,16 @@ interface LignePartage {
     taux: number;
 }
 
-interface BaremeCommission {
-    proprietaire: number | null;
-    livraison: number | null;
-}
-
-/** V2 uniquement — barème Livraison résolu pour une catégorie (cf. conception
- * cible : les barèmes Livraison varient par catégorie, donc le partage entre
- * livreurs est lui aussi défini par catégorie, jamais un seul pourcentage
- * valable pour toute la commande). */
-interface BaremeLivraisonCategorie {
+/** V2 uniquement — barème Propriétaire ET Livraison résolus pour une
+ * catégorie (cf. conception cible : les barèmes varient par catégorie, donc
+ * ni un montant Propriétaire unique ni un partage Livraison unique ne sont
+ * valables pour tout le véhicule — jamais de montant global blended). Une
+ * catégorie n'apparaît ici que si au moins un des deux montants est > 0. */
+interface BaremeCommissionCategorie {
     categorie_id: string;
     categorie_nom: string;
-    montant: number;
+    montant_proprietaire: number;
+    montant_livraison: number;
 }
 
 const props = defineProps<{
@@ -107,8 +104,7 @@ const props = defineProps<{
     equipe: EquipeExistante | null;
     proprietaires: ProprietaireOption[];
     moteurCommission: 'legacy' | 'v2';
-    baremeCommission: BaremeCommission;
-    baremesLivraisonCategories: BaremeLivraisonCategorie[];
+    baremesCommissionCategories: BaremeCommissionCategorie[];
 }>();
 
 const emit = defineEmits<{
@@ -167,25 +163,13 @@ const stepTitle = computed(() =>
     props.equipe ? "Modifier l'équipe" : "Configurer l'équipe",
 );
 
-// V2 uniquement — commission propriétaire : montant fixe du barème (Paramètres →
-// Commissions), jamais saisi ici : le propriétaire ne participe plus au partage
-// des livreurs (décision AMOA #1 — deux enveloppes distinctes, plus un pot commun).
-const montantProprietaire = computed(() => props.baremeCommission.proprietaire);
-// V2 uniquement — montant Livraison : sert de référence pour la saisie Montant/%
-// des livreurs, le montant réel dépend de la catégorie vendue à chaque vente
-// (cf. conception cible §0.2.2/§0.3).
-const montantLivraison = computed(() => props.baremeCommission.livraison);
-
-// V2 uniquement — poids informatif du propriétaire dans le total des deux
-// barèmes affichés — dénominateur différent de la part des livreurs dans
-// l'enveloppe Livraison (cf. conception cible §0.3.2, ne jamais confondre les
-// deux pourcentages).
-const partProprietaireDuBareme = computed(() => {
-    const p = montantProprietaire.value;
-    const l = montantLivraison.value;
-    if (p === null || l === null || p + l <= 0) return null;
-    return parseFloat(((p / (p + l)) * 100).toFixed(2));
-});
+// V2 uniquement — sous-ensemble des catégories nécessitant réellement un
+// partage entre livreurs (Livraison > 0). Une catégorie où seul le
+// Propriétaire a un barème positif reste affichée (cf. baremesCommissionCategories),
+// mais sans tableau de répartition : rien à partager entre livreurs pour elle.
+const categoriesAvecPartageLivraison = computed(() =>
+    props.baremesCommissionCategories.filter((c) => c.montant_livraison > 0),
+);
 
 // ── Init ────────────────────────────────────────────────────────────────────
 
@@ -464,7 +448,7 @@ function initPartagesParCategorie() {
     const labels = membreLabels();
     const result: Record<string, CommissionShareMembre[]> = {};
 
-    for (const cat of props.baremesLivraisonCategories) {
+    for (const cat of categoriesAvecPartageLivraison.value) {
         const existant = props.equipe?.partages_categorie?.find(
             (pc) => pc.categorie_id === cat.categorie_id,
         );
@@ -518,11 +502,13 @@ const partageValide = computed(() => {
             Math.abs(totalPartage.value - commission.value) < 0.01
         );
     }
-    // V2 : CHAQUE catégorie ayant un barème Livraison doit totaliser 100 % —
-    // aucune n'est facultative, jamais une répartition égale déduite pour
-    // celle qu'on aurait oublié de configurer.
-    if (props.baremesLivraisonCategories.length === 0) return false;
-    return props.baremesLivraisonCategories.every((cat) => {
+    // V2 : CHAQUE catégorie ayant un barème Livraison > 0 doit totaliser
+    // 100 % — aucune n'est facultative, jamais une répartition égale déduite
+    // pour celle qu'on aurait oublié de configurer. Les catégories où seul le
+    // Propriétaire a un barème positif sont exclues : rien à répartir entre
+    // livreurs pour elles. Si la liste est vide, il n'y a simplement rien à
+    // répartir — équipe valide.
+    return categoriesAvecPartageLivraison.value.every((cat) => {
         const parts = partagesParCategorie.value[cat.categorie_id] ?? [];
         const total = parts.reduce((s, p) => s + (p.part_pourcentage || 0), 0);
         return parts.length > 0 && Math.abs(total - 100) < 0.01;
@@ -576,13 +562,15 @@ function montantEstimeCategorie(
     categorieId: string,
     membreIndex: number,
 ): string {
-    const cat = props.baremesLivraisonCategories.find(
+    const cat = categoriesAvecPartageLivraison.value.find(
         (c) => c.categorie_id === categorieId,
     );
     const part = partagesParCategorie.value[categorieId]?.[membreIndex];
     if (!cat || !part) return '—';
 
-    const montant = Math.round((part.part_pourcentage / 100) * cat.montant);
+    const montant = Math.round(
+        (part.part_pourcentage / 100) * cat.montant_livraison,
+    );
     return `${formatGNF(montant)} • ${part.part_pourcentage} %`;
 }
 
@@ -624,7 +612,7 @@ function buildPayload() {
             role: m.role,
             ordre: i,
         })),
-        partages_categorie: props.baremesLivraisonCategories.map((cat) => ({
+        partages_categorie: categoriesAvecPartageLivraison.value.map((cat) => ({
             categorie_id: cat.categorie_id,
             parts: (partagesParCategorie.value[cat.categorie_id] ?? []).map(
                 (p) => ({
@@ -1062,44 +1050,24 @@ const hasStep1Errors = computed(() =>
             </p>
         </div>
 
-        <!-- ── Étape 2 (V2) : Partage livreurs PAR CATÉGORIE ───────────────── -->
+        <!-- ── Étape 2 (V2) : Barèmes + partage livreurs PAR CATÉGORIE ─────── -->
         <div v-else-if="step === 2" class="space-y-5">
-            <!-- Propriétaire — montant indicatif, jamais éditable ici (issu du
-                 barème global Paramètres → Commissions, hors partage) -->
+            <!-- Chaque catégorie a son propre barème Propriétaire ET Livraison
+                 (Paramètres → Commissions) — jamais un montant global blended.
+                 Le Propriétaire reste toujours informatif et non modifiable ici ;
+                 un tableau de répartition n'apparaît que si Livraison > 0 pour
+                 cette catégorie (rien à partager sinon). -->
             <div
-                v-if="hasProprietaire"
-                class="rounded-lg border bg-primary/5 p-3"
-            >
-                <p
-                    class="text-xs font-medium tracking-wider text-muted-foreground uppercase"
-                >
-                    Propriétaire — {{ proprietaireNom }}
-                </p>
-                <p class="mt-1 text-sm font-semibold text-primary">
-                    {{ formatGNF(montantProprietaire) }}
-                    <span
-                        v-if="partProprietaireDuBareme !== null"
-                        class="font-normal text-muted-foreground"
-                    >
-                        • {{ partProprietaireDuBareme }} %</span
-                    >
-                </p>
-                <p class="mt-1 text-xs text-muted-foreground">
-                    Hors partage — vient du barème Propriétaire, jamais
-                    modifiable ici.
-                </p>
-            </div>
-
-            <div
-                v-if="baremesLivraisonCategories.length === 0"
+                v-if="baremesCommissionCategories.length === 0"
                 class="rounded-lg border border-dashed py-8 text-center text-sm text-muted-foreground"
             >
-                Aucun barème Livraison configuré. Définissez-en un dans
-                Paramètres → Commissions avant de configurer le partage.
+                Aucun barème de commission actif pour ce véhicule (Propriétaire
+                et Livraison à 0 GNF ou non configurés dans Paramètres →
+                Commissions).
             </div>
 
             <div
-                v-for="cat in baremesLivraisonCategories"
+                v-for="cat in baremesCommissionCategories"
                 :key="cat.categorie_id"
                 class="space-y-2"
             >
@@ -1109,17 +1077,36 @@ const hasStep1Errors = computed(() =>
                     >
                         {{ cat.categorie_nom }}
                     </p>
+                    <p
+                        v-if="hasProprietaire"
+                        class="mt-1 text-sm font-semibold text-primary"
+                    >
+                        {{ formatGNF(cat.montant_proprietaire) }}
+                        <span class="font-normal text-muted-foreground"
+                            >/ unité — Propriétaire ({{
+                                proprietaireNom
+                            }})</span
+                        >
+                    </p>
                     <p class="mt-1 text-sm font-semibold">
-                        {{ formatGNF(cat.montant) }}
+                        {{ formatGNF(cat.montant_livraison) }}
                         <span class="font-normal text-muted-foreground"
                             >/ unité — Livraison</span
                         >
                     </p>
+                    <p
+                        v-if="cat.montant_livraison <= 0"
+                        class="mt-1 text-xs text-muted-foreground"
+                    >
+                        Aucune répartition livreurs nécessaire pour cette
+                        catégorie.
+                    </p>
                 </div>
 
                 <CommissionShareEditor
+                    v-if="cat.montant_livraison > 0"
                     :model-value="partagesParCategorie[cat.categorie_id] ?? []"
-                    :enveloppe-montant="cat.montant"
+                    :enveloppe-montant="cat.montant_livraison"
                     @update:model-value="
                         (list) =>
                             onPartageCategorieUpdate(cat.categorie_id, list)
@@ -1236,57 +1223,42 @@ const hasStep1Errors = computed(() =>
                     </p>
                 </div>
 
-                <!-- Propriétaire — montant + % informatif, jamais éditable ici -->
-                <div
-                    v-if="hasProprietaire && proprietaireNom"
-                    class="rounded-lg border bg-muted/30 p-3"
-                >
-                    <p
-                        class="text-xs font-medium tracking-wider text-muted-foreground uppercase"
-                    >
-                        Propriétaire
-                    </p>
-                    <p class="mt-1 text-sm font-semibold">
-                        {{ proprietaireNom }}
-                    </p>
-                    <p class="text-xs text-muted-foreground">
-                        {{ formatGNF(montantProprietaire) }}
-                        <span v-if="partProprietaireDuBareme !== null">
-                            • {{ partProprietaireDuBareme }} %</span
-                        >
-                    </p>
-                </div>
-
                 <div class="rounded-lg border bg-muted/30 p-3">
                     <p
                         class="text-xs font-medium tracking-wider text-muted-foreground uppercase"
                     >
-                        Catégories Livraison
+                        Catégories
                     </p>
                     <p class="mt-1 text-sm font-semibold">
-                        {{ baremesLivraisonCategories.length }}
+                        {{ baremesCommissionCategories.length }}
                     </p>
                 </div>
             </div>
 
             <div
-                v-for="cat in baremesLivraisonCategories"
+                v-for="cat in baremesCommissionCategories"
                 :key="cat.categorie_id"
                 class="overflow-hidden rounded-lg border"
             >
-                <div
-                    class="flex items-center justify-between border-b bg-muted/30 px-4 py-2.5"
-                >
+                <div class="border-b bg-muted/30 px-4 py-2.5">
                     <p
                         class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
                     >
                         {{ cat.categorie_nom }}
                     </p>
-                    <p class="text-xs font-medium text-muted-foreground">
-                        {{ formatGNF(cat.montant) }} / unité
+                    <p
+                        v-if="hasProprietaire"
+                        class="mt-0.5 text-xs font-medium text-primary"
+                    >
+                        Propriétaire : {{ formatGNF(cat.montant_proprietaire) }}
+                        / unité
+                    </p>
+                    <p class="mt-0.5 text-xs font-medium text-muted-foreground">
+                        Livraison : {{ formatGNF(cat.montant_livraison) }} /
+                        unité
                     </p>
                 </div>
-                <table class="w-full text-sm">
+                <table v-if="cat.montant_livraison > 0" class="w-full text-sm">
                     <thead>
                         <tr
                             class="border-b text-left text-xs text-muted-foreground"
@@ -1322,6 +1294,9 @@ const hasStep1Errors = computed(() =>
                         </tr>
                     </tbody>
                 </table>
+                <p v-else class="px-4 py-2.5 text-xs text-muted-foreground">
+                    Aucune répartition livreurs pour cette catégorie.
+                </p>
             </div>
         </div>
 

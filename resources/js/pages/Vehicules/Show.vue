@@ -111,13 +111,16 @@ interface VehiculeData {
     type_seuil_derogation_impayes: number | null;
 }
 
-/** V2 uniquement — barème Livraison résolu par catégorie (cf. décision AMOA
- * post-Phase 2 : le partage entre livreurs est lui aussi défini par
- * catégorie, jamais un seul pourcentage valable pour toute la commande). */
-interface BaremeLivraisonCategorie {
+/** V2 uniquement — barème Propriétaire ET Livraison résolus par catégorie
+ * (cf. décision AMOA post-Phase 2 : ni un montant Propriétaire unique ni un
+ * partage Livraison unique ne sont valables pour tout le véhicule, chaque
+ * catégorie ayant son propre barème sur chaque cible). Seule source de
+ * vérité utilisée à la fois par cette fiche et par la popup équipe. */
+interface BaremeCommissionCategorie {
     categorie_id: string;
     categorie_nom: string;
-    montant: number;
+    montant_proprietaire: number;
+    montant_livraison: number;
 }
 
 const props = defineProps<{
@@ -127,11 +130,7 @@ const props = defineProps<{
     proprietaires: ProprietaireOption[];
     default_proprietaire_id: string | null;
     seuil_global_impayes: number;
-    bareme_commission: {
-        proprietaire: number | null;
-        livraison: number | null;
-    };
-    baremes_livraison_categories: BaremeLivraisonCategorie[];
+    baremes_commission_categories: BaremeCommissionCategorie[];
     moteur_commission: 'legacy' | 'v2';
 }>();
 
@@ -672,12 +671,17 @@ function toggleDerogation() {
 
                         <div v-else class="overflow-x-auto rounded-lg border">
                             <table class="w-full table-fixed text-sm">
-                                <colgroup>
+                                <colgroup v-if="moteur_commission === 'legacy'">
                                     <col class="w-1/5" />
                                     <col class="w-1/5" />
                                     <col class="w-1/5" />
                                     <col class="w-1/5" />
                                     <col class="w-1/5" />
+                                </colgroup>
+                                <colgroup v-else>
+                                    <col class="w-1/3" />
+                                    <col class="w-1/3" />
+                                    <col class="w-1/3" />
                                 </colgroup>
                                 <thead
                                     class="bg-muted/30 text-left text-muted-foreground"
@@ -692,14 +696,20 @@ function toggleDerogation() {
                                         <th class="px-4 py-3 font-medium">
                                             Rôle
                                         </th>
-                                        <th class="px-4 py-3 font-medium">
-                                            Montant / pack
-                                        </th>
-                                        <th
-                                            class="px-4 py-3 text-right font-medium"
+                                        <template
+                                            v-if="
+                                                moteur_commission === 'legacy'
+                                            "
                                         >
-                                            Commission
-                                        </th>
+                                            <th class="px-4 py-3 font-medium">
+                                                Montant / pack
+                                            </th>
+                                            <th
+                                                class="px-4 py-3 text-right font-medium"
+                                            >
+                                                Commission
+                                            </th>
+                                        </template>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y">
@@ -736,27 +746,40 @@ function toggleDerogation() {
                                                 >{{ m.role }}</span
                                             >
                                         </td>
-                                        <td class="px-4 py-3 font-mono text-sm">
-                                            {{
-                                                m.montant_par_pack.toLocaleString(
-                                                    'fr-FR',
-                                                )
-                                            }}
-                                            GNF
-                                        </td>
-                                        <td
-                                            class="px-4 py-3 text-right text-muted-foreground"
+                                        <template
+                                            v-if="
+                                                moteur_commission === 'legacy'
+                                            "
                                         >
-                                            {{ m.taux_commission }}%
-                                        </td>
+                                            <td
+                                                class="px-4 py-3 font-mono text-sm"
+                                            >
+                                                {{
+                                                    m.montant_par_pack.toLocaleString(
+                                                        'fr-FR',
+                                                    )
+                                                }}
+                                                GNF
+                                            </td>
+                                            <td
+                                                class="px-4 py-3 text-right text-muted-foreground"
+                                            >
+                                                {{ m.taux_commission }}%
+                                            </td>
+                                        </template>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
 
-                        <!-- Récap répartition -->
+                        <!-- Récap répartition (LEGACY) — un seul montant/pack valable
+                             pour tout le véhicule, notion héritée d'avant la V2. -->
                         <div
-                            v-if="equipe && vehicule.equipe_membres.length > 0"
+                            v-if="
+                                moteur_commission === 'legacy' &&
+                                equipe &&
+                                vehicule.equipe_membres.length > 0
+                            "
                             class="mt-2 rounded-lg border bg-muted/30 p-4"
                         >
                             <p
@@ -814,6 +837,70 @@ function toggleDerogation() {
                                     </p>
                                     <p class="text-xs text-muted-foreground">
                                         {{ tauxLivreurs }}%
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Barèmes de commission (V2) — un montant Propriétaire et un
+                             montant Livraison PAR CATÉGORIE, jamais un total blended :
+                             les barèmes peuvent différer d'une catégorie à l'autre
+                             (ex. Sachet = 300 GNF, Bouteille = 1000 GNF Livraison).
+                             Même source que la popup équipe (baremes_commission_categories). -->
+                        <div
+                            v-else-if="
+                                moteur_commission === 'v2' &&
+                                equipe &&
+                                vehicule.equipe_membres.length > 0
+                            "
+                            class="mt-2 space-y-2"
+                        >
+                            <p
+                                class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                            >
+                                Barèmes de commission
+                            </p>
+                            <div
+                                v-if="
+                                    baremes_commission_categories.length === 0
+                                "
+                                class="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground"
+                            >
+                                Aucun barème de commission actif pour ce
+                                véhicule.
+                            </div>
+                            <div
+                                v-for="cat in baremes_commission_categories"
+                                :key="cat.categorie_id"
+                                class="rounded-lg border bg-muted/30 p-3"
+                            >
+                                <p
+                                    class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                                >
+                                    {{ cat.categorie_nom }}
+                                </p>
+                                <div
+                                    class="mt-1 flex flex-wrap gap-x-6 gap-y-1"
+                                >
+                                    <p class="text-xs text-primary">
+                                        Propriétaire :
+                                        <span class="font-mono font-semibold">
+                                            {{
+                                                formatGNF(
+                                                    cat.montant_proprietaire,
+                                                )
+                                            }} </span
+                                        >/ unité
+                                    </p>
+                                    <p class="text-xs text-muted-foreground">
+                                        Livraison :
+                                        <span
+                                            class="font-mono font-semibold text-foreground"
+                                        >
+                                            {{
+                                                formatGNF(cat.montant_livraison)
+                                            }} </span
+                                        >/ unité
                                     </p>
                                 </div>
                             </div>
@@ -925,8 +1012,7 @@ function toggleDerogation() {
         }"
         :equipe="equipe"
         :proprietaires="proprietaires"
-        :bareme-commission="bareme_commission"
-        :baremes-livraison-categories="baremes_livraison_categories"
+        :baremes-commission-categories="baremes_commission_categories"
         :moteur-commission="moteur_commission"
     />
 </template>

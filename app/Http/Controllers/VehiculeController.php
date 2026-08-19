@@ -321,11 +321,11 @@ class VehiculeController extends Controller
             'proprietaires' => $this->proprietairesOptions(),
             'default_proprietaire_id' => Proprietaire::interneParDefautId($vehicule->organization_id),
             'seuil_global_impayes' => Parametre::getVentesSeuilImpayesMax($vehicule->organization_id),
-            'bareme_commission' => $this->baremeCommissionActuel($vehicule->organization_id),
-            // Barème Livraison PAR CATÉGORIE (V2) : une catégorie par bloc de partage
-            // dans la popup — jamais un seul montant blended (cf. décision AMOA
-            // post-Phase 2, les barèmes Livraison varient déjà par catégorie).
-            'baremes_livraison_categories' => $this->baremesLivraisonParCategorie($vehicule->organization_id),
+            // Barème Propriétaire + Livraison PAR CATÉGORIE (V2) — seule source de
+            // vérité utilisée à la fois par la popup équipe et par la fiche véhicule
+            // (cf. décision AMOA post-Phase 2 : plus de montant global blended, un
+            // barème par cible peut différer d'une catégorie à l'autre).
+            'baremes_commission_categories' => $this->baremesCommissionParCategorie($vehicule->organization_id),
             // Source de vérité UNIQUE (cf. MoteurCommissionResolver) — jamais déduite
             // localement dans la popup : une organisation "legacy" garde l'ancienne
             // UX à l'identique, une organisation "v2" bascule sur la nouvelle.
@@ -575,51 +575,24 @@ class VehiculeController extends Controller
     }
 
     /**
-     * Barème "Propriétaire" / "Livraison" actuellement configuré au niveau
-     * global (Paramètres → Commissions) — sert d'aperçu en lecture seule dans
-     * la popup équipe véhicule (montant Propriétaire, référence indicative
-     * pour la répartition Livraison). Null si aucun barème global n'existe
-     * encore pour la cible (décision AMOA #4 : absence de règle = rien à
-     * afficher, jamais une erreur).
+     * Barème Propriétaire ET Livraison résolus PAR CATÉGORIE (V2) — seule
+     * source de vérité utilisée à la fois par la fiche véhicule et par la
+     * popup équipe (remplace l'ancien baremeCommissionActuel(), qui ne lisait
+     * que le scope GLOBAL et affichait "0 GNF" dès qu'un barème n'existait
+     * qu'au niveau catégorie — cf. incident : Bouteille d'eau = 500 GNF
+     * Propriétaire configuré par catégorie, popup affichait pourtant "0 GNF").
+     * Catégorie exacte prioritaire sur la règle globale (même waterfall que
+     * CommissionRegleResolver, restreint au scope catégorie/global puisque la
+     * popup équipe ne connaît jamais de variante/produit précis à l'avance).
+     *
+     * Catégorie incluse dès qu'AU MOINS UN des deux montants résolus est
+     * strictement positif — les deux cibles sont indépendantes : Propriétaire
+     * peut être positif pendant que Livraison vaut 0 pour la même catégorie
+     * (et inversement), 0 GNF restant une valeur métier valide ("configuré,
+     * mais rien à distribuer sur cette cible"). Catégorie exclue seulement si
+     * les DEUX valent 0 : rien à afficher pour elle nulle part.
      */
-    private function baremeCommissionActuel(string $orgId): array
-    {
-        $processus = CommissionProcessus::where('organization_id', $orgId)
-            ->where('code', CommissionProcessus::CODE_VENTE)
-            ->first();
-
-        if (! $processus) {
-            return ['proprietaire' => null, 'livraison' => null];
-        }
-
-        $lire = fn (string $cible) => CommissionRegle::where('organization_id', $orgId)
-            ->where('processus_id', $processus->id)
-            ->where('cible_type', $cible)
-            ->where('scope_type', CommissionScopeType::GLOBAL->value)
-            ->whereNull('scope_id')
-            ->where('unite_calcul', CommissionUniteCalcul::PAR_UNITE_VENDUE->value)
-            ->where('statut', 'active')
-            ->value('montant');
-
-        $proprietaire = $lire(CommissionCibleType::CODE_PROPRIETAIRE);
-        $livraison = $lire(CommissionCibleType::CODE_EQUIPE_LIVRAISON);
-
-        return [
-            'proprietaire' => $proprietaire !== null ? (float) $proprietaire : null,
-            'livraison' => $livraison !== null ? (float) $livraison : null,
-        ];
-    }
-
-    /**
-     * Barème Livraison résolu PAR CATÉGORIE (V2) — une entrée par catégorie
-     * ayant un montant applicable, catégorie exacte prioritaire sur la règle
-     * globale (même waterfall que CommissionRegleResolver, restreint au
-     * scope catégorie/global puisque la popup équipe ne connaît jamais de
-     * variante/produit précis à l'avance). Catégorie exclue si aucun montant
-     * (ni catégorie ni global) n'est configuré — rien à partager, jamais une
-     * erreur (décision AMOA #4).
-     */
-    private function baremesLivraisonParCategorie(string $orgId): array
+    private function baremesCommissionParCategorie(string $orgId): array
     {
         $processus = CommissionProcessus::where('organization_id', $orgId)
             ->where('code', CommissionProcessus::CODE_VENTE)
@@ -631,33 +604,46 @@ class VehiculeController extends Controller
 
         $reglesActives = CommissionRegle::where('organization_id', $orgId)
             ->where('processus_id', $processus->id)
-            ->where('cible_type', CommissionCibleType::CODE_EQUIPE_LIVRAISON)
+            ->whereIn('cible_type', [CommissionCibleType::CODE_PROPRIETAIRE, CommissionCibleType::CODE_EQUIPE_LIVRAISON])
             ->where('unite_calcul', CommissionUniteCalcul::PAR_UNITE_VENDUE->value)
             ->where('statut', 'active')
             ->get();
 
-        $montantGlobal = $reglesActives
-            ->first(fn (CommissionRegle $r) => $r->scope_type === CommissionScopeType::GLOBAL && $r->scope_id === null)
-            ?->montant;
+        $resoudre = function (string $cibleType) use ($reglesActives): array {
+            $regles = $reglesActives->where('cible_type', $cibleType);
 
-        $montantParCategorieId = $reglesActives
-            ->filter(fn (CommissionRegle $r) => $r->scope_type === CommissionScopeType::CATEGORIE)
-            ->keyBy('scope_id')
-            ->map(fn (CommissionRegle $r) => (float) $r->montant);
+            $global = $regles->first(fn (CommissionRegle $r) => $r->scope_type === CommissionScopeType::GLOBAL && $r->scope_id === null)?->montant;
+
+            $parCategorie = $regles
+                ->filter(fn (CommissionRegle $r) => $r->scope_type === CommissionScopeType::CATEGORIE)
+                ->keyBy('scope_id')
+                ->map(fn (CommissionRegle $r) => (float) $r->montant);
+
+            return [$global !== null ? (float) $global : null, $parCategorie];
+        };
+
+        [$proprietaireGlobal, $proprietaireParCategorie] = $resoudre(CommissionCibleType::CODE_PROPRIETAIRE);
+        [$livraisonGlobal, $livraisonParCategorie] = $resoudre(CommissionCibleType::CODE_EQUIPE_LIVRAISON);
 
         return Categorie::where('organization_id', $orgId)
             ->where('statut', 'actif')
             ->orderBy('position')
             ->orderBy('nom')
             ->get()
-            ->map(function (Categorie $c) use ($montantParCategorieId, $montantGlobal) {
-                $montant = $montantParCategorieId->get($c->id) ?? ($montantGlobal !== null ? (float) $montantGlobal : null);
+            ->map(function (Categorie $c) use ($proprietaireParCategorie, $proprietaireGlobal, $livraisonParCategorie, $livraisonGlobal) {
+                $montantProprietaire = $proprietaireParCategorie->get($c->id) ?? $proprietaireGlobal ?? 0.0;
+                $montantLivraison = $livraisonParCategorie->get($c->id) ?? $livraisonGlobal ?? 0.0;
 
-                return $montant !== null ? [
+                if ($montantProprietaire <= 0 && $montantLivraison <= 0) {
+                    return null;
+                }
+
+                return [
                     'categorie_id' => $c->id,
                     'categorie_nom' => $c->nom,
-                    'montant' => $montant,
-                ] : null;
+                    'montant_proprietaire' => (float) $montantProprietaire,
+                    'montant_livraison' => (float) $montantLivraison,
+                ];
             })
             ->filter()
             ->values()

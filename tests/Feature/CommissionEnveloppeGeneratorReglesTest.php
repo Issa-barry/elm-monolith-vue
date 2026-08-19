@@ -296,6 +296,114 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
         $this->assertNull($partChauffeur->taux_repartition_snapshot);
     }
 
+    // ── Barème à 0 : "configuré, rien à distribuer" ≠ "non configuré" ────────
+    // 0 GNF est une valeur métier valide (décision AMOA post-Phase 2) — pour
+    // Livraison spécifiquement, une catégorie à 0 ne doit jamais exiger de
+    // partage ni bloquer la génération : rien à répartir, silence complet.
+
+    /** @test */
+    public function livraison_a_zero_et_proprietaire_a_zero_ne_genere_aucune_enveloppe_livraison_sans_erreur(): void
+    {
+        $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachets', 'statut' => 'actif']);
+        $this->creerRegle(CommissionCibleType::CODE_PROPRIETAIRE, 0, CommissionScopeType::CATEGORIE, $categorie->id);
+        $this->creerRegle(CommissionCibleType::CODE_EQUIPE_LIVRAISON, 0, CommissionScopeType::CATEGORIE, $categorie->id);
+
+        // Équipe SANS aucun partage configuré pour cette catégorie — ne doit
+        // jamais être exigé puisque Livraison = 0.
+        ['vehicule' => $vehicule] = $this->makeVehiculeAvecEquipe(2);
+
+        $produit = $this->makeProduit($categorie->id);
+        $commande = $this->creerCommandeAvecLignes($vehicule, [[$produit, 5]]);
+
+        CommissionEnveloppeGenerator::genererPourCommandeVente($commande);
+
+        $this->assertDatabaseMissing('commission_enveloppes', [
+            'source_id' => $commande->id, 'cible_type' => 'equipe_livraison',
+        ]);
+
+        $tentative = CommissionGenerationAttempt::where('source_id', $commande->id)->firstOrFail();
+        $this->assertEquals(CommissionGenerationStatut::SUCCES, $tentative->statut);
+    }
+
+    /** @test */
+    public function proprietaire_positif_et_livraison_a_zero_genere_le_proprietaire_sans_exiger_de_partage(): void
+    {
+        $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachets', 'statut' => 'actif']);
+        $this->creerRegle(CommissionCibleType::CODE_PROPRIETAIRE, 650, CommissionScopeType::CATEGORIE, $categorie->id);
+        $this->creerRegle(CommissionCibleType::CODE_EQUIPE_LIVRAISON, 0, CommissionScopeType::CATEGORIE, $categorie->id);
+
+        // Équipe SANS partage configuré — ne bloque pas puisque Livraison = 0.
+        ['vehicule' => $vehicule] = $this->makeVehiculeAvecEquipe(2);
+
+        $produit = $this->makeProduit($categorie->id);
+        $commande = $this->creerCommandeAvecLignes($vehicule, [[$produit, 1]]);
+
+        CommissionEnveloppeGenerator::genererPourCommandeVente($commande);
+
+        $enveloppeProp = CommissionEnveloppe::where('source_id', $commande->id)
+            ->where('cible_type', 'proprietaire')->firstOrFail();
+        $this->assertSame(650.0, (float) $enveloppeProp->montant_total);
+
+        $this->assertDatabaseMissing('commission_enveloppes', [
+            'source_id' => $commande->id, 'cible_type' => 'equipe_livraison',
+        ]);
+    }
+
+    /** @test */
+    public function proprietaire_a_zero_et_livraison_positive_exige_le_partage_et_genere_normalement(): void
+    {
+        $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachets', 'statut' => 'actif']);
+        $this->creerRegle(CommissionCibleType::CODE_PROPRIETAIRE, 0, CommissionScopeType::CATEGORIE, $categorie->id);
+        $this->creerRegle(CommissionCibleType::CODE_EQUIPE_LIVRAISON, 300, CommissionScopeType::CATEGORIE, $categorie->id);
+
+        ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreurs' => $livreurs] = $this->makeVehiculeAvecEquipe(2);
+        $this->definirPartageCategorie($equipe, $categorie, [
+            $livreurs[0]->id => 50,
+            $livreurs[1]->id => 50,
+        ]);
+
+        $produit = $this->makeProduit($categorie->id);
+        $commande = $this->creerCommandeAvecLignes($vehicule, [[$produit, 2]]);
+
+        CommissionEnveloppeGenerator::genererPourCommandeVente($commande);
+
+        $enveloppeProp = CommissionEnveloppe::where('source_id', $commande->id)
+            ->where('cible_type', 'proprietaire')->firstOrFail();
+        $this->assertSame(0.0, (float) $enveloppeProp->montant_total);
+
+        $enveloppeLiv = CommissionEnveloppe::where('source_id', $commande->id)
+            ->where('cible_type', 'equipe_livraison')->firstOrFail();
+        $this->assertSame(600.0, (float) $enveloppeLiv->montant_total); // 300 × 2
+
+        $parts = CommissionEnveloppePart::where('enveloppe_id', $enveloppeLiv->id)->get();
+        $this->assertEquals(2, $parts->count());
+        $this->assertEqualsWithDelta(600.0, (float) $parts->sum('montant_brut'), 0.01);
+    }
+
+    /** @test */
+    public function proprietaire_et_livraison_tous_deux_positifs_generent_les_deux_enveloppes_normalement(): void
+    {
+        $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Bouteilles', 'statut' => 'actif']);
+        $this->creerRegle(CommissionCibleType::CODE_PROPRIETAIRE, 500, CommissionScopeType::CATEGORIE, $categorie->id);
+        $this->creerRegle(CommissionCibleType::CODE_EQUIPE_LIVRAISON, 1000, CommissionScopeType::CATEGORIE, $categorie->id);
+
+        ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreurs' => $livreurs] = $this->makeVehiculeAvecEquipe(1);
+        $this->definirPartageCategorie($equipe, $categorie, [$livreurs[0]->id => 100]);
+
+        $produit = $this->makeProduit($categorie->id);
+        $commande = $this->creerCommandeAvecLignes($vehicule, [[$produit, 1]]);
+
+        CommissionEnveloppeGenerator::genererPourCommandeVente($commande);
+
+        $enveloppeProp = CommissionEnveloppe::where('source_id', $commande->id)
+            ->where('cible_type', 'proprietaire')->firstOrFail();
+        $enveloppeLiv = CommissionEnveloppe::where('source_id', $commande->id)
+            ->where('cible_type', 'equipe_livraison')->firstOrFail();
+
+        $this->assertSame(500.0, (float) $enveloppeProp->montant_total);
+        $this->assertSame(1000.0, (float) $enveloppeLiv->montant_total);
+    }
+
     // ── Absence de règle = 0, jamais un blocage (décision AMOA #4) ───────────
 
     /** @test */

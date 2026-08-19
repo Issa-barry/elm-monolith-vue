@@ -268,6 +268,13 @@ class CommissionEnveloppeGenerator
 
                     $montantCategorie = round((float) $contribsCategorie->sum('montant'), 2);
 
+                    // Barème Livraison configuré à 0 pour cette catégorie : valeur métier
+                    // valide ("aucune commission à distribuer"), jamais un partage à
+                    // exiger ni une erreur — rien à répartir, on passe à la suivante.
+                    if ($montantCategorie <= 0) {
+                        continue;
+                    }
+
                     $partages = EquipeLivraisonPartageCategorie::where('equipe_id', $vehicule->equipe->id)
                         ->where('categorie_id', $categorieId)
                         ->get();
@@ -296,6 +303,13 @@ class CommissionEnveloppeGenerator
                 }
 
                 if ($repartitionEchouee) {
+                    continue;
+                }
+
+                // Toutes les catégories contributrices avaient un barème Livraison à 0
+                // (ou aucune n'a résolu de règle) : rien à distribuer, aucune enveloppe
+                // à créer — même silence que l'absence de règle (décision AMOA #4).
+                if (empty($montantParBeneficiaire)) {
                     continue;
                 }
 
