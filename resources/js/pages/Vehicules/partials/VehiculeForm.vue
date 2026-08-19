@@ -6,7 +6,6 @@ import { Link } from '@inertiajs/vue3';
 import { Building2, Save, Upload, X } from 'lucide-vue-next';
 import AutoComplete from 'primevue/autocomplete';
 import Dropdown from 'primevue/dropdown';
-import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import { computed, ref, watch } from 'vue';
 import CapacitesEditor, {
@@ -23,6 +22,8 @@ interface Option {
 interface TypeOption {
     value: string;
     label: string;
+    /** null = aucune dérogation configurée pour ce type (cf. TypeVehicules/Edit.vue). */
+    seuil_derogation_impayes: number | null;
 }
 
 interface SiteOption {
@@ -52,7 +53,7 @@ interface FormData {
     photo: File | null;
     is_active: boolean;
     capacites: CapaciteRow[];
-    seuil_dette_derogation: number | null;
+    derogation_impayes_autorisee: boolean;
 }
 
 const props = defineProps<{
@@ -68,12 +69,24 @@ const props = defineProps<{
     canChangeSite: boolean;
     showStatusField?: boolean;
     defaultProprietaireId?: number | string | null;
-    /** Seuil global de dette (Paramètres > Ventes), affiché à titre indicatif — cf. section
+    /** Seuil standard de dette (Paramètres > Ventes), affiché à titre indicatif — cf. section
      * "Contrôle des impayés" ci-dessous. */
     seuilGlobalImpayes?: number;
 }>();
 
 const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
+
+const selectedType = computed(
+    () =>
+        props.types.find((t) => t.value === props.form.type_vehicule_id) ??
+        null,
+);
+
+const typeHasDerogationConfiguree = computed(
+    () =>
+        selectedType.value?.seuil_derogation_impayes !== null &&
+        selectedType.value?.seuil_derogation_impayes !== undefined,
+);
 
 const photoPreview = ref<string | null>(props.photoUrl ?? null);
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -94,9 +107,18 @@ const seuilGlobalImpayesLabel = computed(() => {
 });
 
 function onTypeChange(value: string) {
+    const nouveauType = props.types.find((t) => t.value === value) ?? null;
+    const derogationEncoreValide =
+        nouveauType?.seuil_derogation_impayes !== null &&
+        nouveauType?.seuil_derogation_impayes !== undefined;
+
     emit('update:form', {
         ...props.form,
         type_vehicule_id: value,
+        // Le plafond dérogatoire dépend du type — si le nouveau type n'en a aucun de
+        // configuré, une dérogation restée active n'aurait plus aucun sens.
+        derogation_impayes_autorisee:
+            props.form.derogation_impayes_autorisee && derogationEncoreValide,
     });
 }
 
@@ -505,7 +527,7 @@ function handleSubmit() {
             />
         </div>
 
-        <!-- Contrôle des impayés : dérogation propre à ce véhicule -->
+        <!-- Contrôle des impayés : dérogation via le type de véhicule -->
         <div class="order-5 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
                 class="mb-1 text-sm font-semibold tracking-wider text-muted-foreground uppercase"
@@ -513,41 +535,57 @@ function handleSubmit() {
                 Contrôle des impayés
             </h3>
             <p class="mb-4 text-xs text-muted-foreground">
-                Facultatif. Laisser vide pour utiliser le seuil global des
-                ventes<span v-if="seuilGlobalImpayesLabel"
-                    >— seuil global actuel : {{ seuilGlobalImpayesLabel }}</span
-                >. Ce n'est pas la dette actuelle du véhicule, mais la limite de
-                dette autorisée avant blocage des nouvelles ventes.
+                Seuil standard actuel<span v-if="seuilGlobalImpayesLabel">
+                    : {{ seuilGlobalImpayesLabel }}</span
+                >. Le plafond de dérogation n'est pas saisi ici : il est
+                configuré sur le type de véhicule (page Types de véhicules).
             </p>
-            <div class="max-w-xs">
-                <Label for="seuil_dette_derogation" class="mb-1.5 block text-sm"
-                    >Seuil de dette spécifique (GNF)</Label
-                >
-                <InputNumber
-                    input-id="seuil_dette_derogation"
-                    :model-value="form.seuil_dette_derogation"
+            <label class="flex cursor-pointer items-start gap-3">
+                <Checkbox
+                    id="derogation_impayes_autorisee"
+                    :model-value="form.derogation_impayes_autorisee"
+                    :disabled="!typeHasDerogationConfiguree"
                     @update:model-value="
                         $emit('update:form', {
                             ...form,
-                            seuil_dette_derogation: $event,
+                            derogation_impayes_autorisee: $event === true,
                         })
                     "
-                    :min="0"
-                    :max="999999999"
-                    :use-grouping="false"
-                    placeholder="Seuil global"
-                    class="w-full"
-                    :class="{
-                        'p-invalid': errors.seuil_dette_derogation,
-                    }"
                 />
-                <p
-                    v-if="errors.seuil_dette_derogation"
-                    class="mt-1 text-xs text-destructive"
-                >
-                    {{ errors.seuil_dette_derogation }}
-                </p>
-            </div>
+                <div>
+                    <span class="text-sm font-medium"
+                        >Autoriser la dérogation au seuil d'impayés</span
+                    >
+                    <p class="text-xs text-muted-foreground">
+                        <template v-if="!form.type_vehicule_id">
+                            Sélectionnez d'abord un type de véhicule.
+                        </template>
+                        <template v-else-if="typeHasDerogationConfiguree">
+                            Ce véhicule pourra atteindre
+                            {{
+                                new Intl.NumberFormat('fr-FR').format(
+                                    selectedType!.seuil_derogation_impayes!,
+                                )
+                            }}
+                            GNF de dette (seuil du type «
+                            {{ selectedType!.label }} »).
+                        </template>
+                        <template v-else>
+                            Aucun seuil de dérogation n'est configuré pour le
+                            type «
+                            {{ selectedType?.label }}
+                            » — configurez-le dans Types de véhicules avant de
+                            pouvoir activer cette option.
+                        </template>
+                    </p>
+                </div>
+            </label>
+            <p
+                v-if="errors.derogation_impayes_autorisee"
+                class="mt-2 text-xs text-destructive"
+            >
+                {{ errors.derogation_impayes_autorisee }}
+            </p>
         </div>
 
         <!-- Photo -->

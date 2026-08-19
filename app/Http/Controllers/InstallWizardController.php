@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\DomaineActivite;
+use App\Enums\SiteType;
 use App\Http\Controllers\Concerns\HasOtpRateLimitResponse;
 use App\Mail\InstallEmailVerificationMail;
 use App\Services\InstallationService;
@@ -49,7 +50,11 @@ class InstallWizardController extends Controller
         }
 
         return Inertia::render('Install/Wizard', [
+            // 'site_types' de chaque domaine (cf. DomaineActivite::options()) alimente les
+            // suggestions de l'étape "Site principal" ; types_tous permet d'afficher la liste
+            // complète si l'utilisateur ne s'y retrouve pas dans les suggestions.
             'domaines' => DomaineActivite::options(),
+            'types_tous' => SiteType::options(),
             // Dérivé de InstallationService::isSaas() (config('app.deployment_mode')) — jamais une
             // deuxième interprétation du mode côté frontend : le backend reste la seule source de
             // vérité, ce booléen n'est qu'un affichage/UX (email obligatoire ou non), la validation
@@ -182,6 +187,9 @@ class InstallWizardController extends Controller
             // enverrait quand même un, auquel cas InstallationService le revalide (doit alors
             // correspondre au mot de passe, cf. sa règle `confirmed`).
             'admin.password_confirmation' => 'nullable|string',
+            'site.type' => ['required', 'string', Rule::in(array_column(SiteType::cases(), 'value'))],
+            'site.ville' => 'required|string|max:100',
+            'site.quartier' => 'required|string|max:100',
         ]);
 
         // La complexité/confirmation du mot de passe est revalidée par InstallationService
@@ -189,6 +197,7 @@ class InstallWizardController extends Controller
         $this->service->install(
             organisation: $data['organisation'],
             admin: $data['admin'],
+            site: $data['site'],
         );
 
         $request->session()->forget('install_token_verified');

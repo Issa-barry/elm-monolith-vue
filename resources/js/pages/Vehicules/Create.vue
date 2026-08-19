@@ -18,6 +18,7 @@ interface Option {
 interface TypeOption {
     value: string;
     label: string;
+    seuil_derogation_impayes: number | null;
 }
 interface SiteOption {
     id: string;
@@ -68,7 +69,7 @@ const form = useForm({
     photo: null as File | null,
     is_active: true,
     capacites: [] as CapaciteRow[],
-    seuil_dette_derogation: null as number | null,
+    derogation_impayes_autorisee: false,
 });
 
 const canSubmit = computed(() => {

@@ -10,6 +10,7 @@ use App\Models\FactureVente;
 use App\Models\Parametre;
 use App\Models\Proprietaire;
 use App\Models\Site;
+use App\Models\TypeVehicule;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\HasProduitVariante;
@@ -147,13 +148,14 @@ class SolvabiliteImpayesTest extends TestCase
     }
 
     /**
-     * Le seuil spécifique du véhicule (dérogation) doit réellement s'appliquer à la création
-     * réelle, pas seulement à l'aperçu — cf. Vehicule::seuil_dette_derogation.
+     * La dérogation via le type de véhicule doit réellement s'appliquer à la création réelle,
+     * pas seulement à l'aperçu — cf. TypeVehicule::seuil_derogation_impayes.
      */
-    public function test_commande_autorisee_grace_au_seuil_specifique_du_vehicule(): void
+    public function test_commande_autorisee_grace_a_la_derogation_du_type_de_vehicule(): void
     {
         Parametre::setVentesControleImpayes($this->org->id, true, 0);
-        $vehicule = $this->makeVehicule(['seuil_dette_derogation' => 2_000_000]);
+        $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'seuil_derogation_impayes' => 2_000_000]);
+        $vehicule = $this->makeVehicule(['type_vehicule_id' => $type->id, 'derogation_impayes_autorisee' => true]);
         $this->makeDette(1_500_000, $vehicule->id);
         $produit = $this->makeProduitAvecVariante($this->org, ['categorie_id' => $this->categorie->id], ['prix_vente' => 5000]);
 
@@ -167,10 +169,11 @@ class SolvabiliteImpayesTest extends TestCase
         $this->assertSame(2, CommandeVente::where('vehicule_id', $vehicule->id)->count());
     }
 
-    public function test_commande_bloquee_au_dela_du_seuil_specifique_du_vehicule(): void
+    public function test_commande_bloquee_au_dela_du_seuil_derogatoire_du_type_de_vehicule(): void
     {
         Parametre::setVentesControleImpayes($this->org->id, true, 10_000_000);
-        $vehicule = $this->makeVehicule(['seuil_dette_derogation' => 2_000_000]);
+        $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'seuil_derogation_impayes' => 2_000_000]);
+        $vehicule = $this->makeVehicule(['type_vehicule_id' => $type->id, 'derogation_impayes_autorisee' => true]);
         $this->makeDette(2_500_000, $vehicule->id);
         $produit = $this->makeProduitAvecVariante($this->org, ['categorie_id' => $this->categorie->id], ['prix_vente' => 5000]);
 

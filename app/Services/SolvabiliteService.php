@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\StatutFactureVente;
 use App\Models\FactureVente;
 use App\Models\Parametre;
+use App\Models\TypeVehicule;
 use App\Models\Vehicule;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
@@ -21,7 +22,10 @@ use Illuminate\Validation\ValidationException;
  * - un `vehiculeId` renseigné → dette = somme des FactureVente.montant_restant rattachées à CE
  *   véhicule (colonne `factures_ventes.vehicule_id`, indépendante du propriétaire — deux
  *   véhicules d'un même propriétaire ont des dettes totalement indépendantes, cf. analyse du
- *   18/08/2026) ; seuil = Vehicule::seuil_dette_derogation si renseigné, sinon le seuil global ;
+ *   18/08/2026) ; seuil = TypeVehicule::seuil_derogation_impayes du type de CE véhicule si
+ *   Vehicule::derogation_impayes_autorisee est actif ET que son type a un seuil configuré,
+ *   sinon le seuil global (cf. seuilApplicableVehicule() — décision produit du 19/08/2026, en
+ *   correction de la version du 18/08/2026 qui portait le montant directement sur le véhicule) ;
  * - sinon, un `clientId` renseigné → dette = factures des commandes de ce client, seuil global
  *   uniquement (pas de dérogation client) ;
  * - ni l'un ni l'autre → aucune dette (rien à contrôler).
@@ -135,16 +139,34 @@ class SolvabiliteService
     }
 
     /**
-     * Vehicule::seuil_dette_derogation, sinon repli sur le seuil global de l'organisation — cf.
-     * migration 2026_08_18_000005 (NULL = pas de dérogation, jamais un simple booléen).
+     * Seuil global sauf si Vehicule::derogation_impayes_autorisee est actif ET que le type de
+     * CE véhicule a un TypeVehicule::seuil_derogation_impayes configuré (cf. migrations
+     * 2026_08_19_000001/000002 — décision produit du 19/08/2026, en correction de la version du
+     * 18/08/2026 qui portait un montant directement sur le véhicule). Un véhicule dérogatoire
+     * dont le type n'a PAS de seuil configuré retombe sur le seuil global (filet de sécurité :
+     * jamais interprété comme illimité) — ce cas ne devrait normalement jamais survenir en
+     * pratique, VehiculeController empêchant d'activer la dérogation tant que le type n'a pas
+     * de seuil configuré, mais le seuil du type peut toujours être retiré après coup.
+     *
+     * Public : également appelée par VehiculeController pour afficher le seuil applicable sur
+     * la fiche véhicule, sans dupliquer cette règle côté frontend.
      */
-    private function seuilApplicableVehicule(string $orgId, string $vehiculeId): int
+    public function seuilApplicableVehicule(string $orgId, string $vehiculeId): int
     {
-        $seuilSpecifique = Vehicule::where('organization_id', $orgId)
+        $vehicule = Vehicule::where('organization_id', $orgId)
             ->whereKey($vehiculeId)
-            ->value('seuil_dette_derogation');
+            ->select('id', 'type_vehicule_id', 'derogation_impayes_autorisee')
+            ->first();
 
-        return $seuilSpecifique !== null ? (int) $seuilSpecifique : Parametre::getVentesSeuilImpayesMax($orgId);
+        if (! $vehicule || ! $vehicule->derogation_impayes_autorisee) {
+            return Parametre::getVentesSeuilImpayesMax($orgId);
+        }
+
+        $seuilType = TypeVehicule::where('organization_id', $orgId)
+            ->whereKey($vehicule->type_vehicule_id)
+            ->value('seuil_derogation_impayes');
+
+        return $seuilType !== null ? (int) $seuilType : Parametre::getVentesSeuilImpayesMax($orgId);
     }
 
     /** @return Collection<int, FactureVente> */
