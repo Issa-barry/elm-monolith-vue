@@ -2,6 +2,7 @@
 import DetailHeader from '@/components/DetailHeader.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
@@ -192,11 +193,40 @@ const seuilImpayesApplicable = computed(() =>
         : props.seuil_global_impayes,
 );
 
-const derogationOrigine = computed(() =>
-    derogationEffective.value
-        ? `Type de véhicule : ${props.vehicule.type_label}`
-        : 'Paramètres de vente',
-);
+/**
+ * Bascule la dérogation directement depuis la fiche (VehiculeController::toggleDerogation()) —
+ * pas de mise à jour optimiste : le Switch reste piloté par `vehicule.derogation_impayes_autorisee`
+ * (jamais par un état local), donc un succès l'actualise via le rechargement Inertia consécutif à
+ * la redirection back(), et un échec le laisse inchangé sans rien à "annuler" manuellement.
+ */
+const derogationProcessing = ref(false);
+
+function toggleDerogation() {
+    if (derogationProcessing.value) return;
+    derogationProcessing.value = true;
+
+    router.patch(
+        `/backoffice/vehicules/${props.vehicule.id}/toggle-derogation`,
+        {},
+        {
+            preserveScroll: true,
+            onError: (errors) => {
+                toast.add({
+                    severity: 'error',
+                    summary: 'Dérogation impayés',
+                    detail:
+                        errors.derogation_impayes_autorisee ??
+                        'Impossible de mettre à jour la dérogation.',
+                    life: 5000,
+                    group: 'top',
+                });
+            },
+            onFinish: () => {
+                derogationProcessing.value = false;
+            },
+        },
+    );
+}
 </script>
 
 <template>
@@ -298,15 +328,6 @@ const derogationOrigine = computed(() =>
                         <Button variant="outline" size="sm">
                             <ArrowLeft class="mr-1.5 h-4 w-4" />
                             Liste de véhicules
-                        </Button>
-                    </Link>
-                    <Link
-                        v-if="can('vehicules.update')"
-                        :href="`/backoffice/vehicules/${vehicule.id}/edit`"
-                    >
-                        <Button size="sm">
-                            <Pencil class="mr-1.5 h-4 w-4" />
-                            Modifier
                         </Button>
                     </Link>
                 </template>
@@ -543,22 +564,31 @@ const derogationOrigine = computed(() =>
                                 </template>
                             </div>
                             <div class="rounded-lg border bg-background p-4">
-                                <p class="text-xs text-muted-foreground">
-                                    Dérogation impayés
-                                </p>
-                                <p class="mt-1 text-sm font-medium">
-                                    {{
-                                        vehicule.derogation_impayes_autorisee
-                                            ? 'Active'
-                                            : 'Inactive'
-                                    }}
-                                </p>
+                                <div
+                                    class="flex items-center justify-between gap-3"
+                                >
+                                    <p class="text-sm font-medium">
+                                        Dérogation impayés
+                                    </p>
+                                    <Switch
+                                        aria-label="Dérogation impayés"
+                                        :model-value="
+                                            vehicule.derogation_impayes_autorisee
+                                        "
+                                        :disabled="
+                                            derogationProcessing ||
+                                            !can('vehicules.update')
+                                        "
+                                        @update:model-value="toggleDerogation()"
+                                    />
+                                </div>
                                 <p class="mt-1.5 text-xs text-muted-foreground">
-                                    Seuil applicable :
-                                    {{ formatGNF(seuilImpayesApplicable) }}
-                                </p>
-                                <p class="text-xs text-muted-foreground">
-                                    Origine : {{ derogationOrigine }}
+                                    {{
+                                        derogationEffective
+                                            ? 'Plafond autorisé'
+                                            : 'Seuil applicable'
+                                    }}
+                                    : {{ formatGNF(seuilImpayesApplicable) }}
                                 </p>
                             </div>
                         </div>

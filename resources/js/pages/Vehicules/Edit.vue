@@ -56,7 +56,6 @@ const props = defineProps<{
     can_change_site: boolean;
     default_proprietaire_id: string | null;
     capacites: CapaciteRow[];
-    seuil_global_impayes: number;
 }>();
 const page = usePage();
 const flashSuccess = computed(
@@ -172,7 +171,6 @@ function submit() {
                 :can-change-site="can_change_site"
                 :show-status-field="!!vehicule.equipe_id"
                 :default-proprietaire-id="default_proprietaire_id"
-                :seuil-global-impayes="seuil_global_impayes"
                 @submit="submit"
                 @update:form="Object.assign(form, $event)"
             />
