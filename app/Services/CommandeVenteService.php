@@ -10,13 +10,11 @@ use App\Enums\StatutFactureVente;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
 use App\Models\FactureVente;
-use App\Services\Commission\MoteurCommissionResolver;
 use App\Services\Comptabilite\VenteComptabilisationService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
-use InvalidArgumentException;
 
 class CommandeVenteService
 {
@@ -177,8 +175,6 @@ class CommandeVenteService
         abort_if(! $commande->isChargementEnCours(), 422, 'La commande doit être en cours de chargement.');
 
         DB::transaction(function () use ($commande, $lignesData) {
-            self::assertEquipeCommissionValide($commande);
-
             self::appliquerQuantitesChargees($commande, $lignesData);
             self::recalculerTotaux($commande);
             self::decrementerStock($commande);
@@ -192,43 +188,6 @@ class CommandeVenteService
             self::activerFacture($commande);
             CommissionTriggerService::onChargementValide($commande);
         });
-    }
-
-    /**
-     * LEGACY UNIQUEMENT : bloque la validation du chargement si le véhicule a
-     * une équipe dont la répartition des taux est invalide (≠ 100 %) — sans
-     * cela, le chargement serait validé silencieusement sans qu'aucune
-     * commission ne puisse être créée derrière, ce qui ne doit jamais passer
-     * inaperçu. Ne bloque rien si le véhicule n'est pas éligible aux
-     * commissions ou n'a pas d'équipe : dans ces cas, aucune commission n'est
-     * due, ce n'est pas une erreur.
-     *
-     * Sans objet pour une organisation V2 : equipe_livraison.taux_commission_proprietaire
-     * et equipe_livreurs.taux_commission n'y sont plus jamais maintenus (le
-     * partage vit désormais dans equipe_livraison_partages_categorie) — les
-     * valider ici bloquerait TOUTE validation de chargement pour ces
-     * organisations. La validité du partage V2 est vérifiée à la génération
-     * réelle, par catégorie, dans CommissionEnveloppeGenerator (tout-ou-rien,
-     * jamais bloquant pour l'opération commerciale).
-     */
-    private static function assertEquipeCommissionValide(CommandeVente $commande): void
-    {
-        $commande->loadMissing('vehicule.equipe');
-        $vehicule = $commande->vehicule;
-
-        if (! $vehicule || ! $commande->commission_eligible_snapshot || ! $vehicule->equipe) {
-            return;
-        }
-
-        if (MoteurCommissionResolver::estV2($commande->organization_id)) {
-            return;
-        }
-
-        try {
-            CommissionCalculator::validateTauxTotal($vehicule->equipe, (float) $vehicule->equipe->taux_commission_proprietaire);
-        } catch (InvalidArgumentException $e) {
-            abort(422, "Impossible de valider le chargement : {$e->getMessage()}");
-        }
     }
 
     /**

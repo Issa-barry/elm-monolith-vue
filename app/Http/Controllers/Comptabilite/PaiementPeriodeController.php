@@ -174,7 +174,7 @@ class PaiementPeriodeController extends Controller
         // (aucun concept de véhicule pour les périodes salarié).
         $vehicules = [];
         if (in_array($periode->type, [TypePeriodePaiement::LIVREUR, TypePeriodePaiement::PROPRIETAIRE], true)) {
-            // Toujours combiner vente V2 + logistique (jamais un choix org-level) : un même
+            // Toujours combiner vente + logistique (jamais un choix) : un même
             // véhicule/bénéficiaire peut porter les deux natures de commission sur la période.
             $vehicules = $this->avecMontantsPayes(
                 collect(CommissionAdjustmentService::vehiculesParPeriodeCombine($periode)),
@@ -184,8 +184,8 @@ class PaiementPeriodeController extends Controller
 
             if (array_filter($filters)) {
                 $beneficiairesParVehicule = collect([
-                    ...CommissionAdjustmentService::groupesParCommissionV2($periode),
                     ...CommissionAdjustmentService::groupesParCommission($periode),
+                    ...CommissionAdjustmentService::groupesLogistiqueParCommission($periode),
                 ])
                     ->groupBy(fn (array $g) => $g['vehicule_id'] ?? '__sans_vehicule__')
                     ->map(fn ($groupes) => $groupes->flatMap(fn (array $g) => $g['parts'])
@@ -265,8 +265,8 @@ class PaiementPeriodeController extends Controller
         $fichesParBeneficiaire = $allFiches->keyBy(fn ($f) => "{$f->beneficiaire_type}:{$f->beneficiaire_id}");
 
         $beneficiairesParVehicule = collect([
-            ...CommissionAdjustmentService::groupesParCommissionV2($periode),
             ...CommissionAdjustmentService::groupesParCommission($periode),
+            ...CommissionAdjustmentService::groupesLogistiqueParCommission($periode),
         ])
             ->groupBy(fn (array $g) => $g['vehicule_id'] ?? '__sans_vehicule__')
             ->map(fn ($groupes) => $groupes->flatMap(fn (array $g) => $g['parts'])
@@ -326,24 +326,24 @@ class PaiementPeriodeController extends Controller
     {
         $this->authorize('valider', $periode);
 
-        // Combine toujours vente V2 + logistique (jamais un choix org-level) : une période
+        // Combine toujours vente + logistique (jamais un choix) : une période
         // LIVREUR/PROPRIETAIRE peut porter les deux natures de commission, et aucune des
-        // deux ne doit jamais être ignorée simplement parce que l'organisation est V2.
-        // Sans effet sur une période SALARIE (partsPourPeriodeV2 y est structurellement
-        // toujours vide, aucune fiche salarié ne référence CommissionEnveloppePart).
-        $nonValidees = CommissionAdjustmentService::partsNonValidees($periode)
-            ->merge(CommissionAdjustmentService::partsNonValideesV2($periode));
+        // deux ne doit jamais être ignorée. Sans effet sur une période SALARIE
+        // (partsPourPeriode y est structurellement toujours vide, aucune fiche salarié
+        // ne référence CommissionEnveloppePart).
+        $nonValidees = CommissionAdjustmentService::partsLogistiqueNonValidees($periode)
+            ->merge(CommissionAdjustmentService::partsNonValidees($periode));
         if ($nonValidees->isNotEmpty()) {
             $n = $nonValidees->count();
 
             return back()->with('error', "{$n} commission".($n > 1 ? 's' : '').' non validée'.($n > 1 ? 's' : '').". Passez par l'écran d'ajustement avant de valider la période.");
         }
 
-        $resumeLogistique = CommissionAdjustmentService::resumeEcarts($periode);
-        $resumeV2 = CommissionAdjustmentService::resumeEcartsV2($periode);
-        $parVehicule = [...$resumeLogistique['par_vehicule'], ...$resumeV2['par_vehicule']];
+        $resumeLogistique = CommissionAdjustmentService::resumeEcartsLogistique($periode);
+        $resumeVente = CommissionAdjustmentService::resumeEcarts($periode);
+        $parVehicule = [...$resumeLogistique['par_vehicule'], ...$resumeVente['par_vehicule']];
         if (! empty($parVehicule)) {
-            $ecart = round($resumeLogistique['ecart'] + $resumeV2['ecart'], 2);
+            $ecart = round($resumeLogistique['ecart'] + $resumeVente['ecart'], 2);
             $abs = number_format(abs($ecart), 0, ',', ' ');
             $n = count($parVehicule);
             $sens = $ecart < 0 ? "il reste {$abs} GNF à redistribuer" : "le montant ajusté dépasse de {$abs} GNF le montant théorique";
@@ -357,10 +357,10 @@ class PaiementPeriodeController extends Controller
             'validated_at' => now(),
         ]);
 
-        // Seul moment où les commissions de vente encore CREEE de cette période
-        // deviennent payables — cf. CommissionAdjustmentService::activerCommissionsCreees().
+        // Seul moment où les commissions encore CREEE de cette période deviennent
+        // payables — cf. CommissionAdjustmentService::activerCommissionsCreees().
         $nbCommissionsActivees = CommissionAdjustmentService::activerCommissionsCreees($periode)
-            + CommissionAdjustmentService::activerCommissionsCreeesV2($periode);
+            + CommissionAdjustmentService::activerCommissionsLogistiqueCreees($periode);
 
         app(AuditLogService::class)->record($periode, AuditEvent::VALIDATED, auth()->user(), null, null, [
             'module' => 'periodes_paiement',

@@ -9,8 +9,6 @@ use App\Models\CommissionEnveloppe;
 use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
-use App\Models\CommissionPart;
-use App\Models\CommissionVente;
 use App\Models\Livreur;
 use App\Models\PaiementPeriode;
 use App\Models\Proprietaire;
@@ -37,13 +35,13 @@ class CommissionAjustementController extends Controller
     {
         $this->authorize('ajuster', $periode);
 
-        // Combine toujours vente V2 + logistique (jamais un choix org-level) : un véhicule
-        // peut porter les deux natures de commission sur la même période, et la logistique
-        // ne doit jamais devenir invisible sur cet écran pour une organisation V2.
+        // Combine toujours vente + logistique (jamais un choix) : un véhicule peut porter
+        // les deux natures de commission sur la même période, et la logistique ne doit
+        // jamais devenir invisible sur cet écran.
         $vehiculeId = $vehicule === 'sans-vehicule' ? null : $vehicule;
         $groupesRaw = [
-            ...CommissionAdjustmentService::groupesParVehiculeV2($periode, $vehiculeId),
             ...CommissionAdjustmentService::groupesParVehicule($periode, $vehiculeId),
+            ...CommissionAdjustmentService::groupesLogistiqueParVehicule($periode, $vehiculeId),
         ];
 
         abort_if(empty($groupesRaw), 404);
@@ -51,8 +49,8 @@ class CommissionAjustementController extends Controller
         $filters = $request->only(['beneficiaire', 'validation']);
 
         $beneficiaires = collect([
-            ...CommissionAdjustmentService::beneficiairesParVehiculeV2($periode, $vehiculeId),
             ...CommissionAdjustmentService::beneficiairesParVehicule($periode, $vehiculeId),
+            ...CommissionAdjustmentService::beneficiairesLogistiqueParVehicule($periode, $vehiculeId),
         ])
             ->filter(function (array $b) use ($filters) {
                 if (! empty($filters['beneficiaire'])) {
@@ -107,12 +105,7 @@ class CommissionAjustementController extends Controller
             'beneficiaires' => $beneficiaires,
             'filters' => $filters,
             'motifs' => MotifAjustementCommission::options(),
-            // 'vente' et 'vente_v2' fusionnés dans la même liste : les deux moteurs
-            // n'ont jamais de données réelles simultanément pour une même organisation
-            // (cf. MoteurCommissionResolver), et remplacant() résout le bon modèle
-            // dynamiquement à partir du seul commission_id — aucune distinction à faire
-            // choisir à l'utilisateur.
-            'commissions_vente' => collect($groupesRaw)->whereIn('type', ['vente', 'vente_v2'])
+            'commissions_vente' => collect($groupesRaw)->where('type', 'vente')
                 ->map(fn (array $g) => ['id' => $g['commission_id'], 'label' => 'Commande '.$g['reference']])
                 ->values(),
             'commissions_logistique' => collect($groupesRaw)->where('type', 'logistique')
@@ -159,9 +152,9 @@ class CommissionAjustementController extends Controller
         $motif = MotifAjustementCommission::from($data['motif']);
 
         if ($part instanceof CommissionEnveloppePart) {
-            CommissionAdjustmentService::ajusterMontantEnveloppePart($part, (float) $data['montant'], $motif, $data['commentaire'] ?? null, $request->user());
-        } else {
             CommissionAdjustmentService::ajusterMontant($part, (float) $data['montant'], $motif, $data['commentaire'] ?? null, $request->user());
+        } else {
+            CommissionAdjustmentService::ajusterMontantLogistique($part, (float) $data['montant'], $motif, $data['commentaire'] ?? null, $request->user());
         }
 
         return back()->with('success', 'Montant ajusté.');
@@ -177,9 +170,9 @@ class CommissionAjustementController extends Controller
         ]);
 
         if ($part instanceof CommissionEnveloppePart) {
-            CommissionAdjustmentService::declarerAbsenceV2($part, $data['commentaire'] ?? null, $request->user());
-        } else {
             CommissionAdjustmentService::declarerAbsence($part, $data['commentaire'] ?? null, $request->user());
+        } else {
+            CommissionAdjustmentService::declarerAbsenceLogistique($part, $data['commentaire'] ?? null, $request->user());
         }
 
         return back()->with('success', 'Absence déclarée, montant mis à 0.');
@@ -196,7 +189,7 @@ class CommissionAjustementController extends Controller
 
         $data = $request->validate([
             'parts' => ['required', 'array', 'min:1'],
-            'parts.*.type' => ['required', Rule::in(['vente', 'logistique', 'vente_v2'])],
+            'parts.*.type' => ['required', Rule::in(['vente', 'logistique'])],
             'parts.*.id' => ['required', 'string'],
             'montant' => ['required', 'numeric', 'min:0'],
             'motif' => ['required', Rule::in(array_column(MotifAjustementCommission::cases(), 'value'))],
@@ -212,7 +205,7 @@ class CommissionAjustementController extends Controller
 
         try {
             if ($parts->first() instanceof CommissionEnveloppePart) {
-                CommissionAdjustmentService::ajusterMontantGroupeV2(
+                CommissionAdjustmentService::ajusterMontantGroupe(
                     $parts,
                     (float) $data['montant'],
                     MotifAjustementCommission::from($data['motif']),
@@ -220,7 +213,7 @@ class CommissionAjustementController extends Controller
                     $request->user(),
                 );
             } else {
-                CommissionAdjustmentService::ajusterMontantGroupe(
+                CommissionAdjustmentService::ajusterMontantGroupeLogistique(
                     $parts,
                     (float) $data['montant'],
                     MotifAjustementCommission::from($data['motif']),
@@ -249,7 +242,7 @@ class CommissionAjustementController extends Controller
             'groups' => ['required', 'array', 'min:1'],
             'groups.*.label' => ['nullable', 'string'],
             'groups.*.parts' => ['required', 'array', 'min:1'],
-            'groups.*.parts.*.type' => ['required', Rule::in(['vente', 'logistique', 'vente_v2'])],
+            'groups.*.parts.*.type' => ['required', Rule::in(['vente', 'logistique'])],
             'groups.*.parts.*.id' => ['required', 'string'],
             'groups.*.montant' => ['required', 'numeric', 'min:0'],
             'motif' => ['required', Rule::in(array_column(MotifAjustementCommission::cases(), 'value'))],
@@ -270,7 +263,7 @@ class CommissionAjustementController extends Controller
 
                     try {
                         if ($parts->first() instanceof CommissionEnveloppePart) {
-                            CommissionAdjustmentService::ajusterMontantGroupeV2(
+                            CommissionAdjustmentService::ajusterMontantGroupe(
                                 $parts,
                                 (float) $group['montant'],
                                 $motif,
@@ -278,7 +271,7 @@ class CommissionAjustementController extends Controller
                                 $request->user(),
                             );
                         } else {
-                            CommissionAdjustmentService::ajusterMontantGroupe(
+                            CommissionAdjustmentService::ajusterMontantGroupeLogistique(
                                 $parts,
                                 (float) $group['montant'],
                                 $motif,
@@ -308,7 +301,7 @@ class CommissionAjustementController extends Controller
 
         $data = $request->validate([
             'parts' => ['required', 'array', 'min:1'],
-            'parts.*.type' => ['required', Rule::in(['vente', 'logistique', 'vente_v2'])],
+            'parts.*.type' => ['required', Rule::in(['vente', 'logistique'])],
             'parts.*.id' => ['required', 'string'],
             'commentaire' => ['nullable', 'string', 'max:500'],
         ]);
@@ -322,9 +315,9 @@ class CommissionAjustementController extends Controller
             }
 
             if ($part instanceof CommissionEnveloppePart) {
-                CommissionAdjustmentService::declarerAbsenceV2($part, $data['commentaire'] ?? null, $request->user());
-            } else {
                 CommissionAdjustmentService::declarerAbsence($part, $data['commentaire'] ?? null, $request->user());
+            } else {
+                CommissionAdjustmentService::declarerAbsenceLogistique($part, $data['commentaire'] ?? null, $request->user());
             }
         }
 
@@ -347,16 +340,8 @@ class CommissionAjustementController extends Controller
         ]);
 
         if ($data['commission_type'] === 'vente') {
-            // Legacy et V2 partagent la même option "Vente" côté écran (cf. vehicule() —
-            // 'commissions_vente' fusionne les deux listes) : jamais de données réelles
-            // simultanées pour une même organisation, donc résolution par simple essai.
-            $commission = CommissionVente::where('organization_id', $periode->organization_id)->find($data['commission_id']);
-            if ($commission) {
-                $part = CommissionAdjustmentService::ajouterRemplacantVente($commission, $data, $request->user());
-            } else {
-                $enveloppe = CommissionEnveloppe::where('organization_id', $periode->organization_id)->findOrFail($data['commission_id']);
-                $part = CommissionAdjustmentService::ajouterRemplacantVenteV2($enveloppe, $data, $request->user());
-            }
+            $enveloppe = CommissionEnveloppe::where('organization_id', $periode->organization_id)->findOrFail($data['commission_id']);
+            $part = CommissionAdjustmentService::ajouterRemplacantVente($enveloppe, $data, $request->user());
         } else {
             $commission = CommissionLogistique::where('organization_id', $periode->organization_id)->findOrFail($data['commission_id']);
             $part = CommissionAdjustmentService::ajouterRemplacantLogistique($commission, $data, $request->user());
@@ -376,9 +361,9 @@ class CommissionAjustementController extends Controller
         $this->authorizeSurPart($part);
 
         if ($part instanceof CommissionEnveloppePart) {
-            CommissionAdjustmentService::validerEnveloppePart($part, $request->user());
-        } else {
             CommissionAdjustmentService::validerPart($part, $request->user());
+        } else {
+            CommissionAdjustmentService::validerPartLogistique($part, $request->user());
         }
 
         return back()->with('success', 'Commission validée.');
@@ -390,15 +375,15 @@ class CommissionAjustementController extends Controller
 
         $data = $request->validate([
             'parts' => ['required', 'array', 'min:1'],
-            'parts.*.type' => ['required', Rule::in(['vente', 'logistique', 'vente_v2'])],
+            'parts.*.type' => ['required', Rule::in(['vente', 'logistique'])],
             'parts.*.id' => ['required', 'string'],
         ]);
 
         $resolved = collect($data['parts'])->map(fn (array $p) => $this->resolvePart($p['type'], $p['id']));
 
         $count = $resolved->first() instanceof CommissionEnveloppePart
-            ? CommissionAdjustmentService::validerLotV2($resolved, $request->user())
-            : CommissionAdjustmentService::validerLot($resolved, $request->user());
+            ? CommissionAdjustmentService::validerLot($resolved, $request->user())
+            : CommissionAdjustmentService::validerLotLogistique($resolved, $request->user());
 
         app(AuditLogService::class)->record($periode, AuditEvent::VALIDATED, $request->user(), null, null, [
             'module' => 'ajustements_commissions',
@@ -420,11 +405,11 @@ class CommissionAjustementController extends Controller
     {
         $this->authorize('ajuster', $periode);
 
-        // Combine toujours vente V2 + logistique — cf. vehicule() ci-dessus.
+        // Combine toujours vente + logistique — cf. vehicule() ci-dessus.
         $vehiculeId = $vehicule === 'sans-vehicule' ? null : $vehicule;
         $groupesRaw = collect([
-            ...CommissionAdjustmentService::groupesParVehiculeV2($periode, $vehiculeId),
             ...CommissionAdjustmentService::groupesParVehicule($periode, $vehiculeId),
+            ...CommissionAdjustmentService::groupesLogistiqueParVehicule($periode, $vehiculeId),
         ]);
 
         abort_if($groupesRaw->isEmpty(), 404);
@@ -436,10 +421,10 @@ class CommissionAjustementController extends Controller
 
         $nomVehicule = $groupesRaw->first()['vehicule_nom'] ?? 'Sans véhicule';
         $parts = $groupesRaw->flatMap(fn (array $g) => $g['parts']);
-        $partsV2 = $parts->filter(fn ($p) => $p instanceof CommissionEnveloppePart);
+        $partsVente = $parts->filter(fn ($p) => $p instanceof CommissionEnveloppePart);
         $partsLogistique = $parts->reject(fn ($p) => $p instanceof CommissionEnveloppePart);
-        $count = CommissionAdjustmentService::validerLotV2($partsV2, auth()->user())
-            + CommissionAdjustmentService::validerLot($partsLogistique, auth()->user());
+        $count = CommissionAdjustmentService::validerLot($partsVente, auth()->user())
+            + CommissionAdjustmentService::validerLotLogistique($partsLogistique, auth()->user());
 
         app(AuditLogService::class)->record($periode, AuditEvent::VALIDATED, auth()->user(), null, null, [
             'module' => 'ajustements_commissions',
@@ -450,17 +435,16 @@ class CommissionAjustementController extends Controller
         return back()->with('success', "Véhicule validé : {$count} commission(s) validée(s).");
     }
 
-    private function resolvePart(string $type, string $partId): CommissionPart|CommissionLogistiquePart|CommissionEnveloppePart
+    private function resolvePart(string $type, string $partId): CommissionLogistiquePart|CommissionEnveloppePart
     {
         return match ($type) {
-            'vente' => CommissionPart::findOrFail($partId),
+            'vente' => CommissionEnveloppePart::findOrFail($partId),
             'logistique' => CommissionLogistiquePart::findOrFail($partId),
-            'vente_v2' => CommissionEnveloppePart::findOrFail($partId),
             default => abort(404),
         };
     }
 
-    private function authorizeSurPart(CommissionPart|CommissionLogistiquePart|CommissionEnveloppePart $part): void
+    private function authorizeSurPart(CommissionLogistiquePart|CommissionEnveloppePart $part): void
     {
         $orgId = $part instanceof CommissionEnveloppePart
             ? $part->enveloppe->organization_id
@@ -470,7 +454,7 @@ class CommissionAjustementController extends Controller
         abort_unless(auth()->user()->isAdmin(), 403, 'Réservé aux administrateurs.');
     }
 
-    private function transform(CommissionPart|CommissionLogistiquePart|CommissionEnveloppePart $part, string $type): array
+    private function transform(CommissionLogistiquePart|CommissionEnveloppePart $part, string $type): array
     {
         if ($part instanceof CommissionEnveloppePart) {
             $beneficiaire = $part->resoudreBeneficiaire();
@@ -513,9 +497,7 @@ class CommissionAjustementController extends Controller
             'validateur_nom' => $part->validateur?->name,
             'validated_at' => $part->validated_at?->toDateTimeString(),
             'peut_etre_ajustee' => $part->peutEtreAjustee(),
-            'reference' => $type === 'vente'
-                ? ($part->commission->commande->reference ?? '—')
-                : ($part->commission->transfert->reference ?? '—'),
+            'reference' => $part->commission->transfert->reference ?? '—',
         ];
     }
 }

@@ -6,9 +6,12 @@ use App\Enums\StatutCommission;
 use App\Enums\StatutFichePaiement;
 use App\Enums\StatutPeriodePaiement;
 use App\Enums\TypePeriodePaiement;
+use App\Models\CommandeVente;
+use App\Models\CommissionEnveloppe;
+use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
-use App\Models\CommissionVente;
+use App\Models\CommissionProcessus;
 use App\Models\Livreur;
 use App\Models\PaiementFiche;
 use App\Models\PaiementFicheLigne;
@@ -132,7 +135,7 @@ class CommissionStatutEffectifTest extends TestCase
         $periode = $this->validerPeriode(TypePeriodePaiement::LIVREUR, $part->earned_at, StatutPeriodePaiement::BROUILLON);
 
         app(PeriodeCalculatorService::class)->calculer($periode);
-        CommissionAdjustmentService::validerPart($part->fresh(), $this->user);
+        CommissionAdjustmentService::validerPartLogistique($part->fresh(), $this->user);
 
         $this->actingAs($this->user)
             ->get('/backoffice/comptabilite/commissions/logistique')
@@ -148,27 +151,41 @@ class CommissionStatutEffectifTest extends TestCase
 
     private function makeVentePart(string $type, string $beneficiaireNom): array
     {
-        $commission = CommissionVente::factory()->create([
+        $processus = CommissionProcessus::firstOrCreate(
+            ['organization_id' => $this->org->id, 'code' => CommissionProcessus::CODE_VENTE],
+            [
+                'libelle' => 'Vente',
+                'declencheur' => 'chargement_valide',
+                'strategie_ancrage_site' => 'operation',
+                'statut' => 'actif',
+            ],
+        );
+        $commande = CommandeVente::factory()->create(['organization_id' => $this->org->id]);
+
+        $commission = CommissionEnveloppe::create([
             'organization_id' => $this->org->id,
-            'montant_commission_totale' => 3000,
-            'montant_verse' => 0,
-            'statut' => StatutCommission::IMPAYE,
+            'source_type' => CommandeVente::class,
+            'source_id' => $commande->id,
+            'processus_id' => $processus->id,
+            'cible_type' => $type === 'livreur' ? 'equipe_livraison' : 'proprietaire',
+            'cible_id' => (string) \Illuminate\Support\Str::ulid(),
+            'montant_total' => 3000,
+            'earned_at' => now(),
+            'statut' => StatutCommission::IMPAYE->value,
         ]);
 
-        $extra = $type === 'livreur'
-            ? ['livreur_id' => Livreur::factory()->create(['organization_id' => $this->org->id])->id]
-            : ['proprietaire_id' => Proprietaire::factory()->create(['organization_id' => $this->org->id])->id];
+        $beneficiaireId = $type === 'livreur'
+            ? Livreur::factory()->create(['organization_id' => $this->org->id])->id
+            : Proprietaire::factory()->create(['organization_id' => $this->org->id])->id;
 
-        $part = $commission->parts()->create(array_merge([
-            'type_beneficiaire' => $type,
-            'beneficiaire_nom' => $beneficiaireNom,
-            'taux_commission' => 100,
+        $part = $commission->parts()->create([
+            'beneficiaire_type' => $type,
+            'beneficiaire_id' => $beneficiaireId,
             'montant_brut' => 3000,
-            'frais_supplementaires' => 0,
             'montant_net' => 3000,
             'montant_verse' => 0,
-            'statut' => StatutCommission::IMPAYE,
-        ], $extra));
+            'statut' => StatutCommission::IMPAYE->value,
+        ]);
 
         return ['commission' => $commission, 'part' => $part];
     }
@@ -176,7 +193,7 @@ class CommissionStatutEffectifTest extends TestCase
     public function test_vente_index_expose_en_attente_de_validation_si_periode_calculee(): void
     {
         ['commission' => $commission] = $this->makeVentePart('livreur', 'Test Livreur');
-        $this->validerPeriode(TypePeriodePaiement::LIVREUR, $commission->created_at, StatutPeriodePaiement::CALCULEE);
+        $this->validerPeriode(TypePeriodePaiement::LIVREUR, $commission->earned_at, StatutPeriodePaiement::CALCULEE);
 
         $this->actingAs($this->user)
             ->get('/backoffice/comptabilite/commissions/vente')
@@ -189,13 +206,16 @@ class CommissionStatutEffectifTest extends TestCase
     public function test_vente_index_expose_payable_si_periode_validee(): void
     {
         ['commission' => $commission] = $this->makeVentePart('livreur', 'Test Livreur');
-        $this->validerPeriode(TypePeriodePaiement::LIVREUR, $commission->created_at, StatutPeriodePaiement::VALIDEE);
+        $this->validerPeriode(TypePeriodePaiement::LIVREUR, $commission->earned_at, StatutPeriodePaiement::VALIDEE);
 
         $this->actingAs($this->user)
             ->get('/backoffice/comptabilite/commissions/vente')
             ->assertInertia(fn ($page) => $page
                 ->where('beneficiaires.0.display_status', 'impaye')
-                ->where('beneficiaires.0.can_pay', true)
+                // V2/unifié : jamais de paiement direct depuis cet écran, cf.
+                // CommissionVenteController::index() — la seule chaîne de paiement
+                // valide passe par Comptabilité > Fiches de paiement.
+                ->where('beneficiaires.0.can_pay', false)
             );
     }
 
@@ -204,7 +224,7 @@ class CommissionStatutEffectifTest extends TestCase
     public function test_proprietaire_index_expose_en_attente_de_validation_si_periode_calculee(): void
     {
         ['commission' => $commission] = $this->makeVentePart('proprietaire', 'Test Proprio');
-        $this->validerPeriode(TypePeriodePaiement::PROPRIETAIRE, $commission->created_at, StatutPeriodePaiement::CALCULEE);
+        $this->validerPeriode(TypePeriodePaiement::PROPRIETAIRE, $commission->earned_at, StatutPeriodePaiement::CALCULEE);
 
         $this->actingAs($this->user)
             ->get('/backoffice/comptabilite/commissions/proprietaires')
@@ -217,13 +237,13 @@ class CommissionStatutEffectifTest extends TestCase
     public function test_proprietaire_index_expose_payable_si_periode_validee(): void
     {
         ['commission' => $commission] = $this->makeVentePart('proprietaire', 'Test Proprio');
-        $this->validerPeriode(TypePeriodePaiement::PROPRIETAIRE, $commission->created_at, StatutPeriodePaiement::VALIDEE);
+        $this->validerPeriode(TypePeriodePaiement::PROPRIETAIRE, $commission->earned_at, StatutPeriodePaiement::VALIDEE);
 
         $this->actingAs($this->user)
             ->get('/backoffice/comptabilite/commissions/proprietaires')
             ->assertInertia(fn ($page) => $page
                 ->where('beneficiaires.0.display_status', 'impaye')
-                ->where('beneficiaires.0.can_pay', true)
+                ->where('beneficiaires.0.can_pay', false)
             );
     }
 

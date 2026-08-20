@@ -131,7 +131,6 @@ const props = defineProps<{
     default_proprietaire_id: string | null;
     seuil_global_impayes: number;
     baremes_commission_categories: BaremeCommissionCategorie[];
-    moteur_commission: 'legacy' | 'v2';
 }>();
 
 const { can } = usePermissions();
@@ -671,14 +670,7 @@ function toggleDerogation() {
 
                         <div v-else class="overflow-x-auto rounded-lg border">
                             <table class="w-full table-fixed text-sm">
-                                <colgroup v-if="moteur_commission === 'legacy'">
-                                    <col class="w-1/5" />
-                                    <col class="w-1/5" />
-                                    <col class="w-1/5" />
-                                    <col class="w-1/5" />
-                                    <col class="w-1/5" />
-                                </colgroup>
-                                <colgroup v-else>
+                                <colgroup>
                                     <col class="w-1/3" />
                                     <col class="w-1/3" />
                                     <col class="w-1/3" />
@@ -696,20 +688,6 @@ function toggleDerogation() {
                                         <th class="px-4 py-3 font-medium">
                                             Rôle
                                         </th>
-                                        <template
-                                            v-if="
-                                                moteur_commission === 'legacy'
-                                            "
-                                        >
-                                            <th class="px-4 py-3 font-medium">
-                                                Montant / pack
-                                            </th>
-                                            <th
-                                                class="px-4 py-3 text-right font-medium"
-                                            >
-                                                Commission
-                                            </th>
-                                        </template>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y">
@@ -746,113 +724,18 @@ function toggleDerogation() {
                                                 >{{ m.role }}</span
                                             >
                                         </td>
-                                        <template
-                                            v-if="
-                                                moteur_commission === 'legacy'
-                                            "
-                                        >
-                                            <td
-                                                class="px-4 py-3 font-mono text-sm"
-                                            >
-                                                {{
-                                                    m.montant_par_pack.toLocaleString(
-                                                        'fr-FR',
-                                                    )
-                                                }}
-                                                GNF
-                                            </td>
-                                            <td
-                                                class="px-4 py-3 text-right text-muted-foreground"
-                                            >
-                                                {{ m.taux_commission }}%
-                                            </td>
-                                        </template>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
 
-                        <!-- Récap répartition (LEGACY) — un seul montant/pack valable
-                             pour tout le véhicule, notion héritée d'avant la V2. -->
-                        <div
-                            v-if="
-                                moteur_commission === 'legacy' &&
-                                equipe &&
-                                vehicule.equipe_membres.length > 0
-                            "
-                            class="mt-2 rounded-lg border bg-muted/30 p-4"
-                        >
-                            <p
-                                class="mb-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase"
-                            >
-                                Répartition par pack
-                            </p>
-                            <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                                <div>
-                                    <p class="text-xs text-muted-foreground">
-                                        Commission totale
-                                    </p>
-                                    <p
-                                        class="mt-0.5 font-mono text-sm font-semibold tabular-nums"
-                                    >
-                                        {{
-                                            formatGNF(
-                                                equipe.commission_unitaire_par_pack,
-                                            )
-                                        }}
-                                    </p>
-                                    <p class="text-xs text-muted-foreground">
-                                        100%
-                                    </p>
-                                </div>
-                                <div
-                                    v-if="equipe.montant_par_pack_proprietaire"
-                                >
-                                    <p class="text-xs text-muted-foreground">
-                                        Part propriétaire
-                                    </p>
-                                    <p
-                                        class="mt-0.5 font-mono text-sm font-semibold tabular-nums"
-                                    >
-                                        {{
-                                            formatGNF(
-                                                equipe.montant_par_pack_proprietaire,
-                                            )
-                                        }}
-                                    </p>
-                                    <p class="text-xs text-muted-foreground">
-                                        {{
-                                            equipe.taux_commission_proprietaire
-                                        }}%
-                                    </p>
-                                </div>
-                                <div>
-                                    <p class="text-xs text-muted-foreground">
-                                        Part livreurs
-                                    </p>
-                                    <p
-                                        class="mt-0.5 font-mono text-sm font-semibold tabular-nums"
-                                    >
-                                        {{ formatGNF(totalLivreurs) }}
-                                    </p>
-                                    <p class="text-xs text-muted-foreground">
-                                        {{ tauxLivreurs }}%
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Barèmes de commission (V2) — un montant Propriétaire et un
+                        <!-- Barèmes de commission — un montant Propriétaire et un
                              montant Livraison PAR CATÉGORIE, jamais un total blended :
                              les barèmes peuvent différer d'une catégorie à l'autre
                              (ex. Sachet = 300 GNF, Bouteille = 1000 GNF Livraison).
                              Même source que la popup équipe (baremes_commission_categories). -->
                         <div
-                            v-else-if="
-                                moteur_commission === 'v2' &&
-                                equipe &&
-                                vehicule.equipe_membres.length > 0
-                            "
+                            v-if="equipe && vehicule.equipe_membres.length > 0"
                             class="mt-2 space-y-2"
                         >
                             <p
@@ -1013,6 +896,6 @@ function toggleDerogation() {
         :equipe="equipe"
         :proprietaires="proprietaires"
         :baremes-commission-categories="baremes_commission_categories"
-        :moteur-commission="moteur_commission"
+        moteur-commission="v2"
     />
 </template>

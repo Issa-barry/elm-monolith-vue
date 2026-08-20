@@ -8,12 +8,15 @@ use App\Enums\StatutPeriodePaiement;
 use App\Enums\TypePeriodePaiement;
 use App\Features\ModuleFeature;
 use App\Models\CommandeVente;
+use App\Models\CommissionEnveloppe;
+use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
-use App\Models\CommissionVente;
+use App\Models\CommissionProcessus;
 use App\Models\Depense;
 use App\Models\Livreur;
-use App\Models\PaiementCommissionVente;
+use App\Models\PaiementFiche;
+use App\Models\PaiementFichePaiement;
 use App\Models\PaiementPeriode;
 use App\Models\Proprietaire;
 use App\Models\Site;
@@ -107,6 +110,55 @@ class CommissionDetailKpiTest extends TestCase
             'montant_total' => 10000,
             'montant_verse' => 0,
             'statut' => StatutCommission::IMPAYE->value,
+        ]);
+    }
+
+    private function makeEnveloppeVente(?string $vehiculeId = null, ?string $siteId = null): CommissionEnveloppe
+    {
+        $processus = CommissionProcessus::firstOrCreate(
+            ['organization_id' => $this->org->id, 'code' => CommissionProcessus::CODE_VENTE],
+            [
+                'libelle' => 'Vente',
+                'declencheur' => 'chargement_valide',
+                'strategie_ancrage_site' => 'operation',
+                'statut' => 'actif',
+            ],
+        );
+
+        $commande = CommandeVente::factory()->create(array_filter([
+            'organization_id' => $this->org->id,
+            'vehicule_id' => $vehiculeId,
+            'site_id' => $siteId,
+        ]));
+
+        return CommissionEnveloppe::create([
+            'organization_id' => $this->org->id,
+            'source_type' => CommandeVente::class,
+            'source_id' => $commande->id,
+            'processus_id' => $processus->id,
+            'cible_type' => 'equipe_livraison',
+            'cible_id' => (string) \Illuminate\Support\Str::ulid(),
+            'montant_total' => 0,
+            'earned_at' => now(),
+            'statut' => StatutCommission::IMPAYE->value,
+        ]);
+    }
+
+    private function makePartVente(
+        CommissionEnveloppe $enveloppe,
+        string $type,
+        string $beneficiaireId,
+        float $brut = 10000,
+        float $verse = 0,
+        string $statut = 'impaye'
+    ): CommissionEnveloppePart {
+        return $enveloppe->parts()->create([
+            'beneficiaire_type' => $type,
+            'beneficiaire_id' => $beneficiaireId,
+            'montant_brut' => $brut,
+            'montant_net' => $brut,
+            'montant_verse' => $verse,
+            'statut' => $statut,
         ]);
     }
 
@@ -226,18 +278,17 @@ class CommissionDetailKpiTest extends TestCase
     public function test_vente_resume_global_inclut_frais(): void
     {
         $livreur = $this->makeLivreur();
-        $commission = CommissionVente::factory()->create(['organization_id' => $this->org->id]);
-        $commission->parts()->create([
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => trim($livreur->prenom.' '.$livreur->nom),
-            'role' => 'chauffeur',
-            'taux_commission' => 10,
-            'montant_brut' => 12000,
-            'frais_supplementaires' => 1000,
-            'montant_net' => 11000,
-            'montant_verse' => 3000,
-            'statut' => 'partiel',
+        $enveloppe = $this->makeEnveloppeVente();
+        $this->makePartVente($enveloppe, 'livreur', $livreur->id, brut: 12000, verse: 3000, statut: 'partiel');
+
+        // Contrairement au schéma legacy, CommissionEnveloppePart ne porte pas de
+        // frais_supplementaires propre : les frais viennent uniquement des Dépenses
+        // imputées au bénéficiaire (cf. CommissionVenteCalculatorService::fraisDepenseLivreur()).
+        Depense::factory()->valide()->create([
+            'organization_id' => $this->org->id,
+            'beneficiaire_type' => 'livreur',
+            'beneficiaire_id' => $livreur->id,
+            'montant' => 1000,
         ]);
 
         $this->actingAs($this->user)
@@ -258,19 +309,8 @@ class CommissionDetailKpiTest extends TestCase
     public function test_proprietaire_resume_global_inclut_net_a_payer(): void
     {
         $proprio = $this->makeProprietaire();
-        $commission = CommissionVente::factory()->create(['organization_id' => $this->org->id]);
-        $commission->parts()->create([
-            'type_beneficiaire' => 'proprietaire',
-            'proprietaire_id' => $proprio->id,
-            'beneficiaire_nom' => trim($proprio->prenom.' '.$proprio->nom),
-            'role' => 'proprietaire',
-            'taux_commission' => 60,
-            'montant_brut' => 50000,
-            'frais_supplementaires' => 0,
-            'montant_net' => 50000,
-            'montant_verse' => 10000,
-            'statut' => 'partiel',
-        ]);
+        $enveloppe = $this->makeEnveloppeVente();
+        $this->makePartVente($enveloppe, 'proprietaire', $proprio->id, brut: 50000, verse: 10000, statut: 'partiel');
 
         $this->actingAs($this->user)
             ->get("/backoffice/comptabilite/commissions/proprietaires/{$proprio->id}")
@@ -294,15 +334,12 @@ class CommissionDetailKpiTest extends TestCase
     public function test_vente_commission_details_expose_montant_paye_reste_statut(): void
     {
         $livreur = $this->makeLivreur();
-        $commission = CommissionVente::factory()->create(['organization_id' => $this->org->id]);
-        $commission->parts()->create([
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => trim($livreur->prenom.' '.$livreur->nom),
-            'role' => 'chauffeur',
-            'taux_commission' => 10,
+        $vehicule = $this->makeVehicule();
+        $enveloppe = $this->makeEnveloppeVente(vehiculeId: $vehicule->id);
+        $enveloppe->parts()->create([
+            'beneficiaire_type' => 'livreur',
+            'beneficiaire_id' => $livreur->id,
             'montant_brut' => 12000,
-            'frais_supplementaires' => 1000,
             'montant_net' => 11000,
             'montant_verse' => 3000,
             'statut' => 'partiel',
@@ -317,7 +354,7 @@ class CommissionDetailKpiTest extends TestCase
                 ->where('commission_details.0.paye', 3000)
                 ->where('commission_details.0.reste', 8000)
                 ->has('commission_details.0.statut')
-                ->where('commission_details.0.vehicule.id', $commission->vehicule_id)
+                ->where('commission_details.0.vehicule.id', $vehicule->id)
                 ->has('expenses')
             );
     }
@@ -351,19 +388,8 @@ class CommissionDetailKpiTest extends TestCase
     public function test_proprietaire_commission_details_expose_montant_paye_reste_statut(): void
     {
         $proprio = $this->makeProprietaire();
-        $commission = CommissionVente::factory()->create(['organization_id' => $this->org->id]);
-        $commission->parts()->create([
-            'type_beneficiaire' => 'proprietaire',
-            'proprietaire_id' => $proprio->id,
-            'beneficiaire_nom' => trim($proprio->prenom.' '.$proprio->nom),
-            'role' => 'proprietaire',
-            'taux_commission' => 60,
-            'montant_brut' => 50000,
-            'frais_supplementaires' => 0,
-            'montant_net' => 50000,
-            'montant_verse' => 10000,
-            'statut' => 'partiel',
-        ]);
+        $enveloppe = $this->makeEnveloppeVente();
+        $this->makePartVente($enveloppe, 'proprietaire', $proprio->id, brut: 50000, verse: 10000, statut: 'partiel');
 
         $this->actingAs($this->user)
             ->get("/backoffice/comptabilite/commissions/proprietaires/{$proprio->id}")
@@ -482,39 +508,11 @@ class CommissionDetailKpiTest extends TestCase
         $vehiculeA = $this->makeVehicule();
         $vehiculeB = $this->makeVehicule();
 
-        $commissionA = CommissionVente::factory()->create([
-            'organization_id' => $this->org->id,
-            'vehicule_id' => $vehiculeA->id,
-        ]);
-        $commissionA->parts()->create([
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => trim($livreur->prenom.' '.$livreur->nom),
-            'role' => 'chauffeur',
-            'taux_commission' => 10,
-            'montant_brut' => 10000,
-            'frais_supplementaires' => 0,
-            'montant_net' => 10000,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
+        $enveloppeA = $this->makeEnveloppeVente(vehiculeId: $vehiculeA->id);
+        $this->makePartVente($enveloppeA, 'livreur', $livreur->id, brut: 10000);
 
-        $commissionB = CommissionVente::factory()->create([
-            'organization_id' => $this->org->id,
-            'vehicule_id' => $vehiculeB->id,
-        ]);
-        $commissionB->parts()->create([
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => trim($livreur->prenom.' '.$livreur->nom),
-            'role' => 'chauffeur',
-            'taux_commission' => 10,
-            'montant_brut' => 25000,
-            'frais_supplementaires' => 0,
-            'montant_net' => 25000,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
+        $enveloppeB = $this->makeEnveloppeVente(vehiculeId: $vehiculeB->id);
+        $this->makePartVente($enveloppeB, 'livreur', $livreur->id, brut: 25000);
 
         $this->actingAs($this->user)
             ->get("/backoffice/comptabilite/commissions/vente/livreurs/{$livreur->id}?vehicule_id[]={$vehiculeA->id}")
@@ -540,45 +538,11 @@ class CommissionDetailKpiTest extends TestCase
         $siteA = $this->makeSite('Hamdallaye');
         $siteB = $this->makeSite('Madina');
 
-        $commissionA = CommissionVente::factory()->create([
-            'organization_id' => $this->org->id,
-            'commande_vente_id' => CommandeVente::factory()->create([
-                'organization_id' => $this->org->id,
-                'site_id' => $siteA->id,
-            ])->id,
-        ]);
-        $commissionA->parts()->create([
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => trim($livreur->prenom.' '.$livreur->nom),
-            'role' => 'chauffeur',
-            'taux_commission' => 10,
-            'montant_brut' => 12000,
-            'frais_supplementaires' => 0,
-            'montant_net' => 12000,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
+        $enveloppeA = $this->makeEnveloppeVente(siteId: $siteA->id);
+        $this->makePartVente($enveloppeA, 'livreur', $livreur->id, brut: 12000);
 
-        $commissionB = CommissionVente::factory()->create([
-            'organization_id' => $this->org->id,
-            'commande_vente_id' => CommandeVente::factory()->create([
-                'organization_id' => $this->org->id,
-                'site_id' => $siteB->id,
-            ])->id,
-        ]);
-        $commissionB->parts()->create([
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => trim($livreur->prenom.' '.$livreur->nom),
-            'role' => 'chauffeur',
-            'taux_commission' => 10,
-            'montant_brut' => 7000,
-            'frais_supplementaires' => 0,
-            'montant_net' => 7000,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
+        $enveloppeB = $this->makeEnveloppeVente(siteId: $siteB->id);
+        $this->makePartVente($enveloppeB, 'livreur', $livreur->id, brut: 7000);
 
         $this->actingAs($this->user)
             ->get("/backoffice/comptabilite/commissions/vente/livreurs/{$livreur->id}?site_ids[]={$siteA->id}")
@@ -594,31 +558,39 @@ class CommissionDetailKpiTest extends TestCase
         $livreur = $this->makeLivreur();
         $vehiculeA = $this->makeVehicule();
 
-        $commission = CommissionVente::factory()->create([
-            'organization_id' => $this->org->id,
-            'vehicule_id' => $vehiculeA->id,
-        ]);
-        $commission->parts()->create([
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => trim($livreur->prenom.' '.$livreur->nom),
-            'role' => 'chauffeur',
-            'taux_commission' => 10,
-            'montant_brut' => 12000,
-            'frais_supplementaires' => 0,
-            'montant_net' => 12000,
-            'montant_verse' => 5000,
-            'statut' => 'partiel',
-        ]);
+        $enveloppe = $this->makeEnveloppeVente(vehiculeId: $vehiculeA->id);
+        $this->makePartVente($enveloppe, 'livreur', $livreur->id, brut: 12000, verse: 5000, statut: 'partiel');
 
-        PaiementCommissionVente::create([
+        // Historique de paiement : passe désormais uniquement par PaiementFiche/
+        // PaiementFichePaiement, jamais un paiement direct sur la commission.
+        $periode = PaiementPeriode::create([
             'organization_id' => $this->org->id,
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
+            'reference' => 'PAY-'.uniqid(),
+            'type' => TypePeriodePaiement::LIVREUR->value,
+            'date_debut' => now()->startOfMonth(),
+            'date_fin' => now()->endOfMonth(),
+            'statut' => 'validee',
+        ]);
+        $fiche = PaiementFiche::create([
+            'organization_id' => $this->org->id,
+            'periode_id' => $periode->id,
+            'reference' => 'FIC-'.uniqid(),
+            'beneficiaire_type' => 'livreur',
+            'beneficiaire_id' => $livreur->id,
             'beneficiaire_nom' => trim($livreur->prenom.' '.$livreur->nom),
+            'montant_brut' => 5000,
+            'total_deductions' => 0,
+            'montant_net' => 5000,
+            'montant_paye' => 5000,
+            'statut' => 'paye',
+        ]);
+        PaiementFichePaiement::create([
+            'fiche_id' => $fiche->id,
+            'organization_id' => $this->org->id,
             'montant' => 5000,
             'mode_paiement' => 'especes',
-            'paid_at' => now(),
+            'date_paiement' => now()->toDateString(),
+            'created_by' => $this->user->id,
         ]);
 
         // Le véhicule sélectionné n'a aucun lien avec ce paiement global au

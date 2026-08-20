@@ -4,8 +4,9 @@ namespace Tests\Feature\Comptabilite;
 
 use App\Enums\StatutCommission;
 use App\Models\CommandeVente;
-use App\Models\CommissionPart;
-use App\Models\CommissionVente;
+use App\Models\CommissionEnveloppe;
+use App\Models\CommissionEnveloppePart;
+use App\Models\CommissionProcessus;
 use App\Models\Livreur;
 use App\Models\Personne;
 use App\Models\Site;
@@ -66,8 +67,8 @@ class CommissionVenteEquipeTest extends TestCase
     }
 
     /**
-     * Crée une commission vente avec une part chauffeur + une part convoyeur,
-     * comme le ferait CommissionGenerator pour une équipe à 2 membres.
+     * Crée une enveloppe de commission vente avec une part chauffeur + une part
+     * convoyeur, comme le ferait CommissionEnveloppeGenerator pour une équipe à 2 membres.
      */
     private function makeCommissionEquipe(
         Vehicule $vehicule,
@@ -77,51 +78,58 @@ class CommissionVenteEquipeTest extends TestCase
         float $commissionTotale = 31_660.0,
         float $tauxChauffeur = 18.42,
         float $tauxConvoyeur = 13.16,
-    ): CommissionVente {
+    ): CommissionEnveloppe {
         $commande = CommandeVente::create([
             'organization_id' => $this->org->id,
             'reference' => 'CMD-'.uniqid(),
             'site_id' => $site->id,
+            'vehicule_id' => $vehicule->id,
             'statut' => 'livree',
             'total_commande' => 500000,
         ]);
 
-        $commission = CommissionVente::create([
+        $processus = CommissionProcessus::firstOrCreate(
+            ['organization_id' => $this->org->id, 'code' => CommissionProcessus::CODE_VENTE],
+            [
+                'libelle' => 'Vente',
+                'declencheur' => 'chargement_valide',
+                'strategie_ancrage_site' => 'operation',
+                'statut' => 'actif',
+            ],
+        );
+
+        $commission = CommissionEnveloppe::create([
             'organization_id' => $this->org->id,
-            'commande_vente_id' => $commande->id,
-            'vehicule_id' => $vehicule->id,
-            'montant_commande' => 500000,
-            'montant_commission_totale' => $commissionTotale,
-            'montant_verse' => 0,
+            'source_type' => CommandeVente::class,
+            'source_id' => $commande->id,
+            'processus_id' => $processus->id,
+            'cible_type' => 'equipe_livraison',
+            'cible_id' => (string) \Illuminate\Support\Str::ulid(),
+            'montant_total' => $commissionTotale,
+            'earned_at' => now(),
             'statut' => StatutCommission::IMPAYE->value,
         ]);
 
         $montantChauffeur = round($commissionTotale * $tauxChauffeur / 100, 2);
         $montantConvoyeur = round($commissionTotale * $tauxConvoyeur / 100, 2);
 
-        CommissionPart::create([
-            'commission_vente_id' => $commission->id,
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $chauffeur->id,
-            'beneficiaire_nom' => trim("{$chauffeur->prenom} {$chauffeur->nom}"),
-            'role' => 'chauffeur',
-            'taux_commission' => $tauxChauffeur,
+        CommissionEnveloppePart::create([
+            'enveloppe_id' => $commission->id,
+            'beneficiaire_type' => CommissionEnveloppePart::TYPE_LIVREUR,
+            'beneficiaire_id' => $chauffeur->id,
+            'taux_repartition_snapshot' => $tauxChauffeur,
             'montant_brut' => $montantChauffeur,
-            'frais_supplementaires' => 0,
             'montant_net' => $montantChauffeur,
             'montant_verse' => 0,
             'statut' => StatutCommission::IMPAYE->value,
         ]);
 
-        CommissionPart::create([
-            'commission_vente_id' => $commission->id,
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $convoyeur->id,
-            'beneficiaire_nom' => trim("{$convoyeur->prenom} {$convoyeur->nom}"),
-            'role' => 'convoyeur',
-            'taux_commission' => $tauxConvoyeur,
+        CommissionEnveloppePart::create([
+            'enveloppe_id' => $commission->id,
+            'beneficiaire_type' => CommissionEnveloppePart::TYPE_LIVREUR,
+            'beneficiaire_id' => $convoyeur->id,
+            'taux_repartition_snapshot' => $tauxConvoyeur,
             'montant_brut' => $montantConvoyeur,
-            'frais_supplementaires' => 0,
             'montant_net' => $montantConvoyeur,
             'montant_verse' => 0,
             'statut' => StatutCommission::IMPAYE->value,
@@ -180,7 +188,7 @@ class CommissionVenteEquipeTest extends TestCase
         $convoyeur = $this->makeLivreur('Mamadouba', 'CAMARA');
 
         $commission = $this->makeCommissionEquipe($vehicule, $site, $chauffeur, $convoyeur);
-        $commandeReference = $commission->commande->reference;
+        $commandeReference = $commission->source->reference;
 
         $this->actingAs($this->user)
             ->get(route('comptabilite.commissions.vente.livreur', $chauffeur->id))
@@ -201,7 +209,7 @@ class CommissionVenteEquipeTest extends TestCase
         $convoyeur = $this->makeLivreur('Mamadouba', 'CAMARA');
 
         $commission = $this->makeCommissionEquipe($vehicule, $site, $chauffeur, $convoyeur);
-        $commandeReference = $commission->commande->reference;
+        $commandeReference = $commission->source->reference;
 
         $this->actingAs($this->user)
             ->get(route('comptabilite.commissions.vente.livreur', $convoyeur->id))

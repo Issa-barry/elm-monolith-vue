@@ -9,7 +9,6 @@ use App\Models\CommissionPayment;
 use App\Models\Depense;
 use App\Models\EncaissementVente;
 use App\Models\JournalTresorerie;
-use App\Models\PaiementCommissionVente;
 use App\Models\PaiementFichePaiement;
 use App\Models\PaiePaiement;
 use Illuminate\Support\Facades\Auth;
@@ -103,27 +102,6 @@ class JournalTresorerieService
             'source_type' => Depense::class,
             'source_id' => $depense->id,
             'created_by' => $depense->user_id,
-        ]);
-    }
-
-    public static function enregistrerCommissionVente(PaiementCommissionVente $paiement): void
-    {
-        $categorie = $paiement->type_beneficiaire === 'proprietaire'
-            ? CategorieJournal::PROPRIETAIRE->value
-            : CategorieJournal::COMMISSION_VENTE->value;
-
-        JournalTresorerie::create([
-            'organization_id' => $paiement->organization_id,
-            'site_id' => null,
-            'date_operation' => $paiement->paid_at,
-            'sens' => SensJournal::SORTIE->value,
-            'categorie' => $categorie,
-            'libelle' => 'Paiement commission vente — '.$paiement->beneficiaire_nom,
-            'reference' => null,
-            'montant' => (float) $paiement->montant,
-            'source_type' => PaiementCommissionVente::class,
-            'source_id' => $paiement->id,
-            'created_by' => $paiement->created_by,
         ]);
     }
 

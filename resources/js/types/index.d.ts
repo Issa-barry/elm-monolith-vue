@@ -31,7 +31,9 @@ export type StandalonePermission =
     | 'ventes.qte.update'
     | 'ventes.prix.update'
     | 'imports-flotte.create'
-    | 'imports-flotte.read';
+    | 'imports-flotte.read'
+    | 'imports-produits.create'
+    | 'imports-produits.read';
 export type PermissionKey = `${Resource}.${CrudAction}` | StandalonePermission;
 export type PermissionsMap = Partial<Record<PermissionKey, boolean>>;
 export type AppRole =

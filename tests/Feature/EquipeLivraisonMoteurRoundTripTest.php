@@ -14,10 +14,8 @@ use App\Models\CommandeVente;
 use App\Models\CommissionCibleType;
 use App\Models\CommissionEnveloppe;
 use App\Models\CommissionEnveloppePart;
-use App\Models\CommissionPart;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
-use App\Models\CommissionVente;
 use App\Models\EquipeLivraison;
 use App\Models\Parametre;
 use App\Models\Produit;
@@ -32,15 +30,10 @@ use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 /**
- * Round-trip complet équipe (popup/contrôleur) → vente réelle → commission,
- * pour chacun des deux moteurs — cf. correction post-Phase 2 (régression
- * signalée : la bascule LEGACY/V2 doit rester sûre de bout en bout, pas
- * seulement au niveau du formulaire équipe).
- *
- * Le second cas (V2) exerce aussi le branchement CommissionTriggerService, qui
- * ne savait auparavant appeler QUE l'ancien moteur, quel que soit le
- * commission_processus de l'organisation (gap découvert et corrigé dans le
- * même correctif : cf. CommissionTriggerService::genererCommissionVente()).
+ * Round-trip complet équipe (popup/contrôleur) → vente réelle → commission :
+ * configurer l'équipe via le contrôleur (partage Livraison PAR CATÉGORIE),
+ * vendre réellement, vérifier que les enveloppes générées reflètent la
+ * configuration effectivement enregistrée.
  */
 class EquipeLivraisonMoteurRoundTripTest extends TestCase
 {
@@ -104,73 +97,7 @@ class EquipeLivraisonMoteurRoundTripTest extends TestCase
         return $commande->fresh();
     }
 
-    // ── LEGACY : modifier l'équipe via le contrôleur, puis vendre ───────────
-
-    public function test_organisation_legacy_modifier_equipe_puis_nouvelle_vente_genere_la_commission_legacy_correcte(): void
-    {
-        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
-        $vehicule = Vehicule::factory()->create([
-            'organization_id' => $this->org->id,
-            'proprietaire_id' => $proprietaire->id,
-            'capacite_packs' => 10,
-        ]);
-
-        // Équipe initiale : 950 = proprio 650 + chauffeur 300.
-        $this->actingAs($this->user)
-            ->post(route('equipes-livraison.store'), [
-                'vehicule_id' => $vehicule->id,
-                'is_active' => true,
-                'commission_unitaire_par_pack' => 950,
-                'montant_par_pack_proprietaire' => 650,
-                'membres' => [[
-                    'livreur_id' => null, 'nom_complet' => 'Mamadou Diallo',
-                    'telephone' => '+224620000001', 'role' => 'chauffeur',
-                    'montant_par_pack' => 300, 'ordre' => 0,
-                ]],
-            ])
-            ->assertRedirectContains('/backoffice/vehicules/');
-
-        $equipe = EquipeLivraison::where('vehicule_id', $vehicule->id)->firstOrFail();
-
-        // Un admin modifie l'équipe AVANT la vente : nouvelle répartition
-        // 950 = proprio 570 (60 %) + chauffeur 380 (40 %).
-        $this->actingAs($this->user)
-            ->patch(route('equipes-livraison.update', $equipe), [
-                'vehicule_id' => $vehicule->id,
-                'is_active' => true,
-                'commission_unitaire_par_pack' => 950,
-                'montant_par_pack_proprietaire' => 570,
-                'membres' => [[
-                    'livreur_id' => null, 'nom_complet' => 'Mamadou Diallo',
-                    'telephone' => '+224620000001', 'role' => 'chauffeur',
-                    'montant_par_pack' => 380, 'ordre' => 0,
-                ]],
-            ])
-            ->assertRedirectContains('/backoffice/vehicules/');
-
-        $equipe->refresh();
-        $this->assertEquals(60.0, (float) $equipe->taux_commission_proprietaire);
-
-        $produit = $this->makeProduit();
-        $commande = $this->validerVente($vehicule, $produit, quantite: 2);
-
-        // Marge = (2000 - 1500) × 2 = 1000.
-        $commission = CommissionVente::where('commande_vente_id', $commande->id)->firstOrFail();
-        $this->assertEquals(1000.0, (float) $commission->montant_commission_totale);
-
-        $partProp = CommissionPart::where('commission_vente_id', $commission->id)
-            ->where('type_beneficiaire', 'proprietaire')->firstOrFail();
-        $partChauffeur = CommissionPart::where('commission_vente_id', $commission->id)
-            ->where('type_beneficiaire', 'livreur')->firstOrFail();
-
-        // 60 % / 40 % de 1000 : la répartition APRÈS modification, pas celle d'origine.
-        $this->assertEqualsWithDelta(600.0, (float) $partProp->montant_brut, 0.01);
-        $this->assertEqualsWithDelta(400.0, (float) $partChauffeur->montant_brut, 0.01);
-    }
-
-    // ── V2 : configurer l'équipe via le contrôleur, puis vendre ─────────────
-
-    public function test_organisation_v2_store_equipe_via_le_controleur_puis_nouvelle_vente_genere_lenveloppe_v2_sans_toucher_lancien_moteur(): void
+    public function test_store_equipe_via_le_controleur_puis_nouvelle_vente_genere_les_enveloppes(): void
     {
         $processus = CommissionProcessus::create([
             'organization_id' => $this->org->id,
@@ -217,9 +144,9 @@ class EquipeLivraisonMoteurRoundTripTest extends TestCase
             'capacite_packs' => 10,
         ]);
 
-        // Popup V2 : le propriétaire n'est jamais dans le payload ; le partage
-        // Livraison est défini PAR CATÉGORIE (décision AMOA post-Phase 2), un
-        // seul livreur à 100 % pour l'unique catégorie vendue ici.
+        // Le propriétaire n'est jamais dans le payload équipe ; le partage
+        // Livraison est défini PAR CATÉGORIE, un seul livreur à 100 % pour
+        // l'unique catégorie vendue ici.
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), [
                 'vehicule_id' => $vehicule->id,
@@ -238,16 +165,13 @@ class EquipeLivraisonMoteurRoundTripTest extends TestCase
             ->assertRedirectContains('/backoffice/vehicules/');
 
         $equipe = EquipeLivraison::where('vehicule_id', $vehicule->id)->firstOrFail();
-        // Jamais maintenus pour une organisation V2 : aucun besoin, restent à leur valeur par défaut.
+        // Colonnes historiques : jamais maintenues, restent à leur valeur par défaut.
         $this->assertSame(0.0, (float) $equipe->commission_unitaire_par_pack);
         $this->assertNull($equipe->montant_par_pack_proprietaire);
         $this->assertNull($equipe->taux_commission_proprietaire);
 
         $produit = $this->makeProduit($categorie->id);
         $commande = $this->validerVente($vehicule, $produit, quantite: 5);
-
-        // L'ancien moteur ne doit JAMAIS tourner pour cette organisation.
-        $this->assertDatabaseMissing('commissions_ventes', ['commande_vente_id' => $commande->id]);
 
         $enveloppeProp = CommissionEnveloppe::where('source_id', $commande->id)
             ->where('cible_type', 'proprietaire')->firstOrFail();

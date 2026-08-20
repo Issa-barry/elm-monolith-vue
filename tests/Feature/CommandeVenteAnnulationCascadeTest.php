@@ -2,15 +2,17 @@
 
 namespace Tests\Feature;
 
+use App\Enums\CommissionActivationStatut;
 use App\Enums\StatutCommission;
 use App\Models\Client;
 use App\Models\CommandeVente;
-use App\Models\CommissionVente;
+use App\Models\CommissionCibleType;
+use App\Models\CommissionEnveloppe;
+use App\Models\CommissionProcessus;
 use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\Site;
 use App\Services\CommandeVenteService;
-use App\Services\CommissionVentePaiementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -45,23 +47,22 @@ class CommandeVenteAnnulationCascadeTest extends TestCase
             'total_commande' => 500000,
         ]);
 
-        $commission = CommissionVente::create([
+        $commission = CommissionEnveloppe::create([
             'organization_id' => $org->id,
-            'commande_vente_id' => $commande->id,
-            'vehicule_id' => null,
-            'montant_commande' => 500000,
-            'montant_commission_totale' => 100000,
-            'montant_verse' => 0,
+            'source_type' => CommandeVente::class,
+            'source_id' => $commande->id,
+            'processus_id' => $this->makeProcessus($org)->id,
+            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+            'cible_id' => (string) \Illuminate\Support\Str::ulid(),
+            'montant_total' => 100000,
+            'earned_at' => now(),
             'statut' => StatutCommission::IMPAYE->value,
         ]);
 
         $part = $commission->parts()->create([
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => trim("{$livreur->prenom} {$livreur->nom}"),
-            'taux_commission' => 100,
+            'beneficiaire_type' => 'livreur',
+            'beneficiaire_id' => $livreur->id,
             'montant_brut' => 100000,
-            'frais_supplementaires' => 0,
             'montant_net' => 100000,
             'montant_verse' => 0,
             'statut' => StatutCommission::IMPAYE->value,
@@ -71,10 +72,6 @@ class CommandeVenteAnnulationCascadeTest extends TestCase
 
         $this->assertSame(StatutCommission::ANNULEE, $part->fresh()->statut);
         $this->assertSame(StatutCommission::ANNULEE, $commission->fresh()->statut);
-
-        // Une part annulée ne doit plus jamais réapparaître comme disponible au paiement.
-        $disponibles = CommissionVentePaiementService::partsDisponibles($org->id, 'livreur', $livreur->id);
-        $this->assertCount(0, $disponibles);
     }
 
     public function test_annuler_commande_preserve_les_parts_deja_payees(): void
@@ -99,23 +96,22 @@ class CommandeVenteAnnulationCascadeTest extends TestCase
             'total_commande' => 500000,
         ]);
 
-        $commission = CommissionVente::create([
+        $commission = CommissionEnveloppe::create([
             'organization_id' => $org->id,
-            'commande_vente_id' => $commande->id,
-            'vehicule_id' => null,
-            'montant_commande' => 500000,
-            'montant_commission_totale' => 100000,
-            'montant_verse' => 100000,
+            'source_type' => CommandeVente::class,
+            'source_id' => $commande->id,
+            'processus_id' => $this->makeProcessus($org)->id,
+            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+            'cible_id' => (string) \Illuminate\Support\Str::ulid(),
+            'montant_total' => 100000,
+            'earned_at' => now(),
             'statut' => StatutCommission::PAYE->value,
         ]);
 
         $part = $commission->parts()->create([
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => trim("{$livreur->prenom} {$livreur->nom}"),
-            'taux_commission' => 100,
+            'beneficiaire_type' => 'livreur',
+            'beneficiaire_id' => $livreur->id,
             'montant_brut' => 100000,
-            'frais_supplementaires' => 0,
             'montant_net' => 100000,
             'montant_verse' => 100000,
             'statut' => StatutCommission::PAYE->value,
@@ -126,5 +122,18 @@ class CommandeVenteAnnulationCascadeTest extends TestCase
         // Une part déjà soldée garde son historique de paiement — jamais rétroactivement annulée.
         $this->assertSame(StatutCommission::PAYE, $part->fresh()->statut);
         $this->assertSame(StatutCommission::PAYE, $commission->fresh()->statut);
+    }
+
+    private function makeProcessus(Organization $org): CommissionProcessus
+    {
+        return CommissionProcessus::firstOrCreate(
+            ['organization_id' => $org->id, 'code' => CommissionProcessus::CODE_VENTE],
+            [
+                'libelle' => 'Vente',
+                'declencheur' => 'chargement_valide',
+                'strategie_ancrage_site' => 'operation',
+                'statut' => CommissionActivationStatut::ACTIF->value,
+            ],
+        );
     }
 }

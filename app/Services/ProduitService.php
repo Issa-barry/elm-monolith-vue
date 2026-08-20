@@ -15,6 +15,15 @@ class ProduitService
         'code_barres', 'prix_usine', 'prix_usine_tricycle', 'prix_vente', 'prix_achat', 'cout',
     ];
 
+    /**
+     * CHAMPS_VARIANTE + 'sku', utilisé UNIQUEMENT par creer() : un SKU fourni explicitement (ex.
+     * import Excel préparant un futur réimport de mise à jour, cf. ImportProduitsParser) doit
+     * être respecté tel quel à la CRÉATION — ProduitVariante::booted() ne l'auto-génère que si
+     * vide. Ne JAMAIS réutiliser cette constante dans mettreAJourSimple() : le SKU d'une variante
+     * existante n'est jamais réécrit par une mise à jour, quel que soit l'appelant.
+     */
+    private const CHAMPS_VARIANTE_CREATION = [...self::CHAMPS_VARIANTE, 'sku'];
+
     public function __construct(private VarianteService $varianteService) {}
 
     /**
@@ -22,17 +31,26 @@ class ProduitService
      * par les controllers Web et API (élimine la duplication de logique constatée avant refonte).
      *
      * $donnees attend les champs produits (nom/produit_type_id/statut/categorie_id/description,
-     * seuil_alerte_stock/alerte_stock_active), les champs de CHAMPS_VARIANTE, et optionnellement
-     * 'options' => [['nom'=>..,'valeurs'=>[..]], ...].
+     * seuil_alerte_stock/alerte_stock_active), les champs de CHAMPS_VARIANTE_CREATION, et
+     * optionnellement 'options' => [['nom'=>..,'valeurs'=>[..]], ...].
      */
     public function creer(array $donnees): Produit
     {
         $type = ProduitType::findOrFail($donnees['produit_type_id']);
-        $donneesVariante = Arr::only($donnees, self::CHAMPS_VARIANTE);
+        $donneesVariante = Arr::only($donnees, self::CHAMPS_VARIANTE_CREATION);
         $this->validerPrixSelonType($type, $donneesVariante);
 
+        // Un SKU explicite n'a de sens que pour la variante par défaut d'un produit simple : les
+        // variantes générées par options partageraient toutes le même SKU (violerait unique(
+        // organization_id, sku)).
+        if (! empty($donneesVariante['sku']) && ! empty($donnees['options'])) {
+            throw ValidationException::withMessages([
+                'sku' => 'Un SKU explicite ne peut être fourni que pour un produit sans déclinaisons.',
+            ]);
+        }
+
         return DB::transaction(function () use ($donnees, $donneesVariante) {
-            $produit = Produit::create(Arr::except($donnees, [...self::CHAMPS_VARIANTE, 'options']));
+            $produit = Produit::create(Arr::except($donnees, [...self::CHAMPS_VARIANTE_CREATION, 'options']));
 
             $optionsInput = $donnees['options'] ?? [];
             if (! empty($optionsInput)) {

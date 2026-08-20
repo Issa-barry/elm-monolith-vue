@@ -12,8 +12,6 @@ use App\Models\CommandeAchat;
 use App\Models\CommandeAchatLigne;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
-use App\Models\CommissionPart;
-use App\Models\CommissionVente;
 use App\Models\EncaissementVente;
 use App\Models\EntrepriseTierce;
 use App\Models\FactureVente;
@@ -30,7 +28,6 @@ use App\Models\TypeVehicule;
 use App\Models\User;
 use App\Models\Vehicule;
 use App\Models\Versement;
-use App\Models\VersementCommission;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;
 use Tests\Concerns\HasProduitVariante;
@@ -905,40 +902,6 @@ class ModelTest extends TestCase
         ]);
 
         $this->assertSame(PackingStatut::PAYEE, $packing->fresh()->statut);
-    }
-
-    // ── VersementCommission ───────────────────────────────────────────────────
-
-    public function test_versement_commission_creator_relation(): void
-    {
-        $org = $this->makeOrg();
-        $user = $this->makeUser($org);
-        $this->actingAs($user);
-
-        $commission = CommissionVente::factory()->create([
-            'organization_id' => $org->id,
-        ]);
-
-        $part = $commission->parts()->create([
-            'type_beneficiaire' => 'livreur',
-            'beneficiaire_nom' => 'Test Livreur',
-            'taux_commission' => 100,
-            'montant_brut' => 5000,
-            'frais_supplementaires' => 0,
-            'montant_net' => 5000,
-            'montant_verse' => 0,
-            'statut' => StatutCommission::IMPAYE,
-        ]);
-
-        $vc = VersementCommission::create([
-            'commission_part_id' => $part->id,
-            'montant' => 1000,
-            'date_versement' => now()->toDateString(),
-            'mode_paiement' => 'especes',
-        ]);
-
-        $this->assertInstanceOf(CommissionPart::class, $vc->part);
-        $this->assertEquals($user->id, $vc->created_by);
     }
 
     // ── EncaissementVente ─────────────────────────────────────────────────────
