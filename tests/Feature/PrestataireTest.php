@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Features\ModuleFeature;
 use App\Models\Organization;
+use App\Models\Personne;
 use App\Models\Prestataire;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Pennant\Feature;
@@ -24,9 +25,15 @@ class PrestataireTest extends TestCase
 
     private function makePrestataire(Organization $org, array $overrides = []): Prestataire
     {
+        $personne = Personne::create([
+            'organization_id' => $org->id,
+            'nom' => $overrides['nom'] ?? 'PRESTATAIRE TEST',
+        ]);
+        unset($overrides['nom']);
+
         return Prestataire::create(array_merge([
             'organization_id' => $org->id,
-            'nom' => 'PRESTATAIRE TEST',
+            'personne_id' => $personne->id,
             'type' => 'machiniste',
             'is_active' => true,
         ], $overrides));
@@ -94,10 +101,13 @@ class PrestataireTest extends TestCase
             ->post(route('prestataires.store'), $this->validPayload())
             ->assertRedirect(route('prestataires.index'));
 
-        $this->assertDatabaseHas('prestataires', [
+        $this->assertDatabaseHas('personnes', [
             'organization_id' => $this->org->id,
             'nom' => 'DIALLO',
         ]);
+        $prestataire = Prestataire::where('organization_id', $this->org->id)->firstOrFail();
+        $this->assertNotNull($prestataire->personne_id);
+        $this->assertNull($prestataire->entreprise_tierce_id);
     }
 
     public function test_store_creates_prestataire_with_raison_sociale_only(): void
@@ -110,7 +120,10 @@ class PrestataireTest extends TestCase
             ]))
             ->assertRedirect(route('prestataires.index'));
 
-        $this->assertDatabaseHas('prestataires', [
+        $prestataire = Prestataire::where('organization_id', $this->org->id)->firstOrFail();
+        $this->assertNull($prestataire->personne_id);
+        $this->assertNotNull($prestataire->entreprise_tierce_id);
+        $this->assertDatabaseHas('entreprises_tierces', [
             'organization_id' => $this->org->id,
         ]);
     }
@@ -193,8 +206,9 @@ class PrestataireTest extends TestCase
             ]))
             ->assertRedirect(route('prestataires.edit', $prestataire));
 
-        $this->assertDatabaseHas('prestataires', [
-            'id' => $prestataire->id,
+        // La même Personne est mise à jour en place (jamais re-résolue vers une autre fiche).
+        $this->assertDatabaseHas('personnes', [
+            'id' => $prestataire->personne_id,
             'nom' => 'BARRY',
         ]);
     }
@@ -212,9 +226,9 @@ class PrestataireTest extends TestCase
             ]))
             ->assertRedirect(route('prestataires.edit', $prestataire));
 
-        $this->assertDatabaseHas('prestataires', [
-            'id' => $prestataire->id,
-        ]);
+        $prestataire->refresh();
+        $this->assertNull($prestataire->personne_id);
+        $this->assertNotNull($prestataire->entreprise_tierce_id);
     }
 
     public function test_update_fails_without_type(): void

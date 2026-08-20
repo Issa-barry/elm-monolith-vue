@@ -56,6 +56,12 @@ interface SolvabiliteResult {
     montant_disponible: number;
     blocked: boolean;
     depassement: number;
+    // Verrou « première régularisation » (cf. SolvabiliteService) : distinct du contrôle de
+    // seuil ci-dessus — se déclenche dès qu'une facture n'a reçu AUCUN encaissement, quel que
+    // soit le seuil ou le paramètre de contrôle des impayés. Ne concerne que la cible véhicule.
+    blocage_premiere_facture: boolean;
+    facture_bloquante_reference: string | null;
+    facture_bloquante_commande_id: string | null;
     factures: FactureDetail[];
 }
 
@@ -731,6 +737,74 @@ function confirmerEtCreer() {
                                 Vérification en cours…
                             </div>
 
+                            <!-- 🚫 Commande bloquée — verrou « première régularisation » : une facture
+                                 précédente n'a reçu AUCUN encaissement, indépendamment du seuil
+                                 d'impayés et de has_debt/blocked ci-dessous (cf. SolvabiliteService —
+                                 une facture encore CREEE n'entre pas dans has_debt mais déclenche
+                                 quand même ce verrou). Vérifié en priorité, avant tout le reste de
+                                 la chaîne, pour ne jamais laisser passer « ✓ Véhicule à jour ». -->
+                            <div
+                                v-else-if="
+                                    vehiculeSolvabilite?.blocage_premiere_facture
+                                "
+                                class="mt-3 rounded-xl border border-red-300 bg-red-100 p-3 dark:border-red-700 dark:bg-red-950/50"
+                            >
+                                <div
+                                    class="mb-2 flex items-center justify-between gap-3"
+                                >
+                                    <p
+                                        class="text-xs font-bold tracking-wide text-red-800 uppercase dark:text-red-300"
+                                    >
+                                        Commande bloquée — première facture
+                                        non réglée
+                                    </p>
+                                    <button
+                                        type="button"
+                                        class="shrink-0 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-100 dark:border-red-700 dark:bg-red-950/60 dark:text-red-300 dark:hover:bg-red-900/60"
+                                        @click="
+                                            ouvrirDialogFactures(
+                                                vehiculeSolvabilite,
+                                                {
+                                                    type: 'vehicule',
+                                                    titre: vehiculeSelected
+                                                        ? vehiculeLabel(
+                                                              vehiculeSelected,
+                                                          )
+                                                        : 'Véhicule',
+                                                    chauffeur:
+                                                        vehiculeSelected?.livreur_nom
+                                                            ? vehiculeSelected.livreur_nom +
+                                                              (vehiculeSelected.livreur_telephone
+                                                                  ? ' — ' +
+                                                                    formatPhoneDisplay(
+                                                                        vehiculeSelected.livreur_telephone,
+                                                                    )
+                                                                  : '')
+                                                            : undefined,
+                                                },
+                                            )
+                                        "
+                                    >
+                                        Voir les factures
+                                    </button>
+                                </div>
+                                <p class="text-sm text-red-900 dark:text-red-200">
+                                    Ce véhicule possède déjà une commande<template
+                                        v-if="
+                                            vehiculeSolvabilite.facture_bloquante_reference
+                                        "
+                                    >
+                                        ({{
+                                            vehiculeSolvabilite.facture_bloquante_reference
+                                        }})</template
+                                    >
+                                    dont la facture n'a encore reçu aucun
+                                    paiement. Enregistrez d'abord un
+                                    encaissement avant de créer une nouvelle
+                                    commande.
+                                </p>
+                            </div>
+
                             <!-- ✅ Aucun impayé -->
                             <p
                                 v-else-if="
@@ -891,7 +965,7 @@ function confirmerEtCreer() {
                                 </div>
                             </div>
 
-                            <!-- 🚫 Commande bloquée -->
+                            <!-- 🚫 Commande bloquée — seuil d'impayés dépassé -->
                             <div
                                 v-else-if="vehiculeSolvabilite?.blocked"
                                 class="mt-3 rounded-xl border border-red-300 bg-red-100 p-3 dark:border-red-700 dark:bg-red-950/50"

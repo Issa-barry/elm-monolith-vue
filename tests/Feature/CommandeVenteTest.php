@@ -1152,15 +1152,20 @@ class CommandeVenteTest extends TestCase
 
     public function test_references_incrementales_dans_le_mois(): void
     {
-        ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
+        ['produit' => $produit, 'vehicule' => $vehicule, 'client' => $client] = $this->makeContext($this->org);
 
-        $payload = [
+        // Deuxième commande sur le client (vente directe), pas sur le même véhicule : depuis le
+        // verrou « première régularisation » (cf. SolvabiliteService), la première commande
+        // laisse une facture non encaissée sur ce véhicule qui bloquerait une deuxième commande
+        // véhicule immédiate — hors sujet ici, ce test ne vise que la numérotation séquentielle.
+        $this->actingAs($this->user)->post(route('ventes.store'), [
             'vehicule_id' => $vehicule->id,
             'lignes' => [['produit_id' => $produit->id, 'qte' => 2, 'prix_vente' => 2000]],
-        ];
-
-        $this->actingAs($this->user)->post(route('ventes.store'), $payload);
-        $this->actingAs($this->user)->post(route('ventes.store'), $payload);
+        ]);
+        $this->actingAs($this->user)->post(route('ventes.store'), [
+            'client_id' => $client->id,
+            'lignes' => [['produit_id' => $produit->id, 'qte' => 2, 'prix_vente' => 2000]],
+        ]);
 
         $commandes = CommandeVente::where('organization_id', $this->org->id)
             ->orderBy('numero')

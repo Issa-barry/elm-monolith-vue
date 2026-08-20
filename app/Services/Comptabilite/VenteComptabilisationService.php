@@ -137,12 +137,13 @@ class VenteComptabilisationService
 
     /**
      * Contrepasse la pièce VENTE_FACTUREE d'une facture annulée après avoir été
-     * comptabilisée — cas rare : uniquement le chemin creerFactureDirecte() (vente
-     * PARTENAIRE/directe), jamais le chemin flotte (non annulable après
-     * LIVRAISON_EN_COURS, cf. StatutCommandeVente::isAnnulable() et
-     * CommandeVenteService::annuler(), qui bloque déjà toute annulation dès qu'un
-     * encaissement existe). Aucun effet si la facture n'avait jamais été
-     * comptabilisée (encore CREEE au moment de l'annulation).
+     * comptabilisée — appelée pour toute commande annulée avec facture (flotte
+     * comme vente directe, cf. CommandeVenteService::annuler()), mais reste un
+     * no-op dans la pratique pour le chemin flotte : une commande flotte n'est
+     * annulable que depuis A_CHARGER (cf. StatutCommandeVente::isAnnulable()),
+     * stade auquel sa facture est encore CREEE et n'a jamais été comptabilisée
+     * (comptabiliserVenteFacturee() n'a lieu qu'au chargement validé). Aucun
+     * effet si la facture n'avait jamais été comptabilisée.
      */
     public function contrepasserVenteFactureeSiExistante(FactureVente $facture, string $motif): ?PieceComptable
     {

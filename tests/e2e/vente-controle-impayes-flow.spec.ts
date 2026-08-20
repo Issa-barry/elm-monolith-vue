@@ -402,8 +402,9 @@ test('vente client sous le seuil autorisée, la même dette dépassant un seuil 
     await selectClientOnVenteForm(page, nomClient);
 
     // "Commande bloquée — seuil dépassé" (blocage côté client, pas de véhicule sélectionné
-    // ici) — l'autre variante ("— facture impayée", blocage côté véhicule) ne s'applique pas
-    // à ce scénario, cf. Ventes/Create.vue lignes ~905 et ~1266.
+    // ici) — les variantes véhicule ("— facture impayée" pour le seuil, "— première facture
+    // non réglée" pour le nouveau verrou testé dans le describe ci-dessous) ne s'appliquent
+    // pas à ce scénario, cf. Ventes/Create.vue.
     await expect(page.locator('body')).toContainText(/commande bloquée/i, {
         timeout: 10_000,
     });
@@ -411,4 +412,101 @@ test('vente client sous le seuil autorisée, la même dette dépassant un seuil 
         .locator('#vente-form button[type="submit"]:visible')
         .first();
     await expect(submitBtn).toBeDisabled({ timeout: 10_000 });
+});
+
+// ── Verrou « première régularisation » — véhicule (décision produit du 20/08/2026) ─────────
+// Un véhicule ne peut pas cumuler plusieurs commandes ouvertes tant que la précédente n'a reçu
+// aucun encaissement — indépendant du contrôle de seuil ci-dessus, cf. SolvabiliteService::
+// premiereFactureNonEncaisseeVehicule(). Couverture détaillée (seuil, dérogation, isolation) dans
+// tests/Unit/SolvabiliteServiceTest.php et tests/Feature/VehiculePremiereRegularisationTest.php ;
+// ce scénario ne vérifie que le parcours utilisateur réel dans /backoffice/ventes/create.
+
+async function selectVehiculeOnVenteForm(
+    page: Page,
+    nomVehicule: string,
+): Promise<void> {
+    const vehiculeAutocomplete = page
+        .locator('#vente-form .p-autocomplete')
+        .first();
+    await expect(vehiculeAutocomplete).toBeVisible({ timeout: 15_000 });
+
+    // pressSequentially() plutôt que fill() : la liste des véhicules (props.vehicules, filtrée
+    // en mémoire à chaque frappe par searchVehicule()) est potentiellement volumineuse sur cet
+    // environnement E2E seedé (ElmV2DemoSeeder) — un fill() synchrone course avec le re-rendu
+    // Vue déclenché par chaque keystroke et peut tronquer le texte réellement saisi (observé :
+    // "e2eimpayes ..." rendu "yes ..." dans le champ). Même principe que pour les InputNumber
+    // PrimeVue ailleurs dans la suite E2E (cf. createTypeVehiculeInApp ci-dessus).
+    const input = vehiculeAutocomplete.locator('input');
+    await input.click();
+    await input.fill('');
+    await input.pressSequentially(nomVehicule, { delay: 20 });
+    await expect(input).toHaveValue(nomVehicule, { timeout: 5_000 });
+
+    const option = page
+        .locator('[role="option"]:visible', { hasText: nomVehicule })
+        .first();
+    await expect(option).toBeVisible({ timeout: 10_000 });
+
+    const solvabiliteResponse = page.waitForResponse(
+        (res) =>
+            res.url().includes('/ventes/check-solvabilite') &&
+            res.url().includes('vehicule_id='),
+        { timeout: 15_000 },
+    );
+    await option.click();
+    await solvabiliteResponse;
+}
+
+test('un véhicule dont la commande précédente na reçu aucun paiement bloque une nouvelle commande', async ({
+    page,
+}) => {
+    await login(page);
+    const unique = `${Date.now()}-${randomDigits(3)}`;
+    const nomVehicule = `${PREFIX} PremiereRegul ${unique}`;
+
+    // Véhicule dédié à ce test (jamais le "premier véhicule" partagé d'autres specs) — sans
+    // quoi la commande précédente pourrait déjà appartenir à un autre scénario en cours.
+    await createVehiculeInApp(
+        page,
+        nomVehicule,
+        `E2EIMP-C-${unique.slice(-5)}`,
+    );
+
+    // ── 1. Première commande : passe en A_CHARGER, facture créée sans encaissement ──
+    await page.goto('/backoffice/ventes/create');
+    await expect(page).toHaveURL(/\/ventes\/create$/, { timeout: 20_000 });
+    await selectVehiculeOnVenteForm(page, nomVehicule);
+
+    const submit1 = page
+        .locator('#vente-form button[type="submit"]:visible')
+        .first();
+    await expect(submit1).toBeEnabled({ timeout: 10_000 });
+    await submit1.click();
+
+    const confirmerEtCreerBtn = page.getByRole('button', {
+        name: /confirmer et créer/i,
+    });
+    await expect(confirmerEtCreerBtn).toBeVisible({ timeout: 10_000 });
+    await confirmerEtCreerBtn.click();
+    await expect(page).toHaveURL(/\/ventes\/(?!create)[a-z0-9]+$/, {
+        timeout: 30_000,
+    });
+
+    // ── 2. Deuxième commande pour le MÊME véhicule : doit être bloquée ──────────────
+    await page.goto('/backoffice/ventes/create');
+    await expect(page).toHaveURL(/\/ventes\/create$/, { timeout: 20_000 });
+    await selectVehiculeOnVenteForm(page, nomVehicule);
+
+    await expect(page.locator('body')).toContainText(
+        /première facture non réglée/i,
+        { timeout: 10_000 },
+    );
+    await expect(page.locator('body')).toContainText(/aucun paiement/i, {
+        timeout: 10_000,
+    });
+
+    const submit2 = page
+        .locator('#vente-form button[type="submit"]:visible')
+        .first();
+    await expect(submit2).toBeDisabled({ timeout: 10_000 });
 });

@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\EntrepriseTierce;
 use App\Models\Fournisseur;
+use App\Models\Personne;
 use App\Traits\PhoneHandlerTrait;
+use App\Traits\ResolutionIdentiteTiersTrait;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -13,15 +16,17 @@ use Inertia\Response;
 
 class FournisseurController extends Controller
 {
-    use PhoneHandlerTrait;
+    use PhoneHandlerTrait, ResolutionIdentiteTiersTrait;
 
     public function index(): Response
     {
         $this->authorize('viewAny', Fournisseur::class);
 
-        $fournisseurs = Fournisseur::where('organization_id', auth()->user()->organization_id)
-            ->orderBy('nom')
+        $fournisseurs = Fournisseur::with(['personne', 'entrepriseTierce'])
+            ->where('organization_id', auth()->user()->organization_id)
             ->get()
+            ->sortBy('nom_complet')
+            ->values()
             ->map(fn (Fournisseur $f) => [
                 'id' => $f->id,
                 'reference' => $f->reference,
@@ -62,7 +67,14 @@ class FournisseurController extends Controller
 
         $data = $this->normalizeData($data);
 
-        Fournisseur::create([...$data, 'organization_id' => $orgId]);
+        $identite = $this->resoudreIdentite($orgId, $data);
+
+        Fournisseur::create([
+            'organization_id' => $orgId,
+            'notes' => $data['notes'] ?? null,
+            'is_active' => $data['is_active'] ?? true,
+            ...$identite,
+        ]);
 
         return redirect()->route('fournisseurs.index')
             ->with('success', 'Fournisseur créé avec succès.');
@@ -73,7 +85,8 @@ class FournisseurController extends Controller
      * formulaire Produit, sans quitter la page. Mêmes normalisations (téléphone/pays) que
      * store(), mais un formulaire volontairement plus léger : pas de nom/prénom séparés,
      * ville et adresse facultatives (la fiche complète — email, notes... — reste éditable
-     * ensuite depuis Fournisseurs > Modifier).
+     * ensuite depuis Fournisseurs > Modifier). Toujours une société (raison_sociale) : la
+     * création rapide depuis un formulaire Produit ne prévoit pas de fournisseur particulier.
      */
     public function storeRapide(Request $request): RedirectResponse
     {
@@ -98,25 +111,29 @@ class FournisseurController extends Controller
 
         $data = $this->resolveCountryData($data);
         $this->validateLocalPhoneLength(array_merge($data, ['telephone' => $data['phone']]));
+        $data = $this->normalizeData($data);
 
-        // Détection de doublon sur le téléphone NORMALISÉ (pas la saisie brute) — la contrainte
-        // unique(['organization_id','phone']) protège déjà la base, ce contrôle sert uniquement
-        // à retourner un message clair plutôt qu'une erreur 500 en cas de collision.
-        $telephoneNormalise = Fournisseur::normalizePhoneE164($data['phone'], $data['code_phone_pays']);
-        $doublon = Fournisseur::where('organization_id', $orgId)
-            ->where('phone', $telephoneNormalise)
+        // Détection de doublon sur le téléphone NORMALISÉ (pas la saisie brute) — un même numéro
+        // peut légitimement désigner une EntrepriseTierce déjà connue (ex: déjà Prestataire) :
+        // dans ce cas on la réutilise. Seul un DEUXIÈME Fournisseur pointant vers cette même
+        // société est bloqué, pour éviter une fiche Fournisseur dupliquée créée par erreur
+        // depuis ce raccourci.
+        $telephoneNormalise = Personne::normaliserTelephone($data['phone']);
+        $entrepriseExistante = EntrepriseTierce::where('organization_id', $orgId)
+            ->where('telephone_normalise', $telephoneNormalise)
             ->first();
-        if ($doublon) {
+        if ($entrepriseExistante
+            && Fournisseur::where('organization_id', $orgId)->where('entreprise_tierce_id', $entrepriseExistante->id)->exists()) {
             throw ValidationException::withMessages([
-                'phone' => "Un fournisseur avec ce numéro existe déjà : {$doublon->nom_complet}.",
+                'phone' => "Un fournisseur avec ce numéro existe déjà : {$entrepriseExistante->raison_sociale}.",
             ]);
         }
 
-        $data = $this->normalizeData($data);
+        $identite = $this->resoudreIdentite($orgId, $data);
 
         $fournisseur = Fournisseur::create([
-            ...$data,
             'organization_id' => $orgId,
+            ...$identite,
         ]);
 
         // Permet à FournisseurSelect.vue (création rapide depuis le formulaire Produit) de
@@ -168,7 +185,13 @@ class FournisseurController extends Controller
 
         $data = $this->normalizeData($data);
 
-        $fournisseur->update($data);
+        $identite = $this->resoudreIdentite($fournisseur->organization_id, $data, $fournisseur);
+
+        $fournisseur->update([
+            'notes' => $data['notes'] ?? null,
+            'is_active' => $data['is_active'] ?? $fournisseur->is_active,
+            ...$identite,
+        ]);
 
         return redirect()->route('fournisseurs.edit', $fournisseur)
             ->with('success', 'Fournisseur mis à jour avec succès.');

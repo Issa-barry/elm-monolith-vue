@@ -8,6 +8,7 @@ use App\Models\Categorie;
 use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
+use App\Models\EncaissementVente;
 use App\Models\FactureVente;
 use App\Models\Fournisseur;
 use App\Models\Organization;
@@ -392,6 +393,26 @@ class PdvCheckoutTest extends TestCase
         ]);
     }
 
+    /**
+     * Dette PARTIELLEMENT réglée — isole le contrôle de SEUIL du verrou « première
+     * régularisation » (cf. SolvabiliteService), qui bloquerait sinon inconditionnellement
+     * n'importe quelle facture à 0 encaissé, quel que soit le seuil ou la dérogation.
+     */
+    private function makeDetteVehiculePartielle(int $montant, int $encaisse, string $vehiculeId): FactureVente
+    {
+        $facture = $this->makeDetteVehicule($montant, $vehiculeId);
+        $facture->update(['statut_facture' => StatutFactureVente::PARTIEL->value]);
+
+        EncaissementVente::create([
+            'facture_vente_id' => $facture->id,
+            'montant' => $encaisse,
+            'date_encaissement' => now()->toDateString(),
+            'mode_paiement' => 'especes',
+        ]);
+
+        return $facture;
+    }
+
     public function test_checkout_mode_livreur_bloque_quand_dette_vehicule_depasse_le_seuil(): void
     {
         Parametre::setVentesControleImpayes($this->org->id, true, 100_000);
@@ -417,7 +438,7 @@ class PdvCheckoutTest extends TestCase
         Parametre::setVentesControleImpayes($this->org->id, true, 100_000);
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id, 'proprietaire_id' => $proprietaire->id]);
-        $this->makeDetteVehicule(50_000, $vehicule->id);
+        $this->makeDetteVehiculePartielle(50_000, 10_000, $vehicule->id);
 
         $this->actingAs($this->user)
             ->post('/backoffice/pdv/checkout', [
@@ -442,7 +463,7 @@ class PdvCheckoutTest extends TestCase
             'type_vehicule_id' => $type->id,
             'derogation_impayes_autorisee' => true,
         ]);
-        $this->makeDetteVehicule(1_500_000, $vehicule->id);
+        $this->makeDetteVehiculePartielle(1_500_000, 10_000, $vehicule->id);
 
         $this->actingAs($this->user)
             ->post('/backoffice/pdv/checkout', [
@@ -451,6 +472,45 @@ class PdvCheckoutTest extends TestCase
                 'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 1]],
             ])
             ->assertSessionDoesntHaveErrors('impayes');
+    }
+
+    // ── Verrou « première régularisation » côté PDV — même service que le back-office ───────
+    // (couverture détaillée du calcul dans tests/Unit/SolvabiliteServiceTest, du parcours
+    // back-office dans VehiculePremiereRegularisationTest ; ici on vérifie juste que le PDV,
+    // deuxième appelant de SolvabiliteService, applique bien le même verrou.)
+
+    public function test_checkout_mode_livreur_bloque_quand_facture_precedente_non_encaissee_meme_sous_le_seuil(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 100_000_000); // seuil énorme, ne doit pas suffire
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id, 'proprietaire_id' => $proprietaire->id]);
+        $this->makeDetteVehicule(10_000, $vehicule->id); // 0 encaissé
+
+        $this->actingAs($this->user)
+            ->post('/backoffice/pdv/checkout', [
+                'mode' => 'Livreur',
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 1]],
+            ])
+            ->assertSessionHasErrors('impayes');
+
+        $this->assertSame(1, CommandeVente::where('vehicule_id', $vehicule->id)->count());
+    }
+
+    public function test_checkout_mode_livreur_bloque_par_le_verrou_meme_controle_impayes_desactive(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, false, 0);
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id, 'proprietaire_id' => $proprietaire->id]);
+        $this->makeDetteVehicule(10_000, $vehicule->id);
+
+        $this->actingAs($this->user)
+            ->post('/backoffice/pdv/checkout', [
+                'mode' => 'Livreur',
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [['produit_id' => $this->produit->id, 'quantite' => 1]],
+            ])
+            ->assertSessionHasErrors('impayes');
     }
 
     public function test_checkout_mode_client_bloque_quand_dette_client_depasse_le_seuil(): void

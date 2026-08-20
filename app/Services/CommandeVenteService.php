@@ -348,8 +348,14 @@ class CommandeVenteService
     }
 
     /**
-     * Annuler — depuis BROUILLON, A_CHARGER ou FACTURATION (vente directe non encaissée).
-     * Pour les commandes FACTURATION, la facture associée est également annulée.
+     * Annuler — depuis BROUILLON, A_CHARGER ou FACTURATION (vente directe non encaissée). La
+     * facture associée est également annulée si elle existe, quel que soit le statut de la
+     * commande (flotte ou vente directe) : le garde-fou ci-dessous garantit déjà qu'elle n'a
+     * reçu aucun encaissement. Sans cela, une commande flotte annulée depuis A_CHARGER
+     * laisserait sa facture orpheline en statut CREEE (0 encaissé, solde > 0) — qui bloquerait
+     * alors indéfiniment le véhicule pour toute nouvelle commande, cf.
+     * SolvabiliteService::premiereFactureNonEncaisseeVehicule() (correctif du 20/08/2026, avant
+     * cela seul le chemin vente directe annulait la facture).
      */
     public static function annuler(CommandeVente $commande, string $motif): void
     {
@@ -367,9 +373,7 @@ class CommandeVenteService
             'Impossible d\'annuler une commande ayant reçu au moins un encaissement.'
         );
 
-        $estDirecte = $commande->isFacturation();
-
-        DB::transaction(function () use ($commande, $motif, $estDirecte) {
+        DB::transaction(function () use ($commande, $motif) {
             $commande->update([
                 'statut' => StatutCommandeVente::ANNULEE,
                 'motif_annulation' => $motif,
@@ -377,12 +381,10 @@ class CommandeVenteService
                 'annulee_par' => Auth::id(),
             ]);
 
-            if ($estDirecte) {
-                $commande->loadMissing('facture');
-                if ($commande->facture && ! $commande->facture->isAnnulee() && ! $commande->facture->isPayee()) {
-                    $commande->facture->update(['statut_facture' => StatutFactureVente::ANNULEE]);
-                    self::contrepasserVenteFactureeSiExistante($commande->facture, $motif);
-                }
+            $commande->loadMissing('facture');
+            if ($commande->facture && ! $commande->facture->isAnnulee() && ! $commande->facture->isPayee()) {
+                $commande->facture->update(['statut_facture' => StatutFactureVente::ANNULEE]);
+                self::contrepasserVenteFactureeSiExistante($commande->facture, $motif);
             }
 
             self::annulerCommissionsAssociees($commande);

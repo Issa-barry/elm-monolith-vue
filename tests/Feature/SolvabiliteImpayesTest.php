@@ -6,6 +6,7 @@ use App\Enums\StatutFactureVente;
 use App\Models\Categorie;
 use App\Models\Client;
 use App\Models\CommandeVente;
+use App\Models\EncaissementVente;
 use App\Models\FactureVente;
 use App\Models\Parametre;
 use App\Models\Proprietaire;
@@ -83,6 +84,26 @@ class SolvabiliteImpayesTest extends TestCase
         ]);
     }
 
+    /**
+     * Dette PARTIELLEMENT réglée (au moins un encaissement) — à utiliser pour tester le contrôle
+     * de SEUIL en isolation du nouveau verrou « première régularisation » (cf.
+     * SolvabiliteService), qui bloquerait sinon inconditionnellement toute facture à 0 encaissé.
+     */
+    private function makeDettePartielle(int $montant, int $encaisse, ?string $vehiculeId = null, ?string $clientId = null): FactureVente
+    {
+        $facture = $this->makeDette($montant, $vehiculeId, $clientId);
+        $facture->update(['statut_facture' => StatutFactureVente::PARTIEL->value]);
+
+        EncaissementVente::create([
+            'facture_vente_id' => $facture->id,
+            'montant' => $encaisse,
+            'date_encaissement' => now()->toDateString(),
+            'mode_paiement' => 'especes',
+        ]);
+
+        return $facture;
+    }
+
     // ── Défaut d'une organisation neuve (aucun Parametre enregistré) ────────────
 
     /**
@@ -133,7 +154,10 @@ class SolvabiliteImpayesTest extends TestCase
     {
         Parametre::setVentesControleImpayes($this->org->id, true, 100_000);
         $vehicule = $this->makeVehicule();
-        $this->makeDette(50_000, $vehicule->id);
+        // Dette PARTIELLEMENT réglée : isole le contrôle de seuil du nouveau verrou « première
+        // régularisation » (testé séparément, cf. VehiculePremiereRegularisationTest), qui
+        // bloquerait sinon inconditionnellement une facture à 0 encaissé.
+        $this->makeDettePartielle(50_000, 10_000, $vehicule->id);
         $produit = $this->makeProduitAvecVariante($this->org, ['categorie_id' => $this->categorie->id], ['prix_vente' => 5000]);
 
         $this->actingAs($this->user)
@@ -156,7 +180,9 @@ class SolvabiliteImpayesTest extends TestCase
         Parametre::setVentesControleImpayes($this->org->id, true, 0);
         $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'seuil_derogation_impayes' => 2_000_000]);
         $vehicule = $this->makeVehicule(['type_vehicule_id' => $type->id, 'derogation_impayes_autorisee' => true]);
-        $this->makeDette(1_500_000, $vehicule->id);
+        // Dette PARTIELLEMENT réglée : isole le contrôle de seuil dérogatoire du verrou
+        // « première régularisation », qui bloquerait sinon inconditionnellement (cf. plus haut).
+        $this->makeDettePartielle(1_500_000, 10_000, $vehicule->id);
         $produit = $this->makeProduitAvecVariante($this->org, ['categorie_id' => $this->categorie->id], ['prix_vente' => 5000]);
 
         $this->actingAs($this->user)
@@ -295,7 +321,10 @@ class SolvabiliteImpayesTest extends TestCase
     {
         Parametre::setVentesControleImpayes($this->org->id, false, 0);
         $vehicule = $this->makeVehicule();
-        $this->makeDette(50_000_000, $vehicule->id);
+        // Dette énorme mais PARTIELLEMENT réglée : isole le contrôle de seuil (désactivé ici) du
+        // verrou « première régularisation », indépendant de ce paramètre et qui bloquerait sinon
+        // inconditionnellement une facture à 0 encaissé (cf. VehiculePremiereRegularisationTest).
+        $this->makeDettePartielle(50_000_000, 1, $vehicule->id);
         $produit = $this->makeProduitAvecVariante($this->org, ['categorie_id' => $this->categorie->id], ['prix_vente' => 5000]);
 
         $this->actingAs($this->user)

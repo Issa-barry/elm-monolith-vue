@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\PrestataireType;
 use App\Models\Prestataire;
 use App\Traits\PhoneHandlerTrait;
+use App\Traits\ResolutionIdentiteTiersTrait;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -13,15 +14,17 @@ use Inertia\Response;
 
 class PrestataireController extends Controller
 {
-    use PhoneHandlerTrait;
+    use PhoneHandlerTrait, ResolutionIdentiteTiersTrait;
 
     public function index(): Response
     {
         $this->authorize('viewAny', Prestataire::class);
 
-        $prestataires = Prestataire::where('organization_id', auth()->user()->organization_id)
-            ->orderBy('nom')
+        $prestataires = Prestataire::with(['personne', 'entrepriseTierce'])
+            ->where('organization_id', auth()->user()->organization_id)
             ->get()
+            ->sortBy('nom_complet')
+            ->values()
             ->map(fn (Prestataire $p) => [
                 'id' => $p->id,
                 'reference' => $p->reference,
@@ -66,7 +69,15 @@ class PrestataireController extends Controller
 
         $data = $this->normalizeData($data);
 
-        Prestataire::create([...$data, 'organization_id' => $orgId]);
+        $identite = $this->resoudreIdentite($orgId, $data);
+
+        Prestataire::create([
+            'organization_id' => $orgId,
+            'type' => $data['type'],
+            'notes' => $data['notes'] ?? null,
+            'is_active' => $data['is_active'] ?? true,
+            ...$identite,
+        ]);
 
         return redirect()->route('prestataires.index')
             ->with('success', 'Prestataire créé avec succès.');
@@ -116,7 +127,14 @@ class PrestataireController extends Controller
 
         $data = $this->normalizeData($data);
 
-        $prestataire->update($data);
+        $identite = $this->resoudreIdentite($prestataire->organization_id, $data, $prestataire);
+
+        $prestataire->update([
+            'type' => $data['type'],
+            'notes' => $data['notes'] ?? null,
+            'is_active' => $data['is_active'] ?? $prestataire->is_active,
+            ...$identite,
+        ]);
 
         return redirect()->route('prestataires.edit', $prestataire)
             ->with('success', 'Prestataire mis à jour avec succès.');

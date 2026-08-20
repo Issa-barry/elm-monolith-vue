@@ -182,6 +182,30 @@ export async function fillLoginIdentifier(
     }
 }
 
+/**
+ * Connexion dédiée à l'organisation "Eau La Maman V2 Demo" (seule
+ * organisation du projet avec le moteur de commissions V2 activé — cf.
+ * ElmV2DemoSeeder). Volontairement distincte de `login()` : celle-ci
+ * court-circuite si une session valide est déjà chargée (storageState par
+ * défaut = admin "elm", Legacy), ce qui empêcherait jamais de basculer vers
+ * ce second compte. N'écrit/ne lit aucun storageState partagé : à appeler à
+ * chaque test qui a besoin du contexte V2 (pas de globalSetup dédié, pour ne
+ * jamais risquer d'affecter les specs Legacy existantes).
+ */
+export async function loginAsElmV2Demo(page: Page): Promise<void> {
+    await page.goto('/login');
+    await page.waitForSelector('input[name="password"]', { timeout: 20_000 });
+    await fillLoginIdentifier(page, { phone: '+224600000201' });
+    await page.locator('input[name="password"]').fill('ElmV2Demo@2025');
+
+    const submitButton = page
+        .getByRole('button', { name: /se connecter/i })
+        .first();
+    await expect(submitButton).toBeEnabled({ timeout: 10_000 });
+    await submitButton.click();
+    await expect(page).not.toHaveURL(/\/login(?:\?.*)?$/, { timeout: 15_000 });
+}
+
 export async function login(page: Page): Promise<void> {
     // Verify whether storageState already loaded a valid session.
     await page.goto('/backoffice/dashboard');
