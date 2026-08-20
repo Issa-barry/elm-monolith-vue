@@ -26,6 +26,7 @@ use App\Services\PeriodeComptableService;
 use App\Services\PeriodePaiementService;
 use App\Services\SiteScopeService;
 use App\Support\Commission\CommissionDetailFilters;
+use App\Support\Commission\CommissionKpiBuckets;
 use App\Support\Commission\CommissionSummaryFormatter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -426,7 +427,7 @@ class CommissionProprietaireController extends Controller
             TypePeriodePaiement::PROPRIETAIRE,
             $premiereEcheanceParProprio->values(),
         );
-        $labelsParStatut = ['impaye' => 'Impayé', 'partiel' => 'Partiel', 'paye' => 'Payé', 'annulee' => 'Annulée'];
+        $labelsParStatut = ['creee' => 'Créée', 'impaye' => 'Impayé', 'partiel' => 'Partiel', 'paye' => 'Payé', 'annulee' => 'Annulée'];
         $periodesUniques = $periodesParDate->values()->unique('id');
         $teamStatusParPeriode = $periodesUniques->mapWithKeys(
             fn ($periode) => [$periode->id => CommissionAdjustmentService::statutValidationParBeneficiaireV2($periode)]
@@ -436,14 +437,23 @@ class CommissionProprietaireController extends Controller
             $fraisParProprio, $premiereEcheanceParProprio, $periodesParDate, $labelsParStatut, $teamStatusParPeriode,
         ) {
             $premier = $parts->first();
-            $totalBrut = (float) $parts->sum('montant_brut');
-            $totalAPayer = (float) $parts->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer);
+
+            // total_brut_cumule/total_net_cumule/solde_restant restent calculés exclusivement
+            // sur les parts déjà actives (jamais CREEE) — jamais mélangées à une commission pas
+            // encore éligible au paiement (cf. compartiments ci-dessous, décision produit du
+            // 20/08/2026 « visible ne veut pas dire payable »).
+            $partsPayables = $parts->filter(fn (CommissionEnveloppePart $p) => $p->statut !== StatutCommission::CREEE);
+            $totalBrut = (float) $partsPayables->sum('montant_brut');
+            $totalAPayer = (float) $partsPayables->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer);
             $totalFrais = $fraisParProprio[$proprioId] ?? 0.0;
             $totalNet = max(0.0, $totalAPayer - $totalFrais);
-            $totalVerse = (float) $parts->sum('montant_verse');
+            $totalVerse = (float) $partsPayables->sum('montant_verse');
             $solde = max(0.0, $totalNet - $totalVerse);
 
+            $buckets = CommissionKpiBuckets::calculer($parts);
+
             $statutGlobal = match (true) {
+                $partsPayables->isEmpty() && $buckets['en_attente_periode'] > 0.009 => StatutCommission::CREEE->value,
                 $totalNet > 0 && $totalVerse >= $totalNet => StatutCommission::PAYE->value,
                 $totalVerse > 0 => StatutCommission::PARTIEL->value,
                 default => StatutCommission::IMPAYE->value,
@@ -482,6 +492,9 @@ class CommissionProprietaireController extends Controller
                 'remaining_amount' => $solde,
                 'nb_commandes' => $parts->pluck('enveloppe_id')->unique()->count(),
                 'statut_global' => $statutGlobal,
+                'total_genere' => $buckets['total_genere'],
+                'en_attente_periode' => $buckets['en_attente_periode'],
+                'payable' => $buckets['payable'],
                 ...$resolved,
             ];
         })->values();
@@ -509,6 +522,9 @@ class CommissionProprietaireController extends Controller
             'total_frais' => (float) $list->sum('total_frais'),
             'total_verse' => (float) $list->sum('total_verse'),
             'solde_total' => (float) $list->sum('solde_restant'),
+            'total_genere' => (float) $list->sum('total_genere'),
+            'en_attente_periode' => (float) $list->sum('en_attente_periode'),
+            'payable' => (float) $list->sum('payable'),
         ];
 
         $earliestDate = CommissionEnveloppePart::where('beneficiaire_type', CommissionEnveloppePart::TYPE_PROPRIETAIRE)
@@ -921,13 +937,17 @@ class CommissionProprietaireController extends Controller
             return true;
         });
 
-        $totalBrut = (float) $filteredParts->sum('montant_brut');
-        $totalAPayer = (float) $filteredParts->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer);
-        $totalNet = max(0.0, $totalAPayer - $totalFraisDepenses);
-        $totalVerse = (float) $filteredParts->sum('montant_verse');
-
+        // total_brut/total_net/solde restent calculés exclusivement sur les parts déjà actives
+        // (jamais CREEE) — jamais mélangées à une commission pas encore éligible au paiement
+        // (cf. $buckets ci-dessous, décision produit du 20/08/2026).
         $activeParts = $filteredParts->filter(fn (CommissionEnveloppePart $p) => $p->statut !== StatutCommission::CREEE);
+        $totalBrut = (float) $activeParts->sum('montant_brut');
+        $totalAPayer = (float) $activeParts->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer);
+        $totalNet = max(0.0, $totalAPayer - $totalFraisDepenses);
+        $totalVerse = (float) $activeParts->sum('montant_verse');
+
         $solde = max(0.0, (float) $activeParts->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer) - $totalFraisDepenses - (float) $activeParts->sum('montant_verse'));
+        $buckets = CommissionKpiBuckets::calculer($filteredParts);
 
         if ($solde > 0.009) {
             $earliestUnpaidDate = $activeParts
@@ -939,6 +959,10 @@ class CommissionProprietaireController extends Controller
             $periodeResolue = $earliestUnpaidDate
                 ? app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::PROPRIETAIRE, Carbon::parse($earliestUnpaidDate))
                 : null;
+        } elseif ($activeParts->isEmpty() && $buckets['en_attente_periode'] > 0.009) {
+            // Rien de payable ni de payé, seulement des commissions CREEE : aucune période à
+            // résoudre, le resolver retombera sur "creee" via sa branche periode === null.
+            $periodeResolue = null;
         } else {
             $periodeResolue = app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::PROPRIETAIRE, now());
         }
@@ -947,8 +971,12 @@ class CommissionProprietaireController extends Controller
             ? (CommissionAdjustmentService::statutValidationParBeneficiaireV2($periodeResolue)["proprietaire:{$proprietaireId}"] ?? null)
             : null;
 
-        $paymentValue = $solde > 0.009 ? StatutCommission::IMPAYE->value : StatutCommission::PAYE->value;
-        $paymentLabel = $solde > 0.009 ? 'Impayé' : 'Payé';
+        $paymentValue = match (true) {
+            $solde > 0.009 => StatutCommission::IMPAYE->value,
+            $activeParts->isEmpty() && $buckets['en_attente_periode'] > 0.009 => StatutCommission::CREEE->value,
+            default => StatutCommission::PAYE->value,
+        };
+        $paymentLabel = ['impaye' => 'Impayé', 'creee' => 'Créée', 'paye' => 'Payé'][$paymentValue] ?? $paymentValue;
         $statutCommission = CommissionStatusResolver::resolve($periodeResolue, $teamStatus, $paymentValue, $paymentLabel);
         $statutCommission['can_pay'] = false;
         $payable = false;
@@ -1030,6 +1058,7 @@ class CommissionProprietaireController extends Controller
                 $totalNet,
                 $totalVerse,
                 $solde,
+                $buckets,
             ),
             'expenses' => $fraisDepensesAffichees->map(function ($d) use ($vehicules) {
                 $vehicule = $d->beneficiaire_type === 'vehicule'

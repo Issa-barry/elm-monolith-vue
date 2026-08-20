@@ -24,6 +24,7 @@ use App\Models\EquipeLivraison;
 use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
+use App\Models\Organization;
 use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
 use App\Models\Proprietaire;
@@ -99,7 +100,7 @@ class CommissionEnveloppeFichePaymentV2Test extends TestCase
         ]);
     }
 
-    /** @return array{vehicule: Vehicule, equipe: EquipeLivraison, livreur: Livreur} */
+    /** @return array{vehicule: Vehicule, equipe: EquipeLivraison, livreur: Livreur, proprietaire: Proprietaire} */
     private function makeVehiculeAvecEquipe(): array
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
@@ -124,7 +125,7 @@ class CommissionEnveloppeFichePaymentV2Test extends TestCase
             'ordre' => 0,
         ]);
 
-        return ['vehicule' => $vehicule->fresh(), 'equipe' => $equipe, 'livreur' => $livreur];
+        return ['vehicule' => $vehicule->fresh(), 'equipe' => $equipe, 'livreur' => $livreur, 'proprietaire' => $proprietaire];
     }
 
     private function creerCommandeEtGenererCommission(Vehicule $vehicule, EquipeLivraison $equipe, Livreur $livreur): CommandeVente
@@ -325,8 +326,11 @@ class CommissionEnveloppeFichePaymentV2Test extends TestCase
         ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur] = $this->makeVehiculeAvecEquipe();
         $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);
 
-        // Une commission CREEE (pas encore activée par la validation de période) est
-        // exclue de l'écran, exactement comme en Legacy — on valide la période d'abord.
+        // Période validée avant lecture : la commission passe CREEE → IMPAYE (cf.
+        // valider_la_periode_active_les_enveloppes_v2_encore_creees ci-dessous). Le cas
+        // "encore CREEE, visible mais non payable" est couvert séparément par
+        // CommissionVenteV2VisibiliteCreeeTest — décision produit du 20/08/2026, une
+        // commission CREEE reste visible, contrairement à l'ancien comportement Legacy.
         $periode = $this->periodeCouvrantAujourdhui();
         app(PeriodeCalculatorService::class)->calculer($periode);
         $this->validerPeriodeReellement($periode);
@@ -422,5 +426,194 @@ class CommissionEnveloppeFichePaymentV2Test extends TestCase
             'commission_part_id' => $part->id,
             'nouveau_montant' => 7000,
         ]);
+    }
+
+    // ── Visibilité des commissions CREEE (décision produit du 20/08/2026) ────
+    // « À partir du moment où une commission V2 existe en base, elle doit être toujours visible
+    // dans l'IHM » — contrairement au comportement Legacy (cf. CommissionVenteStatutCreeeTest),
+    // volontairement différent : une commission CREEE n'est jamais masquée pour une organisation
+    // V2, seulement non payable tant que sa période n'est pas validée. Voir CommissionKpiBuckets
+    // pour la ventilation total_genere/en_attente_periode/payable/deja_paye.
+
+    /** @test */
+    public function une_commission_creee_reste_visible_sur_lindex_commission_vente(): void
+    {
+        ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur] = $this->makeVehiculeAvecEquipe();
+        $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);
+
+        $response = $this->actingAs($this->user)
+            ->get(route('comptabilite.commissions.vente.index'))
+            ->assertOk();
+
+        $beneficiaire = collect($response->viewData('page')['props']['beneficiaires'])
+            ->firstWhere('beneficiaire_id', $livreur->id);
+
+        $this->assertNotNull($beneficiaire, 'Un livreur V2 dont la seule commission est CREEE doit rester visible.');
+        $this->assertSame('creee', $beneficiaire['commission_status']);
+        $this->assertSame('creee', $beneficiaire['display_status']);
+        $this->assertFalse($beneficiaire['can_pay']);
+        $this->assertSame(10_000.0, $beneficiaire['total_genere']);
+        $this->assertSame(10_000.0, $beneficiaire['en_attente_periode']);
+        $this->assertSame(0.0, $beneficiaire['payable']);
+
+        $kpis = $response->viewData('page')['props']['kpis'];
+        $this->assertSame(10_000.0, $kpis['total_genere']);
+        $this->assertSame(10_000.0, $kpis['en_attente_periode']);
+        $this->assertSame(0.0, $kpis['payable']);
+    }
+
+    /** @test */
+    public function le_filtre_statut_creee_retrouve_le_livreur_sur_lindex_commission_vente(): void
+    {
+        ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur] = $this->makeVehiculeAvecEquipe();
+        $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);
+
+        $response = $this->actingAs($this->user)
+            ->get(route('comptabilite.commissions.vente.index', ['statut' => 'creee']))
+            ->assertOk();
+
+        $beneficiaires = collect($response->viewData('page')['props']['beneficiaires']);
+        $this->assertCount(1, $beneficiaires);
+        $this->assertSame($livreur->id, $beneficiaires->first()['beneficiaire_id']);
+    }
+
+    /** @test */
+    public function une_commission_creee_reste_visible_sur_le_detail_commission_vente(): void
+    {
+        ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur] = $this->makeVehiculeAvecEquipe();
+        $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);
+
+        $this->actingAs($this->user)
+            ->get(route('comptabilite.commissions.vente.livreur', $livreur->id))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Comptabilite/CommissionVente/Livreur/Show')
+                ->has('commission_details', 1)
+                ->where('commission_details.0.statut', 'Créée')
+                // Littéraux entiers (pas 10_000.0) : un float PHP sans décimale se
+                // sérialise en JSON sans ".0", et AssertableJson::where() compare
+                // strictement (===) contre la valeur décodée — donc un int ici.
+                ->where('commission_summary.total_genere', 10_000)
+                ->where('commission_summary.en_attente_periode', 10_000)
+                ->where('commission_summary.payable', 0)
+                ->where('commission_summary.net_a_payer', 0)
+                ->where('payable', false)
+            );
+    }
+
+    /** @test */
+    public function une_commission_creee_reste_visible_sur_lindex_commission_proprietaire(): void
+    {
+        ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur, 'proprietaire' => $proprietaire] = $this->makeVehiculeAvecEquipe();
+        $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);
+
+        $response = $this->actingAs($this->user)
+            ->get(route('comptabilite.commissions.proprietaires.index'))
+            ->assertOk();
+
+        $beneficiaire = collect($response->viewData('page')['props']['beneficiaires'])
+            ->firstWhere('beneficiaire_id', $proprietaire->id);
+
+        $this->assertNotNull($beneficiaire, 'Un propriétaire V2 dont la seule commission est CREEE doit rester visible.');
+        $this->assertSame('creee', $beneficiaire['commission_status']);
+        $this->assertFalse($beneficiaire['can_pay']);
+        $this->assertSame(5_000.0, $beneficiaire['total_genere']);
+        $this->assertSame(5_000.0, $beneficiaire['en_attente_periode']);
+        $this->assertSame(0.0, $beneficiaire['payable']);
+
+        $kpis = $response->viewData('page')['props']['kpis'];
+        $this->assertSame(5_000.0, $kpis['total_genere']);
+        $this->assertSame(5_000.0, $kpis['en_attente_periode']);
+    }
+
+    /** @test */
+    public function une_commission_creee_reste_visible_sur_le_detail_commission_proprietaire(): void
+    {
+        ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur, 'proprietaire' => $proprietaire] = $this->makeVehiculeAvecEquipe();
+        $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);
+
+        $this->actingAs($this->user)
+            ->get(route('comptabilite.commissions.proprietaires.show', $proprietaire->id))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Comptabilite/CommissionProprietaire/Show')
+                ->has('commission_details', 1)
+                ->where('commission_details.0.statut', 'Créée')
+                // Littéraux entiers : cf. commentaire équivalent dans le test livreur ci-dessus.
+                ->where('commission_summary.total_genere', 5_000)
+                ->where('commission_summary.en_attente_periode', 5_000)
+                ->where('commission_summary.payable', 0)
+                ->where('payable', false)
+            );
+    }
+
+    /**
+     * Après validation de la période, la commission bascule CREEE → IMPAYE : le montant sort du
+     * compartiment "en attente de période" pour entrer dans "payable" — jamais perdu, jamais
+     * dupliqué (total_genere reste strictement identique avant/après).
+     */
+    /** @test */
+    public function apres_validation_de_la_periode_le_montant_bascule_den_attente_vers_payable(): void
+    {
+        ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur] = $this->makeVehiculeAvecEquipe();
+        $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);
+
+        $periode = $this->periodeCouvrantAujourdhui();
+        app(PeriodeCalculatorService::class)->calculer($periode);
+        $this->validerPeriodeReellement($periode);
+
+        $response = $this->actingAs($this->user)
+            ->get(route('comptabilite.commissions.vente.index'))
+            ->assertOk();
+
+        $beneficiaire = collect($response->viewData('page')['props']['beneficiaires'])
+            ->firstWhere('beneficiaire_id', $livreur->id);
+
+        $this->assertSame('impaye', $beneficiaire['statut_global']);
+        $this->assertSame(10_000.0, $beneficiaire['total_genere']);
+        $this->assertSame(0.0, $beneficiaire['en_attente_periode']);
+        $this->assertSame(10_000.0, $beneficiaire['payable']);
+    }
+
+    /**
+     * Page Commande (Ventes/Show) : le badge de statut commission doit refléter une commission
+     * V2 encore CREEE, jamais rester vide comme s'il n'existait aucune commission — cf.
+     * CommandeVenteController::getCommissionStatutGlobal(), qui lit déjà commissionsV2() pour
+     * une organisation V2 (contrairement à commissions(), la relation Legacy, toujours vide ici).
+     */
+    /** @test */
+    public function la_page_commande_affiche_le_statut_creee_dune_commission_v2(): void
+    {
+        ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur] = $this->makeVehiculeAvecEquipe();
+        $commande = $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);
+
+        $this->actingAs($this->user)
+            ->get(route('ventes.show', $commande))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Ventes/Show')
+                ->where('commission_statut.value', 'creee')
+                ->where('commission_statut.label', 'Créée')
+            );
+    }
+
+    /** Isolation multi-organisation : une commission CREEE d'une autre organisation ne doit jamais fuiter. */
+    /** @test */
+    public function une_commission_creee_dune_autre_organisation_najamais_fuiter_dans_lindex(): void
+    {
+        ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur] = $this->makeVehiculeAvecEquipe();
+        $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);
+
+        $autreOrg = Organization::factory()->create();
+        $autreUser = $this->makeUserWithPermissions($autreOrg, ['comptabilite.read', 'comptabilite.payer']);
+        $autreSite = Site::create(['organization_id' => $autreOrg->id, 'nom' => 'Autre site', 'type' => 'depot', 'localisation' => 'Conakry']);
+        $autreUser->sites()->attach($autreSite->id, ['role' => 'employe', 'is_default' => true]);
+
+        $response = $this->actingAs($autreUser)
+            ->get(route('comptabilite.commissions.vente.index'))
+            ->assertOk();
+
+        $beneficiaires = collect($response->viewData('page')['props']['beneficiaires']);
+        $this->assertCount(0, $beneficiaires);
     }
 }
