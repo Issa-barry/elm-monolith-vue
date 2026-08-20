@@ -26,6 +26,7 @@ use App\Services\CommissionAdjustmentService;
 use App\Services\PeriodePaiementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 use Laravel\Pennant\Feature;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -104,7 +105,7 @@ class CommissionAjustementPropagationTest extends TestCase
             'source_id' => $commande->id,
             'processus_id' => $this->processusVente->id,
             'cible_type' => $type === 'livreur' ? CommissionCibleType::CODE_EQUIPE_LIVRAISON : CommissionCibleType::CODE_PROPRIETAIRE,
-            'cible_id' => (string) \Illuminate\Support\Str::ulid(),
+            'cible_id' => (string) Str::ulid(),
             'montant_total' => $montantNet,
             'earned_at' => now(),
             'statut' => StatutCommission::IMPAYE->value,

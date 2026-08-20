@@ -25,6 +25,7 @@ use App\Models\Vehicule;
 use App\Services\PeriodePaiementService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Pennant\Feature;
 use Spatie\Permission\PermissionRegistrar;
@@ -137,7 +138,7 @@ class CommissionDetailKpiTest extends TestCase
             'source_id' => $commande->id,
             'processus_id' => $processus->id,
             'cible_type' => 'equipe_livraison',
-            'cible_id' => (string) \Illuminate\Support\Str::ulid(),
+            'cible_id' => (string) Str::ulid(),
             'montant_total' => 0,
             'earned_at' => now(),
             'statut' => StatutCommission::IMPAYE->value,

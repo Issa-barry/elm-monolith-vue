@@ -27,6 +27,7 @@ use App\Models\TransfertLogistique;
 use App\Services\BesoinTresorerieService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 use Laravel\Pennant\Feature;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -126,7 +127,7 @@ class BesoinTresorerieServiceTest extends TestCase
             'source_id' => $commande->id,
             'processus_id' => $this->processusVente->id,
             'cible_type' => $typeBeneficiaire === 'livreur' ? CommissionCibleType::CODE_EQUIPE_LIVRAISON : CommissionCibleType::CODE_PROPRIETAIRE,
-            'cible_id' => (string) \Illuminate\Support\Str::ulid(),
+            'cible_id' => (string) Str::ulid(),
             'montant_total' => $montant,
             'earned_at' => $date,
             'statut' => $statut,
@@ -375,7 +376,7 @@ class BesoinTresorerieServiceTest extends TestCase
             'source_id' => $autreCommande->id,
             'processus_id' => $autreProcessus->id,
             'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
-            'cible_id' => (string) \Illuminate\Support\Str::ulid(),
+            'cible_id' => (string) Str::ulid(),
             'montant_total' => 999_000,
             'earned_at' => Carbon::parse('2026-08-05'),
             'statut' => 'impaye',

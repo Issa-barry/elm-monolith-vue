@@ -12,6 +12,7 @@ use App\Models\Personne;
 use App\Models\Site;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -104,7 +105,7 @@ class CommissionVenteEquipeTest extends TestCase
             'source_id' => $commande->id,
             'processus_id' => $processus->id,
             'cible_type' => 'equipe_livraison',
-            'cible_id' => (string) \Illuminate\Support\Str::ulid(),
+            'cible_id' => (string) Str::ulid(),
             'montant_total' => $commissionTotale,
             'earned_at' => now(),
             'statut' => StatutCommission::IMPAYE->value,

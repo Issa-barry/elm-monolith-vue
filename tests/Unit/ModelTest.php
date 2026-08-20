@@ -7,7 +7,6 @@ use App\Enums\PrestataireType;
 use App\Enums\ProduitStatut;
 use App\Enums\StatutCommandeAchat;
 use App\Enums\StatutCommandeVente;
-use App\Enums\StatutCommission;
 use App\Models\CommandeAchat;
 use App\Models\CommandeAchatLigne;
 use App\Models\CommandeVente;

@@ -14,6 +14,7 @@ use App\Models\Organization;
 use App\Models\Site;
 use App\Services\CommandeVenteService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
@@ -53,7 +54,7 @@ class CommandeVenteAnnulationCascadeTest extends TestCase
             'source_id' => $commande->id,
             'processus_id' => $this->makeProcessus($org)->id,
             'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
-            'cible_id' => (string) \Illuminate\Support\Str::ulid(),
+            'cible_id' => (string) Str::ulid(),
             'montant_total' => 100000,
             'earned_at' => now(),
             'statut' => StatutCommission::IMPAYE->value,
@@ -102,7 +103,7 @@ class CommandeVenteAnnulationCascadeTest extends TestCase
             'source_id' => $commande->id,
             'processus_id' => $this->makeProcessus($org)->id,
             'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
-            'cible_id' => (string) \Illuminate\Support\Str::ulid(),
+            'cible_id' => (string) Str::ulid(),
             'montant_total' => 100000,
             'earned_at' => now(),
             'statut' => StatutCommission::PAYE->value,

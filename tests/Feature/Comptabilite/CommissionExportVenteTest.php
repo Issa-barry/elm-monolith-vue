@@ -21,7 +21,6 @@ use App\Models\EquipeLivraison;
 use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
-use App\Models\PaiementPeriode;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\Vehicule;

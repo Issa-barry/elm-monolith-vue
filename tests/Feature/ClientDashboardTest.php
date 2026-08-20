@@ -21,6 +21,7 @@ use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -181,7 +182,7 @@ class ClientDashboardTest extends TestCase
             'source_id' => $commande->id,
             'processus_id' => $processus->id,
             'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
-            'cible_id' => (string) \Illuminate\Support\Str::ulid(),
+            'cible_id' => (string) Str::ulid(),
             'montant_total' => 15000,
             'earned_at' => now(),
             'statut' => StatutCommission::PARTIEL->value,

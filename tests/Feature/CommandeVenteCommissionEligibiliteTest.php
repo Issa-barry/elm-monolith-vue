@@ -8,6 +8,7 @@ use App\Enums\CommissionScopeType;
 use App\Enums\CommissionStrategieAncrageSite;
 use App\Enums\CommissionUniteCalcul;
 use App\Enums\DeclencheurCommissionVente;
+use App\Models\Categorie;
 use App\Models\CommandeVente;
 use App\Models\CommissionCibleType;
 use App\Models\CommissionEnveloppe;
@@ -44,7 +45,7 @@ class CommandeVenteCommissionEligibiliteTest extends TestCase
 
     private CommissionProcessus $processus;
 
-    private \App\Models\Categorie $categorie;
+    private Categorie $categorie;
 
     protected function setUp(): void
     {
@@ -74,7 +75,7 @@ class CommandeVenteCommissionEligibiliteTest extends TestCase
             'statut' => CommissionActivationStatut::ACTIF->value,
         ]);
 
-        $this->categorie = \App\Models\Categorie::create([
+        $this->categorie = Categorie::create([
             'organization_id' => $this->org->id,
             'nom' => 'Défaut',
             'statut' => 'actif',
@@ -233,7 +234,7 @@ class CommandeVenteCommissionEligibiliteTest extends TestCase
         ]);
         $this->assertEquals(
             150_000,
-            \App\Models\CommissionEnveloppe::where('source_id', $commande->id)->sum('montant_total')
+            CommissionEnveloppe::where('source_id', $commande->id)->sum('montant_total')
         );
     }
 

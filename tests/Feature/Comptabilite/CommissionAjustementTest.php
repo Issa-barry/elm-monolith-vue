@@ -5,7 +5,6 @@ namespace Tests\Feature\Comptabilite;
 use App\Enums\CommissionActivationStatut;
 use App\Enums\CommissionStrategieAncrageSite;
 use App\Enums\MotifAjustementCommission;
-use App\Enums\OrigineCommissionPart;
 use App\Enums\StatutCommission;
 use App\Enums\StatutPeriodePaiement;
 use App\Enums\TypePeriodePaiement;

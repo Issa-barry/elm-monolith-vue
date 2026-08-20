@@ -30,6 +30,7 @@ use App\Models\TypeVehicule;
 use App\Models\Vehicule;
 use App\Services\PaieCalculService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Pennant\Feature;
 use Tests\Feature\Concerns\HasAdminSetup;
@@ -70,7 +71,7 @@ class DepenseComptabiliteTest extends TestCase
             'source_id' => $commande->id,
             'processus_id' => $processus->id,
             'cible_type' => $cibleType,
-            'cible_id' => (string) \Illuminate\Support\Str::ulid(),
+            'cible_id' => (string) Str::ulid(),
             'montant_total' => 0,
             'earned_at' => now(),
             'statut' => 'impaye',

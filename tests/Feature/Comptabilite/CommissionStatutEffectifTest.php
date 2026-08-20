@@ -8,7 +8,6 @@ use App\Enums\StatutPeriodePaiement;
 use App\Enums\TypePeriodePaiement;
 use App\Models\CommandeVente;
 use App\Models\CommissionEnveloppe;
-use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
 use App\Models\CommissionProcessus;
@@ -25,6 +24,7 @@ use App\Services\PeriodeCalculatorService;
 use App\Services\PeriodePaiementService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
@@ -168,7 +168,7 @@ class CommissionStatutEffectifTest extends TestCase
             'source_id' => $commande->id,
             'processus_id' => $processus->id,
             'cible_type' => $type === 'livreur' ? 'equipe_livraison' : 'proprietaire',
-            'cible_id' => (string) \Illuminate\Support\Str::ulid(),
+            'cible_id' => (string) Str::ulid(),
             'montant_total' => 3000,
             'earned_at' => now(),
             'statut' => StatutCommission::IMPAYE->value,

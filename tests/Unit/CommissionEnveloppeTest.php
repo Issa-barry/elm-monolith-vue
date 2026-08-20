@@ -16,6 +16,7 @@ use App\Models\PaiementFichePaiement;
 use App\Models\PaiementPeriode;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class CommissionEnveloppeTest extends TestCase
@@ -47,10 +48,10 @@ class CommissionEnveloppeTest extends TestCase
         return CommissionEnveloppe::create(array_merge([
             'organization_id' => $this->org->id,
             'source_type' => 'App\\Models\\CommandeVente',
-            'source_id' => (string) \Illuminate\Support\Str::ulid(),
+            'source_id' => (string) Str::ulid(),
             'processus_id' => $processus->id,
             'cible_type' => 'equipe_livraison',
-            'cible_id' => (string) \Illuminate\Support\Str::ulid(),
+            'cible_id' => (string) Str::ulid(),
             'montant_total' => 5000,
             'earned_at' => now(),
             'statut' => StatutCommission::IMPAYE->value,
@@ -61,7 +62,7 @@ class CommissionEnveloppeTest extends TestCase
     {
         return $enveloppe->parts()->create(array_merge([
             'beneficiaire_type' => 'livreur',
-            'beneficiaire_id' => (string) \Illuminate\Support\Str::ulid(),
+            'beneficiaire_id' => (string) Str::ulid(),
             'montant_brut' => 5000,
             'montant_net' => 5000,
             'montant_verse' => 0,

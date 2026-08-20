@@ -23,7 +23,6 @@ use App\Models\PaiementPeriode;
 use App\Models\Personne;
 use App\Models\Site;
 use App\Models\User;
-use App\Models\Vehicule;
 use App\Services\PeriodeCalculatorService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
