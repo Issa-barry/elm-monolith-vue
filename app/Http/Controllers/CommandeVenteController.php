@@ -22,7 +22,6 @@ use App\Models\Vehicule;
 use App\Services\AuditLogService;
 use App\Services\CommandeVenteActiviteService;
 use App\Services\CommandeVenteService;
-use App\Services\Commission\MoteurCommissionResolver;
 use App\Services\PrixUsineResolver;
 use App\Services\SolvabiliteService;
 use App\Services\VehiculeCapaciteService;
@@ -723,9 +722,7 @@ class CommandeVenteController extends Controller
 
     private function getCommissionStatutGlobal(CommandeVente $commande): ?array
     {
-        $commissions = MoteurCommissionResolver::estV2($commande->organization_id)
-            ? $commande->commissionsV2
-            : $commande->commissions;
+        $commissions = $commande->commissionsV2;
         if ($commissions->isEmpty()) {
             return null;
         }

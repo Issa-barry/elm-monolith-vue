@@ -33,7 +33,6 @@ interface Ligne {
 const props = defineProps<{
     lignes: Ligne[];
     cibles: Cible[];
-    moteurActif: boolean;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -153,15 +152,6 @@ function cellLabel(ligne: Ligne, cible: Cible): string {
                         description="Montant fixe par unité vendue, propriétaire et livraison, par catégorie de produit."
                     />
                 </div>
-
-                <p
-                    v-if="!props.moteurActif"
-                    class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
-                >
-                    Ces barèmes sont enregistrés mais pas encore appliqués aux
-                    ventes — le nouveau moteur de commissions n'est pas encore
-                    activé pour votre organisation.
-                </p>
 
                 <div class="overflow-hidden rounded-xl border bg-card">
                     <DataTable

@@ -14,7 +14,6 @@ use App\Models\Livreur;
 use App\Models\PaiementPeriode;
 use App\Models\Proprietaire;
 use App\Services\AuditLogService;
-use App\Services\Commission\MoteurCommissionResolver;
 use App\Services\CommissionAdjustmentService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -37,20 +36,23 @@ class CommissionAjustementController extends Controller
     {
         $this->authorize('ajuster', $periode);
 
-        $estV2 = MoteurCommissionResolver::estV2($periode->organization_id);
-
+        // Combine toujours vente V2 + logistique (jamais un choix org-level) : un véhicule
+        // peut porter les deux natures de commission sur la même période, et la logistique
+        // ne doit jamais devenir invisible sur cet écran pour une organisation V2.
         $vehiculeId = $vehicule === 'sans-vehicule' ? null : $vehicule;
-        $groupesRaw = $estV2
-            ? CommissionAdjustmentService::groupesParVehiculeV2($periode, $vehiculeId)
-            : CommissionAdjustmentService::groupesParVehicule($periode, $vehiculeId);
+        $groupesRaw = [
+            ...CommissionAdjustmentService::groupesParVehiculeV2($periode, $vehiculeId),
+            ...CommissionAdjustmentService::groupesParVehicule($periode, $vehiculeId),
+        ];
 
         abort_if(empty($groupesRaw), 404);
 
         $filters = $request->only(['beneficiaire', 'validation']);
 
-        $beneficiaires = collect($estV2
-            ? CommissionAdjustmentService::beneficiairesParVehiculeV2($periode, $vehiculeId)
-            : CommissionAdjustmentService::beneficiairesParVehicule($periode, $vehiculeId))
+        $beneficiaires = collect([
+            ...CommissionAdjustmentService::beneficiairesParVehiculeV2($periode, $vehiculeId),
+            ...CommissionAdjustmentService::beneficiairesParVehicule($periode, $vehiculeId),
+        ])
             ->filter(function (array $b) use ($filters) {
                 if (! empty($filters['beneficiaire'])) {
                     $needle = mb_strtolower(trim($filters['beneficiaire']));
@@ -404,12 +406,12 @@ class CommissionAjustementController extends Controller
     {
         $this->authorize('ajuster', $periode);
 
-        $estV2 = MoteurCommissionResolver::estV2($periode->organization_id);
-
+        // Combine toujours vente V2 + logistique — cf. vehicule() ci-dessus.
         $vehiculeId = $vehicule === 'sans-vehicule' ? null : $vehicule;
-        $groupesRaw = collect($estV2
-            ? CommissionAdjustmentService::groupesParVehiculeV2($periode, $vehiculeId)
-            : CommissionAdjustmentService::groupesParVehicule($periode, $vehiculeId));
+        $groupesRaw = collect([
+            ...CommissionAdjustmentService::groupesParVehiculeV2($periode, $vehiculeId),
+            ...CommissionAdjustmentService::groupesParVehicule($periode, $vehiculeId),
+        ]);
 
         abort_if($groupesRaw->isEmpty(), 404);
 
@@ -420,9 +422,10 @@ class CommissionAjustementController extends Controller
 
         $nomVehicule = $groupesRaw->first()['vehicule_nom'] ?? 'Sans véhicule';
         $parts = $groupesRaw->flatMap(fn (array $g) => $g['parts']);
-        $count = $estV2
-            ? CommissionAdjustmentService::validerLotV2($parts, auth()->user())
-            : CommissionAdjustmentService::validerLot($parts, auth()->user());
+        $partsV2 = $parts->filter(fn ($p) => $p instanceof CommissionEnveloppePart);
+        $partsLogistique = $parts->reject(fn ($p) => $p instanceof CommissionEnveloppePart);
+        $count = CommissionAdjustmentService::validerLotV2($partsV2, auth()->user())
+            + CommissionAdjustmentService::validerLot($partsLogistique, auth()->user());
 
         app(AuditLogService::class)->record($periode, AuditEvent::VALIDATED, auth()->user(), null, null, [
             'module' => 'ajustements_commissions',

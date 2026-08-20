@@ -30,23 +30,24 @@ use Illuminate\Support\Facades\DB;
 class CommissionAdjustmentService
 {
     /**
+     * Logistique uniquement — la vente ne passe plus jamais par ce chemin, cf.
+     * partsPourPeriodeV2()/CommissionEnveloppePart (source de vérité unique pour la
+     * commission de vente). La clé 'vente' reste présente (toujours vide) pour ne pas
+     * casser la forme attendue par les appelants existants (merge/concat sans effet).
+     *
      * @return array{vente: Collection<int, CommissionPart>, logistique: Collection<int, CommissionLogistiquePart>}
      */
     public static function partsPourPeriode(PaiementPeriode $periode): array
     {
         $ficheIds = $periode->fiches()->pluck('id');
 
-        $lignes = PaiementFicheLigne::whereIn('fiche_id', $ficheIds)
-            ->whereIn('source_type', [CommissionPart::class, CommissionLogistiquePart::class])
-            ->get(['source_type', 'source_id']);
-
-        $venteIds = $lignes->where('source_type', CommissionPart::class)->pluck('source_id')->unique();
-        $logistiqueIds = $lignes->where('source_type', CommissionLogistiquePart::class)->pluck('source_id')->unique();
+        $logistiqueIds = PaiementFicheLigne::whereIn('fiche_id', $ficheIds)
+            ->where('source_type', CommissionLogistiquePart::class)
+            ->pluck('source_id')
+            ->unique();
 
         return [
-            'vente' => CommissionPart::whereIn('id', $venteIds)
-                ->with(['livreur', 'proprietaire', 'validateur', 'commission.commande'])
-                ->get(),
+            'vente' => CommissionPart::query()->whereRaw('1 = 0')->get(),
             'logistique' => CommissionLogistiquePart::whereIn('id', $logistiqueIds)
                 ->with(['livreur', 'proprietaire', 'validateur', 'commission.transfert'])
                 ->get(),
@@ -923,6 +924,85 @@ class CommissionAdjustmentService
         return $aUnNomSaisi
             ? ($beneficiaire->nom_complet ?? trim("{$beneficiaire->prenom} {$beneficiaire->nom}"))
             : ($designationsParLivreur[$part->beneficiaire_id] ?? '—');
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // ── Combiné : vente V2 + logistique (jamais un choix org-level) ──────────
+    // ═════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Miroir combiné de vehiculesParPeriode()/vehiculesParPeriodeV2() : un même véhicule
+     * peut porter de la commission de vente V2 ET de la commission logistique sur la même
+     * période — jamais deux lignes séparées pour un même véhicule, toujours une seule ligne
+     * fusionnée (montants sommés, pire statut de validation retenu).
+     *
+     * @return list<array{vehicule_id: ?string, vehicule_nom: string, vehicule_immat: ?string, nb_membres: int, nb_commandes: int, theorique: float, ajuste: float, ecart: float, equilibre: bool, statut_validation: string}>
+     */
+    public static function vehiculesParPeriodeCombine(PaiementPeriode $periode): array
+    {
+        $groupes = [
+            ...self::groupesParCommissionV2($periode),
+            ...self::groupesParCommission($periode),
+        ];
+
+        return collect($groupes)
+            ->groupBy(fn (array $g) => $g['vehicule_id'] ?? '__sans_vehicule__')
+            ->map(function (\Illuminate\Support\Collection $groupesDuVehicule) {
+                $premier = $groupesDuVehicule->first();
+                $parts = $groupesDuVehicule->flatMap(fn (array $g) => $g['parts']);
+                $beneficiaires = $parts
+                    ->map(fn ($p) => $p instanceof CommissionEnveloppePart
+                        ? $p->beneficiaire_id
+                        : ($p->livreur_id ?? $p->proprietaire_id))
+                    ->filter()
+                    ->unique();
+
+                $theorique = round((float) $groupesDuVehicule->sum('theorique'), 2);
+                $ajuste = round((float) $groupesDuVehicule->sum('ajuste'), 2);
+                $ecart = round($ajuste - $theorique, 2);
+
+                return [
+                    'vehicule_id' => $premier['vehicule_id'],
+                    'vehicule_nom' => $premier['vehicule_nom'] ?? 'Sans véhicule',
+                    'vehicule_immat' => $premier['vehicule_immat'],
+                    'nb_membres' => $beneficiaires->count(),
+                    'nb_commandes' => $groupesDuVehicule->count(),
+                    'theorique' => $theorique,
+                    'ajuste' => $ajuste,
+                    'ecart' => $ecart,
+                    'equilibre' => abs($ecart) <= 0.01,
+                    'statut_validation' => self::statutValidationMixte($parts)->value,
+                ];
+            })
+            ->sortBy('vehicule_nom')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * isPaye()/estValidee() existent avec la même signature sur CommissionPart,
+     * CommissionLogistiquePart ET CommissionEnveloppePart — cette agrégation fonctionne
+     * donc indifféremment sur un mélange des trois types de part.
+     *
+     * @param  \Illuminate\Support\Collection<int, CommissionPart|CommissionLogistiquePart|CommissionEnveloppePart>  $parts
+     */
+    private static function statutValidationMixte(\Illuminate\Support\Collection $parts): StatutValidationEquipe
+    {
+        if ($parts->isEmpty()) {
+            return StatutValidationEquipe::A_VERIFIER;
+        }
+
+        $total = $parts->count();
+        $payees = $parts->filter(fn ($p) => $p->isPaye())->count();
+        $validees = $parts->filter(fn ($p) => ! $p->isPaye() && $p->estValidee())->count();
+        $enAttente = $total - $payees - $validees;
+
+        return match (true) {
+            $payees === $total => StatutValidationEquipe::PAYEE,
+            $enAttente === 0 => StatutValidationEquipe::VALIDEE,
+            $enAttente === $total => StatutValidationEquipe::A_VERIFIER,
+            default => StatutValidationEquipe::A_REVERIFIER,
+        };
     }
 
     /** Miroir V2 de resumeEcarts(). */

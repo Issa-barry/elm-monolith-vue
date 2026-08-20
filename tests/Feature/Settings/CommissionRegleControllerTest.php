@@ -61,10 +61,10 @@ class CommissionRegleControllerTest extends TestCase
             'statut' => CommissionRegleStatut::ACTIVE->value,
         ]);
 
-        // Le processus vente est créé automatiquement mais reste inactif :
-        // aucun changement de comportement observable.
+        // Enregistrer un barème active immédiatement le processus vente — plus de
+        // notion d'« activation » séparée : configurer un barème suffit.
         $processus = CommissionProcessus::where('organization_id', $this->org->id)->firstOrFail();
-        $this->assertFalse($processus->isActif());
+        $this->assertTrue($processus->isActif());
     }
 
     /** @test */

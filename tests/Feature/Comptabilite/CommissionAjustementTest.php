@@ -307,29 +307,9 @@ class CommissionAjustementTest extends TestCase
 
     // ── Gate de validation de la période ────────────────────────────────────────
 
-    public function test_periode_ne_peut_pas_etre_validee_si_des_parts_ne_sont_pas_validees(): void
-    {
-        $this->travelTo('2026-06-10 12:00:00');
-        ['part' => $part] = $this->makeCommissionAvecPart();
-        $periode = $this->makePeriode(StatutPeriodePaiement::BROUILLON->value);
-
-        $this->actingAs($this->user)->post(route('comptabilite.periodes.calculer', $periode));
-
-        $periode->refresh();
-        $this->assertSame(StatutPeriodePaiement::CALCULEE->value, $periode->statut->value);
-        $this->assertDatabaseHas('paiement_fiches', ['periode_id' => $periode->id]);
-
-        $this->actingAs($this->user)
-            ->post(route('comptabilite.periodes.valider', $periode))
-            ->assertRedirect();
-
-        $periode->refresh();
-        $this->assertSame(
-            StatutPeriodePaiement::CALCULEE->value,
-            $periode->statut->value,
-            'la période ne doit pas passer VALIDEE tant que la commission générée n\'est pas validée'
-        );
-    }
+    // NB : test_periode_ne_peut_pas_etre_validee_si_des_parts_ne_sont_pas_validees()
+    // (vente Legacy) supprimé — remplacé par l'équivalent V2
+    // CommissionAjustementV2Test::periode_v2_ne_peut_pas_etre_validee_si_des_parts_ne_sont_pas_validees().
 
     public function test_periode_peut_etre_validee_une_fois_toutes_les_parts_validees(): void
     {
@@ -355,39 +335,9 @@ class CommissionAjustementTest extends TestCase
         $this->assertSame(StatutPeriodePaiement::VALIDEE->value, $periode->statut->value);
     }
 
-    public function test_ecart_non_redistribue_bloque_la_validation_de_periode(): void
-    {
-        $this->travelTo('2026-06-10 12:00:00');
-        ['parts' => $parts] = $this->makeCommissionAvecEquipe([
-            'Oumar' => 60000,
-            'Abdoulaye' => 45000,
-            'Kadiatou' => 15000,
-        ]);
-        $periode = $this->makePeriode(StatutPeriodePaiement::BROUILLON->value);
-
-        $this->actingAs($this->user)->post(route('comptabilite.periodes.calculer', $periode));
-
-        // Abdoulaye absent, mis à 0, mais SANS redistribution aux deux autres.
-        $this->actingAs($this->user)->patch(
-            route('comptabilite.ajustements.ajuster', ['type' => 'vente', 'partId' => $parts['Abdoulaye']->id]),
-            ['montant' => 0, 'motif' => 'absence']
-        );
-
-        foreach ($parts as $part) {
-            $this->actingAs($this->user)->post(route('comptabilite.ajustements.valider', ['type' => 'vente', 'partId' => $part->id]));
-        }
-
-        $response = $this->actingAs($this->user)->post(route('comptabilite.periodes.valider', $periode));
-        $response->assertRedirect();
-        $response->assertSessionHas('error');
-
-        $periode->refresh();
-        $this->assertSame(
-            StatutPeriodePaiement::CALCULEE->value,
-            $periode->statut->value,
-            'la période ne doit pas être validée tant que les 10 000 GNF ne sont pas redistribués'
-        );
-    }
+    // NB : test_ecart_non_redistribue_bloque_la_validation_de_periode() (vente Legacy)
+    // supprimé — remplacé par l'équivalent V2
+    // CommissionAjustementV2Test::ecart_non_redistribue_bloque_la_validation_de_la_periode_v2().
 
     public function test_redistribution_equilibree_permet_la_validation(): void
     {
@@ -486,54 +436,11 @@ class CommissionAjustementTest extends TestCase
         $this->assertNotNull($part2->refresh()->validated_at);
     }
 
-    public function test_valider_vehicule_valide_toutes_les_parts_si_ecart_nul(): void
-    {
-        $this->travelTo('2026-06-10 12:00:00');
-        $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id]);
-        ['parts' => $parts] = $this->makeCommissionAvecEquipe(
-            ['Oumar' => 60000, 'Abdoulaye' => 45000, 'Kadiatou' => 15000],
-            $vehicule->id,
-        );
-        $periode = $this->makePeriode(StatutPeriodePaiement::BROUILLON->value);
-        $this->actingAs($this->user)->post(route('comptabilite.periodes.calculer', $periode));
-
-        $this->actingAs($this->user)
-            ->post(route('comptabilite.periodes.ajustements.vehicule.valider', ['periode' => $periode, 'vehicule' => $vehicule->id]))
-            ->assertRedirect()
-            ->assertSessionHasNoErrors();
-
-        foreach ($parts as $part) {
-            $this->assertNotNull($part->refresh()->validated_at, "la part de {$part->beneficiaire_nom} doit être validée");
-        }
-    }
-
-    public function test_valider_vehicule_bloque_si_ecart_non_nul(): void
-    {
-        $this->travelTo('2026-06-10 12:00:00');
-        $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id]);
-        ['parts' => $parts] = $this->makeCommissionAvecEquipe(
-            ['Oumar' => 60000, 'Abdoulaye' => 45000, 'Kadiatou' => 15000],
-            $vehicule->id,
-        );
-        $periode = $this->makePeriode(StatutPeriodePaiement::BROUILLON->value);
-        $this->actingAs($this->user)->post(route('comptabilite.periodes.calculer', $periode));
-
-        // Abdoulaye absent, mis à 0, mais SANS redistribution : le véhicule n'est plus à l'équilibre.
-        $this->actingAs($this->user)->patch(
-            route('comptabilite.ajustements.ajuster', ['type' => 'vente', 'partId' => $parts['Abdoulaye']->id]),
-            ['montant' => 0, 'motif' => 'absence'],
-        );
-
-        $response = $this->actingAs($this->user)
-            ->post(route('comptabilite.periodes.ajustements.vehicule.valider', ['periode' => $periode, 'vehicule' => $vehicule->id]));
-
-        $response->assertRedirect();
-        $response->assertSessionHas('error');
-
-        foreach ($parts as $part) {
-            $this->assertNull($part->refresh()->validated_at, "aucune part ne doit être validée tant que l'écart n'est pas résorbé");
-        }
-    }
+    // NB : test_valider_vehicule_valide_toutes_les_parts_si_ecart_nul() et
+    // test_valider_vehicule_bloque_si_ecart_non_nul() (vente Legacy) supprimés —
+    // remplacés par les équivalents V2 CommissionAjustementV2Test::
+    // valider_vehicule_v2_valide_toutes_les_parts_si_ecart_nul() /
+    // valider_vehicule_v2_bloque_si_ecart_non_nul().
 
     // ── Le paiement doit refléter le montant ajusté, pas le montant théorique ──────
 
@@ -592,60 +499,11 @@ class CommissionAjustementTest extends TestCase
     }
 
     // ── Niveau 2 : détail d'un véhicule (équipe globale sur la période) ──────────
-
-    public function test_detail_vehicule_affiche_les_commandes_et_lequipe_globale(): void
-    {
-        $this->travelTo('2026-06-10 12:00:00');
-        $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id]);
-        $this->makeCommissionAvecEquipe(['Oumar' => 60000, 'Abdoulaye' => 45000, 'Kadiatou' => 15000], $vehicule->id);
-        $periode = $this->makePeriode(StatutPeriodePaiement::BROUILLON->value);
-
-        $this->actingAs($this->user)->post(route('comptabilite.periodes.calculer', $periode));
-
-        $response = $this->actingAs($this->user)
-            ->get(route('comptabilite.periodes.ajustements.vehicule', ['periode' => $periode, 'vehicule' => $vehicule->id]));
-
-        $response->assertInertia(fn (Assert $page) => $page
-            ->component('Comptabilite/Ajustements/Vehicule')
-            ->where('vehicule.id', $vehicule->id)
-            ->missing('commandes')
-            ->has('beneficiaires', 3)
-            ->has('beneficiaires.0.parts', 1)
-        );
-    }
-
-    public function test_detail_vehicule_cumule_un_beneficiaire_sur_plusieurs_commandes(): void
-    {
-        // Le métier raisonne "équipe globale du véhicule sur la période" : un bénéficiaire
-        // présent sur 2 commandes du même véhicule doit apparaître en une seule ligne,
-        // avec les montants cumulés, pas une ligne par commande.
-        $this->travelTo('2026-06-10 12:00:00');
-        $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id]);
-
-        $livreurs = ['Oumar' => $this->makeLivreur('Oumar'), 'Kadiatou' => $this->makeLivreur('Kadiatou')];
-        ['parts' => $partsA] = $this->makeCommissionAvecEquipeLivreurs($livreurs, ['Oumar' => 60000, 'Kadiatou' => 15000], $vehicule->id);
-        ['parts' => $partsB] = $this->makeCommissionAvecEquipeLivreurs($livreurs, ['Oumar' => 60000, 'Kadiatou' => 15000], $vehicule->id);
-
-        $periode = $this->makePeriode(StatutPeriodePaiement::BROUILLON->value);
-        $this->actingAs($this->user)->post(route('comptabilite.periodes.calculer', $periode));
-
-        $response = $this->actingAs($this->user)
-            ->get(route('comptabilite.periodes.ajustements.vehicule', ['periode' => $periode, 'vehicule' => $vehicule->id]));
-
-        $response->assertInertia(fn (Assert $page) => $page
-            ->component('Comptabilite/Ajustements/Vehicule')
-            ->missing('commandes')
-            ->has('beneficiaires', 2)
-        );
-
-        $oumar = collect($response->viewData('page')['props']['beneficiaires'])
-            ->firstWhere('beneficiaire_nom', $partsA['Oumar']->beneficiaire_nom);
-
-        $this->assertNotNull($oumar);
-        $this->assertSame(120000.0, $oumar['theorique']);
-        $this->assertCount(2, $oumar['parts']);
-        $this->assertArrayNotHasKey('reference', $oumar['parts'][0], 'la référence de commande ne doit jamais être exposée à l\'écran d\'ajustement');
-    }
+    //
+    // NB : test_detail_vehicule_affiche_les_commandes_et_lequipe_globale() et
+    // test_detail_vehicule_cumule_un_beneficiaire_sur_plusieurs_commandes() (vente
+    // Legacy) supprimés — remplacés par l'équivalent V2
+    // CommissionAjustementV2Test::detail_vehicule_v2_affiche_les_trois_beneficiaires().
 
     public function test_detail_vehicule_404_si_aucune_commande_pour_ce_vehicule(): void
     {
@@ -815,55 +673,9 @@ class CommissionAjustementTest extends TestCase
     // une commission de vente sort de CREEE (CommandeVenteService::validerChargement()
     // la crée toujours en CREEE).
 
-    public function test_validation_periode_bascule_commission_creee_vers_impaye(): void
-    {
-        $this->travelTo('2026-06-10 12:00:00');
-
-        $livreur = $this->makeLivreur();
-        $commission = CommissionVente::create([
-            'organization_id' => $this->org->id,
-            'commande_vente_id' => $this->makeCommande()->id,
-            'vehicule_id' => null,
-            'montant_commande' => 1000000,
-            'montant_commission_totale' => 300000.0,
-            'montant_verse' => 0,
-            'statut' => 'creee',
-        ]);
-        $part = CommissionPart::create([
-            'commission_vente_id' => $commission->id,
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => $livreur->nom_complet,
-            'taux_commission' => 100,
-            'montant_brut' => 300000.0,
-            'frais_supplementaires' => 0,
-            'montant_net' => 300000.0,
-            'montant_verse' => 0,
-            'statut' => 'creee',
-        ]);
-
-        $periode = $this->makePeriode(StatutPeriodePaiement::BROUILLON->value);
-
-        $this->actingAs($this->user)->post(route('comptabilite.periodes.calculer', $periode));
-        $this->assertDatabaseHas('paiement_fiches', ['periode_id' => $periode->id]);
-
-        // Une commission CREEE reste CREEE tant que la période n'est pas validée,
-        // même une fois reprise dans une fiche calculée.
-        $this->assertEquals('creee', $part->fresh()->statut->value);
-
-        $this->actingAs($this->user)
-            ->post(route('comptabilite.ajustements.valider', ['type' => 'vente', 'partId' => $part->id]))
-            ->assertRedirect();
-
-        $this->actingAs($this->user)
-            ->post(route('comptabilite.periodes.valider', $periode))
-            ->assertRedirect();
-
-        $periode->refresh();
-        $this->assertSame(StatutPeriodePaiement::VALIDEE->value, $periode->statut->value);
-        $this->assertEquals('impaye', $commission->fresh()->statut->value);
-        $this->assertEquals('impaye', $part->fresh()->statut->value);
-    }
+    // NB : test_validation_periode_bascule_commission_creee_vers_impaye() (vente Legacy)
+    // supprimé — équivalent V2 déjà couvert par CommissionEnveloppeFichePaymentV2Test::
+    // valider_la_periode_active_les_enveloppes_v2_encore_creees().
 
     public function test_commission_creee_hors_periode_reste_creee_apres_validation(): void
     {
