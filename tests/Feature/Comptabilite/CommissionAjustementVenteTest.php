@@ -38,19 +38,17 @@ use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 /**
- * Équivalent V2 des scénarios période/ajustement/validation véhicule de
- * CommissionAjustementTest.php et PaiementPeriodeTest.php (écrits sur
- * CommissionPart, la vente Legacy) — cette même couverture pour
- * CommissionEnveloppePart, seule source de vérité désormais pour la
- * commission de vente (cf. décision AMOA du 20/08/2026 : V2 unique moteur).
+ * Scénarios période/ajustement/validation véhicule pour la commission de
+ * vente, sur CommissionEnveloppePart — seule source de vérité pour la
+ * commission de vente.
  *
- * Vérifie aussi la combinaison vente V2 + logistique dans
+ * Vérifie aussi la combinaison vente + logistique dans
  * CommissionAjustementController::vehicule()/validerVehicule() et
  * PaiementPeriodeController::show()/valider() — un véhicule peut porter les
  * deux natures de commission sur la même période, jamais l'une masquant
- * l'autre selon que l'organisation est V2 ou non.
+ * l'autre.
  */
-class CommissionAjustementV2Test extends TestCase
+class CommissionAjustementVenteTest extends TestCase
 {
     use HasAdminSetup, HasOrgAndUser, HasProduitVariante, RefreshDatabase;
 
@@ -83,9 +81,8 @@ class CommissionAjustementV2Test extends TestCase
 
     /**
      * Véhicule + équipe de 3 livreurs partageant l'enveloppe Livraison à
-     * 50 % / 37,5 % / 12,5 % — mêmes proportions que l'équivalent Legacy
-     * (Oumar 60000 / Abdoulaye 45000 / Kadiatou 15000 sur un total de 120000),
-     * pour rester directement comparable.
+     * 50 % / 37,5 % / 12,5 % (Oumar 60000 / Abdoulaye 45000 / Kadiatou 15000
+     * sur un total de 120000).
      *
      * @return array{vehicule: Vehicule, equipe: EquipeLivraison, livreurs: array<string, Livreur>, categorie: Categorie}
      */
@@ -182,7 +179,7 @@ class CommissionAjustementV2Test extends TestCase
     }
 
     /** @test */
-    public function periode_v2_ne_peut_pas_etre_validee_si_des_parts_ne_sont_pas_validees(): void
+    public function periode_ne_peut_pas_etre_validee_si_des_parts_ne_sont_pas_validees(): void
     {
         ['vehicule' => $vehicule, 'categorie' => $categorie] = $this->makeVehiculeTroisLivreurs();
         $this->creerCommandeEtGenererCommission($vehicule, $categorie);
@@ -200,7 +197,7 @@ class CommissionAjustementV2Test extends TestCase
     }
 
     /** @test */
-    public function ecart_non_redistribue_bloque_la_validation_de_la_periode_v2(): void
+    public function ecart_non_redistribue_bloque_la_validation_de_la_periode(): void
     {
         ['vehicule' => $vehicule, 'livreurs' => $livreurs, 'categorie' => $categorie] = $this->makeVehiculeTroisLivreurs();
         $this->creerCommandeEtGenererCommission($vehicule, $categorie);
@@ -208,16 +205,16 @@ class CommissionAjustementV2Test extends TestCase
         $periode = $this->periodeCouvrantAujourdhui();
         app(PeriodeCalculatorService::class)->calculer($periode);
 
-        $partAbdoulaye = CommissionAdjustmentService::partsPourPeriodeV2($periode)
+        $partAbdoulaye = CommissionAdjustmentService::partsPourPeriode($periode)
             ->first(fn ($p) => $p->beneficiaire_id === $livreurs['Abdoulaye']->id);
 
         // Abdoulaye absent, mis à 0, mais SANS redistribution aux deux autres.
         $this->actingAs($this->user)->post(
-            route('comptabilite.ajustements.absence', ['type' => 'vente_v2', 'partId' => $partAbdoulaye->id]),
+            route('comptabilite.ajustements.absence', ['type' => 'vente', 'partId' => $partAbdoulaye->id]),
         );
 
-        foreach (CommissionAdjustmentService::partsPourPeriodeV2($periode) as $part) {
-            $this->actingAs($this->user)->post(route('comptabilite.ajustements.valider', ['type' => 'vente_v2', 'partId' => $part->id]));
+        foreach (CommissionAdjustmentService::partsPourPeriode($periode) as $part) {
+            $this->actingAs($this->user)->post(route('comptabilite.ajustements.valider', ['type' => 'vente', 'partId' => $part->id]));
         }
 
         $response = $this->actingAs($this->user)->post(route('comptabilite.periodes.valider', $periode));
@@ -232,7 +229,7 @@ class CommissionAjustementV2Test extends TestCase
     }
 
     /** @test */
-    public function valider_vehicule_v2_valide_toutes_les_parts_si_ecart_nul(): void
+    public function valider_vehicule_valide_toutes_les_parts_si_ecart_nul(): void
     {
         ['vehicule' => $vehicule, 'categorie' => $categorie] = $this->makeVehiculeTroisLivreurs();
         $this->creerCommandeEtGenererCommission($vehicule, $categorie);
@@ -245,7 +242,7 @@ class CommissionAjustementV2Test extends TestCase
             ->assertRedirect()
             ->assertSessionHasNoErrors();
 
-        $parts = CommissionAdjustmentService::partsPourPeriodeV2($periode);
+        $parts = CommissionAdjustmentService::partsPourPeriode($periode);
         $this->assertCount(3, $parts);
         foreach ($parts as $part) {
             $this->assertNotNull($part->fresh()->validated_at, "la part de {$part->beneficiaire_id} doit être validée");
@@ -253,7 +250,7 @@ class CommissionAjustementV2Test extends TestCase
     }
 
     /** @test */
-    public function valider_vehicule_v2_bloque_si_ecart_non_nul(): void
+    public function valider_vehicule_bloque_si_ecart_non_nul(): void
     {
         ['vehicule' => $vehicule, 'livreurs' => $livreurs, 'categorie' => $categorie] = $this->makeVehiculeTroisLivreurs();
         $this->creerCommandeEtGenererCommission($vehicule, $categorie);
@@ -261,12 +258,12 @@ class CommissionAjustementV2Test extends TestCase
         $periode = $this->periodeCouvrantAujourdhui();
         app(PeriodeCalculatorService::class)->calculer($periode);
 
-        $partAbdoulaye = CommissionAdjustmentService::partsPourPeriodeV2($periode)
+        $partAbdoulaye = CommissionAdjustmentService::partsPourPeriode($periode)
             ->first(fn ($p) => $p->beneficiaire_id === $livreurs['Abdoulaye']->id);
 
         // Absent, mis à 0, sans redistribution : le véhicule n'est plus à l'équilibre.
         $this->actingAs($this->user)->post(
-            route('comptabilite.ajustements.absence', ['type' => 'vente_v2', 'partId' => $partAbdoulaye->id]),
+            route('comptabilite.ajustements.absence', ['type' => 'vente', 'partId' => $partAbdoulaye->id]),
         );
 
         $response = $this->actingAs($this->user)
@@ -275,13 +272,13 @@ class CommissionAjustementV2Test extends TestCase
         $response->assertRedirect();
         $response->assertSessionHas('error');
 
-        foreach (CommissionAdjustmentService::partsPourPeriodeV2($periode) as $part) {
+        foreach (CommissionAdjustmentService::partsPourPeriode($periode) as $part) {
             $this->assertNull($part->fresh()->validated_at, "aucune part ne doit être validée tant que l'écart n'est pas résorbé");
         }
     }
 
     /** @test */
-    public function detail_vehicule_v2_affiche_les_trois_beneficiaires(): void
+    public function detail_vehicule_affiche_les_trois_beneficiaires(): void
     {
         ['vehicule' => $vehicule, 'categorie' => $categorie] = $this->makeVehiculeTroisLivreurs();
         $this->creerCommandeEtGenererCommission($vehicule, $categorie);
@@ -301,7 +298,7 @@ class CommissionAjustementV2Test extends TestCase
     }
 
     /** @test */
-    public function periode_show_v2_liste_le_vehicule_avec_les_montants_attendus(): void
+    public function periode_show_liste_le_vehicule_avec_les_montants_attendus(): void
     {
         ['vehicule' => $vehicule, 'categorie' => $categorie] = $this->makeVehiculeTroisLivreurs();
         $this->creerCommandeEtGenererCommission($vehicule, $categorie);
@@ -324,7 +321,7 @@ class CommissionAjustementV2Test extends TestCase
     }
 
     /** @test */
-    public function ajouter_remplacant_v2_cree_une_part_origine_remplacement(): void
+    public function ajouter_remplacant_cree_une_part_origine_remplacement(): void
     {
         ['vehicule' => $vehicule, 'categorie' => $categorie] = $this->makeVehiculeTroisLivreurs();
         $commande = $this->creerCommandeEtGenererCommission($vehicule, $categorie);
@@ -337,7 +334,7 @@ class CommissionAjustementV2Test extends TestCase
         $periode = $this->periodeCouvrantAujourdhui();
         app(PeriodeCalculatorService::class)->calculer($periode);
 
-        // 'vente' et non 'vente_v2' : le contrôleur résout dynamiquement CommissionVente
+        // 'vente' et non 'vente' : le contrôleur résout dynamiquement CommissionVente
         // puis CommissionEnveloppe à partir du seul commission_id (jamais les deux
         // moteurs avec des données réelles simultanées pour une même organisation).
         $this->actingAs($this->user)
@@ -371,7 +368,7 @@ class CommissionAjustementV2Test extends TestCase
     }
 
     /** @test */
-    public function periode_show_v2_marque_le_vehicule_a_ajuster_si_ecart_non_nul(): void
+    public function periode_show_marque_le_vehicule_a_ajuster_si_ecart_non_nul(): void
     {
         ['vehicule' => $vehicule, 'livreurs' => $livreurs, 'categorie' => $categorie] = $this->makeVehiculeTroisLivreurs();
         $this->creerCommandeEtGenererCommission($vehicule, $categorie);
@@ -379,11 +376,11 @@ class CommissionAjustementV2Test extends TestCase
         $periode = $this->periodeCouvrantAujourdhui();
         app(PeriodeCalculatorService::class)->calculer($periode);
 
-        $partOumar = CommissionAdjustmentService::partsPourPeriodeV2($periode)
+        $partOumar = CommissionAdjustmentService::partsPourPeriode($periode)
             ->first(fn ($p) => $p->beneficiaire_id === $livreurs['Oumar']->id);
 
         $this->actingAs($this->user)->patch(
-            route('comptabilite.ajustements.ajuster', ['type' => 'vente_v2', 'partId' => $partOumar->id]),
+            route('comptabilite.ajustements.ajuster', ['type' => 'vente', 'partId' => $partOumar->id]),
             ['montant' => 40000, 'motif' => 'correction'],
         );
 
@@ -396,7 +393,7 @@ class CommissionAjustementV2Test extends TestCase
     }
 
     /** @test */
-    public function periode_show_v2_filtre_les_vehicules_par_nom_et_par_livreur(): void
+    public function periode_show_filtre_les_vehicules_par_nom_et_par_livreur(): void
     {
         ['vehicule' => $vehiculeA, 'categorie' => $categorieA] = $this->makeVehiculeTroisLivreurs(' A');
         $this->creerCommandeEtGenererCommission($vehiculeA, $categorieA);

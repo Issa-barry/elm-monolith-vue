@@ -2,13 +2,16 @@
 
 namespace Tests\Feature;
 
+use App\Enums\CommissionActivationStatut;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutCommission;
 use App\Http\Controllers\Client\ClientDashboardController;
 use App\Models\Client;
 use App\Models\CommandeVente;
-use App\Models\CommissionPart;
-use App\Models\CommissionVente;
+use App\Models\CommissionCibleType;
+use App\Models\CommissionEnveloppe;
+use App\Models\CommissionEnveloppePart;
+use App\Models\CommissionProcessus;
 use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\Personne;
@@ -163,22 +166,31 @@ class ClientDashboardTest extends TestCase
             'validated_at' => now(),
         ]);
 
-        $commission = CommissionVente::create([
+        $processus = CommissionProcessus::create([
             'organization_id' => $org->id,
-            'commande_vente_id' => $commande->id,
-            'vehicule_id' => $vehicule->id,
-            'montant_commande' => 100000,
-            'montant_commission_totale' => 15000,
-            'montant_verse' => 3000,
+            'code' => CommissionProcessus::CODE_VENTE,
+            'libelle' => 'Vente',
+            'declencheur' => 'chargement_valide',
+            'strategie_ancrage_site' => 'operation',
+            'statut' => CommissionActivationStatut::ACTIF->value,
+        ]);
+
+        $commission = CommissionEnveloppe::create([
+            'organization_id' => $org->id,
+            'source_type' => CommandeVente::class,
+            'source_id' => $commande->id,
+            'processus_id' => $processus->id,
+            'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
+            'cible_id' => (string) \Illuminate\Support\Str::ulid(),
+            'montant_total' => 15000,
+            'earned_at' => now(),
             'statut' => StatutCommission::PARTIEL->value,
         ]);
 
-        CommissionPart::create([
-            'commission_vente_id' => $commission->id,
-            'type_beneficiaire' => 'proprietaire',
-            'proprietaire_id' => $proprietaire->id,
-            'beneficiaire_nom' => trim($proprietaire->prenom.' '.$proprietaire->nom),
-            'taux_commission' => 100,
+        CommissionEnveloppePart::create([
+            'enveloppe_id' => $commission->id,
+            'beneficiaire_type' => CommissionEnveloppePart::TYPE_PROPRIETAIRE,
+            'beneficiaire_id' => $proprietaire->id,
             'montant_brut' => 15000,
             'montant_net' => 15000,
             'montant_verse' => 3000,

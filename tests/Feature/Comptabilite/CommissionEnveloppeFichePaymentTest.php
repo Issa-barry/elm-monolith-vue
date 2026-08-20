@@ -195,8 +195,8 @@ class CommissionEnveloppeFichePaymentV2Test extends TestCase
      */
     private function validerPeriodeReellement(PaiementPeriode $periode): void
     {
-        $parts = CommissionAdjustmentService::partsPourPeriodeV2($periode);
-        CommissionAdjustmentService::validerLotV2($parts, $this->user);
+        $parts = CommissionAdjustmentService::partsPourPeriode($periode);
+        CommissionAdjustmentService::validerLot($parts, $this->user);
 
         $this->actingAs($this->user)
             ->post(route('comptabilite.periodes.valider', $periode))
@@ -387,8 +387,8 @@ class CommissionEnveloppeFichePaymentV2Test extends TestCase
         // Une commission de vente V2 non encore validée bloque la validation de la
         // période (cf. CommissionAdjustmentService::partsNonValideesV2()) — valider
         // chaque part d'abord, exactement comme le workflow réel l'exige.
-        $parts = CommissionAdjustmentService::partsPourPeriodeV2($periode);
-        CommissionAdjustmentService::validerLotV2($parts, $this->user);
+        $parts = CommissionAdjustmentService::partsPourPeriode($periode);
+        CommissionAdjustmentService::validerLot($parts, $this->user);
 
         $this->actingAs($this->user)
             ->post(route('comptabilite.periodes.valider', $periode))
@@ -410,7 +410,7 @@ class CommissionEnveloppeFichePaymentV2Test extends TestCase
         $part = CommissionEnveloppePart::where('enveloppe_id', $enveloppeLiv->id)->firstOrFail();
 
         $this->actingAs($this->user)
-            ->patch(route('comptabilite.ajustements.ajuster', ['vente_v2', $part->id]), [
+            ->patch(route('comptabilite.ajustements.ajuster', ['vente', $part->id]), [
                 'montant' => 7000,
                 'motif' => MotifAjustementCommission::CORRECTION->value,
                 'commentaire' => 'Correction test',

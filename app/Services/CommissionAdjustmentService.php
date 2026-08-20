@@ -174,8 +174,8 @@ class CommissionAdjustmentService
             ->all();
     }
 
-    /** @param  Collection<int, CommissionEnveloppePart>  $parts */
-    public static function statutValidationPourParts(Collection $parts): StatutValidationEquipe
+    /** @param  \Illuminate\Support\Collection<int, CommissionEnveloppePart>  $parts */
+    public static function statutValidationPourParts(\Illuminate\Support\Collection $parts): StatutValidationEquipe
     {
         if ($parts->isEmpty()) {
             return StatutValidationEquipe::A_VERIFIER;
@@ -630,8 +630,8 @@ class CommissionAdjustmentService
             ->all();
     }
 
-    /** @param  Collection<int, CommissionLogistiquePart>  $parts */
-    public static function statutValidationLogistiquePourParts(Collection $parts): StatutValidationEquipe
+    /** @param  \Illuminate\Support\Collection<int, CommissionLogistiquePart>  $parts */
+    public static function statutValidationLogistiquePourParts(\Illuminate\Support\Collection $parts): StatutValidationEquipe
     {
         if ($parts->isEmpty()) {
             return StatutValidationEquipe::A_VERIFIER;

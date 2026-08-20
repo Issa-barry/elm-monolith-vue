@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Comptabilite;
 
+use App\Enums\CommissionActivationStatut;
 use App\Enums\MotifAjustementCommission;
 use App\Enums\StatutCommission;
 use App\Enums\StatutPeriodePaiement;
@@ -9,10 +10,12 @@ use App\Enums\TypePeriodePaiement;
 use App\Features\ModuleFeature;
 use App\Models\Client;
 use App\Models\CommandeVente;
+use App\Models\CommissionCibleType;
+use App\Models\CommissionEnveloppe;
+use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
-use App\Models\CommissionPart;
-use App\Models\CommissionVente;
+use App\Models\CommissionProcessus;
 use App\Models\Livreur;
 use App\Models\PaiementPeriode;
 use App\Models\Personne;
@@ -63,7 +66,9 @@ class CommissionAjustementPropagationTest extends TestCase
         ]);
     }
 
-    /** @return array{commission: CommissionVente, part: CommissionPart, livreur: Livreur} */
+    private ?CommissionProcessus $processusVente = null;
+
+    /** @return array{commission: CommissionEnveloppe, part: CommissionEnveloppePart, livreur: ?Livreur} */
     private function makeCommissionVenteAvecPart(float $montantNet, string $type = 'livreur', ?Proprietaire $proprietaire = null): array
     {
         $client = Client::create([
@@ -84,27 +89,34 @@ class CommissionAjustementPropagationTest extends TestCase
             'total_commande' => 1000000,
         ]);
 
-        $commission = CommissionVente::create([
+        $this->processusVente ??= CommissionProcessus::create([
             'organization_id' => $this->org->id,
-            'commande_vente_id' => $commande->id,
-            'vehicule_id' => null,
-            'montant_commande' => 1000000,
-            'montant_commission_totale' => $montantNet,
-            'montant_verse' => 0,
+            'code' => CommissionProcessus::CODE_VENTE,
+            'libelle' => 'Vente',
+            'declencheur' => 'chargement_valide',
+            'strategie_ancrage_site' => 'operation',
+            'statut' => CommissionActivationStatut::ACTIF->value,
+        ]);
+
+        $commission = CommissionEnveloppe::create([
+            'organization_id' => $this->org->id,
+            'source_type' => CommandeVente::class,
+            'source_id' => $commande->id,
+            'processus_id' => $this->processusVente->id,
+            'cible_type' => $type === 'livreur' ? CommissionCibleType::CODE_EQUIPE_LIVRAISON : CommissionCibleType::CODE_PROPRIETAIRE,
+            'cible_id' => (string) \Illuminate\Support\Str::ulid(),
+            'montant_total' => $montantNet,
+            'earned_at' => now(),
             'statut' => StatutCommission::IMPAYE->value,
         ]);
 
         $livreur = $type === 'livreur' ? $this->makeLivreur() : null;
 
-        $part = CommissionPart::create([
-            'commission_vente_id' => $commission->id,
-            'type_beneficiaire' => $type,
-            'livreur_id' => $livreur?->id,
-            'proprietaire_id' => $proprietaire?->id,
-            'beneficiaire_nom' => $livreur?->nom_complet ?? trim(($proprietaire?->prenom ?? '').' '.($proprietaire?->nom ?? '')),
-            'taux_commission' => 100,
+        $part = CommissionEnveloppePart::create([
+            'enveloppe_id' => $commission->id,
+            'beneficiaire_type' => $type,
+            'beneficiaire_id' => $livreur?->id ?? $proprietaire?->id,
             'montant_brut' => $montantNet,
-            'frais_supplementaires' => 0,
             'montant_net' => $montantNet,
             'montant_verse' => 0,
             'statut' => StatutCommission::IMPAYE->value,
@@ -224,7 +236,7 @@ class CommissionAjustementPropagationTest extends TestCase
             'earned_at' => now(),
         ]);
 
-        CommissionAdjustmentService::ajusterMontant($part, 18000.0, MotifAjustementCommission::ABSENCE, null, $this->user);
+        CommissionAdjustmentService::ajusterMontantLogistique($part, 18000.0, MotifAjustementCommission::ABSENCE, null, $this->user);
 
         $response = $this->actingAs($this->user)->get(route('comptabilite.commissions.logistique.index'));
         $response->assertOk();
@@ -236,54 +248,10 @@ class CommissionAjustementPropagationTest extends TestCase
         $this->assertSame(18000.0, $row['impaye'], 'le solde impayé doit refléter le montant ajusté (18000), pas le théorique (20000)');
     }
 
-    // ── Paiement direct : ne jamais payer plus (ou moins) que le montant ajusté ──
-
-    public function test_paiement_vente_direct_respecte_le_montant_ajuste_a_la_baisse(): void
-    {
-        ['commission' => $commission, 'part' => $part, 'livreur' => $livreur] = $this->makeCommissionVenteAvecPart(15000.0);
-        CommissionAdjustmentService::ajusterMontant($part, 12000.0, MotifAjustementCommission::ABSENCE, null, $this->user);
-        $this->validerPeriode(TypePeriodePaiement::LIVREUR, $commission->created_at, StatutPeriodePaiement::VALIDEE);
-
-        // Payer le solde théorique (15000) doit être refusé : il dépasse le disponible réel (12000).
-        $refus = $this->actingAs($this->user)->post(
-            route('comptabilite.commissions.vente.livreur.paiements', ['livreurId' => $livreur->id]),
-            ['montant' => 15000, 'mode_paiement' => 'especes']
-        );
-        $refus->assertSessionHasErrors('montant');
-
-        // Payer exactement le montant ajusté doit réussir et solder la part.
-        $this->actingAs($this->user)->post(
-            route('comptabilite.commissions.vente.livreur.paiements', ['livreurId' => $livreur->id]),
-            ['montant' => 12000, 'mode_paiement' => 'especes']
-        )->assertRedirect();
-
-        $part->refresh();
-        $this->assertSame(StatutCommission::PAYE, $part->statut);
-        $this->assertSame(0.0, (float) $part->montant_restant);
-    }
-
-    public function test_paiement_vente_direct_respecte_le_montant_ajuste_a_la_hausse(): void
-    {
-        ['commission' => $commission, 'part' => $part, 'livreur' => $livreur] = $this->makeCommissionVenteAvecPart(60000.0);
-        CommissionAdjustmentService::ajusterMontant($part, 61500.0, MotifAjustementCommission::TRAVAIL_SUPPLEMENTAIRE, null, $this->user);
-        $this->validerPeriode(TypePeriodePaiement::LIVREUR, $commission->created_at, StatutPeriodePaiement::VALIDEE);
-
-        // Payer le montant théorique (60000) ne doit pas suffire à solder la part.
-        $this->actingAs($this->user)->post(
-            route('comptabilite.commissions.vente.livreur.paiements', ['livreurId' => $livreur->id]),
-            ['montant' => 60000, 'mode_paiement' => 'especes']
-        )->assertRedirect();
-
-        $part->refresh();
-        $this->assertNotSame(StatutCommission::PAYE, $part->statut, 'il reste 1500 GNF dus après le montant théorique, la part ne doit pas être soldée');
-        $this->assertSame(1500.0, (float) $part->montant_restant);
-
-        $this->actingAs($this->user)->post(
-            route('comptabilite.commissions.vente.livreur.paiements', ['livreurId' => $livreur->id]),
-            ['montant' => 1500, 'mode_paiement' => 'especes']
-        )->assertRedirect();
-
-        $part->refresh();
-        $this->assertSame(StatutCommission::PAYE, $part->statut);
-    }
+    // Paiement direct de commission vente désormais impossible depuis aucun écran
+    // (can_pay toujours false — la seule chaîne de paiement valide passe par
+    // Comptabilité > Fiches de paiement) : les scénarios "respecte le montant
+    // ajusté" n'ont plus de route à exercer ici. La propagation de l'ajustement
+    // au montant réellement dû par une fiche reste couverte par
+    // CommissionAjustementTest::test_calcul_de_fiche_utilise_le_montant_ajuste.
 }
