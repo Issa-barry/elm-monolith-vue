@@ -197,6 +197,13 @@ export async function loginAsElmV2Demo(page: Page): Promise<void> {
 
     for (let attempt = 1; attempt <= 3; attempt++) {
         try {
+            // Le storageState par défaut (.auth/user.json, écrit par global-setup.ts)
+            // authentifie déjà le contexte comme admin "elm" — /login est une route
+            // `guest` (routes/web.php) qui redirige un utilisateur déjà connecté vers
+            // le dashboard sans jamais rendre le formulaire, cf. le même pattern dans
+            // smoke.spec.ts ("avec storageState actif, /login redirigerait vers le
+            // dashboard"). Sans ce clearCookies(), le password input n'apparaît jamais.
+            await page.context().clearCookies();
             await page.goto('/login');
             await page.waitForSelector('input[name="password"]', {
                 timeout: 20_000,

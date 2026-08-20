@@ -20,7 +20,11 @@ class ElmV2DemoCatalogSeeder extends Seeder
     public function run(): void
     {
         $org = Organization::where('slug', 'elm-v2-demo')->firstOrFail();
-        $typeId = ProduitType::where('organization_id', $org->id)->where('code', 'materiel')->value('id');
+        // 'achat_vente' (pas 'materiel', qui est vendable=false par défaut, cf.
+        // ProduitTypeDefaultSeeder) — un sachet d'eau vendu aux clients doit apparaître
+        // dans CommandeVenteController::produitsActifs() (filtré sur vendable=true),
+        // sans quoi le formulaire /ventes/create n'a aucun produit à proposer.
+        $typeId = ProduitType::where('organization_id', $org->id)->where('code', 'achat_vente')->value('id');
 
         $categorie = Categorie::firstOrCreate(
             ['organization_id' => $org->id, 'nom' => 'Sachets d\'eau V2 Demo'],

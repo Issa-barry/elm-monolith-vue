@@ -29,6 +29,18 @@ const VEHICULE_IMMAT = 'V2-DEMO-01';
 const PROPRIETAIRE_MONTANT = 500;
 const LIVRAISON_MONTANT = 1000;
 
+/**
+ * Fragment de regex matchant un montant tel que rendu par `Intl.NumberFormat('fr-FR')`
+ * côté front (formatGNF() dans EquipeStepperModal.vue, toLocaleString('fr-FR') ailleurs) :
+ * le séparateur de milliers est une espace fine insécable (U+202F), invisible à l'œil mais
+ * absente d'un `String(montant)` brut — un `toContainText(String(1000))` ne matche donc
+ * jamais "1 000 GNF". Tolère aussi une espace normale, au cas où le rendu diffère.
+ */
+function montantPattern(amount: number): string {
+    const formatted = new Intl.NumberFormat('fr-FR').format(amount);
+    return formatted.split('').map((ch) => (/\s/.test(ch) ? '\\s' : ch)).join('');
+}
+
 test.beforeEach(async ({ page }) => {
     await loginAsElmV2Demo(page);
 });
@@ -61,8 +73,12 @@ async function configurerBaremes(page: Page): Promise<void> {
     await dialogLiv.getByRole('button', { name: /enregistrer/i }).click();
     await expect(dialogLiv).toBeHidden({ timeout: 10_000 });
 
-    await expect(cells.first()).toContainText(String(PROPRIETAIRE_MONTANT));
-    await expect(cells.nth(1)).toContainText(String(LIVRAISON_MONTANT));
+    await expect(cells.first()).toContainText(
+        new RegExp(montantPattern(PROPRIETAIRE_MONTANT)),
+    );
+    await expect(cells.nth(1)).toContainText(
+        new RegExp(montantPattern(LIVRAISON_MONTANT)),
+    );
 }
 
 /**
@@ -107,7 +123,9 @@ async function configurerPartageVehicule(page: Page): Promise<void> {
         { timeout: 10_000 },
     );
     await expect(
-        dialog.getByText(new RegExp(`${LIVRAISON_MONTANT}.*unité.*Livraison`, 'i')),
+        dialog.getByText(
+            new RegExp(`${montantPattern(LIVRAISON_MONTANT)}.*unité.*Livraison`, 'i'),
+        ),
     ).toBeVisible();
 
     // Un seul chauffeur : auto-complété à 100 % (cf. initPartagesParCategorie()).

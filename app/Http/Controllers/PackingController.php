@@ -67,6 +67,12 @@ class PackingController extends Controller
             ->with(['personne', 'entrepriseTierce'])
             ->get()
             ->sortBy('nom')
+            // sortBy() conserve les clés d'origine (pas de réindexation) : sans values(),
+            // une Collection dont les clés ne sont plus 0..n-1 séquentielles se sérialise
+            // en objet JSON ({"1":...,"0":...}) au lieu d'un tableau — le composant
+            // Dropdown du front (qui fait `this.options || []` sans vérifier le type)
+            // plante silencieusement sur un objet (visibleOptions.findIndex n'existe pas).
+            ->values()
             ->map(fn (Prestataire $p) => [
                 'value' => $p->id,
                 'label' => $p->nom_complet ?? $p->reference,
@@ -153,6 +159,12 @@ class PackingController extends Controller
             ->with(['personne', 'entrepriseTierce'])
             ->get()
             ->sortBy('nom')
+            // sortBy() conserve les clés d'origine (pas de réindexation) : sans values(),
+            // une Collection dont les clés ne sont plus 0..n-1 séquentielles se sérialise
+            // en objet JSON ({"1":...,"0":...}) au lieu d'un tableau — le composant
+            // Dropdown du front (qui fait `this.options || []` sans vérifier le type)
+            // plante silencieusement sur un objet (visibleOptions.findIndex n'existe pas).
+            ->values()
             ->map(fn (Prestataire $p) => [
                 'value' => $p->id,
                 'label' => $p->nom_complet ?? $p->reference,
