@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Comptabilite;
 use App\Enums\AuditEvent;
 use App\Enums\MotifAjustementCommission;
 use App\Http\Controllers\Controller;
+use App\Models\CommissionEnveloppe;
 use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
@@ -106,7 +107,12 @@ class CommissionAjustementController extends Controller
             'beneficiaires' => $beneficiaires,
             'filters' => $filters,
             'motifs' => MotifAjustementCommission::options(),
-            'commissions_vente' => collect($groupesRaw)->where('type', 'vente')
+            // 'vente' et 'vente_v2' fusionnés dans la même liste : les deux moteurs
+            // n'ont jamais de données réelles simultanément pour une même organisation
+            // (cf. MoteurCommissionResolver), et remplacant() résout le bon modèle
+            // dynamiquement à partir du seul commission_id — aucune distinction à faire
+            // choisir à l'utilisateur.
+            'commissions_vente' => collect($groupesRaw)->whereIn('type', ['vente', 'vente_v2'])
                 ->map(fn (array $g) => ['id' => $g['commission_id'], 'label' => 'Commande '.$g['reference']])
                 ->values(),
             'commissions_logistique' => collect($groupesRaw)->where('type', 'logistique')
@@ -341,8 +347,16 @@ class CommissionAjustementController extends Controller
         ]);
 
         if ($data['commission_type'] === 'vente') {
-            $commission = CommissionVente::where('organization_id', $periode->organization_id)->findOrFail($data['commission_id']);
-            $part = CommissionAdjustmentService::ajouterRemplacantVente($commission, $data, $request->user());
+            // Legacy et V2 partagent la même option "Vente" côté écran (cf. vehicule() —
+            // 'commissions_vente' fusionne les deux listes) : jamais de données réelles
+            // simultanées pour une même organisation, donc résolution par simple essai.
+            $commission = CommissionVente::where('organization_id', $periode->organization_id)->find($data['commission_id']);
+            if ($commission) {
+                $part = CommissionAdjustmentService::ajouterRemplacantVente($commission, $data, $request->user());
+            } else {
+                $enveloppe = CommissionEnveloppe::where('organization_id', $periode->organization_id)->findOrFail($data['commission_id']);
+                $part = CommissionAdjustmentService::ajouterRemplacantVenteV2($enveloppe, $data, $request->user());
+            }
         } else {
             $commission = CommissionLogistique::where('organization_id', $periode->organization_id)->findOrFail($data['commission_id']);
             $part = CommissionAdjustmentService::ajouterRemplacantLogistique($commission, $data, $request->user());

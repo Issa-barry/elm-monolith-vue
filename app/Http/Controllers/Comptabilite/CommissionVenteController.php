@@ -1113,6 +1113,10 @@ class CommissionVenteController extends Controller
     {
         abort_unless(auth()->user()->can('comptabilite.read'), 403);
 
+        if (MoteurCommissionResolver::estV2(auth()->user()->organization_id)) {
+            return $this->exportExcelV2($request);
+        }
+
         $user = auth()->user();
         $orgId = $user->organization_id;
         $isAdmin = $user->isAdmin();
@@ -1161,6 +1165,10 @@ class CommissionVenteController extends Controller
     public function exportPdf(Request $request): HttpResponse
     {
         abort_unless(auth()->user()->can('comptabilite.read'), 403);
+
+        if (MoteurCommissionResolver::estV2(auth()->user()->organization_id)) {
+            return $this->exportPdfV2($request);
+        }
 
         $user = auth()->user();
         $orgId = $user->organization_id;
@@ -1320,5 +1328,190 @@ class CommissionVenteController extends Controller
             fn ($v) => trim($v['nom'].($v['immatriculation'] ? ' '.$v['immatriculation'] : '')),
             $vehicules
         ));
+    }
+
+    // ── Exports V2 ────────────────────────────────────────────────────────────
+    //
+    // Miroir des exports Legacy ci-dessus, source CommissionEnveloppePart. Comme sur
+    // les écrans de paiement, les parts CREEE sont exclues : un export est un
+    // document de règlement/signature, pas un écran de visibilité générique (celle-ci
+    // reste garantie par indexV2()/showLivreurV2(), jamais masquée). buildSiteGroups()
+    // est réutilisée telle quelle : elle opère uniquement sur la forme de ligne déjà
+    // construite, jamais sur le modèle source.
+
+    private function exportExcelV2(Request $request): StreamedResponse
+    {
+        $user = auth()->user();
+        $orgId = $user->organization_id;
+        $isAdmin = $user->isAdmin();
+        $filtrePeriode = $this->scalarInput($request, 'periode');
+        $filtreStatut = $this->scalarInput($request, 'statut');
+        $search = trim((string) $request->input('search', ''));
+        $filtreSiteIds = $isAdmin
+            ? array_values(array_filter((array) $request->input('site_ids', [])))
+            : $this->siteScope->accessibleSiteIds($user)->all();
+
+        $parts = $this->loadPartsForExportV2($orgId, $filtrePeriode, $filtreSiteIds);
+        $fraisDepensesParLivreur = CommissionVenteCalculatorService::fraisDepensesParLivreur(
+            $orgId,
+            $parts->pluck('beneficiaire_id')->filter()->unique()->values()->all(),
+            $filtrePeriode,
+            ! empty($filtreSiteIds) ? $filtreSiteIds : null,
+        );
+        $rows = $this->buildExportRowsV2($parts, $filtrePeriode, $filtreStatut, $search, $fraisDepensesParLivreur);
+
+        $periodeLabel = $filtrePeriode !== '' ? PeriodeComptableService::labelForCode($filtrePeriode) : 'Toutes périodes';
+        $filename = 'commissions-vente-'.now()->format('Y-m-d').'.csv';
+
+        return response()->streamDownload(function () use ($rows, $periodeLabel) {
+            $handle = fopen('php://output', 'w');
+            fwrite($handle, "\xEF\xBB\xBF");
+            fputcsv($handle, ['Bénéficiaire', 'Téléphone', 'Véhicule(s)', 'Agence', 'Période', 'Total cumulé (GNF)', 'Dépenses (GNF)', 'Déjà payé (GNF)', 'Reste à payer (GNF)', 'Statut', 'Signature'], ';');
+            foreach ($rows as $row) {
+                fputcsv($handle, [
+                    $row['beneficiaire_nom'],
+                    $row['telephone'] ?? '',
+                    self::vehiculesEnTexte($row['vehicules'] ?? []),
+                    $row['agence'] ?? '',
+                    $periodeLabel,
+                    number_format((float) $row['total_cumule'], 0, ',', ' '),
+                    number_format((float) $row['frais'], 0, ',', ' '),
+                    number_format((float) $row['deja_paye'], 0, ',', ' '),
+                    number_format((float) $row['reste'], 0, ',', ' '),
+                    $row['statut'],
+                    '',
+                ], ';');
+            }
+            fclose($handle);
+        }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    private function exportPdfV2(Request $request): HttpResponse
+    {
+        $user = auth()->user();
+        $orgId = $user->organization_id;
+        $isAdmin = $user->isAdmin();
+        $filtrePeriode = $this->scalarInput($request, 'periode');
+        $filtreStatut = $this->scalarInput($request, 'statut');
+        $search = trim((string) $request->input('search', ''));
+        $filtreSiteIds = $isAdmin
+            ? array_values(array_filter((array) $request->input('site_ids', [])))
+            : $this->siteScope->accessibleSiteIds($user)->all();
+
+        $parts = $this->loadPartsForExportV2($orgId, $filtrePeriode, $filtreSiteIds);
+        $fraisDepensesParLivreur = CommissionVenteCalculatorService::fraisDepensesParLivreur(
+            $orgId,
+            $parts->pluck('beneficiaire_id')->filter()->unique()->values()->all(),
+            $filtrePeriode,
+            ! empty($filtreSiteIds) ? $filtreSiteIds : null,
+        );
+        $rows = $this->buildExportRowsV2($parts, $filtrePeriode, $filtreStatut, $search, $fraisDepensesParLivreur);
+        $siteGroups = $this->buildSiteGroups($rows);
+
+        $org = Organization::find($orgId);
+        $periodeLabel = $filtrePeriode !== '' ? PeriodeComptableService::labelForCode($filtrePeriode) : 'Toutes périodes';
+
+        $pdf = Pdf::loadView('pdf.commissions.index', [
+            'title' => 'Commissions livreur vente',
+            'org' => $org,
+            'periode_label' => $periodeLabel,
+            'filters' => ['statut' => $filtreStatut, 'search' => $search],
+            'sites' => $siteGroups,
+            'printed_by' => auth()->user()->name ?? '—',
+            'generated_at' => now(),
+        ])->setPaper('a4', 'landscape');
+
+        return $pdf->download('commissions-vente-'.now()->format('Y-m-d').'.pdf');
+    }
+
+    /** @param  array<int, string>  $filtreSiteIds */
+    private function loadPartsForExportV2(string $orgId, string $filtrePeriode, array $filtreSiteIds = []): Collection
+    {
+        $query = CommissionEnveloppePart::with([
+            'enveloppe.source.site:id,nom',
+            'enveloppe.source.vehicule:id,nom_vehicule,immatriculation',
+        ])
+            ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_LIVREUR)
+            ->where('statut', '!=', StatutCommission::CREEE->value)
+            ->whereHas('enveloppe', function ($q) use ($orgId, $filtrePeriode) {
+                $q->where('organization_id', $orgId);
+                if ($filtrePeriode !== '') {
+                    [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
+                    $q->whereBetween('earned_at', [$debut, $fin]);
+                }
+            });
+
+        if (! empty($filtreSiteIds)) {
+            $query->whereHas('enveloppe.source', fn ($q) => $q->whereIn('site_id', $filtreSiteIds));
+        }
+
+        return $query->get();
+    }
+
+    /** @return Collection<int, array<string, mixed>> */
+    private function buildExportRowsV2(Collection $parts, string $filtrePeriode, string $filtreStatut, string $search, array $fraisDepensesParLivreur = []): Collection
+    {
+        $rows = $parts->groupBy('beneficiaire_id')->map(function (Collection $livParts) use ($filtrePeriode, $fraisDepensesParLivreur) {
+            $first = $livParts->first();
+            $beneficiaire = $first->resoudreBeneficiaire();
+            $fraisDepenses = $fraisDepensesParLivreur[(string) $first->beneficiaire_id] ?? 0.0;
+            $resume = CommissionVenteCalculatorService::calculerResume(
+                (float) $livParts->sum('montant_brut'),
+                0.0, // pas de frais_supplementaires sur CommissionEnveloppePart
+                (float) $livParts->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer),
+                $fraisDepenses,
+                (float) $livParts->sum('montant_verse'),
+            );
+
+            $vehicules = $livParts->pluck('enveloppe.source.vehicule')
+                ->filter()->unique('id')
+                ->map(fn ($v) => ['nom' => $v->nom_vehicule, 'immatriculation' => $v->immatriculation])
+                ->values();
+
+            $agence = $livParts->pluck('enveloppe.source.site.nom')
+                ->filter()->unique()->sort()->implode(', ');
+
+            $periodeLabel = $filtrePeriode !== ''
+                ? PeriodeComptableService::labelForCode($filtrePeriode)
+                : $livParts->pluck('enveloppe.earned_at')
+                    ->filter()
+                    ->map(fn ($d) => PeriodeComptableService::labelForCode(
+                        PeriodeComptableService::codeForLivreur(Carbon::parse($d))
+                    ))
+                    ->unique()->implode(', ');
+
+            return [
+                'beneficiaire_id' => $first->beneficiaire_id,
+                'beneficiaire_nom' => $beneficiaire?->nom_complet ?? '—',
+                'telephone' => $beneficiaire?->telephone,
+                'vehicules' => $vehicules->all(),
+                'agence' => $agence ?: null,
+                'periode' => $periodeLabel,
+                'total_cumule' => $resume['brut'],
+                'frais' => $resume['frais'],
+                'deja_paye' => $resume['verse'],
+                'reste' => $resume['reste'],
+                'statut' => StatutCommission::from($resume['statut'])->label(),
+            ];
+        });
+
+        if ($filtreStatut !== '') {
+            $statutLabel = match ($filtreStatut) {
+                'impaye' => StatutCommission::IMPAYE->label(),
+                'paye' => StatutCommission::PAYE->label(),
+                'partiel' => StatutCommission::PARTIEL->label(),
+                default => null,
+            };
+            if ($statutLabel !== null) {
+                $rows = $rows->filter(fn ($r) => $r['statut'] === $statutLabel);
+            }
+        }
+
+        if ($search !== '') {
+            $s = mb_strtolower($search);
+            $rows = $rows->filter(fn ($r) => str_contains(mb_strtolower($r['beneficiaire_nom']), $s));
+        }
+
+        return $rows->sortBy('beneficiaire_nom')->values();
     }
 }

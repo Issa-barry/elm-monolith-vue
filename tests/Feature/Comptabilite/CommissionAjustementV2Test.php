@@ -10,9 +10,12 @@ use App\Enums\CommissionUniteCalcul;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutPeriodePaiement;
 use App\Enums\TypePeriodePaiement;
+use App\Enums\OrigineCommissionPart;
 use App\Models\Categorie;
 use App\Models\CommandeVente;
 use App\Models\CommissionCibleType;
+use App\Models\CommissionEnveloppe;
+use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
 use App\Models\EquipeLivraison;
@@ -318,6 +321,53 @@ class CommissionAjustementV2Test extends TestCase
             ->where('vehicules.0.ajuste', 120000)
             ->where('vehicules.0.equilibre', true)
         );
+    }
+
+    /** @test */
+    public function ajouter_remplacant_v2_cree_une_part_origine_remplacement(): void
+    {
+        ['vehicule' => $vehicule, 'categorie' => $categorie] = $this->makeVehiculeTroisLivreurs();
+        $commande = $this->creerCommandeEtGenererCommission($vehicule, $categorie);
+        $remplacant = Livreur::factory()->create(['organization_id' => $this->org->id, 'nom_complet' => 'Camara']);
+
+        $enveloppe = CommissionEnveloppe::where('source_id', $commande->id)
+            ->where('cible_type', 'equipe_livraison')
+            ->firstOrFail();
+
+        $periode = $this->periodeCouvrantAujourdhui();
+        app(PeriodeCalculatorService::class)->calculer($periode);
+
+        // 'vente' et non 'vente_v2' : le contrôleur résout dynamiquement CommissionVente
+        // puis CommissionEnveloppe à partir du seul commission_id (jamais les deux
+        // moteurs avec des données réelles simultanées pour une même organisation).
+        $this->actingAs($this->user)
+            ->post(route('comptabilite.periodes.ajustements.remplacant', $periode), [
+                'commission_type' => 'vente',
+                'commission_id' => $enveloppe->id,
+                'type_beneficiaire' => 'livreur',
+                'livreur_id' => $remplacant->id,
+                'beneficiaire_nom' => $remplacant->nom_complet,
+                'montant' => 20000,
+                'commentaire' => 'Remplaçant du jour',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $nouvellePart = CommissionEnveloppePart::where('enveloppe_id', $enveloppe->id)
+            ->where('beneficiaire_id', $remplacant->id)
+            ->first();
+
+        $this->assertNotNull($nouvellePart);
+        $this->assertSame(OrigineCommissionPart::REMPLACEMENT, $nouvellePart->origine);
+        $this->assertSame(20000.0, (float) $nouvellePart->montant_actuel);
+        $this->assertSame(
+            0.0,
+            (float) $nouvellePart->montant_net,
+            'un remplaçant n\'a aucune allocation théorique : tout son montant est de l\'écart à compenser',
+        );
+        // L'enveloppe théorique du véhicule ne bouge jamais : le remplaçant crée un
+        // écart de +20 000 GNF à résorber ailleurs, jamais une commission supplémentaire.
+        $this->assertSame(120000.0, (float) $enveloppe->fresh()->montant_total);
     }
 
     /** @test */

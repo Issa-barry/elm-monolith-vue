@@ -163,6 +163,30 @@ class CommandeVenteCommissionEligibiliteTest extends TestCase
         ]);
     }
 
+    /**
+     * Régression : le badge "Commission : X" de la page Commande lisait uniquement
+     * commissionsV2() à un moment (cf. getCommissionStatutGlobal()), ce qui le rendait
+     * silencieusement vide pour toute organisation Legacy — cette organisation de test
+     * n'a jamais activé de processus V2, donc c'est bien la relation Legacy qui doit
+     * être lue ici.
+     */
+    public function test_page_commande_affiche_le_badge_commission_pour_une_organisation_legacy(): void
+    {
+        $produit = $this->makeProduit();
+        $vehicule = $this->makeVehicule(livraisonVente: true);
+        $this->attacherEquipe($vehicule);
+
+        $commande = $this->creerCommande($vehicule, $produit);
+
+        $this->actingAs($this->user)
+            ->get(route('ventes.show', $commande))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Ventes/Show')
+                ->where('commission_statut.value', 'creee')
+            );
+    }
+
     public function test_vehicule_sans_livraison_vente_ne_genere_pas_de_commission(): void
     {
         // Toujours facturé au prix de vente plein (véhicule de flotte gérée) mais aucune

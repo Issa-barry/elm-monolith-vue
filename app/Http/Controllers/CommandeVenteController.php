@@ -22,6 +22,7 @@ use App\Models\Vehicule;
 use App\Services\AuditLogService;
 use App\Services\CommandeVenteActiviteService;
 use App\Services\CommandeVenteService;
+use App\Services\Commission\MoteurCommissionResolver;
 use App\Services\PrixUsineResolver;
 use App\Services\SolvabiliteService;
 use App\Services\VehiculeCapaciteService;
@@ -722,7 +723,13 @@ class CommandeVenteController extends Controller
 
     private function getCommissionStatutGlobal(CommandeVente $commande): ?array
     {
-        $commissions = $commande->commissionsV2;
+        // Une organisation Legacy continue de générer de vrais CommissionVente/CommissionPart
+        // (cf. CommissionTriggerService — seules les organisations V2 écrivent dans
+        // commissionsV2()) : lire uniquement commissionsV2() casserait silencieusement ce
+        // badge pour toute organisation pas encore basculée en V2.
+        $commissions = MoteurCommissionResolver::estV2($commande->organization_id)
+            ? $commande->commissionsV2
+            : $commande->commissions;
         if ($commissions->isEmpty()) {
             return null;
         }

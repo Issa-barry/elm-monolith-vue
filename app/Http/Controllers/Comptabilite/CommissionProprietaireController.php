@@ -1156,6 +1156,10 @@ class CommissionProprietaireController extends Controller
     {
         abort_unless(auth()->user()->can('comptabilite.read'), 403);
 
+        if (MoteurCommissionResolver::estV2(auth()->user()->organization_id)) {
+            return $this->exportExcelV2($request);
+        }
+
         $orgId = auth()->user()->organization_id;
         $filtrePeriode = trim((string) $request->input('periode', ''));
         $filtreStatut = trim((string) $request->input('statut', ''));
@@ -1195,6 +1199,10 @@ class CommissionProprietaireController extends Controller
     public function exportPdf(Request $request): HttpResponse
     {
         abort_unless(auth()->user()->can('comptabilite.read'), 403);
+
+        if (MoteurCommissionResolver::estV2(auth()->user()->organization_id)) {
+            return $this->exportPdfV2($request);
+        }
 
         $orgId = auth()->user()->organization_id;
         $filtrePeriode = trim((string) $request->input('periode', ''));
@@ -1408,6 +1416,234 @@ class CommissionProprietaireController extends Controller
             fn ($v) => trim($v['nom'].($v['immatriculation'] ? ' '.$v['immatriculation'] : '')),
             $vehicules
         ));
+    }
+
+    // ── Exports V2 ────────────────────────────────────────────────────────────
+    //
+    // Miroir des exports Legacy ci-dessus, source CommissionEnveloppePart.
+    // buildSiteGroups() est réutilisée telle quelle (opère uniquement sur la forme de
+    // ligne déjà construite). Comme en Legacy, aucune exclusion CREEE ici (l'export
+    // propriétaire Legacy ne l'a jamais fait non plus — comportement reproduit
+    // fidèlement, pas "corrigé").
+
+    private function exportExcelV2(Request $request): StreamedResponse
+    {
+        $orgId = auth()->user()->organization_id;
+        $filtrePeriode = trim((string) $request->input('periode', ''));
+        $filtreStatut = trim((string) $request->input('statut', ''));
+        $filtreNom = trim((string) $request->input('nom', ''));
+        $filtreTelephone = trim((string) $request->input('telephone', ''));
+
+        [$parts, $fraisParProprio, $motifsParProprio] = $this->loadPartsForExportV2($orgId, $filtrePeriode);
+        $rows = $this->buildExportRowsV2($parts, $fraisParProprio, $motifsParProprio, $filtrePeriode, $filtreStatut, $filtreNom, $filtreTelephone);
+
+        $periodeLabel = $filtrePeriode !== '' ? PeriodeComptableService::labelForCode($filtrePeriode) : 'Toutes périodes';
+        $filename = 'commissions-proprietaires-'.now()->format('Y-m-d').'.csv';
+
+        return response()->streamDownload(function () use ($rows, $periodeLabel) {
+            $handle = fopen('php://output', 'w');
+            fwrite($handle, "\xEF\xBB\xBF");
+            fputcsv($handle, ['Bénéficiaire', 'Téléphone', 'Véhicule(s)', 'Agence', 'Période', 'Total cumulé (GNF)', 'Dépenses (GNF)', 'Motif de dépense', 'Déjà payé (GNF)', 'Reste à payer (GNF)', 'Statut', 'Signature'], ';');
+            foreach ($rows as $row) {
+                fputcsv($handle, [
+                    $row['beneficiaire_nom'],
+                    $row['telephone'] ?? '',
+                    self::vehiculesEnTexte($row['vehicules'] ?? []),
+                    $row['agence'] ?? '',
+                    $periodeLabel,
+                    number_format((float) $row['total_cumule'], 0, ',', ' '),
+                    number_format((float) $row['frais'], 0, ',', ' '),
+                    $row['motifs_frais'] ?? '',
+                    number_format((float) $row['deja_paye'], 0, ',', ' '),
+                    number_format((float) $row['reste'], 0, ',', ' '),
+                    $row['statut'],
+                    '',
+                ], ';');
+            }
+            fclose($handle);
+        }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    private function exportPdfV2(Request $request): HttpResponse
+    {
+        $orgId = auth()->user()->organization_id;
+        $filtrePeriode = trim((string) $request->input('periode', ''));
+        $filtreStatut = trim((string) $request->input('statut', ''));
+        $filtreNom = trim((string) $request->input('nom', ''));
+        $filtreTelephone = trim((string) $request->input('telephone', ''));
+
+        [$parts, $fraisParProprio, $motifsParProprio] = $this->loadPartsForExportV2($orgId, $filtrePeriode);
+        $rows = $this->buildExportRowsV2($parts, $fraisParProprio, $motifsParProprio, $filtrePeriode, $filtreStatut, $filtreNom, $filtreTelephone);
+        $siteGroups = $this->buildSiteGroups($rows);
+
+        $org = Organization::find($orgId);
+        $periodeLabel = $filtrePeriode !== '' ? PeriodeComptableService::labelForCode($filtrePeriode) : 'Toutes périodes';
+
+        $pdf = Pdf::loadView('pdf.commissions.index', [
+            'title' => 'Commissions propriétaire',
+            'org' => $org,
+            'periode_label' => $periodeLabel,
+            'filters' => ['statut' => $filtreStatut, 'nom' => $filtreNom, 'telephone' => $filtreTelephone],
+            'sites' => $siteGroups,
+            'printed_by' => auth()->user()->name ?? '—',
+            'generated_at' => now(),
+        ])->setPaper('a4', 'landscape');
+
+        return $pdf->download('commissions-proprietaires-'.now()->format('Y-m-d').'.pdf');
+    }
+
+    /** @return array{0: Collection<int, CommissionEnveloppePart>, 1: array<string, float>, 2: array<string, string>} */
+    private function loadPartsForExportV2(string $orgId, string $filtrePeriode): array
+    {
+        $query = CommissionEnveloppePart::with(['enveloppe.source.site:id,nom', 'enveloppe.source.vehicule:id,nom_vehicule,immatriculation'])
+            ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PROPRIETAIRE)
+            ->whereHas('enveloppe', function ($q) use ($orgId, $filtrePeriode) {
+                $q->where('organization_id', $orgId);
+                if ($filtrePeriode !== '') {
+                    [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
+                    $q->whereBetween('earned_at', [$debut, $fin]);
+                }
+            });
+
+        $parts = $query->get();
+
+        $proprioIds = $parts->pluck('beneficiaire_id')->filter()->unique();
+        $fraisParProprio = [];
+        $motifsParProprio = [];
+
+        if ($proprioIds->isNotEmpty()) {
+            $vehiculesByProprio = Vehicule::whereIn('proprietaire_id', $proprioIds)
+                ->where('organization_id', $orgId)
+                ->get(['id', 'proprietaire_id', 'nom_vehicule', 'immatriculation'])
+                ->groupBy('proprietaire_id');
+
+            $allVehiculeIds = $vehiculesByProprio->flatten()->pluck('id');
+
+            $applyPeriode = function ($query) use ($filtrePeriode) {
+                if ($filtrePeriode !== '') {
+                    [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
+                    $query->whereBetween('date_depense', [$debut->toDateString(), $fin->toDateString().' 23:59:59']);
+                }
+
+                return $query;
+            };
+
+            if ($allVehiculeIds->isNotEmpty()) {
+                $depQuery = Depense::with('depenseType:id,libelle')
+                    ->where('beneficiaire_type', 'vehicule')
+                    ->whereIn('beneficiaire_id', $allVehiculeIds)
+                    ->where('statut', StatutDepense::VALIDE->value)
+                    ->where('organization_id', $orgId);
+                $applyPeriode($depQuery);
+
+                $depenses = $depQuery->get()->groupBy('beneficiaire_id');
+
+                foreach ($vehiculesByProprio as $proprioId => $vehicules) {
+                    $proprioDeps = $vehicules->flatMap(fn ($v) => $depenses->get($v->id, collect()));
+                    $fraisParProprio[(string) $proprioId] = (float) $proprioDeps->sum('montant');
+                    $motifsParProprio[(string) $proprioId] = $proprioDeps
+                        ->pluck('depenseType.libelle')->filter()->unique()->implode(', ');
+                }
+            }
+
+            $depProprioQuery = Depense::with('depenseType:id,libelle')
+                ->where('beneficiaire_type', 'proprietaire')
+                ->whereIn('beneficiaire_id', $proprioIds)
+                ->where('statut', StatutDepense::VALIDE->value)
+                ->where('organization_id', $orgId);
+            $applyPeriode($depProprioQuery);
+
+            foreach ($depProprioQuery->get()->groupBy('beneficiaire_id') as $proprioId => $depenses) {
+                $proprioId = (string) $proprioId;
+                $fraisParProprio[$proprioId] = ($fraisParProprio[$proprioId] ?? 0.0) + (float) $depenses->sum('montant');
+                $motifs = $depenses->pluck('depenseType.libelle')->filter()->unique();
+                $motifsParProprio[$proprioId] = trim(
+                    ($motifsParProprio[$proprioId] ?? '').(($motifsParProprio[$proprioId] ?? '') !== '' && $motifs->isNotEmpty() ? ', ' : '').$motifs->implode(', '),
+                    ', ',
+                );
+            }
+        }
+
+        return [$parts, $fraisParProprio, $motifsParProprio];
+    }
+
+    /** @return Collection<int, array<string, mixed>> */
+    private function buildExportRowsV2(Collection $parts, array $fraisParProprio, array $motifsParProprio, string $filtrePeriode, string $filtreStatut, string $filtreNom, string $filtreTelephone): Collection
+    {
+        $rows = $parts->groupBy('beneficiaire_id')->map(function (Collection $propParts, string $proprioId) use ($fraisParProprio, $motifsParProprio, $filtrePeriode) {
+            $first = $propParts->first();
+            $beneficiaire = $first->resoudreBeneficiaire();
+            $totalBrut = (float) $propParts->sum('montant_brut');
+            $totalAPayer = (float) $propParts->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer);
+            $totalFrais = $fraisParProprio[$proprioId] ?? 0.0;
+            $totalNet = max(0.0, $totalAPayer - $totalFrais);
+            $totalVerse = (float) $propParts->sum('montant_verse');
+            $solde = max(0.0, $totalNet - $totalVerse);
+
+            $vehicules = $propParts->pluck('enveloppe.source.vehicule')
+                ->filter()->unique('id')
+                ->map(fn ($v) => ['nom' => $v->nom_vehicule, 'immatriculation' => $v->immatriculation])
+                ->values();
+
+            $agence = $propParts->pluck('enveloppe.source.site.nom')
+                ->filter()->unique()->sort()->implode(', ');
+
+            $motifs = $motifsParProprio[$proprioId] ?? null;
+
+            $periodeLabel = $filtrePeriode !== ''
+                ? PeriodeComptableService::labelForCode($filtrePeriode)
+                : $propParts->pluck('enveloppe.earned_at')
+                    ->filter()
+                    ->map(fn ($d) => PeriodeComptableService::labelForCode(
+                        PeriodeComptableService::codeForProprietaire(Carbon::parse($d))
+                    ))
+                    ->unique()->implode(', ');
+
+            $statut = match (true) {
+                $totalNet > 0 && $totalVerse >= $totalNet => StatutCommission::PAYE->label(),
+                $totalVerse > 0 => StatutCommission::PARTIEL->label(),
+                default => StatutCommission::IMPAYE->label(),
+            };
+
+            return [
+                'beneficiaire_id' => $proprioId,
+                'beneficiaire_nom' => $beneficiaire?->nom_complet ?? '—',
+                'telephone' => $beneficiaire?->telephone,
+                'vehicules' => $vehicules->all(),
+                'agence' => $agence ?: null,
+                'periode' => $periodeLabel,
+                'total_cumule' => $totalBrut,
+                'frais' => $totalFrais,
+                'motifs_frais' => $motifs ?: null,
+                'deja_paye' => $totalVerse,
+                'reste' => $solde,
+                'statut' => $statut,
+            ];
+        });
+
+        if ($filtreStatut !== '') {
+            $statutLabel = match ($filtreStatut) {
+                'impaye' => StatutCommission::IMPAYE->label(),
+                'paye' => StatutCommission::PAYE->label(),
+                'partiel' => StatutCommission::PARTIEL->label(),
+                default => null,
+            };
+            if ($statutLabel !== null) {
+                $rows = $rows->filter(fn ($r) => $r['statut'] === $statutLabel);
+            }
+        }
+
+        if ($filtreNom !== '') {
+            $s = mb_strtolower($filtreNom);
+            $rows = $rows->filter(fn ($r) => str_contains(mb_strtolower($r['beneficiaire_nom']), $s));
+        }
+
+        if ($filtreTelephone !== '') {
+            $t = preg_replace('/\s/', '', $filtreTelephone);
+            $rows = $rows->filter(fn ($r) => str_contains(preg_replace('/\s/', '', (string) ($r['telephone'] ?? '')), $t));
+        }
+
+        return $rows->sortBy('beneficiaire_nom')->values();
     }
 
     private static function periodesProprietaireBetween(Carbon $from, Carbon $to): array

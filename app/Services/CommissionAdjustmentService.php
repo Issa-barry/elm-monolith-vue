@@ -30,10 +30,16 @@ use Illuminate\Support\Facades\DB;
 class CommissionAdjustmentService
 {
     /**
-     * Logistique uniquement — la vente ne passe plus jamais par ce chemin, cf.
-     * partsPourPeriodeV2()/CommissionEnveloppePart (source de vérité unique pour la
-     * commission de vente). La clé 'vente' reste présente (toujours vide) pour ne pas
-     * casser la forme attendue par les appelants existants (merge/concat sans effet).
+     * Legacy (vente ET logistique). IMPORTANT : la clé 'vente' n'est PAS structurellement
+     * vide — une organisation qui n'a pas (encore) basculé son processus vente en V2
+     * continue de générer de vrais CommissionPart (cf. CommissionTriggerService::
+     * genererCommissionVente(), qui n'appelle CommissionEnveloppeGenerator QUE pour les
+     * organisations V2) : cette méthode doit continuer à les lire normalement pour que
+     * la validation de période Legacy reste correctement gardée. Une organisation V2,
+     * elle, n'écrit jamais dans commission_parts pour la vente — 'vente' y est donc
+     * naturellement (et non artificiellement) toujours vide, sans qu'aucun code ici
+     * n'ait besoin de le forcer. Ne JAMAIS coder en dur cette clé à vide : ça casserait
+     * silencieusement la validation de période pour toute organisation encore Legacy.
      *
      * @return array{vente: Collection<int, CommissionPart>, logistique: Collection<int, CommissionLogistiquePart>}
      */
@@ -41,13 +47,17 @@ class CommissionAdjustmentService
     {
         $ficheIds = $periode->fiches()->pluck('id');
 
-        $logistiqueIds = PaiementFicheLigne::whereIn('fiche_id', $ficheIds)
-            ->where('source_type', CommissionLogistiquePart::class)
-            ->pluck('source_id')
-            ->unique();
+        $lignes = PaiementFicheLigne::whereIn('fiche_id', $ficheIds)
+            ->whereIn('source_type', [CommissionPart::class, CommissionLogistiquePart::class])
+            ->get(['source_type', 'source_id']);
+
+        $venteIds = $lignes->where('source_type', CommissionPart::class)->pluck('source_id')->unique();
+        $logistiqueIds = $lignes->where('source_type', CommissionLogistiquePart::class)->pluck('source_id')->unique();
 
         return [
-            'vente' => CommissionPart::query()->whereRaw('1 = 0')->get(),
+            'vente' => CommissionPart::whereIn('id', $venteIds)
+                ->with(['livreur', 'proprietaire', 'validateur', 'commission.commande'])
+                ->get(),
             'logistique' => CommissionLogistiquePart::whereIn('id', $logistiqueIds)
                 ->with(['livreur', 'proprietaire', 'validateur', 'commission.transfert'])
                 ->get(),
@@ -625,7 +635,7 @@ class CommissionAdjustmentService
         app(PeriodeCalculatorService::class)->recalculerPeriodesConcernees($orgId, $date);
     }
 
-    private static function logCreationRemplacant(CommissionPart|CommissionLogistiquePart $part, float $montant, ?string $commentaire, User $user): void
+    private static function logCreationRemplacant(CommissionPart|CommissionLogistiquePart|CommissionEnveloppePart $part, float $montant, ?string $commentaire, User $user): void
     {
         CommissionPartAdjustment::create([
             'commission_part_type' => $part::class,
@@ -1114,6 +1124,45 @@ class CommissionAdjustmentService
         User $user,
     ): void {
         self::ajusterMontantEnveloppePart($part, 0.0, MotifAjustementCommission::ABSENCE, $commentaire, $user);
+    }
+
+    /**
+     * Miroir V2 de ajouterRemplacantVente() — le bénéficiaire doit obligatoirement
+     * référencer un Livreur/Proprietaire existant (imposé par la validation du
+     * contrôleur, cf. CommissionAjustementController::remplacant()) : contrairement à
+     * CommissionPart, CommissionEnveloppePart n'a pas de beneficiaire_nom propre, le nom
+     * affiché est toujours résolu depuis le bénéficiaire réel (cf. resoudreBeneficiaire()).
+     *
+     * @param  array{type_beneficiaire: string, livreur_id: ?string, proprietaire_id: ?string, beneficiaire_nom: string, montant: float, commentaire: ?string}  $data
+     */
+    public static function ajouterRemplacantVenteV2(CommissionEnveloppe $enveloppe, array $data, User $user): CommissionEnveloppePart
+    {
+        return DB::transaction(function () use ($enveloppe, $data, $user) {
+            $montant = max(0.0, round((float) $data['montant'], 2));
+            $beneficiaireId = $data['type_beneficiaire'] === CommissionEnveloppePart::TYPE_PROPRIETAIRE
+                ? $data['proprietaire_id']
+                : $data['livreur_id'];
+
+            // montant_net = 0 : un remplaçant n'a aucune allocation théorique — tout son
+            // montant_actuel est donc de l'écart, à compenser par une baisse équivalente
+            // ailleurs sur la même enveloppe (cf. resumeEcartsV2()).
+            $part = CommissionEnveloppePart::create([
+                'enveloppe_id' => $enveloppe->id,
+                'beneficiaire_type' => $data['type_beneficiaire'],
+                'beneficiaire_id' => $beneficiaireId,
+                'taux_repartition_snapshot' => null,
+                'montant_brut' => $montant,
+                'montant_net' => 0,
+                'montant_actuel' => $montant,
+                'origine' => OrigineCommissionPart::REMPLACEMENT,
+                'statut' => StatutCommission::IMPAYE,
+            ]);
+
+            self::logCreationRemplacant($part, $montant, $data['commentaire'] ?? null, $user);
+            self::invaliderPeriodesV2($part);
+
+            return $part;
+        });
     }
 
     /** Miroir V2 de invaliderPeriodes() — date résolue via enveloppe->earned_at. */
