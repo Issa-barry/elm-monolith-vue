@@ -45,8 +45,8 @@ function ouvrir(id: string) {
                         Historique des imports de produits
                     </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        Créations et mises à jour de produits en masse depuis
-                        un fichier Excel.
+                        Créations et mises à jour de produits en masse depuis un
+                        fichier Excel.
                     </p>
                 </div>
                 <div class="flex gap-2">
@@ -82,9 +82,7 @@ function ouvrir(id: string) {
                             <th class="px-4 py-3 font-medium">Fichier</th>
                             <th class="px-4 py-3 font-medium">Statut</th>
                             <th class="px-4 py-3 font-medium">Créés</th>
-                            <th class="px-4 py-3 font-medium">
-                                Mis à jour
-                            </th>
+                            <th class="px-4 py-3 font-medium">Mis à jour</th>
                             <th class="px-4 py-3 font-medium">Inchangés</th>
                             <th class="px-4 py-3 font-medium">Erreurs</th>
                             <th class="px-4 py-3 font-medium">Utilisateur</th>
