@@ -289,6 +289,7 @@ class CommissionDetailKpiTest extends TestCase
             'beneficiaire_type' => 'livreur',
             'beneficiaire_id' => $livreur->id,
             'montant' => 1000,
+            'date_depense' => now()->toDateString(),
         ]);
 
         $this->actingAs($this->user)
@@ -422,6 +423,7 @@ class CommissionDetailKpiTest extends TestCase
             'beneficiaire_type' => 'livreur',
             'beneficiaire_id' => $livreur->id,
             'montant' => 2000,
+            'date_depense' => now()->toDateString(),
         ]);
 
         $this->actingAs($this->user)
@@ -444,6 +446,7 @@ class CommissionDetailKpiTest extends TestCase
             'beneficiaire_type' => 'livreur',
             'beneficiaire_id' => $livreur->id,
             'montant' => 1500,
+            'date_depense' => now()->toDateString(),
         ]);
 
         $this->actingAs($this->user)
@@ -619,6 +622,7 @@ class CommissionDetailKpiTest extends TestCase
             'beneficiaire_type' => 'vehicule',
             'beneficiaire_id' => $vehicule->id,
             'montant' => 3000,
+            'date_depense' => now()->toDateString(),
         ]);
 
         Depense::factory()->valide()->create([
@@ -626,6 +630,7 @@ class CommissionDetailKpiTest extends TestCase
             'beneficiaire_type' => 'proprietaire',
             'beneficiaire_id' => $proprio->id,
             'montant' => 1000,
+            'date_depense' => now()->toDateString(),
         ]);
 
         $this->actingAs($this->user)

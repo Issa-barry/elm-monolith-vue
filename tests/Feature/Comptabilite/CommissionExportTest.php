@@ -3,18 +3,11 @@
 namespace Tests\Feature\Comptabilite;
 
 use App\Enums\StatutCommission;
-use App\Enums\StatutDepense;
 use App\Features\ModuleFeature;
-use App\Models\CommandeVente;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
-use App\Models\CommissionPart;
-use App\Models\CommissionVente;
-use App\Models\Depense;
-use App\Models\DepenseType;
 use App\Models\Livreur;
 use App\Models\Personne;
-use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
 use App\Models\Vehicule;
@@ -24,6 +17,13 @@ use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
+/**
+ * Exports Excel/PDF logistique (moteur indépendant, cf. CommissionLogistiquePart)
+ * ainsi que quelques tests génériques (accès, "sans données") partagés avec les
+ * écrans vente/propriétaire. La couverture vente/propriétaire elle-même vit dans
+ * CommissionExportVenteTest.php (CommissionEnveloppePart, seule source de vérité
+ * pour la commission de vente).
+ */
 class CommissionExportTest extends TestCase
 {
     use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
@@ -79,22 +79,6 @@ class CommissionExportTest extends TestCase
         ]);
     }
 
-    private function makeProprietaire(): Proprietaire
-    {
-        $personne = Personne::create([
-            'organization_id' => $this->org->id,
-            'nom' => 'Barry',
-            'prenom' => 'Ibrahima',
-            'telephone' => '622000002',
-        ]);
-
-        return Proprietaire::create([
-            'organization_id' => $this->org->id,
-            'personne_id' => $personne->id,
-            'is_active' => true,
-        ]);
-    }
-
     private function makeLogistiquePart(Livreur $livreur, Vehicule $vehicule, Site $site, array $override = []): CommissionLogistiquePart
     {
         $transfert = TransfertLogistique::create([
@@ -133,77 +117,6 @@ class CommissionExportTest extends TestCase
             'earned_at' => now()->toDateString(),
             'periode' => now()->format('Y-m').'-P1',
         ], $override));
-    }
-
-    private function makeVentePart(Livreur $livreur, Vehicule $vehicule, Site $site): CommissionPart
-    {
-        $commande = CommandeVente::create([
-            'organization_id' => $this->org->id,
-            'reference' => 'CMD-'.uniqid(),
-            'site_id' => $site->id,
-            'statut' => 'livree',
-            'total_commande' => 500000,
-        ]);
-
-        $commission = CommissionVente::create([
-            'organization_id' => $this->org->id,
-            'commande_vente_id' => $commande->id,
-            'vehicule_id' => $vehicule->id,
-            'montant_commande' => 500000,
-            'montant_commission_totale' => 25000,
-            'montant_verse' => 0,
-            'statut' => StatutCommission::IMPAYE->value,
-        ]);
-
-        return CommissionPart::create([
-            'commission_vente_id' => $commission->id,
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => trim("{$livreur->prenom} {$livreur->nom}"),
-            'role' => 'chauffeur',
-            'taux_commission' => 5,
-            'montant_brut' => 25000,
-            'frais_supplementaires' => 2000,
-            'type_frais' => 'carburant',
-            'montant_net' => 23000,
-            'montant_verse' => 0,
-            'statut' => StatutCommission::IMPAYE->value,
-        ]);
-    }
-
-    private function makeProprietairePart(Proprietaire $proprio, Vehicule $vehicule, Site $site): CommissionPart
-    {
-        $commande = CommandeVente::create([
-            'organization_id' => $this->org->id,
-            'reference' => 'CMD-'.uniqid(),
-            'site_id' => $site->id,
-            'statut' => 'livree',
-            'total_commande' => 500000,
-        ]);
-
-        $commission = CommissionVente::create([
-            'organization_id' => $this->org->id,
-            'commande_vente_id' => $commande->id,
-            'vehicule_id' => $vehicule->id,
-            'montant_commande' => 500000,
-            'montant_commission_totale' => 30000,
-            'montant_verse' => 0,
-            'statut' => StatutCommission::IMPAYE->value,
-        ]);
-
-        return CommissionPart::create([
-            'commission_vente_id' => $commission->id,
-            'type_beneficiaire' => 'proprietaire',
-            'proprietaire_id' => $proprio->id,
-            'beneficiaire_nom' => trim("{$proprio->prenom} {$proprio->nom}"),
-            'role' => 'proprietaire',
-            'taux_commission' => 6,
-            'montant_brut' => 30000,
-            'frais_supplementaires' => 0,
-            'montant_net' => 30000,
-            'montant_verse' => 0,
-            'statut' => StatutCommission::IMPAYE->value,
-        ]);
     }
 
     // ── Commission logistique — Excel ─────────────────────────────────────────
@@ -339,188 +252,9 @@ class CommissionExportTest extends TestCase
             ->assertStatus(403);
     }
 
-    // ── Commission vente — Excel ───────────────────────────────────────────────
-
-    public function test_export_excel_vente_retourne_csv(): void
-    {
-        $site = $this->makeSite();
-        $vehicule = $this->makeVehicule($site);
-        $livreur = $this->makeLivreur();
-        $this->makeVentePart($livreur, $vehicule, $site);
-
-        $response = $this->actingAs($this->user)
-            ->get(route('comptabilite.commissions.vente.excel'));
-
-        $response->assertOk();
-        $response->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
-    }
-
-    public function test_export_excel_vente_contient_colonnes_requises(): void
-    {
-        $site = $this->makeSite();
-        $vehicule = $this->makeVehicule($site);
-        $livreur = $this->makeLivreur();
-        $this->makeVentePart($livreur, $vehicule, $site);
-
-        $response = $this->actingAs($this->user)
-            ->get(route('comptabilite.commissions.vente.excel'));
-
-        $content = $response->streamedContent();
-        $this->assertStringContainsString('Bénéficiaire', $content);
-        $this->assertStringContainsString('Téléphone', $content);
-        $this->assertStringContainsString('Véhicule(s)', $content);
-        $this->assertStringContainsString('Agence', $content);
-        $this->assertStringContainsString('Total cumulé', $content);
-        $this->assertStringContainsString('Dépenses', $content);
-        $this->assertStringContainsString('Déjà payé', $content);
-        $this->assertStringContainsString('Reste à payer', $content);
-        $this->assertStringContainsString('Statut', $content);
-        $this->assertStringContainsString('Signature', $content);
-    }
-
-    public function test_export_excel_vente_ne_contient_plus_motif_de_frais(): void
-    {
-        $site = $this->makeSite();
-        $vehicule = $this->makeVehicule($site);
-        $livreur = $this->makeLivreur();
-        $this->makeVentePart($livreur, $vehicule, $site);
-
-        $response = $this->actingAs($this->user)
-            ->get(route('comptabilite.commissions.vente.excel'));
-
-        $this->assertStringNotContainsString('Motif de dépense', $response->streamedContent());
-    }
-
-    public function test_export_excel_vente_pas_de_colonnes_techniques(): void
-    {
-        $site = $this->makeSite();
-        $vehicule = $this->makeVehicule($site);
-        $livreur = $this->makeLivreur();
-        $this->makeVentePart($livreur, $vehicule, $site);
-
-        $response = $this->actingAs($this->user)
-            ->get(route('comptabilite.commissions.vente.excel'));
-
-        $content = $response->streamedContent();
-        $this->assertStringNotContainsString('organization_id', $content);
-        $this->assertStringNotContainsString('commission_vente_id', $content);
-    }
-
-    // ── Commission vente — PDF ─────────────────────────────────────────────────
-
-    public function test_export_pdf_vente_retourne_pdf(): void
-    {
-        $site = $this->makeSite();
-        $vehicule = $this->makeVehicule($site);
-        $livreur = $this->makeLivreur();
-        $this->makeVentePart($livreur, $vehicule, $site);
-
-        $response = $this->actingAs($this->user)
-            ->get(route('comptabilite.commissions.vente.pdf'));
-
-        $response->assertOk();
-        $response->assertHeader('Content-Type', 'application/pdf');
-    }
-
-    public function test_export_pdf_vente_necessite_permission(): void
-    {
-        $userSansPermission = $this->makeUserWithPermissions($this->org, []);
-
-        $this->actingAs($userSansPermission)
-            ->get(route('comptabilite.commissions.vente.pdf'))
-            ->assertStatus(403);
-    }
-
-    // ── Commission propriétaire — Excel ───────────────────────────────────────
-
-    public function test_export_excel_proprietaire_retourne_csv(): void
-    {
-        $site = $this->makeSite();
-        $proprio = $this->makeProprietaire();
-        $vehicule = $this->makeVehicule($site, $proprio->id);
-        $this->makeProprietairePart($proprio, $vehicule, $site);
-
-        $response = $this->actingAs($this->user)
-            ->get(route('comptabilite.commissions.proprietaires.excel'));
-
-        $response->assertOk();
-        $response->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
-    }
-
-    public function test_export_excel_proprietaire_contient_colonnes_requises(): void
-    {
-        $site = $this->makeSite();
-        $proprio = $this->makeProprietaire();
-        $vehicule = $this->makeVehicule($site, $proprio->id);
-        $this->makeProprietairePart($proprio, $vehicule, $site);
-
-        $response = $this->actingAs($this->user)
-            ->get(route('comptabilite.commissions.proprietaires.excel'));
-
-        $content = $response->streamedContent();
-        $this->assertStringContainsString('Bénéficiaire', $content);
-        $this->assertStringContainsString('Dépenses', $content);
-        $this->assertStringContainsString('Motif de dépense', $content);
-        $this->assertStringContainsString('Signature', $content);
-    }
-
-    public function test_export_excel_proprietaire_inclut_frais_depenses(): void
-    {
-        $site = $this->makeSite();
-        $proprio = $this->makeProprietaire();
-        $vehicule = $this->makeVehicule($site, $proprio->id);
-        $this->makeProprietairePart($proprio, $vehicule, $site);
-
-        $depType = DepenseType::create([
-            'organization_id' => $this->org->id,
-            'code' => 'REP_MOTEUR',
-            'libelle' => 'Réparation moteur',
-        ]);
-
-        Depense::create([
-            'organization_id' => $this->org->id,
-            'beneficiaire_type' => 'vehicule',
-            'beneficiaire_id' => $vehicule->id,
-            'depense_type_id' => $depType->id,
-            'montant' => 50000,
-            'date_depense' => now()->toDateString(),
-            'statut' => StatutDepense::VALIDE->value,
-            'user_id' => $this->user->id,
-        ]);
-
-        $response = $this->actingAs($this->user)
-            ->get(route('comptabilite.commissions.proprietaires.excel'));
-
-        $content = $response->streamedContent();
-        $this->assertStringContainsString('Réparation moteur', $content);
-    }
-
-    // ── Commission propriétaire — PDF ─────────────────────────────────────────
-
-    public function test_export_pdf_proprietaire_retourne_pdf(): void
-    {
-        $site = $this->makeSite();
-        $proprio = $this->makeProprietaire();
-        $vehicule = $this->makeVehicule($site, $proprio->id);
-        $this->makeProprietairePart($proprio, $vehicule, $site);
-
-        $response = $this->actingAs($this->user)
-            ->get(route('comptabilite.commissions.proprietaires.pdf'));
-
-        $response->assertOk();
-        $response->assertHeader('Content-Type', 'application/pdf');
-    }
-
-    public function test_export_pdf_proprietaire_necessite_permission(): void
-    {
-        $userSansPermission = $this->makeUserWithPermissions($this->org, []);
-
-        $this->actingAs($userSansPermission)
-            ->get(route('comptabilite.commissions.proprietaires.pdf'))
-            ->assertStatus(403);
-    }
-
     // ── PDF — séparation par agence ───────────────────────────────────────────
+    // La couverture Excel/PDF vente et propriétaire (colonnes, filtres, permissions,
+    // frais dépenses) vit désormais dans CommissionExportVenteTest.php.
 
     public function test_pdf_vente_sans_donnees_retourne_pdf_vide(): void
     {
@@ -538,24 +272,6 @@ class CommissionExportTest extends TestCase
 
         $response->assertOk();
         $response->assertHeader('Content-Type', 'application/pdf');
-    }
-
-    // ── Filtres respectés ─────────────────────────────────────────────────────
-
-    public function test_export_excel_vente_filtre_statut_impaye(): void
-    {
-        $site = $this->makeSite();
-        $vehicule = $this->makeVehicule($site);
-        $livreur = $this->makeLivreur();
-        $this->makeVentePart($livreur, $vehicule, $site);
-
-        $response = $this->actingAs($this->user)
-            ->get(route('comptabilite.commissions.vente.excel', ['statut' => 'paye']));
-
-        $content = $response->streamedContent();
-        // Le livreur est impayé, donc avec filtre 'paye' il ne doit pas apparaître dans les données
-        $lines = array_filter(explode("\n", $content));
-        $this->assertCount(1, $lines); // Seulement la ligne d'en-tête
     }
 
     public function test_export_excel_logistique_acces_non_authentifie(): void

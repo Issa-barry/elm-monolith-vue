@@ -5,6 +5,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { ArrowLeft, Download, History } from 'lucide-vue-next';
+import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
 import { computed, watch } from 'vue';
 
@@ -59,6 +60,7 @@ interface ImportDetail {
 const props = defineProps<{ record: ImportDetail }>();
 const page = usePage();
 const toast = useToast();
+const RESULT_TOAST_GROUP = 'import-produits-resultat';
 
 interface FlashMessages {
     success?: string;
@@ -74,6 +76,7 @@ watch(
     (messages) => {
         if (messages.success) {
             toast.add({
+                group: RESULT_TOAST_GROUP,
                 severity: 'success',
                 summary: 'Import réussi',
                 detail: messages.success,
@@ -81,6 +84,7 @@ watch(
             });
         } else if (messages.error) {
             toast.add({
+                group: RESULT_TOAST_GROUP,
                 severity: 'error',
                 summary: "Échec de l'import",
                 detail: messages.error,
@@ -130,6 +134,8 @@ function relancer() {
 
 <template>
     <Head :title="`Import produits - ${record.fichier_original}`" />
+
+    <Toast :group="RESULT_TOAST_GROUP" position="top-right" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">

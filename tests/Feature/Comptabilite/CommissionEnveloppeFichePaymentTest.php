@@ -42,17 +42,17 @@ use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 /**
- * Chaîne complète V2 : vente → enveloppe → parts → période → fiche → paiement
+ * Chaîne complète : vente → enveloppe → parts → période → fiche → paiement
  * → journal financier, et lecture depuis Commission vente/propriétaire. Seule
  * source de vérité : commission_enveloppe_parts.montant_verse, quel que soit
- * l'écran depuis lequel le paiement a été enregistré (cf. décision AMOA —
- * jamais deux circuits de paiement pour une organisation V2).
+ * l'écran depuis lequel le paiement a été enregistré — jamais deux circuits
+ * de paiement pour la commission de vente.
  *
  * Le générateur lui-même (CommissionEnveloppeGenerator) est déjà couvert par
  * CommissionEnveloppeGeneratorReglesTest — ce fichier teste uniquement l'AVAL
- * (période/fiche/paiement/ajustement), qui n'existait pas avant ce chantier.
+ * (période/fiche/paiement/ajustement).
  */
-class CommissionEnveloppeFichePaymentV2Test extends TestCase
+class CommissionEnveloppeFichePaymentTest extends TestCase
 {
     use HasAdminSetup, HasOrgAndUser, HasProduitVariante, RefreshDatabase;
 
@@ -189,9 +189,9 @@ class CommissionEnveloppeFichePaymentV2Test extends TestCase
 
     /**
      * Reproduit le workflow réel avant qu'une période ne devienne payable :
-     * valider chaque part de vente V2 encore non validée (bloquant sinon la
-     * validation de la période, cf. CommissionAdjustmentService::partsNonValideesV2()),
-     * puis valider la période via la vraie route (déclenche activerCommissionsCreeesV2()).
+     * valider chaque part de vente encore non validée (bloquant sinon la
+     * validation de la période, cf. CommissionAdjustmentService::partsNonValidees()),
+     * puis valider la période via la vraie route (déclenche activerCommissionsCreees()).
      */
     private function validerPeriodeReellement(PaiementPeriode $periode): void
     {
@@ -206,7 +206,7 @@ class CommissionEnveloppeFichePaymentV2Test extends TestCase
     // ── Génération → parts ───────────────────────────────────────────────────
 
     /** @test */
-    public function la_commission_v2_genere_des_enveloppes_avec_montant_verse_a_zero(): void
+    public function la_generation_cree_des_enveloppes_avec_montant_verse_a_zero(): void
     {
         ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur] = $this->makeVehiculeAvecEquipe();
         $commande = $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);
@@ -220,10 +220,10 @@ class CommissionEnveloppeFichePaymentV2Test extends TestCase
         $this->assertSame(10000.0, $part->montant_restant);
     }
 
-    // ── Génération de fiche via PeriodeCalculatorService (calculerLivreursV2) ──
+    // ── Génération de fiche via PeriodeCalculatorService (calculerLivreurs) ──
 
     /** @test */
-    public function le_calcul_de_periode_genere_une_fiche_v2_a_partir_des_enveloppes(): void
+    public function le_calcul_de_periode_genere_une_fiche_a_partir_des_enveloppes(): void
     {
         ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur] = $this->makeVehiculeAvecEquipe();
         $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);
@@ -318,19 +318,19 @@ class CommissionEnveloppeFichePaymentV2Test extends TestCase
         $this->assertSame(StatutCommission::IMPAYE, $part->fresh()->statut);
     }
 
-    // ── Écrans Commission vente : lecture seule pour V2 ──────────────────────
+    // ── Écrans Commission vente : lecture seule, jamais de paiement direct ────
 
     /** @test */
-    public function lecran_commission_vente_affiche_la_commission_v2_sans_bouton_payer(): void
+    public function lecran_commission_vente_affiche_la_commission_sans_bouton_payer(): void
     {
         ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur] = $this->makeVehiculeAvecEquipe();
         $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);
 
         // Période validée avant lecture : la commission passe CREEE → IMPAYE (cf.
-        // valider_la_periode_active_les_enveloppes_v2_encore_creees ci-dessous). Le cas
+        // valider_la_periode_active_les_enveloppes_encore_creees ci-dessous). Le cas
         // "encore CREEE, visible mais non payable" est couvert séparément par
-        // CommissionVenteV2VisibiliteCreeeTest — décision produit du 20/08/2026, une
-        // commission CREEE reste visible, contrairement à l'ancien comportement Legacy.
+        // CommissionVenteStatutCreeeTest — décision produit du 20/08/2026, une
+        // commission CREEE reste toujours visible.
         $periode = $this->periodeCouvrantAujourdhui();
         app(PeriodeCalculatorService::class)->calculer($periode);
         $this->validerPeriodeReellement($periode);
@@ -354,26 +354,10 @@ class CommissionEnveloppeFichePaymentV2Test extends TestCase
         );
     }
 
-    /** @test */
-    public function le_paiement_direct_est_refuse_pour_une_organisation_v2(): void
-    {
-        ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur] = $this->makeVehiculeAvecEquipe();
-        $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);
-
-        $this->actingAs($this->user)
-            ->post(route('comptabilite.commissions.vente.livreur.paiements', $livreur->id), [
-                'montant' => 1000,
-                'mode_paiement' => 'especes',
-            ])
-            ->assertStatus(422);
-
-        $this->assertDatabaseCount('paiement_fiche_paiements', 0);
-    }
-
-    // ── Validation de période : bascule CREEE→IMPAYE sur les enveloppes V2 ──
+    // ── Validation de période : bascule CREEE→IMPAYE sur les enveloppes ──
 
     /** @test */
-    public function valider_la_periode_active_les_enveloppes_v2_encore_creees(): void
+    public function valider_la_periode_active_les_enveloppes_encore_creees(): void
     {
         ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur] = $this->makeVehiculeAvecEquipe();
         $commande = $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);
@@ -384,8 +368,8 @@ class CommissionEnveloppeFichePaymentV2Test extends TestCase
         $periode = $this->periodeCouvrantAujourdhui();
         app(PeriodeCalculatorService::class)->calculer($periode);
 
-        // Une commission de vente V2 non encore validée bloque la validation de la
-        // période (cf. CommissionAdjustmentService::partsNonValideesV2()) — valider
+        // Une commission de vente non encore validée bloque la validation de la
+        // période (cf. CommissionAdjustmentService::partsNonValidees()) — valider
         // chaque part d'abord, exactement comme le workflow réel l'exige.
         $parts = CommissionAdjustmentService::partsPourPeriode($periode);
         CommissionAdjustmentService::validerLot($parts, $this->user);
@@ -398,10 +382,10 @@ class CommissionEnveloppeFichePaymentV2Test extends TestCase
         $this->assertSame(StatutPeriodePaiement::VALIDEE, $periode->fresh()->statut);
     }
 
-    // ── Ajustement V2 ─────────────────────────────────────────────────────────
+    // ── Ajustement ────────────────────────────────────────────────────────────
 
     /** @test */
-    public function ajuster_le_montant_dune_part_v2_cree_un_ajustement_et_invalide_sa_validation(): void
+    public function ajuster_le_montant_dune_part_cree_un_ajustement_et_invalide_sa_validation(): void
     {
         ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur] = $this->makeVehiculeAvecEquipe();
         $commande = $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);
@@ -429,11 +413,10 @@ class CommissionEnveloppeFichePaymentV2Test extends TestCase
     }
 
     // ── Visibilité des commissions CREEE (décision produit du 20/08/2026) ────
-    // « À partir du moment où une commission V2 existe en base, elle doit être toujours visible
-    // dans l'IHM » — contrairement au comportement Legacy (cf. CommissionVenteStatutCreeeTest),
-    // volontairement différent : une commission CREEE n'est jamais masquée pour une organisation
-    // V2, seulement non payable tant que sa période n'est pas validée. Voir CommissionKpiBuckets
-    // pour la ventilation total_genere/en_attente_periode/payable/deja_paye.
+    // « À partir du moment où une commission existe en base, elle doit être toujours visible
+    // dans l'IHM » : une commission CREEE n'est jamais masquée, seulement non payable tant
+    // que sa période n'est pas validée. Voir CommissionKpiBuckets pour la ventilation
+    // total_genere/en_attente_periode/payable/deja_paye.
 
     /** @test */
     public function une_commission_creee_reste_visible_sur_lindex_commission_vente(): void
@@ -448,7 +431,7 @@ class CommissionEnveloppeFichePaymentV2Test extends TestCase
         $beneficiaire = collect($response->viewData('page')['props']['beneficiaires'])
             ->firstWhere('beneficiaire_id', $livreur->id);
 
-        $this->assertNotNull($beneficiaire, 'Un livreur V2 dont la seule commission est CREEE doit rester visible.');
+        $this->assertNotNull($beneficiaire, 'Un livreur dont la seule commission est CREEE doit rester visible.');
         $this->assertSame('creee', $beneficiaire['commission_status']);
         $this->assertSame('creee', $beneficiaire['display_status']);
         $this->assertFalse($beneficiaire['can_pay']);
@@ -514,7 +497,7 @@ class CommissionEnveloppeFichePaymentV2Test extends TestCase
         $beneficiaire = collect($response->viewData('page')['props']['beneficiaires'])
             ->firstWhere('beneficiaire_id', $proprietaire->id);
 
-        $this->assertNotNull($beneficiaire, 'Un propriétaire V2 dont la seule commission est CREEE doit rester visible.');
+        $this->assertNotNull($beneficiaire, 'Un propriétaire dont la seule commission est CREEE doit rester visible.');
         $this->assertSame('creee', $beneficiaire['commission_status']);
         $this->assertFalse($beneficiaire['can_pay']);
         $this->assertSame(5_000.0, $beneficiaire['total_genere']);
@@ -577,12 +560,11 @@ class CommissionEnveloppeFichePaymentV2Test extends TestCase
 
     /**
      * Page Commande (Ventes/Show) : le badge de statut commission doit refléter une commission
-     * V2 encore CREEE, jamais rester vide comme s'il n'existait aucune commission — cf.
-     * CommandeVenteController::getCommissionStatutGlobal(), qui lit déjà commissionsV2() pour
-     * une organisation V2 (contrairement à commissions(), la relation Legacy, toujours vide ici).
+     * encore CREEE, jamais rester vide comme s'il n'existait aucune commission — cf.
+     * CommandeVenteController::getCommissionStatutGlobal(), qui lit la relation commissions().
      */
     /** @test */
-    public function la_page_commande_affiche_le_statut_creee_dune_commission_v2(): void
+    public function la_page_commande_affiche_le_statut_creee_dune_commission(): void
     {
         ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur] = $this->makeVehiculeAvecEquipe();
         $commande = $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);

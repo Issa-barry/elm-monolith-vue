@@ -8,12 +8,15 @@ use App\Enums\CommissionScopeType;
 use App\Enums\CommissionStrategieAncrageSite;
 use App\Enums\CommissionUniteCalcul;
 use App\Enums\StatutCommandeVente;
+use App\Enums\StatutDepense;
 use App\Enums\TypePeriodePaiement;
 use App\Models\Categorie;
 use App\Models\CommandeVente;
 use App\Models\CommissionCibleType;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
+use App\Models\Depense;
+use App\Models\DepenseType;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\EquipeLivreur;
@@ -34,15 +37,16 @@ use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 /**
- * Équivalent V2 de CommissionExportTest.php (vente/propriétaire, la partie
- * vente Legacy) — exports Excel/PDF sur CommissionEnveloppePart, qui n'avaient
- * jusqu'ici aucun équivalent V2 (cf. audit couverture commissions).
+ * Exports Excel/PDF vente et propriétaire, sur CommissionEnveloppePart — seule
+ * source de vérité pour la commission de vente. Les exports logistique restent
+ * couverts séparément par CommissionExportTest.php (moteur indépendant, non
+ * concerné par ce fichier).
  *
  * Comme sur les écrans de paiement, une part encore CREEE est exclue de
  * l'export (document de règlement/signature, pas un écran de visibilité
  * générique) — la période est donc calculée puis validée avant chaque test.
  */
-class CommissionExportV2Test extends TestCase
+class CommissionExportVenteTest extends TestCase
 {
     use HasAdminSetup, HasOrgAndUser, HasProduitVariante, RefreshDatabase;
 
@@ -168,7 +172,7 @@ class CommissionExportV2Test extends TestCase
         return $commande;
     }
 
-    /** Génère une vente V2 puis calcule + valide sa période, pour sortir du statut CREEE. */
+    /** Génère une vente puis calcule + valide sa période, pour sortir du statut CREEE. */
     private function genererEtActiver(): void
     {
         ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur] = $this->makeVehiculeAvecEquipe();
@@ -181,12 +185,12 @@ class CommissionExportV2Test extends TestCase
             $this->user->id,
         );
         app(PeriodeCalculatorService::class)->calculer($periode);
-        CommissionAdjustmentService::validerLotV2(CommissionAdjustmentService::partsPourPeriodeV2($periode), $this->user);
+        CommissionAdjustmentService::validerLot(CommissionAdjustmentService::partsPourPeriode($periode), $this->user);
         $this->actingAs($this->user)->post(route('comptabilite.periodes.valider', $periode))->assertSessionHas('success');
     }
 
     /** @test */
-    public function export_excel_vente_v2_retourne_csv_avec_les_colonnes_requises(): void
+    public function export_excel_vente_retourne_csv_avec_les_colonnes_requises(): void
     {
         $this->genererEtActiver();
 
@@ -203,7 +207,46 @@ class CommissionExportV2Test extends TestCase
     }
 
     /** @test */
-    public function export_excel_vente_v2_exclut_les_parts_encore_creee(): void
+    public function export_excel_vente_ne_contient_plus_motif_de_frais(): void
+    {
+        $this->genererEtActiver();
+
+        $content = $this->actingAs($this->user)
+            ->get(route('comptabilite.commissions.vente.excel'))
+            ->streamedContent();
+
+        $this->assertStringNotContainsString('Motif de dépense', $content);
+    }
+
+    /** @test */
+    public function export_excel_vente_pas_de_colonnes_techniques(): void
+    {
+        $this->genererEtActiver();
+
+        $content = $this->actingAs($this->user)
+            ->get(route('comptabilite.commissions.vente.excel'))
+            ->streamedContent();
+
+        $this->assertStringNotContainsString('organization_id', $content);
+        $this->assertStringNotContainsString('enveloppe_id', $content);
+    }
+
+    /** @test */
+    public function export_excel_vente_filtre_statut_impaye(): void
+    {
+        $this->genererEtActiver();
+
+        $content = $this->actingAs($this->user)
+            ->get(route('comptabilite.commissions.vente.excel', ['statut' => 'paye']))
+            ->streamedContent();
+
+        // La commission générée est impayée : avec le filtre 'paye', seule la ligne d'en-tête reste.
+        $lines = array_filter(explode("\n", $content));
+        $this->assertCount(1, $lines);
+    }
+
+    /** @test */
+    public function export_excel_vente_exclut_les_parts_encore_creee(): void
     {
         // Deuxième vente générée APRÈS le calcul/validation de la période courante :
         // reste CREEE, ne doit jamais apparaître dans l'export.
@@ -219,7 +262,7 @@ class CommissionExportV2Test extends TestCase
     }
 
     /** @test */
-    public function export_pdf_vente_v2_retourne_pdf(): void
+    public function export_pdf_vente_retourne_pdf(): void
     {
         $this->genererEtActiver();
 
@@ -230,7 +273,7 @@ class CommissionExportV2Test extends TestCase
     }
 
     /** @test */
-    public function export_pdf_vente_v2_necessite_permission(): void
+    public function export_pdf_vente_necessite_permission(): void
     {
         $this->genererEtActiver();
         $userSansPermission = $this->makeUserWithPermissions($this->org, []);
@@ -243,7 +286,7 @@ class CommissionExportV2Test extends TestCase
     // ── Commission propriétaire ──────────────────────────────────────────────
 
     /** @test */
-    public function export_excel_proprietaire_v2_retourne_csv_avec_les_colonnes_requises(): void
+    public function export_excel_proprietaire_retourne_csv_avec_les_colonnes_requises(): void
     {
         ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur] = $this->makeVehiculeAvecEquipe();
         $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);
@@ -261,7 +304,37 @@ class CommissionExportV2Test extends TestCase
     }
 
     /** @test */
-    public function export_pdf_proprietaire_v2_retourne_pdf(): void
+    public function export_excel_proprietaire_inclut_frais_depenses(): void
+    {
+        ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur] = $this->makeVehiculeAvecEquipe();
+        $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);
+
+        $depType = DepenseType::create([
+            'organization_id' => $this->org->id,
+            'code' => 'REP_MOTEUR',
+            'libelle' => 'Réparation moteur',
+        ]);
+
+        Depense::create([
+            'organization_id' => $this->org->id,
+            'beneficiaire_type' => 'vehicule',
+            'beneficiaire_id' => $vehicule->id,
+            'depense_type_id' => $depType->id,
+            'montant' => 50000,
+            'date_depense' => now()->toDateString(),
+            'statut' => StatutDepense::VALIDE->value,
+            'user_id' => $this->user->id,
+        ]);
+
+        $content = $this->actingAs($this->user)
+            ->get(route('comptabilite.commissions.proprietaires.excel'))
+            ->streamedContent();
+
+        $this->assertStringContainsString('Réparation moteur', $content);
+    }
+
+    /** @test */
+    public function export_pdf_proprietaire_retourne_pdf(): void
     {
         ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur] = $this->makeVehiculeAvecEquipe();
         $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);
@@ -270,5 +343,17 @@ class CommissionExportV2Test extends TestCase
 
         $response->assertOk();
         $response->assertHeader('Content-Type', 'application/pdf');
+    }
+
+    /** @test */
+    public function export_pdf_proprietaire_necessite_permission(): void
+    {
+        ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur] = $this->makeVehiculeAvecEquipe();
+        $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);
+        $userSansPermission = $this->makeUserWithPermissions($this->org, []);
+
+        $this->actingAs($userSansPermission)
+            ->get(route('comptabilite.commissions.proprietaires.pdf'))
+            ->assertStatus(403);
     }
 }

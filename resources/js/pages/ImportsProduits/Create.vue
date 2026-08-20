@@ -10,7 +10,10 @@ import { computed, ref } from 'vue';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Produits', href: '/backoffice/produits' },
-    { title: 'Import de produits', href: '/backoffice/produits/imports/nouveau' },
+    {
+        title: 'Import de produits',
+        href: '/backoffice/produits/imports/nouveau',
+    },
 ];
 
 const form = useForm<{ fichier: File | null }>({ fichier: null });
@@ -56,12 +59,10 @@ function submit() {
         <div class="mx-auto w-full max-w-2xl space-y-6 p-4 sm:p-6">
             <div class="flex items-center justify-between gap-2">
                 <div>
-                    <h1 class="text-lg font-semibold">
-                        Import de produits
-                    </h1>
+                    <h1 class="text-lg font-semibold">Import de produits</h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        Créez ou mettez à jour plusieurs produits en une fois
-                        à partir d'un fichier Excel.
+                        Ajoutez ou modifiez plusieurs produits avec un fichier
+                        Excel.
                     </p>
                 </div>
                 <div class="flex gap-2">
@@ -87,21 +88,30 @@ function submit() {
                     1. Télécharger le modèle
                 </h2>
                 <p class="mt-2 text-sm text-muted-foreground">
-                    Le modèle contient l'onglet
-                    <strong>PRODUITS</strong> à remplir (seul onglet importé),
-                    ainsi que <strong>MODE_EMPLOI</strong>,
-                    <strong>REFERENCES</strong> (codes de type, catégories,
-                    fournisseurs) et <strong>EXEMPLES</strong> — ces trois
-                    derniers sont purement informatifs.
+                    Remplissez uniquement l'onglet
+                    <strong>PRODUITS</strong>. Les autres onglets vous servent
+                    d'aide. Ne modifiez pas les titres des colonnes.
                 </p>
-                <p class="mt-2 text-sm text-muted-foreground">
-                    Laissez la colonne <strong>sku</strong> vide pour créer un
-                    nouveau produit. Renseignez le SKU d'un produit existant
-                    pour le mettre à jour : les cellules vides conservent leur
-                    valeur actuelle, une valeur renseignée la remplace, et
-                    <code class="rounded bg-muted px-1">#VIDER#</code> l'efface
-                    explicitement.
-                </p>
+                <ul
+                    class="mt-3 list-disc space-y-1 pl-5 text-sm text-muted-foreground"
+                >
+                    <li>
+                        <strong>Nouveau produit :</strong> laissez le SKU vide.
+                    </li>
+                    <li>
+                        <strong>Produit existant :</strong> indiquez son SKU
+                        pour le modifier.
+                    </li>
+                    <li>
+                        <strong>Cellule vide :</strong> la valeur actuelle est
+                        conservée.
+                    </li>
+                    <li>
+                        <strong>Effacer une valeur facultative :</strong>
+                        écrivez
+                        <code class="rounded bg-muted px-1">#VIDER#</code>.
+                    </li>
+                </ul>
                 <a
                     href="/backoffice/produits/imports/modele"
                     class="mt-4 inline-flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
@@ -115,8 +125,13 @@ function submit() {
                 <h2
                     class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
                 >
-                    2. Déposer le fichier rempli
+                    2. Importer le fichier rempli
                 </h2>
+
+                <p class="mt-2 text-sm text-muted-foreground">
+                    Choisissez votre fichier. Vous pourrez vérifier le résultat
+                    avant de confirmer l'import.
+                </p>
 
                 <form class="mt-4 space-y-4" @submit.prevent="submit">
                     <div>
@@ -137,8 +152,7 @@ function submit() {
                                 fileName ?? 'Cliquez pour choisir un fichier'
                             }}</span>
                             <span class="text-xs text-muted-foreground"
-                                >.xlsx ou .xls — 5 Mo max, 500 lignes
-                                max</span
+                                >.xlsx ou .xls — 5 Mo max, 500 lignes max</span
                             >
                         </button>
                         <p
@@ -154,17 +168,13 @@ function submit() {
                         :disabled="!form.fichier || form.processing"
                         class="w-full"
                     >
-                        Analyser le fichier
+                        Vérifier le fichier
                     </Button>
                 </form>
             </div>
         </div>
 
-        <Toast
-            :group="UPLOAD_TOAST_GROUP"
-            position="bottom-right"
-            class="w-auto!"
-        >
+        <Toast :group="UPLOAD_TOAST_GROUP" position="top-right" class="w-auto!">
             <template #container="{ message, closeCallback }">
                 <div
                     class="flex w-80 flex-col gap-3 rounded-xl border bg-card p-4 shadow-lg"
