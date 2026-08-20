@@ -205,44 +205,35 @@ test('créer une équipe depuis la fiche véhicule avec stepper', async ({
         'Mamadou Diallo',
     );
 
-    // Passer à l'étape 2 — organisation LEGACY (comportement par défaut tant
-    // qu'aucun commission_processus n'a été explicitement activé) : le
-    // véhicule de test a un propriétaire par défaut (seed E2E), donc la
-    // répartition affiche 2 bénéficiaires — propriétaire ET chauffeur — avec
-    // Montant (GNF) ET % éditables sur les deux colonnes, plus le champ
-    // "Commission unitaire par pack" qui pilote le total à répartir.
+    // Passer à l'étape 2 (Partage) : le véhicule de test n'a aucun barème de
+    // commission configuré (organisation "elm", partagée avec de nombreuses
+    // autres specs — aucun CommissionRegle n'y est seedé par défaut, cf.
+    // baremesCommissionCategories vide côté VehiculeController). L'étape
+    // affiche donc l'état vide, sans aucune catégorie à répartir — le partage
+    // reste "valide" par construction (rien à répartir), Suivant reste actif.
+    // La démonstration de l'auto-complétion du reliquat (CommissionShareEditor
+    // ::recomputeAutoFill) est couverte séparément par
+    // commission-v2-full-chain.spec.ts, sur l'organisation dédiée "Eau La
+    // Maman V2 Demo" qui configure elle-même son propre barème — jamais sur
+    // "elm", pour ne pas polluer l'état partagé par toutes les autres specs.
     await dialog.getByRole('button', { name: /suivant/i }).click();
     await expect(dialog.getByText(/partage/i).first()).toBeVisible({
         timeout: 5_000,
     });
-    await expect(page.locator('#step-commission')).toBeVisible();
+    await expect(
+        dialog.getByText(/aucun barème de commission actif/i),
+    ).toBeVisible({ timeout: 5_000 });
 
-    // Saisir la part (%) du chauffeur complète automatiquement le propriétaire
-    // avec le reliquat (cf. EquipeStepperModal::recomputeAutoFill, legacy).
-    const membrePartInput = dialog
-        .locator('tbody tr')
-        .filter({ hasText: /Mamadou/i })
-        .locator('td')
-        .nth(2)
-        .locator('input');
-    await membrePartInput.click();
-    await page.keyboard.press('Control+a');
-    await page.keyboard.type('100');
-    await page.keyboard.press('Tab');
-
-    await expect(dialog.getByText('✓ 100 %')).toBeVisible({ timeout: 5_000 });
-
-    // Passer à l'étape 3
+    // Passer à l'étape 3 — récapitulatif sans détail par catégorie (aucun
+    // barème configuré, cf. ci-dessus) : seuls véhicule et nombre de
+    // catégories (0) sont affichés.
     await dialog.getByRole('button', { name: /suivant/i }).click();
     await expect(dialog.getByText(/récapitulatif/i).first()).toBeVisible({
         timeout: 5_000,
     });
-
-    // Récap legacy : montant GNF par membre (pas de %, cf. gabarit original).
-    // Le chauffeur ayant 100 % de la commission par défaut (950 GNF), le
-    // propriétaire se retrouve à 0 GNF.
-    await expect(dialog.getByText(/Mamadou/i).first()).toBeVisible();
-    await expect(dialog.getByText(/950 GNF/i).first()).toBeVisible();
+    await expect(
+        dialog.getByText(new RegExp(escapeRegExp(E2E_VH_PREFIX), 'i')).first(),
+    ).toBeVisible();
 
     // Enregistrer
     await dialog.getByRole('button', { name: /enregistrer l'équipe/i }).click();
@@ -261,62 +252,14 @@ test('créer une équipe depuis la fiche véhicule avec stepper', async ({
     });
 });
 
-test('étape 2 partage : saisir une part complète automatiquement l\'unique bénéficiaire restant', async ({
-    page,
-}) => {
-    await openStepperModal(page);
-    const dialog = page
-        .locator('[role="dialog"]')
-        .filter({ hasText: /équipe/i });
-
-    // Ligne 0 auto-ajoutée : chauffeur. Organisation LEGACY (par défaut) : le
-    // véhicule de test a un propriétaire par défaut (seed E2E), donc l'étape
-    // Partage affiche déjà 2 bénéficiaires (chauffeur + propriétaire) sans
-    // qu'il soit nécessaire d'ajouter un second membre pour tester
-    // l'auto-complétion du reliquat.
-    await selectOptionFromCombobox(
-        page,
-        page.getByTestId('role-dropdown-0'),
-        /chauffeur/i,
-    );
-    await page.getByTestId('nom-complet-0').fill('Auto Complete');
-    const phone0 = page.getByTestId('telephone-0');
-    await phone0.click();
-    await phone0.fill('620333444');
-
-    await dialog.getByRole('button', { name: /suivant/i }).click();
-    await expect(dialog.getByText(/partage/i).first()).toBeVisible({
-        timeout: 5_000,
-    });
-
-    // Exactement 2 bénéficiaires (chauffeur + propriétaire) : saisir la part de
-    // "Auto Complete" doit compléter automatiquement l'autre ligne avec le
-    // reliquat (100 % - saisi). 60/40 (pas 65/35) : la commission par défaut
-    // (950 GNF) ne se divise pas proprement à 65/35 — l'auto-complétion passe
-    // par un arrondi GNF intermédiaire (65 % de 950 = 617,5 → 618 GNF, dont le
-    // reliquat en % n'est plus exactement 35,00) ; 60/40 donne des montants GNF
-    // entiers (570/380) donc un pourcentage exact des deux côtés.
-    const rows = dialog.locator('tbody tr');
-    const chauffeurPart = rows
-        .filter({ hasText: /Auto Complete/i })
-        .locator('td')
-        .nth(2)
-        .locator('input');
-    await chauffeurPart.click();
-    await page.keyboard.press('Control+a');
-    await page.keyboard.type('60');
-    await page.keyboard.press('Tab');
-
-    const autrePart = rows
-        .filter({ hasNotText: /Auto Complete/i })
-        .locator('td')
-        .nth(2)
-        .locator('input');
-    await expect(autrePart).toHaveValue('40 %', { timeout: 5_000 });
-    await expect(dialog.getByText('✓ 100 %')).toBeVisible({
-        timeout: 5_000,
-    });
-});
+// L'auto-complétion du reliquat entre 2 bénéficiaires (CommissionShareEditor
+// ::recomputeAutoFill) exigerait de configurer un barème de commission — mais
+// l'organisation "elm" utilisée ici est partagée avec de nombreuses autres
+// specs (achats, packing, produits…) et n'a délibérément aucun CommissionRegle
+// seedé par défaut ; y configurer un barème depuis ce test pollueriait l'état
+// partagé pour toutes les autres. Ce scénario est couvert sur l'organisation
+// dédiée "Eau La Maman V2 Demo" (cf. commission-v2-full-chain.spec.ts), qui
+// configure son propre barème isolé.
 
 test('equipe index ne propose pas de bouton création directe', async ({
     page,

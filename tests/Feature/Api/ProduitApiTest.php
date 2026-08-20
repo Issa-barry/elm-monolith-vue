@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api;
 
+use App\Models\EntrepriseTierce;
 use App\Models\Fournisseur;
 use App\Models\Organization;
 use App\Models\Produit;
@@ -143,12 +144,18 @@ class ProduitApiTest extends TestCase
     {
         Sanctum::actingAs($this->user, ['*']);
 
-        $fournisseur = Fournisseur::create([
+        // Identité (raison_sociale/téléphone...) portée par EntrepriseTierce, jamais directement
+        // par Fournisseur — cf. refonte Fournisseur ≠ Prestataire + EntrepriseTierce.
+        $entreprise = EntrepriseTierce::create([
             'organization_id' => $this->org->id,
-            'raison_sociale' => 'SOGUIDEP',
-            'phone' => '+224620000020',
+            'raison_sociale' => 'Soguidep',
+            'telephone' => '+224620000020',
             'code_phone_pays' => '+224',
             'code_pays' => 'GN',
+        ]);
+        $fournisseur = Fournisseur::create([
+            'organization_id' => $this->org->id,
+            'entreprise_tierce_id' => $entreprise->id,
             'is_active' => true,
         ]);
         $produit = $this->makeProduit($this->org, ['fournisseur_id' => $fournisseur->id]);

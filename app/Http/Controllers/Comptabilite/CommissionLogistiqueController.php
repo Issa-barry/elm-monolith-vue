@@ -171,7 +171,7 @@ class CommissionLogistiqueController extends Controller
         );
 
         $teamStatusParPeriode = $periodesParDate->mapWithKeys(
-            fn ($periode) => [$periode->id => CommissionAdjustmentService::statutValidationParBeneficiaire($periode)]
+            fn ($periode) => [$periode->id => CommissionAdjustmentService::statutValidationLogistiqueParBeneficiaire($periode)]
         );
 
         $livreurs = $rows->map(function ($row) use ($telephones, $vehiculesParLivreur, $agencesParLivreur, $fraisDepensesParLivreur, $periodesParDate, $teamStatusParPeriode) {
@@ -327,7 +327,7 @@ class CommissionLogistiqueController extends Controller
         }
 
         $teamStatus = $periodeResolue
-            ? (CommissionAdjustmentService::statutValidationParBeneficiaire($periodeResolue)["livreur:{$livreurId}"] ?? null)
+            ? (CommissionAdjustmentService::statutValidationLogistiqueParBeneficiaire($periodeResolue)["livreur:{$livreurId}"] ?? null)
             : null;
 
         $paymentValue = $totalImpaye > 0.009 ? StatutCommission::IMPAYE->value : StatutCommission::PAYE->value;

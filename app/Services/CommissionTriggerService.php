@@ -11,7 +11,6 @@ use App\Models\FactureVente;
 use App\Models\Parametre;
 use App\Models\TransfertLogistique;
 use App\Services\Commission\CommissionEnveloppeGenerator;
-use App\Services\Commission\MoteurCommissionResolver;
 
 /**
  * Point d'entrée unique reliant les événements métier réels (chargement validé,
@@ -21,20 +20,15 @@ use App\Services\Commission\MoteurCommissionResolver;
  *
  * Le déclencheur ne choisit QUE le moment de naissance de la commission,
  * jamais son statut initial : dans tous les cas elle naît CREEE (cf.
- * CommissionGenerator / CommissionLogistiqueService) et ne devient IMPAYE(E)
- * qu'à la validation de la période de paiement qui la couvre (cf.
+ * CommissionEnveloppeGenerator / CommissionLogistiqueService) et ne devient
+ * IMPAYE(E) qu'à la validation de la période de paiement qui la couvre (cf.
  * CommissionAdjustmentService::activerCommissionsCreees()).
  *
  * Ne recalcule jamais rien elle-même : délègue systématiquement à
- * CommissionGenerator / CommissionLogistiqueService, seules sources de vérité du
- * calcul (CommissionCalculator, barèmes, parts). Chaque méthode est idempotente
- * par construction, via l'idempotence déjà portée par ces générateurs (existence
- * check + contrainte unique BDD sur commande_vente_id / transfert_logistique_id).
- *
- * Vente uniquement : bascule LEGACY/V2 (cf. MoteurCommissionResolver et
- * genererCommissionVente()) — pour une organisation V2, la génération réelle
- * passe par CommissionEnveloppeGenerator au lieu de l'ancien CommissionGenerator,
- * jamais les deux pour la même commande.
+ * CommissionEnveloppeGenerator / CommissionLogistiqueService, seules sources de
+ * vérité du calcul (barèmes, parts). Chaque méthode est idempotente par
+ * construction, via l'idempotence déjà portée par ces générateurs (existence
+ * check + contrainte unique BDD sur source_id / transfert_logistique_id).
  *
  * Changer le paramètre d'une organisation n'affecte jamais les commissions déjà
  * générées : chaque méthode n'agit que sur l'événement en cours, jamais
@@ -94,31 +88,21 @@ class CommissionTriggerService
     }
 
     /**
-     * Bascule LEGACY/V2 unique pour la génération de commission de vente (cf.
-     * MoteurCommissionResolver) — jamais les deux moteurs pour la même commande.
+     * Moteur unique de génération de commission de vente.
      *
-     * V2 : CommissionEnveloppeGenerator::genererPourCommandeVente() ouvre sa
-     * PROPRE transaction isolée et n'échoue jamais de façon à faire annuler
-     * l'appelant (elle catch et trace toute erreur dans
-     * commission_generation_attempts sans jamais relancer) — un appel imbriqué
-     * dans la transaction de chargement/encaissement est donc sans risque pour
-     * celle-ci, y compris sous les tests (RefreshDatabase ne permet pas
-     * d'observer un DB::afterCommit() dans le même test, seule une exécution
-     * synchrone imbriquée reste testable). Toujours invoqué en tout dernier,
-     * une fois toutes les écritures métier de l'opération déclenchante faites.
-     *
-     * LEGACY : comportement historique inchangé — une équipe invalide bloque
-     * toujours l'opération (cf. CommandeVenteService::assertEquipeCommissionValide()).
+     * CommissionEnveloppeGenerator::genererPourCommandeVente() ouvre sa PROPRE
+     * transaction isolée et n'échoue jamais de façon à faire annuler l'appelant
+     * (elle catch et trace toute erreur dans commission_generation_attempts sans
+     * jamais relancer) — un appel imbriqué dans la transaction de
+     * chargement/encaissement est donc sans risque pour celle-ci, y compris sous
+     * les tests (RefreshDatabase ne permet pas d'observer un DB::afterCommit()
+     * dans le même test, seule une exécution synchrone imbriquée reste
+     * testable). Toujours invoqué en tout dernier, une fois toutes les écritures
+     * métier de l'opération déclenchante faites.
      */
     private static function genererCommissionVente(CommandeVente $commande): void
     {
-        if (MoteurCommissionResolver::estV2($commande->organization_id)) {
-            CommissionEnveloppeGenerator::genererPourCommandeVente($commande);
-
-            return;
-        }
-
-        CommissionGenerator::generateForCommandeIfMissing($commande);
+        CommissionEnveloppeGenerator::genererPourCommandeVente($commande);
     }
 
     // ── Logistique ────────────────────────────────────────────────────────────

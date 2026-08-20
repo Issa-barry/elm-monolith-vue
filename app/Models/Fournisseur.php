@@ -16,21 +16,19 @@ class Fournisseur extends Model
     protected $fillable = [
         'organization_id',
         'reference',
-        'nom',
-        'prenom',
-        'raison_sociale',
-        'email',
-        'phone',
-        'code_phone_pays',
-        'code_pays',
-        'pays',
-        'ville',
-        'adresse',
+        'personne_id',
+        'entreprise_tierce_id',
         'notes',
         'is_active',
     ];
 
-    protected $appends = ['nom_complet'];
+    // Identité (nom/prenom/raison_sociale/email/phone/adresse...) portée par Personne (cas
+    // physique) ou EntrepriseTierce (cas moral) — jamais de colonne équivalente ici, cf.
+    // accesseurs ci-dessous. Exactement l'un des deux est renseigné.
+    protected $appends = [
+        'nom_complet', 'nom', 'prenom', 'raison_sociale', 'email',
+        'phone', 'code_phone_pays', 'code_pays', 'pays', 'ville', 'adresse',
+    ];
 
     protected function casts(): array
     {
@@ -39,30 +37,14 @@ class Fournisseur extends Model
         ];
     }
 
-    // ── Boot ──────────────────────────────────────────────────────────────────
-
     protected static function booted(): void
     {
         static::creating(function (Fournisseur $f) {
             if (empty($f->reference)) {
                 $f->reference = self::generateReference();
             }
-            $f->code_pays = self::normalizeIsoCountryCode($f->code_pays) ?? 'GN';
-            $f->code_phone_pays = self::normalizeDialCode($f->code_phone_pays) ?? '+224';
-            $f->phone = self::normalizePhoneE164($f->phone, $f->code_phone_pays);
-            if (empty($f->pays)) {
-                $f->pays = 'Guinée';
-            }
-        });
-
-        static::updating(function (Fournisseur $f) {
-            $f->code_pays = self::normalizeIsoCountryCode($f->code_pays) ?? 'GN';
-            $f->code_phone_pays = self::normalizeDialCode($f->code_phone_pays) ?? '+224';
-            $f->phone = self::normalizePhoneE164($f->phone, $f->code_phone_pays);
         });
     }
-
-    // ── Référence auto ────────────────────────────────────────────────────────
 
     // Préfixe 'F' (vs 'P' pour Prestataire) — permet de distinguer les deux séries de
     // références au premier coup d'œil malgré le même format lettres/chiffres.
@@ -77,57 +59,61 @@ class Fournisseur extends Model
         return $ref;
     }
 
-    // ── Mutateurs ─────────────────────────────────────────────────────────────
-
-    public function setNomAttribute(mixed $value): void
-    {
-        $v = self::normalizeIdentity($value);
-        $this->attributes['nom'] = $v !== null ? mb_strtoupper($v, 'UTF-8') : null;
-    }
-
-    public function setPrenomAttribute(mixed $value): void
-    {
-        $v = self::normalizeIdentity($value);
-        $this->attributes['prenom'] = $v !== null ? mb_convert_case($v, MB_CASE_TITLE, 'UTF-8') : null;
-    }
-
-    public function setRaisonSocialeAttribute(mixed $value): void
-    {
-        $v = self::normalizeIdentity($value);
-        $this->attributes['raison_sociale'] = $v !== null ? mb_convert_case($v, MB_CASE_TITLE, 'UTF-8') : null;
-    }
-
-    public function setEmailAttribute(mixed $value): void
-    {
-        $this->attributes['email'] = self::normalizeEmail($value);
-    }
-
-    public function setVilleAttribute(mixed $value): void
-    {
-        $v = self::normalizeIdentity($value);
-        $this->attributes['ville'] = $v !== null ? mb_convert_case($v, MB_CASE_TITLE, 'UTF-8') : null;
-    }
-
-    public function setAdresseAttribute(mixed $value): void
-    {
-        $this->attributes['adresse'] = self::normalizeIdentity($value);
-    }
-
-    public function setNotesAttribute(mixed $value): void
-    {
-        $this->attributes['notes'] = self::normalizeIdentity($value);
-    }
-
-    // ── Accesseurs ────────────────────────────────────────────────────────────
+    // ── Accesseurs — proxy en lecture seule vers Personne ou EntrepriseTierce ───────────────
 
     public function getNomCompletAttribute(): ?string
     {
-        if (! empty($this->raison_sociale)) {
-            return $this->raison_sociale;
-        }
-        $full = trim(implode(' ', array_filter([$this->prenom, $this->nom])));
+        return $this->entrepriseTierce?->raison_sociale ?? $this->personne?->nom_complet;
+    }
 
-        return $full !== '' ? $full : null;
+    public function getNomAttribute(): ?string
+    {
+        return $this->personne?->nom;
+    }
+
+    public function getPrenomAttribute(): ?string
+    {
+        return $this->personne?->prenom;
+    }
+
+    public function getRaisonSocialeAttribute(): ?string
+    {
+        return $this->entrepriseTierce?->raison_sociale;
+    }
+
+    public function getEmailAttribute(): ?string
+    {
+        return $this->personne?->email ?? $this->entrepriseTierce?->email;
+    }
+
+    public function getPhoneAttribute(): ?string
+    {
+        return $this->personne?->telephone ?? $this->entrepriseTierce?->telephone;
+    }
+
+    public function getCodePhonePaysAttribute(): ?string
+    {
+        return $this->personne?->code_phone_pays ?? $this->entrepriseTierce?->code_phone_pays;
+    }
+
+    public function getCodePaysAttribute(): ?string
+    {
+        return $this->personne?->code_pays ?? $this->entrepriseTierce?->code_pays;
+    }
+
+    public function getPaysAttribute(): ?string
+    {
+        return $this->personne?->pays ?? $this->entrepriseTierce?->pays;
+    }
+
+    public function getVilleAttribute(): ?string
+    {
+        return $this->personne?->ville ?? $this->entrepriseTierce?->ville;
+    }
+
+    public function getAdresseAttribute(): ?string
+    {
+        return $this->personne?->adresse ?? $this->entrepriseTierce?->adresse;
     }
 
     // ── Relations ─────────────────────────────────────────────────────────────
@@ -137,84 +123,20 @@ class Fournisseur extends Model
         return $this->belongsTo(Organization::class);
     }
 
+    public function personne(): BelongsTo
+    {
+        return $this->belongsTo(Personne::class);
+    }
+
+    public function entrepriseTierce(): BelongsTo
+    {
+        return $this->belongsTo(EntrepriseTierce::class);
+    }
+
     // ── Scopes ────────────────────────────────────────────────────────────────
 
     public function scopeActifs(Builder $q): Builder
     {
         return $q->where('is_active', true);
-    }
-
-    // ── Normalisation statique (identique à Prestataire — même patron pays/téléphone) ──────
-
-    public static function normalizeEmail(mixed $value): ?string
-    {
-        if ($value === null) {
-            return null;
-        }
-        $v = trim((string) $value);
-
-        return $v !== '' ? strtolower($v) : null;
-    }
-
-    public static function normalizeIsoCountryCode(mixed $value): ?string
-    {
-        if ($value === null) {
-            return null;
-        }
-        $v = preg_replace('/[^A-Z]/', '', strtoupper(trim((string) $value))) ?? '';
-
-        return $v !== '' ? substr($v, 0, 2) : null;
-    }
-
-    public static function normalizeDialCode(mixed $value): ?string
-    {
-        if ($value === null) {
-            return null;
-        }
-        $v = trim((string) $value);
-        if ($v === '') {
-            return null;
-        }
-        if (str_starts_with($v, '00')) {
-            $v = '+'.substr($v, 2);
-        }
-        $digits = preg_replace('/\D/', '', $v) ?? '';
-
-        return $digits !== '' ? '+'.substr($digits, 0, 4) : null;
-    }
-
-    public static function normalizePhoneE164(mixed $value, mixed $dialCode = null): ?string
-    {
-        if ($value === null) {
-            return null;
-        }
-        $phone = trim((string) $value);
-        if ($phone === '') {
-            return null;
-        }
-        if (str_starts_with($phone, '00')) {
-            $phone = '+'.substr($phone, 2);
-        }
-        if (! str_starts_with($phone, '+')) {
-            $local = ltrim(preg_replace('/\D/', '', $phone) ?? '', '0');
-            $cc = self::normalizeDialCode($dialCode) ?? '+224';
-            $phone = $local !== '' ? $cc.$local : null;
-        }
-        if ($phone === null) {
-            return null;
-        }
-        $digits = preg_replace('/\D/', '', ltrim($phone, '+')) ?? '';
-
-        return $digits !== '' ? '+'.$digits : null;
-    }
-
-    private static function normalizeIdentity(mixed $value): ?string
-    {
-        if ($value === null) {
-            return null;
-        }
-        $v = trim(preg_replace('/\s+/u', ' ', (string) $value) ?? '');
-
-        return $v !== '' ? $v : null;
     }
 }

@@ -122,17 +122,7 @@ class CommandeVente extends Model
         return $this->hasOne(FactureVente::class);
     }
 
-    public function commissions(): HasMany
-    {
-        return $this->hasMany(CommissionVente::class, 'commande_vente_id');
-    }
-
-    /**
-     * Enveloppes générées par le nouveau moteur de commissions (Phase 1+, cf.
-     * CommissionEnveloppeGenerator) — coexiste avec commissions() (ancien schéma)
-     * tant que la bascule n'est pas terminée.
-     */
-    public function commissionsV2(): MorphMany
+    public function commissions(): MorphMany
     {
         return $this->morphMany(CommissionEnveloppe::class, 'source');
     }
@@ -236,7 +226,7 @@ class CommandeVente extends Model
         }
 
         $facture = $this->load('facture')->facture;
-        $commissionsVersees = $this->commissions()->get()->every(fn ($c) => $c->isVersee());
+        $commissionsVersees = $this->commissions()->get()->every(fn ($c) => $c->isPaye());
 
         if (! $facture?->isPayee() || ! $commissionsVersees) {
             return false;

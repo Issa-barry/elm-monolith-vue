@@ -11,17 +11,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 /**
- * La part individuelle finale d'un bénéficiaire sur une CommissionEnveloppe.
- * Nommée `commission_enveloppe_parts` pour ne pas entrer en collision avec
- * la table `commission_parts` de l'ancien schéma (les deux coexistent).
- *
- * Équivalent V2 de CommissionPart pour tout ce qui est paiement/ajustement —
- * mêmes méthodes métier (recalculStatut, isPaye, isPayable, estValidee,
- * peutEtreAjustee), volontairement dupliquées plutôt que factorisées avec
- * l'ancien schéma pour ne jamais risquer de régression legacy en touchant
- * CommissionPart. Seule différence : le paiement est alloué via
- * CommissionEnveloppePaiementItem (pas de VersementCommission côté V2, table
- * legacy uniquement).
+ * La part individuelle finale d'un bénéficiaire sur une CommissionEnveloppe —
+ * source de vérité unique pour toute commission de vente (méthodes métier :
+ * recalculStatut, isPaye, isPayable, estValidee, peutEtreAjustee). Le paiement
+ * est alloué via CommissionEnveloppePaiementItem.
  */
 class CommissionEnveloppePart extends Model
 {

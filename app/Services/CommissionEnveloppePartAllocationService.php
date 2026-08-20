@@ -11,16 +11,13 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Reporte un paiement de fiche (PaiementFichePaiement) sur les
- * CommissionEnveloppePart réellement soldées, pour les organisations V2.
+ * CommissionEnveloppePart réellement soldées.
  *
- * Legacy ne touche jamais commission_parts.montant_verse depuis une fiche —
- * seul l'ancien circuit de paiement direct (CommissionVentePaiementService)
- * le fait, un écart assumé et documenté du schéma historique. Pour V2, ce
- * service ferme cet écart : quelle que soit la vue depuis laquelle un
- * paiement est visible (Commission vente, Commission propriétaire, Fiches
- * de paiement), commission_enveloppe_parts.montant_verse est TOUJOURS la
- * seule source de vérité, jamais désynchronisée de paiement_fiche_paiements
- * (cf. décision AMOA — une seule chaîne de paiement pour V2).
+ * Quelle que soit la vue depuis laquelle un paiement est visible (Commission
+ * vente, Commission propriétaire, Fiches de paiement),
+ * commission_enveloppe_parts.montant_verse est TOUJOURS la seule source de
+ * vérité, jamais désynchronisée de paiement_fiche_paiements — une seule
+ * chaîne de paiement, jamais de second circuit direct.
  */
 class CommissionEnveloppePartAllocationService
 {

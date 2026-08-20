@@ -77,6 +77,9 @@ class RolesAndPermissionsSeeder extends Seeder
         // — Import flotte (propriétaires + véhicules + livreurs) —
         Permission::firstOrCreate(['name' => 'imports-flotte.create']);
         Permission::firstOrCreate(['name' => 'imports-flotte.read']);
+        // — Import produits (création + mise à jour en masse) —
+        Permission::firstOrCreate(['name' => 'imports-produits.create']);
+        Permission::firstOrCreate(['name' => 'imports-produits.read']);
         // — Pièces d'identité (workflow de vérification — actuellement sur Proprietaire) —
         Permission::firstOrCreate(['name' => 'pieces-identite.download']);
         Permission::firstOrCreate(['name' => 'pieces-identite.valider']);
@@ -153,6 +156,7 @@ class RolesAndPermissionsSeeder extends Seeder
             // Commerce
             'produits.create',          'produits.read',          'produits.update',          'produits.delete',
             'produits.ajuster_stock',
+            'imports-produits.create',  'imports-produits.read',
             'categories.create',        'categories.read',        'categories.update',        'categories.delete',
             'options.create',           'options.read',           'options.update',           'options.delete',
             'type-produits.create',     'type-produits.read',     'type-produits.update',     'type-produits.delete',
@@ -211,6 +215,7 @@ class RolesAndPermissionsSeeder extends Seeder
             // Commerce
             'produits.read',            'produits.create',        'produits.update',
             'produits.ajuster_stock',
+            'imports-produits.create',  'imports-produits.read',
             'categories.read',          'categories.create',      'categories.update',
             'options.read',             'options.create',         'options.update',
             'type-produits.read',       'type-produits.create',   'type-produits.update',

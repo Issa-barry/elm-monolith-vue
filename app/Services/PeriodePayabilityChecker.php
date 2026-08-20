@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Enums\TypePeriodePaiement;
 use App\Models\CommissionLogistiquePart;
-use App\Models\CommissionPart;
 use App\Models\PaieLigne;
 use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
@@ -32,20 +31,19 @@ class PeriodePayabilityChecker
         }
     }
 
-    // ── Cas 2 : période à résoudre par date (CommissionLogistiquePart / CommissionPart) ──
+    // ── Cas 2 : période à résoudre par date (paiement direct, logistique uniquement — la
+    // vente ne passe plus que par PaiementFiche, cf. Cas 1) ──────────────────────────────
 
-    public static function periodeForCommissionPart(CommissionLogistiquePart|CommissionPart $part): ?PaiementPeriode
+    public static function periodeForCommissionPart(CommissionLogistiquePart $part): ?PaiementPeriode
     {
         $organizationId = $part->commission->organization_id;
         $type = TypePeriodePaiement::from($part->type_beneficiaire);
-        $date = $part instanceof CommissionLogistiquePart
-            ? Carbon::parse($part->earned_at)
-            : Carbon::parse($part->commission->created_at);
+        $date = Carbon::parse($part->earned_at);
 
         return app(PeriodePaiementService::class)->getPeriodByDate($organizationId, $type, $date);
     }
 
-    public static function reasonPartNotPayable(CommissionLogistiquePart|CommissionPart $part): ?string
+    public static function reasonPartNotPayable(CommissionLogistiquePart $part): ?string
     {
         $periode = self::periodeForCommissionPart($part);
 
@@ -60,14 +58,14 @@ class PeriodePayabilityChecker
         return null;
     }
 
-    public static function assertPartPayable(CommissionLogistiquePart|CommissionPart $part): void
+    public static function assertPartPayable(CommissionLogistiquePart $part): void
     {
         if ($reason = self::reasonPartNotPayable($part)) {
             throw new InvalidArgumentException($reason);
         }
     }
 
-    /** @param  Collection<int, CommissionLogistiquePart|CommissionPart>  $parts */
+    /** @param  Collection<int, CommissionLogistiquePart>  $parts */
     public static function assertPartsPayable(Collection $parts): void
     {
         foreach ($parts as $part) {
@@ -86,8 +84,8 @@ class PeriodePayabilityChecker
     // ── Verrou double paiement : fiche vs paiement direct ──────────────────────────
 
     /**
-     * Empêche le paiement DIRECT (FIFO sur CommissionPart/CommissionLogistiquePart) d'une
-     * part dont la période a déjà une PaiementFiche générée pour ce bénéficiaire.
+     * Empêche le paiement DIRECT (FIFO sur CommissionLogistiquePart) d'une part dont la
+     * période a déjà une PaiementFiche générée pour ce bénéficiaire.
      *
      * Raison : PaiementFiche.montant_paye ne dérive QUE de son historique de paiements
      * propre (PaiementFichePaiement) — un paiement direct ne le met jamais à jour. Une
@@ -95,7 +93,7 @@ class PeriodePayabilityChecker
      * verrou, payer directement puis payer à nouveau via la fiche double-paierait le
      * bénéficiaire sans que rien ne le détecte (montant_net de la fiche resterait "dû").
      *
-     * @param  Collection<int, CommissionLogistiquePart|CommissionPart>  $parts  déjà réduites aux items réellement touchés (cf. touchedUntilAmount)
+     * @param  Collection<int, CommissionLogistiquePart>  $parts  déjà réduites aux items réellement touchés (cf. touchedUntilAmount)
      */
     public static function assertPartsNotClaimedByFiche(Collection $parts, string $type, string $beneficiaireId): void
     {

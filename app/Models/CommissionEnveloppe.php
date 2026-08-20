@@ -91,10 +91,10 @@ class CommissionEnveloppe extends Model
     }
 
     /**
-     * Recalcule montant_verse + statut global depuis les parts — miroir exact
-     * de CommissionVente::recalculStatutGlobal() (même comparaison au
-     * montant_net théorique, pas au montant_a_payer ajusté : reproduit à
-     * l'identique la même particularité assumée côté legacy).
+     * Recalcule montant_verse + statut global depuis les parts — comparaison
+     * volontaire au montant_net théorique, pas au montant_a_payer ajusté
+     * (particularité assumée : un ajustement ne doit pas à lui seul faire
+     * basculer le statut global de l'enveloppe).
      */
     public function recalculStatutGlobal(): bool
     {

@@ -10,13 +10,11 @@ use App\Enums\StatutFactureVente;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
 use App\Models\FactureVente;
-use App\Services\Commission\MoteurCommissionResolver;
 use App\Services\Comptabilite\VenteComptabilisationService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
-use InvalidArgumentException;
 
 class CommandeVenteService
 {
@@ -177,8 +175,6 @@ class CommandeVenteService
         abort_if(! $commande->isChargementEnCours(), 422, 'La commande doit être en cours de chargement.');
 
         DB::transaction(function () use ($commande, $lignesData) {
-            self::assertEquipeCommissionValide($commande);
-
             self::appliquerQuantitesChargees($commande, $lignesData);
             self::recalculerTotaux($commande);
             self::decrementerStock($commande);
@@ -192,43 +188,6 @@ class CommandeVenteService
             self::activerFacture($commande);
             CommissionTriggerService::onChargementValide($commande);
         });
-    }
-
-    /**
-     * LEGACY UNIQUEMENT : bloque la validation du chargement si le véhicule a
-     * une équipe dont la répartition des taux est invalide (≠ 100 %) — sans
-     * cela, le chargement serait validé silencieusement sans qu'aucune
-     * commission ne puisse être créée derrière, ce qui ne doit jamais passer
-     * inaperçu. Ne bloque rien si le véhicule n'est pas éligible aux
-     * commissions ou n'a pas d'équipe : dans ces cas, aucune commission n'est
-     * due, ce n'est pas une erreur.
-     *
-     * Sans objet pour une organisation V2 : equipe_livraison.taux_commission_proprietaire
-     * et equipe_livreurs.taux_commission n'y sont plus jamais maintenus (le
-     * partage vit désormais dans equipe_livraison_partages_categorie) — les
-     * valider ici bloquerait TOUTE validation de chargement pour ces
-     * organisations. La validité du partage V2 est vérifiée à la génération
-     * réelle, par catégorie, dans CommissionEnveloppeGenerator (tout-ou-rien,
-     * jamais bloquant pour l'opération commerciale).
-     */
-    private static function assertEquipeCommissionValide(CommandeVente $commande): void
-    {
-        $commande->loadMissing('vehicule.equipe');
-        $vehicule = $commande->vehicule;
-
-        if (! $vehicule || ! $commande->commission_eligible_snapshot || ! $vehicule->equipe) {
-            return;
-        }
-
-        if (MoteurCommissionResolver::estV2($commande->organization_id)) {
-            return;
-        }
-
-        try {
-            CommissionCalculator::validateTauxTotal($vehicule->equipe, (float) $vehicule->equipe->taux_commission_proprietaire);
-        } catch (InvalidArgumentException $e) {
-            abort(422, "Impossible de valider le chargement : {$e->getMessage()}");
-        }
     }
 
     /**
@@ -348,8 +307,14 @@ class CommandeVenteService
     }
 
     /**
-     * Annuler — depuis BROUILLON, A_CHARGER ou FACTURATION (vente directe non encaissée).
-     * Pour les commandes FACTURATION, la facture associée est également annulée.
+     * Annuler — depuis BROUILLON, A_CHARGER ou FACTURATION (vente directe non encaissée). La
+     * facture associée est également annulée si elle existe, quel que soit le statut de la
+     * commande (flotte ou vente directe) : le garde-fou ci-dessous garantit déjà qu'elle n'a
+     * reçu aucun encaissement. Sans cela, une commande flotte annulée depuis A_CHARGER
+     * laisserait sa facture orpheline en statut CREEE (0 encaissé, solde > 0) — qui bloquerait
+     * alors indéfiniment le véhicule pour toute nouvelle commande, cf.
+     * SolvabiliteService::premiereFactureNonEncaisseeVehicule() (correctif du 20/08/2026, avant
+     * cela seul le chemin vente directe annulait la facture).
      */
     public static function annuler(CommandeVente $commande, string $motif): void
     {
@@ -367,9 +332,7 @@ class CommandeVenteService
             'Impossible d\'annuler une commande ayant reçu au moins un encaissement.'
         );
 
-        $estDirecte = $commande->isFacturation();
-
-        DB::transaction(function () use ($commande, $motif, $estDirecte) {
+        DB::transaction(function () use ($commande, $motif) {
             $commande->update([
                 'statut' => StatutCommandeVente::ANNULEE,
                 'motif_annulation' => $motif,
@@ -377,12 +340,10 @@ class CommandeVenteService
                 'annulee_par' => Auth::id(),
             ]);
 
-            if ($estDirecte) {
-                $commande->loadMissing('facture');
-                if ($commande->facture && ! $commande->facture->isAnnulee() && ! $commande->facture->isPayee()) {
-                    $commande->facture->update(['statut_facture' => StatutFactureVente::ANNULEE]);
-                    self::contrepasserVenteFactureeSiExistante($commande->facture, $motif);
-                }
+            $commande->loadMissing('facture');
+            if ($commande->facture && ! $commande->facture->isAnnulee() && ! $commande->facture->isPayee()) {
+                $commande->facture->update(['statut_facture' => StatutFactureVente::ANNULEE]);
+                self::contrepasserVenteFactureeSiExistante($commande->facture, $motif);
             }
 
             self::annulerCommissionsAssociees($commande);

@@ -8,7 +8,6 @@ use App\Http\Controllers\Controller;
 use App\Models\PaiementFiche;
 use App\Models\PaiementFichePaiement;
 use App\Services\AuditLogService;
-use App\Services\Commission\MoteurCommissionResolver;
 use App\Services\CommissionEnveloppePartAllocationService;
 use App\Services\PeriodePayabilityChecker;
 use Illuminate\Http\RedirectResponse;
@@ -53,14 +52,12 @@ class PaiementFichePaiementController extends Controller
             'note' => $data['note'] ?? null,
         ]);
 
-        // V2 uniquement : reporte ce paiement sur les CommissionEnveloppePart
-        // sous-jacentes de la fiche, pour que Commission vente/propriétaire
-        // restent synchronisées avec ce paiement (cf. décision AMOA — une
-        // seule chaîne de paiement, jamais deux circuits pour V2). Sans effet
-        // pour une fiche Legacy (comportement 100% inchangé).
-        if (MoteurCommissionResolver::estV2($fiche->organization_id)) {
-            CommissionEnveloppePartAllocationService::allouer($fiche, $paiement);
-        }
+        // Reporte ce paiement sur les CommissionEnveloppePart sous-jacentes de la
+        // fiche, pour que Commission vente/propriétaire restent synchronisées avec
+        // ce paiement (une seule chaîne de paiement). Auto-scopé et sans effet pour
+        // une fiche logistique : partsPourFiche() ne trouve rien à allouer quand
+        // aucune ligne de la fiche ne référence CommissionEnveloppePart.
+        CommissionEnveloppePartAllocationService::allouer($fiche, $paiement);
 
         $montantFmt = number_format((float) $data['montant'], 0, ',', "\u{202F}");
         app(AuditLogService::class)->record($fiche, AuditEvent::PAID, auth()->user(), null, null, [
@@ -93,9 +90,7 @@ class PaiementFichePaiementController extends Controller
             'description' => "Paiement de {$montantFmt} GNF annulé pour {$fiche->beneficiaire_nom}",
         ]);
 
-        if (MoteurCommissionResolver::estV2($fiche->organization_id)) {
-            CommissionEnveloppePartAllocationService::desallouer($paiement);
-        }
+        CommissionEnveloppePartAllocationService::desallouer($paiement);
 
         $paiement->delete();
 

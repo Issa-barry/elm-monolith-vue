@@ -42,6 +42,8 @@ class CommissionRegleController extends Controller
             ->orderBy('nom')
             ->get(['id', 'nom']);
 
+        // Lecture pure : ne crée jamais le processus ici (effet de bord indésirable
+        // sur un GET) — seul store() le crée, à l'enregistrement du premier barème.
         $processus = CommissionProcessus::where('organization_id', $orgId)
             ->where('code', CommissionProcessus::CODE_VENTE)
             ->first();
@@ -77,7 +79,6 @@ class CommissionRegleController extends Controller
         return Inertia::render('settings/CommissionRegles/Index', [
             'lignes' => $lignes,
             'cibles' => $cibles,
-            'moteurActif' => (bool) $processus?->isActif(),
         ]);
     }
 
@@ -112,7 +113,7 @@ class CommissionRegleController extends Controller
                 'libelle' => 'Vente',
                 'declencheur' => Parametre::getDeclencheurCommissionVente($orgId)->value,
                 'strategie_ancrage_site' => CommissionStrategieAncrageSite::OPERATION->value,
-                'statut' => CommissionActivationStatut::INACTIF->value,
+                'statut' => CommissionActivationStatut::ACTIF->value,
             ],
         );
 

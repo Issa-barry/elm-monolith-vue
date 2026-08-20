@@ -2,15 +2,18 @@
 
 namespace Tests\Feature\Comptabilite;
 
+use App\Enums\CommissionActivationStatut;
 use App\Enums\StatutContrat;
 use App\Enums\TypeContrat;
 use App\Features\ModuleFeature;
 use App\Models\Client;
 use App\Models\CommandeVente;
+use App\Models\CommissionCibleType;
+use App\Models\CommissionEnveloppe;
+use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
-use App\Models\CommissionPart;
-use App\Models\CommissionVente;
+use App\Models\CommissionProcessus;
 use App\Models\Contrat;
 use App\Models\Employe;
 use App\Models\Livreur;
@@ -24,6 +27,7 @@ use App\Models\TransfertLogistique;
 use App\Services\BesoinTresorerieService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 use Laravel\Pennant\Feature;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -101,33 +105,42 @@ class BesoinTresorerieServiceTest extends TestCase
         return $commande;
     }
 
-    /** Commission de vente + une part livreur ou propriétaire, sur une commande rattachée à $site. */
-    private function makeCommissionVentePart(Site $site, Carbon $date, string $typeBeneficiaire, string $beneficiaireId, float $montant, ?float $montantActuel = null, string $statut = 'impaye'): CommissionPart
+    private ?CommissionProcessus $processusVente = null;
+
+    /** Enveloppe de commission vente + une part livreur ou propriétaire, sur une commande rattachée à $site. */
+    private function makeCommissionVentePart(Site $site, Carbon $date, string $typeBeneficiaire, string $beneficiaireId, float $montant, ?float $montantActuel = null, string $statut = 'impaye'): CommissionEnveloppePart
     {
         $commande = $this->makeCommande($site, $date);
 
-        $commission = CommissionVente::create([
+        $this->processusVente ??= CommissionProcessus::create([
             'organization_id' => $this->org->id,
-            'commande_vente_id' => $commande->id,
-            'vehicule_id' => null,
-            'montant_commande' => 1_000_000,
-            'montant_commission_totale' => $montant,
-            'montant_verse' => 0,
+            'code' => CommissionProcessus::CODE_VENTE,
+            'libelle' => 'Vente',
+            'declencheur' => 'chargement_valide',
+            'strategie_ancrage_site' => 'operation',
+            'statut' => CommissionActivationStatut::ACTIF->value,
+        ]);
+
+        $enveloppe = CommissionEnveloppe::create([
+            'organization_id' => $this->org->id,
+            'source_type' => CommandeVente::class,
+            'source_id' => $commande->id,
+            'processus_id' => $this->processusVente->id,
+            'cible_type' => $typeBeneficiaire === 'livreur' ? CommissionCibleType::CODE_EQUIPE_LIVRAISON : CommissionCibleType::CODE_PROPRIETAIRE,
+            'cible_id' => (string) Str::ulid(),
+            'montant_total' => $montant,
+            'earned_at' => $date,
             'statut' => $statut,
         ]);
-        // La période est résolue sur la date de la commission elle-même (naissance
+        // La période est résolue sur la date d'acquisition de l'enveloppe (naissance
         // au chargement réel), pas sur celle de la commande — cf. PeriodeCalculatorService.
-        $commission->forceFill(['created_at' => $date])->saveQuietly();
+        $enveloppe->forceFill(['created_at' => $date])->saveQuietly();
 
-        return CommissionPart::create([
-            'commission_vente_id' => $commission->id,
-            'type_beneficiaire' => $typeBeneficiaire,
-            'livreur_id' => $typeBeneficiaire === 'livreur' ? $beneficiaireId : null,
-            'proprietaire_id' => $typeBeneficiaire === 'proprietaire' ? $beneficiaireId : null,
-            'beneficiaire_nom' => 'Bénéficiaire test',
-            'taux_commission' => 100,
+        return CommissionEnveloppePart::create([
+            'enveloppe_id' => $enveloppe->id,
+            'beneficiaire_type' => $typeBeneficiaire,
+            'beneficiaire_id' => $beneficiaireId,
             'montant_brut' => $montant,
-            'frais_supplementaires' => 0,
             'montant_net' => $montant,
             'montant_actuel' => $montantActuel,
             'montant_verse' => 0,
@@ -349,22 +362,31 @@ class BesoinTresorerieServiceTest extends TestCase
             'total_commande' => 1_000_000,
         ]);
         $autreCommande->forceFill(['created_at' => Carbon::parse('2026-08-05')])->saveQuietly();
-        $autreCommission = CommissionVente::create([
+        $autreProcessus = CommissionProcessus::create([
             'organization_id' => $autreOrg->id,
-            'commande_vente_id' => $autreCommande->id,
-            'montant_commande' => 1_000_000,
-            'montant_commission_totale' => 999_000,
-            'montant_verse' => 0,
+            'code' => CommissionProcessus::CODE_VENTE,
+            'libelle' => 'Vente',
+            'declencheur' => 'chargement_valide',
+            'strategie_ancrage_site' => 'operation',
+            'statut' => CommissionActivationStatut::ACTIF->value,
+        ]);
+        $autreEnveloppe = CommissionEnveloppe::create([
+            'organization_id' => $autreOrg->id,
+            'source_type' => CommandeVente::class,
+            'source_id' => $autreCommande->id,
+            'processus_id' => $autreProcessus->id,
+            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+            'cible_id' => (string) Str::ulid(),
+            'montant_total' => 999_000,
+            'earned_at' => Carbon::parse('2026-08-05'),
             'statut' => 'impaye',
         ]);
-        CommissionPart::create([
-            'commission_vente_id' => $autreCommission->id,
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $autreLivreur->id,
-            'beneficiaire_nom' => 'Autre',
-            'taux_commission' => 100,
+        $autreEnveloppe->forceFill(['created_at' => Carbon::parse('2026-08-05')])->saveQuietly();
+        CommissionEnveloppePart::create([
+            'enveloppe_id' => $autreEnveloppe->id,
+            'beneficiaire_type' => 'livreur',
+            'beneficiaire_id' => $autreLivreur->id,
             'montant_brut' => 999_000,
-            'frais_supplementaires' => 0,
             'montant_net' => 999_000,
             'montant_verse' => 0,
             'statut' => 'impaye',

@@ -19,7 +19,6 @@ use App\Http\Controllers\CommandeVenteStatutController;
 use App\Http\Controllers\CommissionLogistiqueController;
 use App\Http\Controllers\CommissionPaymentController;
 use App\Http\Controllers\CommissionVehiculeController;
-use App\Http\Controllers\CommissionVenteController;
 use App\Http\Controllers\Comptabilite\BesoinTresorerieController;
 use App\Http\Controllers\Comptabilite\CommissionAjustementController;
 use App\Http\Controllers\Comptabilite\CommissionLogistiqueController as ComptabiliteCommissionLogistiqueController;
@@ -41,7 +40,7 @@ use App\Http\Controllers\EncaissementVenteController;
 use App\Http\Controllers\EquipeLivraisonController;
 use App\Http\Controllers\FactureVenteController;
 use App\Http\Controllers\FournisseurController;
-use App\Http\Controllers\FraisCommissionPartController;
+use App\Http\Controllers\ImportProduitsController;
 use App\Http\Controllers\InstallWizardController;
 use App\Http\Controllers\LivreurController;
 use App\Http\Controllers\MediaController;
@@ -49,7 +48,6 @@ use App\Http\Controllers\OnboardingSiteController;
 use App\Http\Controllers\OptionCatalogueController;
 use App\Http\Controllers\PackingController;
 use App\Http\Controllers\PaieController;
-use App\Http\Controllers\PaiementCommissionVenteController;
 use App\Http\Controllers\PaiePaiementController;
 use App\Http\Controllers\PaieVariableController;
 use App\Http\Controllers\PdvController;
@@ -72,7 +70,6 @@ use App\Http\Controllers\TypeVehiculeController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserInvitationController;
 use App\Http\Controllers\VehiculeController;
-use App\Http\Controllers\VersementCommissionController;
 use App\Http\Controllers\VersementCommissionLogistiqueController;
 use App\Http\Controllers\VersementController;
 use App\Support\AuthRedirects;
@@ -209,21 +206,6 @@ Route::prefix('backoffice')->group(function () {
             Route::post('ventes/{commande_vente}/statut/annuler', [CommandeVenteStatutController::class, 'annuler'])->name('ventes.statut.annuler');
             Route::get('factures', [FactureVenteController::class, 'index'])->name('factures.index');
 
-            // Commissions
-            Route::get('commissions', [CommissionVenteController::class, 'index'])->name('commissions.index');
-            Route::get('commissions/beneficiaires/{type}/{beneficiaireId}', [CommissionVenteController::class, 'showBeneficiaire'])->name('commissions.beneficiaires.show');
-            Route::get('commissions/{commission_vente}', [CommissionVenteController::class, 'show'])->name('commissions.show');
-
-            // Paiement groupé bénéficiaire (nouveau workflow)
-            Route::post('commissions/beneficiaires/{type}/{beneficiaireId}/paiements', [PaiementCommissionVenteController::class, 'store'])->name('commissions.beneficiaires.paiements.store');
-
-            // Frais par part (livreur)
-            Route::patch('commissions/parts/{part}/frais', [FraisCommissionPartController::class, 'update'])->name('commissions.parts.frais.update');
-
-            // Versements par part (ancien système — conservé pour compatibilité)
-            Route::post('commissions/{commission}/parts/{part}/versements', [VersementCommissionController::class, 'store'])->name('commissions.parts.versements.store');
-            Route::delete('versements-commissions/{versement_commission}', [VersementCommissionController::class, 'destroy'])->name('commissions.versements.destroy');
-
             // Encaissements factures
             Route::post('factures/{facture_vente}/encaissements', [EncaissementVenteController::class, 'store'])->name('encaissements.store');
             Route::delete('encaissements/{encaissement_vente}', [EncaissementVenteController::class, 'destroy'])->name('encaissements.destroy');
@@ -335,6 +317,17 @@ Route::prefix('backoffice')->group(function () {
             // FournisseurSelect.vue. Le CRUD complet reste sous le module Achats (route
             // fournisseurs.* ci-dessus).
             Route::post('produits/fournisseurs', [FournisseurController::class, 'storeRapide'])->name('produits.fournisseurs.store');
+
+            // Import Excel en masse (création + mise à jour), déclarées avant produits/{produit}
+            // par lisibilité — même raison que categories/options/types ci-dessus.
+            Route::get('produits/imports', [ImportProduitsController::class, 'index'])->name('produits.imports.index');
+            Route::get('produits/imports/nouveau', [ImportProduitsController::class, 'create'])->name('produits.imports.create');
+            Route::post('produits/imports', [ImportProduitsController::class, 'store'])->name('produits.imports.store');
+            Route::get('produits/imports/modele', [ImportProduitsController::class, 'template'])->name('produits.imports.modele');
+            Route::get('produits/imports/{importProduits}', [ImportProduitsController::class, 'show'])->name('produits.imports.show');
+            Route::post('produits/imports/{importProduits}/confirmer', [ImportProduitsController::class, 'confirm'])->name('produits.imports.confirm');
+            Route::post('produits/imports/{importProduits}/reessayer', [ImportProduitsController::class, 'retry'])->name('produits.imports.retry');
+            Route::get('produits/imports/{importProduits}/reprise', [ImportProduitsController::class, 'reprise'])->name('produits.imports.reprise');
 
             Route::resource('produits', ProduitController::class);
             Route::post('produits/{produit}/ajuster-stock', [ProduitController::class, 'ajusterStock'])
@@ -479,8 +472,6 @@ Route::prefix('backoffice')->group(function () {
                 ->name('commissions.vente.pdf');
             Route::get('commissions/vente/livreurs/{livreurId}', [ComptabiliteCommissionVenteController::class, 'showLivreur'])
                 ->name('commissions.vente.livreur');
-            Route::post('commissions/vente/livreurs/{livreurId}/paiements', [ComptabiliteCommissionVenteController::class, 'payerLivreur'])
-                ->name('commissions.vente.livreur.paiements');
 
             // ── Commission propriétaires ───────────────────────────────────────────
             Route::get('commissions/proprietaires', [CommissionProprietaireController::class, 'index'])
@@ -491,8 +482,6 @@ Route::prefix('backoffice')->group(function () {
                 ->name('commissions.proprietaires.pdf');
             Route::get('commissions/proprietaires/{proprietaireId}', [CommissionProprietaireController::class, 'show'])
                 ->name('commissions.proprietaires.show');
-            Route::post('commissions/proprietaires/{proprietaireId}/paiements', [CommissionProprietaireController::class, 'payer'])
-                ->name('commissions.proprietaires.paiements');
 
             // ── Périodes de paiement (générées automatiquement, jamais créées à la main) ──
             Route::get('periodes', [PaiementPeriodeController::class, 'index'])->name('periodes.index');

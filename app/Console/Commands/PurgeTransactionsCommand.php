@@ -9,13 +9,13 @@ use App\Models\CommandeAchat;
 use App\Models\CommandeAchatLigne;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
+use App\Models\CommissionEnveloppe;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionPayment;
 use App\Models\EncaissementVente;
 use App\Models\JournalTresorerie;
 use App\Models\MouvementStock;
 use App\Models\Organization;
-use App\Models\PaiementCommissionVente;
 use App\Models\PieceComptable;
 use App\Models\VarianteStock;
 use Illuminate\Console\Command;
@@ -50,7 +50,6 @@ class PurgeTransactionsCommand extends Command
     private const SOURCES_TRESORERIE_A_EFFACER = [
         EncaissementVente::class,
         CashbackVersement::class,
-        PaiementCommissionVente::class,
         CommissionPayment::class,
     ];
 
@@ -79,7 +78,7 @@ class PurgeTransactionsCommand extends Command
             'commandes_ventes' => $scoped(CommandeVente::query())->count(),
             'commandes_achats' => $scoped(CommandeAchat::query())->count(),
             'commissions_logistiques' => $scoped(CommissionLogistique::query())->count(),
-            'paiements_commissions_ventes' => $scoped(PaiementCommissionVente::query())->count(),
+            'commission_enveloppes' => $scoped(CommissionEnveloppe::query())->count(),
             'commission_payments' => $scoped(CommissionPayment::query())->count(),
             'cashback_transactions' => $scoped(CashbackTransaction::query())->count(),
             'mouvements_stock (vente/achat)' => $scoped(MouvementStock::whereIn('source_type', self::SOURCES_STOCK_A_EFFACER))->count(),
@@ -115,8 +114,8 @@ class PurgeTransactionsCommand extends Command
             // ne déclenche PAS les ON DELETE CASCADE ci-dessous (constaté en test : lignes,
             // factures, commissions restaient toutes en base après un ->delete() classique).
             // Cascade DB (ON DELETE CASCADE) : lignes, activités, factures_ventes,
-            // encaissements_ventes, commissions_ventes, commission_parts,
-            // versements_commissions, paiements_commissions_ventes_items.
+            // encaissements_ventes. commission_enveloppes n'a PAS de contrainte FK vers
+            // commandes_ventes (source polymorphe) : effacé explicitement ci-dessous.
             $scoped(CommandeVente::query())->forceDelete();
 
             // forceDelete() impératif : CommandeAchat utilise aussi SoftDeletes (même raison).
@@ -127,8 +126,10 @@ class PurgeTransactionsCommand extends Command
             // commission_payment_items. Ne touche pas transferts_logistiques (parent, pas enfant).
             $scoped(CommissionLogistique::query())->delete();
 
+            // Cascade DB : commission_enveloppe_parts, commission_enveloppe_lignes.
+            $scoped(CommissionEnveloppe::query())->delete();
+
             // Headers non cascadés depuis ce qui précède (leurs lignes/items le sont, pas eux).
-            $scoped(PaiementCommissionVente::query())->delete();
             $scoped(CommissionPayment::query())->delete();
 
             // Cascade DB : cashback_versements.

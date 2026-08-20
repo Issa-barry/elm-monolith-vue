@@ -4,7 +4,8 @@ namespace App\Http\Controllers\Api\Client;
 
 use App\Enums\StatutCommission;
 use App\Http\Controllers\Controller;
-use App\Models\CommissionPart;
+use App\Models\CommandeVente;
+use App\Models\CommissionEnveloppePart;
 use App\Models\Livreur;
 use App\Models\Proprietaire;
 use App\Models\User;
@@ -41,35 +42,38 @@ class VehiculeCommissionsController extends Controller
             return response()->json([]);
         }
 
-        $parts = CommissionPart::query()
-            ->join('commissions_ventes AS cv', 'cv.id', '=', 'commission_parts.commission_vente_id')
-            ->join('commandes_ventes AS cmd', 'cmd.id', '=', 'cv.commande_vente_id')
-            ->where('cv.vehicule_id', $vehiculeId)
-            ->when($user->organization_id, fn ($q) => $q->where('cv.organization_id', $user->organization_id))
+        $parts = CommissionEnveloppePart::query()
+            ->join('commission_enveloppes AS ce', 'ce.id', '=', 'commission_enveloppe_parts.enveloppe_id')
+            ->join('commandes_ventes AS cmd', function ($join) {
+                $join->on('cmd.id', '=', 'ce.source_id')
+                    ->where('ce.source_type', '=', CommandeVente::class);
+            })
+            ->where('cmd.vehicule_id', $vehiculeId)
+            ->when($user->organization_id, fn ($q) => $q->where('ce.organization_id', $user->organization_id))
             ->where(function ($q) use ($proprietaire, $livreur) {
                 if ($proprietaire !== null) {
                     $q->orWhere(fn ($sq) => $sq
-                        ->where('commission_parts.type_beneficiaire', 'proprietaire')
-                        ->where('commission_parts.proprietaire_id', $proprietaire->id)
+                        ->where('commission_enveloppe_parts.beneficiaire_type', 'proprietaire')
+                        ->where('commission_enveloppe_parts.beneficiaire_id', $proprietaire->id)
                     );
                 }
                 if ($livreur !== null) {
                     $q->orWhere(fn ($sq) => $sq
-                        ->where('commission_parts.type_beneficiaire', 'livreur')
-                        ->where('commission_parts.livreur_id', $livreur->id)
+                        ->where('commission_enveloppe_parts.beneficiaire_type', 'livreur')
+                        ->where('commission_enveloppe_parts.beneficiaire_id', $livreur->id)
                     );
                 }
             })
             ->select([
-                'commission_parts.id',
-                'commission_parts.montant_net',
-                'commission_parts.montant_actuel',
-                'commission_parts.montant_verse',
-                'commission_parts.statut',
-                'cv.created_at AS commission_date',
+                'commission_enveloppe_parts.id',
+                'commission_enveloppe_parts.montant_net',
+                'commission_enveloppe_parts.montant_actuel',
+                'commission_enveloppe_parts.montant_verse',
+                'commission_enveloppe_parts.statut',
+                'ce.earned_at AS commission_date',
                 'cmd.reference',
             ])
-            ->orderByDesc('cv.created_at')
+            ->orderByDesc('ce.earned_at')
             ->get()
             ->map(function ($row) {
                 $date = $row->commission_date

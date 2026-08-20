@@ -12,26 +12,17 @@ return new class extends Migration
             $table->ulid('id')->primary();
             $table->foreignUlid('organization_id')->constrained()->cascadeOnDelete();
             $table->string('reference', 10)->nullable()->unique();
-            $table->string('nom', 100)->nullable();
-            $table->string('prenom', 100)->nullable();
-            $table->string('raison_sociale', 200)->nullable();
-            $table->string('email')->nullable();
-            $table->string('phone', 30)->nullable();
-            $table->string('code_phone_pays', 10)->default('+224');
-            $table->string('code_pays', 2)->default('GN');
-            $table->string('pays', 100)->default('Guinée');
-            $table->string('ville', 100)->nullable();
-            $table->text('adresse')->nullable();
+            // Identité (physique ou morale) jamais dupliquée ici — même principe que Prestataire,
+            // cf. ..._create_prestataires_table.php. Entité séparée de Prestataire (cf. décision
+            // produit : un fournisseur n'est pas un prestataire) — pas de colonne 'type' ici.
+            $table->foreignUlid('personne_id')->nullable()->constrained('personnes')->nullOnDelete();
+            $table->foreignUlid('entreprise_tierce_id')->nullable()->constrained('entreprises_tierces')->nullOnDelete();
             $table->text('notes')->nullable();
             $table->boolean('is_active')->default(true)->index();
             $table->timestamps();
             $table->softDeletes();
 
             $table->index(['organization_id', 'is_active']);
-            // Anti-doublon : même téléphone normalisé au sein d'une organisation = probablement
-            // la même entreprise déjà saisie. Entité séparée de Prestataire (cf. décision produit :
-            // un fournisseur n'est pas un prestataire) — pas de colonne 'type' ici.
-            $table->unique(['organization_id', 'phone']);
         });
     }
 

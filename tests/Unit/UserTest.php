@@ -69,15 +69,15 @@ class UserTest extends TestCase
 
     // ── permissionsMap ────────────────────────────────────────────────────────
 
-    public function test_permissions_map_returns_177_keys(): void
+    public function test_permissions_map_returns_179_keys(): void
     {
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
 
         $map = $user->permissionsMap();
 
-        // 37 resources × 4 actions + 29 standalone = 177
-        $this->assertCount(177, $map);
+        // 37 resources × 4 actions + 31 standalone = 179
+        $this->assertCount(179, $map);
     }
 
     public function test_permissions_map_keys_follow_resource_dot_action_format(): void

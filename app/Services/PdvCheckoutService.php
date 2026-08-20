@@ -37,16 +37,26 @@ class PdvCheckoutService
             $this->validateCapacite($data);
         }
 
-        // Même règle de solvabilité que le back-office (CommandeVenteController::store()), sur
-        // le même service — le PDV créait auparavant sa facture sans AUCUN contrôle d'impayés,
-        // quel que soit le paramétrage de l'organisation (trou identifié le 18/08/2026).
-        $this->solvabiliteService->enforcerOuEchouer(
-            $user->organization_id,
-            $data['vehicule_id'] ?? null,
-            $data['client_id'] ?? null,
-        );
-
         return DB::transaction(function () use ($data, $user, $siteId) {
+            // Verrou de ligne sur le véhicule le temps de la transaction : sans cela, deux
+            // requêtes concurrentes pour le même véhicule passeraient toutes les deux le
+            // contrôle de solvabilité (aucune facture bloquante encore visible pour l'une comme
+            // pour l'autre) puis créeraient chacune une commande — exactement le doublon que ce
+            // contrôle doit empêcher (cf. section « concurrence » de la règle métier).
+            if (! empty($data['vehicule_id'])) {
+                Vehicule::whereKey($data['vehicule_id'])->lockForUpdate()->first();
+            }
+
+            // Même règle de solvabilité que le back-office (CommandeVenteController::store()),
+            // sur le même service — le PDV créait auparavant sa facture sans AUCUN contrôle
+            // d'impayés, quel que soit le paramétrage de l'organisation (trou identifié le
+            // 18/08/2026). Exécuté sous le verrou ci-dessus pour rester fiable en concurrence.
+            $this->solvabiliteService->enforcerOuEchouer(
+                $user->organization_id,
+                $data['vehicule_id'] ?? null,
+                $data['client_id'] ?? null,
+            );
+
             $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null);
             [$lignesData, $total, $stockTrackedVarianteIds] = $this->buildLignes($data['lignes'], $user->organization_id, (string) $siteId, $context->modeTarification, $context->categorieTarifaireVehicule);
 

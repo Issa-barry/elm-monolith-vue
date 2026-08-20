@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Organization;
+use App\Models\Personne;
 use App\Models\Prestataire;
 use Illuminate\Database\Seeder;
 
@@ -16,7 +17,6 @@ class PrestatairesSeeder extends Seeder
             [
                 'nom' => 'Diallo',
                 'prenom' => 'Mamadou',
-                'raison_sociale' => null,
                 'email' => 'mamadou.diallo@example.com',
                 'phone' => '+224620000001',
                 'code_phone_pays' => '+224',
@@ -31,7 +31,6 @@ class PrestatairesSeeder extends Seeder
             [
                 'nom' => 'Camara',
                 'prenom' => 'Ibrahima',
-                'raison_sociale' => null,
                 'email' => 'ibrahima.camara@example.com',
                 'phone' => '+224620000002',
                 'code_phone_pays' => '+224',
@@ -46,9 +45,27 @@ class PrestatairesSeeder extends Seeder
         ];
 
         foreach ($prestataires as $data) {
+            $personne = Personne::resoudreOuCreer($org->id, [
+                'nom' => $data['nom'],
+                'prenom' => $data['prenom'],
+                'telephone' => $data['phone'],
+                'email' => $data['email'],
+                'pays' => $data['pays'],
+                'code_pays' => $data['code_pays'],
+                'code_phone_pays' => $data['code_phone_pays'],
+                'ville' => $data['ville'],
+                'adresse' => $data['adresse'],
+            ]);
+
             Prestataire::firstOrCreate(
-                ['email' => $data['email']],
-                [...$data, 'organization_id' => $org->id]
+                ['personne_id' => $personne->id],
+                [
+                    'organization_id' => $org->id,
+                    'personne_id' => $personne->id,
+                    'type' => $data['type'],
+                    'notes' => $data['notes'],
+                    'is_active' => $data['is_active'],
+                ]
             );
         }
     }

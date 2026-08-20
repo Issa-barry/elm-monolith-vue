@@ -182,6 +182,55 @@ export async function fillLoginIdentifier(
     }
 }
 
+/**
+ * Connexion dédiée à l'organisation "Eau La Maman V2 Demo" (seule
+ * organisation du projet avec le moteur de commissions V2 activé — cf.
+ * ElmV2DemoSeeder). Volontairement distincte de `login()` : celle-ci
+ * court-circuite si une session valide est déjà chargée (storageState par
+ * défaut = admin "elm", Legacy), ce qui empêcherait jamais de basculer vers
+ * ce second compte. N'écrit/ne lit aucun storageState partagé : à appeler à
+ * chaque test qui a besoin du contexte V2 (pas de globalSetup dédié, pour ne
+ * jamais risquer d'affecter les specs Legacy existantes).
+ */
+export async function loginAsElmV2Demo(page: Page): Promise<void> {
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+            // Le storageState par défaut (.auth/user.json, écrit par global-setup.ts)
+            // authentifie déjà le contexte comme admin "elm" — /login est une route
+            // `guest` (routes/web.php) qui redirige un utilisateur déjà connecté vers
+            // le dashboard sans jamais rendre le formulaire, cf. le même pattern dans
+            // smoke.spec.ts ("avec storageState actif, /login redirigerait vers le
+            // dashboard"). Sans ce clearCookies(), le password input n'apparaît jamais.
+            await page.context().clearCookies();
+            await page.goto('/login');
+            await page.waitForSelector('input[name="password"]', {
+                timeout: 20_000,
+            });
+            await fillLoginIdentifier(page, { phone: '+224600000201' });
+            await page.locator('input[name="password"]').fill('ElmV2Demo@2025');
+
+            const submitButton = page
+                .getByRole('button', { name: /se connecter/i })
+                .first();
+            await expect(submitButton).toBeEnabled({ timeout: 10_000 });
+            await submitButton.click();
+            await expect(page).not.toHaveURL(/\/login(?:\?.*)?$/, {
+                timeout: 15_000,
+            });
+            return;
+        } catch (error) {
+            lastError = error;
+            await page.waitForTimeout(500 * attempt);
+        }
+    }
+
+    throw lastError instanceof Error
+        ? new Error(`loginAsElmV2Demo failed after retries.\nCause: ${lastError.message}`)
+        : new Error('loginAsElmV2Demo failed after retries.');
+}
+
 export async function login(page: Page): Promise<void> {
     // Verify whether storageState already loaded a valid session.
     await page.goto('/backoffice/dashboard');

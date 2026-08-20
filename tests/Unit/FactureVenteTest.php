@@ -3,24 +3,13 @@
 namespace Tests\Unit;
 
 use App\Enums\StatutFactureVente;
-use App\Models\CommandeVente;
-use App\Models\CommissionVente;
-use App\Models\EquipeLivraison;
-use App\Models\EquipeLivreur;
 use App\Models\FactureVente;
-use App\Models\Livreur;
-use App\Models\Organization;
-use App\Models\Produit;
-use App\Models\Proprietaire;
-use App\Models\Vehicule;
-use App\Services\CommissionGenerator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Tests\Concerns\HasProduitVariante;
 use Tests\TestCase;
 
 class FactureVenteTest extends TestCase
 {
-    use HasProduitVariante, RefreshDatabase;
+    use RefreshDatabase;
 
     // ── recalculStatut ────────────────────────────────────────────────────────
 
@@ -73,199 +62,8 @@ class FactureVenteTest extends TestCase
         $this->assertFalse($result);
     }
 
-    private function makeProduit(Organization $org): Produit
-    {
-        return $this->makeProduitAvecVariante($org, ['qte_stock' => 0], ['prix_achat' => 0]);
-    }
-
-    // ── CommissionGenerator (nouveau modèle) ──────────────────────────────────
-
-    public function test_commission_generee_quand_vehicule_a_equipe_et_taux_valide(): void
-    {
-        $org = Organization::factory()->create();
-        $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
-        $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id]);
-        $produit = $this->makeProduit($org);
-
-        $vehicule = Vehicule::factory()->create([
-            'organization_id' => $org->id,
-            'proprietaire_id' => $proprietaire->id,
-        ]);
-
-        $equipe = EquipeLivraison::create([
-            'organization_id' => $org->id,
-            'vehicule_id' => $vehicule->id,
-            'nom' => 'Équipe Test',
-            'is_active' => true,
-            'taux_commission_proprietaire' => 40,
-        ]);
-        EquipeLivreur::create([
-            'equipe_id' => $equipe->id,
-            'livreur_id' => $livreur->id,
-            'taux_commission' => 60,
-            'role' => 'principal',
-            'ordre' => 0,
-        ]);
-
-        $commande = CommandeVente::factory()->create([
-            'organization_id' => $org->id,
-            'vehicule_id' => $vehicule->id,
-            'total_commande' => 10000,
-        ]);
-        $commande->lignes()->create([
-            'variante_id' => $produit->variantePrincipale()->first()->id,
-            'quantite_demandee' => 1,
-            'quantite_chargee' => 1,
-            'prix_vente_snapshot' => 10000,
-            'prix_usine_snapshot' => 0,
-            'total_ligne' => 10000,
-        ]);
-
-        CommissionGenerator::generateForCommandeIfMissing($commande);
-
-        $commission = CommissionVente::where('commande_vente_id', $commande->id)->first();
-        $this->assertNotNull($commission, 'La commission doit être créée');
-        $this->assertEquals(10000.0, (float) $commission->montant_commission_totale);
-
-        $partLivreur = $commission->parts()->where('type_beneficiaire', 'livreur')->first();
-        $partProp = $commission->parts()->where('type_beneficiaire', 'proprietaire')->first();
-        $this->assertEquals(6000.0, (float) $partLivreur->montant_brut);
-        $this->assertEquals(4000.0, (float) $partProp->montant_brut);
-        $this->assertEquals($livreur->id, $partLivreur->livreur_id);
-        $this->assertEquals($proprietaire->id, $partProp->proprietaire_id);
-    }
-
-    public function test_commission_generee_pour_chauffeur_et_convoyeur_selon_leur_taux(): void
-    {
-        $org = Organization::factory()->create();
-        $chauffeur = Livreur::factory()->create(['organization_id' => $org->id]);
-        $convoyeur = Livreur::factory()->create(['organization_id' => $org->id]);
-        $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id]);
-        $produit = $this->makeProduit($org);
-
-        $vehicule = Vehicule::factory()->create([
-            'organization_id' => $org->id,
-            'proprietaire_id' => $proprietaire->id,
-        ]);
-
-        $equipe = EquipeLivraison::create([
-            'organization_id' => $org->id,
-            'vehicule_id' => $vehicule->id,
-            'nom' => 'Équipe Abdoulaye',
-            'is_active' => true,
-            'taux_commission_proprietaire' => 68.42,
-        ]);
-        EquipeLivreur::create([
-            'equipe_id' => $equipe->id,
-            'livreur_id' => $chauffeur->id,
-            'taux_commission' => 18.42,
-            'role' => 'chauffeur',
-            'ordre' => 0,
-        ]);
-        EquipeLivreur::create([
-            'equipe_id' => $equipe->id,
-            'livreur_id' => $convoyeur->id,
-            'taux_commission' => 13.16,
-            'role' => 'convoyeur',
-            'ordre' => 1,
-        ]);
-
-        $commande = CommandeVente::factory()->create([
-            'organization_id' => $org->id,
-            'vehicule_id' => $vehicule->id,
-            'total_commande' => 100000,
-        ]);
-        $commande->lignes()->create([
-            'variante_id' => $produit->variantePrincipale()->first()->id,
-            'quantite_demandee' => 1,
-            'quantite_chargee' => 1,
-            'prix_vente_snapshot' => 100000,
-            'prix_usine_snapshot' => 0,
-            'total_ligne' => 100000,
-        ]);
-
-        CommissionGenerator::generateForCommandeIfMissing($commande);
-
-        $commission = CommissionVente::where('commande_vente_id', $commande->id)->first();
-        $partsLivreur = $commission->parts()->where('type_beneficiaire', 'livreur')->get();
-
-        $this->assertCount(2, $partsLivreur, 'Le chauffeur et le convoyeur doivent chacun avoir leur part');
-
-        $partChauffeur = $partsLivreur->firstWhere('livreur_id', $chauffeur->id);
-        $partConvoyeur = $partsLivreur->firstWhere('livreur_id', $convoyeur->id);
-
-        $this->assertNotNull($partChauffeur);
-        $this->assertNotNull($partConvoyeur);
-        $this->assertSame('chauffeur', $partChauffeur->role);
-        $this->assertSame('convoyeur', $partConvoyeur->role);
-        $this->assertEquals(18420.0, (float) $partChauffeur->montant_brut);
-        $this->assertEquals(13160.0, (float) $partConvoyeur->montant_brut);
-    }
-
-    public function test_commission_non_generee_si_vehicule_sans_equipe(): void
-    {
-        $org = Organization::factory()->create();
-        $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id]);
-        $vehicule = Vehicule::factory()->create([
-            'organization_id' => $org->id,
-            'proprietaire_id' => $proprietaire->id,
-        ]);
-
-        $commande = CommandeVente::factory()->create([
-            'organization_id' => $org->id,
-            'vehicule_id' => $vehicule->id,
-            'total_commande' => 10000,
-        ]);
-
-        CommissionGenerator::generateForCommandeIfMissing($commande);
-
-        $this->assertEquals(0, CommissionVente::where('commande_vente_id', $commande->id)->count());
-    }
-
-    public function test_commission_non_dupliquee_si_commande_deja_traitee(): void
-    {
-        $org = Organization::factory()->create();
-        $livreur = Livreur::factory()->create(['organization_id' => $org->id]);
-        $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id]);
-        $produit = $this->makeProduit($org);
-
-        $vehicule = Vehicule::factory()->create([
-            'organization_id' => $org->id,
-            'proprietaire_id' => $proprietaire->id,
-        ]);
-
-        $equipe = EquipeLivraison::create([
-            'organization_id' => $org->id,
-            'vehicule_id' => $vehicule->id,
-            'nom' => 'Équipe Test',
-            'is_active' => true,
-            'taux_commission_proprietaire' => 40,
-        ]);
-        EquipeLivreur::create([
-            'equipe_id' => $equipe->id,
-            'livreur_id' => $livreur->id,
-            'taux_commission' => 60,
-            'role' => 'principal',
-            'ordre' => 0,
-        ]);
-
-        $commande = CommandeVente::factory()->create([
-            'organization_id' => $org->id,
-            'vehicule_id' => $vehicule->id,
-            'total_commande' => 5000,
-        ]);
-        $commande->lignes()->create([
-            'variante_id' => $produit->variantePrincipale()->first()->id,
-            'quantite_demandee' => 1,
-            'quantite_chargee' => 1,
-            'prix_vente_snapshot' => 5000,
-            'prix_usine_snapshot' => 0,
-            'total_ligne' => 5000,
-        ]);
-
-        CommissionGenerator::generateForCommandeIfMissing($commande);
-        CommissionGenerator::generateForCommandeIfMissing($commande);
-
-        $this->assertEquals(1, CommissionVente::where('commande_vente_id', $commande->id)->count());
-    }
+    // La génération de commission (équipe, chauffeur/convoyeur, idempotence,
+    // véhicule sans équipe) est couverte de bout en bout, sur le moteur réel
+    // (CommissionEnveloppeGenerator), par CommissionTriggerVenteTest et
+    // CommandeVenteCommissionEligibiliteTest — jamais dupliquée ici.
 }

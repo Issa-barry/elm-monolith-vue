@@ -27,6 +27,12 @@ class Personne extends Model
         'pays', 'code_pays', 'code_phone_pays', 'ville', 'adresse',
     ];
 
+    public function setEmailAttribute(mixed $value): void
+    {
+        $v = $value !== null ? trim((string) $value) : null;
+        $this->attributes['email'] = $v !== null && $v !== '' ? strtolower($v) : null;
+    }
+
     /**
      * Une personne n'a pas toujours nom+prénom connus séparément (ex: livreur identifié
      * seulement par "Baba Ousou") — priorité d'affichage : nom_complet saisi tel quel, sinon

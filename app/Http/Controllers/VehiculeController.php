@@ -19,7 +19,6 @@ use App\Models\TypeVehicule;
 use App\Models\User;
 use App\Models\Vehicule;
 use App\Models\VehiculeFrais;
-use App\Services\Commission\MoteurCommissionResolver;
 use App\Services\ImageService;
 use App\Services\VehiculeCapaciteService;
 use Illuminate\Http\RedirectResponse;
@@ -326,10 +325,6 @@ class VehiculeController extends Controller
             // (cf. décision AMOA post-Phase 2 : plus de montant global blended, un
             // barème par cible peut différer d'une catégorie à l'autre).
             'baremes_commission_categories' => $this->baremesCommissionParCategorie($vehicule->organization_id),
-            // Source de vérité UNIQUE (cf. MoteurCommissionResolver) — jamais déduite
-            // localement dans la popup : une organisation "legacy" garde l'ancienne
-            // UX à l'identique, une organisation "v2" bascule sur la nouvelle.
-            'moteur_commission' => MoteurCommissionResolver::estV2($vehicule->organization_id) ? 'v2' : 'legacy',
         ]);
     }
 
