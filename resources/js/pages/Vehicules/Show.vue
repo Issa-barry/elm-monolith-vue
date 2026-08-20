@@ -180,18 +180,6 @@ const totalApprouve = computed(() =>
         .reduce((s, d) => s + d.montant, 0),
 );
 
-const totalLivreurs = computed(() =>
-    props.vehicule.equipe_membres.reduce((s, m) => s + m.montant_par_pack, 0),
-);
-
-const tauxLivreurs = computed(() =>
-    parseFloat(
-        props.vehicule.equipe_membres
-            .reduce((s, m) => s + m.taux_commission, 0)
-            .toFixed(2),
-    ),
-);
-
 function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
 }

@@ -109,9 +109,6 @@ const STATUT_LABELS: Record<StatutLigne, string> = {
 };
 
 const lignes = computed(() => props.record.rapport?.lignes ?? []);
-const lignesErreur = computed(() =>
-    lignes.value.filter((l) => l.statut === 'erreur'),
-);
 
 function formatChangement(champ: string, c: Changement): string {
     const avant = c.avant ?? 'Aucun';
