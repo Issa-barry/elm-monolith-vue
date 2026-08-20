@@ -193,17 +193,35 @@ export async function fillLoginIdentifier(
  * jamais risquer d'affecter les specs Legacy existantes).
  */
 export async function loginAsElmV2Demo(page: Page): Promise<void> {
-    await page.goto('/login');
-    await page.waitForSelector('input[name="password"]', { timeout: 20_000 });
-    await fillLoginIdentifier(page, { phone: '+224600000201' });
-    await page.locator('input[name="password"]').fill('ElmV2Demo@2025');
+    let lastError: unknown;
 
-    const submitButton = page
-        .getByRole('button', { name: /se connecter/i })
-        .first();
-    await expect(submitButton).toBeEnabled({ timeout: 10_000 });
-    await submitButton.click();
-    await expect(page).not.toHaveURL(/\/login(?:\?.*)?$/, { timeout: 15_000 });
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+            await page.goto('/login');
+            await page.waitForSelector('input[name="password"]', {
+                timeout: 20_000,
+            });
+            await fillLoginIdentifier(page, { phone: '+224600000201' });
+            await page.locator('input[name="password"]').fill('ElmV2Demo@2025');
+
+            const submitButton = page
+                .getByRole('button', { name: /se connecter/i })
+                .first();
+            await expect(submitButton).toBeEnabled({ timeout: 10_000 });
+            await submitButton.click();
+            await expect(page).not.toHaveURL(/\/login(?:\?.*)?$/, {
+                timeout: 15_000,
+            });
+            return;
+        } catch (error) {
+            lastError = error;
+            await page.waitForTimeout(500 * attempt);
+        }
+    }
+
+    throw lastError instanceof Error
+        ? new Error(`loginAsElmV2Demo failed after retries.\nCause: ${lastError.message}`)
+        : new Error('loginAsElmV2Demo failed after retries.');
 }
 
 export async function login(page: Page): Promise<void> {

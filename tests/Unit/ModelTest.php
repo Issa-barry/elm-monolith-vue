@@ -15,6 +15,7 @@ use App\Models\CommandeVenteLigne;
 use App\Models\CommissionPart;
 use App\Models\CommissionVente;
 use App\Models\EncaissementVente;
+use App\Models\EntrepriseTierce;
 use App\Models\FactureVente;
 use App\Models\Organization;
 use App\Models\Packing;
@@ -49,13 +50,27 @@ class ModelTest extends TestCase
         return User::factory()->create(['organization_id' => $org->id]);
     }
 
-    private function makePrestataire(Organization $org): Prestataire
+    /**
+     * L'identité (nom/prenom/raison_sociale...) n'est plus portée directement par Prestataire
+     * depuis la refonte Fournisseur ≠ Prestataire + EntrepriseTierce : elle vit sur Personne
+     * (cas physique) ou EntrepriseTierce (cas moral), référencée via personne_id/
+     * entreprise_tierce_id — cf. Prestataire::getNomCompletAttribute() et
+     * ResolutionIdentiteTiersTrait.
+     */
+    private function makePrestataire(Organization $org, array $overrides = []): Prestataire
     {
-        return Prestataire::create([
+        $personne = Personne::create([
             'organization_id' => $org->id,
-            'nom' => 'PREST'.uniqid(),
-            'type' => 'machiniste',
+            'nom' => $overrides['nom'] ?? 'PREST'.uniqid(),
+            'prenom' => $overrides['prenom'] ?? null,
         ]);
+        unset($overrides['nom'], $overrides['prenom']);
+
+        return Prestataire::create(array_merge([
+            'organization_id' => $org->id,
+            'personne_id' => $personne->id,
+            'type' => 'machiniste',
+        ], $overrides));
     }
 
     private function makePacking(Organization $org, array $overrides = []): Packing
@@ -75,23 +90,23 @@ class ModelTest extends TestCase
 
     public function test_prestataire_nom_complet_returns_raison_sociale_if_set(): void
     {
-        $p = Prestataire::create([
-            'organization_id' => $this->makeOrg()->id,
+        $org = $this->makeOrg();
+        $entreprise = EntrepriseTierce::create([
+            'organization_id' => $org->id,
             'raison_sociale' => 'Société ABC',
+        ]);
+        $p = Prestataire::create([
+            'organization_id' => $org->id,
+            'entreprise_tierce_id' => $entreprise->id,
             'type' => 'machiniste',
         ]);
 
-        $this->assertSame('Société Abc', $p->nom_complet);
+        $this->assertSame('Société ABC', $p->nom_complet);
     }
 
     public function test_prestataire_nom_complet_returns_prenom_nom(): void
     {
-        $p = Prestataire::create([
-            'organization_id' => $this->makeOrg()->id,
-            'nom' => 'DIALLO',
-            'prenom' => 'Mamadou',
-            'type' => 'machiniste',
-        ]);
+        $p = $this->makePrestataire($this->makeOrg(), ['nom' => 'DIALLO', 'prenom' => 'Mamadou']);
 
         $this->assertNotNull($p->nom_complet);
         $this->assertStringContainsString('DIALLO', $p->nom_complet);
@@ -99,11 +114,7 @@ class ModelTest extends TestCase
 
     public function test_prestataire_type_label_returns_string(): void
     {
-        $p = Prestataire::create([
-            'organization_id' => $this->makeOrg()->id,
-            'nom' => 'TEST',
-            'type' => 'mecanicien',
-        ]);
+        $p = $this->makePrestataire($this->makeOrg(), ['type' => 'mecanicien']);
 
         $this->assertSame('Mécanicien', $p->type_label);
     }
@@ -111,8 +122,8 @@ class ModelTest extends TestCase
     public function test_prestataire_scope_actifs(): void
     {
         $org = $this->makeOrg();
-        Prestataire::create(['organization_id' => $org->id, 'nom' => 'ACTIF', 'type' => 'machiniste', 'is_active' => true]);
-        Prestataire::create(['organization_id' => $org->id, 'nom' => 'INACTIF', 'type' => 'machiniste', 'is_active' => false]);
+        $this->makePrestataire($org, ['nom' => 'ACTIF', 'is_active' => true]);
+        $this->makePrestataire($org, ['nom' => 'INACTIF', 'is_active' => false]);
 
         $actifs = Prestataire::actifs()->where('organization_id', $org->id)->get();
         $this->assertCount(1, $actifs);
@@ -122,8 +133,8 @@ class ModelTest extends TestCase
     public function test_prestataire_scope_par_type(): void
     {
         $org = $this->makeOrg();
-        Prestataire::create(['organization_id' => $org->id, 'nom' => 'MACHI', 'type' => 'machiniste']);
-        Prestataire::create(['organization_id' => $org->id, 'nom' => 'MECA', 'type' => 'mecanicien']);
+        $this->makePrestataire($org, ['nom' => 'MACHI', 'type' => 'machiniste']);
+        $this->makePrestataire($org, ['nom' => 'MECA', 'type' => 'mecanicien']);
 
         $machinistes = Prestataire::parType('machiniste')->where('organization_id', $org->id)->get();
         $this->assertCount(1, $machinistes);
@@ -133,7 +144,7 @@ class ModelTest extends TestCase
     public function test_prestataire_scope_par_type_accepts_enum(): void
     {
         $org = $this->makeOrg();
-        Prestataire::create(['organization_id' => $org->id, 'nom' => 'CONS', 'type' => 'consultant']);
+        $this->makePrestataire($org, ['nom' => 'CONS', 'type' => 'consultant']);
 
         $consultants = Prestataire::parType(PrestataireType::CONSULTANT)
             ->where('organization_id', $org->id)
@@ -142,41 +153,33 @@ class ModelTest extends TestCase
         $this->assertCount(1, $consultants);
     }
 
-    public function test_prestataire_normalize_email(): void
+    /**
+     * La normalisation téléphone/email/code pays n'est plus portée par des méthodes statiques
+     * sur Prestataire (normalizeEmail/normalizeIsoCountryCode/normalizeDialCode/
+     * normalizePhoneE164 ont disparu avec la refonte identité) : l'email est normalisé par le
+     * mutateur Personne::setEmailAttribute()/EntrepriseTierce::setEmailAttribute(), le
+     * téléphone par Personne::normaliserTelephone() (forme canonique chiffres seuls, utilisée
+     * uniquement pour le rapprochement — cf. resoudreOuCreer()) ; il n'y a plus de formatage
+     * E164 avec indicatif dédié.
+     */
+    public function test_personne_normaliser_telephone_garde_uniquement_les_chiffres(): void
     {
-        $this->assertSame('test@example.com', Prestataire::normalizeEmail('  TEST@EXAMPLE.COM  '));
-        $this->assertNull(Prestataire::normalizeEmail(null));
-        $this->assertNull(Prestataire::normalizeEmail('   '));
+        // Simple filtrage des chiffres — jamais de logique E164 (indicatif, préfixe "00")
+        // depuis la refonte : cette forme ne sert qu'au rapprochement (cf. resoudreOuCreer()),
+        // jamais à l'affichage.
+        $this->assertSame('224622000001', Personne::normaliserTelephone('+224 622 00 00 01'));
+        $this->assertSame('00224622000001', Personne::normaliserTelephone('00224622000001'));
     }
 
-    public function test_prestataire_normalize_iso_country_code(): void
+    public function test_personne_set_email_attribute_normalise_la_casse_et_les_espaces(): void
     {
-        $this->assertSame('GN', Prestataire::normalizeIsoCountryCode('gn'));
-        $this->assertSame('FR', Prestataire::normalizeIsoCountryCode(' FR '));
-        $this->assertNull(Prestataire::normalizeIsoCountryCode(null));
-        $this->assertNull(Prestataire::normalizeIsoCountryCode('   '));
-    }
+        $p = Personne::create([
+            'organization_id' => $this->makeOrg()->id,
+            'nom' => 'TEST',
+            'email' => '  TEST@EXAMPLE.COM  ',
+        ]);
 
-    public function test_prestataire_normalize_dial_code(): void
-    {
-        $this->assertSame('+224', Prestataire::normalizeDialCode('+224'));
-        $this->assertSame('+224', Prestataire::normalizeDialCode('00224'));
-        $this->assertNull(Prestataire::normalizeDialCode(null));
-        $this->assertNull(Prestataire::normalizeDialCode(''));
-    }
-
-    public function test_prestataire_normalize_phone_e164(): void
-    {
-        $this->assertSame('+224622000001', Prestataire::normalizePhoneE164('622000001', '+224'));
-        $this->assertSame('+224622000001', Prestataire::normalizePhoneE164('+224622000001'));
-        $this->assertNull(Prestataire::normalizePhoneE164(null));
-        $this->assertNull(Prestataire::normalizePhoneE164(''));
-    }
-
-    public function test_prestataire_normalize_phone_with_00_prefix(): void
-    {
-        $result = Prestataire::normalizePhoneE164('00224622000001');
-        $this->assertSame('+224622000001', $result);
+        $this->assertSame('test@example.com', $p->email);
     }
 
     public function test_prestataire_generate_reference_unique(): void
@@ -191,7 +194,7 @@ class ModelTest extends TestCase
     public function test_prestataire_organization_relation(): void
     {
         $org = $this->makeOrg();
-        $p = Prestataire::create(['organization_id' => $org->id, 'nom' => 'TEST', 'type' => 'machiniste']);
+        $p = $this->makePrestataire($org);
 
         $this->assertInstanceOf(Organization::class, $p->organization);
         $this->assertEquals($org->id, $p->organization->id);
