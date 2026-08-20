@@ -3,7 +3,6 @@ import CommissionShareEditor, {
     type CommissionShareMembre,
 } from '@/components/commission/CommissionShareEditor.vue';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import { router } from '@inertiajs/vue3';
 import {
     Check,
@@ -14,7 +13,6 @@ import {
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import Dropdown from 'primevue/dropdown';
-import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import { computed, reactive, ref, watch } from 'vue';
 
