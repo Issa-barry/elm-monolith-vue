@@ -884,6 +884,5 @@ function toggleDerogation() {
         :equipe="equipe"
         :proprietaires="proprietaires"
         :baremes-commission-categories="baremes_commission_categories"
-        moteur-commission="v2"
     />
 </template>

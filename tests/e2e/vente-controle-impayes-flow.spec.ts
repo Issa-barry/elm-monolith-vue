@@ -439,9 +439,14 @@ async function activerVehiculeAvecEquipeMinimale(page: Page): Promise<void> {
         .filter({ hasText: /equipe/i })
         .click();
 
-    const gererBtn = page.getByRole('button', { name: /gérer l'équipe/i }).first();
-    await expect(gererBtn).toBeVisible({ timeout: 10_000 });
-    await gererBtn.click();
+    // "Ajouter une équipe" (véhicule fraîchement créé, aucune équipe encore
+    // assignée) — jamais "Gérer l'équipe", réservé aux véhicules qui en ont
+    // déjà une (cf. Vehicules/Show.vue).
+    const equipeBtn = page
+        .getByRole('button', { name: /ajouter une équipe|gérer l'équipe/i })
+        .first();
+    await expect(equipeBtn).toBeVisible({ timeout: 10_000 });
+    await equipeBtn.click();
 
     const dialog = page.locator('[role="dialog"]').filter({ hasText: /équipe/i });
     await expect(dialog).toBeVisible({ timeout: 10_000 });
@@ -457,22 +462,11 @@ async function activerVehiculeAvecEquipeMinimale(page: Page): Promise<void> {
     await telInput.pressSequentially(randomDigits(9), { delay: 20 });
     await dialog.getByRole('button', { name: /suivant/i }).click();
 
-    // Étape 2 (Partage, legacy) : commission entièrement affectée au chauffeur — un éventuel
-    // propriétaire par défaut se voit auto-complété à 0 par recomputeAutoFill() (cf.
-    // EquipeStepperModal.vue), le total reste donc toujours égal à la commission saisie.
-    const commissionInput = dialog.locator('#step-commission');
-    await commissionInput.click();
-    await commissionInput.pressSequentially('1000', { delay: 20 });
-    await commissionInput.blur();
-
-    const montantChauffeur = dialog
-        .locator('table tbody tr', { hasText: /chauffeur/i })
-        .locator('input')
-        .first();
-    await montantChauffeur.click();
-    await montantChauffeur.pressSequentially('1000', { delay: 20 });
-    await montantChauffeur.blur();
-
+    // Étape 2 (Partage) : aucun barème de commission configuré pour ce
+    // véhicule (organisation "elm", partagée avec de nombreuses autres specs
+    // — aucun CommissionRegle n'y est seedé par défaut). L'étape affiche donc
+    // l'état vide ; seule l'activation du véhicule nous intéresse ici, pas la
+    // répartition elle-même (cf. commentaire de fonction ci-dessus).
     const suivantEtape2 = dialog.getByRole('button', { name: /suivant/i });
     await expect(suivantEtape2).toBeEnabled({ timeout: 5_000 });
     await suivantEtape2.click();

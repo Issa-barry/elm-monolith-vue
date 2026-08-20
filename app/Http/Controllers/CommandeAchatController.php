@@ -75,10 +75,13 @@ class CommandeAchatController extends Controller
                 ];
             });
 
+        // nom n'est pas une colonne de fournisseurs (déléguée à Personne/EntrepriseTierce,
+        // cf. Fournisseur::getNomCompletAttribute()) — tri en PHP, pas via orderBy() SQL.
         $fournisseurs = Fournisseur::where('organization_id', $orgId)
             ->where('is_active', true)
-            ->orderBy('nom')
+            ->with(['personne', 'entrepriseTierce'])
             ->get()
+            ->sortBy('nom_complet')
             ->map(fn (Fournisseur $f) => [
                 'id' => $f->id,
                 'nom' => $f->nom_complet,
