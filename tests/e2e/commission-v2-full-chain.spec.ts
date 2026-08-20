@@ -215,8 +215,12 @@ async function creerVenteEtEncaisser(page: Page): Promise<void> {
         timeout: 20_000,
     });
 
+    // La colonne "Véhicule / Client" de /backoffice/factures affiche le nom du
+    // véhicule (nom_vehicule, cf. ElmV2DemoFleetSeeder), pas son immatriculation —
+    // contrairement aux autres pages de ce parcours (liste véhicules, logistique)
+    // qui affichent l'immatriculation. D'où ce regex distinct, pas VEHICULE_IMMAT.
     const row = page
-        .locator('tbody tr', { hasText: new RegExp(VEHICULE_IMMAT, 'i') })
+        .locator('tbody tr', { hasText: /véhicule v2 demo/i })
         .first();
     await expect(row).toBeVisible({ timeout: 20_000 });
     await row.locator('button').last().click();
@@ -338,11 +342,10 @@ async function payerFicheEtVerifierSolde(page: Page): Promise<void> {
     // formulaire de paiement disparaît une fois can_pay redevenu false.
     await expect(paiementHeading).toBeHidden({ timeout: 20_000 });
 
-    // Reste à payer = 0 — le résumé de la fiche l'affiche explicitement.
-    await expect(page.getByText(/reste à payer/i)).toBeVisible({
-        timeout: 10_000,
-    });
-    await expect(page.getByText(/^0\s*GNF$/i).first()).toBeVisible({
+    // Reste à payer = 0 — le résumé de la fiche l'affiche explicitement, dans un
+    // seul span "Reste : {montant}" (cf. Fiches/Show.vue), pas "reste à payer" et
+    // pas un span isolé à "0 GNF" (le libellé fait partie du même nœud de texte).
+    await expect(page.getByText(/reste\s*:\s*0\s*GNF/i)).toBeVisible({
         timeout: 10_000,
     });
 }
