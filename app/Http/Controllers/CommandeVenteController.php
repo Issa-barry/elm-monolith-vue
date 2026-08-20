@@ -22,6 +22,7 @@ use App\Models\Vehicule;
 use App\Services\AuditLogService;
 use App\Services\CommandeVenteActiviteService;
 use App\Services\CommandeVenteService;
+use App\Services\Commission\MoteurCommissionResolver;
 use App\Services\PrixUsineResolver;
 use App\Services\SolvabiliteService;
 use App\Services\VehiculeCapaciteService;
@@ -373,7 +374,7 @@ class CommandeVenteController extends Controller
         $this->authorize('view', $vente);
 
         $commande = $vente;
-        $commande->load(['vehicule.proprietaire', 'vehicule.typeVehicule', 'vehicule.equipe.livreurs', 'client', 'site', 'lignes.variante.produit', 'createdBy', 'facture.encaissements.creator', 'commissions', 'activites.user']);
+        $commande->load(['vehicule.proprietaire', 'vehicule.typeVehicule', 'vehicule.equipe.livreurs', 'client', 'site', 'lignes.variante.produit', 'createdBy', 'facture.encaissements.creator', 'commissions', 'commissionsV2', 'activites.user']);
 
         $commande->cloturerSiComplete();
         $commande->refresh();
@@ -722,7 +723,9 @@ class CommandeVenteController extends Controller
 
     private function getCommissionStatutGlobal(CommandeVente $commande): ?array
     {
-        $commissions = $commande->commissions;
+        $commissions = MoteurCommissionResolver::estV2($commande->organization_id)
+            ? $commande->commissionsV2
+            : $commande->commissions;
         if ($commissions->isEmpty()) {
             return null;
         }

@@ -422,16 +422,76 @@ test('vente client sous le seuil autorisée, la même dette dépassant un seuil 
 // ce scénario ne vérifie que le parcours utilisateur réel dans /backoffice/ventes/create.
 
 /**
- * Sélectionne le premier véhicule actif disponible (même mécanique que
- * facture-flow.spec.ts::selectFirstVehicule() : ouvre le dropdown via son bouton dédié plutôt
- * que de taper dans le champ — jamais de véhicule créé spécialement pour ce test, un véhicule
- * fraîchement créé reste `is_active=false` tant qu'aucune équipe ne lui est assignée
- * (VehiculeController::store(), hors périmètre de cette règle métier), et n'apparaîtrait donc
- * jamais dans cette liste). L'ordre (alphabétique sur nom_vehicule, cf.
- * CommandeVenteController::vehiculesActifs()) est stable d'un chargement à l'autre : rouvrir le
- * formulaire et re-sélectionner "le premier" pointe donc bien vers le même véhicule.
+ * Un véhicule fraîchement créé reste `is_active=false` tant qu'aucune équipe ne lui est
+ * assignée (VehiculeController::store() ; l'activation est un effet de bord de
+ * EquipeLivraisonController::store(), cf. code source) — sans quoi il n'apparaîtrait jamais
+ * dans la liste des véhicules actifs du formulaire de vente. Réutiliser un véhicule EXISTANT du
+ * seed (« le premier de la liste ») a été essayé puis abandonné : l'environnement E2E est
+ * partagé avec de nombreuses autres specs (achats, packing, produits, commissions…) qui créent
+ * elles aussi des commandes sur des véhicules arbitraires, rendant le point de départ du test
+ * imprévisible en CI. On crée donc un véhicule dédié PUIS on lui assigne l'équipe minimale
+ * (1 chauffeur, commission 100 % à son nom — seule l'activation du véhicule nous intéresse ici,
+ * pas la répartition elle-même) via le même flux UI qu'un administrateur suivrait réellement.
  */
-async function selectFirstVehiculeOnVenteForm(page: Page): Promise<void> {
+async function activerVehiculeAvecEquipeMinimale(page: Page): Promise<void> {
+    await page
+        .locator('aside button')
+        .filter({ hasText: /equipe/i })
+        .click();
+
+    const gererBtn = page.getByRole('button', { name: /gérer l'équipe/i }).first();
+    await expect(gererBtn).toBeVisible({ timeout: 10_000 });
+    await gererBtn.click();
+
+    const dialog = page.locator('[role="dialog"]').filter({ hasText: /équipe/i });
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+
+    // Étape 1 (Membres) : un chauffeur, téléphone unique.
+    await selectOptionFromCombobox(
+        page,
+        dialog.locator('[data-testid="role-dropdown-0"]'),
+        /^chauffeur$/i,
+    );
+    const telInput = dialog.locator('[data-testid="telephone-0"]');
+    await telInput.click();
+    await telInput.pressSequentially(randomDigits(9), { delay: 20 });
+    await dialog.getByRole('button', { name: /suivant/i }).click();
+
+    // Étape 2 (Partage, legacy) : commission entièrement affectée au chauffeur — un éventuel
+    // propriétaire par défaut se voit auto-complété à 0 par recomputeAutoFill() (cf.
+    // EquipeStepperModal.vue), le total reste donc toujours égal à la commission saisie.
+    const commissionInput = dialog.locator('#step-commission');
+    await commissionInput.click();
+    await commissionInput.pressSequentially('1000', { delay: 20 });
+    await commissionInput.blur();
+
+    const montantChauffeur = dialog
+        .locator('table tbody tr', { hasText: /chauffeur/i })
+        .locator('input')
+        .first();
+    await montantChauffeur.click();
+    await montantChauffeur.pressSequentially('1000', { delay: 20 });
+    await montantChauffeur.blur();
+
+    const suivantEtape2 = dialog.getByRole('button', { name: /suivant/i });
+    await expect(suivantEtape2).toBeEnabled({ timeout: 5_000 });
+    await suivantEtape2.click();
+
+    // Étape 3 (Récapitulatif) : enregistrer.
+    await dialog.getByRole('button', { name: /enregistrer l'équipe/i }).click();
+    await expect(dialog).toBeHidden({ timeout: 15_000 });
+}
+
+/**
+ * Ouvre le dropdown véhicule du formulaire de vente et sélectionne l'option dont le texte
+ * contient `nomVehicule` — jamais en tapant dans le champ (fill() comme pressSequentially()
+ * tronquent de façon reproductible le texte réellement saisi sur cet environnement, cf. analyse
+ * du 20/08/2026 ; même contournement que facture-flow.spec.ts::selectFirstVehicule()).
+ */
+async function selectVehiculeOnVenteForm(
+    page: Page,
+    nomVehicule: string,
+): Promise<void> {
     const vehiculeAutocomplete = page
         .locator('#vente-form .p-autocomplete')
         .first();
@@ -441,8 +501,12 @@ async function selectFirstVehiculeOnVenteForm(page: Page): Promise<void> {
         .first()
         .click({ timeout: 5_000 });
 
-    const firstOption = page.locator('[role="option"]:visible').first();
-    await expect(firstOption).toBeVisible({ timeout: 10_000 });
+    // hasText en chaîne (jamais une regex ici) : Playwright normalise déjà la casse/les
+    // espaces, insensible à la capitalisation appliquée par le backend au nom du véhicule.
+    const option = page
+        .locator('[role="option"]:visible', { hasText: nomVehicule })
+        .first();
+    await expect(option).toBeVisible({ timeout: 10_000 });
 
     const solvabiliteResponse = page.waitForResponse(
         (res) =>
@@ -450,7 +514,7 @@ async function selectFirstVehiculeOnVenteForm(page: Page): Promise<void> {
             res.url().includes('vehicule_id='),
         { timeout: 15_000 },
     );
-    await firstOption.click();
+    await option.click();
     await solvabiliteResponse;
 }
 
@@ -458,43 +522,40 @@ test('un véhicule dont la commande précédente na reçu aucun paiement bloque 
     page,
 }) => {
     await login(page);
+    const unique = `${Date.now()}-${randomDigits(3)}`;
+    const nomVehicule = `${PREFIX} PremiereRegul ${unique}`;
 
+    await createVehiculeInApp(
+        page,
+        nomVehicule,
+        `E2EIMP-C-${unique.slice(-5)}`,
+    );
+    await activerVehiculeAvecEquipeMinimale(page);
+
+    // ── 1. Première commande : passe en A_CHARGER, facture créée sans encaissement ──
     await page.goto('/backoffice/ventes/create');
     await expect(page).toHaveURL(/\/ventes\/create$/, { timeout: 20_000 });
-    await selectFirstVehiculeOnVenteForm(page);
+    await selectVehiculeOnVenteForm(page, nomVehicule);
 
-    // L'environnement E2E est partagé entre scénarios : si ce véhicule porte déjà une facture
-    // non encaissée (laissée par une exécution précédente de CE test, DB non réinitialisée
-    // entre deux lancements manuels), le blocage est déjà visible — inutile de créer une
-    // première commande, on passe directement à la vérification.
-    const dejaBloque = await page
-        .getByText(/première facture non réglée/i)
-        .isVisible()
-        .catch(() => false);
+    const submit1 = page
+        .locator('#vente-form button[type="submit"]:visible')
+        .first();
+    await expect(submit1).toBeEnabled({ timeout: 10_000 });
+    await submit1.click();
 
-    if (!dejaBloque) {
-        // ── 1. Première commande : passe en A_CHARGER, facture créée sans encaissement ──
-        const submit1 = page
-            .locator('#vente-form button[type="submit"]:visible')
-            .first();
-        await expect(submit1).toBeEnabled({ timeout: 10_000 });
-        await submit1.click();
+    const confirmerEtCreerBtn = page.getByRole('button', {
+        name: /confirmer et créer/i,
+    });
+    await expect(confirmerEtCreerBtn).toBeVisible({ timeout: 10_000 });
+    await confirmerEtCreerBtn.click();
+    await expect(page).toHaveURL(/\/ventes\/(?!create)[a-z0-9]+$/, {
+        timeout: 30_000,
+    });
 
-        const confirmerEtCreerBtn = page.getByRole('button', {
-            name: /confirmer et créer/i,
-        });
-        await expect(confirmerEtCreerBtn).toBeVisible({ timeout: 10_000 });
-        await confirmerEtCreerBtn.click();
-        await expect(page).toHaveURL(/\/ventes\/(?!create)[a-z0-9]+$/, {
-            timeout: 30_000,
-        });
-
-        // ── 2. Deuxième commande pour le MÊME véhicule (toujours le premier de la liste,
-        // ordre stable) : doit être bloquée ─────────────────────────────────────────────
-        await page.goto('/backoffice/ventes/create');
-        await expect(page).toHaveURL(/\/ventes\/create$/, { timeout: 20_000 });
-        await selectFirstVehiculeOnVenteForm(page);
-    }
+    // ── 2. Deuxième commande pour le MÊME véhicule : doit être bloquée ──────────────
+    await page.goto('/backoffice/ventes/create');
+    await expect(page).toHaveURL(/\/ventes\/create$/, { timeout: 20_000 });
+    await selectVehiculeOnVenteForm(page, nomVehicule);
 
     await expect(page.getByText(/première facture non réglée/i)).toBeVisible({
         timeout: 10_000,
