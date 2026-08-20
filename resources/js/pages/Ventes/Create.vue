@@ -755,8 +755,8 @@ function confirmerEtCreer() {
                                     <p
                                         class="text-xs font-bold tracking-wide text-red-800 uppercase dark:text-red-300"
                                     >
-                                        Commande bloquée — première facture
-                                        non réglée
+                                        Commande bloquée — première facture non
+                                        réglée
                                     </p>
                                     <button
                                         type="button"
@@ -788,8 +788,11 @@ function confirmerEtCreer() {
                                         Voir les factures
                                     </button>
                                 </div>
-                                <p class="text-sm text-red-900 dark:text-red-200">
-                                    Ce véhicule possède déjà une commande<template
+                                <p
+                                    class="text-sm text-red-900 dark:text-red-200"
+                                >
+                                    Ce véhicule possède déjà une
+                                    commande<template
                                         v-if="
                                             vehiculeSolvabilite.facture_bloquante_reference
                                         "

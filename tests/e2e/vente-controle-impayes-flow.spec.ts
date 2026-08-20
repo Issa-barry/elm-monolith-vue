@@ -421,31 +421,28 @@ test('vente client sous le seuil autorisée, la même dette dépassant un seuil 
 // tests/Unit/SolvabiliteServiceTest.php et tests/Feature/VehiculePremiereRegularisationTest.php ;
 // ce scénario ne vérifie que le parcours utilisateur réel dans /backoffice/ventes/create.
 
-async function selectVehiculeOnVenteForm(
-    page: Page,
-    nomVehicule: string,
-): Promise<void> {
+/**
+ * Sélectionne le premier véhicule actif disponible (même mécanique que
+ * facture-flow.spec.ts::selectFirstVehicule() : ouvre le dropdown via son bouton dédié plutôt
+ * que de taper dans le champ — jamais de véhicule créé spécialement pour ce test, un véhicule
+ * fraîchement créé reste `is_active=false` tant qu'aucune équipe ne lui est assignée
+ * (VehiculeController::store(), hors périmètre de cette règle métier), et n'apparaîtrait donc
+ * jamais dans cette liste). L'ordre (alphabétique sur nom_vehicule, cf.
+ * CommandeVenteController::vehiculesActifs()) est stable d'un chargement à l'autre : rouvrir le
+ * formulaire et re-sélectionner "le premier" pointe donc bien vers le même véhicule.
+ */
+async function selectFirstVehiculeOnVenteForm(page: Page): Promise<void> {
     const vehiculeAutocomplete = page
         .locator('#vente-form .p-autocomplete')
         .first();
     await expect(vehiculeAutocomplete).toBeVisible({ timeout: 15_000 });
+    await vehiculeAutocomplete
+        .locator('button')
+        .first()
+        .click({ timeout: 5_000 });
 
-    // pressSequentially() plutôt que fill() : la liste des véhicules (props.vehicules, filtrée
-    // en mémoire à chaque frappe par searchVehicule()) est potentiellement volumineuse sur cet
-    // environnement E2E seedé (ElmV2DemoSeeder) — un fill() synchrone course avec le re-rendu
-    // Vue déclenché par chaque keystroke et peut tronquer le texte réellement saisi (observé :
-    // "e2eimpayes ..." rendu "yes ..." dans le champ). Même principe que pour les InputNumber
-    // PrimeVue ailleurs dans la suite E2E (cf. createTypeVehiculeInApp ci-dessus).
-    const input = vehiculeAutocomplete.locator('input');
-    await input.click();
-    await input.fill('');
-    await input.pressSequentially(nomVehicule, { delay: 20 });
-    await expect(input).toHaveValue(nomVehicule, { timeout: 5_000 });
-
-    const option = page
-        .locator('[role="option"]:visible', { hasText: nomVehicule })
-        .first();
-    await expect(option).toBeVisible({ timeout: 10_000 });
+    const firstOption = page.locator('[role="option"]:visible').first();
+    await expect(firstOption).toBeVisible({ timeout: 10_000 });
 
     const solvabiliteResponse = page.waitForResponse(
         (res) =>
@@ -453,7 +450,7 @@ async function selectVehiculeOnVenteForm(
             res.url().includes('vehicule_id='),
         { timeout: 15_000 },
     );
-    await option.click();
+    await firstOption.click();
     await solvabiliteResponse;
 }
 
@@ -461,46 +458,47 @@ test('un véhicule dont la commande précédente na reçu aucun paiement bloque 
     page,
 }) => {
     await login(page);
-    const unique = `${Date.now()}-${randomDigits(3)}`;
-    const nomVehicule = `${PREFIX} PremiereRegul ${unique}`;
 
-    // Véhicule dédié à ce test (jamais le "premier véhicule" partagé d'autres specs) — sans
-    // quoi la commande précédente pourrait déjà appartenir à un autre scénario en cours.
-    await createVehiculeInApp(
-        page,
-        nomVehicule,
-        `E2EIMP-C-${unique.slice(-5)}`,
-    );
-
-    // ── 1. Première commande : passe en A_CHARGER, facture créée sans encaissement ──
     await page.goto('/backoffice/ventes/create');
     await expect(page).toHaveURL(/\/ventes\/create$/, { timeout: 20_000 });
-    await selectVehiculeOnVenteForm(page, nomVehicule);
+    await selectFirstVehiculeOnVenteForm(page);
 
-    const submit1 = page
-        .locator('#vente-form button[type="submit"]:visible')
-        .first();
-    await expect(submit1).toBeEnabled({ timeout: 10_000 });
-    await submit1.click();
+    // L'environnement E2E est partagé entre scénarios : si ce véhicule porte déjà une facture
+    // non encaissée (laissée par une exécution précédente de CE test, DB non réinitialisée
+    // entre deux lancements manuels), le blocage est déjà visible — inutile de créer une
+    // première commande, on passe directement à la vérification.
+    const dejaBloque = await page
+        .getByText(/première facture non réglée/i)
+        .isVisible()
+        .catch(() => false);
 
-    const confirmerEtCreerBtn = page.getByRole('button', {
-        name: /confirmer et créer/i,
+    if (!dejaBloque) {
+        // ── 1. Première commande : passe en A_CHARGER, facture créée sans encaissement ──
+        const submit1 = page
+            .locator('#vente-form button[type="submit"]:visible')
+            .first();
+        await expect(submit1).toBeEnabled({ timeout: 10_000 });
+        await submit1.click();
+
+        const confirmerEtCreerBtn = page.getByRole('button', {
+            name: /confirmer et créer/i,
+        });
+        await expect(confirmerEtCreerBtn).toBeVisible({ timeout: 10_000 });
+        await confirmerEtCreerBtn.click();
+        await expect(page).toHaveURL(/\/ventes\/(?!create)[a-z0-9]+$/, {
+            timeout: 30_000,
+        });
+
+        // ── 2. Deuxième commande pour le MÊME véhicule (toujours le premier de la liste,
+        // ordre stable) : doit être bloquée ─────────────────────────────────────────────
+        await page.goto('/backoffice/ventes/create');
+        await expect(page).toHaveURL(/\/ventes\/create$/, { timeout: 20_000 });
+        await selectFirstVehiculeOnVenteForm(page);
+    }
+
+    await expect(page.getByText(/première facture non réglée/i)).toBeVisible({
+        timeout: 10_000,
     });
-    await expect(confirmerEtCreerBtn).toBeVisible({ timeout: 10_000 });
-    await confirmerEtCreerBtn.click();
-    await expect(page).toHaveURL(/\/ventes\/(?!create)[a-z0-9]+$/, {
-        timeout: 30_000,
-    });
-
-    // ── 2. Deuxième commande pour le MÊME véhicule : doit être bloquée ──────────────
-    await page.goto('/backoffice/ventes/create');
-    await expect(page).toHaveURL(/\/ventes\/create$/, { timeout: 20_000 });
-    await selectVehiculeOnVenteForm(page, nomVehicule);
-
-    await expect(page.locator('body')).toContainText(
-        /première facture non réglée/i,
-        { timeout: 10_000 },
-    );
     await expect(page.locator('body')).toContainText(/aucun paiement/i, {
         timeout: 10_000,
     });
