@@ -238,9 +238,7 @@ function confirmDelete(e: Employe) {
                                             >·</span
                                         >
                                         <span v-if="data.telephone">{{
-                                            formatPhoneDisplay(
-                                                data.telephone,
-                                            )
+                                            formatPhoneDisplay(data.telephone)
                                         }}</span>
                                     </div>
                                 </div>

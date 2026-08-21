@@ -3,7 +3,6 @@ import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
-import ValidateAccountModal from '@/components/users/ValidateAccountModal.vue';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -12,6 +11,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import ValidateAccountModal from '@/components/users/ValidateAccountModal.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';

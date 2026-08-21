@@ -316,9 +316,9 @@ function deleteContrat(c: ContratRow) {
                                     class="w-full"
                                 />
                                 <p class="mt-1 text-xs text-muted-foreground">
-                                    Changer le site ferme l'affectation
-                                    actuelle et en ouvre une nouvelle
-                                    (historique conservé).
+                                    Changer le site ferme l'affectation actuelle
+                                    et en ouvre une nouvelle (historique
+                                    conservé).
                                 </p>
                             </div>
                             <div>

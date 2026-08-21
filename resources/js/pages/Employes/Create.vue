@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import FonctionRhSelect from '@/components/rh/FonctionRhSelect.vue';
 import PhoneCountryInput from '@/components/PhoneCountryInput.vue';
+import FonctionRhSelect from '@/components/rh/FonctionRhSelect.vue';
 import { Button } from '@/components/ui/button';
 import { useFlashToast } from '@/composables/useFlashToast';
 import AppLayout from '@/layouts/AppLayout.vue';
