@@ -474,4 +474,93 @@ class EmployeTest extends TestCase
             'telephone' => '+224622222222',
         ]);
     }
+
+    // ── show ──────────────────────────────────────────────────────────────────
+
+    public function test_show_returns_200_and_exposes_the_expected_fields(): void
+    {
+        $employe = $this->makeEmploye();
+
+        $response = $this->actingAs($this->user)->get(route('employes.show', $employe));
+
+        $response->assertOk();
+        $response->assertInertia(fn ($page) => $page
+            ->component('Employes/Show')
+            ->where('employe.id', $employe->id)
+            ->where('employe.nom_complet', $employe->nom_complet)
+            ->where('employe.compte', null)
+        );
+    }
+
+    public function test_show_returns_403_for_an_employe_from_another_organization(): void
+    {
+        $autreOrg = Organization::factory()->create();
+        $employe = $this->makeEmploye(['organization_id' => $autreOrg->id]);
+
+        $this->actingAs($this->user)->get(route('employes.show', $employe))->assertForbidden();
+    }
+
+    public function test_show_returns_403_without_rh_employes_read_permission(): void
+    {
+        $employe = $this->makeEmploye();
+        $sansPermission = User::factory()->create(['organization_id' => $this->org->id]);
+        $sansPermission->assignRole('admin_entreprise');
+        $sansPermission->sites()->attach($this->site->id, ['role' => 'employe', 'is_default' => true]);
+
+        $this->actingAs($sansPermission)->get(route('employes.show', $employe))->assertForbidden();
+    }
+
+    /**
+     * Aucun compte utilisateur rattaché — l'employé RH existe indépendamment de tout compte
+     * applicatif (cf. mission « jamais un compte utilisateur requis »).
+     */
+    public function test_show_indicates_no_account_when_employe_has_none(): void
+    {
+        $employe = $this->makeEmploye();
+
+        $response = $this->actingAs($this->user)->get(route('employes.show', $employe));
+
+        $response->assertInertia(fn ($page) => $page->where('employe.compte', null));
+    }
+
+    /**
+     * Compte et profil d'accès (rôle Spatie) exposés SÉPARÉMENT de la fonction RH — jamais la
+     * même notion (cf. mission).
+     */
+    public function test_show_exposes_compte_and_profil_dacces_when_a_user_account_exists(): void
+    {
+        $employe = $this->makeEmploye();
+        Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web'], ['label' => 'Manager']);
+        $compte = User::factory()->create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $employe->personne_id,
+            'is_active' => true,
+        ]);
+        $compte->assignRole('manager');
+
+        $response = $this->actingAs($this->user)->get(route('employes.show', $employe));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('employe.compte.email', $compte->email)
+            ->where('employe.compte.role_label', 'Manager')
+            ->where('employe.compte.statut', 'actif')
+        );
+    }
+
+    /**
+     * La fiche employé n'expose plus aucune donnée de commission : la commission est désormais
+     * attribuée directement au site métier de l'opération, jamais à un employé (décision produit
+     * 2026-08-21) — la clé `commission_gerant_depot` n'existe plus du tout côté payload.
+     */
+    public function test_show_never_exposes_any_commission_data(): void
+    {
+        $employe = $this->makeEmploye();
+
+        $response = $this->actingAs($this->user)->get(route('employes.show', $employe));
+
+        $response->assertInertia(fn ($page) => $page
+            ->component('Employes/Show')
+            ->missing('employe.commission_gerant_depot')
+        );
+    }
 }

@@ -43,7 +43,10 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['employe_id', 'fin_at']);
-            $table->index(['site_id', 'fonction_rh_id', 'debut_at', 'fin_at']);
+            $table->index(
+                ['site_id', 'fonction_rh_id', 'debut_at', 'fin_at'],
+                'emp_aff_site_fonction_dates_idx'
+            );
         });
 
         // Backfill : sans cette étape, aucun employé déjà affecté à un site avant cette migration

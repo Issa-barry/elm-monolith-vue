@@ -23,6 +23,7 @@ use App\Http\Controllers\Comptabilite\BesoinTresorerieController;
 use App\Http\Controllers\Comptabilite\CommissionAjustementController;
 use App\Http\Controllers\Comptabilite\CommissionLogistiqueController as ComptabiliteCommissionLogistiqueController;
 use App\Http\Controllers\Comptabilite\CommissionProprietaireController;
+use App\Http\Controllers\Comptabilite\CommissionSiteController;
 use App\Http\Controllers\Comptabilite\CommissionVenteController as ComptabiliteCommissionVenteController;
 use App\Http\Controllers\Comptabilite\ComptabiliteDashboardController;
 use App\Http\Controllers\Comptabilite\HistoriqueActionsController;
@@ -488,6 +489,14 @@ Route::prefix('backoffice')->group(function () {
                 ->name('commissions.vente.pdf');
             Route::get('commissions/vente/livreurs/{livreurId}', [ComptabiliteCommissionVenteController::class, 'showLivreur'])
                 ->name('commissions.vente.livreur');
+
+            // ── Commission sites ────────────────────────────────────────────────────
+            Route::get('commissions/sites', [CommissionSiteController::class, 'index'])
+                ->name('commissions.sites.index');
+            Route::get('commissions/sites/export/excel', [CommissionSiteController::class, 'exportExcel'])
+                ->name('commissions.sites.excel');
+            Route::get('commissions/sites/export/pdf', [CommissionSiteController::class, 'exportPdf'])
+                ->name('commissions.sites.pdf');
 
             // ── Commission propriétaires ───────────────────────────────────────────
             Route::get('commissions/proprietaires', [CommissionProprietaireController::class, 'index'])

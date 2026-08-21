@@ -141,6 +141,7 @@ function submit() {
                                 id="telephone"
                                 :model-value="form.telephone"
                                 :remember-choice="false"
+                                :required="false"
                                 @update:model-value="form.telephone = $event"
                             />
                             <p
@@ -213,6 +214,12 @@ function submit() {
                                 option-value="value"
                                 class="w-full"
                             />
+                            <p
+                                v-if="form.errors.site_id"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                {{ form.errors.site_id }}
+                            </p>
                         </div>
                         <div>
                             <label class="mb-1.5 block text-sm font-medium"

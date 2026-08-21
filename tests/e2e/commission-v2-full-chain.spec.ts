@@ -1,4 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 import { loginAsElmV2Demo, selectOptionFromCombobox } from './helpers';
 
 /**
@@ -289,7 +290,36 @@ async function verifierCommissionVisible(page: Page): Promise<void> {
     await expect(
         page.getByRole('menuitem', { name: 'Exporter en PDF' }),
     ).toBeVisible();
-    await page.keyboard.press('Escape');
+
+    // La commission est encore « Partage à valider » à cette étape. Les deux
+    // exports doivent néanmoins reprendre la ligne visible, sans attendre la
+    // validation de la période.
+    const [excelDownload] = await Promise.all([
+        page.waitForEvent('download'),
+        page.getByRole('menuitem', { name: 'Exporter en Excel' }).click(),
+    ]);
+    expect(excelDownload.suggestedFilename()).toMatch(
+        /commissions-vente.*\.csv$/,
+    );
+    const excelPath = await excelDownload.path();
+    expect(excelPath).not.toBeNull();
+    const excelContent = await readFile(excelPath!, 'utf8');
+    expect(excelContent).toContain('Chauffeur V2 Demo');
+    expect(excelContent).toContain('Partage à valider');
+
+    await page.getByRole('button', { name: 'Exporter', exact: true }).click();
+    const [pdfDownload] = await Promise.all([
+        page.waitForEvent('download'),
+        page.getByRole('menuitem', { name: 'Exporter en PDF' }).click(),
+    ]);
+    expect(pdfDownload.suggestedFilename()).toMatch(
+        /commissions-vente.*\.pdf$/,
+    );
+    const pdfPath = await pdfDownload.path();
+    expect(pdfPath).not.toBeNull();
+    const pdfContent = await readFile(pdfPath!);
+    expect(pdfContent.subarray(0, 4).toString()).toBe('%PDF');
+    expect(pdfContent.length).toBeGreaterThan(1_000);
 
     await page.getByRole('button', { name: /^Filtres/ }).click();
     await expect(page.getByTestId('filters-drawer')).toBeVisible();

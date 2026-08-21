@@ -21,6 +21,18 @@ export default async function globalSetup(config: FullConfig) {
         fs.mkdirSync(authDir, { recursive: true });
     }
 
+    // Certains parcours autonomes (notamment Commission V2) créent leurs
+    // propres données et se connectent dans leur beforeEach. Cette option
+    // permet de les exécuter isolément sans dépendre du préchargement Legacy.
+    if (process.env.E2E_SKIP_GLOBAL_SETUP === '1') {
+        fs.writeFileSync(
+            path.join(authDir, 'user.json'),
+            JSON.stringify({ cookies: [], origins: [] }),
+        );
+
+        return;
+    }
+
     const browser = await chromium.launch();
     const context = await browser.newContext({ baseURL });
     const page = await context.newPage();

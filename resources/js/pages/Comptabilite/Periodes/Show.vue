@@ -171,6 +171,8 @@ const voirCommissionsUrl = computed(() => {
             return `/backoffice/comptabilite/commission-proprietaire?date_debut=${d}&date_fin=${f}`;
         case 'salarie':
             return `/backoffice/comptabilite/salaires`;
+        case 'site':
+            return `/backoffice/comptabilite/commissions/sites`;
         default:
             return '/backoffice/comptabilite';
     }

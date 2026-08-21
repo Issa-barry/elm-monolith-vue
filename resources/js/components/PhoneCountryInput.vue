@@ -64,6 +64,13 @@ const props = withDefaults(
          * un formulaire administratif où le défaut doit rester déterministe (toujours le premier
          * pays de la liste, ex: Guinée) quel que soit le pays de connexion de l'opérateur. */
         rememberChoice?: boolean;
+        /** true par défaut (Login.vue/Wizard.vue : le téléphone est toujours obligatoire là où
+         * ce composant a été introduit). À mettre à `false` explicitement pour un formulaire où
+         * le téléphone reste facultatif (ex: Employes/Create.vue) — sans quoi l'attribut HTML
+         * `required` bloque silencieusement la soumission native du formulaire quand le champ
+         * est laissé vide : aucune requête n'est envoyée, aucune erreur JS, le bouton "submit"
+         * semble simplement ne rien faire. */
+        required?: boolean;
     }>(),
     {
         modelValue: '',
@@ -77,6 +84,7 @@ const props = withDefaults(
         // paysOptions ci-dessous retombe déjà sur DEFAULT_PAYS quand countries est absent/vide.
         countries: undefined,
         rememberChoice: true,
+        required: true,
     },
 );
 
@@ -250,7 +258,7 @@ defineExpose({ phoneIsValid, phoneClientError });
                 autocomplete="tel-national"
                 inputmode="numeric"
                 :autofocus="autofocus"
-                required
+                :required="required"
                 :maxlength="
                     phoneDigits.startsWith('0')
                         ? selectedPays.localLength + 1
