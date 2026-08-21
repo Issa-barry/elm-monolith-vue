@@ -39,6 +39,7 @@ use App\Http\Controllers\EmployeController;
 use App\Http\Controllers\EncaissementVenteController;
 use App\Http\Controllers\EquipeLivraisonController;
 use App\Http\Controllers\FactureVenteController;
+use App\Http\Controllers\FonctionRhController;
 use App\Http\Controllers\FournisseurController;
 use App\Http\Controllers\ImportProduitsController;
 use App\Http\Controllers\InstallWizardController;
@@ -169,10 +170,10 @@ Route::middleware(['auth', 'account.active'])->prefix('onboarding')->name('onboa
 // ── Espace staff (back-office) ──────────────────────────────────────────────
 Route::prefix('backoffice')->group(function () {
     Route::get('dashboard', [DashboardController::class, 'index'])
-        ->middleware(['auth', 'account.active', 'password.not-expired', 'verified', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'org.site.required', 'require.site'])
+        ->middleware(['auth', 'account.active', 'password.not-expired', 'verified', 'staff', 'org.site.required', 'require.site'])
         ->name('dashboard');
 
-    Route::middleware(['auth', 'account.active', 'password.not-expired', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'org.site.required', 'require.site'])->group(function () {
+    Route::middleware(['auth', 'account.active', 'password.not-expired', 'staff', 'org.site.required', 'require.site'])->group(function () {
 
         // Messages de contact
         Route::get('contact-messages/unread-count', [ContactController::class, 'unreadCount'])->name('contact-messages.unread-count');
@@ -415,6 +416,21 @@ Route::prefix('backoffice')->group(function () {
         // ── Module : RH (Ressources humaines) ────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::RH)->group(function () {
             Route::resource('employes', EmployeController::class);
+            Route::patch('employes/{employe}/transferer-site', [EmployeController::class, 'transfererSite'])
+                ->name('employes.transferer-site');
+            // Pas de create()/edit() : la création/modification se fait exclusivement en popup
+            // (écran Fonctions RH ou sélecteur embarqué Employé/validation de compte), mirroring
+            // CategorieController — jamais de navigation vers une page dédiée.
+            // ->parameters(...) : Laravel générerait {fonctions_rh} (pluriel) par défaut pour ce
+            // nom de ressource composé — ne correspond pas au paramètre {fonction_rh} (singulier)
+            // attendu par FonctionRhController (et déjà utilisé par la route toggle ci-dessous),
+            // ce qui ferait échouer silencieusement le binding implicite (modèle vide injecté,
+            // jamais une 404/500 franche) sur update().
+            Route::resource('fonctions-rh', FonctionRhController::class)
+                ->parameters(['fonctions-rh' => 'fonction_rh'])
+                ->only(['index', 'store', 'update']);
+            Route::patch('fonctions-rh/{fonction_rh}/toggle', [FonctionRhController::class, 'toggle'])
+                ->name('fonctions-rh.toggle');
             Route::resource('contrats', ContratController::class)->except(['show']);
 
             // Paie (legacy — lecture seule, gestion déplacée dans Comptabilité > Salaires)

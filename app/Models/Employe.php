@@ -25,6 +25,7 @@ class Employe extends Model
         'matricule',
         'type_employe',
         'site_id',
+        'fonction_rh_id',
         'statut',
     ];
 
@@ -75,9 +76,30 @@ class Employe extends Model
         return $this->belongsTo(Personne::class);
     }
 
+    /**
+     * Cache dénormalisé "site actuel" — maintenu par EmployeAffectationService à chaque
+     * affectation. La source de vérité (avec historique) reste employe_affectations, cf.
+     * affectationActive()/affectations().
+     */
     public function site(): BelongsTo
     {
         return $this->belongsTo(Site::class);
+    }
+
+    /** Cache dénormalisé "fonction actuelle" — même remarque que site(). */
+    public function fonction(): BelongsTo
+    {
+        return $this->belongsTo(FonctionRh::class, 'fonction_rh_id');
+    }
+
+    public function affectations(): HasMany
+    {
+        return $this->hasMany(EmployeAffectation::class)->orderByDesc('debut_at');
+    }
+
+    public function affectationActive(): HasOne
+    {
+        return $this->hasOne(EmployeAffectation::class)->whereNull('fin_at');
     }
 
     public function contrats(): HasMany

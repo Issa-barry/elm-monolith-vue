@@ -3,17 +3,19 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AuditEvent;
-use App\Mail\AccountValidatedMail;
+use App\Enums\StatutEmploye;
+use App\Enums\TypeEmploye;
+use App\Models\FonctionRh;
 use App\Models\Personne;
 use App\Models\Site;
 use App\Models\User;
 use App\Models\UserAuthIdentity;
 use App\Services\AuditLogService;
 use App\Services\MatriculeService;
+use App\Services\Rh\AccountValidationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
@@ -61,6 +63,23 @@ class UserController extends Controller
             ->orderBy('nom')
             ->get(['id', 'nom', 'code'])
             ->map(fn ($s) => ['value' => $s->id, 'label' => "{$s->nom} ({$s->code})"]);
+    }
+
+    /**
+     * Profils d'accès proposables à la VALIDATION de compte (écran distinct de Users/Create-Edit,
+     * qui reste sur STAFF_ROLES ci-dessus, hors périmètre) — tous les rôles visibles de
+     * l'organisation (système ∪ org, même règle que RoleController::visibleRoles()), jamais ceux
+     * d'une autre organisation. `super_admin` n'apparaît que si l'acteur l'est déjà lui-même
+     * (jamais un mapping automatique, jamais une élévation de privilège via cet écran).
+     */
+    private function validationRoleOptions(?string $orgId, bool $actorIsSuperAdmin): Collection
+    {
+        return Role::where(fn ($q) => $q->whereNull('organization_id')->orWhere('organization_id', $orgId))
+            ->when(! $actorIsSuperAdmin, fn ($q) => $q->where('name', '!=', 'super_admin'))
+            ->orderBy('label')
+            ->get(['id', 'label', 'name'])
+            ->map(fn (Role $r) => ['value' => $r->id, 'label' => $r->label ?? $r->name])
+            ->values();
     }
 
     private function resolvePays(?string $codePays): array
@@ -197,6 +216,25 @@ class UserController extends Controller
         return Inertia::render('Users/Index', [
             'users' => $users,
             'pending_registrations' => $pendingRegistrations,
+            // Options du modal de validation de compte (ValidateAccountModal.vue) — cf.
+            // AccountValidationService. Vides si l'organisation n'a pas encore de site/fonction ;
+            // le front affiche alors un état invitant à en créer un avant de pouvoir valider un
+            // membre du personnel.
+            'validation_role_options' => $orgId ? $this->validationRoleOptions($orgId, $authUser->isSuperAdmin()) : [],
+            'validation_site_options' => $orgId ? $this->getSiteOptions($orgId) : [],
+            'validation_fonction_options' => $orgId
+                ? FonctionRh::where('organization_id', $orgId)->where('is_active', true)->orderBy('libelle')
+                    ->get(['id', 'libelle'])->map(fn (FonctionRh $f) => ['value' => $f->id, 'label' => $f->libelle])
+                : [],
+            'type_employe_options' => TypeEmploye::options(),
+            'statut_employe_options' => StatutEmploye::options(),
+            // Remplace les dictionnaires ROLE_LABELS figés côté Vue : un rôle personnalisé
+            // d'organisation (créé via RoleController) a désormais un label lisible dans la
+            // colonne "Rôle" de cette liste, pas seulement les 5 rôles historiques.
+            'role_labels' => $orgId
+                ? Role::where(fn ($q) => $q->whereNull('organization_id')->orWhere('organization_id', $orgId))
+                    ->pluck('label', 'name')
+                : [],
         ]);
     }
 
@@ -223,6 +261,21 @@ class UserController extends Controller
             $localDigits = preg_replace('/\D+/', '', $local) ?? '';
             $localDigits = preg_replace('/^0/', '', $localDigits);
             $request->merge(['telephone' => '+'.$dialDigits.$localDigits]);
+        }
+    }
+
+    /**
+     * Élévation de privilège corrigée le 2026-08-21 : `role` n'était validé que contre
+     * STAFF_ROLES (qui inclut `super_admin`), sans jamais vérifier que l'ACTEUR l'est lui-même —
+     * n'importe quel utilisateur autorisé à modifier des comptes pouvait donc s'attribuer ou
+     * attribuer `super_admin` à un tiers. `admin_entreprise` reste attribuable par tout
+     * `admin_entreprise` (cohérent avec RoleController::canManageRoles()) — seul `super_admin`
+     * est concerné, mirroring exact de la garde AccountValidationService::resoudreRole().
+     */
+    private function assertNoPrivilegeEscalation(string $role): void
+    {
+        if ($role === 'super_admin' && ! auth()->user()->isSuperAdmin()) {
+            abort(403, 'Seul un super_admin peut attribuer ce rôle.');
         }
     }
 
@@ -278,6 +331,7 @@ class UserController extends Controller
         ]);
 
         $this->assertIdentityUnique($data['telephone'], $data['email'] ?? null);
+        $this->assertNoPrivilegeEscalation($data['role']);
 
         $personneFields = $this->buildPersonneFields($data);
         $personne = Personne::resoudreOuCreer($orgId, $personneFields);
@@ -358,6 +412,7 @@ class UserController extends Controller
         ]);
 
         $this->assertIdentityUnique($data['telephone'], $data['email'] ?? null, $user->id);
+        $this->assertNoPrivilegeEscalation($data['role']);
 
         // Un rôle admin ne peut être attribué qu'à un compte déjà validé : un compte
         // en attente doit d'abord être validé avant toute élévation de privilèges.
@@ -395,24 +450,35 @@ class UserController extends Controller
 
     /**
      * PATCH /users/{user}/validate
-     * Valide un compte en attente : il devient actif et peut se connecter.
+     * Valide un compte en attente : choix du profil d'accès, du site, et — pour un membre du
+     * personnel — de la fonction RH (avec création ou rattachement de la fiche Employe). Toute la
+     * logique transactionnelle vit dans AccountValidationService (cf. plan "fonctions RH/profils
+     * d'accès/sites") — ce contrôleur ne fait que valider la requête et déléguer.
      */
-    public function validateAccount(User $user, AuditLogService $auditLog): RedirectResponse
+    public function validateAccount(Request $request, User $user, AccountValidationService $service): RedirectResponse
     {
         $this->authorize('update', $user);
 
-        abort_unless($user->isPendingValidation(), 422, "Ce compte n'est pas en attente de validation.");
+        $isStaff = $request->boolean('is_staff_avec_fiche_employe');
 
-        $user->update([
-            'status' => User::STATUS_ACTIVE,
-            'is_active' => true,
+        // role_id/site_id restent optionnels : ValidateAccountModal.vue les envoie toujours,
+        // mais un appel sans corps (comportement historique, cf. AccountValidationTest) doit
+        // continuer à fonctionner — AccountValidationService retombe alors sur le rôle/site déjà
+        // posés sur le compte par UserInvitationService::accept().
+        $data = $request->validate([
+            'is_staff_avec_fiche_employe' => 'boolean',
+            'role_id' => 'nullable|integer|exists:roles,id',
+            'site_id' => 'nullable|string|exists:sites,id',
+            'fonction_rh_id' => [$isStaff ? 'required' : 'nullable', 'string', 'exists:fonctions_rh,id'],
+            'type_employe' => [$isStaff ? 'required' : 'nullable', Rule::in(TypeEmploye::values())],
+            'statut' => [$isStaff ? 'required' : 'nullable', Rule::in(StatutEmploye::values())],
+        ], [
+            'fonction_rh_id.required' => 'La fonction RH est obligatoire pour un membre du personnel.',
+            'type_employe.required' => 'Le type d\'employé est obligatoire pour un membre du personnel.',
+            'statut.required' => 'Le statut est obligatoire pour un membre du personnel.',
         ]);
 
-        $auditLog->record($user, AuditEvent::VALIDATED, auth()->user());
-
-        if ($user->email) {
-            Mail::to($user->email)->send(new AccountValidatedMail($user));
-        }
+        $service->valider($user, $data, auth()->user());
 
         // Retourne vers la page d'origine (liste des utilisateurs ou onglet
         // "Membres" d'un site) plutôt qu'une destination fixe.

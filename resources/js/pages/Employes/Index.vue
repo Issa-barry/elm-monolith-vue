@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
@@ -228,6 +229,15 @@ function confirmDelete(e: Employe) {
                                     </div>
                                     <div class="text-xs text-muted-foreground">
                                         {{ data.email }}
+                                        <span
+                                            v-if="data.email && data.telephone"
+                                            >·</span
+                                        >
+                                        <span v-if="data.telephone">{{
+                                            formatPhoneDisplay(
+                                                data.telephone,
+                                            )
+                                        }}</span>
                                     </div>
                                 </div>
                             </div>

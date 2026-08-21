@@ -257,6 +257,7 @@ class HandleInertiaRequests extends Middleware
                 'created_option_catalogue_id' => $request->session()->get('created_option_catalogue_id'),
                 'created_option_catalogue_valeur_id' => $request->session()->get('created_option_catalogue_valeur_id'),
                 'created_fournisseur_id' => $request->session()->get('created_fournisseur_id'),
+                'created_fonction_rh_id' => $request->session()->get('created_fonction_rh_id'),
             ],
         ];
     }

@@ -40,4 +40,9 @@ useScanInterceptor();
     </AppShell>
     <ConfirmDialog />
     <Toast position="bottom-right" />
+    <!-- Groupe "top" dédié aux parcours fonctions RH / profils d'accès / sites (validation de
+         compte, transfert de site...) — toast.add({ group: 'top', ... }) uniquement, jamais
+         l'instance par défaut ci-dessus : ne change pas la position des toasts existants
+         ailleurs dans l'app (cf. CLAUDE de session, "gestion des fonctions"). -->
+    <Toast group="top" position="top-right" />
 </template>

@@ -1,6 +1,21 @@
+<script setup lang="ts">
+withDefaults(
+    defineProps<{
+        unstyled?: boolean;
+    }>(),
+    {
+        unstyled: false,
+    },
+);
+</script>
+
 <template>
     <div
-        class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border bg-muted/30 p-3"
+        :class="
+            unstyled
+                ? 'contents'
+                : 'flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border bg-muted/30 p-3'
+        "
     >
         <slot />
         <div

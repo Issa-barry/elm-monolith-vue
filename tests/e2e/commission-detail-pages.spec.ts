@@ -5,7 +5,7 @@ test.setTimeout(120_000);
 
 /**
  * Vérifie que les 3 pages détail commission (Vente / Logistique / Propriétaire)
- * partagent désormais la même UI : 5 cartes résumé, mêmes tabs, même dialog de
+ * partagent désormais la même UI : 4 cartes résumé maximum, mêmes tabs, même dialog de
  * paiement. La logistique s'appuie sur les transferts créés via UI dans
  * global-setup.ts (aucun seeder). Vente et Propriétaire dépendent de
  * CommissionsSeeder, désactivé dans DatabaseSeeder — ces deux tests prennent
@@ -17,20 +17,34 @@ test.setTimeout(120_000);
  * Aissatou — Thierno reste impayé quelle que soit l'ordre d'exécution parallèle.
  */
 
-const SUMMARY_LABELS = [
-    'Brut cumulé',
-    'Net à payer',
-    'Déjà payé',
-    'Reste à payer',
-];
-
 const TAB_LABELS = ['Informations', 'Dépenses', 'Paiements', 'Historique'];
 
 async function assertSummaryCardsAndTabs(
     page: import('@playwright/test').Page,
     fraisLabel: string,
+    lifecycleV2 = false,
 ) {
-    for (const label of [...SUMMARY_LABELS, fraisLabel]) {
+    const labels = lifecycleV2
+        ? [
+              'Commissions générées',
+              'Net validé',
+              'Déjà payé',
+              'Reste à payer',
+              fraisLabel,
+          ]
+        : [
+              'Brut cumulé',
+              'Net à payer',
+              'Déjà payé',
+              'Reste à payer',
+              fraisLabel,
+          ];
+
+    await expect(
+        page.getByTestId('commission-detail-summary').locator(':scope > div'),
+    ).toHaveCount(4);
+
+    for (const label of labels) {
         await expect(
             page.getByText(label, { exact: true }).first(),
         ).toBeVisible({ timeout: 15_000 });
@@ -43,7 +57,7 @@ async function assertSummaryCardsAndTabs(
     }
 }
 
-test('détail Commission logistique — 5 cartes, tabs, dialog paiement', async ({
+test('détail Commission logistique — 4 cartes, tabs, dialog paiement', async ({
     page,
 }) => {
     await login(page);
@@ -79,7 +93,7 @@ test('détail Commission logistique — 5 cartes, tabs, dialog paiement', async 
     await page.keyboard.press('Escape');
 });
 
-test('détail Commission vente — 5 cartes et tabs identiques', async ({
+test('détail Commission vente — 4 cartes et tabs identiques', async ({
     page,
 }) => {
     await login(page);
@@ -99,7 +113,7 @@ test('détail Commission vente — 5 cartes et tabs identiques', async ({
         { timeout: 20_000 },
     );
 
-    await assertSummaryCardsAndTabs(page, 'Dépenses');
+    await assertSummaryCardsAndTabs(page, 'Dépenses', true);
 
     // Changer la période recalcule la section (re-render des cartes) sans casser la page.
     const periodeSelect = page.locator('.p-dropdown').first();
@@ -112,7 +126,7 @@ test('détail Commission vente — 5 cartes et tabs identiques', async ({
                 /\/comptabilite\/commissions\/vente\/livreurs\//,
                 { timeout: 15_000 },
             );
-            await assertSummaryCardsAndTabs(page, 'Dépenses');
+            await assertSummaryCardsAndTabs(page, 'Dépenses', true);
         }
     }
 });
@@ -137,7 +151,7 @@ test('détail Commission propriétaire — libellé « Dépenses véhicules »',
         { timeout: 20_000 },
     );
 
-    await assertSummaryCardsAndTabs(page, 'Dépenses véhicules');
+    await assertSummaryCardsAndTabs(page, 'Dépenses véhicules', true);
 
     await page.getByRole('button', { name: 'Dépenses', exact: false }).click();
     await expect(page.locator('body')).toContainText(

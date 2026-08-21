@@ -16,6 +16,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 use Laravel\Pennant\Feature;
@@ -43,6 +44,14 @@ class AppServiceProvider extends ServiceProvider
         URL::forceRootUrl($appUrl);
         if (str_starts_with($appUrl, 'https://')) {
             URL::forceScheme('https');
+        }
+
+        // Pendant de `buildDirectory` dans vite.config.ts : `npm run e2e:build`
+        // écrit dans public/build-e2e (au lieu de public/build) pour ne pas écraser
+        // les assets du serveur de dev avec des helpers Wayfinder pointant vers
+        // l'URL e2e (127.0.0.1:8080) — cf. [[project_env_test_isolation]].
+        if ($this->app->environment('e2e')) {
+            Vite::useBuildDirectory('build-e2e');
         }
 
         // Bloque migrate:fresh, migrate:refresh, db:wipe (et apparentés) en
