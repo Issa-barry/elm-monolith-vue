@@ -33,7 +33,9 @@ class PeriodeComptableService
      */
     public static function periodicityFor(string $typeBeneficiaire): string
     {
-        return $typeBeneficiaire === 'livreur' ? 'quinzaine' : 'mensuelle';
+        // Site : même déclencheur que l'équipe de livraison (une vente), donc même cadence
+        // quinzaine — jamais le cycle mensuel propriétaire/salarié.
+        return in_array($typeBeneficiaire, ['livreur', 'site'], true) ? 'quinzaine' : 'mensuelle';
     }
 
     // ── Calcul du code ────────────────────────────────────────────────────────
@@ -66,7 +68,7 @@ class PeriodeComptableService
      */
     public static function codeFor(string $typeBeneficiaire, Carbon $date): string
     {
-        return $typeBeneficiaire === 'livreur'
+        return in_array($typeBeneficiaire, ['livreur', 'site'], true)
             ? self::codeForLivreur($date)
             : self::codeForProprietaire($date);
     }

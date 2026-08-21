@@ -18,6 +18,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     Briefcase,
+    Eye,
     MoreVertical,
     Pencil,
     Plus,
@@ -217,7 +218,10 @@ function confirmDelete(e: Employe) {
                         style="min-width: 220px"
                     >
                         <template #body="{ data }">
-                            <div class="flex items-center gap-3">
+                            <Link
+                                :href="`/backoffice/employes/${data.id}`"
+                                class="flex items-center gap-3"
+                            >
                                 <div
                                     class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary"
                                 >
@@ -240,7 +244,7 @@ function confirmDelete(e: Employe) {
                                         }}</span>
                                     </div>
                                 </div>
-                            </div>
+                            </Link>
                         </template>
                     </Column>
 
@@ -350,6 +354,14 @@ function confirmDelete(e: Employe) {
                                         align="end"
                                         class="w-44"
                                     >
+                                        <DropdownMenuItem as-child>
+                                            <Link
+                                                :href="`/backoffice/employes/${data.id}`"
+                                                class="flex w-full items-center gap-2"
+                                            >
+                                                <Eye class="h-4 w-4" />Voir
+                                            </Link>
+                                        </DropdownMenuItem>
                                         <DropdownMenuItem
                                             v-if="can('rh-employes.update')"
                                             as-child

@@ -21,17 +21,22 @@ test('créer un employé avec un site affiche une affectation initiale active', 
     const nom = `E2EEMP${randomDigits(6)}`;
 
     await page.goto('/backoffice/employes/create');
-    await expect(page.getByRole('heading', { name: /nouvel employé/i })).toBeVisible({
+    await expect(
+        page.getByRole('heading', { name: /nouvel employé/i }),
+    ).toBeVisible({
         timeout: 15_000,
     });
 
-    await page.locator('input[type="text"]').first().fill('Amara');
-    await page.locator('input[type="text"]').nth(1).fill(nom);
+    await page
+        .locator('form')
+        .locator('input[type="text"]')
+        .first()
+        .fill('Amara');
+    await page.locator('form').locator('input[type="text"]').nth(1).fill(nom);
 
     const siteCombobox = page
-        .locator('div')
-        .filter({ hasText: /^Site$/ })
-        .locator('..')
+        .locator('label', { hasText: /^Site$/ })
+        .locator('xpath=..')
         .getByRole('combobox')
         .first();
     await selectOptionFromCombobox(page, siteCombobox, /matoto/i);
@@ -41,9 +46,9 @@ test('créer un employé avec un site affiche une affectation initiale active', 
     await expect(page).toHaveURL(/\/employes\/[a-z0-9]+\/edit/, {
         timeout: 15_000,
     });
-    await expect(
-        page.getByText(/historique d'affectation/i),
-    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/historique d'affectation/i)).toBeVisible({
+        timeout: 10_000,
+    });
     await expect(page.getByText(/^actif$/i).first()).toBeVisible();
 });
 
@@ -53,13 +58,16 @@ test('transférer un employé vers un autre site conserve son historique', async
     const nom = `E2EEMP${randomDigits(6)}`;
 
     await page.goto('/backoffice/employes/create');
-    await page.locator('input[type="text"]').first().fill('Amara');
-    await page.locator('input[type="text"]').nth(1).fill(nom);
+    await page
+        .locator('form')
+        .locator('input[type="text"]')
+        .first()
+        .fill('Amara');
+    await page.locator('form').locator('input[type="text"]').nth(1).fill(nom);
 
     const siteComboboxCreate = page
-        .locator('div')
-        .filter({ hasText: /^Site$/ })
-        .locator('..')
+        .locator('label', { hasText: /^Site$/ })
+        .locator('xpath=..')
         .getByRole('combobox')
         .first();
     await selectOptionFromCombobox(page, siteComboboxCreate, /matoto/i);
@@ -70,9 +78,8 @@ test('transférer un employé vers un autre site conserve son historique', async
 
     // Transfert : changer le site sur le formulaire d'édition.
     const siteComboboxEdit = page
-        .locator('div')
-        .filter({ hasText: /^Site$/ })
-        .locator('..')
+        .locator('label', { hasText: /^Site$/ })
+        .locator('xpath=..')
         .getByRole('combobox')
         .first();
     await selectOptionFromCombobox(page, siteComboboxEdit, /cba|lambanyi/i);

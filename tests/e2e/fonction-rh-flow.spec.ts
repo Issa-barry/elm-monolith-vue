@@ -26,22 +26,32 @@ test.describe('création inline depuis un autre formulaire', () => {
             page.getByRole('heading', { name: /nouvel employé/i }),
         ).toBeVisible({ timeout: 15_000 });
 
-        await page.locator('input[type="text"]').first().fill('Amara');
-        await page.locator('input[type="text"]').nth(1).fill(nom);
+        await page
+            .locator('form')
+            .locator('input[type="text"]')
+            .first()
+            .fill('Amara');
+        await page
+            .locator('form')
+            .locator('input[type="text"]')
+            .nth(1)
+            .fill(nom);
 
         const fonctionCombobox = page
-            .locator('div')
-            .filter({ hasText: /^Fonction RH$/ })
-            .locator('..')
+            .locator('label', { hasText: /^Fonction RH$/ })
+            .locator('xpath=..')
             .getByRole('combobox')
             .first();
         await fonctionCombobox.click();
 
-        await page
-            .getByRole('button', { name: /créer une fonction/i })
-            .click();
+        await page.getByRole('button', { name: /créer une fonction/i }).click();
+        // Dialog PrimeVue : le titre n'est pas exposé en role="heading" (contrairement à un
+        // <h1>/<h2> classique) — cf. le pattern déjà établi ailleurs dans ce projet
+        // (equipe-flow.spec.ts, achat-flow.spec.ts...) : cibler [role="dialog"] directement.
         await expect(
-            page.getByRole('heading', { name: /créer une fonction rh/i }),
+            page
+                .locator('[role="dialog"]')
+                .filter({ hasText: /créer une fonction rh/i }),
         ).toBeVisible({ timeout: 10_000 });
 
         await page.locator('#fonction-rh-libelle').fill(libelle);
@@ -73,7 +83,9 @@ test('créer une fonction RH via la popup puis la retrouver dans la liste', asyn
 
     await page.getByRole('button', { name: /nouvelle fonction/i }).click();
     await expect(
-        page.getByRole('heading', { name: /créer une fonction rh/i }),
+        page
+            .locator('[role="dialog"]')
+            .filter({ hasText: /créer une fonction rh/i }),
     ).toBeVisible({ timeout: 10_000 });
 
     await page.locator('#libelle').fill(libelle);
@@ -134,7 +146,7 @@ test('désactiver puis réactiver une fonction — jamais de suppression', async
     await expect(row.getByText(/^active$/i)).toBeVisible({ timeout: 10_000 });
 });
 
-test('modifier le libellé d\'une fonction via la popup', async ({ page }) => {
+test("modifier le libellé d'une fonction via la popup", async ({ page }) => {
     const libelle = `E2EFON-${randomDigits(6)}`;
     const nouveauLibelle = `E2EFON-EDIT-${randomDigits(6)}`;
 
@@ -149,7 +161,9 @@ test('modifier le libellé d\'une fonction via la popup', async ({ page }) => {
     await row.locator('button').last().click();
     await page.getByRole('menuitem', { name: /modifier/i }).click();
     await expect(
-        page.getByRole('heading', { name: /modifier la fonction/i }),
+        page
+            .locator('[role="dialog"]')
+            .filter({ hasText: /modifier la fonction/i }),
     ).toBeVisible({ timeout: 10_000 });
 
     await page.locator('#libelle').fill(nouveauLibelle);

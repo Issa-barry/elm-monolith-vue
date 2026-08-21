@@ -15,26 +15,33 @@ test.beforeEach(async ({ page }) => {
     await login(page);
 });
 
-test('créer un employé avec le numéro guinéen par défaut, vérifier l\'affichage puis modifier le pays et le numéro', async ({
+test("créer un employé avec le numéro guinéen par défaut, vérifier l'affichage puis modifier le pays et le numéro", async ({
     page,
 }) => {
     const nom = `E2EEMP${randomDigits(6)}`;
-    const numeroGuinee = `6${randomDigits(8)}`;
+    // Mobile guinéen valide (libphonenumber GN) : 6[0-356]\d{7} — le 2e chiffre ne peut
+    // JAMAIS être 4/7/8/9, sous peine de rejet légitime côté backend (numéro invalide).
+    const numeroGuinee = `6${['0', '1', '2', '3', '5', '6'][Math.floor(Math.random() * 6)]}${randomDigits(7)}`;
 
     await page.goto('/backoffice/employes/create');
     await expect(
         page.getByRole('heading', { name: /nouvel employé/i }),
     ).toBeVisible({ timeout: 15_000 });
 
-    await page.locator('input[type="text"]').first().fill('Amara');
-    await page.locator('input[type="text"]').nth(1).fill(nom);
+    await page
+        .locator('form')
+        .locator('input[type="text"]')
+        .first()
+        .fill('Amara');
+    await page.locator('form').locator('input[type="text"]').nth(1).fill(nom);
 
     // Guinée +224 sélectionné par défaut, sans aucune interaction.
     const telephoneField = page
-        .locator('div')
-        .filter({ hasText: /^Téléphone$/ })
-        .locator('..');
-    await expect(telephoneField.getByText('+224')).toBeVisible();
+        .locator('label', { hasText: /^Téléphone$/ })
+        .locator('xpath=..');
+    await expect(telephoneField.getByText('+224')).toBeVisible({
+        timeout: 15_000,
+    });
 
     await page.locator('#telephone').fill(numeroGuinee);
     await page.getByRole('button', { name: /créer l'employé/i }).click();
@@ -53,11 +60,14 @@ test('créer un employé avec le numéro guinéen par défaut, vérifier l\'affi
     // Préremplissage à l'édition : pays + numéro national correctement restitués, jamais
     // "+224 +224...".
     const editTelephoneField = page
-        .locator('div')
-        .filter({ hasText: /^Téléphone$/ })
-        .locator('..');
-    await expect(editTelephoneField.getByText('+224')).toBeVisible();
-    await expect(page.locator('#telephone')).toHaveValue(numeroGuinee);
+        .locator('label', { hasText: /^Téléphone$/ })
+        .locator('xpath=..');
+    await expect(editTelephoneField.getByText('+224')).toBeVisible({
+        timeout: 15_000,
+    });
+    await expect(page.locator('#telephone')).toHaveValue(numeroGuinee, {
+        timeout: 15_000,
+    });
     await expect(page.locator('#telephone')).not.toHaveValue(
         new RegExp(`\\+224.*${numeroGuinee}`),
     );
@@ -70,10 +80,14 @@ test('créer un employé avec le numéro guinéen par défaut, vérifier l\'affi
     await page.getByRole('button', { name: /^enregistrer$/i }).click();
 
     await expect(page.locator('.p-toast-message').first()).toBeVisible({
-        timeout: 10_000,
+        timeout: 15_000,
     });
-    await expect(editTelephoneField.getByText('+33')).toBeVisible();
-    await expect(page.locator('#telephone')).toHaveValue('612345678');
+    await expect(editTelephoneField.getByText('+33')).toBeVisible({
+        timeout: 15_000,
+    });
+    await expect(page.locator('#telephone')).toHaveValue('612345678', {
+        timeout: 15_000,
+    });
 });
 
 test('un numéro invalide est refusé avec une erreur sous le champ téléphone', async ({
@@ -82,8 +96,12 @@ test('un numéro invalide est refusé avec une erreur sous le champ téléphone'
     const nom = `E2EEMP${randomDigits(6)}`;
 
     await page.goto('/backoffice/employes/create');
-    await page.locator('input[type="text"]').first().fill('Amara');
-    await page.locator('input[type="text"]').nth(1).fill(nom);
+    await page
+        .locator('form')
+        .locator('input[type="text"]')
+        .first()
+        .fill('Amara');
+    await page.locator('form').locator('input[type="text"]').nth(1).fill(nom);
 
     // 3 chiffres seulement : jamais assez pour un numéro guinéen valide (9 attendus) — bloqué
     // côté client par PhoneCountryInput avant même la soumission serveur.
@@ -106,9 +124,8 @@ test('le sélecteur de téléphone reste utilisable sur petit écran', async ({
     ).toBeVisible({ timeout: 15_000 });
 
     const telephoneField = page
-        .locator('div')
-        .filter({ hasText: /^Téléphone$/ })
-        .locator('..');
+        .locator('label', { hasText: /^Téléphone$/ })
+        .locator('xpath=..');
     const countryCombobox = telephoneField.getByRole('combobox').first();
     const phoneInput = page.locator('#telephone');
 

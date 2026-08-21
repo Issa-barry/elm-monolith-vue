@@ -59,6 +59,7 @@ class CommissionRegleController extends Controller
         $cibles = [
             ['code' => CommissionCibleType::CODE_PROPRIETAIRE, 'libelle' => 'Propriétaire'],
             ['code' => CommissionCibleType::CODE_EQUIPE_LIVRAISON, 'libelle' => 'Livraison'],
+            ['code' => CommissionCibleType::CODE_SITE, 'libelle' => 'Site'],
         ];
 
         $lignes = [
@@ -121,7 +122,9 @@ class CommissionRegleController extends Controller
         $scopeId = $scopeType === 'categorie' ? $data['categorie_id'] : null;
         $effectiveFrom = $data['effective_from'] ?? Carbon::today()->toDateString();
 
-        $mode = $data['cible_type'] === CommissionCibleType::CODE_PROPRIETAIRE
+        // DIRECT pour Propriétaire ET Site : un seul bénéficiaire déterministe, jamais de
+        // répartition à calculer (cf. CommissionEnveloppeGenerator, branche CODE_SITE).
+        $mode = in_array($data['cible_type'], [CommissionCibleType::CODE_PROPRIETAIRE, CommissionCibleType::CODE_SITE], true)
             ? CommissionMode::DIRECT
             : CommissionMode::A_REPARTIR;
 
@@ -161,7 +164,11 @@ class CommissionRegleController extends Controller
 
     private function libelleAuto(string $cibleType, string $scopeType, ?string $scopeId): string
     {
-        $cibleLabel = $cibleType === CommissionCibleType::CODE_PROPRIETAIRE ? 'Propriétaire' : 'Livraison';
+        $cibleLabel = match ($cibleType) {
+            CommissionCibleType::CODE_PROPRIETAIRE => 'Propriétaire',
+            CommissionCibleType::CODE_SITE => 'Site',
+            default => 'Livraison',
+        };
         $scopeLabel = $scopeType === 'global'
             ? 'toutes catégories'
             : (Categorie::find($scopeId)?->nom ?? 'catégorie');

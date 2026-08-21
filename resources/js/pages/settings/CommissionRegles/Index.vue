@@ -149,7 +149,7 @@ function cellLabel(ligne: Ligne, cible: Cible): string {
                 <div class="flex items-start justify-between gap-4">
                     <HeadingSmall
                         title="Commissions"
-                        description="Montant fixe par unité vendue, propriétaire et livraison, par catégorie de produit."
+                        description="Montants de commission par catégorie pour le propriétaire, la livraison et le site de l'opération."
                     />
                 </div>
 

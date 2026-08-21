@@ -232,6 +232,51 @@ class EmployeController extends Controller
             ->with('success', "{$employe->nom_complet} a été créé avec succès.");
     }
 
+    /**
+     * Fiche employé en lecture seule : identité, fonction/site actuels, contrat + historique,
+     * historique d'affectation, compte applicatif et profil d'accès CLAIREMENT séparés de la
+     * fonction RH (jamais la même notion) — aucune commission n'intervient plus ici (la
+     * commission est désormais attribuée directement au site, jamais à un employé/gérant).
+     */
+    public function show(Employe $employe): Response
+    {
+        $this->authorize('view', $employe);
+
+        $employe->load(['personne.user.roles']);
+
+        return Inertia::render('Employes/Show', [
+            'employe' => array_merge($this->toDetail($employe), [
+                'compte' => $this->compteInfo($employe),
+            ]),
+        ]);
+    }
+
+    /**
+     * null = aucun compte applicatif rattaché (cas normal : un employé n'a jamais besoin d'un
+     * compte pour exister côté RH, cf. mission §"jamais un compte utilisateur requis") — la vue
+     * affiche alors explicitement « Aucun compte », jamais une section vide silencieuse.
+     */
+    private function compteInfo(Employe $employe): ?array
+    {
+        $user = $employe->personne?->user;
+        if ($user === null) {
+            return null;
+        }
+
+        $role = $user->roles->first();
+        $pending = $user->isPendingValidation();
+
+        return [
+            'id' => $user->id,
+            'email' => $user->email,
+            // Profil d'accès (rôle Spatie) — toujours affiché séparément de la fonction RH,
+            // jamais fusionné : deux notions distinctes (cf. mission).
+            'role_label' => $role ? ($role->label ?? $role->name) : null,
+            'statut' => $pending ? 'pending_validation' : ($user->is_active ? 'actif' : 'inactif'),
+            'statut_label' => $pending ? 'En attente de validation' : ($user->is_active ? 'Actif' : 'Inactif'),
+        ];
+    }
+
     public function edit(Employe $employe): Response
     {
         $this->authorize('update', $employe);

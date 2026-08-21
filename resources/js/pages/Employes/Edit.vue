@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PhoneCountryInput from '@/components/PhoneCountryInput.vue';
 import FonctionRhSelect from '@/components/rh/FonctionRhSelect.vue';
 import { Button } from '@/components/ui/button';
 import { useFlashToast } from '@/composables/useFlashToast';
@@ -251,9 +252,11 @@ function deleteContrat(c: ContratRow) {
                                     >Téléphone</label
                                 >
                                 <PhoneCountryInput
+                                    :key="employe.id"
                                     id="telephone"
                                     :model-value="form.telephone"
                                     :remember-choice="false"
+                                    :required="false"
                                     @update:model-value="
                                         form.telephone = $event
                                     "

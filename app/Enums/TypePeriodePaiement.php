@@ -9,6 +9,7 @@ enum TypePeriodePaiement: string
     case LIVREUR = 'livreur';
     case PROPRIETAIRE = 'proprietaire';
     case SALARIE = 'salarie';
+    case SITE = 'site';
 
     public function label(): string
     {
@@ -16,6 +17,7 @@ enum TypePeriodePaiement: string
             self::LIVREUR => 'Livreurs',
             self::PROPRIETAIRE => 'Propriétaires',
             self::SALARIE => 'Salariés',
+            self::SITE => 'Sites',
         };
     }
 
@@ -37,6 +39,7 @@ enum TypePeriodePaiement: string
             self::LIVREUR => 'LIV',
             self::PROPRIETAIRE => 'PRO',
             self::SALARIE => 'SAL',
+            self::SITE => 'SIT',
         };
     }
 
