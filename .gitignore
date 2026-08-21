@@ -7,6 +7,9 @@
 # site — fello.eau-la-maman.com's deploy-hostinger-admin.yml already builds
 # fresh assets in CI and never relied on the committed copy.
 /public/build
+# Build de sortie dédié à `npm run e2e:build` (vite.config.ts buildDirectory) —
+# isolé de /public/build pour ne jamais écraser les assets du serveur de dev.
+/public/build-e2e
 /public/hot
 /public/storage
 /storage/*.key

@@ -63,6 +63,8 @@ const props = withDefaults(
         hideAgenceSelector?: boolean;
         /** Masque le compteur "N résultats" (pages où il n'apporte rien, ex: trésorerie) */
         hideResultCount?: boolean;
+        /** N'affiche que le bouton ouvrant le drawer, pour une utilisation dans un en-tête */
+        triggerOnly?: boolean;
     }>(),
     {
         baseParams: () => ({}),
@@ -71,6 +73,7 @@ const props = withDefaults(
         url: undefined,
         hideAgenceSelector: false,
         hideResultCount: false,
+        triggerOnly: false,
     },
 );
 
@@ -291,6 +294,9 @@ function resetFilters() {
 
 const inlineFields = computed(() => props.fields.filter((f) => f.inline));
 const drawerFields = computed(() => props.fields.filter((f) => !f.inline));
+const displayedDrawerFields = computed(() =>
+    props.triggerOnly ? props.fields : drawerFields.value,
+);
 
 // ── Compteurs ─────────────────────────────────────────────────────────────────
 
@@ -318,6 +324,13 @@ function countActiveFields(fields: FilterField[]): number {
 
 const drawerFilterCount = computed(() => countActiveFields(drawerFields.value));
 
+const activeFilterCount = computed(
+    () =>
+        drawerFilterCount.value +
+        countActiveFields(inlineFields.value) +
+        (isAdmin.value && localSiteIds.value.length > 0 ? 1 : 0),
+);
+
 const hasActiveFilters = computed(
     () =>
         drawerFilterCount.value > 0 ||
@@ -327,10 +340,10 @@ const hasActiveFilters = computed(
 </script>
 
 <template>
-    <FilterBar>
+    <FilterBar :unstyled="triggerOnly">
         <!-- ── 1. Agence / Site ── toujours en premier ──────────────────────── -->
         <div
-            v-if="!hideAgenceSelector && siteOptions.length > 0"
+            v-if="!triggerOnly && !hideAgenceSelector && siteOptions.length > 0"
             data-testid="agency-filter"
             class="relative flex shrink-0 flex-col gap-1"
         >
@@ -353,7 +366,10 @@ const hasActiveFilters = computed(
         </div>
 
         <!-- ── 2. Champs inline ──────────────────────────────────────────────── -->
-        <template v-for="field in inlineFields" :key="field.key">
+        <template
+            v-for="field in triggerOnly ? [] : inlineFields"
+            :key="field.key"
+        >
             <!-- select / multi-select -->
             <div
                 v-if="field.type === 'multi-select' || field.type === 'select'"
@@ -412,20 +428,50 @@ const hasActiveFilters = computed(
         </template>
 
         <!-- ── Slot pour contrôles inline additionnels ───────────────────────── -->
-        <slot name="inline" />
+        <slot v-if="!triggerOnly" name="inline" />
 
         <!-- ── 3. Bouton Filtres (drawer) ── toujours en dernier ────────────── -->
         <div v-if="drawerFields.length > 0" class="shrink-0 self-end">
             <FilterDrawer
                 v-model:open="filterDrawerOpen"
                 title="Filtres"
-                :active-count="drawerFilterCount"
+                :active-count="
+                    triggerOnly ? activeFilterCount : drawerFilterCount
+                "
                 :apply-disabled="!pendingChange"
                 @apply="applyFilters"
                 @reset="resetFilters"
             >
                 <div class="space-y-5">
-                    <template v-for="field in drawerFields" :key="field.key">
+                    <div
+                        v-if="
+                            triggerOnly &&
+                            !hideAgenceSelector &&
+                            siteOptions.length > 0
+                        "
+                        data-testid="agency-filter"
+                        class="space-y-1.5"
+                    >
+                        <Label class="flex items-center gap-1.5">
+                            Agence
+                            <Lock
+                                v-if="siteSelectorLocked"
+                                class="h-3 w-3 text-muted-foreground opacity-60"
+                            />
+                        </Label>
+                        <FilterMultiSelect
+                            v-model="localSiteIds"
+                            :options="siteOptions"
+                            placeholder="Toutes les agences"
+                            :empty-means-all="isAdmin"
+                            :disabled="siteSelectorLocked"
+                        />
+                    </div>
+
+                    <template
+                        v-for="field in displayedDrawerFields"
+                        :key="field.key"
+                    >
                         <!-- multi-select ou select -->
                         <div
                             v-if="
@@ -549,7 +595,7 @@ const hasActiveFilters = computed(
             </FilterDrawer>
         </div>
 
-        <template #actions>
+        <template v-if="!triggerOnly" #actions>
             <span
                 v-if="!hideResultCount"
                 data-testid="filters-result-count"

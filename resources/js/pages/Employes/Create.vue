@@ -1,10 +1,15 @@
 <script setup lang="ts">
+import FonctionRhSelect from '@/components/rh/FonctionRhSelect.vue';
+import PhoneCountryInput from '@/components/PhoneCountryInput.vue';
 import { Button } from '@/components/ui/button';
+import { useFlashToast } from '@/composables/useFlashToast';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ArrowLeft, Save } from 'lucide-vue-next';
 import Select from 'primevue/select';
+
+useFlashToast();
 
 interface Option {
     value: string;
@@ -15,6 +20,7 @@ defineProps<{
     type_employe_options: Option[];
     statut_options: Option[];
     sites: Option[];
+    fonctions: Option[];
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -30,6 +36,7 @@ const form = useForm({
     telephone: '',
     type_employe: 'interne',
     site_id: null as string | null,
+    fonction_rh_id: null as string | null,
     statut: 'actif',
 });
 
@@ -130,11 +137,18 @@ function submit() {
                             <label class="mb-1.5 block text-sm font-medium"
                                 >Téléphone</label
                             >
-                            <input
-                                v-model="form.telephone"
-                                type="tel"
-                                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                            <PhoneCountryInput
+                                id="telephone"
+                                :model-value="form.telephone"
+                                :remember-choice="false"
+                                @update:model-value="form.telephone = $event"
                             />
+                            <p
+                                v-if="form.errors.telephone"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                {{ form.errors.telephone }}
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -185,7 +199,7 @@ function submit() {
                                 {{ form.errors.statut }}
                             </p>
                         </div>
-                        <div class="sm:col-span-2">
+                        <div>
                             <label class="mb-1.5 block text-sm font-medium"
                                 >Site</label
                             >
@@ -198,6 +212,15 @@ function submit() {
                                 option-label="label"
                                 option-value="value"
                                 class="w-full"
+                            />
+                        </div>
+                        <div>
+                            <label class="mb-1.5 block text-sm font-medium"
+                                >Fonction RH</label
+                            >
+                            <FonctionRhSelect
+                                v-model="form.fonction_rh_id"
+                                :fonctions="fonctions"
                             />
                         </div>
                     </div>

@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import FonctionRhSelect from '@/components/rh/FonctionRhSelect.vue';
 import { Button } from '@/components/ui/button';
+import { useFlashToast } from '@/composables/useFlashToast';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
@@ -31,6 +33,16 @@ interface ContratRow {
     salaire_base: string | null;
 }
 
+interface AffectationRow {
+    id: string;
+    site: string | null;
+    fonction_libelle: string | null;
+    debut_at: string | null;
+    fin_at: string | null;
+    active: boolean;
+    motif: string | null;
+}
+
 interface EmployeData {
     id: string;
     matricule: string | null;
@@ -42,8 +54,11 @@ interface EmployeData {
     statut: string;
     site_id: string | null;
     site: string | null;
+    fonction_rh_id: string | null;
+    fonction_libelle: string | null;
     contrats: ContratRow[];
     contrat_actif: { type_contrat: string; type_contrat_label: string } | null;
+    affectations: AffectationRow[];
 }
 
 const props = defineProps<{
@@ -51,10 +66,12 @@ const props = defineProps<{
     type_employe_options: Option[];
     statut_options: Option[];
     sites: Option[];
+    fonctions: Option[];
 }>();
 
 const confirm = useConfirm();
 const toast = useToast();
+useFlashToast();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
@@ -69,6 +86,7 @@ const form = useForm({
     telephone: props.employe.telephone ?? '',
     type_employe: props.employe.type_employe,
     site_id: props.employe.site_id ?? null,
+    fonction_rh_id: props.employe.fonction_rh_id ?? null,
     statut: props.employe.statut,
 });
 
@@ -232,11 +250,20 @@ function deleteContrat(c: ContratRow) {
                                 <label class="mb-1.5 block text-sm font-medium"
                                     >Téléphone</label
                                 >
-                                <input
-                                    v-model="form.telephone"
-                                    type="tel"
-                                    class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                <PhoneCountryInput
+                                    id="telephone"
+                                    :model-value="form.telephone"
+                                    :remember-choice="false"
+                                    @update:model-value="
+                                        form.telephone = $event
+                                    "
                                 />
+                                <p
+                                    v-if="form.errors.telephone"
+                                    class="mt-1 text-xs text-destructive"
+                                >
+                                    {{ form.errors.telephone }}
+                                </p>
                             </div>
                             <div>
                                 <label class="mb-1.5 block text-sm font-medium"
@@ -268,7 +295,7 @@ function deleteContrat(c: ContratRow) {
                                     class="w-full"
                                 />
                             </div>
-                            <div class="sm:col-span-2">
+                            <div>
                                 <label class="mb-1.5 block text-sm font-medium"
                                     >Site</label
                                 >
@@ -285,6 +312,62 @@ function deleteContrat(c: ContratRow) {
                                     option-value="value"
                                     class="w-full"
                                 />
+                                <p class="mt-1 text-xs text-muted-foreground">
+                                    Changer le site ferme l'affectation
+                                    actuelle et en ouvre une nouvelle
+                                    (historique conservé).
+                                </p>
+                            </div>
+                            <div>
+                                <label class="mb-1.5 block text-sm font-medium"
+                                    >Fonction RH</label
+                                >
+                                <FonctionRhSelect
+                                    v-model="form.fonction_rh_id"
+                                    :fonctions="fonctions"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Historique d'affectation (site + fonction) -->
+                    <div
+                        v-if="employe.affectations.length > 0"
+                        class="space-y-3 rounded-xl border bg-card p-6 shadow-sm"
+                    >
+                        <h3
+                            class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                        >
+                            Historique d'affectation
+                        </h3>
+                        <div class="space-y-2">
+                            <div
+                                v-for="a in employe.affectations"
+                                :key="a.id"
+                                class="flex items-center justify-between rounded-lg border p-2.5 text-sm"
+                            >
+                                <div>
+                                    <p class="font-medium">
+                                        {{ a.site ?? '—' }}
+                                        <span
+                                            v-if="a.fonction_libelle"
+                                            class="font-normal text-muted-foreground"
+                                            >— {{ a.fonction_libelle }}</span
+                                        >
+                                    </p>
+                                    <p class="text-xs text-muted-foreground">
+                                        Du {{ a.debut_at }}
+                                        <template v-if="a.fin_at">
+                                            au {{ a.fin_at }}</template
+                                        >
+                                        <template v-else> (en cours)</template>
+                                    </p>
+                                </div>
+                                <span
+                                    v-if="a.active"
+                                    class="rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-medium text-white"
+                                    >Actif</span
+                                >
                             </div>
                         </div>
                     </div>
