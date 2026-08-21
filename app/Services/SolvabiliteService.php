@@ -34,10 +34,21 @@ use Illuminate\Validation\ValidationException;
  * client n'est jamais consulté — Ventes/Create.vue doit refléter exactement cette priorité,
  * jamais bloquer indépendamment sur les deux.
  *
- * Factures prises en compte : statut IMPAYEE ou PARTIEL uniquement (CREEE/PAYEE/ANNULEE
- * n'entrent jamais dans le calcul). Le montant compté est `montant_restant`
- * (montant_net - montant_encaisse, cf. FactureVente) : une facture partiellement encaissée ne
- * compte que pour son reste à payer, jamais son montant brut.
+ * Factures prises en compte pour le calcul de la DETTE (seuil/dérogation) : statut IMPAYEE ou
+ * PARTIEL uniquement (CREEE/PAYEE/ANNULEE n'entrent jamais dans ce calcul). Le montant compté
+ * est `montant_restant` (montant_net - montant_encaisse, cf. FactureVente) : une facture
+ * partiellement encaissée ne compte que pour son reste à payer, jamais son montant brut.
+ *
+ * Verrou absolu « première régularisation » (décision produit du 20/08/2026) — indépendant du
+ * calcul de dette ci-dessus et du paramètre « contrôle des impayés » : un véhicule possédant
+ * déjà une facture n'ayant reçu STRICTEMENT AUCUN encaissement (montant_encaisse <= 0 ET
+ * montant_restant > 0, jamais un test sur le libellé du statut — un statut CREEE compte autant
+ * qu'un statut IMPAYEE, cf. premiereFactureNonEncaisseeVehicule()) ne peut recevoir aucune
+ * nouvelle commande tant que cette facture n'a pas reçu au moins un encaissement, quel que soit
+ * le paramétrage du contrôle de seuil. Dès qu'un encaissement — même partiel — existe sur TOUTES
+ * les factures non soldées du véhicule, ce verrou n'a plus prise et seul le contrôle de seuil
+ * habituel (ci-dessous) s'applique. Ne concerne que la cible 'vehicule' : un client seul (repli,
+ * sans véhicule) n'est jamais soumis à ce verrou, uniquement au contrôle de seuil.
  */
 class SolvabiliteService
 {
@@ -56,17 +67,22 @@ class SolvabiliteService
      *     montant_disponible: int,
      *     blocked: bool,
      *     depassement: int,
+     *     blocage_premiere_facture: bool,
+     *     facture_bloquante_reference: ?string,
+     *     facture_bloquante_commande_id: ?string,
      *     factures: array<int, array{commande_id: string, reference: ?string, date: ?string, montant: int, encaisse: int, restant: int, statut: string, statut_label: string}>,
      * }
      */
     public function evaluer(string $orgId, ?string $vehiculeId, ?string $clientId): array
     {
         $controleActif = Parametre::isVentesControleImpayesActif($orgId);
+        $factureBloquante = null;
 
         if ($vehiculeId) {
             $cible = 'vehicule';
             $seuil = $this->seuilApplicableVehicule($orgId, $vehiculeId);
             $factures = $this->facturesImpayeesVehicule($orgId, $vehiculeId);
+            $factureBloquante = $this->premiereFactureNonEncaisseeVehicule($orgId, $vehiculeId);
         } elseif ($clientId) {
             $cible = 'client';
             $seuil = Parametre::getVentesSeuilImpayesMax($orgId);
@@ -84,7 +100,8 @@ class SolvabiliteService
 
         // Strict : bloqué seulement si la dette DÉPASSE le seuil, jamais à l'égalité (cf. cas
         // "seuil=0, dette=0 → autorisé" et "seuil=2000000, dette=2000000 → autorisé").
-        $blocked = $controleActif && $totalRemaining > $seuil;
+        $blockedSeuil = $controleActif && $totalRemaining > $seuil;
+        $blockedPremiereFacture = $factureBloquante !== null;
 
         return [
             'cible' => $cible,
@@ -98,8 +115,11 @@ class SolvabiliteService
             'controle_actif' => $controleActif,
             'seuil_impayes' => $seuil,
             'montant_disponible' => max(0, $seuil - $totalRemaining),
-            'blocked' => $blocked,
-            'depassement' => $blocked ? $totalRemaining - $seuil : 0,
+            'blocked' => $blockedPremiereFacture || $blockedSeuil,
+            'depassement' => $blockedSeuil ? $totalRemaining - $seuil : 0,
+            'blocage_premiere_facture' => $blockedPremiereFacture,
+            'facture_bloquante_reference' => $factureBloquante?->reference,
+            'facture_bloquante_commande_id' => $factureBloquante?->commande_vente_id,
             'factures' => $factures->map(fn (FactureVente $f) => [
                 'commande_id' => $f->commande_vente_id,
                 'reference' => $f->reference,
@@ -119,11 +139,25 @@ class SolvabiliteService
      * checkSolvabilite() (aperçu) utilise evaluer() directement : il ne doit jamais lever, juste
      * refléter l'état pour l'utilisateur avant qu'il ne soumette.
      *
+     * Le verrou « première régularisation » est vérifié en priorité — message dédié, distinct de
+     * celui du seuil, pour ne jamais laisser croire à l'utilisateur qu'un simple encaissement
+     * partiel suffirait à lever un blocage qui exige en réalité un premier encaissement complet.
+     *
      * @return array (même forme que evaluer())
      */
     public function enforcerOuEchouer(string $orgId, ?string $vehiculeId, ?string $clientId): array
     {
         $resultat = $this->evaluer($orgId, $vehiculeId, $clientId);
+
+        if ($resultat['blocage_premiere_facture']) {
+            $reference = $resultat['facture_bloquante_reference'];
+
+            throw ValidationException::withMessages([
+                'impayes' => 'Ce véhicule possède déjà une commande'
+                    .($reference ? " ({$reference})" : '')
+                    .' dont la facture n\'a encore reçu aucun paiement. Enregistrez d\'abord un encaissement avant de créer une nouvelle commande.',
+            ]);
+        }
 
         if ($resultat['blocked']) {
             throw ValidationException::withMessages([
@@ -167,6 +201,26 @@ class SolvabiliteService
             ->value('seuil_derogation_impayes');
 
         return $seuilType !== null ? (int) $seuilType : Parametre::getVentesSeuilImpayesMax($orgId);
+    }
+
+    /**
+     * Première facture (par ordre de création) rattachée à ce véhicule n'ayant reçu STRICTEMENT
+     * AUCUN encaissement alors qu'elle porte encore un solde — cf. docblock de classe. Volontai-
+     * rement basé sur le calcul montant_encaisse/montant_restant plutôt que sur `statut_facture`
+     * (CREEE et IMPAYEE comptent tous les deux ici) : le blocage doit rester correct même si de
+     * nouveaux statuts intermédiaires apparaissent plus tard. Une facture ANNULEE n'engendre plus
+     * de créance réelle et n'est jamais bloquante (cf. CommandeVenteService::annuler(), qui
+     * annule désormais systématiquement la facture d'une commande annulée non encaissée).
+     */
+    public function premiereFactureNonEncaisseeVehicule(string $orgId, string $vehiculeId): ?FactureVente
+    {
+        return FactureVente::where('organization_id', $orgId)
+            ->where('vehicule_id', $vehiculeId)
+            ->where('statut_facture', '!=', StatutFactureVente::ANNULEE->value)
+            ->with('encaissements')
+            ->orderBy('created_at')
+            ->get()
+            ->first(fn (FactureVente $f) => (float) $f->montant_encaisse <= 0.0 && (float) $f->montant_restant > 0.0);
     }
 
     /** @return Collection<int, FactureVente> */

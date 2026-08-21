@@ -43,6 +43,7 @@ const sidebarNavItems = computed((): NavItem[] => {
             { title: 'Paramètres produits', href: '/settings/produits' },
             { title: 'Paramètres dépenses', href: '/settings/depenses' },
             { title: 'Paramètres ventes', href: '/settings/ventes' },
+            { title: 'Paramètres commissions', href: '/settings/commissions' },
             { title: 'Modules metier', href: '/settings/modules' },
             { title: 'Thème', href: '/settings/theme' },
         );

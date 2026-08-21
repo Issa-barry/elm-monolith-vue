@@ -31,6 +31,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -308,44 +309,61 @@ class CommandeVenteController extends Controller
         $data = $request->validate($this->commandeValidationRules(), $this->commandeValidationMessages());
 
         $this->ensureVehiculeOrClientSelected($data);
-        $this->enforceImpayesBlocking($data, $orgId);
         $this->ensureQuantiteMatchesVehiculeCapacity($data);
         $this->enforcePrixVentePolicy($data, null);
 
-        $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null);
-        [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $context->modeTarification, $context->categorieTarifaireVehicule);
+        $commande = DB::transaction(function () use ($data, $orgId, $userSite) {
+            // Verrou de ligne sur le véhicule le temps de la transaction : sans cela, deux
+            // requêtes concurrentes pour le même véhicule (double clic, deux utilisateurs)
+            // passeraient toutes les deux enforceImpayesBlocking() avant qu'aucune des deux
+            // commandes ne soit créée, puis créeraient chacune une commande — exactement le
+            // doublon que ce contrôle doit empêcher (cf. section « concurrence » de la règle
+            // métier). Le verrou est acquis AVANT le contrôle pour que la seconde requête,
+            // bloquée par MySQL/Postgres jusqu'au commit de la première, revoie bien la facture
+            // fraîchement créée par celle-ci une fois débloquée.
+            if (! empty($data['vehicule_id'])) {
+                Vehicule::whereKey($data['vehicule_id'])->lockForUpdate()->first();
+            }
 
-        $commande = CommandeVente::create([
-            'organization_id' => $orgId,
-            'site_id' => $userSite->id,
-            'vehicule_id' => $data['vehicule_id'] ?? null,
-            'client_id' => $data['client_id'] ?? null,
-            'client_vehicule_id' => $data['client_vehicule_id'] ?? null,
-            'total_commande' => $totalCommande,
-            'mode_tarification_snapshot' => $context->modeTarification->value,
-            'commission_eligible_snapshot' => $context->commissionEligible,
-            'created_by' => auth()->id(),
-        ]);
+            $this->enforceImpayesBlocking($data, $orgId);
 
-        foreach ($lignesData as $ligneDatum) {
-            $commande->lignes()->create($ligneDatum);
-        }
+            $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null);
+            [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $context->modeTarification, $context->categorieTarifaireVehicule);
 
-        $commande->load(['lignes.variante.produit', 'vehicule', 'client']);
-        $this->auditService->record($commande, AuditEvent::CREATED, auth()->user(), null, $this->commandeSnapshot($commande));
+            $commande = CommandeVente::create([
+                'organization_id' => $orgId,
+                'site_id' => $userSite->id,
+                'vehicule_id' => $data['vehicule_id'] ?? null,
+                'client_id' => $data['client_id'] ?? null,
+                'client_vehicule_id' => $data['client_vehicule_id'] ?? null,
+                'total_commande' => $totalCommande,
+                'mode_tarification_snapshot' => $context->modeTarification->value,
+                'commission_eligible_snapshot' => $context->commissionEligible,
+                'created_by' => auth()->id(),
+            ]);
 
-        if ($commande->vehicule_id && $commande->lignes->isNotEmpty()) {
-            CommandeVenteService::confirmer($commande);
-            CommandeVenteActiviteService::log($commande, 'creation_confirmee');
+            foreach ($lignesData as $ligneDatum) {
+                $commande->lignes()->create($ligneDatum);
+            }
 
-            return redirect()->route('ventes.show', $commande)->with('success', 'Commande créée et confirmée. En attente de chargement.');
-        }
+            $commande->load(['lignes.variante.produit', 'vehicule', 'client']);
+            $this->auditService->record($commande, AuditEvent::CREATED, auth()->user(), null, $this->commandeSnapshot($commande));
 
-        // Vente directe client — passe en FACTURATION + crée la facture
-        CommandeVenteService::creerFactureDirecte($commande);
-        CommandeVenteActiviteService::log($commande, 'creation_directe');
+            if ($commande->vehicule_id && $commande->lignes->isNotEmpty()) {
+                CommandeVenteService::confirmer($commande);
+                CommandeVenteActiviteService::log($commande, 'creation_confirmee');
+            } else {
+                // Vente directe client — passe en FACTURATION + crée la facture
+                CommandeVenteService::creerFactureDirecte($commande);
+                CommandeVenteActiviteService::log($commande, 'creation_directe');
+            }
 
-        return redirect()->route('ventes.show', $commande)->with('success', 'Commande créée. Facture générée — en attente d\'encaissement.');
+            return $commande;
+        });
+
+        return $commande->isFacturation()
+            ? redirect()->route('ventes.show', $commande)->with('success', 'Commande créée. Facture générée — en attente d\'encaissement.')
+            : redirect()->route('ventes.show', $commande)->with('success', 'Commande créée et confirmée. En attente de chargement.');
     }
 
     // ── Show ──────────────────────────────────────────────────────────────────

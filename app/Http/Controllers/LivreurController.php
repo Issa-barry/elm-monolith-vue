@@ -2,7 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\CommissionPart;
+use App\Models\CommissionEnveloppePart;
+use App\Models\CommissionLogistiquePart;
 use App\Models\Livreur;
 use App\Models\Personne;
 use Illuminate\Http\JsonResponse;
@@ -151,13 +152,14 @@ class LivreurController extends Controller
     /**
      * Supprime un livreur :
      *  - Suppression physique (soft) s'il n'a pas d'historique de commissions.
-     *  - Désactivation logique s'il est référencé dans des commission_parts.
+     *  - Désactivation logique s'il est référencé dans des commissions vente ou logistique.
      */
     public function destroy(Livreur $livreur): JsonResponse
     {
         $this->authorize('delete', $livreur);
 
-        $hasHistory = CommissionPart::where('livreur_id', $livreur->id)->exists();
+        $hasHistory = CommissionEnveloppePart::where('beneficiaire_type', 'livreur')->where('beneficiaire_id', $livreur->id)->exists()
+            || CommissionLogistiquePart::where('livreur_id', $livreur->id)->exists();
 
         if ($hasHistory) {
             $livreur->update(['is_active' => false]);

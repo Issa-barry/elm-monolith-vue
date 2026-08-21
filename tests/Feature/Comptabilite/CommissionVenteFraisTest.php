@@ -7,8 +7,9 @@ use App\Enums\StatutDepense;
 use App\Enums\StatutPeriodePaiement;
 use App\Enums\TypePeriodePaiement;
 use App\Models\CommandeVente;
-use App\Models\CommissionPart;
-use App\Models\CommissionVente;
+use App\Models\CommissionEnveloppe;
+use App\Models\CommissionEnveloppePart;
+use App\Models\CommissionProcessus;
 use App\Models\Depense;
 use App\Models\DepenseType;
 use App\Models\Livreur;
@@ -17,6 +18,7 @@ use App\Models\Site;
 use App\Models\Vehicule;
 use App\Services\PeriodePaiementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -95,25 +97,34 @@ class CommissionVenteFraisTest extends TestCase
             'total_commande' => 500000,
         ]);
 
-        $commission = CommissionVente::create([
+        $processus = CommissionProcessus::firstOrCreate(
+            ['organization_id' => $this->org->id, 'code' => CommissionProcessus::CODE_VENTE],
+            [
+                'libelle' => 'Vente',
+                'declencheur' => 'chargement_valide',
+                'strategie_ancrage_site' => 'operation',
+                'statut' => 'actif',
+            ],
+        );
+
+        $commission = CommissionEnveloppe::create([
             'organization_id' => $this->org->id,
-            'commande_vente_id' => $commande->id,
-            'vehicule_id' => $vehicule->id,
-            'montant_commande' => 500000,
-            'montant_commission_totale' => 120000,
-            'montant_verse' => 0,
+            'source_type' => CommandeVente::class,
+            'source_id' => $commande->id,
+            'processus_id' => $processus->id,
+            'cible_type' => 'equipe_livraison',
+            'cible_id' => (string) Str::ulid(),
+            'montant_total' => 120000,
+            'earned_at' => now(),
             'statut' => StatutCommission::IMPAYE->value,
         ]);
 
-        CommissionPart::create([
-            'commission_vente_id' => $commission->id,
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => trim("{$livreur->prenom} {$livreur->nom}"),
-            'role' => 'chauffeur',
-            'taux_commission' => 100,
+        CommissionEnveloppePart::create([
+            'enveloppe_id' => $commission->id,
+            'beneficiaire_type' => CommissionEnveloppePart::TYPE_LIVREUR,
+            'beneficiaire_id' => $livreur->id,
+            'taux_repartition_snapshot' => 100,
             'montant_brut' => 120000,
-            'frais_supplementaires' => 0,
             'montant_net' => 120000,
             'montant_verse' => 0,
             'statut' => StatutCommission::IMPAYE->value,
@@ -144,7 +155,7 @@ class CommissionVenteFraisTest extends TestCase
         $periode = app(PeriodePaiementService::class)->getOrCreatePeriod(
             $this->org->id,
             TypePeriodePaiement::LIVREUR,
-            $commission->created_at,
+            $commission->earned_at,
         );
         $periode->update(['statut' => StatutPeriodePaiement::VALIDEE]);
 
@@ -184,51 +195,9 @@ class CommissionVenteFraisTest extends TestCase
             );
     }
 
-    public function test_paiement_refuse_un_montant_superieur_au_reste_apres_frais(): void
-    {
-        $livreur = $this->setupLivreurAvecFrais();
-
-        // Le brut de la part (120 000) dépasse le reste réel (20 000) une fois
-        // les frais déduits : le paiement doit être bloqué.
-        $this->actingAs($this->user)
-            ->post(route('comptabilite.commissions.vente.livreur.paiements', $livreur->id), [
-                'montant' => 100000,
-                'mode_paiement' => 'especes',
-            ])
-            ->assertSessionHasErrors('montant');
-    }
-
-    public function test_paiement_du_reste_exact_apres_frais_est_accepte(): void
-    {
-        $livreur = $this->setupLivreurAvecFrais();
-
-        $this->actingAs($this->user)
-            ->post(route('comptabilite.commissions.vente.livreur.paiements', $livreur->id), [
-                'montant' => 20000,
-                'mode_paiement' => 'especes',
-            ])
-            ->assertSessionHasNoErrors()
-            ->assertSessionHas('success');
-    }
-
-    // ── Message d'erreur explicite quand le solde disponible est nul ─────────
-
-    public function test_message_explique_que_les_frais_ont_ramene_le_solde_a_zero(): void
-    {
-        // Frais (120 000) >= brut (120 000) : le solde disponible tombe à 0,
-        // le message doit le dire explicitement plutôt qu'un simple "(0.00 GNF)".
-        $livreur = $this->setupLivreurAvecFrais(montantDepense: 120000);
-
-        $response = $this->actingAs($this->user)
-            ->post(route('comptabilite.commissions.vente.livreur.paiements', $livreur->id), [
-                'montant' => 1000,
-                'mode_paiement' => 'especes',
-            ])
-            ->assertSessionHasErrors('montant');
-
-        $this->assertStringContainsString(
-            'dépenses',
-            mb_strtolower($response->getSession()->get('errors')->get('montant')[0])
-        );
-    }
+    // Paiement direct désormais impossible depuis cet écran (can_pay toujours false —
+    // la seule chaîne de paiement valide passe par Comptabilité > Fiches de paiement,
+    // cf. CommissionVenteController::index()). La déduction des frais du montant
+    // réellement dû reste garantie côté génération de fiche
+    // (PeriodeCalculatorService::calculerLivreurs(), cf. DepenseComptabiliteTest).
 }

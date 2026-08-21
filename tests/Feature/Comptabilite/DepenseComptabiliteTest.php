@@ -8,9 +8,11 @@ use App\Enums\StatutPeriodePaie;
 use App\Enums\TypeVariablePaie;
 use App\Features\ModuleFeature;
 use App\Models\CommandeVente;
+use App\Models\CommissionEnveloppe;
+use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
-use App\Models\CommissionVente;
+use App\Models\CommissionProcessus;
 use App\Models\Contrat;
 use App\Models\Depense;
 use App\Models\DepenseType;
@@ -28,6 +30,7 @@ use App\Models\TypeVehicule;
 use App\Models\Vehicule;
 use App\Services\PaieCalculService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Pennant\Feature;
 use Tests\Feature\Concerns\HasAdminSetup;
@@ -49,6 +52,31 @@ class DepenseComptabiliteTest extends TestCase
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private function makeEnveloppe(CommandeVente $commande, string $cibleType): CommissionEnveloppe
+    {
+        $processus = CommissionProcessus::firstOrCreate(
+            ['organization_id' => $this->org->id, 'code' => CommissionProcessus::CODE_VENTE],
+            [
+                'libelle' => 'Vente',
+                'declencheur' => 'chargement_valide',
+                'strategie_ancrage_site' => 'operation',
+                'statut' => 'actif',
+            ],
+        );
+
+        return CommissionEnveloppe::create([
+            'organization_id' => $this->org->id,
+            'source_type' => CommandeVente::class,
+            'source_id' => $commande->id,
+            'processus_id' => $processus->id,
+            'cible_type' => $cibleType,
+            'cible_id' => (string) Str::ulid(),
+            'montant_total' => 0,
+            'earned_at' => now(),
+            'statut' => 'impaye',
+        ]);
+    }
 
     private function makeEmployeAvecContrat(float $salaire = 1_000_000): array
     {
@@ -596,21 +624,13 @@ class DepenseComptabiliteTest extends TestCase
             'proprietaire_id' => $proprietaire->id,
         ]);
 
-        $commandeVente = CommandeVente::factory()->create(['organization_id' => $this->org->id]);
-        $commissionVente = CommissionVente::factory()->create([
-            'organization_id' => $this->org->id,
-            'vehicule_id' => $vehicule->id,
-            'commande_vente_id' => $commandeVente->id,
-        ]);
+        $commandeVente = CommandeVente::factory()->create(['organization_id' => $this->org->id, 'vehicule_id' => $vehicule->id]);
+        $enveloppe = $this->makeEnveloppe($commandeVente, 'equipe_livraison');
 
-        $commissionVente->parts()->create([
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => 'Livreur Test',
-            'role' => 'chauffeur',
-            'taux_commission' => 20,
+        $enveloppe->parts()->create([
+            'beneficiaire_type' => CommissionEnveloppePart::TYPE_LIVREUR,
+            'beneficiaire_id' => $livreur->id,
             'montant_brut' => 150_000,
-            'frais_supplementaires' => 0,
             'montant_net' => 150_000,
             'montant_verse' => 0,
             'statut' => 'impaye',
@@ -650,21 +670,13 @@ class DepenseComptabiliteTest extends TestCase
             'proprietaire_id' => $proprietaire->id,
         ]);
 
-        $commandeVenteP = CommandeVente::factory()->create(['organization_id' => $this->org->id]);
-        $commissionVente = CommissionVente::factory()->create([
-            'organization_id' => $this->org->id,
-            'vehicule_id' => $vehicule->id,
-            'commande_vente_id' => $commandeVenteP->id,
-        ]);
+        $commandeVenteP = CommandeVente::factory()->create(['organization_id' => $this->org->id, 'vehicule_id' => $vehicule->id]);
+        $enveloppe = $this->makeEnveloppe($commandeVenteP, 'proprietaire');
 
-        $commissionVente->parts()->create([
-            'type_beneficiaire' => 'proprietaire',
-            'proprietaire_id' => $proprietaire->id,
-            'beneficiaire_nom' => 'Propriétaire Test',
-            'role' => 'proprietaire',
-            'taux_commission' => 30,
+        $enveloppe->parts()->create([
+            'beneficiaire_type' => CommissionEnveloppePart::TYPE_PROPRIETAIRE,
+            'beneficiaire_id' => $proprietaire->id,
             'montant_brut' => 300_000,
-            'frais_supplementaires' => 0,
             'montant_net' => 300_000,
             'montant_verse' => 0,
             'statut' => 'impaye',
@@ -707,21 +719,13 @@ class DepenseComptabiliteTest extends TestCase
             'proprietaire_id' => $proprietaire->id,
         ]);
 
-        $commandeVenteP = CommandeVente::factory()->create(['organization_id' => $this->org->id]);
-        $commissionVente = CommissionVente::factory()->create([
-            'organization_id' => $this->org->id,
-            'vehicule_id' => $vehicule->id,
-            'commande_vente_id' => $commandeVenteP->id,
-        ]);
+        $commandeVenteP = CommandeVente::factory()->create(['organization_id' => $this->org->id, 'vehicule_id' => $vehicule->id]);
+        $enveloppe = $this->makeEnveloppe($commandeVenteP, 'proprietaire');
 
-        $commissionVente->parts()->create([
-            'type_beneficiaire' => 'proprietaire',
-            'proprietaire_id' => $proprietaire->id,
-            'beneficiaire_nom' => 'Propriétaire Test',
-            'role' => 'proprietaire',
-            'taux_commission' => 30,
+        $enveloppe->parts()->create([
+            'beneficiaire_type' => CommissionEnveloppePart::TYPE_PROPRIETAIRE,
+            'beneficiaire_id' => $proprietaire->id,
             'montant_brut' => 300_000,
-            'frais_supplementaires' => 0,
             'montant_net' => 300_000,
             'montant_verse' => 0,
             'statut' => 'impaye',

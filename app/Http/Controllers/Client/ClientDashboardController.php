@@ -7,8 +7,8 @@ use App\Enums\StatutDepense;
 use App\Enums\StatutPropositionVehicule;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
+use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionLogistiquePart;
-use App\Models\CommissionPart;
 use App\Models\Depense;
 use App\Models\Livreur;
 use App\Models\Organization;
@@ -527,7 +527,7 @@ class ClientDashboardController extends Controller
     }
 
     /**
-     * @return Collection<int, CommissionPart>
+     * @return Collection<int, CommissionEnveloppePart>
      */
     private function partsVentes(
         ?string $organizationId,
@@ -542,15 +542,15 @@ class ClientDashboardController extends Controller
             return collect();
         }
 
-        return CommissionPart::query()
+        return CommissionEnveloppePart::query()
             ->with([
-                'commission.commande:id,reference,validated_at,created_at',
-                'commission.vehicule:id,nom_vehicule,immatriculation',
+                'enveloppe.source:id,reference,validated_at,created_at',
+                'enveloppe.source.vehicule:id,nom_vehicule,immatriculation',
             ])
-            ->whereHas('commission', fn ($query) => $query->where('organization_id', $organizationId))
-            // tous les statuts sont actifs (impaye/partiel/paye)
-            ->when($dateDebut, fn ($q) => $q->whereDate('created_at', '>=', $dateDebut))
-            ->when($dateFin, fn ($q) => $q->whereDate('created_at', '<=', $dateFin))
+            ->whereHas('enveloppe', fn ($query) => $query->where('organization_id', $organizationId))
+            // tous les statuts sont actifs (creee/impaye/partiel/paye)
+            ->when($dateDebut, fn ($q) => $q->whereHas('enveloppe', fn ($sq) => $sq->whereDate('earned_at', '>=', $dateDebut)))
+            ->when($dateFin, fn ($q) => $q->whereHas('enveloppe', fn ($sq) => $sq->whereDate('earned_at', '<=', $dateFin)))
             ->when($statut, fn ($q) => $q->where('statut', $statut))
             ->when($vehiculeIds !== null, function ($q) use ($vehiculeIds) {
                 if ($vehiculeIds === []) {
@@ -558,20 +558,20 @@ class ClientDashboardController extends Controller
 
                     return;
                 }
-                $q->whereHas('commission', fn ($sq) => $sq->whereIn('vehicule_id', $vehiculeIds));
+                $q->whereHas('enveloppe.source', fn ($sq) => $sq->whereIn('vehicule_id', $vehiculeIds));
             })
             ->where(function ($query) use ($proprietaire, $livreur) {
                 if ($proprietaire !== null) {
                     $query->orWhere(function ($sq) use ($proprietaire) {
-                        $sq->where('type_beneficiaire', 'proprietaire')
-                            ->where('proprietaire_id', $proprietaire->id);
+                        $sq->where('beneficiaire_type', 'proprietaire')
+                            ->where('beneficiaire_id', $proprietaire->id);
                     });
                 }
 
                 if ($livreur !== null) {
                     $query->orWhere(function ($sq) use ($livreur) {
-                        $sq->where('type_beneficiaire', 'livreur')
-                            ->where('livreur_id', $livreur->id);
+                        $sq->where('beneficiaire_type', 'livreur')
+                            ->where('beneficiaire_id', $livreur->id);
                     });
                 }
             })
@@ -821,9 +821,9 @@ class ClientDashboardController extends Controller
 
     private function releve(Collection $partsVentes, Collection $partsLogistiques): array
     {
-        $lignesVentes = $partsVentes->map(function (CommissionPart $part) {
-            $commande = $part->commission?->commande;
-            $vehicule = $part->commission?->vehicule;
+        $lignesVentes = $partsVentes->map(function (CommissionEnveloppePart $part) {
+            $commande = $part->enveloppe?->source;
+            $vehicule = $commande?->vehicule;
             $date = $commande?->validated_at ?? $commande?->created_at ?? $part->created_at;
 
             return [
@@ -835,13 +835,13 @@ class ClientDashboardController extends Controller
                 'immatriculation' => $vehicule?->immatriculation,
                 'date_label' => $date?->format('d/m/Y'),
                 'date_sort' => $date?->timestamp ?? 0,
-                'frais' => (float) $part->frais_supplementaires,
+                'frais' => 0.0,
                 'montant_net' => (float) $part->montant_net,
                 'montant_a_payer' => $part->montant_a_payer,
                 'montant_verse' => (float) $part->montant_verse,
-                'montant_restant' => (float) $part->montant_restant,
+                'montant_restant' => $part->montant_restant,
                 'statut' => $part->statut?->value ?? (string) $part->getRawOriginal('statut'),
-                'statut_label' => $part->statut_label,
+                'statut_label' => $part->statut?->label(),
             ];
         });
 

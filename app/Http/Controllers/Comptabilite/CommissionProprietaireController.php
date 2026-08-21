@@ -2,38 +2,33 @@
 
 namespace App\Http\Controllers\Comptabilite;
 
-use App\Enums\AuditEvent;
 use App\Enums\ModePaiement;
 use App\Enums\StatutCommission;
 use App\Enums\StatutDepense;
 use App\Enums\TypePeriodePaiement;
 use App\Http\Controllers\Controller;
-use App\Models\CommissionPart;
+use App\Models\CommissionEnveloppePart;
 use App\Models\Depense;
 use App\Models\Organization;
-use App\Models\PaiementCommissionVente;
+use App\Models\PaiementFichePaiement;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\Vehicule;
-use App\Services\AuditLogService;
 use App\Services\CommissionAdjustmentService;
 use App\Services\CommissionStatusResolver;
-use App\Services\CommissionVentePaiementService;
 use App\Services\PeriodeComptableService;
 use App\Services\PeriodePaiementService;
 use App\Services\SiteScopeService;
 use App\Support\Commission\CommissionDetailFilters;
+use App\Support\Commission\CommissionKpiBuckets;
 use App\Support\Commission\CommissionSummaryFormatter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Collection;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
-use InvalidArgumentException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class CommissionProprietaireController extends Controller
@@ -42,6 +37,11 @@ class CommissionProprietaireController extends Controller
 
     public function __construct(private SiteScopeService $siteScope) {}
 
+    /**
+     * Écran "Commission propriétaire" — cf. CommissionVenteController::index()
+     * pour le raisonnement (collection plutôt que SQL brut, can_pay/can_payer
+     * toujours false : paiement exclusivement via Fiches de paiement).
+     */
     public function index(Request $request): Response
     {
         abort_unless(auth()->user()->can('comptabilite.read'), 403);
@@ -61,38 +61,29 @@ class CommissionProprietaireController extends Controller
         $siteIds = ! $isAdmin ? $this->siteScope->accessibleSiteIds($user)->all() : [];
         $filtreSiteIds = $isAdmin ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
 
-        $query = CommissionPart::query()
-            ->from('commission_parts AS cp')
-            ->join('commissions_ventes AS cv', 'cv.id', '=', 'cp.commission_vente_id')
-            ->where('cv.organization_id', $orgId)
-            ->where('cp.type_beneficiaire', 'proprietaire')
-            ->whereNotNull('cp.proprietaire_id')
-            ->leftJoin('proprietaires', 'proprietaires.id', '=', 'cp.proprietaire_id')
-            // telephone n'est plus une colonne physique de `proprietaires` depuis la refonte
-            // Personne — jointure vers `personnes` requise.
-            ->leftJoin('personnes AS proprietaires_personnes', 'proprietaires_personnes.id', '=', 'proprietaires.personne_id')
-            ->select(['cp.proprietaire_id AS beneficiaire_id'])
-            ->selectRaw(
-                '"proprietaire"                   AS type_beneficiaire,
-                 MAX(cp.beneficiaire_nom)         AS beneficiaire_nom,
-                 MAX(proprietaires_personnes.telephone) AS telephone,
-                 SUM(cp.montant_brut)             AS total_brut_cumule,
-                 SUM(COALESCE(cp.montant_actuel, cp.montant_net)) AS total_a_payer_cumule,
-                 SUM(cp.montant_verse)            AS total_verse,
-                 COUNT(DISTINCT cp.commission_vente_id) AS nb_commandes,
-                 MIN(CASE WHEN cp.statut IN (?,?) THEN cv.created_at END) AS premiere_echeance',
-                [StatutCommission::IMPAYE->value, StatutCommission::PARTIEL->value]
-            )
-            ->groupBy('cp.proprietaire_id');
+        $query = CommissionEnveloppePart::with([
+            'enveloppe.source.site:id,nom',
+            'enveloppe.source.vehicule:id,nom_vehicule,immatriculation',
+        ])
+            ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PROPRIETAIRE)
+            ->whereHas('enveloppe', function ($q) use ($orgId, $filtrePeriode) {
+                $q->where('organization_id', $orgId);
+                if ($filtrePeriode !== '') {
+                    [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
+                    $q->whereBetween('earned_at', [$debut, $fin]);
+                }
+            });
 
-        if ($filtrePeriode !== '') {
-            [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
-            $query->whereBetween('cv.created_at', [$debut, $fin]);
+        if ($isAdmin && ! empty($filtreSiteIds)) {
+            $query->whereHas('enveloppe.source', fn ($q) => $q->whereIn('site_id', $filtreSiteIds));
+        } elseif (! $isAdmin && ! empty($siteIds)) {
+            $query->whereHas('enveloppe.source', fn ($q) => $q->whereIn('site_id', $siteIds));
         }
 
-        $rows = $query->orderByRaw('SUM(COALESCE(cp.montant_actuel, cp.montant_net)) - SUM(cp.montant_verse) DESC')->get();
+        $allParts = $query->get();
+        $partsParProprio = $allParts->groupBy('beneficiaire_id');
 
-        $proprioIds = $rows->pluck('beneficiaire_id')->filter()->unique()->values();
+        $proprioIds = $partsParProprio->keys()->map(fn ($id) => (string) $id)->values();
         $fraisParProprio = [];
 
         if ($proprioIds->isNotEmpty()) {
@@ -130,7 +121,6 @@ class CommissionProprietaireController extends Controller
                 }
             }
 
-            // Dépenses rattachées directement au propriétaire (ex. "Dette propriétaire").
             $depProprioQuery = Depense::where('beneficiaire_type', 'proprietaire')
                 ->whereIn('beneficiaire_id', $proprioIds)
                 ->where('statut', StatutDepense::VALIDE->value)
@@ -143,34 +133,57 @@ class CommissionProprietaireController extends Controller
             }
         }
 
+        $premiereEcheanceParProprio = $partsParProprio->map(function ($parts) {
+            return $parts
+                ->filter(fn (CommissionEnveloppePart $p) => in_array($p->statut, [StatutCommission::IMPAYE, StatutCommission::PARTIEL], true))
+                ->pluck('enveloppe.earned_at')
+                ->filter()
+                ->sort()
+                ->first();
+        });
+
         $periodesParDate = app(PeriodePaiementService::class)->getPeriodsForDates(
             $orgId,
             TypePeriodePaiement::PROPRIETAIRE,
-            $rows->pluck('premiere_echeance')
+            $premiereEcheanceParProprio->values(),
         );
-        $labelsParStatut = ['impaye' => 'Impayé', 'partiel' => 'Partiel', 'paye' => 'Payé', 'annulee' => 'Annulée'];
-        $teamStatusParPeriode = $periodesParDate->mapWithKeys(
+        $labelsParStatut = ['creee' => 'Créée', 'impaye' => 'Impayé', 'partiel' => 'Partiel', 'paye' => 'Payé', 'annulee' => 'Annulée'];
+        $periodesUniques = $periodesParDate->values()->unique('id');
+        $teamStatusParPeriode = $periodesUniques->mapWithKeys(
             fn ($periode) => [$periode->id => CommissionAdjustmentService::statutValidationParBeneficiaire($periode)]
         );
 
-        $beneficiaires = $rows->map(function ($row) use ($fraisParProprio, $periodesParDate, $labelsParStatut, $teamStatusParPeriode) {
-            $totalBrut = (float) $row->total_brut_cumule;
-            $totalAPayer = (float) $row->total_a_payer_cumule;
-            $totalFrais = $fraisParProprio[(string) $row->beneficiaire_id] ?? 0.0;
+        $beneficiaires = $partsParProprio->map(function (Collection $parts, string $proprioId) use (
+            $fraisParProprio, $premiereEcheanceParProprio, $periodesParDate, $labelsParStatut, $teamStatusParPeriode,
+        ) {
+            $premier = $parts->first();
+
+            // total_brut_cumule/total_net_cumule/solde_restant restent calculés exclusivement
+            // sur les parts déjà actives (jamais CREEE) — jamais mélangées à une commission pas
+            // encore éligible au paiement (cf. compartiments ci-dessous, décision produit du
+            // 20/08/2026 « visible ne veut pas dire payable »).
+            $partsPayables = $parts->filter(fn (CommissionEnveloppePart $p) => $p->statut !== StatutCommission::CREEE);
+            $totalBrut = (float) $partsPayables->sum('montant_brut');
+            $totalAPayer = (float) $partsPayables->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer);
+            $totalFrais = $fraisParProprio[$proprioId] ?? 0.0;
             $totalNet = max(0.0, $totalAPayer - $totalFrais);
-            $totalVerse = (float) $row->total_verse;
+            $totalVerse = (float) $partsPayables->sum('montant_verse');
             $solde = max(0.0, $totalNet - $totalVerse);
 
+            $buckets = CommissionKpiBuckets::calculer($parts);
+
             $statutGlobal = match (true) {
+                $partsPayables->isEmpty() && $buckets['en_attente_periode'] > 0.009 => StatutCommission::CREEE->value,
                 $totalNet > 0 && $totalVerse >= $totalNet => StatutCommission::PAYE->value,
                 $totalVerse > 0 => StatutCommission::PARTIEL->value,
                 default => StatutCommission::IMPAYE->value,
             };
 
-            $periode = $row->premiere_echeance
-                ? $periodesParDate->get(PeriodePaiementService::debutKeyForDate(Carbon::parse($row->premiere_echeance)))
+            $premiereEcheance = $premiereEcheanceParProprio->get($proprioId);
+            $periode = $premiereEcheance
+                ? $periodesParDate->get(PeriodePaiementService::debutKeyForDate(Carbon::parse($premiereEcheance)))
                 : null;
-            $teamStatus = $periode ? ($teamStatusParPeriode[$periode->id]["proprietaire:{$row->beneficiaire_id}"] ?? null) : null;
+            $teamStatus = $periode ? ($teamStatusParPeriode[$periode->id]["proprietaire:{$proprioId}"] ?? null) : null;
 
             $resolved = CommissionStatusResolver::resolve(
                 $periode,
@@ -178,22 +191,33 @@ class CommissionProprietaireController extends Controller
                 $statutGlobal,
                 $labelsParStatut[$statutGlobal] ?? $statutGlobal,
             );
+            $resolved['can_pay'] = false;
+
+            $beneficiaire = $premier->resoudreBeneficiaire();
+            $vehicules = $parts->pluck('enveloppe.source.vehicule')->filter()->unique('id')
+                ->map(fn ($v) => ['nom' => $v->nom_vehicule, 'immatriculation' => $v->immatriculation])->values();
+            $agence = $parts->pluck('enveloppe.source.site.nom')->filter()->unique()->sort()->implode(', ');
 
             return [
-                'beneficiaire_id' => (string) $row->beneficiaire_id,
-                'beneficiaire_nom' => $row->beneficiaire_nom ?? '—',
-                'telephone' => $row->telephone,
+                'beneficiaire_id' => $proprioId,
+                'beneficiaire_nom' => $beneficiaire?->nom_complet ?? '—',
+                'telephone' => $beneficiaire?->telephone,
+                'vehicules' => $vehicules->all(),
+                'agence' => $agence ?: null,
                 'total_brut_cumule' => $totalBrut,
                 'total_frais' => $totalFrais,
                 'total_net_cumule' => $totalNet,
                 'total_verse' => $totalVerse,
                 'solde_restant' => $solde,
                 'remaining_amount' => $solde,
-                'nb_commandes' => (int) $row->nb_commandes,
+                'nb_commandes' => $parts->pluck('enveloppe_id')->unique()->count(),
                 'statut_global' => $statutGlobal,
+                'total_genere' => $buckets['total_genere'],
+                'en_attente_periode' => $buckets['en_attente_periode'],
+                'payable' => $buckets['payable'],
                 ...$resolved,
             ];
-        });
+        })->values();
 
         if ($filtreStatut !== '') {
             $beneficiaires = $beneficiaires->filter(fn ($b) => $b['statut_global'] === $filtreStatut);
@@ -201,66 +225,15 @@ class CommissionProprietaireController extends Controller
 
         if ($filtreNom !== '') {
             $s = mb_strtolower($filtreNom);
-            $beneficiaires = $beneficiaires->filter(
-                fn ($b) => str_contains(mb_strtolower((string) $b['beneficiaire_nom']), $s)
-            );
+            $beneficiaires = $beneficiaires->filter(fn ($b) => str_contains(mb_strtolower((string) $b['beneficiaire_nom']), $s));
         }
 
         if ($filtreTelephone !== '') {
             $t = preg_replace('/\s/', '', $filtreTelephone);
-            $beneficiaires = $beneficiaires->filter(
-                fn ($b) => str_contains(preg_replace('/\s/', '', (string) ($b['telephone'] ?? '')), $t)
-            );
+            $beneficiaires = $beneficiaires->filter(fn ($b) => str_contains(preg_replace('/\s/', '', (string) ($b['telephone'] ?? '')), $t));
         }
 
         $list = $beneficiaires->values();
-
-        $proprioIdsList = $list->pluck('beneficiaire_id')->filter()->unique()->values()->toArray();
-
-        $partsParProprio = CommissionPart::with([
-            'commission.commande.site:id,nom',
-            'commission.vehicule:id,nom_vehicule,immatriculation',
-        ])
-            ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
-            ->where('type_beneficiaire', 'proprietaire')
-            ->whereNotNull('proprietaire_id')
-            ->whereIn('proprietaire_id', $proprioIdsList)
-            ->when($filtrePeriode !== '', function ($q) use ($filtrePeriode) {
-                [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
-                $q->whereHas('commission', fn ($q2) => $q2->whereBetween('created_at', [$debut, $fin]));
-            })
-            ->when($isAdmin && ! empty($filtreSiteIds), fn ($q) => $q->whereHas(
-                'commission.commande', fn ($q2) => $q2->whereIn('site_id', $filtreSiteIds)
-            ))
-            ->when(! $isAdmin && ! empty($siteIds), fn ($q) => $q->whereHas(
-                'commission.commande', fn ($q2) => $q2->whereIn('site_id', $siteIds)
-            ))
-            ->get()
-            ->groupBy('proprietaire_id');
-
-        $vehiculesParProprio = $partsParProprio->map(fn ($parts) => $parts
-            ->pluck('commission.vehicule')
-            ->filter()->unique('id')
-            ->map(fn ($v) => ['nom' => $v->nom_vehicule, 'immatriculation' => $v->immatriculation])
-            ->values()
-        );
-
-        $agencesParProprio = $partsParProprio->map(fn ($parts) => $parts
-            ->pluck('commission.commande.site.nom')
-            ->filter()->unique()->sort()->implode(', ')
-        );
-
-        $list = $list->map(function ($b) use ($vehiculesParProprio, $agencesParProprio) {
-            return array_merge($b, [
-                'vehicules' => $vehiculesParProprio[$b['beneficiaire_id']]?->values()->all() ?? [],
-                'agence' => $agencesParProprio[$b['beneficiaire_id']] ?: null,
-            ]);
-        })->values();
-
-        if (! $isAdmin || ! empty($filtreSiteIds)) {
-            $allowedIds = $partsParProprio->keys()->map(fn ($k) => (string) $k)->all();
-            $list = $list->filter(fn ($b) => in_array($b['beneficiaire_id'], $allowedIds))->values();
-        }
 
         $kpis = [
             'nb_proprietaires' => $list->count(),
@@ -269,15 +242,15 @@ class CommissionProprietaireController extends Controller
             'total_frais' => (float) $list->sum('total_frais'),
             'total_verse' => (float) $list->sum('total_verse'),
             'solde_total' => (float) $list->sum('solde_restant'),
+            'total_genere' => (float) $list->sum('total_genere'),
+            'en_attente_periode' => (float) $list->sum('en_attente_periode'),
+            'payable' => (float) $list->sum('payable'),
         ];
 
-        $earliestDate = CommissionPart::query()
-            ->from('commission_parts AS cp')
-            ->join('commissions_ventes AS cv', 'cv.id', '=', 'cp.commission_vente_id')
-            ->where('cv.organization_id', $orgId)
-            ->where('cp.type_beneficiaire', 'proprietaire')
-            ->whereNotNull('cp.proprietaire_id')
-            ->min('cv.created_at');
+        $earliestDate = CommissionEnveloppePart::where('beneficiaire_type', CommissionEnveloppePart::TYPE_PROPRIETAIRE)
+            ->whereHas('enveloppe', fn ($q) => $q->where('organization_id', $orgId))
+            ->join('commission_enveloppes', 'commission_enveloppes.id', '=', 'commission_enveloppe_parts.enveloppe_id')
+            ->min('commission_enveloppes.earned_at');
 
         $periodesDisponibles = $earliestDate
             ? self::periodesProprietaireBetween(Carbon::parse($earliestDate), now())
@@ -307,7 +280,7 @@ class CommissionProprietaireController extends Controller
                 'statut_label' => $periodeAffichee->statut_label,
             ] : null,
             'sites' => $sites,
-            'can_payer' => auth()->user()->can('comptabilite.payer'),
+            'can_payer' => false,
         ]);
     }
 
@@ -320,11 +293,11 @@ class CommissionProprietaireController extends Controller
         $proprio = Proprietaire::find($proprietaireId);
         $nom = $proprio ? trim(($proprio->prenom ?? '').' '.($proprio->nom ?? '')) : '—';
 
-        $allParts = CommissionPart::with(['commission.commande.site', 'commission.vehicule'])
-            ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
-            ->where('type_beneficiaire', 'proprietaire')
-            ->where('proprietaire_id', $proprietaireId)
-            ->orderByDesc('commission_vente_id')
+        $allParts = CommissionEnveloppePart::with(['enveloppe.source.site', 'enveloppe.source.vehicule'])
+            ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PROPRIETAIRE)
+            ->where('beneficiaire_id', $proprietaireId)
+            ->whereHas('enveloppe', fn ($q) => $q->where('organization_id', $orgId))
+            ->orderByDesc('enveloppe_id')
             ->get();
 
         $vehicules = Vehicule::where('proprietaire_id', $proprietaireId)
@@ -339,11 +312,6 @@ class CommissionProprietaireController extends Controller
         $vehiculeIds = $filters['vehicule_ids'];
         $siteIds = $filters['site_ids'];
 
-        // Deux sources de dépenses imputées à la commission propriétaire :
-        // celles rattachées à un véhicule qu'il possède, et celles rattachées
-        // directement à lui (ex. "Dette propriétaire"). Quand un filtre véhicule
-        // global est actif, seules les dépenses du véhicule sélectionné comptent
-        // (les dépenses "Dette propriétaire" ne sont rattachables à aucun véhicule).
         $fraisDepensesQuery = Depense::with(['depenseType:id,libelle', 'user', 'validateur'])
             ->where('organization_id', $orgId)
             ->where('statut', StatutDepense::VALIDE->value)
@@ -382,65 +350,69 @@ class CommissionProprietaireController extends Controller
         $totalFraisDepenses = (float) $fraisDepensesAffichees->sum('montant');
 
         $earliestCommission = $allParts
-            ->filter(fn ($p) => $p->commission?->created_at !== null)
-            ->sortBy(fn ($p) => $p->commission->created_at)
+            ->filter(fn (CommissionEnveloppePart $p) => $p->enveloppe?->earned_at !== null)
+            ->sortBy(fn (CommissionEnveloppePart $p) => $p->enveloppe->earned_at)
             ->first();
-        $earliestDate = $earliestCommission?->commission?->created_at ?? now();
-        $periodesDisponibles = self::periodesProprietaireBetween(Carbon::instance($earliestDate), now());
+        $earliestDate = $earliestCommission?->enveloppe?->earned_at ?? now();
+        $periodesDisponibles = self::periodesProprietaireBetween(Carbon::parse($earliestDate), now());
 
         $vehiculesDisponibles = $allParts
-            ->map(fn ($p) => $p->commission?->vehicule)
+            ->map(fn (CommissionEnveloppePart $p) => $p->enveloppe?->source?->vehicule)
             ->filter()
             ->unique('id')
             ->sortBy('nom_vehicule')
-            ->map(fn ($v) => [
-                'id' => $v->id,
-                'nom' => $v->nom_vehicule,
-                'immatriculation' => $v->immatriculation,
-            ])
+            ->map(fn ($v) => ['id' => $v->id, 'nom' => $v->nom_vehicule, 'immatriculation' => $v->immatriculation])
             ->values();
 
         $agencesDisponibles = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
 
-        $filteredParts = $allParts->filter(function ($p) use ($periodeFilter, $vehiculeIds, $siteIds) {
-            $commission = $p->commission;
+        $filteredParts = $allParts->filter(function (CommissionEnveloppePart $p) use ($periodeFilter, $vehiculeIds, $siteIds) {
+            $source = $p->enveloppe?->source;
 
             if ($periodeFilter !== '') {
-                $createdAt = $commission?->created_at;
-                if (! $createdAt || PeriodeComptableService::codeForProprietaire(Carbon::instance($createdAt)) !== $periodeFilter) {
+                $earnedAt = $p->enveloppe?->earned_at;
+                if (! $earnedAt || PeriodeComptableService::codeForProprietaire(Carbon::parse($earnedAt)) !== $periodeFilter) {
                     return false;
                 }
             }
 
-            if (! empty($vehiculeIds) && ! in_array($commission?->vehicule_id, $vehiculeIds, true)) {
+            if (! empty($vehiculeIds) && ! in_array($source?->vehicule_id, $vehiculeIds, true)) {
                 return false;
             }
 
-            if (! empty($siteIds) && ! in_array($commission?->commande?->site_id, $siteIds, true)) {
+            if (! empty($siteIds) && ! in_array($source?->site_id, $siteIds, true)) {
                 return false;
             }
 
             return true;
         });
 
-        $totalBrut = (float) $filteredParts->sum('montant_brut');
-        $totalAPayer = (float) $filteredParts->sum('montant_a_payer');
+        // total_brut/total_net/solde restent calculés exclusivement sur les parts déjà actives
+        // (jamais CREEE) — jamais mélangées à une commission pas encore éligible au paiement
+        // (cf. $buckets ci-dessous, décision produit du 20/08/2026).
+        $activeParts = $filteredParts->filter(fn (CommissionEnveloppePart $p) => $p->statut !== StatutCommission::CREEE);
+        $totalBrut = (float) $activeParts->sum('montant_brut');
+        $totalAPayer = (float) $activeParts->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer);
         $totalNet = max(0.0, $totalAPayer - $totalFraisDepenses);
-        $totalVerse = (float) $filteredParts->sum('montant_verse');
+        $totalVerse = (float) $activeParts->sum('montant_verse');
 
-        $activeParts = $filteredParts->filter(fn ($p) => $p->statut !== StatutCommission::CREEE);
-        $solde = max(0.0, (float) $activeParts->sum('montant_a_payer') - $totalFraisDepenses - (float) $activeParts->sum('montant_verse'));
+        $solde = max(0.0, (float) $activeParts->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer) - $totalFraisDepenses - (float) $activeParts->sum('montant_verse'));
+        $buckets = CommissionKpiBuckets::calculer($filteredParts);
 
         if ($solde > 0.009) {
             $earliestUnpaidDate = $activeParts
-                ->filter(fn ($p) => in_array($p->statut, [StatutCommission::IMPAYE, StatutCommission::PARTIEL], true))
-                ->map(fn ($p) => $p->commission?->created_at)
+                ->filter(fn (CommissionEnveloppePart $p) => in_array($p->statut, [StatutCommission::IMPAYE, StatutCommission::PARTIEL], true))
+                ->map(fn (CommissionEnveloppePart $p) => $p->enveloppe?->earned_at)
                 ->filter()
                 ->sort()
                 ->first();
             $periodeResolue = $earliestUnpaidDate
-                ? app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::PROPRIETAIRE, Carbon::instance($earliestUnpaidDate))
+                ? app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::PROPRIETAIRE, Carbon::parse($earliestUnpaidDate))
                 : null;
+        } elseif ($activeParts->isEmpty() && $buckets['en_attente_periode'] > 0.009) {
+            // Rien de payable ni de payé, seulement des commissions CREEE : aucune période à
+            // résoudre, le resolver retombera sur "creee" via sa branche periode === null.
+            $periodeResolue = null;
         } else {
             $periodeResolue = app(PeriodePaiementService::class)->getPeriodByDate($orgId, TypePeriodePaiement::PROPRIETAIRE, now());
         }
@@ -449,67 +421,73 @@ class CommissionProprietaireController extends Controller
             ? (CommissionAdjustmentService::statutValidationParBeneficiaire($periodeResolue)["proprietaire:{$proprietaireId}"] ?? null)
             : null;
 
-        $paymentValue = $solde > 0.009 ? StatutCommission::IMPAYE->value : StatutCommission::PAYE->value;
-        $paymentLabel = $solde > 0.009 ? 'Impayé' : 'Payé';
+        $paymentValue = match (true) {
+            $solde > 0.009 => StatutCommission::IMPAYE->value,
+            $activeParts->isEmpty() && $buckets['en_attente_periode'] > 0.009 => StatutCommission::CREEE->value,
+            default => StatutCommission::PAYE->value,
+        };
+        $paymentLabel = ['impaye' => 'Impayé', 'creee' => 'Créée', 'paye' => 'Payé'][$paymentValue] ?? $paymentValue;
         $statutCommission = CommissionStatusResolver::resolve($periodeResolue, $teamStatus, $paymentValue, $paymentLabel);
-        $payable = $statutCommission['can_pay'];
+        $statutCommission['can_pay'] = false;
+        $payable = false;
 
         $historiqueCommandes = $filteredParts
-            ->groupBy('commission_vente_id')
-            ->map(function ($partsGroup) {
+            ->groupBy('enveloppe_id')
+            ->map(function (Collection $partsGroup) {
                 $first = $partsGroup->first();
-                $commission = $first->commission;
-                $periodeCode = $commission->created_at
-                    ? PeriodeComptableService::codeForProprietaire(Carbon::instance($commission->created_at))
+                $enveloppe = $first->enveloppe;
+                $source = $enveloppe?->source;
+                $periodeCode = $enveloppe?->earned_at
+                    ? PeriodeComptableService::codeForProprietaire(Carbon::parse($enveloppe->earned_at))
                     : null;
 
-                $montantAPayer = (float) $partsGroup->sum('montant_a_payer');
+                $montantAPayer = (float) $partsGroup->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer);
                 $montantVerse = (float) $partsGroup->sum('montant_verse');
 
                 return [
-                    'commission_id' => $commission->id,
-                    'reference' => $commission->commande?->reference,
-                    'date' => $commission->created_at?->format(self::DATE_FORMAT),
-                    'site' => $commission->commande?->site?->nom,
-                    'vehicule' => $commission->vehicule ? [
-                        'id' => $commission->vehicule->id,
-                        'nom' => $commission->vehicule->nom_vehicule,
-                        'immatriculation' => $commission->vehicule->immatriculation,
+                    'commission_id' => $enveloppe?->id,
+                    'reference' => $source?->reference,
+                    'date' => $enveloppe?->earned_at ? Carbon::parse($enveloppe->earned_at)->format(self::DATE_FORMAT) : null,
+                    'site' => $source?->site?->nom,
+                    'vehicule' => $source?->vehicule ? [
+                        'id' => $source->vehicule->id,
+                        'nom' => $source->vehicule->nom_vehicule,
+                        'immatriculation' => $source->vehicule->immatriculation,
                     ] : null,
                     'montant_brut' => (float) $partsGroup->sum('montant_brut'),
                     'montant' => $montantAPayer,
                     'paye' => $montantVerse,
                     'reste' => max(0.0, $montantAPayer - $montantVerse),
-                    'statut' => $first->statut_label,
-                    'statut_dot_class' => $first->statut_dot_class,
+                    'statut' => $first->statut?->label(),
+                    'statut_dot_class' => $first->statut instanceof StatutCommission ? $first->statut->dotClass() : 'bg-zinc-400 dark:bg-zinc-500',
                     'periode' => $periodeCode,
                     'periode_label' => $periodeCode ? PeriodeComptableService::labelForCode($periodeCode) : null,
                 ];
             })
             ->values();
 
-        $historiquePaiementsQuery = PaiementCommissionVente::with('creator')
-            ->where('organization_id', $orgId)
-            ->where('type_beneficiaire', 'proprietaire')
-            ->where('proprietaire_id', $proprietaireId)
-            ->orderByDesc('paid_at');
+        $historiquePaiementsQuery = PaiementFichePaiement::with('createur')
+            ->whereHas('fiche', fn ($q) => $q->where('organization_id', $orgId)
+                ->where('beneficiaire_type', 'proprietaire')
+                ->where('beneficiaire_id', $proprietaireId))
+            ->orderByDesc('date_paiement');
 
         if ($periodeFilter !== '') {
             [$debutPaiement, $finPaiement] = PeriodeComptableService::dateRangeForCode($periodeFilter);
-            $historiquePaiementsQuery->whereBetween('paid_at', [$debutPaiement->toDateString(), $finPaiement->toDateString().' 23:59:59']);
+            $historiquePaiementsQuery->whereBetween('date_paiement', [$debutPaiement->toDateString(), $finPaiement->toDateString().' 23:59:59']);
         }
 
         $historiquePaiements = $historiquePaiementsQuery
             ->get()
             ->map(fn ($p) => [
                 'id' => $p->id,
-                'paid_at' => $p->paid_at?->format(self::DATE_FORMAT),
+                'paid_at' => $p->date_paiement?->format(self::DATE_FORMAT),
                 'montant' => (float) $p->montant,
                 'mode_paiement' => $p->mode_paiement instanceof ModePaiement
                     ? $p->mode_paiement->label()
                     : (string) $p->mode_paiement,
                 'note' => $p->note,
-                'created_by' => $p->creator?->name,
+                'created_by' => $p->createur?->name,
             ]);
 
         $periodeRange = ['debut' => null, 'fin' => null];
@@ -530,6 +508,7 @@ class CommissionProprietaireController extends Controller
                 $totalNet,
                 $totalVerse,
                 $solde,
+                $buckets,
             ),
             'expenses' => $fraisDepensesAffichees->map(function ($d) use ($vehicules) {
                 $vehicule = $d->beneficiaire_type === 'vehicule'
@@ -573,47 +552,45 @@ class CommissionProprietaireController extends Controller
             ],
             'vehicules_disponibles' => $vehiculesDisponibles,
             'agences_disponibles' => $agencesDisponibles,
-            'can_payer' => auth()->user()->can('comptabilite.payer'),
+            'can_payer' => false,
         ]);
     }
 
-    public function payer(Request $request, string $proprietaireId): RedirectResponse
+    private function buildSiteGroups(Collection $rows): array
     {
-        abort_unless(auth()->user()->can('comptabilite.payer'), 403);
+        $grouped = $rows->groupBy(fn ($r) => $r['agence'] ?? 'Sans agence')
+            ->sortKeys()
+            ->map(function (Collection $siteRows, string $siteNom) {
+                return [
+                    'site_nom' => $siteNom === 'Sans agence' ? null : $siteNom,
+                    'rows' => $siteRows->values()->toArray(),
+                    'totaux' => [
+                        'total_cumule' => (float) $siteRows->sum('total_cumule'),
+                        'total_frais' => (float) $siteRows->sum('frais'),
+                        'total_deja_paye' => (float) $siteRows->sum('deja_paye'),
+                        'total_reste' => (float) $siteRows->sum('reste'),
+                    ],
+                ];
+            });
 
-        $data = $request->validate([
-            'montant' => ['required', 'numeric', 'min:0.01'],
-            'mode_paiement' => ['required', Rule::in(array_column(ModePaiement::cases(), 'value'))],
-            'note' => ['nullable', 'string', 'max:2000'],
-        ]);
-
-        try {
-            CommissionVentePaiementService::payer(
-                organizationId: auth()->user()->organization_id,
-                type: 'proprietaire',
-                beneficiaireId: $proprietaireId,
-                montant: (float) $data['montant'],
-                modePaiement: $data['mode_paiement'],
-                paidAt: now()->toDateString(),
-                note: $data['note'] ?? null,
-            );
-        } catch (InvalidArgumentException $e) {
-            return back()->withErrors(['montant' => $e->getMessage()]);
-        }
-
-        $proprietaire = Proprietaire::find($proprietaireId);
-        if ($proprietaire) {
-            $montantFmt = number_format((float) $data['montant'], 0, ',', "\u{202F}");
-            app(AuditLogService::class)->record($proprietaire, AuditEvent::PAID, auth()->user(), null, null, [
-                'module' => 'commissions_proprietaires',
-                'montant' => $data['montant'],
-                'mode_paiement' => $data['mode_paiement'],
-                'description' => "Paiement de {$montantFmt} GNF effectué pour ".trim("{$proprietaire->prenom} {$proprietaire->nom}"),
-            ]);
-        }
-
-        return back()->with('success', 'Paiement enregistré.');
+        return $grouped->isEmpty()
+            ? [['site_nom' => null, 'rows' => [], 'totaux' => ['total_cumule' => 0, 'total_frais' => 0, 'total_deja_paye' => 0, 'total_reste' => 0]]]
+            : $grouped->values()->toArray();
     }
+
+    /** @param  array<int, array{nom: string, immatriculation: ?string}>  $vehicules */
+    private static function vehiculesEnTexte(array $vehicules): string
+    {
+        return implode(' / ', array_map(
+            fn ($v) => trim($v['nom'].($v['immatriculation'] ? ' '.$v['immatriculation'] : '')),
+            $vehicules
+        ));
+    }
+
+    // ── Exports ───────────────────────────────────────────────────────────────
+    //
+    // Source CommissionEnveloppePart. Aucune exclusion CREEE ici — comportement
+    // volontaire, la commission propriétaire s'exporte quel que soit son statut.
 
     public function exportExcel(Request $request): StreamedResponse
     {
@@ -685,26 +662,22 @@ class CommissionProprietaireController extends Controller
         return $pdf->download('commissions-proprietaires-'.now()->format('Y-m-d').'.pdf');
     }
 
+    /** @return array{0: Collection<int, CommissionEnveloppePart>, 1: array<string, float>, 2: array<string, string>} */
     private function loadPartsForExport(string $orgId, string $filtrePeriode): array
     {
-        $query = CommissionPart::with([
-            'commission.commande.site:id,nom',
-            'commission.vehicule:id,nom_vehicule,immatriculation',
-            'proprietaire:id,personne_id',
-            'proprietaire.personne',
-        ])
-            ->whereHas('commission', fn ($q) => $q->where('organization_id', $orgId))
-            ->where('type_beneficiaire', 'proprietaire')
-            ->whereNotNull('proprietaire_id');
-
-        if ($filtrePeriode !== '') {
-            [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
-            $query->whereHas('commission', fn ($q) => $q->whereBetween('created_at', [$debut, $fin]));
-        }
+        $query = CommissionEnveloppePart::with(['enveloppe.source.site:id,nom', 'enveloppe.source.vehicule:id,nom_vehicule,immatriculation'])
+            ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PROPRIETAIRE)
+            ->whereHas('enveloppe', function ($q) use ($orgId, $filtrePeriode) {
+                $q->where('organization_id', $orgId);
+                if ($filtrePeriode !== '') {
+                    [$debut, $fin] = PeriodeComptableService::dateRangeForCode($filtrePeriode);
+                    $q->whereBetween('earned_at', [$debut, $fin]);
+                }
+            });
 
         $parts = $query->get();
 
-        $proprioIds = $parts->pluck('proprietaire_id')->filter()->unique();
+        $proprioIds = $parts->pluck('beneficiaire_id')->filter()->unique();
         $fraisParProprio = [];
         $motifsParProprio = [];
 
@@ -743,7 +716,6 @@ class CommissionProprietaireController extends Controller
                 }
             }
 
-            // Dépenses rattachées directement au propriétaire (ex. "Dette propriétaire").
             $depProprioQuery = Depense::with('depenseType:id,libelle')
                 ->where('beneficiaire_type', 'proprietaire')
                 ->whereIn('beneficiaire_id', $proprioIds)
@@ -765,33 +737,35 @@ class CommissionProprietaireController extends Controller
         return [$parts, $fraisParProprio, $motifsParProprio];
     }
 
+    /** @return Collection<int, array<string, mixed>> */
     private function buildExportRows(Collection $parts, array $fraisParProprio, array $motifsParProprio, string $filtrePeriode, string $filtreStatut, string $filtreNom, string $filtreTelephone): Collection
     {
-        $rows = $parts->groupBy('proprietaire_id')->map(function (Collection $propParts, string $proprioId) use ($fraisParProprio, $motifsParProprio, $filtrePeriode) {
+        $rows = $parts->groupBy('beneficiaire_id')->map(function (Collection $propParts, string $proprioId) use ($fraisParProprio, $motifsParProprio, $filtrePeriode) {
             $first = $propParts->first();
+            $beneficiaire = $first->resoudreBeneficiaire();
             $totalBrut = (float) $propParts->sum('montant_brut');
-            $totalAPayer = (float) $propParts->sum('montant_a_payer');
+            $totalAPayer = (float) $propParts->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer);
             $totalFrais = $fraisParProprio[$proprioId] ?? 0.0;
             $totalNet = max(0.0, $totalAPayer - $totalFrais);
             $totalVerse = (float) $propParts->sum('montant_verse');
             $solde = max(0.0, $totalNet - $totalVerse);
 
-            $vehicules = $propParts->pluck('commission.vehicule')
+            $vehicules = $propParts->pluck('enveloppe.source.vehicule')
                 ->filter()->unique('id')
                 ->map(fn ($v) => ['nom' => $v->nom_vehicule, 'immatriculation' => $v->immatriculation])
                 ->values();
 
-            $agence = $propParts->pluck('commission.commande.site.nom')
+            $agence = $propParts->pluck('enveloppe.source.site.nom')
                 ->filter()->unique()->sort()->implode(', ');
 
             $motifs = $motifsParProprio[$proprioId] ?? null;
 
             $periodeLabel = $filtrePeriode !== ''
                 ? PeriodeComptableService::labelForCode($filtrePeriode)
-                : $propParts->pluck('commission.created_at')
+                : $propParts->pluck('enveloppe.earned_at')
                     ->filter()
                     ->map(fn ($d) => PeriodeComptableService::labelForCode(
-                        PeriodeComptableService::codeForProprietaire(Carbon::instance($d))
+                        PeriodeComptableService::codeForProprietaire(Carbon::parse($d))
                     ))
                     ->unique()->implode(', ');
 
@@ -803,8 +777,8 @@ class CommissionProprietaireController extends Controller
 
             return [
                 'beneficiaire_id' => $proprioId,
-                'beneficiaire_nom' => $first->beneficiaire_nom ?? '—',
-                'telephone' => $first->proprietaire?->telephone,
+                'beneficiaire_nom' => $beneficiaire?->nom_complet ?? '—',
+                'telephone' => $beneficiaire?->telephone,
                 'vehicules' => $vehicules->all(),
                 'agence' => $agence ?: null,
                 'periode' => $periodeLabel,
@@ -840,37 +814,6 @@ class CommissionProprietaireController extends Controller
         }
 
         return $rows->sortBy('beneficiaire_nom')->values();
-    }
-
-    private function buildSiteGroups(Collection $rows): array
-    {
-        $grouped = $rows->groupBy(fn ($r) => $r['agence'] ?? 'Sans agence')
-            ->sortKeys()
-            ->map(function (Collection $siteRows, string $siteNom) {
-                return [
-                    'site_nom' => $siteNom === 'Sans agence' ? null : $siteNom,
-                    'rows' => $siteRows->values()->toArray(),
-                    'totaux' => [
-                        'total_cumule' => (float) $siteRows->sum('total_cumule'),
-                        'total_frais' => (float) $siteRows->sum('frais'),
-                        'total_deja_paye' => (float) $siteRows->sum('deja_paye'),
-                        'total_reste' => (float) $siteRows->sum('reste'),
-                    ],
-                ];
-            });
-
-        return $grouped->isEmpty()
-            ? [['site_nom' => null, 'rows' => [], 'totaux' => ['total_cumule' => 0, 'total_frais' => 0, 'total_deja_paye' => 0, 'total_reste' => 0]]]
-            : $grouped->values()->toArray();
-    }
-
-    /** @param  array<int, array{nom: string, immatriculation: ?string}>  $vehicules */
-    private static function vehiculesEnTexte(array $vehicules): string
-    {
-        return implode(' / ', array_map(
-            fn ($v) => trim($v['nom'].($v['immatriculation'] ? ' '.$v['immatriculation'] : '')),
-            $vehicules
-        ));
     }
 
     private static function periodesProprietaireBetween(Carbon $from, Carbon $to): array

@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Auth;
 
@@ -121,9 +122,9 @@ class CommandeVente extends Model
         return $this->hasOne(FactureVente::class);
     }
 
-    public function commissions(): HasMany
+    public function commissions(): MorphMany
     {
-        return $this->hasMany(CommissionVente::class, 'commande_vente_id');
+        return $this->morphMany(CommissionEnveloppe::class, 'source');
     }
 
     public function activites(): HasMany
@@ -225,7 +226,7 @@ class CommandeVente extends Model
         }
 
         $facture = $this->load('facture')->facture;
-        $commissionsVersees = $this->commissions()->get()->every(fn ($c) => $c->isVersee());
+        $commissionsVersees = $this->commissions()->get()->every(fn ($c) => $c->isPaye());
 
         if (! $facture?->isPayee() || ! $commissionsVersees) {
             return false;

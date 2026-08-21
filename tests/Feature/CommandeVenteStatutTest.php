@@ -2,11 +2,21 @@
 
 namespace Tests\Feature;
 
+use App\Enums\CommissionActivationStatut;
+use App\Enums\CommissionMode;
+use App\Enums\CommissionScopeType;
+use App\Enums\CommissionStrategieAncrageSite;
+use App\Enums\CommissionUniteCalcul;
 use App\Enums\DeclencheurCommissionVente;
 use App\Enums\StatutCommandeVente;
+use App\Models\Categorie;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
+use App\Models\CommissionCibleType;
+use App\Models\CommissionProcessus;
+use App\Models\CommissionRegle;
 use App\Models\EquipeLivraison;
+use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\EquipeLivreur;
 use App\Models\FactureVente;
 use App\Models\Livreur;
@@ -18,7 +28,6 @@ use App\Models\VarianteStock;
 use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Spatie\Permission\Models\Permission;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -40,6 +49,8 @@ class CommandeVenteStatutTest extends TestCase
 
     private Site $defaultSite;
 
+    private Categorie $categorie;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -58,6 +69,49 @@ class CommandeVenteStatutTest extends TestCase
             'localisation' => 'Conakry',
         ]);
         $this->user->sites()->attach($this->defaultSite->id, ['role' => 'employe', 'is_default' => true]);
+
+        $this->categorie = Categorie::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Défaut',
+            'statut' => 'actif',
+        ]);
+
+        $processus = CommissionProcessus::create([
+            'organization_id' => $this->org->id,
+            'code' => CommissionProcessus::CODE_VENTE,
+            'libelle' => 'Vente',
+            'declencheur' => 'chargement_valide',
+            'strategie_ancrage_site' => CommissionStrategieAncrageSite::OPERATION->value,
+            'statut' => CommissionActivationStatut::ACTIF->value,
+        ]);
+        // Barème global : 100/pack pour l'équipe (partagé selon EquipeLivraisonPartageCategorie),
+        // 50/pack pour le propriétaire — indépendants l'un de l'autre (chaque cible a sa propre
+        // enveloppe), contrairement à l'ancien schéma où un seul pourcentage partagé déterminait
+        // les trois parts depuis la même marge.
+        CommissionRegle::create([
+            'organization_id' => $this->org->id,
+            'processus_id' => $processus->id,
+            'libelle' => 'Livraison — Global',
+            'scope_type' => CommissionScopeType::GLOBAL->value,
+            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+            'mode' => CommissionMode::A_REPARTIR->value,
+            'unite_calcul' => CommissionUniteCalcul::PAR_UNITE_VENDUE->value,
+            'montant' => 100,
+            'effective_from' => now()->subDay()->toDateString(),
+            'statut' => 'active',
+        ]);
+        CommissionRegle::create([
+            'organization_id' => $this->org->id,
+            'processus_id' => $processus->id,
+            'libelle' => 'Propriétaire — Global',
+            'scope_type' => CommissionScopeType::GLOBAL->value,
+            'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
+            'mode' => CommissionMode::DIRECT->value,
+            'unite_calcul' => CommissionUniteCalcul::PAR_UNITE_VENDUE->value,
+            'montant' => 50,
+            'effective_from' => now()->subDay()->toDateString(),
+            'statut' => 'active',
+        ]);
     }
 
     /**
@@ -76,7 +130,7 @@ class CommandeVenteStatutTest extends TestCase
 
         $produit = $this->makeProduitAvecVariante(
             $this->org,
-            ['nom' => 'Produit Test'],
+            ['nom' => 'Produit Test', 'categorie_id' => $this->categorie->id],
             ['prix_vente' => 2000, 'prix_usine' => 1500],
         );
 
@@ -150,7 +204,7 @@ class CommandeVenteStatutTest extends TestCase
     /**
      * Crée un véhicule avec une équipe à 2 membres (chauffeur + convoyeur).
      */
-    private function makeVehiculeAvecEquipe(float $tauxChauffeur = 18.42, float $tauxConvoyeur = 13.16): Vehicule
+    private function makeVehiculeAvecEquipe(float $partChauffeur = 58.33, float $partConvoyeur = 41.67): Vehicule
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $vehicule = Vehicule::factory()->create([
@@ -167,21 +221,16 @@ class CommandeVenteStatutTest extends TestCase
             'vehicule_id' => $vehicule->id,
             'nom' => 'Équipe Test',
             'is_active' => true,
-            'taux_commission_proprietaire' => round(100 - $tauxChauffeur - $tauxConvoyeur, 2),
         ]);
-        EquipeLivreur::create([
-            'equipe_id' => $equipe->id,
-            'livreur_id' => $chauffeur->id,
-            'taux_commission' => $tauxChauffeur,
-            'role' => 'chauffeur',
-            'ordre' => 0,
+        EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $chauffeur->id, 'role' => 'chauffeur', 'ordre' => 0]);
+        EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $convoyeur->id, 'role' => 'convoyeur', 'ordre' => 1]);
+        EquipeLivraisonPartageCategorie::create([
+            'equipe_id' => $equipe->id, 'categorie_id' => $this->categorie->id,
+            'livreur_id' => $chauffeur->id, 'part_pourcentage' => $partChauffeur,
         ]);
-        EquipeLivreur::create([
-            'equipe_id' => $equipe->id,
-            'livreur_id' => $convoyeur->id,
-            'taux_commission' => $tauxConvoyeur,
-            'role' => 'convoyeur',
-            'ordre' => 1,
+        EquipeLivraisonPartageCategorie::create([
+            'equipe_id' => $equipe->id, 'categorie_id' => $this->categorie->id,
+            'livreur_id' => $convoyeur->id, 'part_pourcentage' => $partConvoyeur,
         ]);
 
         return $vehicule->fresh();
@@ -291,7 +340,7 @@ class CommandeVenteStatutTest extends TestCase
 
     /**
      * La commission de vente naît du chargement réel (validerChargement()),
-     * jamais de la confirmation : aucune ligne commissions_ventes ne doit
+     * jamais de la confirmation : aucune ligne commission_enveloppes ne doit
      * exister tant que le chargement n'a pas été validé.
      */
     public function test_confirmer_ne_cree_aucune_commission(): void
@@ -304,7 +353,7 @@ class CommandeVenteStatutTest extends TestCase
             ->assertRedirect();
 
         $this->assertEquals(StatutCommandeVente::A_CHARGER, $commande->fresh()->statut);
-        $this->assertDatabaseMissing('commissions_ventes', ['commande_vente_id' => $commande->id]);
+        $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commande->id]);
     }
 
     public function test_demarrer_chargement_ne_recree_pas_la_facture_et_ne_cree_toujours_pas_de_commission(): void
@@ -324,7 +373,7 @@ class CommandeVenteStatutTest extends TestCase
         $this->assertEquals(StatutCommandeVente::CHARGEMENT_EN_COURS, $fresh->statut);
         $this->assertEquals($factureId, $fresh->facture->id);
         $this->assertEquals(1, FactureVente::where('commande_vente_id', $commande->id)->count());
-        $this->assertDatabaseMissing('commissions_ventes', ['commande_vente_id' => $commande->id]);
+        $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commande->id]);
     }
 
     // ── CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS ──────────────────────────────
@@ -412,13 +461,13 @@ class CommandeVenteStatutTest extends TestCase
 
     public function test_valider_chargement_cree_les_commissions_chauffeur_et_convoyeur_selon_qte_chargee(): void
     {
-        $vehicule = $this->makeVehiculeAvecEquipe(tauxChauffeur: 18.42, tauxConvoyeur: 13.16);
-        ['commande' => $commande, 'ligne' => $ligne] = $this->makeCommandeWithLigne([
+        $vehicule = $this->makeVehiculeAvecEquipe(partChauffeur: 58.33, partConvoyeur: 41.67);
+        ['commande' => $commande, 'ligne' => $ligne, 'vehicule' => $vehicule] = $this->makeCommandeWithLigne([
             'statut' => StatutCommandeVente::CHARGEMENT_EN_COURS,
         ], $vehicule);
 
         // Aucune commission tant que le chargement n'est pas validé.
-        $this->assertDatabaseMissing('commissions_ventes', ['commande_vente_id' => $commande->id]);
+        $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commande->id]);
 
         // Valide le chargement avec seulement 1 pack chargé au lieu de 2.
         $this->actingAs($this->user)
@@ -431,18 +480,23 @@ class CommandeVenteStatutTest extends TestCase
             ])
             ->assertRedirect();
 
-        $commission = $commande->fresh()->commissions()->first();
+        $chauffeurId = $vehicule->equipe->membres->firstWhere('role', 'chauffeur')->livreur_id;
+        $convoyeurId = $vehicule->equipe->membres->firstWhere('role', 'convoyeur')->livreur_id;
+
+        $commission = $commande->fresh()->commissions()
+            ->where('cible_type', CommissionCibleType::CODE_EQUIPE_LIVRAISON)->first();
         $this->assertNotNull($commission);
-        $parts = $commission->parts()->orderBy('role')->get()->keyBy('role');
+        $parts = $commission->parts()->get()->keyBy('beneficiaire_id');
 
         // Commission calculée directement sur la quantité chargée (1 pack, jamais
-        // les 2 demandées) : marge = 500 → chauffeur 18.42% = 92.10, convoyeur 13.16% = 65.80
-        $this->assertEquals(92.1, round((float) $parts['chauffeur']->montant_brut, 2));
-        $this->assertEquals(65.8, round((float) $parts['convoyeur']->montant_brut, 2));
+        // les 2 demandées) : barème équipe = 100/pack × 1 = 100, réparti
+        // 58,33 % / 41,67 % → chauffeur 58.33, convoyeur 41.67.
+        $this->assertEquals(58.33, round((float) $parts[$chauffeurId]->montant_brut, 2));
+        $this->assertEquals(41.67, round((float) $parts[$convoyeurId]->montant_brut, 2));
         // Créée seulement — ne devient IMPAYE qu'à la validation de la période de paiement.
         $this->assertEquals('creee', $commission->statut->value);
-        $this->assertEquals('creee', $parts['chauffeur']->statut->value);
-        $this->assertEquals('creee', $parts['convoyeur']->statut->value);
+        $this->assertEquals('creee', $parts[$chauffeurId]->statut->value);
+        $this->assertEquals('creee', $parts[$convoyeurId]->statut->value);
     }
 
     public function test_valider_chargement_decremente_le_stock_du_site(): void
@@ -553,7 +607,10 @@ class CommandeVenteStatutTest extends TestCase
             ->assertRedirect();
 
         $this->assertEquals(StatutCommandeVente::LIVRAISON_EN_COURS, $commande->fresh()->statut);
-        $nbPartsAvant = $commande->fresh()->commissions()->first()->parts()->count();
+        // Une enveloppe par cible (équipe_livraison + propriétaire) — jamais une seule
+        // commission partagée comme dans l'ancien schéma.
+        $nbEnveloppesAvant = $commande->fresh()->commissions()->count();
+        $nbPartsAvant = $commande->fresh()->commissions()->get()->sum(fn ($e) => $e->parts()->count());
 
         // Toute nouvelle tentative d'avancer depuis LIVRAISON_EN_COURS est refusée par la policy.
         $this->actingAs($this->user)
@@ -563,8 +620,8 @@ class CommandeVenteStatutTest extends TestCase
             ->assertStatus(403);
 
         $this->assertEquals(1, FactureVente::where('commande_vente_id', $commande->id)->count());
-        $this->assertEquals(1, $commande->fresh()->commissions()->count());
-        $this->assertEquals($nbPartsAvant, $commande->fresh()->commissions()->first()->parts()->count());
+        $this->assertEquals($nbEnveloppesAvant, $commande->fresh()->commissions()->count());
+        $this->assertEquals($nbPartsAvant, $commande->fresh()->commissions()->get()->sum(fn ($e) => $e->parts()->count()));
     }
 
     public function test_encaissement_interdit_tant_que_chargement_non_valide(): void
@@ -586,29 +643,11 @@ class CommandeVenteStatutTest extends TestCase
             ->assertStatus(422);
     }
 
-    public function test_paiement_commission_interdit_tant_que_chargement_non_valide(): void
-    {
-        $vehicule = $this->makeVehiculeAvecEquipe();
-        ['commande' => $commande] = $this->makeCommandeWithLigne([
-            'statut' => StatutCommandeVente::CHARGEMENT_EN_COURS,
-        ], $vehicule);
-
-        // Tant que le chargement n'est pas validé, aucune commission n'existe
-        // encore : rien n'est payable.
-        $this->assertDatabaseMissing('commissions_ventes', ['commande_vente_id' => $commande->id]);
-
-        $chauffeurId = $vehicule->fresh()->equipe->membres()->where('role', 'chauffeur')->first()->livreur_id;
-
-        Permission::firstOrCreate(['name' => 'comptabilite.payer', 'guard_name' => 'web']);
-        $this->user->givePermissionTo('comptabilite.payer');
-
-        $this->actingAs($this->user)
-            ->post(route('comptabilite.commissions.vente.livreur.paiements', $chauffeurId), [
-                'montant' => 50,
-                'mode_paiement' => 'especes',
-            ])
-            ->assertSessionHasErrors();
-    }
+    // Paiement direct de commission vente désormais impossible depuis aucun écran
+    // (can_pay toujours false — la seule chaîne de paiement valide passe par
+    // Comptabilité > Fiches de paiement, cf. CommissionVenteController::index()) : le
+    // scénario "paiement refusé tant que le chargement n'est pas validé" n'a plus de
+    // route à exercer.
 
     public function test_valider_chargement_sans_quantite_chargee_retourne_erreur(): void
     {

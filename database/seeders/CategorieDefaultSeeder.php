@@ -40,12 +40,16 @@ class CategorieDefaultSeeder extends Seeder
             'Quincaillerie' => [],
             'Cosmétique & Hygiène' => [],
             'Électronique' => [],
+            "Sachet d'eau" => [],
+            "Bouteille d'eau" => [],
         ],
         'industrie_fabrication' => [
             'Matières premières' => [],
             'Consommables' => ['Emballages', "Fournitures d'atelier"],
             'Produits finis' => [],
             'Outillage & Équipement' => [],
+            "Sachet d'eau" => [],
+            "Bouteille d'eau" => [],
         ],
         'restauration' => [
             'Plats' => ['Entrées', 'Plats principaux', 'Desserts'],

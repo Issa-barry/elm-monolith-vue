@@ -2,17 +2,21 @@
 
 namespace Tests\Feature\Comptabilite;
 
+use App\Enums\CommissionActivationStatut;
+use App\Enums\CommissionStrategieAncrageSite;
 use App\Enums\MotifAjustementCommission;
-use App\Enums\OrigineCommissionPart;
+use App\Enums\StatutCommission;
 use App\Enums\StatutPeriodePaiement;
 use App\Enums\TypePeriodePaiement;
 use App\Features\ModuleFeature;
 use App\Models\Client;
 use App\Models\CommandeVente;
+use App\Models\CommissionCibleType;
+use App\Models\CommissionEnveloppe;
+use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
-use App\Models\CommissionPart;
-use App\Models\CommissionVente;
+use App\Models\CommissionProcessus;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
@@ -25,6 +29,7 @@ use App\Models\Vehicule;
 use App\Services\CommissionAdjustmentService;
 use App\Services\PeriodeComptableService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Pennant\Feature;
 use Spatie\Permission\Models\Role;
@@ -35,6 +40,8 @@ use Tests\TestCase;
 class CommissionAjustementTest extends TestCase
 {
     use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
+
+    private ?CommissionProcessus $processusVente = null;
 
     protected function setUp(): void
     {
@@ -82,40 +89,20 @@ class CommissionAjustementTest extends TestCase
         ]);
     }
 
-    /** @return array{commission: CommissionVente, part: CommissionPart, livreur: Livreur} */
+    /** @return array{commission: CommissionEnveloppe, part: CommissionEnveloppePart, livreur: Livreur} */
     private function makeCommissionAvecPart(float $montantNet = 300000.0): array
     {
         $livreur = $this->makeLivreur();
+        ['commission' => $commission, 'parts' => $parts] = $this->makeCommissionAvecEquipeLivreurs(
+            ['Diallo' => $livreur], ['Diallo' => $montantNet],
+        );
 
-        $commission = CommissionVente::create([
-            'organization_id' => $this->org->id,
-            'commande_vente_id' => $this->makeCommande()->id,
-            'vehicule_id' => null,
-            'montant_commande' => 1000000,
-            'montant_commission_totale' => $montantNet,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
-
-        $part = CommissionPart::create([
-            'commission_vente_id' => $commission->id,
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => $livreur->nom_complet,
-            'taux_commission' => 100,
-            'montant_brut' => $montantNet,
-            'frais_supplementaires' => 0,
-            'montant_net' => $montantNet,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
-
-        return ['commission' => $commission, 'part' => $part, 'livreur' => $livreur];
+        return ['commission' => $commission, 'part' => $parts['Diallo'], 'livreur' => $livreur];
     }
 
     /**
      * @param  array<string, float>  $repartition  nom => montant
-     * @return array{commission: CommissionVente, parts: array<string, CommissionPart>}
+     * @return array{commission: CommissionEnveloppe, parts: array<string, CommissionEnveloppePart>}
      */
     private function makeCommissionAvecEquipe(array $repartition, ?string $vehiculeId = null): array
     {
@@ -127,34 +114,47 @@ class CommissionAjustementTest extends TestCase
     /**
      * @param  array<string, Livreur>  $livreurs  nom => livreur (permet de réutiliser le même livreur sur 2 commandes)
      * @param  array<string, float>  $repartition  nom => montant
-     * @return array{commission: CommissionVente, parts: array<string, CommissionPart>}
+     * @return array{commission: CommissionEnveloppe, parts: array<string, CommissionEnveloppePart>}
      */
     private function makeCommissionAvecEquipeLivreurs(array $livreurs, array $repartition, ?string $vehiculeId = null): array
     {
-        $commission = CommissionVente::create([
+        $commande = $this->makeCommande();
+        if ($vehiculeId) {
+            $commande->update(['vehicule_id' => $vehiculeId]);
+        }
+
+        $this->processusVente ??= CommissionProcessus::create([
             'organization_id' => $this->org->id,
-            'commande_vente_id' => $this->makeCommande()->id,
-            'vehicule_id' => $vehiculeId,
-            'montant_commande' => 1000000,
-            'montant_commission_totale' => array_sum($repartition),
-            'montant_verse' => 0,
-            'statut' => 'impaye',
+            'code' => CommissionProcessus::CODE_VENTE,
+            'libelle' => 'Vente',
+            'declencheur' => 'chargement_valide',
+            'strategie_ancrage_site' => CommissionStrategieAncrageSite::OPERATION->value,
+            'statut' => CommissionActivationStatut::ACTIF->value,
+        ]);
+
+        $commission = CommissionEnveloppe::create([
+            'organization_id' => $this->org->id,
+            'source_type' => CommandeVente::class,
+            'source_id' => $commande->id,
+            'processus_id' => $this->processusVente->id,
+            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+            'cible_id' => (string) Str::ulid(),
+            'montant_total' => array_sum($repartition),
+            'earned_at' => now(),
+            'statut' => StatutCommission::IMPAYE->value,
         ]);
 
         $parts = [];
         foreach ($repartition as $nom => $montant) {
             $livreur = $livreurs[$nom];
-            $parts[$nom] = CommissionPart::create([
-                'commission_vente_id' => $commission->id,
-                'type_beneficiaire' => 'livreur',
-                'livreur_id' => $livreur->id,
-                'beneficiaire_nom' => $livreur->nom_complet,
-                'taux_commission' => 100,
+            $parts[$nom] = CommissionEnveloppePart::create([
+                'enveloppe_id' => $commission->id,
+                'beneficiaire_type' => CommissionEnveloppePart::TYPE_LIVREUR,
+                'beneficiaire_id' => $livreur->id,
                 'montant_brut' => $montant,
-                'frais_supplementaires' => 0,
                 'montant_net' => $montant,
                 'montant_verse' => 0,
-                'statut' => 'impaye',
+                'statut' => StatutCommission::IMPAYE->value,
             ]);
         }
 
@@ -227,7 +227,7 @@ class CommissionAjustementTest extends TestCase
         $this->assertSame(300000.0, (float) $part->montant_net, 'le montant théorique ne doit jamais être écrasé');
 
         $this->assertDatabaseHas('commission_part_adjustments', [
-            'commission_part_type' => CommissionPart::class,
+            'commission_part_type' => CommissionEnveloppePart::class,
             'commission_part_id' => $part->id,
             'ancien_montant' => 300000.00,
             'nouveau_montant' => 200000.00,
@@ -275,61 +275,11 @@ class CommissionAjustementTest extends TestCase
     }
 
     // ── Remplaçant hors équipe théorique ─────────────────────────────────────────
-
-    public function test_ajouter_remplacant_cree_une_part_origine_remplacement(): void
-    {
-        ['commission' => $commission] = $this->makeCommissionAvecPart();
-        $remplacant = $this->makeLivreur('Camara');
-        $periode = $this->makePeriode();
-
-        $this->actingAs($this->user)
-            ->post(route('comptabilite.periodes.ajustements.remplacant', $periode), [
-                'commission_type' => 'vente',
-                'commission_id' => $commission->id,
-                'type_beneficiaire' => 'livreur',
-                'livreur_id' => $remplacant->id,
-                'beneficiaire_nom' => $remplacant->nom_complet,
-                'montant' => 120000,
-                'commentaire' => 'Remplaçant du 10/06',
-            ])
-            ->assertRedirect();
-
-        $nouvellePart = CommissionPart::where('livreur_id', $remplacant->id)->first();
-        $this->assertNotNull($nouvellePart);
-        $this->assertEquals(OrigineCommissionPart::REMPLACEMENT, $nouvellePart->origine);
-        $this->assertSame(120000.0, (float) $nouvellePart->montant_actuel);
-        $this->assertSame(
-            0.0,
-            (float) $nouvellePart->montant_net,
-            'un remplaçant n\'a aucune allocation théorique : tout son montant est de l\'écart à compenser'
-        );
-    }
+    // Couverture déjà portée dans CommissionAjustementVenteTest.php — pas dupliquée ici.
 
     // ── Gate de validation de la période ────────────────────────────────────────
-
-    public function test_periode_ne_peut_pas_etre_validee_si_des_parts_ne_sont_pas_validees(): void
-    {
-        $this->travelTo('2026-06-10 12:00:00');
-        ['part' => $part] = $this->makeCommissionAvecPart();
-        $periode = $this->makePeriode(StatutPeriodePaiement::BROUILLON->value);
-
-        $this->actingAs($this->user)->post(route('comptabilite.periodes.calculer', $periode));
-
-        $periode->refresh();
-        $this->assertSame(StatutPeriodePaiement::CALCULEE->value, $periode->statut->value);
-        $this->assertDatabaseHas('paiement_fiches', ['periode_id' => $periode->id]);
-
-        $this->actingAs($this->user)
-            ->post(route('comptabilite.periodes.valider', $periode))
-            ->assertRedirect();
-
-        $periode->refresh();
-        $this->assertSame(
-            StatutPeriodePaiement::CALCULEE->value,
-            $periode->statut->value,
-            'la période ne doit pas passer VALIDEE tant que la commission générée n\'est pas validée'
-        );
-    }
+    // "période ne peut pas être validée si des parts ne sont pas validées" déjà
+    // portée dans CommissionAjustementVenteTest.php — pas dupliquée ici.
 
     public function test_periode_peut_etre_validee_une_fois_toutes_les_parts_validees(): void
     {
@@ -355,39 +305,8 @@ class CommissionAjustementTest extends TestCase
         $this->assertSame(StatutPeriodePaiement::VALIDEE->value, $periode->statut->value);
     }
 
-    public function test_ecart_non_redistribue_bloque_la_validation_de_periode(): void
-    {
-        $this->travelTo('2026-06-10 12:00:00');
-        ['parts' => $parts] = $this->makeCommissionAvecEquipe([
-            'Oumar' => 60000,
-            'Abdoulaye' => 45000,
-            'Kadiatou' => 15000,
-        ]);
-        $periode = $this->makePeriode(StatutPeriodePaiement::BROUILLON->value);
-
-        $this->actingAs($this->user)->post(route('comptabilite.periodes.calculer', $periode));
-
-        // Abdoulaye absent, mis à 0, mais SANS redistribution aux deux autres.
-        $this->actingAs($this->user)->patch(
-            route('comptabilite.ajustements.ajuster', ['type' => 'vente', 'partId' => $parts['Abdoulaye']->id]),
-            ['montant' => 0, 'motif' => 'absence']
-        );
-
-        foreach ($parts as $part) {
-            $this->actingAs($this->user)->post(route('comptabilite.ajustements.valider', ['type' => 'vente', 'partId' => $part->id]));
-        }
-
-        $response = $this->actingAs($this->user)->post(route('comptabilite.periodes.valider', $periode));
-        $response->assertRedirect();
-        $response->assertSessionHas('error');
-
-        $periode->refresh();
-        $this->assertSame(
-            StatutPeriodePaiement::CALCULEE->value,
-            $periode->statut->value,
-            'la période ne doit pas être validée tant que les 10 000 GNF ne sont pas redistribués'
-        );
-    }
+    // "écart non redistribué bloque la validation de période" déjà portée dans
+    // CommissionAjustementVenteTest.php — pas dupliquée ici.
 
     public function test_redistribution_equilibree_permet_la_validation(): void
     {
@@ -486,54 +405,8 @@ class CommissionAjustementTest extends TestCase
         $this->assertNotNull($part2->refresh()->validated_at);
     }
 
-    public function test_valider_vehicule_valide_toutes_les_parts_si_ecart_nul(): void
-    {
-        $this->travelTo('2026-06-10 12:00:00');
-        $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id]);
-        ['parts' => $parts] = $this->makeCommissionAvecEquipe(
-            ['Oumar' => 60000, 'Abdoulaye' => 45000, 'Kadiatou' => 15000],
-            $vehicule->id,
-        );
-        $periode = $this->makePeriode(StatutPeriodePaiement::BROUILLON->value);
-        $this->actingAs($this->user)->post(route('comptabilite.periodes.calculer', $periode));
-
-        $this->actingAs($this->user)
-            ->post(route('comptabilite.periodes.ajustements.vehicule.valider', ['periode' => $periode, 'vehicule' => $vehicule->id]))
-            ->assertRedirect()
-            ->assertSessionHasNoErrors();
-
-        foreach ($parts as $part) {
-            $this->assertNotNull($part->refresh()->validated_at, "la part de {$part->beneficiaire_nom} doit être validée");
-        }
-    }
-
-    public function test_valider_vehicule_bloque_si_ecart_non_nul(): void
-    {
-        $this->travelTo('2026-06-10 12:00:00');
-        $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id]);
-        ['parts' => $parts] = $this->makeCommissionAvecEquipe(
-            ['Oumar' => 60000, 'Abdoulaye' => 45000, 'Kadiatou' => 15000],
-            $vehicule->id,
-        );
-        $periode = $this->makePeriode(StatutPeriodePaiement::BROUILLON->value);
-        $this->actingAs($this->user)->post(route('comptabilite.periodes.calculer', $periode));
-
-        // Abdoulaye absent, mis à 0, mais SANS redistribution : le véhicule n'est plus à l'équilibre.
-        $this->actingAs($this->user)->patch(
-            route('comptabilite.ajustements.ajuster', ['type' => 'vente', 'partId' => $parts['Abdoulaye']->id]),
-            ['montant' => 0, 'motif' => 'absence'],
-        );
-
-        $response = $this->actingAs($this->user)
-            ->post(route('comptabilite.periodes.ajustements.vehicule.valider', ['periode' => $periode, 'vehicule' => $vehicule->id]));
-
-        $response->assertRedirect();
-        $response->assertSessionHas('error');
-
-        foreach ($parts as $part) {
-            $this->assertNull($part->refresh()->validated_at, "aucune part ne doit être validée tant que l'écart n'est pas résorbé");
-        }
-    }
+    // "valider véhicule" (valide toutes les parts si écart nul / bloque si écart non
+    // nul) déjà porté dans CommissionAjustementVenteTest.php — pas dupliqué ici.
 
     // ── Le paiement doit refléter le montant ajusté, pas le montant théorique ──────
 
@@ -639,7 +512,7 @@ class CommissionAjustementTest extends TestCase
         );
 
         $oumar = collect($response->viewData('page')['props']['beneficiaires'])
-            ->firstWhere('beneficiaire_nom', $partsA['Oumar']->beneficiaire_nom);
+            ->firstWhere('beneficiaire_nom', $livreurs['Oumar']->nom_complet);
 
         $this->assertNotNull($oumar);
         $this->assertSame(120000.0, $oumar['theorique']);
@@ -820,26 +693,33 @@ class CommissionAjustementTest extends TestCase
         $this->travelTo('2026-06-10 12:00:00');
 
         $livreur = $this->makeLivreur();
-        $commission = CommissionVente::create([
+        $this->processusVente ??= CommissionProcessus::create([
             'organization_id' => $this->org->id,
-            'commande_vente_id' => $this->makeCommande()->id,
-            'vehicule_id' => null,
-            'montant_commande' => 1000000,
-            'montant_commission_totale' => 300000.0,
-            'montant_verse' => 0,
-            'statut' => 'creee',
+            'code' => CommissionProcessus::CODE_VENTE,
+            'libelle' => 'Vente',
+            'declencheur' => 'chargement_valide',
+            'strategie_ancrage_site' => CommissionStrategieAncrageSite::OPERATION->value,
+            'statut' => CommissionActivationStatut::ACTIF->value,
         ]);
-        $part = CommissionPart::create([
-            'commission_vente_id' => $commission->id,
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => $livreur->nom_complet,
-            'taux_commission' => 100,
+        $commission = CommissionEnveloppe::create([
+            'organization_id' => $this->org->id,
+            'source_type' => CommandeVente::class,
+            'source_id' => $this->makeCommande()->id,
+            'processus_id' => $this->processusVente->id,
+            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+            'cible_id' => (string) Str::ulid(),
+            'montant_total' => 300000.0,
+            'earned_at' => now(),
+            'statut' => StatutCommission::CREEE->value,
+        ]);
+        $part = CommissionEnveloppePart::create([
+            'enveloppe_id' => $commission->id,
+            'beneficiaire_type' => CommissionEnveloppePart::TYPE_LIVREUR,
+            'beneficiaire_id' => $livreur->id,
             'montant_brut' => 300000.0,
-            'frais_supplementaires' => 0,
             'montant_net' => 300000.0,
             'montant_verse' => 0,
-            'statut' => 'creee',
+            'statut' => StatutCommission::CREEE->value,
         ]);
 
         $periode = $this->makePeriode(StatutPeriodePaiement::BROUILLON->value);
@@ -874,26 +754,33 @@ class CommissionAjustementTest extends TestCase
         // plus bas : ne doit jamais être touchée par cette validation.
         $this->travelTo('2026-07-05 12:00:00');
         $livreurHorsPeriode = $this->makeLivreur('HorsPeriode');
-        $commissionHorsPeriode = CommissionVente::create([
+        $this->processusVente ??= CommissionProcessus::create([
             'organization_id' => $this->org->id,
-            'commande_vente_id' => $this->makeCommande()->id,
-            'vehicule_id' => null,
-            'montant_commande' => 500000,
-            'montant_commission_totale' => 150000.0,
-            'montant_verse' => 0,
-            'statut' => 'creee',
+            'code' => CommissionProcessus::CODE_VENTE,
+            'libelle' => 'Vente',
+            'declencheur' => 'chargement_valide',
+            'strategie_ancrage_site' => CommissionStrategieAncrageSite::OPERATION->value,
+            'statut' => CommissionActivationStatut::ACTIF->value,
         ]);
-        $partHorsPeriode = CommissionPart::create([
-            'commission_vente_id' => $commissionHorsPeriode->id,
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreurHorsPeriode->id,
-            'beneficiaire_nom' => $livreurHorsPeriode->nom_complet,
-            'taux_commission' => 100,
+        $commissionHorsPeriode = CommissionEnveloppe::create([
+            'organization_id' => $this->org->id,
+            'source_type' => CommandeVente::class,
+            'source_id' => $this->makeCommande()->id,
+            'processus_id' => $this->processusVente->id,
+            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+            'cible_id' => (string) Str::ulid(),
+            'montant_total' => 150000.0,
+            'earned_at' => now(),
+            'statut' => StatutCommission::CREEE->value,
+        ]);
+        $partHorsPeriode = CommissionEnveloppePart::create([
+            'enveloppe_id' => $commissionHorsPeriode->id,
+            'beneficiaire_type' => CommissionEnveloppePart::TYPE_LIVREUR,
+            'beneficiaire_id' => $livreurHorsPeriode->id,
             'montant_brut' => 150000.0,
-            'frais_supplementaires' => 0,
             'montant_net' => 150000.0,
             'montant_verse' => 0,
-            'statut' => 'creee',
+            'statut' => StatutCommission::CREEE->value,
         ]);
         $this->travelTo('2026-06-10 12:00:00');
 

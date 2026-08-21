@@ -60,6 +60,10 @@ interface BeneficiaireRow extends StatutCommissionResolu {
     remaining_amount: number;
     nb_commandes: number;
     statut_global: string;
+    /** V2 uniquement (CommissionKpiBuckets) — absents en Legacy. */
+    total_genere?: number;
+    en_attente_periode?: number;
+    payable?: number;
 }
 
 interface PeriodeOption {
@@ -76,6 +80,10 @@ const props = defineProps<{
         total_net: number;
         total_verse: number;
         solde_total: number;
+        /** V2 uniquement (CommissionKpiBuckets) — absents en Legacy. */
+        total_genere?: number;
+        en_attente_periode?: number;
+        payable?: number;
     };
     search: string;
     filtre_statut: string;
@@ -105,6 +113,7 @@ const filterFields = computed((): FilterField[] => [
         label: 'Statut',
         type: 'select' as const,
         options: [
+            { value: 'creee', label: 'Créée — en attente de période' },
             { value: 'impaye', label: 'Impayé' },
             { value: 'partiel', label: 'Partiel' },
             { value: 'paye', label: 'Payé' },
@@ -332,6 +341,41 @@ function fmtTel(tel: string | null | undefined): string {
                                 ? 's'
                                 : ''
                         }}
+                    </p>
+                </div>
+            </div>
+
+            <!-- V2 uniquement : ventilation « visible ne veut pas dire payable » — une commission
+                 créée mais pas encore éligible au paiement (période non validée) reste comptée
+                 dans le total, jamais masquée. Absent (undefined) en Legacy. -->
+            <div
+                v-if="kpis.total_genere !== undefined"
+                class="grid grid-cols-1 gap-4 sm:grid-cols-3"
+            >
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
+                    <p class="text-sm text-muted-foreground">Total généré</p>
+                    <p
+                        class="mt-2 text-2xl font-bold text-foreground tabular-nums"
+                    >
+                        {{ fmt(kpis.total_genere) }}
+                    </p>
+                </div>
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
+                    <p class="text-sm text-muted-foreground">
+                        En attente de période
+                    </p>
+                    <p
+                        class="mt-2 text-2xl font-bold text-zinc-600 tabular-nums dark:text-zinc-400"
+                    >
+                        {{ fmt(kpis.en_attente_periode ?? 0) }}
+                    </p>
+                </div>
+                <div class="rounded-xl border bg-card p-5 shadow-sm">
+                    <p class="text-sm text-muted-foreground">Payable</p>
+                    <p
+                        class="mt-2 text-2xl font-bold text-amber-600 tabular-nums dark:text-amber-400"
+                    >
+                        {{ fmt(kpis.payable ?? 0) }}
                     </p>
                 </div>
             </div>

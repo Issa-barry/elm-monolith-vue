@@ -55,6 +55,12 @@ interface MembreEquipeDetail {
     ordre: number;
 }
 
+/** V2 uniquement — partage Livraison déjà enregistré, groupé par catégorie. */
+interface PartageCategorieDetail {
+    categorie_id: string;
+    parts: Array<{ livreur_id: string; part_pourcentage: number }>;
+}
+
 interface EquipeData {
     id: string;
     is_active: boolean;
@@ -64,6 +70,7 @@ interface EquipeData {
     proprietaire_id: string | null;
     proprietaire_nom: string | null;
     membres: MembreEquipeDetail[];
+    partages_categorie: PartageCategorieDetail[];
 }
 
 interface ProprietaireOption {
@@ -104,6 +111,18 @@ interface VehiculeData {
     type_seuil_derogation_impayes: number | null;
 }
 
+/** V2 uniquement — barème Propriétaire ET Livraison résolus par catégorie
+ * (cf. décision AMOA post-Phase 2 : ni un montant Propriétaire unique ni un
+ * partage Livraison unique ne sont valables pour tout le véhicule, chaque
+ * catégorie ayant son propre barème sur chaque cible). Seule source de
+ * vérité utilisée à la fois par cette fiche et par la popup équipe. */
+interface BaremeCommissionCategorie {
+    categorie_id: string;
+    categorie_nom: string;
+    montant_proprietaire: number;
+    montant_livraison: number;
+}
+
 const props = defineProps<{
     vehicule: VehiculeData;
     depenses: DepenseRow[];
@@ -111,6 +130,7 @@ const props = defineProps<{
     proprietaires: ProprietaireOption[];
     default_proprietaire_id: string | null;
     seuil_global_impayes: number;
+    baremes_commission_categories: BaremeCommissionCategorie[];
 }>();
 
 const { can } = usePermissions();
@@ -158,18 +178,6 @@ const totalApprouve = computed(() =>
     props.depenses
         .filter((d) => d.statut === 'approuve')
         .reduce((s, d) => s + d.montant, 0),
-);
-
-const totalLivreurs = computed(() =>
-    props.vehicule.equipe_membres.reduce((s, m) => s + m.montant_par_pack, 0),
-);
-
-const tauxLivreurs = computed(() =>
-    parseFloat(
-        props.vehicule.equipe_membres
-            .reduce((s, m) => s + m.taux_commission, 0)
-            .toFixed(2),
-    ),
 );
 
 function formatGNF(val: number): string {
@@ -651,11 +659,9 @@ function toggleDerogation() {
                         <div v-else class="overflow-x-auto rounded-lg border">
                             <table class="w-full table-fixed text-sm">
                                 <colgroup>
-                                    <col class="w-1/5" />
-                                    <col class="w-1/5" />
-                                    <col class="w-1/5" />
-                                    <col class="w-1/5" />
-                                    <col class="w-1/5" />
+                                    <col class="w-1/3" />
+                                    <col class="w-1/3" />
+                                    <col class="w-1/3" />
                                 </colgroup>
                                 <thead
                                     class="bg-muted/30 text-left text-muted-foreground"
@@ -669,14 +675,6 @@ function toggleDerogation() {
                                         </th>
                                         <th class="px-4 py-3 font-medium">
                                             Rôle
-                                        </th>
-                                        <th class="px-4 py-3 font-medium">
-                                            Montant / pack
-                                        </th>
-                                        <th
-                                            class="px-4 py-3 text-right font-medium"
-                                        >
-                                            Commission
                                         </th>
                                     </tr>
                                 </thead>
@@ -714,84 +712,66 @@ function toggleDerogation() {
                                                 >{{ m.role }}</span
                                             >
                                         </td>
-                                        <td class="px-4 py-3 font-mono text-sm">
-                                            {{
-                                                m.montant_par_pack.toLocaleString(
-                                                    'fr-FR',
-                                                )
-                                            }}
-                                            GNF
-                                        </td>
-                                        <td
-                                            class="px-4 py-3 text-right text-muted-foreground"
-                                        >
-                                            {{ m.taux_commission }}%
-                                        </td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
 
-                        <!-- Récap répartition -->
+                        <!-- Barèmes de commission — un montant Propriétaire et un
+                             montant Livraison PAR CATÉGORIE, jamais un total blended :
+                             les barèmes peuvent différer d'une catégorie à l'autre
+                             (ex. Sachet = 300 GNF, Bouteille = 1000 GNF Livraison).
+                             Même source que la popup équipe (baremes_commission_categories). -->
                         <div
                             v-if="equipe && vehicule.equipe_membres.length > 0"
-                            class="mt-2 rounded-lg border bg-muted/30 p-4"
+                            class="mt-2 space-y-2"
                         >
                             <p
-                                class="mb-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                                class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
                             >
-                                Répartition par pack
+                                Barèmes de commission
                             </p>
-                            <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                                <div>
-                                    <p class="text-xs text-muted-foreground">
-                                        Commission totale
-                                    </p>
-                                    <p
-                                        class="mt-0.5 font-mono text-sm font-semibold tabular-nums"
-                                    >
-                                        {{
-                                            formatGNF(
-                                                equipe.commission_unitaire_par_pack,
-                                            )
-                                        }}
-                                    </p>
-                                    <p class="text-xs text-muted-foreground">
-                                        100%
-                                    </p>
-                                </div>
-                                <div
-                                    v-if="equipe.montant_par_pack_proprietaire"
+                            <div
+                                v-if="
+                                    baremes_commission_categories.length === 0
+                                "
+                                class="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground"
+                            >
+                                Aucun barème de commission actif pour ce
+                                véhicule.
+                            </div>
+                            <div
+                                v-for="cat in baremes_commission_categories"
+                                :key="cat.categorie_id"
+                                class="rounded-lg border bg-muted/30 p-3"
+                            >
+                                <p
+                                    class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
                                 >
-                                    <p class="text-xs text-muted-foreground">
-                                        Part propriétaire
-                                    </p>
-                                    <p
-                                        class="mt-0.5 font-mono text-sm font-semibold tabular-nums"
-                                    >
-                                        {{
-                                            formatGNF(
-                                                equipe.montant_par_pack_proprietaire,
-                                            )
-                                        }}
-                                    </p>
-                                    <p class="text-xs text-muted-foreground">
-                                        {{
-                                            equipe.taux_commission_proprietaire
-                                        }}%
-                                    </p>
-                                </div>
-                                <div>
-                                    <p class="text-xs text-muted-foreground">
-                                        Part livreurs
-                                    </p>
-                                    <p
-                                        class="mt-0.5 font-mono text-sm font-semibold tabular-nums"
-                                    >
-                                        {{ formatGNF(totalLivreurs) }}
+                                    {{ cat.categorie_nom }}
+                                </p>
+                                <div
+                                    class="mt-1 flex flex-wrap gap-x-6 gap-y-1"
+                                >
+                                    <p class="text-xs text-primary">
+                                        Propriétaire :
+                                        <span class="font-mono font-semibold">
+                                            {{
+                                                formatGNF(
+                                                    cat.montant_proprietaire,
+                                                )
+                                            }} </span
+                                        >/ unité
                                     </p>
                                     <p class="text-xs text-muted-foreground">
-                                        {{ tauxLivreurs }}%
+                                        Livraison :
+                                        <span
+                                            class="font-mono font-semibold text-foreground"
+                                        >
+                                            {{
+                                                formatGNF(cat.montant_livraison)
+                                            }} </span
+                                        >/ unité
                                     </p>
                                 </div>
                             </div>
@@ -903,5 +883,6 @@ function toggleDerogation() {
         }"
         :equipe="equipe"
         :proprietaires="proprietaires"
+        :baremes-commission-categories="baremes_commission_categories"
     />
 </template>

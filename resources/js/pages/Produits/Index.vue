@@ -21,6 +21,7 @@ import {
     Archive,
     ArrowDown,
     ArrowUp,
+    ChevronDown,
     Download,
     Eye,
     History,
@@ -30,6 +31,7 @@ import {
     Plus,
     Sliders,
     Trash2,
+    Upload,
     X,
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
@@ -568,6 +570,64 @@ function confirmArchive(produit: Produit) {
                         <Download class="mr-2 h-4 w-4" />
                         Exporter Excel
                     </Button>
+                    <DropdownMenu
+                        v-if="
+                            can('imports-produits.create') ||
+                            can('imports-produits.read')
+                        "
+                    >
+                        <DropdownMenuTrigger as-child>
+                            <Button type="button" variant="outline">
+                                <Upload class="mr-2 h-4 w-4" />
+                                Importer
+                                <ChevronDown class="ml-2 h-3.5 w-3.5" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" class="w-56">
+                            <DropdownMenuItem
+                                v-if="can('imports-produits.create')"
+                                as-child
+                            >
+                                <Link
+                                    href="/backoffice/produits/imports/nouveau"
+                                    class="flex w-full items-center gap-2"
+                                >
+                                    <Upload class="h-4 w-4" />
+                                    Importer des produits
+                                </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                v-if="can('imports-produits.create')"
+                                as-child
+                            >
+                                <a
+                                    href="/backoffice/produits/imports/modele"
+                                    class="flex w-full items-center gap-2"
+                                >
+                                    <Download class="h-4 w-4" />
+                                    Télécharger le modèle
+                                </a>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator
+                                v-if="
+                                    can('imports-produits.create') &&
+                                    can('imports-produits.read')
+                                "
+                            />
+                            <DropdownMenuItem
+                                v-if="can('imports-produits.read')"
+                                as-child
+                            >
+                                <Link
+                                    href="/backoffice/produits/imports"
+                                    class="flex w-full items-center gap-2"
+                                >
+                                    <History class="h-4 w-4" />
+                                    Historique des imports
+                                </Link>
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                     <Link
                         v-if="can('produits.create')"
                         href="/backoffice/produits/create"

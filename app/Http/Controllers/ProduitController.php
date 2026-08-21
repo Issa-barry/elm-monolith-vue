@@ -933,11 +933,14 @@ class ProduitController extends Controller
      */
     private function fournisseursOptions(string $orgId): Collection
     {
+        // raison_sociale/nom ne sont pas des colonnes de fournisseurs (déléguées à
+        // Personne/EntrepriseTierce, cf. Fournisseur::getNomCompletAttribute()) — le tri
+        // se fait donc en PHP sur l'accesseur, pas via orderBy() côté SQL.
         return Fournisseur::where('organization_id', $orgId)
             ->where('is_active', true)
-            ->orderBy('raison_sociale')
-            ->orderBy('nom')
+            ->with(['personne', 'entrepriseTierce'])
             ->get()
+            ->sortBy('nom_complet')
             ->map(fn (Fournisseur $f) => [
                 'id' => $f->id,
                 'nom_complet' => $f->nom_complet,

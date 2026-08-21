@@ -4,6 +4,14 @@ export interface CommissionSummary {
     net_a_payer: number;
     deja_paye: number;
     reste_a_payer: number;
+    /**
+     * Compartiments V2 (CommissionKpiBuckets côté back) — null sur les écrans Legacy/Logistique,
+     * qui n'ont pas cette notion de commission "créée mais pas encore éligible au paiement".
+     * total_genere === en_attente_periode + payable + deja_paye (à l'arrondi près).
+     */
+    total_genere: number | null;
+    en_attente_periode: number | null;
+    payable: number | null;
 }
 
 export interface CommissionVehiculeInfo {
