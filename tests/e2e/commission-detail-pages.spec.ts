@@ -57,6 +57,116 @@ async function assertSummaryCardsAndTabs(
     }
 }
 
+test('liste Commission propriétaire — design harmonisé, exports et filtres en drawer', async ({
+    page,
+}) => {
+    await login(page);
+    await page.goto('/backoffice/comptabilite/commissions/proprietaires');
+
+    await expect(
+        page.getByRole('heading', { name: /^commission propriétaire$/i }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    const cards = page.getByTestId('commission-summary-cards').locator('> div');
+    await expect(cards).toHaveCount(4);
+    for (const label of [
+        'Commissions générées',
+        'Dépenses',
+        'Net validé',
+        'Reste à payer',
+    ]) {
+        await expect(cards.getByText(label, { exact: true })).toBeVisible();
+    }
+
+    await page.getByRole('button', { name: /^exporter$/i }).click();
+    await expect(
+        page.getByRole('menuitem', { name: /exporter en excel/i }),
+    ).toBeVisible();
+    await expect(
+        page.getByRole('menuitem', { name: /exporter en pdf/i }),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    await page.getByRole('button', { name: /^filtres/i }).click();
+    const drawer = page.getByRole('dialog').filter({ hasText: /^filtres/i });
+    await expect(drawer).toBeVisible();
+    await expect(
+        drawer.getByText('Nom complet', { exact: true }),
+    ).toBeVisible();
+    await expect(drawer.getByText('Téléphone', { exact: true })).toBeVisible();
+    await expect(drawer.getByText('Statut', { exact: true })).toBeVisible();
+    await expect(drawer.getByText('Période', { exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    const tableScroll = page.getByTestId('commission-table-scroll');
+    await expect(tableScroll).toHaveCSS('overflow-x', 'auto');
+
+    const row = page.locator('tbody tr:has(td)').first();
+    if (await row.isVisible({ timeout: 5_000 }).catch(() => false)) {
+        for (const label of [
+            'Propriétaire',
+            'Véhicule(s)',
+            'Agence',
+            'Généré',
+            'Brut validé',
+            'Dépenses',
+            'Net validé',
+            'Déjà payé',
+            'Reste à payer',
+            'Statut',
+        ]) {
+            await expect(
+                page.getByRole('columnheader', { name: label, exact: true }),
+            ).toBeVisible();
+        }
+    }
+});
+
+test('Commission propriètaire — compteur compact et fenêtre des véhicules contributeurs', async ({
+    page,
+}) => {
+    await login(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/backoffice/comptabilite/commissions/proprietaires');
+
+    const trigger = page.getByTestId('contributing-vehicles-trigger').first();
+    test.skip(
+        !(await trigger.isVisible({ timeout: 5_000 }).catch(() => false)),
+        'Aucune commission propriètaire seedée : la liste contributrice est couverte en Feature.',
+    );
+
+    const label = (await trigger.textContent())?.trim() ?? '';
+    expect(label).toMatch(/^\d+\s+véhicules?$/i);
+    const expectedCount = Number(label.match(/^\d+/)?.[0] ?? 0);
+
+    await trigger.click();
+    const dialog = page.getByTestId('contributing-vehicles-dialog');
+    await expect(dialog).toBeVisible();
+    await expect(
+        dialog.getByText('Véhicules ayant généré des ventes', {
+            exact: true,
+        }),
+    ).toBeVisible();
+    await expect(dialog.getByTestId('contributing-vehicle-row')).toHaveCount(
+        expectedCount,
+    );
+    await expect(
+        dialog.getByTestId('contributing-vehicle-registration').first(),
+    ).not.toBeEmpty();
+    await expect(dialog).toContainText(/GNF/);
+
+    const box = await dialog.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.width).toBeLessThanOrEqual(390);
+
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+
+    await trigger.click();
+    await dialog.getByRole('button', { name: /^fermer$/i }).click();
+    await expect(dialog).toBeHidden();
+});
+
 test('détail Commission logistique — 4 cartes, tabs, dialog paiement', async ({
     page,
 }) => {

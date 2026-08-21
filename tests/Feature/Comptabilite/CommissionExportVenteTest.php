@@ -377,10 +377,11 @@ class CommissionExportVenteTest extends TestCase
         $response->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
 
         $content = $response->streamedContent();
-        foreach (['Bénéficiaire', 'Téléphone', 'Véhicule(s)', 'Agence', 'Total cumulé', 'Dépenses', 'Motif de dépense', 'Déjà payé', 'Reste à payer', 'Statut', 'Signature'] as $colonne) {
+        foreach (['Bénéficiaire', 'Téléphone', 'Véhicule(s)', 'Agence', 'Généré', 'Brut validé', 'Dépenses', 'Net validé', 'Déjà payé', 'Reste à payer', 'Statut', 'Signature'] as $colonne) {
             $this->assertStringContainsString($colonne, $content);
         }
         $this->assertStringContainsString('5 000', $content);
+        $this->assertStringContainsString('Partage à valider', $content);
     }
 
     /** @test */
@@ -410,7 +411,50 @@ class CommissionExportVenteTest extends TestCase
             ->get(route('comptabilite.commissions.proprietaires.excel'))
             ->streamedContent();
 
-        $this->assertStringContainsString('Réparation moteur', $content);
+        $this->assertStringContainsString('50 000', $content);
+    }
+
+    /** @test */
+    public function export_excel_proprietaire_respecte_les_filtres_agence_et_statut_du_drawer(): void
+    {
+        ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur, 'proprietaire' => $proprietaire] = $this->makeVehiculeAvecEquipe();
+        $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);
+
+        $autreSite = Site::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Autre site',
+            'type' => 'depot',
+            'localisation' => 'Conakry',
+        ]);
+
+        $creees = $this->actingAs($this->user)
+            ->get(route('comptabilite.commissions.proprietaires.excel', [
+                'statut' => ['creee'],
+                'site_ids' => [$this->defaultSite->id],
+            ]))
+            ->streamedContent();
+
+        $this->assertStringContainsString($proprietaire->nom_complet, $creees);
+        $this->assertStringContainsString('Partage à valider', $creees);
+
+        $autreAgence = $this->actingAs($this->user)
+            ->get(route('comptabilite.commissions.proprietaires.excel', [
+                'statut' => ['creee'],
+                'site_ids' => [$autreSite->id],
+            ]))
+            ->streamedContent();
+
+        $this->assertStringNotContainsString($proprietaire->nom_complet, $autreAgence);
+    }
+
+    /** @test */
+    public function export_excel_proprietaire_necessite_permission(): void
+    {
+        $userSansPermission = $this->makeUserWithPermissions($this->org, []);
+
+        $this->actingAs($userSansPermission)
+            ->get(route('comptabilite.commissions.proprietaires.excel'))
+            ->assertStatus(403);
     }
 
     /** @test */

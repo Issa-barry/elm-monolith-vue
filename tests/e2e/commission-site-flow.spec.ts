@@ -7,21 +7,28 @@
  * (CommissionEnveloppeGeneratorSiteTest, CommissionSiteTest) — ce fichier vérifie le câblage UI,
  * pas l'arithmétique (même découpage que commission-v2-full-chain.spec.ts).
  *
- * Run: npx playwright test tests/e2e/commission-site-flow.spec.ts --workers=1
+ * Utilise l'organisation dédiée "Eau La Maman V2 Demo" (loginAsElmV2Demo) — seule organisation
+ * du projet avec le processus vente V2 activé, cf. ElmV2DemoSeeder et commission-v2-full-chain.spec.ts.
+ * E2E_SKIP_GLOBAL_SETUP=1 évite le préchargement Legacy (transferts/commissions logistique) du
+ * global-setup, inutile et non lié à cette organisation.
+ *
+ * Run: E2E_SKIP_GLOBAL_SETUP=1 npx playwright test tests/e2e/commission-site-flow.spec.ts --workers=1
  */
 import { expect, test } from '@playwright/test';
-import { login } from './helpers';
+import { loginAsElmV2Demo } from './helpers';
 
 test.setTimeout(120_000);
 
+const CATEGORIE_NOM = "Sachets d'eau V2 Demo";
+
 test.beforeEach(async ({ page }) => {
-    await login(page);
+    await loginAsElmV2Demo(page);
 });
 
 test('définir un barème "Site" par catégorie dans Paramètres > Commissions', async ({
     page,
 }) => {
-    await page.goto('/backoffice/settings/commissions');
+    await page.goto('/settings/commissions');
     await expect(
         page.getByRole('heading', { name: /^commissions$/i }),
     ).toBeVisible({ timeout: 15_000 });
@@ -35,27 +42,29 @@ test('définir un barème "Site" par catégorie dans Paramètres > Commissions',
         page.getByRole('columnheader', { name: /gérants? dépôt/i }),
     ).toHaveCount(0);
 
-    const globalRow = page
-        .locator('tr')
-        .filter({ hasText: /toutes catégories/i })
+    const row = page
+        .locator('tbody tr', { hasText: new RegExp(CATEGORIE_NOM, 'i') })
         .first();
-    const siteCell = globalRow.locator('td', { hasText: /définir|gnf/i }).last();
-    await siteCell.getByRole('button').click();
+    await expect(row).toBeVisible({ timeout: 15_000 });
 
-    await expect(
-        page.locator('[role="dialog"]').filter({ hasText: /^site/i }),
-    ).toBeVisible({ timeout: 10_000 });
+    // Ordre des colonnes cible : Propriétaire, Livraison, Site (cf. CommissionRegleController).
+    const siteCell = row.getByRole('button').nth(2);
+    await siteCell.click();
 
-    await page.locator('#cr-montant').fill('1000');
-    await page.getByRole('button', { name: /enregistrer/i }).click();
+    const dialog = page.getByRole('dialog', { name: /site/i });
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    await dialog.locator('#cr-montant').fill('1000');
+    await dialog.getByRole('button', { name: /enregistrer/i }).click();
+    await expect(dialog).toBeHidden({ timeout: 10_000 });
 
     // Toast de succès en haut (jamais en bas), cf. mission §10.
     await expect(page.getByText(/barème enregistré/i)).toBeVisible({
         timeout: 10_000,
     });
+    await expect(siteCell).toContainText(/1.?000/);
 });
 
-test('l\'écran Comptabilité > Commission sites se charge avec ses filtres et ses cartes de synthèse', async ({
+test("l'écran Comptabilité > Commission sites se charge avec ses filtres et ses cartes de synthèse", async ({
     page,
 }) => {
     await page.goto('/backoffice/comptabilite/commissions/sites');
@@ -69,9 +78,7 @@ test('l\'écran Comptabilité > Commission sites se charge avec ses filtres et s
     await expect(cards).toHaveCount(4);
 
     // Filtres standards, DataFilters.vue — jamais de <select> fait maison (cf. CLAUDE.md).
-    await expect(
-        page.getByRole('button', { name: /^filtres/i }),
-    ).toBeVisible();
+    await expect(page.getByRole('button', { name: /^filtres/i })).toBeVisible();
 
     // Export unique en dropdown (Excel + PDF), jamais deux boutons séparés.
     await page.getByRole('button', { name: /^exporter$/i }).click();
