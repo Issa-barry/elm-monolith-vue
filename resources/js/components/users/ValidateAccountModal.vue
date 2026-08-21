@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import FonctionRhSelect from '@/components/rh/FonctionRhSelect.vue';
+import { Button } from '@/components/ui/button';
 import {
     Dialog,
     DialogContent,
@@ -7,7 +8,6 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useForm } from '@inertiajs/vue3';

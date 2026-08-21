@@ -2,7 +2,6 @@
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -11,6 +10,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Label } from '@/components/ui/label';
 import { useFlashToast } from '@/composables/useFlashToast';
 import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
@@ -189,9 +189,7 @@ function handleSubmit() {
                                             </span>
                                         </p>
                                     </td>
-                                    <td
-                                        class="px-6 py-4 text-muted-foreground"
-                                    >
+                                    <td class="px-6 py-4 text-muted-foreground">
                                         {{
                                             employesLabel(
                                                 fonction.employes_count,

@@ -73,10 +73,7 @@ function submit() {
                     autofocus
                     @keyup.enter="submit"
                 />
-                <p
-                    v-if="form.errors.libelle"
-                    class="text-xs text-destructive"
-                >
+                <p v-if="form.errors.libelle" class="text-xs text-destructive">
                     {{ form.errors.libelle }}
                 </p>
                 <p v-else class="text-xs text-muted-foreground">

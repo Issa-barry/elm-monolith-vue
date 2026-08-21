@@ -99,7 +99,8 @@ const emit = defineEmits<{
 
 const STORAGE_KEY = 'login_country_code';
 const savedCode = props.rememberChoice
-    ? (globalThis.localStorage?.getItem(STORAGE_KEY) ?? paysOptions.value[0].code)
+    ? (globalThis.localStorage?.getItem(STORAGE_KEY) ??
+      paysOptions.value[0].code)
     : paysOptions.value[0].code;
 const selectedCountryCode = ref(
     paysOptions.value.some((p) => p.code === savedCode)
@@ -108,7 +109,8 @@ const selectedCountryCode = ref(
 );
 
 watch(selectedCountryCode, (code) => {
-    if (props.rememberChoice) globalThis.localStorage?.setItem(STORAGE_KEY, code);
+    if (props.rememberChoice)
+        globalThis.localStorage?.setItem(STORAGE_KEY, code);
 });
 
 const selectedPays = computed(
