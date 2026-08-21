@@ -77,6 +77,25 @@ test('liste Commission propriétaire — design harmonisé, exports et filtres e
     ]) {
         await expect(cards.getByText(label, { exact: true })).toBeVisible();
     }
+    for (const redundantText of [
+        'Déduites des commissions validées',
+        'Après dépenses et ajustements',
+        'Déjà payé :',
+    ]) {
+        await expect(
+            cards.getByText(redundantText, { exact: false }),
+        ).toHaveCount(0);
+    }
+    const generatedHelp = cards.getByRole('button', {
+        name: 'Définition des commissions générées',
+    });
+    await expect(generatedHelp).toBeVisible();
+    await generatedHelp.hover();
+    await expect(
+        page
+            .getByRole('tooltip')
+            .getByText(/total des commissions calculées à partir des ventes/i),
+    ).toBeVisible();
 
     await page.getByRole('button', { name: /^exporter$/i }).click();
     await expect(

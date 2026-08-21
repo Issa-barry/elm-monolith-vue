@@ -14,6 +14,12 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import type {
@@ -30,6 +36,7 @@ import {
     FileText,
     HandCoins,
     History,
+    Info,
     MoreHorizontal,
     Truck,
     User,
@@ -339,83 +346,146 @@ function fmtTel(tel: string | null | undefined): string {
                 </div>
             </div>
 
-            <div
-                data-testid="commission-summary-cards"
-                aria-label="Synthèse des commissions"
-                class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
-            >
-                <div class="rounded-xl border bg-card p-4 shadow-sm">
-                    <p class="text-sm text-muted-foreground">
-                        Commissions générées
-                    </p>
-                    <p
-                        class="mt-1.5 text-2xl font-bold whitespace-nowrap text-foreground tabular-nums"
-                    >
-                        {{ fmt(kpis.total_genere) }}
-                    </p>
-                    <p class="mt-0.5 text-xs text-muted-foreground">
-                        {{ kpis.nb_proprietaires }} propriétaire{{
-                            kpis.nb_proprietaires !== 1 ? 's' : ''
-                        }}
-                    </p>
-                </div>
-                <div class="rounded-xl border bg-card p-4 shadow-sm">
-                    <p class="text-sm text-muted-foreground">Dépenses</p>
-                    <p
-                        class="mt-1.5 text-2xl font-bold whitespace-nowrap tabular-nums"
-                        :class="
-                            kpis.total_frais > 0
-                                ? 'text-red-600 dark:text-red-400'
-                                : 'text-foreground'
-                        "
-                    >
-                        {{
-                            kpis.total_frais > 0
-                                ? '-' + fmt(kpis.total_frais)
-                                : fmt(0)
-                        }}
-                    </p>
-                    <p class="mt-0.5 text-xs text-muted-foreground">
-                        Déduites des commissions validées
-                    </p>
-                </div>
-                <div class="rounded-xl border bg-card p-4 shadow-sm">
-                    <p class="text-sm text-muted-foreground">Net validé</p>
-                    <p
-                        class="mt-1.5 text-2xl font-bold whitespace-nowrap tabular-nums"
-                        :class="
-                            kpis.solde_total > 0
-                                ? 'text-amber-600 dark:text-amber-400'
-                                : 'text-foreground'
-                        "
-                    >
-                        {{ fmt(kpis.total_net) }}
-                    </p>
-                    <p class="mt-0.5 text-xs text-muted-foreground">
-                        Après dépenses et ajustements
-                    </p>
-                </div>
-                <div class="rounded-xl border bg-card p-4 shadow-sm">
-                    <p class="text-sm text-muted-foreground">Reste à payer</p>
-                    <p
-                        class="mt-1.5 text-2xl font-bold whitespace-nowrap text-foreground tabular-nums"
-                    >
-                        {{ fmt(kpis.solde_total) }}
-                    </p>
-                    <p class="mt-0.5 text-xs tabular-nums">
-                        <span class="text-muted-foreground">Déjà payé : </span>
-                        <span
+            <TooltipProvider :delay-duration="150">
+                <div
+                    data-testid="commission-summary-cards"
+                    aria-label="Synthèse des commissions"
+                    class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+                >
+                    <div class="rounded-xl border bg-card p-4 shadow-sm">
+                        <div
+                            class="flex items-center gap-1.5 text-sm text-muted-foreground"
+                        >
+                            <span>Commissions générées</span>
+                            <Tooltip>
+                                <TooltipTrigger as-child>
+                                    <button
+                                        type="button"
+                                        aria-label="Définition des commissions générées"
+                                        class="rounded-sm text-muted-foreground/70 transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                                    >
+                                        <Info class="h-3.5 w-3.5" />
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent class="max-w-xs">
+                                    <p>
+                                        Total des commissions calculées à partir
+                                        des ventes, avant validation de la
+                                        période.
+                                    </p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </div>
+                        <p
+                            class="mt-1.5 text-2xl font-bold whitespace-nowrap text-foreground tabular-nums"
+                        >
+                            {{ fmt(kpis.total_genere) }}
+                        </p>
+                    </div>
+                    <div class="rounded-xl border bg-card p-4 shadow-sm">
+                        <div
+                            class="flex items-center gap-1.5 text-sm text-muted-foreground"
+                        >
+                            <span>Dépenses</span>
+                            <Tooltip>
+                                <TooltipTrigger as-child>
+                                    <button
+                                        type="button"
+                                        aria-label="Définition des dépenses"
+                                        class="rounded-sm text-muted-foreground/70 transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                                    >
+                                        <Info class="h-3.5 w-3.5" />
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent class="max-w-xs">
+                                    <p>
+                                        Dépenses déduites des commissions déjà
+                                        validées.
+                                    </p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </div>
+                        <p
+                            class="mt-1.5 text-2xl font-bold whitespace-nowrap tabular-nums"
                             :class="
-                                kpis.total_verse > 0
-                                    ? 'text-emerald-600 dark:text-emerald-400'
-                                    : 'text-muted-foreground'
+                                kpis.total_frais > 0
+                                    ? 'text-red-600 dark:text-red-400'
+                                    : 'text-foreground'
                             "
                         >
-                            {{ fmt(kpis.total_verse) }}
-                        </span>
-                    </p>
+                            {{
+                                kpis.total_frais > 0
+                                    ? '-' + fmt(kpis.total_frais)
+                                    : fmt(0)
+                            }}
+                        </p>
+                    </div>
+                    <div class="rounded-xl border bg-card p-4 shadow-sm">
+                        <div
+                            class="flex items-center gap-1.5 text-sm text-muted-foreground"
+                        >
+                            <span>Net validé</span>
+                            <Tooltip>
+                                <TooltipTrigger as-child>
+                                    <button
+                                        type="button"
+                                        aria-label="Définition du net validé"
+                                        class="rounded-sm text-muted-foreground/70 transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                                    >
+                                        <Info class="h-3.5 w-3.5" />
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent class="max-w-xs">
+                                    <p>
+                                        Montant validé après déduction des
+                                        dépenses et prise en compte des
+                                        ajustements.
+                                    </p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </div>
+                        <p
+                            class="mt-1.5 text-2xl font-bold whitespace-nowrap tabular-nums"
+                            :class="
+                                kpis.solde_total > 0
+                                    ? 'text-amber-600 dark:text-amber-400'
+                                    : 'text-foreground'
+                            "
+                        >
+                            {{ fmt(kpis.total_net) }}
+                        </p>
+                    </div>
+                    <div class="rounded-xl border bg-card p-4 shadow-sm">
+                        <div
+                            class="flex items-center gap-1.5 text-sm text-muted-foreground"
+                        >
+                            <span>Reste à payer</span>
+                            <Tooltip>
+                                <TooltipTrigger as-child>
+                                    <button
+                                        type="button"
+                                        aria-label="Définition du reste à payer"
+                                        class="rounded-sm text-muted-foreground/70 transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                                    >
+                                        <Info class="h-3.5 w-3.5" />
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent class="max-w-xs">
+                                    <p>
+                                        Net validé restant à verser après les
+                                        paiements déjà effectués.
+                                    </p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </div>
+                        <p
+                            class="mt-1.5 text-2xl font-bold whitespace-nowrap text-foreground tabular-nums"
+                        >
+                            {{ fmt(kpis.solde_total) }}
+                        </p>
+                    </div>
                 </div>
-            </div>
+            </TooltipProvider>
 
             <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
                 <div
