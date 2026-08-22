@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CompteTresorerie;
 use App\Models\SoldeOuvertureTresorerie;
 use App\Services\Tresorerie\SoldeOuvertureTresorerieService;
+use App\Support\MontantNormalizer;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -20,6 +21,11 @@ class SoldeOuvertureTresorerieController extends Controller
         abort_unless(auth()->user()->can('tresorerie.gerer_soldes_ouverture'), 403);
 
         $orgId = auth()->user()->organization_id;
+
+        // Défense en profondeur : le client envoie déjà la valeur brute (le formatage
+        // "20 000 000" n'est qu'un affichage), mais on tolère aussi une chaîne
+        // formatée si elle arrive telle quelle (cf. MontantNormalizer).
+        $request->merge(['montant' => MontantNormalizer::normalize($request->input('montant'))]);
 
         $data = $request->validate([
             'compte_tresorerie_id' => ['required', Rule::exists('compta_supports_tresorerie', 'id')->where('organization_id', $orgId)],

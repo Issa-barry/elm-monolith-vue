@@ -163,21 +163,44 @@ function searchVehicule(event: { query: string }) {
         : [...props.vehicules];
 }
 
+/**
+ * Requêtes de solvabilité centralisées ici (véhicule/client) — évite de dupliquer le même
+ * fetch/try/finally à chaque appelant. Le montant de la vente en cours n'y est volontairement
+ * jamais transmis : le plafond (standard ou dérogatoire) ne compare jamais que la dette DÉJÀ
+ * existante, jamais la vente en cours de création (cf. SolvabiliteService, décision produit du
+ * 22/08/2026) — inutile de rafraîchir cet aperçu quand seules les lignes changent.
+ */
+async function fetchVehiculeSolvabilite(vehiculeId: number) {
+    vehiculeSolvabiliteLoading.value = true;
+    try {
+        const res = await fetch(
+            `/backoffice/ventes/check-solvabilite?vehicule_id=${vehiculeId}`,
+        );
+        vehiculeSolvabilite.value = await res.json();
+    } finally {
+        vehiculeSolvabiliteLoading.value = false;
+    }
+}
+
+async function fetchClientSolvabilite(clientId: number) {
+    clientSolvabiliteLoading.value = true;
+    try {
+        const res = await fetch(
+            `/backoffice/ventes/check-solvabilite?client_id=${clientId}`,
+        );
+        clientSolvabilite.value = await res.json();
+    } finally {
+        clientSolvabiliteLoading.value = false;
+    }
+}
+
 async function onVehiculeSelect(v: VehiculeOption | null) {
     form.vehicule_id = v?.id ?? null;
     applyVehiculeCapacityOnSingleLine(v);
     recomputeAllTotals();
     if (v) {
-        vehiculeSolvabiliteLoading.value = true;
         vehiculeSolvabilite.value = null;
-        try {
-            const res = await fetch(
-                `/backoffice/ventes/check-solvabilite?vehicule_id=${v.id}`,
-            );
-            vehiculeSolvabilite.value = await res.json();
-        } finally {
-            vehiculeSolvabiliteLoading.value = false;
-        }
+        await fetchVehiculeSolvabilite(v.id);
     }
 }
 
@@ -305,16 +328,8 @@ async function onClientSelect(c: ClientOption | null) {
     // que le prix unitaire affiché, lui, se met à jour immédiatement.
     recomputeAllTotals();
     if (c) {
-        clientSolvabiliteLoading.value = true;
         clientSolvabilite.value = null;
-        try {
-            const res = await fetch(
-                `/backoffice/ventes/check-solvabilite?client_id=${c.id}`,
-            );
-            clientSolvabilite.value = await res.json();
-        } finally {
-            clientSolvabiliteLoading.value = false;
-        }
+        await fetchClientSolvabilite(c.id);
     }
 }
 
@@ -979,9 +994,19 @@ function confirmerEtCreer() {
                                     <p
                                         class="text-xs font-bold tracking-wide text-red-800 uppercase dark:text-red-300"
                                     >
-                                        Commande bloquée — facture impayée
+                                        Commande bloquée —
+                                        {{
+                                            vehiculeSolvabilite.total_remaining >
+                                            0
+                                                ? 'plafond dépassé'
+                                                : 'cette vente dépasse le plafond'
+                                        }}
                                     </p>
                                     <button
+                                        v-if="
+                                            vehiculeSolvabilite.unpaid_invoices_count >
+                                            0
+                                        "
                                         type="button"
                                         class="shrink-0 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-100 dark:border-red-700 dark:bg-red-950/60 dark:text-red-300 dark:hover:bg-red-900/60"
                                         @click="

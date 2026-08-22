@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useFlashToast } from '@/composables/useFlashToast';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/vue3';
@@ -19,6 +20,8 @@ const props = defineProps<{
     echeance_debut_prerempli: string | null;
     echeance_fin_prerempli: string | null;
 }>();
+
+useFlashToast('top');
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
