@@ -35,13 +35,14 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     calculee: 'bg-blue-500',
     repartition_validee: 'bg-blue-500',
 
-    // Gris — brouillon / créé / pas commencé
+    // Gris — brouillon / créé / pas commencé / neutralisé
     brouillon: 'bg-zinc-400 dark:bg-zinc-500',
     creee: 'bg-zinc-400 dark:bg-zinc-500',
     a_charger: 'bg-zinc-400 dark:bg-zinc-500',
     a_verifier: 'bg-zinc-400 dark:bg-zinc-500',
     inactif: 'bg-zinc-400 dark:bg-zinc-500',
     inactive: 'bg-zinc-400 dark:bg-zinc-500',
+    contrepassee: 'bg-zinc-400 dark:bg-zinc-500',
 
     // Rouge — impayé / rejeté / annulé
     impaye: 'bg-red-500',
