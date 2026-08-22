@@ -42,6 +42,10 @@ withDefaults(
         filterValues: Record<string, unknown>;
         filterFields: FilterField[];
         sites?: SiteOption[];
+        /** Masque le sélecteur Agence/Site du DataFilters partagé — pour une cible qui n'est
+         * rattachée à aucun site (ex: Consultant, désigné au niveau organisation), jamais pour
+         * masquer artificiellement un filtre par ailleurs pertinent. */
+        hideAgenceSelector?: boolean;
         summary: CommissionIndexSummary;
         tableTitle: string;
         resultCount: number;
@@ -51,6 +55,7 @@ withDefaults(
         entityLabelPlural: undefined,
         periodStatus: null,
         sites: () => [],
+        hideAgenceSelector: false,
         emptyMessage: 'Aucune commission trouvée.',
     },
 );
@@ -128,6 +133,7 @@ defineEmits<{
                     :values="filterValues"
                     :fields="filterFields"
                     :sites="sites"
+                    :hide-agence-selector="hideAgenceSelector"
                     :result-count="resultCount"
                 />
             </div>

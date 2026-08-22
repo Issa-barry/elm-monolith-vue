@@ -66,7 +66,10 @@ jamais être confondu avec `compta_pieces`/`compta_ecritures`, qui appliquent la
   `journal_comptable_id` → `compta_journaux` (nullable).
 - **Événements** : catalogue fermé dans `App\Enums\EvenementComptable` (fiche_proprietaire_validee,
   fiche_livreur_validee, paiement_proprietaire, paiement_livreur, depense_interne_validee,
-  depense_avance_tiers_validee, regularisation_cloture_fiche).
+  depense_avance_tiers_validee, regularisation_cloture_fiche, vente_facturee,
+  encaissement_vente_recu, paiement_salaire, mouvement_fonds_envoye, mouvement_fonds_recu,
+  solde_ouverture_tresorerie — ces 4 derniers ajoutés par le chantier Financement des agences,
+  2026-08-22).
 - **Usage BI** : référentiel de configuration, rarement interrogé directement en BI (sert au
   moteur, pas au reporting).
 
@@ -103,6 +106,22 @@ jamais être confondu avec `compta_pieces`/`compta_ecritures`, qui appliquent la
   `exercice_comptable_id` → `compta_exercices`.
 - **Usage BI** : table technique, aucun intérêt en reporting.
 
+### `compta_supports_tresorerie` (chantier Financement des agences, 2026-08-22)
+- **Rôle** : support de trésorerie configurable par organisation — rattache un site à un compte
+  du plan comptable (571000 Caisse, 521000 Banque, 561xxx Mobile Money...). Lève l'ambiguïté
+  "où l'argent est réellement détenu" ; aucun opérateur/numéro codé en dur, cf. `CompteTresorerie`.
+- **PK** : `id`. **FK** : `organization_id` ; `site_id` → `sites` ; `compte_comptable_id` →
+  `compta_comptes`.
+- **Usage BI** : dimension "support de trésorerie" (caisse/banque/mobile money par site).
+
+### `compta_soldes_ouverture` (chantier Financement des agences, 2026-08-22)
+- **Rôle** : solde d'ouverture d'un support de trésorerie — au plus un par support (unique),
+  brouillon puis validé. La validation seule produit une pièce comptable (débit compte du
+  support / crédit `109000` — contrepartie technique), cf. `SoldeOuvertureTresorerieService`.
+  Un montant de 0 est validé sans pièce (rien à comptabiliser).
+- **PK** : `id`. **FK** : `organization_id` ; `compte_tresorerie_id` → `compta_supports_tresorerie`
+  (unique) ; `piece_comptable_id` → `compta_pieces` (nullable) ; `created_by`/`valide_by` → `users`.
+
 ## Données métier sources (en amont de la compta générale)
 
 | Table | Rôle | Alimente `compta_pieces` via | Événement(s) |
@@ -111,10 +130,20 @@ jamais être confondu avec `compta_pieces`/`compta_ecritures`, qui appliquent la
 | `paiement_fiches` + `paiement_fiche_lignes` + `paiement_fiche_paiements` | Fiches de paiement propriétaires/livreurs (commissions à régler) | `FicheComptabilisationService` | `fiche_proprietaire_validee`, `fiche_livreur_validee`, `paiement_proprietaire`, `paiement_livreur`, `regularisation_cloture_fiche` |
 | `commissions_ventes` / `commissions_logistiques` + tables de parts/ajustements | Calcul des commissions par vehicule/livreur | Indirectement, via les fiches de paiement qui les agrègent | — |
 | `factures_ventes` / `encaissements_ventes` | Facturation et encaissement client | Non branché à ce jour | — |
+| `paie_paiements` | Paiement de salaire | `PaieComptabilisationService` (jambe trésorerie uniquement, pas d'engagement — chantier 2026-08-22) | `paiement_salaire` |
+| `mouvements_fonds` | Mouvement de fonds interne agence ↔ siège (remise/financement) | `MouvementFondsComptabilisationService` — 2 pièces mono-site (émission + réception) via le compte 58 "virements internes" | `mouvement_fonds_envoye`, `mouvement_fonds_recu` |
 | `journal_tresorerie` | Flux de trésorerie opérationnel (caisse/banque au fil de l'eau) | Non branché — reste un journal métier parallèle, pas une sous-table de `compta_journaux` | — |
 
-**Note pour la data/BI** : à ce stade, seuls les modules Dépenses et Fiches de paiement sont
-réellement branchés sur la comptabilité générale. Commissions (calcul brut), Ventes/Factures et
-Trésorerie opérationnelle restent des sources métier autonomes, non encore comptabilisées en
-partie double — ne pas supposer qu'un total dans `compta_ecritures` couvre l'intégralité de
-l'activité tant que ces branchements n'existent pas.
+**Note pour la data/BI** : à ce stade, Dépenses, Fiches de paiement, Salaires (jambe trésorerie
+seulement) et Mouvements de fonds sont branchés sur la comptabilité générale. Commissions (calcul
+brut), Ventes/Factures et Trésorerie opérationnelle (`journal_tresorerie`) restent des sources
+métier autonomes, non comptabilisées en partie double — ne pas supposer qu'un total dans
+`compta_ecritures` couvre l'intégralité de l'activité tant que ces branchements n'existent pas.
+
+**`journal_tresorerie` — dette technique identifiée, non résolue par ce chantier** : ce registre
+reste la SEULE trace financière des paiements de commission logistique (`CommissionPayment`) et
+des versements de cashback (`CashbackVersement`) — ils n'ont aucune écriture dans
+`compta_ecritures`. Le supprimer ou le remplacer sans migrer d'abord ces deux flux vers le moteur
+comptable général causerait une perte de traçabilité réelle. Le chantier Financement des agences
+(2026-08-22) a délibérément laissé `journal_tresorerie` inchangé pour cette raison — voir
+audit dans le compte-rendu du chantier.

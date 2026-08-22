@@ -14,24 +14,24 @@ use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
-class BesoinTresorerieControllerTest extends TestCase
+class FinancementAgenceControllerTest extends TestCase
 {
     use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->initOrgAndUser(['comptabilite.read']);
+        $this->initOrgAndUser(['tresorerie.read']);
         Feature::for($this->org)->activate(ModuleFeature::COMPTABILITE);
     }
 
     public function test_index_retourne_200(): void
     {
         $this->actingAs($this->user)
-            ->get(route('comptabilite.tresorerie.index'))
+            ->get(route('comptabilite.tresorerie.financement.index'))
             ->assertStatus(200)
             ->assertInertia(fn (Assert $page) => $page
-                ->component('Comptabilite/Tresorerie/Index')
+                ->component('Comptabilite/Financement/Index')
                 ->has('rows')
                 ->has('total_general')
             );
@@ -39,7 +39,7 @@ class BesoinTresorerieControllerTest extends TestCase
 
     public function test_index_redirige_non_authentifie(): void
     {
-        $this->get(route('comptabilite.tresorerie.index'))
+        $this->get(route('comptabilite.tresorerie.financement.index'))
             ->assertRedirect(route('login'));
     }
 
@@ -48,17 +48,17 @@ class BesoinTresorerieControllerTest extends TestCase
         $this->user->syncPermissions([]);
 
         $this->actingAs($this->user)
-            ->get(route('comptabilite.tresorerie.index'))
+            ->get(route('comptabilite.tresorerie.financement.index'))
             ->assertStatus(403);
     }
 
     public function test_show_sans_agence_retourne_200(): void
     {
         $this->actingAs($this->user)
-            ->get(route('comptabilite.tresorerie.show', 'sans-agence'))
+            ->get(route('comptabilite.tresorerie.financement.show', 'sans-agence'))
             ->assertStatus(200)
             ->assertInertia(fn (Assert $page) => $page
-                ->component('Comptabilite/Tresorerie/Show')
+                ->component('Comptabilite/Financement/Show')
                 ->where('site.id', null)
             );
     }
@@ -68,10 +68,10 @@ class BesoinTresorerieControllerTest extends TestCase
         $site = $this->user->sites()->first();
 
         $this->actingAs($this->user)
-            ->get(route('comptabilite.tresorerie.show', $site->id))
+            ->get(route('comptabilite.tresorerie.financement.show', $site->id))
             ->assertStatus(200)
             ->assertInertia(fn (Assert $page) => $page
-                ->component('Comptabilite/Tresorerie/Show')
+                ->component('Comptabilite/Financement/Show')
                 ->where('site.id', $site->id)
             );
     }
@@ -86,10 +86,10 @@ class BesoinTresorerieControllerTest extends TestCase
         ]);
 
         $this->actingAs($this->user)
-            ->get(route('comptabilite.tresorerie.index', ['site_ids' => [$autreSite->id]]))
+            ->get(route('comptabilite.tresorerie.financement.index', ['site_ids' => [$autreSite->id]]))
             ->assertStatus(200)
             ->assertInertia(fn (Assert $page) => $page
-                ->component('Comptabilite/Tresorerie/Index')
+                ->component('Comptabilite/Financement/Index')
                 ->where('rows.0.site_id', $autreSite->id)
                 ->has('rows', 1)
             );
@@ -106,20 +106,17 @@ class BesoinTresorerieControllerTest extends TestCase
         ]);
 
         Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
-        Permission::firstOrCreate(['name' => 'comptabilite.read', 'guard_name' => 'web']);
+        Permission::firstOrCreate(['name' => 'tresorerie.read', 'guard_name' => 'web']);
         $nonAdmin = User::factory()->create(['organization_id' => $this->org->id]);
         $nonAdmin->assignRole('manager');
-        $nonAdmin->givePermissionTo('comptabilite.read');
+        $nonAdmin->givePermissionTo('tresorerie.read');
         $nonAdmin->sites()->attach($ownSite->id, ['role' => 'employe', 'is_default' => true]);
 
-        // Même en forçant site_ids vers un site étranger dans l'URL, un
-        // non-admin reste cantonné à ses propres sites (le cadenas côté UI
-        // n'est qu'un affichage — la restriction réelle est ici, côté serveur).
         $this->actingAs($nonAdmin)
-            ->get(route('comptabilite.tresorerie.index', ['site_ids' => [$autreSite->id]]))
+            ->get(route('comptabilite.tresorerie.financement.index', ['site_ids' => [$autreSite->id]]))
             ->assertStatus(200)
             ->assertInertia(fn (Assert $page) => $page
-                ->component('Comptabilite/Tresorerie/Index')
+                ->component('Comptabilite/Financement/Index')
                 ->where('rows.0.site_id', $ownSite->id)
                 ->has('rows', 1)
             );
@@ -136,14 +133,28 @@ class BesoinTresorerieControllerTest extends TestCase
         ]);
 
         Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web']);
-        Permission::firstOrCreate(['name' => 'comptabilite.read', 'guard_name' => 'web']);
+        Permission::firstOrCreate(['name' => 'tresorerie.read', 'guard_name' => 'web']);
         $nonAdmin = User::factory()->create(['organization_id' => $this->org->id]);
         $nonAdmin->assignRole('manager');
-        $nonAdmin->givePermissionTo('comptabilite.read');
+        $nonAdmin->givePermissionTo('tresorerie.read');
         $nonAdmin->sites()->attach($ownSite->id, ['role' => 'employe', 'is_default' => true]);
 
         $this->actingAs($nonAdmin)
-            ->get(route('comptabilite.tresorerie.show', $autreSite->id))
+            ->get(route('comptabilite.tresorerie.financement.show', $autreSite->id))
             ->assertStatus(403);
+    }
+
+    public function test_ligne_sans_support_tresorerie_est_marquee_donnees_incompletes(): void
+    {
+        // Aucun CompteTresorerie créé pour le site par défaut : le disponible ne
+        // peut pas être calculé de façon fiable (règle #7 — jamais un faux besoin précis).
+        $this->actingAs($this->user)
+            ->get(route('comptabilite.tresorerie.financement.index'))
+            ->assertStatus(200)
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Comptabilite/Financement/Index')
+                ->where('rows.0.statut', 'donnees_incompletes')
+                ->where('rows.0.disponible', null)
+            );
     }
 }

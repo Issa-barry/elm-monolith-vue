@@ -28,7 +28,13 @@ return new class extends Migration
             $table->foreignUlid('prestataire_id')->constrained('prestataires')->restrictOnDelete();
             $table->date('effective_from');
             $table->date('effective_to')->nullable();
-            $table->foreignUlid('remplace_affectation_id')->nullable()->constrained('commission_consultant_affectations')->nullOnDelete();
+            // Nom de contrainte explicite et raccourci : le nom auto-généré par Laravel
+            // ("commission_consultant_affectations_remplace_affectation_id_foreign", 68
+            // caractères) dépasse la limite MySQL de 64 caractères pour un identifiant
+            // (SQLSTATE[42000] 1059), même style d'abréviation que l'index ci-dessous.
+            $table->foreignUlid('remplace_affectation_id')->nullable()
+                ->constrained('commission_consultant_affectations', 'id', 'comm_consultant_aff_remplace_fk')
+                ->nullOnDelete();
             $table->string('statut', 20)->default('active');
             $table->foreignUlid('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();

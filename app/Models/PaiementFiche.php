@@ -144,6 +144,7 @@ class PaiementFiche extends Model
             'proprietaire' => Proprietaire::find($this->beneficiaire_id),
             'salarie' => Employe::find($this->beneficiaire_id),
             'site' => Site::find($this->beneficiaire_id),
+            'prestataire' => Prestataire::find($this->beneficiaire_id),
             default => null,
         };
     }

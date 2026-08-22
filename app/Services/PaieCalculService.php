@@ -19,7 +19,7 @@ class PaieCalculService
      * Point d'entrée unique pour obtenir la PaiePeriode d'un mois, en
      * garantissant que ses PaieLigne existent — sans dépendre d'une visite
      * préalable de l'écran Comptabilité > Salaires (cf. SalaireController::index()
-     * et BesoinTresorerieService, qui appellent tous les deux cette méthode
+     * et SalaireObligationContributor, qui appellent tous les deux cette méthode
      * plutôt que de dupliquer la logique de génération).
      */
     public function getOrGenererPeriode(string $orgId, int $mois, int $annee): PaiePeriode

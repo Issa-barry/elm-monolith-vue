@@ -19,18 +19,22 @@ use App\Http\Controllers\CommandeVenteStatutController;
 use App\Http\Controllers\CommissionLogistiqueController;
 use App\Http\Controllers\CommissionPaymentController;
 use App\Http\Controllers\CommissionVehiculeController;
-use App\Http\Controllers\Comptabilite\BesoinTresorerieController;
 use App\Http\Controllers\Comptabilite\CommissionAjustementController;
+use App\Http\Controllers\Comptabilite\CommissionConsultantController;
 use App\Http\Controllers\Comptabilite\CommissionLogistiqueController as ComptabiliteCommissionLogistiqueController;
 use App\Http\Controllers\Comptabilite\CommissionProprietaireController;
 use App\Http\Controllers\Comptabilite\CommissionSiteController;
 use App\Http\Controllers\Comptabilite\CommissionVenteController as ComptabiliteCommissionVenteController;
+use App\Http\Controllers\Comptabilite\CompteTresorerieController;
+use App\Http\Controllers\Comptabilite\FinancementAgenceController;
 use App\Http\Controllers\Comptabilite\HistoriqueActionsController;
 use App\Http\Controllers\Comptabilite\JournalTresorerieController;
+use App\Http\Controllers\Comptabilite\MouvementFondsController;
 use App\Http\Controllers\Comptabilite\PaiementFicheController;
 use App\Http\Controllers\Comptabilite\PaiementFichePaiementController;
 use App\Http\Controllers\Comptabilite\PaiementPeriodeController;
 use App\Http\Controllers\Comptabilite\SalaireController;
+use App\Http\Controllers\Comptabilite\SoldeOuvertureTresorerieController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\ContratController;
 use App\Http\Controllers\DashboardController;
@@ -453,9 +457,28 @@ Route::prefix('backoffice')->group(function () {
         // ── Module : Comptabilité ─────────────────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::COMPTABILITE)->prefix('comptabilite')->name('comptabilite.')->group(function () {
 
-            // ── Besoin de trésorerie (prévision, par agence) ────────────────────────
-            Route::get('tresorerie', [BesoinTresorerieController::class, 'index'])->name('tresorerie.index');
-            Route::get('tresorerie/{site}', [BesoinTresorerieController::class, 'show'])->name('tresorerie.show');
+            // ── Trésorerie : Financement des agences + Mouvements de fonds ──────────
+            // Remplace l'ancien "Besoin de trésorerie" (BesoinTresorerieController) —
+            // cf. compte-rendu du chantier Financement des agences (2026-08-22).
+            Route::prefix('tresorerie')->name('tresorerie.')->group(function () {
+                Route::get('financement', [FinancementAgenceController::class, 'index'])->name('financement.index');
+                Route::get('financement/{site}', [FinancementAgenceController::class, 'show'])->name('financement.show');
+
+                Route::get('mouvements', [MouvementFondsController::class, 'index'])->name('mouvements.index');
+                Route::get('mouvements/create', [MouvementFondsController::class, 'create'])->name('mouvements.create');
+                Route::post('mouvements', [MouvementFondsController::class, 'store'])->name('mouvements.store');
+                Route::post('mouvements/{mouvement}/envoyer', [MouvementFondsController::class, 'envoyer'])->name('mouvements.envoyer');
+                Route::post('mouvements/{mouvement}/recevoir', [MouvementFondsController::class, 'recevoir'])->name('mouvements.recevoir');
+                Route::post('mouvements/{mouvement}/annuler', [MouvementFondsController::class, 'annuler'])->name('mouvements.annuler');
+                Route::post('mouvements/{mouvement}/rejeter', [MouvementFondsController::class, 'rejeter'])->name('mouvements.rejeter');
+
+                Route::get('supports', [CompteTresorerieController::class, 'index'])->name('supports.index');
+                Route::post('supports', [CompteTresorerieController::class, 'store'])->name('supports.store');
+                Route::put('supports/{compteTresorerie}', [CompteTresorerieController::class, 'update'])->name('supports.update');
+
+                Route::post('soldes-ouverture', [SoldeOuvertureTresorerieController::class, 'store'])->name('soldes-ouverture.store');
+                Route::post('soldes-ouverture/{soldeOuverture}/valider', [SoldeOuvertureTresorerieController::class, 'valider'])->name('soldes-ouverture.valider');
+            });
 
             Route::get('fiches/livreurs', [PaiementFicheController::class, 'indexLivreurs'])->name('fiches.livreurs');
             Route::get('fiches/proprietaires', [PaiementFicheController::class, 'indexProprietaires'])->name('fiches.proprietaires');
@@ -508,6 +531,14 @@ Route::prefix('backoffice')->group(function () {
                 ->name('commissions.proprietaires.pdf');
             Route::get('commissions/proprietaires/{proprietaireId}', [CommissionProprietaireController::class, 'show'])
                 ->name('commissions.proprietaires.show');
+
+            // ── Commission consultants ──────────────────────────────────────────────
+            Route::get('commissions/consultants', [CommissionConsultantController::class, 'index'])
+                ->name('commissions.consultants.index');
+            Route::get('commissions/consultants/export/excel', [CommissionConsultantController::class, 'exportExcel'])
+                ->name('commissions.consultants.excel');
+            Route::get('commissions/consultants/export/pdf', [CommissionConsultantController::class, 'exportPdf'])
+                ->name('commissions.consultants.pdf');
 
             // ── Périodes de paiement (générées automatiquement, jamais créées à la main) ──
             Route::get('periodes', [PaiementPeriodeController::class, 'index'])->name('periodes.index');
