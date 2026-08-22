@@ -92,7 +92,7 @@ const typeTitle = {
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
-    { title: 'Comptabilité', href: '/backoffice/comptabilite' },
+    { title: 'Comptabilité' },
     { title: typeTitle[props.type], href: typeRoute[props.type] },
 ];
 

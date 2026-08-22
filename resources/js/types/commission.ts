@@ -14,6 +14,20 @@ export interface CommissionSummary {
     payable: number | null;
 }
 
+/**
+ * Synthèse commune aux pages de liste des commissions.
+ *
+ * Les contrôleurs restent libres de calculer leurs indicateurs selon leur
+ * domaine ; ce contrat ne mutualise que leur présentation.
+ */
+export interface CommissionIndexSummary {
+    generated: number;
+    expenses: number;
+    netValidated: number;
+    remaining: number;
+    paid?: number;
+}
+
 export interface CommissionVehiculeInfo {
     id: string | null;
     nom: string | null;

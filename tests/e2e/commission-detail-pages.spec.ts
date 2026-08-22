@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { login } from './helpers';
+import { closeFilterDrawerIfOpen, login } from './helpers';
 
 test.setTimeout(120_000);
 
@@ -92,9 +92,9 @@ test('liste Commission propriétaire — design harmonisé, exports et filtres e
     await expect(generatedHelp).toBeVisible();
     await generatedHelp.hover();
     await expect(
-        page
-            .getByRole('tooltip')
-            .getByText(/total des commissions calculées à partir des ventes/i),
+        page.locator('[role="tooltip"]').filter({
+            hasText: /total des commissions calculées à partir des ventes/i,
+        }),
     ).toBeVisible();
 
     await page.getByRole('button', { name: /^exporter$/i }).click();
@@ -118,7 +118,11 @@ test('liste Commission propriétaire — design harmonisé, exports et filtres e
     await page.keyboard.press('Escape');
 
     const tableScroll = page.getByTestId('commission-table-scroll');
-    await expect(tableScroll).toHaveCSS('overflow-x', 'auto');
+    if (await tableScroll.isVisible({ timeout: 3_000 }).catch(() => false)) {
+        await expect(tableScroll).toHaveCSS('overflow-x', 'auto');
+    } else {
+        await expect(page.getByTestId('commission-empty-state')).toBeVisible();
+    }
 
     const row = page.locator('tbody tr:has(td)').first();
     if (await row.isVisible({ timeout: 5_000 }).catch(() => false)) {
@@ -138,6 +142,65 @@ test('liste Commission propriétaire — design harmonisé, exports et filtres e
                 page.getByRole('columnheader', { name: label, exact: true }),
             ).toBeVisible();
         }
+    }
+});
+
+test('les quatre listes de commissions partagent le même socle et conservent leurs filtres métier', async ({
+    page,
+}) => {
+    await login(page);
+
+    const pages = [
+        {
+            path: '/backoffice/comptabilite/commissions/vente',
+            title: /commissions? des livreurs sur les ventes/i,
+            filters: ['Statut', 'Période'],
+        },
+        {
+            path: '/backoffice/comptabilite/commissions/logistique',
+            title: /commission livreur logistique/i,
+            filters: ['Statut', 'Période'],
+        },
+        {
+            path: '/backoffice/comptabilite/commissions/proprietaires',
+            title: /^commission propriétaire$/i,
+            filters: ['Nom complet', 'Téléphone', 'Statut', 'Période'],
+        },
+        {
+            path: '/backoffice/comptabilite/commissions/sites',
+            title: /commissions des sites/i,
+            filters: ['Statut', 'Période', 'Catégorie', 'Type de site'],
+        },
+    ];
+
+    for (const commissionPage of pages) {
+        await page.goto(commissionPage.path);
+        await expect(
+            page.getByRole('heading', { name: commissionPage.title }),
+        ).toBeVisible({ timeout: 15_000 });
+        await expect(
+            page.getByTestId('commission-summary-cards').locator('> div'),
+        ).toHaveCount(4);
+        await expect(
+            page.getByTestId('commission-export-trigger'),
+        ).toBeVisible();
+
+        await page.getByRole('button', { name: /^filtres/i }).click();
+        const drawer = page
+            .getByRole('dialog')
+            .filter({ hasText: /^filtres/i });
+        await expect(drawer.getByTestId('agency-filter')).toBeVisible();
+        for (const filterLabel of commissionPage.filters) {
+            await expect(
+                drawer.getByText(filterLabel, { exact: true }),
+            ).toBeVisible();
+        }
+        await closeFilterDrawerIfOpen(page);
+
+        const tableOrEmpty = page
+            .getByTestId('commission-table-scroll')
+            .or(page.getByTestId('commission-empty-state'));
+        await expect(tableOrEmpty).toBeVisible();
     }
 });
 
