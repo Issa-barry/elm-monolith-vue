@@ -7,10 +7,11 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/vue3';
-import { Coins, Pencil, Plus } from 'lucide-vue-next';
+import { Coins, Pencil, Plus, UserCog } from 'lucide-vue-next';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
+import Select from 'primevue/select';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
@@ -29,10 +30,16 @@ interface Ligne {
     libelle: string;
     montants: Record<string, Montant | null>;
 }
+interface ConsultantOption {
+    value: string;
+    label: string;
+}
 
 const props = defineProps<{
     lignes: Ligne[];
     cibles: Cible[];
+    consultantActifId: string | null;
+    consultantsEligibles: ConsultantOption[];
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -41,6 +48,27 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const toast = useToast();
+
+// ── Consultant bénéficiaire ──────────────────────────────────────────────────
+
+const consultantForm = useForm({
+    prestataire_id: props.consultantActifId as string | null,
+});
+
+function submitConsultant() {
+    if (!consultantForm.prestataire_id) return;
+
+    consultantForm.post('/settings/commissions/consultant', {
+        preserveScroll: true,
+        onSuccess: () => {
+            toast.add({
+                severity: 'success',
+                summary: 'Consultant bénéficiaire mis à jour',
+                life: 3000,
+            });
+        },
+    });
+}
 
 // ── Dialog : définir / modifier un montant ──────────────────────────────────
 
@@ -149,8 +177,42 @@ function cellLabel(ligne: Ligne, cible: Cible): string {
                 <div class="flex items-start justify-between gap-4">
                     <HeadingSmall
                         title="Commissions"
-                        description="Montants de commission par catégorie pour le propriétaire, la livraison et le site de l'opération."
+                        description="Montants de commission par catégorie pour le propriétaire, la livraison, le site de l'opération et le consultant."
                     />
+                </div>
+
+                <div class="rounded-xl border bg-card p-4">
+                    <div class="flex items-center gap-3">
+                        <div
+                            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-muted/30"
+                        >
+                            <UserCog class="h-4 w-4 text-muted-foreground" />
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <p class="text-sm font-medium">
+                                Consultant bénéficiaire
+                            </p>
+                            <p class="text-xs text-muted-foreground">
+                                Le prestataire (type Consultant) qui perçoit la
+                                commission Consultant. Un remplacement ne
+                                s'applique qu'aux ventes futures.
+                            </p>
+                        </div>
+                        <template v-if="props.consultantsEligibles.length">
+                            <Select
+                                v-model="consultantForm.prestataire_id"
+                                :options="props.consultantsEligibles"
+                                option-label="label"
+                                option-value="value"
+                                placeholder="Choisir un consultant"
+                                class="w-64"
+                                @update:model-value="submitConsultant"
+                            />
+                        </template>
+                        <p v-else class="text-xs text-muted-foreground italic">
+                            Créez d'abord un prestataire de type Consultant.
+                        </p>
+                    </div>
                 </div>
 
                 <div class="overflow-hidden rounded-xl border bg-card">

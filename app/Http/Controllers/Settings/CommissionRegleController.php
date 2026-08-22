@@ -7,13 +7,17 @@ use App\Enums\CommissionMode;
 use App\Enums\CommissionRegleStatut;
 use App\Enums\CommissionStrategieAncrageSite;
 use App\Enums\CommissionUniteCalcul;
+use App\Enums\PrestataireType;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Settings\StoreCommissionConsultantAffectationRequest;
 use App\Http\Requests\Settings\StoreCommissionRegleRequest;
 use App\Models\Categorie;
 use App\Models\CommissionCibleType;
+use App\Models\CommissionConsultantAffectation;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
 use App\Models\Parametre;
+use App\Models\Prestataire;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
@@ -60,6 +64,7 @@ class CommissionRegleController extends Controller
             ['code' => CommissionCibleType::CODE_PROPRIETAIRE, 'libelle' => 'Propriétaire'],
             ['code' => CommissionCibleType::CODE_EQUIPE_LIVRAISON, 'libelle' => 'Livraison'],
             ['code' => CommissionCibleType::CODE_SITE, 'libelle' => 'Site'],
+            ['code' => CommissionCibleType::CODE_CONSULTANT, 'libelle' => 'Consultant'],
         ];
 
         $lignes = [
@@ -80,7 +85,57 @@ class CommissionRegleController extends Controller
         return Inertia::render('settings/CommissionRegles/Index', [
             'lignes' => $lignes,
             'cibles' => $cibles,
+            'consultantActifId' => CommissionConsultantAffectation::actifPour($orgId)?->prestataire_id,
+            'consultantsEligibles' => Prestataire::where('organization_id', $orgId)
+                ->actifs()
+                ->parType(PrestataireType::CONSULTANT)
+                ->with(['personne', 'entrepriseTierce'])
+                ->get()
+                ->map(fn (Prestataire $p) => [
+                    'value' => $p->id,
+                    'label' => $p->nom_complet ?? $p->reference,
+                ])
+                ->values(),
         ]);
+    }
+
+    /**
+     * Désigne le prestataire actuellement bénéficiaire de la cible "consultant" — jamais un
+     * prestataire codé en dur. Même principe de versionnement que store() ci-dessus : l'ancienne
+     * désignation n'est jamais modifiée en place, elle est close puis remplacée, pour que les
+     * commissions déjà générées gardent leur bénéficiaire d'origine.
+     */
+    public function updateConsultant(StoreCommissionConsultantAffectationRequest $request): RedirectResponse
+    {
+        $this->authorize('create', CommissionRegle::class);
+
+        $orgId = auth()->user()->organization_id;
+        $prestataireId = $request->validated('prestataire_id');
+        $today = Carbon::today()->toDateString();
+
+        $ancienne = CommissionConsultantAffectation::actifPour($orgId);
+
+        if ($ancienne && $ancienne->prestataire_id === $prestataireId) {
+            return back();
+        }
+
+        CommissionConsultantAffectation::create([
+            'organization_id' => $orgId,
+            'prestataire_id' => $prestataireId,
+            'effective_from' => $today,
+            'remplace_affectation_id' => $ancienne?->id,
+            'statut' => CommissionRegleStatut::ACTIVE->value,
+            'created_by' => auth()->id(),
+        ]);
+
+        if ($ancienne) {
+            $ancienne->update([
+                'effective_to' => Carbon::parse($today)->subDay()->toDateString(),
+                'statut' => CommissionRegleStatut::REMPLACEE->value,
+            ]);
+        }
+
+        return back()->with('success', 'Consultant bénéficiaire mis à jour.');
     }
 
     private function montantsPour($reglesActives, string $scopeType, ?string $scopeId, array $cibles): array
@@ -122,9 +177,14 @@ class CommissionRegleController extends Controller
         $scopeId = $scopeType === 'categorie' ? $data['categorie_id'] : null;
         $effectiveFrom = $data['effective_from'] ?? Carbon::today()->toDateString();
 
-        // DIRECT pour Propriétaire ET Site : un seul bénéficiaire déterministe, jamais de
-        // répartition à calculer (cf. CommissionEnveloppeGenerator, branche CODE_SITE).
-        $mode = in_array($data['cible_type'], [CommissionCibleType::CODE_PROPRIETAIRE, CommissionCibleType::CODE_SITE], true)
+        // DIRECT pour Propriétaire, Site ET Consultant : un seul bénéficiaire déterministe,
+        // jamais de répartition à calculer (cf. CommissionEnveloppeGenerator, branches CODE_SITE
+        // et CODE_CONSULTANT).
+        $mode = in_array($data['cible_type'], [
+            CommissionCibleType::CODE_PROPRIETAIRE,
+            CommissionCibleType::CODE_SITE,
+            CommissionCibleType::CODE_CONSULTANT,
+        ], true)
             ? CommissionMode::DIRECT
             : CommissionMode::A_REPARTIR;
 
@@ -167,6 +227,7 @@ class CommissionRegleController extends Controller
         $cibleLabel = match ($cibleType) {
             CommissionCibleType::CODE_PROPRIETAIRE => 'Propriétaire',
             CommissionCibleType::CODE_SITE => 'Site',
+            CommissionCibleType::CODE_CONSULTANT => 'Consultant',
             default => 'Livraison',
         };
         $scopeLabel = $scopeType === 'global'
