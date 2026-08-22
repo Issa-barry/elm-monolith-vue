@@ -2,9 +2,10 @@
 
 namespace App\Models;
 
+use App\Enums\EvenementComptable;
 use App\Enums\ModePaiement;
+use App\Services\Comptabilite\EcritureComptableService;
 use App\Services\Comptabilite\VenteComptabilisationService;
-use App\Services\JournalTresorerieService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -49,7 +50,6 @@ class EncaissementVente extends Model
                 $facture->recalculStatut();
                 $facture->commande->cloturerSiComplete();
             }
-            JournalTresorerieService::enregistrerEncaissement($e);
 
             // Comptabilité générale : un encaissement fait entrer de la trésorerie
             // réelle — bloquant depuis la revue Codex du 2026-08-22 (même raison que
@@ -67,9 +67,18 @@ class EncaissementVente extends Model
                 $facture->recalculStatut();
                 $facture->commande->cloturerSiComplete();
             }
-            JournalTresorerie::where('source_type', EncaissementVente::class)
-                ->where('source_id', $e->id)
-                ->delete();
+
+            // Jamais de suppression destructive d'écriture validée (règle #29) : on
+            // contrepasse la pièce d'encaissement si elle existe, on ne la supprime
+            // jamais. EncaissementVenteController::destroy() englobe déjà cette
+            // suppression dans une transaction.
+            if ($facture) {
+                $ecritures = app(EcritureComptableService::class);
+                $piece = $ecritures->pieceExistantePour($facture->organization_id, $e, EvenementComptable::ENCAISSEMENT_VENTE_RECU);
+                if ($piece && $piece->isValidee()) {
+                    $ecritures->contrepasser($piece, 'Encaissement supprimé');
+                }
+            }
         });
     }
 

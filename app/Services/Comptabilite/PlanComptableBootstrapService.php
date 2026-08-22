@@ -58,12 +58,19 @@ class PlanComptableBootstrapService
         $defs = [
             '622100' => 'Commissions propriétaires de véhicules',
             '622200' => 'Commissions livreurs',
+            '622300' => 'Commissions sites',
+            '622400' => 'Commissions consultants',
             '467110' => 'Propriétaires — commissions à payer',
             '467120' => 'Livreurs — commissions à payer',
+            '467170' => 'Sites — commissions à payer',
+            '467180' => 'Consultants — commissions à payer',
             '467130' => 'Propriétaires — avances et dépenses à récupérer',
             '467140' => 'Livreurs — avances et dépenses à récupérer',
+            '467190' => 'Sites — avances et dépenses à récupérer',
+            '467200' => 'Consultants — avances et dépenses à récupérer',
             '467150' => 'Propriétaires — charges à payer (provision de clôture)',
             '467160' => 'Livreurs — charges à payer (provision de clôture)',
+            '658100' => 'Cashback clients accordés',
             '411000' => 'Clients',
             '701000' => 'Ventes de marchandises',
             '571000' => 'Caisse',
@@ -141,6 +148,50 @@ class PlanComptableBootstrapService
             ['paiement_livreur', 'tresorerie', 'mobile_money:djomy', '561300', 'MM'],
             ['paiement_livreur', 'tresorerie', 'virement', '521000', 'BQ'],
             ['paiement_livreur', 'tresorerie', 'cheque', '521000', 'BQ'],
+
+            // Engagement — fiche commission site validée
+            ['fiche_site_validee', 'charge_commission', null, '622300', 'OD'],
+            ['fiche_site_validee', 'dette_tiers', null, '467170', 'OD'],
+            ['fiche_site_validee', 'avance_tiers_site', null, '467190', 'OD'],
+
+            // Engagement — fiche commission consultant validée
+            ['fiche_consultant_validee', 'charge_commission', null, '622400', 'OD'],
+            ['fiche_consultant_validee', 'dette_tiers', null, '467180', 'OD'],
+            ['fiche_consultant_validee', 'avance_tiers_prestataire', null, '467200', 'OD'],
+
+            // Règlement — paiement commission site
+            ['paiement_site', 'dette_tiers', null, '467170', null],
+            ['paiement_site', 'tresorerie', null, '571000', 'CA'],
+            ['paiement_site', 'tresorerie', 'especes', '571000', 'CA'],
+            ['paiement_site', 'tresorerie', 'mobile_money', '561000', 'MM'],
+            ['paiement_site', 'tresorerie', 'mobile_money:orange', '561100', 'MM'],
+            ['paiement_site', 'tresorerie', 'mobile_money:mtn', '561200', 'MM'],
+            ['paiement_site', 'tresorerie', 'mobile_money:djomy', '561300', 'MM'],
+            ['paiement_site', 'tresorerie', 'virement', '521000', 'BQ'],
+            ['paiement_site', 'tresorerie', 'cheque', '521000', 'BQ'],
+
+            // Règlement — paiement commission consultant
+            ['paiement_consultant', 'dette_tiers', null, '467180', null],
+            ['paiement_consultant', 'tresorerie', null, '571000', 'CA'],
+            ['paiement_consultant', 'tresorerie', 'especes', '571000', 'CA'],
+            ['paiement_consultant', 'tresorerie', 'mobile_money', '561000', 'MM'],
+            ['paiement_consultant', 'tresorerie', 'mobile_money:orange', '561100', 'MM'],
+            ['paiement_consultant', 'tresorerie', 'mobile_money:mtn', '561200', 'MM'],
+            ['paiement_consultant', 'tresorerie', 'mobile_money:djomy', '561300', 'MM'],
+            ['paiement_consultant', 'tresorerie', 'virement', '521000', 'BQ'],
+            ['paiement_consultant', 'tresorerie', 'cheque', '521000', 'BQ'],
+
+            // Versement cashback (jambe trésorerie uniquement, cf. EvenementComptable::
+            // VERSEMENT_CASHBACK et CashbackComptabilisationService).
+            ['versement_cashback', 'charge_cashback', null, '658100', null],
+            ['versement_cashback', 'tresorerie', null, '571000', 'CA'],
+            ['versement_cashback', 'tresorerie', 'especes', '571000', 'CA'],
+            ['versement_cashback', 'tresorerie', 'mobile_money', '561000', 'MM'],
+            ['versement_cashback', 'tresorerie', 'mobile_money:orange', '561100', 'MM'],
+            ['versement_cashback', 'tresorerie', 'mobile_money:mtn', '561200', 'MM'],
+            ['versement_cashback', 'tresorerie', 'mobile_money:djomy', '561300', 'MM'],
+            ['versement_cashback', 'tresorerie', 'virement', '521000', 'BQ'],
+            ['versement_cashback', 'tresorerie', 'cheque', '521000', 'BQ'],
 
             // Vente facturée (engagement — créance client constatée à la sortie du
             // statut CREEE de la facture, montant définitif). Journal VE, provisionné

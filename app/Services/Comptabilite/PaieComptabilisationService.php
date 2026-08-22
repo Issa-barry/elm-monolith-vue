@@ -20,8 +20,9 @@ use Illuminate\Support\Facades\Log;
  * la paie (contrairement aux fiches livreur/propriétaire via
  * FicheComptabilisationService) — retracer tout le cycle d'engagement de la
  * paie en comptabilité générale est un chantier séparé, hors périmètre ici.
- * Appelé en mode "shadow" (ne doit jamais empêcher un paiement métier de
- * passer), même convention que PaiementFichePaiement::booted().
+ * Bloquant depuis la revue Codex du 2026-08-22 (même convention que
+ * PaiementFichePaiement::booted()) : si la pièce échoue, le paiement de
+ * salaire ne doit pas être enregistré non plus.
  */
 class PaieComptabilisationService
 {

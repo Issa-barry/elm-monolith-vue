@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
+use App\Services\Comptabilite\EcritureComptableService;
 use App\Services\Comptabilite\FicheComptabilisationService;
-use App\Services\JournalTresorerieService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -44,7 +44,6 @@ class PaiementFichePaiement extends Model
 
         static::created(function (self $p) {
             $p->fiche?->recalculStatut();
-            JournalTresorerieService::enregistrerPaiementFiche($p);
 
             // Comptabilité générale : un paiement de fiche déplace de la trésorerie
             // réelle (571000/521000/561xxx) — si la pièce comptable ne peut pas être
@@ -61,7 +60,21 @@ class PaiementFichePaiement extends Model
         });
 
         static::deleted(function (self $p) {
-            $p->fiche?->recalculStatut();
+            $fiche = $p->fiche;
+            $fiche?->recalculStatut();
+
+            // Jamais de suppression destructive d'écriture validée (règle #29) : on
+            // contrepasse la pièce de règlement si elle existe, on ne la supprime
+            // jamais. PaiementFichePaiementController::destroy() englobe déjà cette
+            // suppression dans une transaction.
+            $evenement = $fiche ? FicheComptabilisationService::evenementPaiementPour($fiche->beneficiaire_type) : null;
+            if ($evenement) {
+                $ecritures = app(EcritureComptableService::class);
+                $piece = $ecritures->pieceExistantePour($p->organization_id, $p, $evenement);
+                if ($piece && $piece->isValidee()) {
+                    $ecritures->contrepasser($piece, 'Paiement de fiche supprimé');
+                }
+            }
         });
     }
 
