@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import AuditDrawer from '@/components/AuditDrawer.vue';
-import DataFilters, {
-    type FilterField,
-} from '@/components/filters/DataFilters.vue';
+import CommissionIndexLayout from '@/components/commission/CommissionIndexLayout.vue';
+import type { FilterField } from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -13,17 +12,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
+import type { CommissionIndexSummary } from '@/types/commission';
 import { Head } from '@inertiajs/vue3';
-import {
-    ChevronDown,
-    Download,
-    FileSpreadsheet,
-    FileText,
-    HandCoins,
-    History,
-    MoreHorizontal,
-    Warehouse,
-} from 'lucide-vue-next';
+import { History, MoreHorizontal, Warehouse } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface BeneficiaireRow {
@@ -74,7 +65,7 @@ const props = defineProps<{
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
-    { title: 'Comptabilité', href: '/backoffice/comptabilite' },
+    { title: 'Comptabilité' },
     {
         title: 'Commissions des sites',
         href: '/backoffice/comptabilite/commissions/sites',
@@ -176,6 +167,13 @@ const periodContextLabel = computed(() => {
     );
 });
 
+const indexSummary = computed<CommissionIndexSummary>(() => ({
+    generated: props.kpis.commissions_generees,
+    expenses: props.kpis.depenses,
+    netValidated: props.kpis.net_valide,
+    remaining: props.kpis.reste_a_payer,
+}));
+
 function fmt(val: number | null | undefined) {
     return (
         new Intl.NumberFormat('fr-FR')
@@ -188,332 +186,197 @@ function fmt(val: number | null | undefined) {
 <template>
     <Head title="Commissions des sites — Comptabilité" />
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="space-y-5 p-4 sm:p-6">
-            <div class="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                    <h1 class="text-2xl font-semibold tracking-tight">
-                        Commissions des sites
-                    </h1>
-                    <div
-                        class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground"
+        <CommissionIndexLayout
+            title="Commissions des sites"
+            :entity-count="beneficiaires.length"
+            entity-label="site"
+            :period-label="periodContextLabel"
+            filter-url="/backoffice/comptabilite/commissions/sites"
+            :filter-values="currentFilters"
+            :filter-fields="filterFields"
+            :sites="sites"
+            :summary="indexSummary"
+            table-title="Détail par site"
+            :result-count="beneficiaires.length"
+            @export-excel="exportExcel"
+            @export-pdf="exportPdf"
+        >
+            <table class="w-full min-w-[1320px] text-sm">
+                <thead>
+                    <tr class="border-b bg-muted/50">
+                        <th
+                            scope="col"
+                            class="sticky left-0 z-20 w-[220px] min-w-[220px] border-r bg-muted px-4 py-3 text-left font-semibold text-foreground/70"
+                        >
+                            Site
+                        </th>
+                        <th
+                            scope="col"
+                            class="px-4 py-3 text-left font-semibold text-foreground/70"
+                        >
+                            Code
+                        </th>
+                        <th
+                            scope="col"
+                            class="px-4 py-3 text-left font-semibold text-foreground/70"
+                        >
+                            Catégories
+                        </th>
+                        <th
+                            scope="col"
+                            title="Montant calculé avant validation de la direction"
+                            class="px-4 py-3 text-right font-semibold text-foreground/70"
+                        >
+                            Généré
+                        </th>
+                        <th
+                            scope="col"
+                            class="px-4 py-3 text-right font-semibold whitespace-nowrap text-foreground/70"
+                        >
+                            Brut validé
+                        </th>
+                        <th
+                            scope="col"
+                            class="px-4 py-3 text-right font-semibold text-foreground/70"
+                        >
+                            Dépenses
+                        </th>
+                        <th
+                            scope="col"
+                            class="px-4 py-3 text-right font-semibold text-foreground/70"
+                        >
+                            Net validé
+                        </th>
+                        <th
+                            scope="col"
+                            class="px-4 py-3 text-right font-semibold text-foreground/70"
+                        >
+                            Déjà payé
+                        </th>
+                        <th
+                            scope="col"
+                            class="px-4 py-3 text-right font-semibold text-foreground/70"
+                        >
+                            Reste à payer
+                        </th>
+                        <th
+                            scope="col"
+                            class="px-4 py-3 text-left font-semibold text-foreground/70"
+                        >
+                            Statut
+                        </th>
+                        <th
+                            scope="col"
+                            aria-label="Actions"
+                            class="sticky right-0 z-20 w-10 border-l bg-muted px-3 py-3"
+                        />
+                    </tr>
+                </thead>
+                <tbody class="divide-y">
+                    <tr
+                        v-for="b in beneficiaires"
+                        :key="b.beneficiaire_id"
+                        class="even:bg-muted/20"
                     >
-                        <span>
-                            {{ beneficiaires.length }} site{{
-                                beneficiaires.length !== 1 ? 's' : ''
-                            }}
-                        </span>
-                        <span aria-hidden="true">·</span>
-                        <span>{{ periodContextLabel }}</span>
-                    </div>
-                </div>
-                <div class="flex items-center gap-2">
-                    <DropdownMenu>
-                        <DropdownMenuTrigger as-child>
-                            <Button variant="outline">
-                                <Download class="mr-2 h-4 w-4" />
-                                Exporter
-                                <ChevronDown class="ml-2 h-3.5 w-3.5" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" class="w-48">
-                            <DropdownMenuItem
-                                class="cursor-pointer"
-                                @click="exportExcel"
-                            >
-                                <FileSpreadsheet class="h-4 w-4" />
-                                Exporter en Excel
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                                class="cursor-pointer"
-                                @click="exportPdf"
-                            >
-                                <FileText class="h-4 w-4" />
-                                Exporter en PDF
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                    <DataFilters
-                        trigger-only
-                        url="/backoffice/comptabilite/commissions/sites"
-                        :values="currentFilters"
-                        :fields="filterFields"
-                        :sites="sites"
-                        :result-count="beneficiaires.length"
-                    />
-                </div>
-            </div>
-
-            <!-- 4 cartes de synthèse maximum, cf. Commission vente. -->
-            <div
-                data-testid="commission-summary-cards"
-                aria-label="Synthèse des commissions"
-                class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
-            >
-                <div class="rounded-xl border bg-card p-4 shadow-sm">
-                    <p class="text-sm text-muted-foreground">
-                        Commissions générées
-                    </p>
-                    <p
-                        class="mt-1.5 text-2xl font-bold whitespace-nowrap text-foreground tabular-nums"
-                    >
-                        {{ fmt(kpis.commissions_generees) }}
-                    </p>
-                    <p class="mt-0.5 text-xs text-muted-foreground">
-                        {{ beneficiaires.length }} site{{
-                            beneficiaires.length !== 1 ? 's' : ''
-                        }}
-                    </p>
-                </div>
-                <div class="rounded-xl border bg-card p-4 shadow-sm">
-                    <p class="text-sm text-muted-foreground">Dépenses</p>
-                    <p
-                        class="mt-1.5 text-2xl font-bold whitespace-nowrap tabular-nums"
-                        :class="
-                            kpis.depenses > 0
-                                ? 'text-red-600 dark:text-red-400'
-                                : 'text-foreground'
-                        "
-                    >
-                        {{
-                            kpis.depenses > 0
-                                ? '-' + fmt(kpis.depenses)
-                                : fmt(0)
-                        }}
-                    </p>
-                    <p class="mt-0.5 text-xs text-muted-foreground">
-                        Déduites des commissions validées
-                    </p>
-                </div>
-                <div class="rounded-xl border bg-card p-4 shadow-sm">
-                    <p class="text-sm text-muted-foreground">Net validé</p>
-                    <p
-                        class="mt-1.5 text-2xl font-bold whitespace-nowrap tabular-nums"
-                        :class="
-                            kpis.net_valide > 0
-                                ? 'text-amber-600 dark:text-amber-400'
-                                : 'text-foreground'
-                        "
-                    >
-                        {{ fmt(kpis.net_valide) }}
-                    </p>
-                    <p class="mt-0.5 text-xs text-muted-foreground">
-                        Après dépenses et ajustements
-                    </p>
-                </div>
-                <div class="rounded-xl border bg-card p-4 shadow-sm">
-                    <p class="text-sm text-muted-foreground">Reste à payer</p>
-                    <p
-                        class="mt-1.5 text-2xl font-bold whitespace-nowrap text-foreground tabular-nums"
-                    >
-                        {{ fmt(kpis.reste_a_payer) }}
-                    </p>
-                </div>
-            </div>
-
-            <!-- Tableau -->
-            <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
-                <div
-                    class="flex items-center justify-between gap-4 border-b px-5 py-3"
-                >
-                    <h2 class="text-base font-semibold">Détail par site</h2>
-                    <span class="text-xs text-muted-foreground">
-                        {{ beneficiaires.length }} résultat{{
-                            beneficiaires.length !== 1 ? 's' : ''
-                        }}
-                    </span>
-                </div>
-                <div
-                    v-if="beneficiaires.length > 0"
-                    data-testid="commission-table-scroll"
-                    class="max-w-full overflow-x-auto pb-1"
-                >
-                    <table class="w-full min-w-[1320px] text-sm">
-                        <thead>
-                            <tr class="border-b bg-muted/50">
-                                <th
-                                    scope="col"
-                                    class="sticky left-0 z-20 w-[220px] min-w-[220px] border-r bg-muted px-4 py-3 text-left font-semibold text-foreground/70"
-                                >
-                                    Site
-                                </th>
-                                <th
-                                    scope="col"
-                                    class="px-4 py-3 text-left font-semibold text-foreground/70"
-                                >
-                                    Code
-                                </th>
-                                <th
-                                    scope="col"
-                                    class="px-4 py-3 text-left font-semibold text-foreground/70"
-                                >
-                                    Catégories
-                                </th>
-                                <th
-                                    scope="col"
-                                    title="Montant calculé avant validation de la direction"
-                                    class="px-4 py-3 text-right font-semibold text-foreground/70"
-                                >
-                                    Généré
-                                </th>
-                                <th
-                                    scope="col"
-                                    class="px-4 py-3 text-right font-semibold whitespace-nowrap text-foreground/70"
-                                >
-                                    Brut validé
-                                </th>
-                                <th
-                                    scope="col"
-                                    class="px-4 py-3 text-right font-semibold text-foreground/70"
-                                >
-                                    Dépenses
-                                </th>
-                                <th
-                                    scope="col"
-                                    class="px-4 py-3 text-right font-semibold text-foreground/70"
-                                >
-                                    Net validé
-                                </th>
-                                <th
-                                    scope="col"
-                                    class="px-4 py-3 text-right font-semibold text-foreground/70"
-                                >
-                                    Déjà payé
-                                </th>
-                                <th
-                                    scope="col"
-                                    class="px-4 py-3 text-right font-semibold text-foreground/70"
-                                >
-                                    Reste à payer
-                                </th>
-                                <th
-                                    scope="col"
-                                    class="px-4 py-3 text-left font-semibold text-foreground/70"
-                                >
-                                    Statut
-                                </th>
-                                <th
-                                    scope="col"
-                                    aria-label="Actions"
-                                    class="sticky right-0 z-20 w-10 border-l bg-muted px-3 py-3"
+                        <td
+                            class="sticky left-0 z-10 w-[220px] min-w-[220px] border-r bg-card px-4 py-3"
+                        >
+                            <div class="flex items-center gap-1.5">
+                                <Warehouse
+                                    class="h-3.5 w-3.5 shrink-0 text-muted-foreground"
                                 />
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y">
-                            <tr
-                                v-for="b in beneficiaires"
-                                :key="b.beneficiaire_id"
-                                class="even:bg-muted/20"
-                            >
-                                <td
-                                    class="sticky left-0 z-10 w-[220px] min-w-[220px] border-r bg-card px-4 py-3"
-                                >
-                                    <div class="flex items-center gap-1.5">
-                                        <Warehouse
-                                            class="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-                                        />
-                                        <div>
-                                            <p class="font-semibold">
-                                                {{ b.beneficiaire_nom }}
-                                            </p>
-                                            <p
-                                                v-if="b.site_type_label"
-                                                class="text-xs text-muted-foreground"
-                                            >
-                                                {{ b.site_type_label }}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td
-                                    class="px-4 py-3 font-mono text-xs text-muted-foreground"
-                                >
-                                    {{ b.site_code ?? '—' }}
-                                </td>
-                                <td
-                                    class="max-w-[220px] px-4 py-3 text-xs text-muted-foreground"
-                                >
-                                    {{ b.categories.join(', ') || '—' }}
-                                </td>
-                                <td
-                                    class="px-4 py-3 text-right whitespace-nowrap text-foreground/80 tabular-nums"
-                                >
-                                    {{ fmt(b.total_genere) }}
-                                </td>
-                                <td
-                                    class="px-4 py-3 text-right whitespace-nowrap text-foreground/80 tabular-nums"
-                                >
-                                    {{ fmt(b.total_brut_cumule) }}
-                                </td>
-                                <td
-                                    class="px-4 py-3 text-right whitespace-nowrap text-red-600 tabular-nums dark:text-red-400"
-                                >
-                                    {{
-                                        b.total_frais > 0
-                                            ? '-' + fmt(b.total_frais)
-                                            : '—'
-                                    }}
-                                </td>
-                                <td
-                                    class="px-4 py-3 text-right whitespace-nowrap text-foreground/80 tabular-nums"
-                                >
-                                    {{ fmt(b.total_net_cumule) }}
-                                </td>
-                                <td
-                                    class="px-4 py-3 text-right whitespace-nowrap text-foreground/80 tabular-nums"
-                                >
-                                    {{ fmt(b.total_verse) }}
-                                </td>
-                                <td
-                                    class="px-4 py-3 text-right font-bold whitespace-nowrap tabular-nums"
-                                >
-                                    {{ fmt(b.solde_restant) }}
-                                </td>
-                                <td class="px-4 py-3">
-                                    <StatusDot
-                                        :status="b.statut_global"
-                                        :label="b.statut_label"
-                                    />
-                                </td>
-                                <td
-                                    class="sticky right-0 z-10 border-l bg-card px-3 py-3 text-right"
-                                >
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger as-child>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                :aria-label="`Actions pour ${b.beneficiaire_nom}`"
-                                                class="h-7 w-7"
-                                            >
-                                                <MoreHorizontal
-                                                    class="h-4 w-4"
-                                                />
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end">
-                                            <DropdownMenuItem
-                                                class="cursor-pointer"
-                                                @click="openAudit(b)"
-                                            >
-                                                <History class="mr-2 h-4 w-4" />
-                                                Historique
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                <div
-                    v-else
-                    class="flex flex-col items-center gap-3 py-16 text-muted-foreground"
-                >
-                    <HandCoins class="h-12 w-12 opacity-30" />
-                    <p class="text-sm">Aucune commission trouvée.</p>
-                </div>
-            </div>
-        </div>
+                                <div>
+                                    <p class="font-semibold">
+                                        {{ b.beneficiaire_nom }}
+                                    </p>
+                                    <p
+                                        v-if="b.site_type_label"
+                                        class="text-xs text-muted-foreground"
+                                    >
+                                        {{ b.site_type_label }}
+                                    </p>
+                                </div>
+                            </div>
+                        </td>
+                        <td
+                            class="px-4 py-3 font-mono text-xs text-muted-foreground"
+                        >
+                            {{ b.site_code ?? '—' }}
+                        </td>
+                        <td
+                            class="max-w-[220px] px-4 py-3 text-xs text-muted-foreground"
+                        >
+                            {{ b.categories.join(', ') || '—' }}
+                        </td>
+                        <td
+                            class="px-4 py-3 text-right whitespace-nowrap text-foreground/80 tabular-nums"
+                        >
+                            {{ fmt(b.total_genere) }}
+                        </td>
+                        <td
+                            class="px-4 py-3 text-right whitespace-nowrap text-foreground/80 tabular-nums"
+                        >
+                            {{ fmt(b.total_brut_cumule) }}
+                        </td>
+                        <td
+                            class="px-4 py-3 text-right whitespace-nowrap text-red-600 tabular-nums dark:text-red-400"
+                        >
+                            {{
+                                b.total_frais > 0
+                                    ? '-' + fmt(b.total_frais)
+                                    : '—'
+                            }}
+                        </td>
+                        <td
+                            class="px-4 py-3 text-right whitespace-nowrap text-foreground/80 tabular-nums"
+                        >
+                            {{ fmt(b.total_net_cumule) }}
+                        </td>
+                        <td
+                            class="px-4 py-3 text-right whitespace-nowrap text-foreground/80 tabular-nums"
+                        >
+                            {{ fmt(b.total_verse) }}
+                        </td>
+                        <td
+                            class="px-4 py-3 text-right font-bold whitespace-nowrap tabular-nums"
+                        >
+                            {{ fmt(b.solde_restant) }}
+                        </td>
+                        <td class="px-4 py-3">
+                            <StatusDot
+                                :status="b.statut_global"
+                                :label="b.statut_label"
+                            />
+                        </td>
+                        <td
+                            class="sticky right-0 z-10 border-l bg-card px-3 py-3 text-right"
+                        >
+                            <DropdownMenu>
+                                <DropdownMenuTrigger as-child>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        :aria-label="`Actions pour ${b.beneficiaire_nom}`"
+                                        class="h-7 w-7"
+                                    >
+                                        <MoreHorizontal class="h-4 w-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuItem
+                                        class="cursor-pointer"
+                                        @click="openAudit(b)"
+                                    >
+                                        <History class="mr-2 h-4 w-4" />
+                                        Historique
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </CommissionIndexLayout>
     </AppLayout>
 
     <AuditDrawer

@@ -43,7 +43,7 @@ function isItemActive(href: NavItem['href']) {
 function isParentActive(item: NavItem) {
     return (
         isItemActive(item.href) ||
-        !!item.items?.some((subItem) => isItemActive(subItem.href))
+        !!item.items?.some((subItem) => isParentActive(subItem))
     );
 }
 
@@ -127,7 +127,67 @@ function parentBadge(item: NavItem): number | undefined {
                             v-for="subItem in item.items"
                             :key="`${item.title}-${subItem.title}`"
                         >
+                            <template v-if="subItem.items?.length">
+                                <SidebarMenuSubButton
+                                    as="button"
+                                    class="w-full cursor-pointer"
+                                    :is-active="isParentActive(subItem)"
+                                    :aria-expanded="isMenuOpen(subItem)"
+                                    @click="toggleMenu(subItem)"
+                                >
+                                    <span>{{ subItem.title }}</span>
+                                    <span
+                                        v-if="parentBadge(subItem)"
+                                        class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground"
+                                        >{{ parentBadge(subItem) }}</span
+                                    >
+                                    <ChevronDown
+                                        class="ml-auto h-3.5 w-3.5 shrink-0 opacity-70 transition-transform"
+                                        :class="
+                                            isMenuOpen(subItem)
+                                                ? 'rotate-180'
+                                                : ''
+                                        "
+                                    />
+                                </SidebarMenuSubButton>
+
+                                <SidebarMenuSub
+                                    v-if="isMenuOpen(subItem)"
+                                    class="mx-2.5 pr-0"
+                                >
+                                    <SidebarMenuSubItem
+                                        v-for="nestedItem in subItem.items"
+                                        :key="`${item.title}-${subItem.title}-${nestedItem.title}`"
+                                    >
+                                        <SidebarMenuSubButton
+                                            as-child
+                                            size="md"
+                                            :is-active="
+                                                isItemActive(nestedItem.href)
+                                            "
+                                        >
+                                            <Link
+                                                :href="nestedItem.href"
+                                                @click="closeMobileSidebar"
+                                            >
+                                                <span>{{
+                                                    nestedItem.title
+                                                }}</span>
+                                                <span
+                                                    v-if="nestedItem.badge"
+                                                    class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground"
+                                                    >{{
+                                                        nestedItem.badge
+                                                    }}</span
+                                                >
+                                            </Link>
+                                        </SidebarMenuSubButton>
+                                    </SidebarMenuSubItem>
+                                </SidebarMenuSub>
+                            </template>
+
                             <SidebarMenuSubButton
+                                v-else
                                 as-child
                                 :is-active="isItemActive(subItem.href)"
                             >
