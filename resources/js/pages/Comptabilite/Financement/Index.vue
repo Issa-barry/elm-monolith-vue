@@ -46,6 +46,8 @@ const props = defineProps<{
         echeance: 'p1' | 'p2' | 'mensuel';
         site_ids: string[];
     };
+    echeance_debut: string;
+    echeance_fin: string;
     sites: { value: string; label: string }[];
     is_admin: boolean;
 }>();
@@ -165,7 +167,13 @@ function valeurColonne(row: Row, col: string): number {
 function nouveauFinancementHref(row: Row): string {
     if (!row.site_id || !row.a_financer)
         return '/backoffice/comptabilite/tresorerie/mouvements/create';
-    return `/backoffice/comptabilite/tresorerie/mouvements/create?site_id=${row.site_id}&montant=${Math.round(row.a_financer)}`;
+    const params = new URLSearchParams({
+        site_id: row.site_id,
+        montant: String(Math.round(row.a_financer)),
+        echeance_debut: props.echeance_debut,
+        echeance_fin: props.echeance_fin,
+    });
+    return `/backoffice/comptabilite/tresorerie/mouvements/create?${params.toString()}`;
 }
 </script>
 

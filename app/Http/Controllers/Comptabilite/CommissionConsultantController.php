@@ -13,6 +13,7 @@ use App\Models\Prestataire;
 use App\Services\CommissionVenteCalculatorService;
 use App\Services\PeriodeComptableService;
 use App\Support\Commission\CommissionKpiBuckets;
+use App\Support\PhoneFormatter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
@@ -263,7 +264,7 @@ class CommissionConsultantController extends Controller
                 fputcsv($handle, [
                     $row['beneficiaire_nom'],
                     $row['reference'] ?? '',
-                    $row['telephone'] ?? '',
+                    PhoneFormatter::display($row['telephone'] ?? null),
                     number_format((float) $row['total_genere'], 0, ',', ' '),
                     number_format((float) $row['total_brut_cumule'], 0, ',', ' '),
                     number_format((float) $row['total_frais'], 0, ',', ' '),

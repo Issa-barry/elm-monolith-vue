@@ -7,7 +7,6 @@ use App\Services\JournalTresorerieService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Facades\Log;
 
 class PaiePaiement extends Model
 {
@@ -31,16 +30,11 @@ class PaiePaiement extends Model
         static::created(function (self $p) {
             JournalTresorerieService::enregistrerPaieSalaire($p);
 
-            // Comptabilité générale, en aval — ne doit jamais empêcher un paiement
-            // métier de passer (mode shadow, même convention que PaiementFichePaiement).
-            try {
-                app(PaieComptabilisationService::class)->comptabiliserPaiement($p);
-            } catch (\Throwable $e) {
-                Log::error('Comptabilisation paiement salaire échouée', [
-                    'paiement_id' => $p->id,
-                    'error' => $e->getMessage(),
-                ]);
-            }
+            // Comptabilité générale : déplace de la trésorerie réelle — bloquant
+            // depuis la revue Codex du 2026-08-22 (même raison que PaiementFichePaiement).
+            // L'appelant (PaiePaiementController::store()) englobe cette création dans
+            // une transaction.
+            app(PaieComptabilisationService::class)->comptabiliserPaiement($p);
         });
 
         static::deleted(function (self $p) {

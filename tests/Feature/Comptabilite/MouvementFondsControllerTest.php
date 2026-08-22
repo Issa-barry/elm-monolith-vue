@@ -31,7 +31,7 @@ class MouvementFondsControllerTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->initOrgAndUser(['tresorerie.create', 'tresorerie.read', 'tresorerie.envoyer', 'tresorerie.recevoir', 'tresorerie.annuler', 'tresorerie.rejeter']);
+        $this->initOrgAndUser(['tresorerie.create', 'tresorerie.read', 'tresorerie.envoyer', 'tresorerie.recevoir', 'tresorerie.annuler', 'tresorerie.rejeter', 'tresorerie.confirmer_retour']);
 
         $this->siege = Site::create(['organization_id' => $this->org->id, 'nom' => 'Siège', 'type' => 'siege', 'localisation' => 'Conakry']);
         $this->agence = $this->user->sites()->first();

@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Comptabilite;
 use App\Enums\TypeSupportTresorerie;
 use App\Http\Controllers\Controller;
 use App\Models\CompteComptable;
+use App\Models\CompteMapping;
 use App\Models\CompteTresorerie;
 use App\Models\Site;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -50,7 +52,7 @@ class CompteTresorerieController extends Controller
             'sites' => Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']),
             'type_options' => TypeSupportTresorerie::options(),
             'comptes_comptables' => CompteComptable::where('organization_id', $orgId)
-                ->whereIn('numero', ['571000', '521000', '561000', '561100', '561200', '561300'])
+                ->whereIn('id', $this->comptesDeTresorerieDisponibles($orgId))
                 ->orderBy('numero')
                 ->get(['id', 'numero', 'libelle']),
         ]);
@@ -89,5 +91,22 @@ class CompteTresorerieController extends Controller
         $compteTresorerie->update($data);
 
         return back()->with('success', 'Support de trésorerie mis à jour.');
+    }
+
+    /**
+     * Comptes éligibles à un support de trésorerie : ceux déjà reconnus comme comptes de
+     * trésorerie par le paramétrage propre de l'organisation (rôle "tresorerie" dans
+     * compta_mappings), jamais une liste de numéros codée en dur (cf. revue Codex du
+     * 2026-08-22 — l'ancienne liste ['571000', '521000', ...] contredisait la promesse
+     * "aucun numéro codé en dur" du chantier).
+     *
+     * @return Collection<int, string>
+     */
+    private function comptesDeTresorerieDisponibles(string $orgId): Collection
+    {
+        return CompteMapping::where('organization_id', $orgId)
+            ->where('role', 'tresorerie')
+            ->pluck('compte_comptable_id')
+            ->unique();
     }
 }

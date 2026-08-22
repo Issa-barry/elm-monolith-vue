@@ -68,8 +68,8 @@ jamais être confondu avec `compta_pieces`/`compta_ecritures`, qui appliquent la
   fiche_livreur_validee, paiement_proprietaire, paiement_livreur, depense_interne_validee,
   depense_avance_tiers_validee, regularisation_cloture_fiche, vente_facturee,
   encaissement_vente_recu, paiement_salaire, mouvement_fonds_envoye, mouvement_fonds_recu,
-  solde_ouverture_tresorerie — ces 4 derniers ajoutés par le chantier Financement des agences,
-  2026-08-22).
+  solde_ouverture_tresorerie, paiement_commission_logistique_direct — ces 5 derniers ajoutés par
+  le chantier Financement des agences, 2026-08-22).
 - **Usage BI** : référentiel de configuration, rarement interrogé directement en BI (sert au
   moteur, pas au reporting).
 
@@ -131,19 +131,25 @@ jamais être confondu avec `compta_pieces`/`compta_ecritures`, qui appliquent la
 | `commissions_ventes` / `commissions_logistiques` + tables de parts/ajustements | Calcul des commissions par vehicule/livreur | Indirectement, via les fiches de paiement qui les agrègent | — |
 | `factures_ventes` / `encaissements_ventes` | Facturation et encaissement client | Non branché à ce jour | — |
 | `paie_paiements` | Paiement de salaire | `PaieComptabilisationService` (jambe trésorerie uniquement, pas d'engagement — chantier 2026-08-22) | `paiement_salaire` |
-| `mouvements_fonds` | Mouvement de fonds interne agence ↔ siège (remise/financement) | `MouvementFondsComptabilisationService` — 2 pièces mono-site (émission + réception) via le compte 58 "virements internes" | `mouvement_fonds_envoye`, `mouvement_fonds_recu` |
-| `journal_tresorerie` | Flux de trésorerie opérationnel (caisse/banque au fil de l'eau) | Non branché — reste un journal métier parallèle, pas une sous-table de `compta_journaux` | — |
+| `mouvements_fonds` | Mouvement de fonds interne agence ↔ siège (remise/financement). Porte `echeance_debut`/`echeance_fin` (nullable) pour rattacher le mouvement à un besoin précis (P1/P2/mois) et éviter un double financement — cf. `FinancementAgenceService`. Workflow : brouillon → envoyé → (contesté ↔) reçu / retourné. Une contestation seule ne contrepasse jamais rien : seul le retour confirmé le fait. | `MouvementFondsComptabilisationService` — 2 pièces mono-site (émission + réception) via le compte 58 "virements internes" | `mouvement_fonds_envoye`, `mouvement_fonds_recu` |
+| `commission_payments` | Paiement direct de commission logistique — circuit actif et distinct de `paiement_fiches` (verrouillé contre le double paiement par `PeriodePayabilityChecker::assertPartsNotClaimedByFiche`) | `CommissionPaymentComptabilisationService` (jambe trésorerie uniquement, pas d'engagement — chantier 2026-08-22) | `paiement_commission_logistique_direct` |
+| `journal_tresorerie` | Flux de trésorerie opérationnel (caisse/banque au fil de l'eau) | Non branché — reste un journal métier parallèle, pas une sous-table de `compta_journaux` (dette technique documentée, cf. note ci-dessous : `CashbackVersement` en dépend encore) | — |
 
 **Note pour la data/BI** : à ce stade, Dépenses, Fiches de paiement, Salaires (jambe trésorerie
-seulement) et Mouvements de fonds sont branchés sur la comptabilité générale. Commissions (calcul
-brut), Ventes/Factures et Trésorerie opérationnelle (`journal_tresorerie`) restent des sources
-métier autonomes, non comptabilisées en partie double — ne pas supposer qu'un total dans
-`compta_ecritures` couvre l'intégralité de l'activité tant que ces branchements n'existent pas.
+seulement), Mouvements de fonds et Paiements directs de commission logistique sont branchés sur
+la comptabilité générale — et ces 6 événements sont désormais **bloquants** (jamais en mode
+shadow) : si la pièce comptable ne peut pas être créée, l'opération métier est annulée dans son
+ensemble (revue Codex du 2026-08-22 — avant cette date, un échec de comptabilisation n'était que
+loggé, laissant l'opération réussir et le disponible calculé devenir silencieusement faux).
+Commissions (calcul brut), Ventes/Factures (engagement `vente_facturee`/`fiche_*_validee`) et
+Trésorerie opérationnelle (`journal_tresorerie`) restent en mode shadow ou non comptabilisées —
+ne pas supposer qu'un total dans `compta_ecritures` couvre l'intégralité de l'activité.
 
 **`journal_tresorerie` — dette technique identifiée, non résolue par ce chantier** : ce registre
-reste la SEULE trace financière des paiements de commission logistique (`CommissionPayment`) et
-des versements de cashback (`CashbackVersement`) — ils n'ont aucune écriture dans
-`compta_ecritures`. Le supprimer ou le remplacer sans migrer d'abord ces deux flux vers le moteur
-comptable général causerait une perte de traçabilité réelle. Le chantier Financement des agences
-(2026-08-22) a délibérément laissé `journal_tresorerie` inchangé pour cette raison — voir
-audit dans le compte-rendu du chantier.
+reste la SEULE trace financière des versements de cashback (`CashbackVersement`) — aucune écriture
+dans `compta_ecritures`. Le supprimer ou le remplacer sans migrer d'abord ce flux vers le moteur
+comptable général causerait une perte de traçabilité réelle. Reste à faire avant suppression :
+(1) comptabiliser le cashback, (2) reconstruire l'écran "Journal financier" comme une simple vue
+de lecture sur `compta_ecritures` (au lieu de lire `journal_tresorerie`), (3) supprimer la table,
+le modèle et le service. Aucune de ces 3 étapes n'a été faite par le chantier du 2026-08-22 — voir
+compte-rendu.

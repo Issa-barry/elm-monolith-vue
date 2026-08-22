@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Enums\CommissionActivationStatut;
+use App\Enums\PrestataireType;
 use App\Enums\StatutCommission;
 use App\Enums\StatutFichePaiement;
 use App\Enums\TypePeriodePaiement;
@@ -10,10 +11,16 @@ use App\Models\CommissionEnveloppe;
 use App\Models\CommissionEnveloppePaiementItem;
 use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionProcessus;
+use App\Models\Employe;
+use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\PaiementFiche;
 use App\Models\PaiementFichePaiement;
 use App\Models\PaiementPeriode;
+use App\Models\Personne;
+use App\Models\Prestataire;
+use App\Models\Proprietaire;
+use App\Models\Site;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
@@ -256,5 +263,89 @@ class CommissionEnveloppeTest extends TestCase
         $this->assertEqualsCanonicalizing(['creee', 'impaye', 'partiel', 'paye', 'annulee'], $values);
         $this->assertNotContains('annule', $values);
         $this->assertNotContains('cancelled', $values);
+    }
+
+    // ── resoudreBeneficiaire ──────────────────────────────────────────────────
+
+    public function test_resoudre_beneficiaire_resout_le_prestataire_pour_type_prestataire(): void
+    {
+        $personne = Personne::create(['organization_id' => $this->org->id, 'nom' => 'Diallo', 'prenom' => 'Abdoulaye']);
+        $prestataire = Prestataire::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
+            'type' => PrestataireType::CONSULTANT->value,
+            'is_active' => true,
+        ]);
+        $enveloppe = $this->makeEnveloppe();
+        $part = $this->makePart($enveloppe, [
+            'beneficiaire_type' => CommissionEnveloppePart::TYPE_PRESTATAIRE,
+            'beneficiaire_id' => $prestataire->id,
+        ]);
+
+        $resolu = $part->resoudreBeneficiaire();
+
+        $this->assertInstanceOf(Prestataire::class, $resolu);
+        $this->assertSame($prestataire->id, $resolu->id);
+    }
+
+    public function test_resoudre_beneficiaire_retourne_null_si_le_prestataire_nexiste_plus(): void
+    {
+        $enveloppe = $this->makeEnveloppe();
+        $part = $this->makePart($enveloppe, [
+            'beneficiaire_type' => CommissionEnveloppePart::TYPE_PRESTATAIRE,
+            'beneficiaire_id' => (string) Str::ulid(),
+        ]);
+
+        $this->assertNull($part->resoudreBeneficiaire());
+    }
+
+    public function test_resoudre_beneficiaire_resout_chaque_type_beneficiaire_connu(): void
+    {
+        $enveloppe = $this->makeEnveloppe();
+
+        $livreur = Livreur::factory()->create(['organization_id' => $this->org->id]);
+        $partLivreur = $this->makePart($enveloppe, ['beneficiaire_type' => CommissionEnveloppePart::TYPE_LIVREUR, 'beneficiaire_id' => $livreur->id]);
+        $this->assertInstanceOf(Livreur::class, $partLivreur->resoudreBeneficiaire());
+
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $partProp = $this->makePart($enveloppe, ['beneficiaire_type' => CommissionEnveloppePart::TYPE_PROPRIETAIRE, 'beneficiaire_id' => $proprietaire->id]);
+        $this->assertInstanceOf(Proprietaire::class, $partProp->resoudreBeneficiaire());
+
+        $employe = Employe::factory()->create(['organization_id' => $this->org->id]);
+        $partEmploye = $this->makePart($enveloppe, ['beneficiaire_type' => CommissionEnveloppePart::TYPE_EMPLOYE, 'beneficiaire_id' => $employe->id]);
+        $this->assertInstanceOf(Employe::class, $partEmploye->resoudreBeneficiaire());
+
+        $site = Site::create(['organization_id' => $this->org->id, 'nom' => 'Site '.uniqid(), 'type' => 'depot', 'localisation' => 'Conakry']);
+        $partSite = $this->makePart($enveloppe, ['beneficiaire_type' => CommissionEnveloppePart::TYPE_SITE, 'beneficiaire_id' => $site->id]);
+        $this->assertInstanceOf(Site::class, $partSite->resoudreBeneficiaire());
+    }
+
+    public function test_resoudre_beneficiaire_retourne_null_pour_un_type_inconnu(): void
+    {
+        $enveloppe = $this->makeEnveloppe();
+        $part = $this->makePart($enveloppe, ['beneficiaire_type' => 'type_inexistant', 'beneficiaire_id' => (string) Str::ulid()]);
+
+        $this->assertNull($part->resoudreBeneficiaire());
+    }
+
+    // ── montant_a_payer (ajustement) ──────────────────────────────────────────
+
+    public function test_montant_a_payer_retombe_sur_montant_net_sans_ajustement(): void
+    {
+        $enveloppe = $this->makeEnveloppe();
+        $part = $this->makePart($enveloppe, ['montant_net' => 3000, 'montant_actuel' => null]);
+
+        $this->assertSame(3000.0, $part->montant_a_payer);
+    }
+
+    public function test_montant_a_payer_utilise_montant_actuel_quand_ajuste(): void
+    {
+        $enveloppe = $this->makeEnveloppe();
+        $part = $this->makePart($enveloppe, ['montant_net' => 3000, 'montant_actuel' => 2500]);
+
+        // Un ajustement (CommissionAdjustmentService) doit primer sur le montant théorique —
+        // le reste à payer se calcule toujours sur montant_a_payer, jamais montant_net brut.
+        $this->assertSame(2500.0, $part->montant_a_payer);
+        $this->assertSame(2500.0, $part->montant_restant);
     }
 }

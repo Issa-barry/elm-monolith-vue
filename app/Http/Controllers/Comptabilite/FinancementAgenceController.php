@@ -55,6 +55,8 @@ class FinancementAgenceController extends Controller
             ));
         }
 
+        [$echeanceDebut, $echeanceFin] = $this->financement->dateRangePourEcheance($annee, $mois, $echeance);
+
         return Inertia::render('Comptabilite/Financement/Index', [
             'rows' => $rows,
             'total_general' => $this->financement->totalGeneral($rows),
@@ -64,6 +66,8 @@ class FinancementAgenceController extends Controller
                 'echeance' => $echeance,
                 'site_ids' => $filtreSiteIds,
             ],
+            'echeance_debut' => $echeanceDebut->toDateString(),
+            'echeance_fin' => $echeanceFin->toDateString(),
             'sites' => $isAdmin
                 ? Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom'])->map(fn ($s) => ['value' => $s->id, 'label' => $s->nom])
                 : collect(),

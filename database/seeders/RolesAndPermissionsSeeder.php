@@ -90,6 +90,7 @@ class RolesAndPermissionsSeeder extends Seeder
         Permission::firstOrCreate(['name' => 'tresorerie.recevoir']);
         Permission::firstOrCreate(['name' => 'tresorerie.annuler']);
         Permission::firstOrCreate(['name' => 'tresorerie.rejeter']);
+        Permission::firstOrCreate(['name' => 'tresorerie.confirmer_retour']);
         Permission::firstOrCreate(['name' => 'tresorerie.gerer_soldes_ouverture']);
         Permission::firstOrCreate(['name' => 'tresorerie.exporter']);
         // — Dépenses (workflow) —
@@ -193,6 +194,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'journal-financier.create', 'journal-financier.read', 'journal-financier.update', 'journal-financier.delete',
             'tresorerie.create',        'tresorerie.read',        'tresorerie.update',        'tresorerie.delete',
             'tresorerie.envoyer',       'tresorerie.recevoir',    'tresorerie.annuler',       'tresorerie.rejeter',
+            'tresorerie.confirmer_retour',
             'tresorerie.gerer_soldes_ouverture', 'tresorerie.exporter',
             // RH
             'rh-employes.create',       'rh-employes.read',       'rh-employes.update',       'rh-employes.delete',
@@ -300,6 +302,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'journal-financier.read',
             'tresorerie.create',      'tresorerie.read',        'tresorerie.update',
             'tresorerie.envoyer',     'tresorerie.recevoir',    'tresorerie.annuler',     'tresorerie.rejeter',
+            'tresorerie.confirmer_retour',
             'tresorerie.gerer_soldes_ouverture', 'tresorerie.exporter',
             'cashback.read',
             'rh-paie.read',

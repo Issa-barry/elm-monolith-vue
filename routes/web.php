@@ -470,7 +470,8 @@ Route::prefix('backoffice')->group(function () {
                 Route::post('mouvements/{mouvement}/envoyer', [MouvementFondsController::class, 'envoyer'])->name('mouvements.envoyer');
                 Route::post('mouvements/{mouvement}/recevoir', [MouvementFondsController::class, 'recevoir'])->name('mouvements.recevoir');
                 Route::post('mouvements/{mouvement}/annuler', [MouvementFondsController::class, 'annuler'])->name('mouvements.annuler');
-                Route::post('mouvements/{mouvement}/rejeter', [MouvementFondsController::class, 'rejeter'])->name('mouvements.rejeter');
+                Route::post('mouvements/{mouvement}/contester', [MouvementFondsController::class, 'contester'])->name('mouvements.contester');
+                Route::post('mouvements/{mouvement}/confirmer-retour', [MouvementFondsController::class, 'confirmerRetour'])->name('mouvements.confirmer-retour');
 
                 Route::get('supports', [CompteTresorerieController::class, 'index'])->name('supports.index');
                 Route::post('supports', [CompteTresorerieController::class, 'store'])->name('supports.store');

@@ -69,7 +69,8 @@ class MouvementFondsController extends Controller
             'peut_envoyer' => $user->can('envoyer', $m),
             'peut_recevoir' => $user->can('recevoir', $m),
             'peut_annuler' => $user->can('annuler', $m),
-            'peut_rejeter' => $user->can('rejeter', $m),
+            'peut_contester' => $user->can('contester', $m),
+            'peut_confirmer_retour' => $user->can('confirmerRetour', $m),
         ]);
 
         return Inertia::render('Comptabilite/MouvementsFonds/Index', [
@@ -97,6 +98,8 @@ class MouvementFondsController extends Controller
             'comptes_tresorerie' => CompteTresorerie::forOrg($orgId)->actifs()->get(['id', 'site_id', 'libelle', 'type']),
             'site_prerempli' => $request->input('site_id'),
             'montant_prerempli' => $request->input('montant'),
+            'echeance_debut_prerempli' => $request->input('echeance_debut'),
+            'echeance_fin_prerempli' => $request->input('echeance_fin'),
         ]);
     }
 
@@ -114,6 +117,10 @@ class MouvementFondsController extends Controller
             'montant' => ['required', 'numeric', 'min:0.01'],
             'moyen_transfert' => ['nullable', 'string', 'max:30'],
             'reference_externe' => ['nullable', 'string', 'max:100'],
+            // Échéance visée par ce financement — pré-remplie depuis Financement des
+            // agences, mais toujours modifiable (une remise agence->siège n'en a pas).
+            'echeance_debut' => ['nullable', 'date'],
+            'echeance_fin' => ['nullable', 'date', 'after_or_equal:echeance_debut'],
             'commentaire' => ['nullable', 'string'],
             'justificatif' => ['nullable', 'file', 'max:10240'],
         ]);
@@ -157,15 +164,26 @@ class MouvementFondsController extends Controller
         return back()->with('success', "Mouvement {$mouvement->reference} annulé.");
     }
 
-    public function rejeter(Request $request, MouvementFonds $mouvement)
+    public function contester(Request $request, MouvementFonds $mouvement)
     {
-        $this->authorize('rejeter', $mouvement);
+        $this->authorize('contester', $mouvement);
 
         $data = $request->validate(['motif' => ['required', 'string', 'max:500']]);
 
-        $mouvement = $this->service->rejeter($mouvement, auth()->id(), $data['motif']);
+        $mouvement = $this->service->contester($mouvement, auth()->id(), $data['motif']);
 
-        return back()->with('success', "Mouvement {$mouvement->reference} rejeté.");
+        return back()->with('success', "Mouvement {$mouvement->reference} marqué comme contesté.");
+    }
+
+    public function confirmerRetour(Request $request, MouvementFonds $mouvement)
+    {
+        $this->authorize('confirmerRetour', $mouvement);
+
+        $data = $request->validate(['motif' => ['required', 'string', 'max:500']]);
+
+        $mouvement = $this->service->confirmerRetour($mouvement, auth()->id(), $data['motif']);
+
+        return back()->with('success', "Retour des fonds confirmé pour le mouvement {$mouvement->reference}.");
     }
 
     /** @return list<array{value:string,label:string}> */

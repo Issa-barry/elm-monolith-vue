@@ -11,6 +11,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import type { CommissionIndexSummary } from '@/types/commission';
 import { Head } from '@inertiajs/vue3';
@@ -271,7 +272,7 @@ function fmt(val: number | null | undefined) {
                                         v-if="b.telephone"
                                         class="text-xs text-muted-foreground"
                                     >
-                                        {{ b.telephone }}
+                                        {{ formatPhoneDisplay(b.telephone) }}
                                     </p>
                                 </div>
                             </div>

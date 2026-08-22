@@ -15,6 +15,7 @@ use App\Models\CompteTresorerie;
 use App\Models\Livreur;
 use App\Models\Personne;
 use App\Models\Site;
+use App\Services\PeriodePaiementService;
 use App\Services\Tresorerie\FinancementAgenceService;
 use App\Services\Tresorerie\MouvementFondsService;
 use App\Services\Tresorerie\SoldeOuvertureTresorerieService;
@@ -160,19 +161,17 @@ class FinancementAgenceServiceTest extends TestCase
         $this->assertSame('couvert', $row['statut']);
     }
 
-    public function test_fonds_en_transit_non_receptionnes_ne_comptent_jamais_comme_disponible(): void
+    private function envoyerFinancementVersAgence(float $montant, ?string $echeanceDebut = null, ?string $echeanceFin = null): void
     {
-        $this->validerSoldeOuverture(0);
-        $this->makeLivreurCommission(300_000, Carbon::parse('2026-08-05'));
-
-        // Un financement du siège est envoyé mais jamais reçu — ne doit pas
-        // apparaître dans le disponible, seulement dans "fonds_en_transit".
-        $siege = Site::create(['organization_id' => $this->org->id, 'nom' => 'Siège', 'type' => 'siege', 'localisation' => 'Conakry']);
+        $siege = Site::firstOrCreate(
+            ['organization_id' => $this->org->id, 'type' => 'siege'],
+            ['nom' => 'Siège', 'localisation' => 'Conakry'],
+        );
         $compteCaisse = CompteComptable::where('organization_id', $this->org->id)->where('numero', '571000')->firstOrFail();
-        $caisseSiege = CompteTresorerie::create([
-            'organization_id' => $this->org->id, 'site_id' => $siege->id,
-            'compte_comptable_id' => $compteCaisse->id, 'type' => 'caisse', 'libelle' => 'Caisse Siège',
-        ]);
+        $caisseSiege = CompteTresorerie::firstOrCreate(
+            ['organization_id' => $this->org->id, 'site_id' => $siege->id, 'compte_comptable_id' => $compteCaisse->id],
+            ['type' => 'caisse', 'libelle' => 'Caisse Siège'],
+        );
 
         $mvtService = app(MouvementFondsService::class);
         $mouvement = $mvtService->creerBrouillon($this->org->id, [
@@ -180,17 +179,50 @@ class FinancementAgenceServiceTest extends TestCase
             'site_destination_id' => $this->agence->id,
             'compte_tresorerie_origine_id' => $caisseSiege->id,
             'compte_tresorerie_destination_id' => $this->caisseAgence->id,
-            'montant' => 200_000,
+            'montant' => $montant,
+            'echeance_debut' => $echeanceDebut,
+            'echeance_fin' => $echeanceFin,
         ], $this->user->id);
         $mvtService->envoyer($mouvement, $this->user->id);
+    }
+
+    public function test_fonds_en_transit_non_receptionnes_ne_comptent_jamais_comme_disponible(): void
+    {
+        $this->validerSoldeOuverture(0);
+        $this->makeLivreurCommission(300_000, Carbon::parse('2026-08-05'));
+
+        // Un financement du siège est envoyé mais jamais reçu — ne doit pas
+        // apparaître dans le disponible, seulement dans "fonds_en_transit".
+        // Aucune échéance déclarée sur ce mouvement : compté prudemment comme
+        // pouvant couvrir le besoin courant (cf. FinancementAgenceService).
+        $this->envoyerFinancementVersAgence(200_000);
 
         $rows = $this->service->calculerPourEcheance($this->org->id, 2026, 8, 'p1');
         $row = collect($rows)->firstWhere('site_id', $this->agence->id);
 
         $this->assertSame(0.0, $row['disponible']);
         $this->assertSame(200_000.0, $row['fonds_en_transit']);
-        $this->assertSame(300_000.0, $row['a_financer']);
+        // Le transit est déduit du besoin — sinon le siège renverrait 300 000 en plus
+        // des 200 000 déjà en route (double financement), cf. revue Codex du 2026-08-22.
+        $this->assertSame(100_000.0, $row['a_financer']);
         $this->assertSame('fonds_en_transit', $row['statut']);
+    }
+
+    public function test_transit_tague_pour_une_autre_echeance_ne_reduit_pas_le_besoin_courant(): void
+    {
+        $this->validerSoldeOuverture(0);
+        $this->makeLivreurCommission(300_000, Carbon::parse('2026-08-05'));
+
+        // Financement explicitement destiné à l'échéance P2 (16-31 août) — ne doit
+        // rien changer au besoin P1 calculé ici.
+        [$debutP2, $finP2] = PeriodePaiementService::dateRangeFor(2026, 8, PeriodePaiementService::P2);
+        $this->envoyerFinancementVersAgence(150_000, $debutP2->toDateString(), $finP2->toDateString());
+
+        $rows = $this->service->calculerPourEcheance($this->org->id, 2026, 8, 'p1');
+        $row = collect($rows)->firstWhere('site_id', $this->agence->id);
+
+        $this->assertSame(0.0, $row['fonds_en_transit']);
+        $this->assertSame(300_000.0, $row['a_financer']);
     }
 
     public function test_echeance_p1_ignore_les_colonnes_fin_de_mois(): void

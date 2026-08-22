@@ -65,7 +65,10 @@ return new class extends Migration
         Schema::create('mouvements_fonds', function (Blueprint $table) {
             $table->ulid('id')->primary();
             $table->foreignUlid('organization_id')->constrained()->cascadeOnDelete();
-            $table->string('reference', 30)->unique();
+            // Unique PAR organisation, jamais globalement — même convention que le reste du
+            // schéma multi-tenant (cf. revue Codex du 2026-08-22).
+            $table->string('reference', 30);
+            $table->unique(['organization_id', 'reference']);
             $table->foreignUlid('site_origine_id')->constrained('sites')->restrictOnDelete();
             $table->foreignUlid('site_destination_id')->constrained('sites')->restrictOnDelete();
             $table->foreignUlid('compte_tresorerie_origine_id')->constrained('compta_supports_tresorerie')->restrictOnDelete();
@@ -73,6 +76,13 @@ return new class extends Migration
             $table->decimal('montant', 15, 2);
             $table->string('moyen_transfert', 30)->nullable();
             $table->string('reference_externe', 100)->nullable();
+            // Échéance de financement visée (nullable : une remise agence->siège spontanée
+            // n'en a pas forcément) — bornes exactes produites par
+            // FinancementAgenceService::dateRangePourEcheance(), pour que "fonds en transit"
+            // ne soit imputé qu'au besoin qu'il couvre réellement et jamais compté deux fois
+            // sur une autre échéance (revue Codex du 2026-08-22, double financement).
+            $table->date('echeance_debut')->nullable();
+            $table->date('echeance_fin')->nullable();
             $table->date('date_envoi')->nullable();
             $table->date('date_reception')->nullable();
             $table->string('justificatif_path')->nullable();

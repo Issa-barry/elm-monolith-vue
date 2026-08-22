@@ -99,9 +99,12 @@ class FinancementAgenceService
         }
 
         $disponible = $this->disponibilite->disponiblePourSite($organizationId, $siteId, $fin);
-        $enTransit = $this->disponibilite->fondsEnTransitVersSite($organizationId, $siteId);
+        $enTransit = $this->disponibilite->fondsEnTransitVersSite($organizationId, $siteId, $debut, $fin);
         $dejaFinance = $this->disponibilite->dejaFinancePourSite($organizationId, $siteId, $debut, $fin);
-        $aFinancer = round(max(0.0, $totalARegler - $disponible), 2);
+        // Le transit affecté à CETTE échéance est déduit du besoin — sinon le siège
+        // pourrait renvoyer un deuxième financement alors qu'un premier est déjà en
+        // route pour le même besoin (revue Codex du 2026-08-22, double financement).
+        $aFinancer = round(max(0.0, $totalARegler - $disponible - $enTransit), 2);
 
         $statut = match (true) {
             $totalARegler <= 0.0 || $aFinancer <= 0.0 => StatutFinancementAgence::COUVERT,
@@ -122,10 +125,12 @@ class FinancementAgenceService
 
     /**
      * Un site n'a une position de trésorerie fiable que s'il a au moins un
-     * support de trésorerie actif ET qu'au moins un de ces supports a un
-     * solde d'ouverture validé — sans ça, le "disponible" calculé depuis le
-     * grand livre ignorerait silencieusement la caisse déjà détenue avant le
-     * début du suivi (cf. règle #7 de la spec : jamais un faux besoin précis).
+     * support de trésorerie actif ET que TOUS ces supports ont un solde
+     * d'ouverture validé — un seul support non initialisé suffit à rendre le
+     * "disponible" du site incomplet (ex: caisse initialisée mais wallet
+     * Mobile Money oublié), cf. règle #7 de la spec : jamais un faux besoin
+     * précis. Avant cette correction (revue Codex du 2026-08-22), un seul
+     * support validé sur plusieurs suffisait à tort à déclarer le site fiable.
      */
     private function positionFiable(string $organizationId, string $siteId): bool
     {
@@ -135,6 +140,6 @@ class FinancementAgenceService
             return false;
         }
 
-        return $comptes->contains(fn (CompteTresorerie $c) => $c->soldeOuverture?->isValide() === true);
+        return $comptes->every(fn (CompteTresorerie $c) => $c->soldeOuverture?->isValide() === true);
     }
 }

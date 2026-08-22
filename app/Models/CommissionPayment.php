@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Comptabilite\CommissionPaymentComptabilisationService;
 use App\Services\JournalTresorerieService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
@@ -40,6 +41,12 @@ class CommissionPayment extends Model
     {
         static::created(function (self $p) {
             JournalTresorerieService::enregistrerCommissionLogistique($p);
+
+            // Comptabilité générale : déplace de la trésorerie réelle — bloquant depuis
+            // l'audit du 2026-08-22 (même raison que PaiementFichePaiement/PaiePaiement).
+            // CommissionPaymentService::payer()/payerLivreur() englobent déjà cette
+            // création dans une transaction.
+            app(CommissionPaymentComptabilisationService::class)->comptabiliserPaiement($p);
         });
     }
 

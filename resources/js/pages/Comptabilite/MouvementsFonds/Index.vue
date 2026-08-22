@@ -34,7 +34,8 @@ interface Mouvement {
     peut_envoyer: boolean;
     peut_recevoir: boolean;
     peut_annuler: boolean;
-    peut_rejeter: boolean;
+    peut_contester: boolean;
+    peut_confirmer_retour: boolean;
 }
 
 const props = defineProps<{
@@ -90,15 +91,23 @@ function recevoir(m: Mouvement) {
     );
 }
 
-// ── Dialog motif (annuler / rejeter) — un seul dialog réutilisé pour les deux actions ──
+// ── Dialog motif (annuler / contester / confirmer-retour) — un seul dialog réutilisé ──
+
+type ActionMotif = 'annuler' | 'contester' | 'confirmer-retour';
 
 const motifDialogOpen = ref(false);
-const motifDialogAction = ref<'annuler' | 'rejeter'>('annuler');
+const motifDialogAction = ref<ActionMotif>('annuler');
 const motifCible = ref<Mouvement | null>(null);
 const motif = ref('');
 const motifError = ref('');
 
-function ouvrirDialogMotif(action: 'annuler' | 'rejeter', m: Mouvement) {
+const motifDialogTitres: Record<ActionMotif, string> = {
+    annuler: 'Annuler le mouvement',
+    contester: 'Contester le mouvement',
+    'confirmer-retour': 'Confirmer le retour des fonds',
+};
+
+function ouvrirDialogMotif(action: ActionMotif, m: Mouvement) {
     motifDialogAction.value = action;
     motifCible.value = m;
     motif.value = '';
@@ -231,12 +240,27 @@ function confirmerMotif() {
                                         Annuler
                                     </button>
                                     <button
-                                        v-if="m.peut_rejeter"
+                                        v-if="m.peut_contester"
                                         type="button"
                                         class="text-xs font-medium text-red-600 hover:underline dark:text-red-400"
-                                        @click="ouvrirDialogMotif('rejeter', m)"
+                                        @click="
+                                            ouvrirDialogMotif('contester', m)
+                                        "
                                     >
-                                        Rejeter
+                                        Contester
+                                    </button>
+                                    <button
+                                        v-if="m.peut_confirmer_retour"
+                                        type="button"
+                                        class="text-xs font-medium text-primary hover:underline"
+                                        @click="
+                                            ouvrirDialogMotif(
+                                                'confirmer-retour',
+                                                m,
+                                            )
+                                        "
+                                    >
+                                        Confirmer le retour
                                     </button>
                                 </div>
                             </td>
@@ -258,11 +282,7 @@ function confirmerMotif() {
             <DialogContent class="sm:max-w-md">
                 <DialogHeader>
                     <DialogTitle>
-                        {{
-                            motifDialogAction === 'annuler'
-                                ? 'Annuler le mouvement'
-                                : 'Rejeter le mouvement'
-                        }}
+                        {{ motifDialogTitres[motifDialogAction] }}
                         {{ motifCible?.reference }}
                     </DialogTitle>
                 </DialogHeader>

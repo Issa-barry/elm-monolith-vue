@@ -16,6 +16,8 @@ const props = defineProps<{
     comptes_tresorerie: CompteTresorerie[];
     site_prerempli: string | null;
     montant_prerempli: string | null;
+    echeance_debut_prerempli: string | null;
+    echeance_fin_prerempli: string | null;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -36,6 +38,8 @@ const form = useForm({
     montant: props.montant_prerempli ?? '',
     moyen_transfert: '',
     reference_externe: '',
+    echeance_debut: props.echeance_debut_prerempli ?? '',
+    echeance_fin: props.echeance_fin_prerempli ?? '',
     commentaire: '',
     justificatif: null as File | null,
 });
@@ -189,6 +193,28 @@ function submit() {
                     >
                         {{ form.errors.montant }}
                     </p>
+                </div>
+
+                <div class="space-y-1.5">
+                    <label class="text-sm font-medium"
+                        >Échéance visée
+                        <span class="font-normal text-muted-foreground"
+                            >(optionnel — laisser vide pour une remise sans
+                            échéance précise)</span
+                        ></label
+                    >
+                    <div class="grid grid-cols-2 gap-4">
+                        <input
+                            v-model="form.echeance_debut"
+                            type="date"
+                            class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        />
+                        <input
+                            v-model="form.echeance_fin"
+                            type="date"
+                            class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        />
+                    </div>
                 </div>
 
                 <div class="grid gap-4 sm:grid-cols-2">

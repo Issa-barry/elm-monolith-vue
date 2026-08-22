@@ -51,12 +51,14 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     rejetee: 'bg-red-500',
     annule: 'bg-red-500',
     annulee: 'bg-red-500',
+    retourne: 'bg-red-500',
     ko: 'bg-red-500',
     expiree: 'bg-red-500',
     echoue: 'bg-red-500',
     rupture: 'bg-red-500',
 
     // Orange — partiel / en attente / soumis
+    conteste: 'bg-orange-500',
     partiel: 'bg-orange-500',
     partielle: 'bg-orange-500',
     partiellement_paye: 'bg-orange-500',

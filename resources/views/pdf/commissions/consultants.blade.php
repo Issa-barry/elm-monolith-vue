@@ -116,7 +116,7 @@ tbody td.center { text-align: center; }
         <tr>
             <td class="col-ben"><strong>{{ $row['beneficiaire_nom'] }}</strong></td>
             <td class="col-ref">{{ $row['reference'] ?? '—' }}</td>
-            <td class="col-tel">{{ $row['telephone'] ?? '—' }}</td>
+            <td class="col-tel">{{ \App\Support\PhoneFormatter::display($row['telephone'] ?? null) }}</td>
             <td class="col-gen right">{{ number_format((float) $row['total_genere'], 0, ',', "\xc2\xa0") }}</td>
             <td class="col-cum right">{{ number_format((float) $row['total_brut_cumule'], 0, ',', "\xc2\xa0") }}</td>
             <td class="col-fra right">{{ $row['total_frais'] > 0 ? number_format((float) $row['total_frais'], 0, ',', "\xc2\xa0") : '—' }}</td>

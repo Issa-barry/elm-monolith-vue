@@ -7,9 +7,10 @@ use App\Models\User;
 
 /**
  * Séparation création/réception (règle #11 de la spec) : le site d'origine
- * initie/envoie, le site de destination confirme la réception ou rejette —
- * jamais la même personne des deux côtés d'affilée sauf si admin (autorité
- * globale sur l'organisation, comme TransfertLogistiquePolicy).
+ * initie/envoie et confirme un retour, le site de destination confirme la
+ * réception ou conteste — jamais la même personne des deux côtés d'affilée
+ * sauf si admin (autorité globale sur l'organisation, comme
+ * TransfertLogistiquePolicy).
  */
 class MouvementFondsPolicy
 {
@@ -39,7 +40,10 @@ class MouvementFondsPolicy
 
     public function recevoir(User $user, MouvementFonds $mouvement): bool
     {
-        if (! $user->can('tresorerie.recevoir') || ! $this->sameOrganization($user, $mouvement) || ! $mouvement->isEnvoye()) {
+        if (! $user->can('tresorerie.recevoir') || ! $this->sameOrganization($user, $mouvement)) {
+            return false;
+        }
+        if (! $mouvement->isEnvoye() && ! $mouvement->isConteste()) {
             return false;
         }
 
@@ -55,13 +59,24 @@ class MouvementFondsPolicy
         return $user->isAdmin() || $user->isAssignedToSite($mouvement->site_origine_id);
     }
 
-    public function rejeter(User $user, MouvementFonds $mouvement): bool
+    /** Contestation — côté destinataire : "je n'ai rien reçu". */
+    public function contester(User $user, MouvementFonds $mouvement): bool
     {
         if (! $user->can('tresorerie.rejeter') || ! $this->sameOrganization($user, $mouvement) || ! $mouvement->isEnvoye()) {
             return false;
         }
 
         return $user->isAdmin() || $user->isAssignedToSite($mouvement->site_destination_id);
+    }
+
+    /** Retour confirmé — côté origine : l'argent est physiquement revenu. */
+    public function confirmerRetour(User $user, MouvementFonds $mouvement): bool
+    {
+        if (! $user->can('tresorerie.confirmer_retour') || ! $this->sameOrganization($user, $mouvement) || ! $mouvement->isConteste()) {
+            return false;
+        }
+
+        return $user->isAdmin() || $user->isAssignedToSite($mouvement->site_origine_id);
     }
 
     private function sameOrganization(User $user, MouvementFonds $mouvement): bool

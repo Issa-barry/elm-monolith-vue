@@ -39,6 +39,12 @@ enum EvenementComptable: string
     case MOUVEMENT_FONDS_RECU = 'mouvement_fonds_recu';
     // Solde d'ouverture d'un support de trésorerie (App\Models\SoldeOuvertureTresorerie).
     case SOLDE_OUVERTURE_TRESORERIE = 'solde_ouverture_tresorerie';
+    // Paiement direct d'une commission logistique (App\Models\CommissionPayment) — circuit
+    // parallèle à PaiementFiche (PeriodePayabilityChecker::assertPartsNotClaimedByFiche
+    // empêche qu'une même part soit payée deux fois par les deux circuits). Jambe trésorerie
+    // uniquement, comme PAIEMENT_SALAIRE : aucun engagement préalable comptabilisé pour les
+    // CommissionLogistiquePart aujourd'hui (audit du 2026-08-22).
+    case PAIEMENT_COMMISSION_LOGISTIQUE_DIRECT = 'paiement_commission_logistique_direct';
 
     public function label(): string
     {
