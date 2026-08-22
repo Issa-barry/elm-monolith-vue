@@ -532,13 +532,30 @@ class ProduitController extends Controller
         ]);
     }
 
-    public function historique(Produit $produit): JsonResponse
+    public function historique(Request $request, Produit $produit): JsonResponse
     {
         $this->authorize('view', $produit);
 
         $varianteIds = $produit->variantes()->pluck('id');
+        $varianteId = $request->string('variante_id')->trim()->toString();
+        if ($varianteId !== '') {
+            abort_unless($varianteIds->contains($varianteId), 404);
+            $varianteIds = collect([$varianteId]);
+        }
+
+        $user = $request->user();
+        $sitesConsultables = $user->isAdmin()
+            ? Site::where('organization_id', $produit->organization_id)->pluck('id')
+            : $user->sites()->where('sites.organization_id', $produit->organization_id)->pluck('sites.id');
+        $siteId = $request->string('site_id')->trim()->toString();
+        if ($siteId !== '') {
+            abort_unless($sitesConsultables->contains($siteId), 404);
+            $sitesConsultables = collect([$siteId]);
+        }
 
         $ajustements = MouvementStock::whereIn('produit_variante_id', $varianteIds)
+            ->where('organization_id', $produit->organization_id)
+            ->whereIn('site_id', $sitesConsultables)
             ->with(['createur:id,personne_id', 'createur.personne', 'site:id,nom,code'])
             ->orderByDesc('created_at')
             ->take(200)

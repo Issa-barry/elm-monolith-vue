@@ -96,14 +96,38 @@ test("l'écran Comptabilité > Commission sites se charge avec ses filtres et se
     ).toHaveCount(0);
 });
 
-test('la navigation latérale expose "Commission sites" sous Comptabilité', async ({
+test('la navigation latérale regroupe les commissions sous Comptabilité', async ({
     page,
 }) => {
     await page.goto('/backoffice/dashboard');
-    await page.getByRole('button', { name: /^comptabilité$/i }).click();
-    await page.getByRole('link', { name: /^commission sites$/i }).click();
+
+    const accountingButton = page.getByRole('button', {
+        name: /^comptabilité$/i,
+    });
+    await accountingButton.click();
+
+    const accountingItem = page
+        .locator('[data-sidebar="menu-item"]')
+        .filter({ has: accountingButton });
+    await expect(
+        accountingItem.getByRole('link', { name: /^tableau de bord$/i }),
+    ).toHaveCount(0);
+
+    const commissionsButton = accountingItem.getByRole('button', {
+        name: /^commissions$/i,
+    });
+    await commissionsButton.click();
+    await expect(commissionsButton).toHaveAttribute('aria-expanded', 'true');
+
+    const commissionsItem = accountingItem
+        .locator('[data-sidebar="menu-sub-item"]')
+        .filter({ has: commissionsButton });
+    await commissionsItem.getByRole('link', { name: /^sites$/i }).click();
 
     await expect(page).toHaveURL(/\/comptabilite\/commissions\/sites$/, {
         timeout: 15_000,
     });
+
+    await expect(accountingButton).toHaveAttribute('data-active', 'true');
+    await expect(commissionsButton).toHaveAttribute('data-active', 'true');
 });

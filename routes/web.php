@@ -25,7 +25,6 @@ use App\Http\Controllers\Comptabilite\CommissionLogistiqueController as Comptabi
 use App\Http\Controllers\Comptabilite\CommissionProprietaireController;
 use App\Http\Controllers\Comptabilite\CommissionSiteController;
 use App\Http\Controllers\Comptabilite\CommissionVenteController as ComptabiliteCommissionVenteController;
-use App\Http\Controllers\Comptabilite\ComptabiliteDashboardController;
 use App\Http\Controllers\Comptabilite\HistoriqueActionsController;
 use App\Http\Controllers\Comptabilite\JournalTresorerieController;
 use App\Http\Controllers\Comptabilite\PaiementFicheController;
@@ -66,6 +65,7 @@ use App\Http\Controllers\ScanUserController;
 use App\Http\Controllers\SiteController;
 use App\Http\Controllers\SiteImportController;
 use App\Http\Controllers\SitemapController;
+use App\Http\Controllers\StockController;
 use App\Http\Controllers\TransfertLogistiqueController;
 use App\Http\Controllers\TransfertStatutController;
 use App\Http\Controllers\TypeVehiculeController;
@@ -287,6 +287,8 @@ Route::prefix('backoffice')->group(function () {
 
         // ── Module : Produits ─────────────────────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::PRODUITS)->group(function () {
+            Route::get('produits/stock', [StockController::class, 'index'])->name('produits.stock.index');
+
             // Déclarées avant produits/{produit} par lisibilité (ULID ne collisionne jamais
             // avec le littéral "categories", mais garde l'ordre explicite).
             Route::get('produits/categories', [CategorieController::class, 'index'])->name('produits.categories.index');
@@ -450,7 +452,6 @@ Route::prefix('backoffice')->group(function () {
 
         // ── Module : Comptabilité ─────────────────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::COMPTABILITE)->prefix('comptabilite')->name('comptabilite.')->group(function () {
-            Route::get('/', [ComptabiliteDashboardController::class, 'index'])->name('dashboard');
 
             // ── Besoin de trésorerie (prévision, par agence) ────────────────────────
             Route::get('tresorerie', [BesoinTresorerieController::class, 'index'])->name('tresorerie.index');
