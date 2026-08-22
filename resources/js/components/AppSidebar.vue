@@ -264,12 +264,26 @@ const mainNavItems = computed((): NavItem[] => {
     if (canSee('comptabilite.read', 'comptabilite')) {
         items.push({
             title: 'Comptabilité',
-            href: '/backoffice/comptabilite/tresorerie',
+            href: '/backoffice/comptabilite/tresorerie/financement',
             icon: Calculator,
             items: [
                 {
-                    title: 'Besoin de trésorerie',
-                    href: '/backoffice/comptabilite/tresorerie',
+                    title: 'Trésorerie',
+                    href: '/backoffice/comptabilite/tresorerie/financement',
+                    items: [
+                        {
+                            title: 'Financement des agences',
+                            href: '/backoffice/comptabilite/tresorerie/financement',
+                        },
+                        {
+                            title: 'Mouvements de fonds',
+                            href: '/backoffice/comptabilite/tresorerie/mouvements',
+                        },
+                        {
+                            title: 'Supports de trésorerie',
+                            href: '/backoffice/comptabilite/tresorerie/supports',
+                        },
+                    ],
                 },
                 {
                     title: 'Commissions',
@@ -290,6 +304,10 @@ const mainNavItems = computed((): NavItem[] => {
                         {
                             title: 'Sites',
                             href: '/backoffice/comptabilite/commissions/sites',
+                        },
+                        {
+                            title: 'Consultants',
+                            href: '/backoffice/comptabilite/commissions/consultants',
                         },
                     ],
                 },

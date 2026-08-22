@@ -168,10 +168,14 @@ class PaiementPeriodeController extends Controller
 
         $allFiches = $periode->fiches()->get();
 
-        $filters = $request->only(['vehicule', 'livreur', 'proprietaire', 'etat']);
+        $filters = $request->only(['vehicule', 'livreur', 'proprietaire', 'etat', 'beneficiaire']);
 
-        // Le détail de période est centré véhicule : c'est ainsi que le métier travaille
-        // (aucun concept de véhicule pour les périodes salarié).
+        // Le détail de période est centré véhicule pour livreur/propriétaire : c'est ainsi que
+        // le métier travaille pour ces deux types (une commission de vente/logistique s'ancre
+        // sur un véhicule). Pour les autres types (salarié, site, consultant), il n'existe aucun
+        // concept de véhicule — chaque PaiementFiche EST directement la ligne bénéficiaire à
+        // afficher, sans regroupement supplémentaire.
+        $beneficiaires = [];
         $vehicules = [];
         if (in_array($periode->type, [TypePeriodePaiement::LIVREUR, TypePeriodePaiement::PROPRIETAIRE], true)) {
             // Toujours combiner vente + logistique (jamais un choix) : un même
@@ -219,11 +223,33 @@ class PaiementPeriodeController extends Controller
             }
 
             $vehicules = $vehicules->values()->all();
+        } else {
+            $beneficiaires = $allFiches
+                ->when(! empty($filters['beneficiaire']), fn ($c) => $c->filter(
+                    fn (PaiementFiche $f) => str_contains(mb_strtolower($f->beneficiaire_nom ?? ''), mb_strtolower(trim($filters['beneficiaire'])))
+                ))
+                ->when(! empty($filters['etat']), fn ($c) => $c->filter(
+                    fn (PaiementFiche $f) => $f->statut?->value === $filters['etat']
+                ))
+                ->map(fn (PaiementFiche $f) => [
+                    'fiche_id' => $f->id,
+                    'beneficiaire_nom' => $f->beneficiaire_label,
+                    'montant_brut' => (float) $f->montant_brut,
+                    'montant_net' => (float) $f->montant_net,
+                    'montant_paye' => (float) $f->montant_paye,
+                    'reste' => $f->montant_restant,
+                    'statut' => $f->statut?->value,
+                    'statut_label' => $f->statut_label,
+                ])
+                ->sortBy('beneficiaire_nom')
+                ->values()
+                ->all();
         }
 
         return Inertia::render('Comptabilite/Periodes/Show', [
             'periode' => $this->transform($periode),
             'vehicules' => $vehicules,
+            'beneficiaires' => $beneficiaires,
             'filters' => $filters,
             'recalcul' => [
                 'effectue' => $recalcul['recalcule'],

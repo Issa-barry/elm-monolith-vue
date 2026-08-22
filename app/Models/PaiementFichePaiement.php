@@ -9,7 +9,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
 
 class PaiementFichePaiement extends Model
 {
@@ -47,16 +46,18 @@ class PaiementFichePaiement extends Model
             $p->fiche?->recalculStatut();
             JournalTresorerieService::enregistrerPaiementFiche($p);
 
-            // Comptabilité générale, en aval — ne doit jamais empêcher un paiement
-            // métier de passer (mode shadow, règle #26 de la spec).
-            try {
-                app(FicheComptabilisationService::class)->comptabiliserPaiementFiche($p);
-            } catch (\Throwable $e) {
-                Log::error('Comptabilisation paiement fiche échouée', [
-                    'paiement_id' => $p->id,
-                    'error' => $e->getMessage(),
-                ]);
-            }
+            // Comptabilité générale : un paiement de fiche déplace de la trésorerie
+            // réelle (571000/521000/561xxx) — si la pièce comptable ne peut pas être
+            // créée, le paiement ne doit PAS être enregistré non plus (sinon le
+            // disponible calculé par TresorerieDisponibiliteService devient faux
+            // silencieusement). Volontairement BLOQUANT depuis la revue Codex du
+            // 2026-08-22 — l'appelant (PaiementFichePaiementController::store()) doit
+            // englober cette création dans une transaction pour que l'échec annule
+            // aussi l'insertion. Ne PAS étendre ce mode bloquant à un événement qui ne
+            // touche pas un compte de trésorerie (ex: fiche_*_validee, vente_facturee) :
+            // le risque de bloquer une opération métier fréquente sans bénéfice pour le
+            // disponible ne se justifie pas là.
+            app(FicheComptabilisationService::class)->comptabiliserPaiementFiche($p);
         });
 
         static::deleted(function (self $p) {

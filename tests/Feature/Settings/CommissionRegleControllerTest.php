@@ -39,7 +39,7 @@ class CommissionRegleControllerTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->component('settings/CommissionRegles/Index')
                 ->has('lignes', 2) // globale + 1 catégorie
-                ->has('cibles', 3) // propriétaire + livraison + site
+                ->has('cibles', 4) // propriétaire + livraison + site + consultant
             );
     }
 

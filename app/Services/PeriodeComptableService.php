@@ -35,6 +35,15 @@ class PeriodeComptableService
     {
         // Site : même déclencheur que l'équipe de livraison (une vente), donc même cadence
         // quinzaine — jamais le cycle mensuel propriétaire/salarié.
+        //
+        // Consultant : hypothèse V1 documentée (décision produit 2026-08-22) — mensuelle,
+        // cohérente avec un prestataire consulté sur une base de type honoraires/retainer,
+        // jamais la quinzaine des livreurs même si la commission consultant est elle aussi
+        // générée à chaque vente (comme site) : le rythme de PAIEMENT reste mensuel, distinct
+        // du rythme de GÉNÉRATION. Aucune décision préexistante trouvée dans le code — à
+        // révisiter si le produit tranche différemment. Résultat implicite via le "mensuelle"
+        // par défaut ci-dessous : 'consultant' n'a volontairement pas besoin d'entrer dans la
+        // liste quinzaine.
         return in_array($typeBeneficiaire, ['livreur', 'site'], true) ? 'quinzaine' : 'mensuelle';
     }
 

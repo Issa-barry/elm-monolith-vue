@@ -17,6 +17,7 @@ use App\Models\PaieLigne;
 use App\Models\PaiementFiche;
 use App\Models\PaiementPeriode;
 use App\Models\PaieVariable;
+use App\Models\Prestataire;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use Illuminate\Support\Carbon;
@@ -47,6 +48,7 @@ class PeriodeCalculatorService
                 TypePeriodePaiement::PROPRIETAIRE => $this->calculerProprietaires($periode),
                 TypePeriodePaiement::SALARIE => $this->calculerSalaries($periode),
                 TypePeriodePaiement::SITE => $this->calculerSites($periode),
+                TypePeriodePaiement::CONSULTANT => $this->calculerConsultants($periode),
             };
 
             // Le hash/horodatage sont enregistrés même à 0 fiche : sans données source, on ne
@@ -145,6 +147,7 @@ class PeriodeCalculatorService
         $type = match ($periode->type) {
             TypePeriodePaiement::LIVREUR => 'livreur',
             TypePeriodePaiement::SITE => CommissionEnveloppePart::TYPE_SITE,
+            TypePeriodePaiement::CONSULTANT => CommissionEnveloppePart::TYPE_PRESTATAIRE,
             default => 'proprietaire',
         };
 
@@ -152,16 +155,21 @@ class PeriodeCalculatorService
             ->whereHas('enveloppe', function ($q) use ($orgId, $periode) {
                 $q->where('organization_id', $orgId)
                     ->whereBetween('earned_at', [$periode->date_debut, $periode->date_fin]);
+                // beneficiaire_type=prestataire pourrait un jour recouvrir un autre usage que
+                // "consultant" — la cible de l'enveloppe seule distingue les deux, même
+                // convention que site (cf. CommissionSiteController).
                 if ($periode->type === TypePeriodePaiement::SITE) {
                     $q->where('cible_type', CommissionCibleType::CODE_SITE);
+                } elseif ($periode->type === TypePeriodePaiement::CONSULTANT) {
+                    $q->where('cible_type', CommissionCibleType::CODE_CONSULTANT);
                 }
             });
         $commParts = $commPartsQuery
             ->selectRaw('COUNT(*) as n, SUM(COALESCE(montant_actuel, montant_net)) as s, MAX(updated_at) as m')->first();
 
-        // Un site n'a jamais de commission logistique (transfert), au même titre qu'un gérant de
-        // dépôt n'en avait jamais — cf. calculerSites().
-        $logParts = $periode->type === TypePeriodePaiement::SITE
+        // Ni un site ni un consultant n'ont jamais de commission logistique (transfert), au même
+        // titre qu'un gérant de dépôt n'en avait jamais — cf. calculerSites()/calculerConsultants().
+        $logParts = in_array($periode->type, [TypePeriodePaiement::SITE, TypePeriodePaiement::CONSULTANT], true)
             ? null
             : CommissionLogistiquePart::where('type_beneficiaire', $type)
                 ->whereNotNull("{$type}_id")
@@ -487,6 +495,87 @@ class PeriodeCalculatorService
             }
 
             $this->creerFiche($periode, CommissionEnveloppePart::TYPE_SITE, $siteId, $site->nom, $siteId, $lignes);
+            $count++;
+        }
+
+        return $count;
+    }
+
+    /**
+     * Mirroring calculerSites() : le bénéficiaire de la fiche EST le prestataire désigné au
+     * moment de chaque commission (snapshotté, jamais recalculé rétroactivement si le consultant
+     * courant change depuis) — filtré par cible_type=consultant sur l'enveloppe pour rester
+     * cohérent même si beneficiaire_type=prestataire venait à couvrir un autre usage un jour. Un
+     * consultant n'est rattaché à aucun site (désignation au niveau organisation, cf.
+     * CommissionConsultantAffectation) : $siteId est toujours null en pied de fiche, contrairement
+     * à calculerSites().
+     */
+    private function calculerConsultants(PaiementPeriode $periode): int
+    {
+        $orgId = $periode->organization_id;
+
+        $commParts = CommissionEnveloppePart::where('beneficiaire_type', CommissionEnveloppePart::TYPE_PRESTATAIRE)
+            ->where('statut', '!=', StatutCommission::ANNULEE->value)
+            ->whereHas('enveloppe', fn ($q) => $q->where('organization_id', $orgId)
+                ->where('cible_type', CommissionCibleType::CODE_CONSULTANT)
+                ->whereBetween('earned_at', [$periode->date_debut, $periode->date_fin]))
+            ->with(['enveloppe.source'])
+            ->get()
+            ->groupBy('beneficiaire_id');
+
+        $depenses = Depense::where('organization_id', $orgId)
+            ->where('statut', StatutDepense::VALIDE)
+            ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PRESTATAIRE)
+            ->whereNotNull('beneficiaire_id')
+            ->whereBetween('date_depense', [$periode->date_debut, $periode->date_fin])
+            ->with('depenseType')
+            ->get()
+            ->groupBy('beneficiaire_id');
+
+        $prestataireIds = $commParts->keys();
+
+        $count = 0;
+
+        foreach ($prestataireIds as $prestataireId) {
+            $prestataire = Prestataire::find($prestataireId);
+            if (! $prestataire) {
+                continue;
+            }
+
+            $ordre = 1;
+            $lignes = collect();
+
+            foreach ($commParts->get($prestataireId, collect()) as $part) {
+                if ($part->isPaye()) {
+                    continue;
+                }
+                $ref = $part->enveloppe->source?->reference ?? '—';
+                $lignes->push([
+                    'source_type' => CommissionEnveloppePart::class,
+                    'source_id' => $part->id,
+                    'type_ligne' => TypeLignePaiement::COMMISSION_VENTE->value,
+                    'libelle' => 'Commission consultant '.$ref,
+                    'montant' => $part->montant_a_payer,
+                    'ordre' => $ordre++,
+                ]);
+            }
+
+            foreach ($depenses->get($prestataireId, collect()) as $dep) {
+                $lignes->push([
+                    'source_type' => Depense::class,
+                    'source_id' => $dep->id,
+                    'type_ligne' => TypeLignePaiement::DEPENSE->value,
+                    'libelle' => $dep->depenseType?->libelle ?? 'Dépense',
+                    'montant' => -(float) $dep->montant,
+                    'ordre' => $ordre++,
+                ]);
+            }
+
+            if ($lignes->isEmpty()) {
+                continue;
+            }
+
+            $this->creerFiche($periode, CommissionEnveloppePart::TYPE_PRESTATAIRE, $prestataireId, $prestataire->nom_complet ?? $prestataire->reference, null, $lignes);
             $count++;
         }
 

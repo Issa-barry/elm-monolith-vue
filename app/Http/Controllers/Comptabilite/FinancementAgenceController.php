@@ -5,28 +5,32 @@ namespace App\Http\Controllers\Comptabilite;
 use App\Http\Controllers\Controller;
 use App\Models\Site;
 use App\Models\User;
-use App\Services\BesoinTresorerieService;
 use App\Services\SiteScopeService;
+use App\Services\Tresorerie\FinancementAgenceService;
+use App\Services\Tresorerie\ObligationsAgenceService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * Prévision du besoin de trésorerie par agence : montant que le siège doit
- * prévoir pour que chaque agence règle ses commissions livreurs (P1/P2),
- * commissions propriétaires et salaires du mois. Écran de lecture seule —
- * aucun mouvement de fonds n'est créé ici (cf. BesoinTresorerieService).
+ * Remplace Comptabilite/Tresorerie (BesoinTresorerieController) : ne montre
+ * plus les obligations restantes seules ("Total à envoyer" trompeur, cf.
+ * compte-rendu du chantier), mais le vrai complément à financer une fois la
+ * trésorerie déjà disponible en agence déduite (FinancementAgenceService).
+ * Toujours en lecture seule — les mouvements de fonds eux-mêmes se créent
+ * depuis MouvementFondsController.
  */
-class BesoinTresorerieController extends Controller
+class FinancementAgenceController extends Controller
 {
     public function __construct(
-        private readonly BesoinTresorerieService $besoinTresorerieService,
+        private readonly FinancementAgenceService $financement,
+        private readonly ObligationsAgenceService $obligations,
         private readonly SiteScopeService $siteScope,
     ) {}
 
     public function index(Request $request): Response
     {
-        abort_unless(auth()->user()->can('comptabilite.read'), 403);
+        abort_unless(auth()->user()->can('tresorerie.read'), 403);
 
         $user = auth()->user();
         $orgId = $user->organization_id;
@@ -34,13 +38,14 @@ class BesoinTresorerieController extends Controller
 
         $annee = (int) $request->input('annee', now()->year);
         $mois = (int) $request->input('mois', now()->month);
-        // Filtre Agence : uniquement pertinent pour un admin (même pattern que
-        // SalaireController) — un non-admin est toujours cantonné à ses sites
-        // via restreindreAuxSitesAccessibles(), le sélecteur reste verrouillé
-        // côté UI (DataFilters gère ce cadenas automatiquement).
+        $echeance = $request->input('echeance', 'mensuel');
+        if (! in_array($echeance, ['p1', 'p2', 'mensuel'], true)) {
+            $echeance = 'mensuel';
+        }
+
         $filtreSiteIds = $isAdmin ? array_values(array_filter((array) $request->input('site_ids', []))) : [];
 
-        $rows = $this->besoinTresorerieService->calculerPourMois($orgId, $annee, $mois);
+        $rows = $this->financement->calculerPourEcheance($orgId, $annee, $mois, $echeance);
         $rows = $this->restreindreAuxSitesAccessibles($rows, $user);
 
         if ($isAdmin && $filtreSiteIds !== []) {
@@ -50,21 +55,29 @@ class BesoinTresorerieController extends Controller
             ));
         }
 
-        return Inertia::render('Comptabilite/Tresorerie/Index', [
+        [$echeanceDebut, $echeanceFin] = $this->financement->dateRangePourEcheance($annee, $mois, $echeance);
+
+        return Inertia::render('Comptabilite/Financement/Index', [
             'rows' => $rows,
-            'total_general' => BesoinTresorerieService::totalGeneral($rows),
+            'total_general' => $this->financement->totalGeneral($rows),
             'filters' => [
                 'annee' => (string) $annee,
                 'mois' => (string) $mois,
+                'echeance' => $echeance,
                 'site_ids' => $filtreSiteIds,
             ],
+            'echeance_debut' => $echeanceDebut->toDateString(),
+            'echeance_fin' => $echeanceFin->toDateString(),
+            'sites' => $isAdmin
+                ? Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom'])->map(fn ($s) => ['value' => $s->id, 'label' => $s->nom])
+                : collect(),
             'is_admin' => $isAdmin,
         ]);
     }
 
     public function show(Request $request, string $site): Response
     {
-        abort_unless(auth()->user()->can('comptabilite.read'), 403);
+        abort_unless(auth()->user()->can('tresorerie.read'), 403);
 
         $user = auth()->user();
         $orgId = $user->organization_id;
@@ -76,23 +89,16 @@ class BesoinTresorerieController extends Controller
 
         $annee = (int) $request->input('annee', now()->year);
         $mois = (int) $request->input('mois', now()->month);
-        // Provenance de l'onglet cliqué sur l'index (p1/p2/mensuel) — sert
-        // uniquement à savoir quelles sections afficher ici, aucune incidence
-        // sur le calcul (le détail complet reste chargé dans tous les cas).
-        $echeance = $request->input('echeance', 'mensuel');
-        if (! in_array($echeance, ['p1', 'p2', 'mensuel'], true)) {
-            $echeance = 'mensuel';
-        }
 
-        $detail = $this->besoinTresorerieService->detailAgence($orgId, $annee, $mois, $siteId);
+        $detail = $this->obligations->detailAgence($orgId, $annee, $mois, $siteId);
         $siteNom = $siteId
             ? (Site::where('organization_id', $orgId)->whereKey($siteId)->value('nom') ?? '—')
             : 'Sans agence';
 
-        return Inertia::render('Comptabilite/Tresorerie/Show', [
+        return Inertia::render('Comptabilite/Financement/Show', [
             'site' => ['id' => $siteId, 'nom' => $siteNom],
             'detail' => $detail,
-            'filters' => ['annee' => (string) $annee, 'mois' => (string) $mois, 'echeance' => $echeance],
+            'filters' => ['annee' => (string) $annee, 'mois' => (string) $mois],
         ]);
     }
 

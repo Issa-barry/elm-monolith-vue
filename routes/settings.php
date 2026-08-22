@@ -55,6 +55,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('settings/commissions', [CommissionRegleController::class, 'index'])->name('settings.commissions.index');
     Route::post('settings/commissions', [CommissionRegleController::class, 'store'])->name('settings.commissions.store');
+    Route::post('settings/commissions/consultant', [CommissionRegleController::class, 'updateConsultant'])->name('settings.commissions.consultant.update');
 
     Route::get('settings/produits', [StockAjustementController::class, 'edit'])->name('settings.produits');
     Route::put('settings/produits', [StockAjustementController::class, 'update'])->name('settings.produits.update');

@@ -59,6 +59,7 @@ const props = defineProps<{
     employes: PersonneOption[];
     livreurs: PersonneOption[];
     proprietaires: PersonneOption[];
+    prestataires: PersonneOption[];
     categories: { value: string; label: string }[];
     can_change_site: boolean;
 }>();
@@ -183,6 +184,11 @@ const beneficiaireLabel = computed<string | null>(() => {
             props.proprietaires.find((p) => p.id === form.beneficiaire_id)
                 ?.nom_complet ?? null
         );
+    if (cat === 'prestataire')
+        return (
+            props.prestataires.find((p) => p.id === form.beneficiaire_id)
+                ?.nom_complet ?? null
+        );
     return null;
 });
 
@@ -197,6 +203,7 @@ const concerneBadgeClass = computed(() => {
         livreur: 'border-amber-200 bg-amber-50 text-amber-700',
         employe: 'border-blue-200 bg-blue-50 text-blue-700',
         interne: 'border-slate-200 bg-slate-50 text-slate-700',
+        prestataire: 'border-teal-200 bg-teal-50 text-teal-700',
     };
     return map[concerneSelectionne.value] ?? '';
 });
@@ -552,6 +559,43 @@ function submitAs(statut: 'brouillon' | 'soumis') {
                                         :value="p.id"
                                     >
                                         {{ p.nom_complet }}
+                                    </option>
+                                </select>
+                                <p
+                                    v-if="form.errors.beneficiaire_id"
+                                    class="mt-1 text-xs text-destructive"
+                                >
+                                    {{ form.errors.beneficiaire_id }}
+                                </p>
+                            </div>
+
+                            <!-- Prestataire -->
+                            <div v-else-if="categorie === 'prestataire'">
+                                <Label
+                                    for="dep-prestataire"
+                                    class="mb-1.5 block text-xs font-medium"
+                                >
+                                    Prestataire
+                                    <span class="text-destructive">*</span>
+                                </Label>
+                                <select
+                                    id="dep-prestataire"
+                                    v-model="form.beneficiaire_id"
+                                    class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+                                    :class="{
+                                        'border-destructive':
+                                            form.errors.beneficiaire_id,
+                                    }"
+                                >
+                                    <option value="">
+                                        — Sélectionner un prestataire —
+                                    </option>
+                                    <option
+                                        v-for="pr in prestataires"
+                                        :key="pr.id"
+                                        :value="pr.id"
+                                    >
+                                        {{ pr.nom_complet }}
                                     </option>
                                 </select>
                                 <p

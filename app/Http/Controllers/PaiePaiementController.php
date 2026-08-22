@@ -7,6 +7,7 @@ use App\Models\PaiePaiement;
 use App\Services\PaieCalculService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class PaiePaiementController extends Controller
 {
@@ -26,8 +27,14 @@ class PaiePaiementController extends Controller
             return back()->withErrors(['montant' => "Le montant dépasse le reste à payer ({$maxPaiement})."]);
         }
 
-        $ligne->paiements()->create($data);
-        $service->recalculerApresPaiement($ligne);
+        try {
+            DB::transaction(function () use ($ligne, $data, $service) {
+                $ligne->paiements()->create($data);
+                $service->recalculerApresPaiement($ligne);
+            });
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['comptabilisation' => "Paiement non enregistré : {$e->getMessage()}"]);
+        }
 
         return back()->with('success', 'Paiement enregistré.');
     }

@@ -54,14 +54,6 @@ class SolvabiliteServiceTest extends TestCase
         ]);
     }
 
-    private function makeType(?int $seuilDerogation = null): TypeVehicule
-    {
-        return TypeVehicule::factory()->create([
-            'organization_id' => $this->org->id,
-            'seuil_derogation_impayes' => $seuilDerogation,
-        ]);
-    }
-
     /** Facture IMPAYEE/PARTIEL rattachée à un véhicule et/ou un client, via sa commande. */
     private function makeFacture(int $montantNet, StatutFactureVente $statut, ?string $vehiculeId = null, ?string $clientId = null): FactureVente
     {
@@ -112,82 +104,82 @@ class SolvabiliteServiceTest extends TestCase
         $this->assertFalse($resultat['blocked'], 'dette = seuil → autorisé, jamais bloqué à l\'égalité');
     }
 
-    // ── Dérogation via le type de véhicule ───────────────────────────────────────
+    // ── Dérogation individuelle par véhicule (décision produit du 22/08/2026) ────────────────
 
-    public function test_vehicule_avec_derogation_utilise_le_seuil_de_son_type(): void
+    public function test_vehicule_avec_derogation_utilise_son_propre_plafond(): void
     {
         Parametre::setVentesControleImpayes($this->org->id, true, 0);
-        $type = $this->makeType(2_000_000);
-        $vehicule = $this->makeVehicule(['type_vehicule_id' => $type->id, 'derogation_impayes_autorisee' => true]);
+        $vehicule = $this->makeVehicule(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 2_000_000]);
         // Encaissement de 1 GNF : neutralise le verrou « première régularisation » sans changer
         // le reste à payer (1 500 001 - 1 = 1 500 000), pour isoler ici le seul comportement du
-        // seuil dérogatoire.
+        // plafond dérogatoire.
         $facture = $this->makeFacture(1_500_001, StatutFactureVente::PARTIEL, $vehicule->id);
         $this->encaisser($facture, 1);
 
         $resultat = $this->service->evaluer($this->org->id, $vehicule->id, null);
 
         $this->assertSame(2_000_000, $resultat['seuil_impayes']);
-        $this->assertFalse($resultat['blocked'], 'sous le seuil dérogatoire du type → autorisé');
+        $this->assertSame('derogation', $resultat['seuil_origine']);
+        $this->assertFalse($resultat['blocked'], 'sous le plafond dérogatoire du véhicule → autorisé');
         $this->assertSame(500_000, $resultat['montant_disponible']);
     }
 
-    public function test_vehicule_avec_derogation_bloque_au_dela_du_seuil_de_son_type(): void
+    public function test_vehicule_avec_derogation_bloque_au_dela_de_son_propre_plafond(): void
     {
         Parametre::setVentesControleImpayes($this->org->id, true, 10_000_000);
-        $type = $this->makeType(2_000_000);
-        $vehicule = $this->makeVehicule(['type_vehicule_id' => $type->id, 'derogation_impayes_autorisee' => true]);
+        $vehicule = $this->makeVehicule(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 2_000_000]);
         $this->makeFacture(2_000_001, StatutFactureVente::IMPAYEE, $vehicule->id);
 
         $resultat = $this->service->evaluer($this->org->id, $vehicule->id, null);
 
-        $this->assertTrue($resultat['blocked'], 'le seuil du type prime sur un seuil global bien plus large');
+        $this->assertTrue($resultat['blocked'], 'le plafond du véhicule prime sur un seuil global bien plus large');
         $this->assertSame(1, $resultat['depassement']);
     }
 
     /**
-     * Un type de camion et un type de tricycle avec des seuils dérogatoires différents doivent
-     * réellement produire des plafonds différents — pas de valeur globale unique partagée.
+     * Deux véhicules du MÊME type, avec des plafonds dérogatoires différents, doivent réellement
+     * produire des plafonds différents — la dérogation ne dépend jamais du type (cf. exemple
+     * ABARRY/autre Minibus de l'analyse du 22/08/2026).
      */
-    public function test_deux_types_de_vehicule_ont_des_seuils_derogatoires_independants(): void
+    public function test_deux_vehicules_du_meme_type_ont_des_plafonds_derogatoires_independants(): void
     {
         Parametre::setVentesControleImpayes($this->org->id, true, 0);
-        $tricycle = $this->makeType(2_000_000);
-        $camion = $this->makeType(10_000_000);
-        $vehiculeTricycle = $this->makeVehicule(['type_vehicule_id' => $tricycle->id, 'derogation_impayes_autorisee' => true]);
-        $vehiculeCamion = $this->makeVehicule(['type_vehicule_id' => $camion->id, 'derogation_impayes_autorisee' => true]);
+        $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id]);
+        $vehiculeA = $this->makeVehicule(['type_vehicule_id' => $type->id, 'derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 2_000_000]);
+        $vehiculeB = $this->makeVehicule(['type_vehicule_id' => $type->id, 'derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 10_000_000]);
 
-        $this->assertSame(2_000_000, $this->service->evaluer($this->org->id, $vehiculeTricycle->id, null)['seuil_impayes']);
-        $this->assertSame(10_000_000, $this->service->evaluer($this->org->id, $vehiculeCamion->id, null)['seuil_impayes']);
+        $this->assertSame(2_000_000, $this->service->evaluer($this->org->id, $vehiculeA->id, null)['seuil_impayes']);
+        $this->assertSame(10_000_000, $this->service->evaluer($this->org->id, $vehiculeB->id, null)['seuil_impayes']);
     }
 
     /**
-     * Filet de sécurité : un véhicule dérogatoire dont le type n'a PAS de seuil configuré ne
-     * doit jamais être traité comme illimité — retombe sur le seuil global. Ce cas est
-     * normalement empêché côté formulaire (VehiculeController::ensureDerogationCoherente()),
-     * mais le service doit rester sûr même si le seuil du type est retiré après coup.
+     * Filet de sécurité : un véhicule dérogatoire sans plafond propre configuré ne doit jamais
+     * être traité comme illimité — retombe sur le seuil global. Ce cas est normalement empêché
+     * côté formulaire (VehiculeController::ensureDerogationCoherente()), mais le service doit
+     * rester sûr même si le plafond est retiré après coup.
      */
-    public function test_vehicule_avec_derogation_mais_type_sans_seuil_configure_retombe_sur_le_seuil_global(): void
+    public function test_vehicule_avec_derogation_mais_sans_plafond_configure_retombe_sur_le_seuil_global(): void
     {
         Parametre::setVentesControleImpayes($this->org->id, true, 500_000);
-        $vehicule = $this->makeVehicule(['derogation_impayes_autorisee' => true]);
+        $vehicule = $this->makeVehicule(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => null]);
         $this->makeFacture(600_000, StatutFactureVente::IMPAYEE, $vehicule->id);
 
         $resultat = $this->service->evaluer($this->org->id, $vehicule->id, null);
 
-        $this->assertSame(500_000, $resultat['seuil_impayes'], 'type non configuré → filet de sécurité, jamais illimité');
+        $this->assertSame(500_000, $resultat['seuil_impayes'], 'pas de plafond configuré → filet de sécurité, jamais illimité');
+        $this->assertSame('standard', $resultat['seuil_origine']);
         $this->assertTrue($resultat['blocked']);
     }
 
-    /** Même type, deux véhicules : la dérogation reste individuelle, pas automatique pour tout le type. */
+    /** Même type, deux véhicules : la dérogation reste individuelle, jamais automatique pour tout le type. */
     public function test_deux_vehicules_du_meme_type_un_avec_derogation_lautre_sans(): void
     {
         Parametre::setVentesControleImpayes($this->org->id, true, 0);
-        $type = $this->makeType(3_000_000);
-        $avecDerogation = $this->makeVehicule(['type_vehicule_id' => $type->id, 'derogation_impayes_autorisee' => true]);
+        $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id]);
+        $avecDerogation = $this->makeVehicule(['type_vehicule_id' => $type->id, 'derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 3_000_000]);
         $sansDerogation = $this->makeVehicule(['type_vehicule_id' => $type->id, 'derogation_impayes_autorisee' => false]);
         // avecDerogation : encaissement de 1 GNF pour neutraliser le verrou « première
-        // régularisation » et isoler le comportement du seuil dérogatoire (reste à payer
+        // régularisation » et isoler le comportement du plafond dérogatoire (reste à payer
         // inchangé : 1 000 001 - 1 = 1 000 000). sansDerogation reste fully impayée : de toute
         // façon bloqué (seuil global 0), avec ou sans le nouveau verrou.
         $facture = $this->makeFacture(1_000_001, StatutFactureVente::PARTIEL, $avecDerogation->id);
@@ -198,33 +190,31 @@ class SolvabiliteServiceTest extends TestCase
         $this->assertTrue($this->service->evaluer($this->org->id, $sansDerogation->id, null)['blocked']);
     }
 
-    /** Changer le type d'un véhicule dérogatoire fait automatiquement suivre son plafond. */
-    public function test_changement_de_type_change_le_seuil_applicable_automatiquement(): void
+    /** Changer le type d'un véhicule dérogatoire n'affecte plus jamais son plafond — désormais individuel, pas hérité. */
+    public function test_changement_de_type_naffecte_jamais_le_plafond_derogatoire_du_vehicule(): void
     {
         Parametre::setVentesControleImpayes($this->org->id, true, 0);
-        $tricycle = $this->makeType(2_000_000);
-        $camion = $this->makeType(10_000_000);
-        $vehicule = $this->makeVehicule(['type_vehicule_id' => $tricycle->id, 'derogation_impayes_autorisee' => true]);
-
-        $this->assertSame(2_000_000, $this->service->evaluer($this->org->id, $vehicule->id, null)['seuil_impayes']);
+        $tricycle = TypeVehicule::factory()->create(['organization_id' => $this->org->id]);
+        $camion = TypeVehicule::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule(['type_vehicule_id' => $tricycle->id, 'derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 2_000_000]);
 
         $vehicule->update(['type_vehicule_id' => $camion->id]);
 
-        $this->assertSame(10_000_000, $this->service->evaluer($this->org->id, $vehicule->id, null)['seuil_impayes']);
+        $this->assertSame(2_000_000, $this->service->evaluer($this->org->id, $vehicule->id, null)['seuil_impayes']);
     }
 
-    /** Modifier le seuil du type impacte tous ses véhicules dérogatoires, sans rien toucher véhicule par véhicule. */
-    public function test_modification_du_seuil_du_type_impacte_tous_ses_vehicules_derogatoires(): void
+    /** Modifier le plafond d'un véhicule n'affecte jamais un autre véhicule, même du même type. */
+    public function test_modification_du_plafond_dun_vehicule_naffecte_jamais_un_autre(): void
     {
         Parametre::setVentesControleImpayes($this->org->id, true, 0);
-        $type = $this->makeType(2_000_000);
-        $vehiculeA = $this->makeVehicule(['type_vehicule_id' => $type->id, 'derogation_impayes_autorisee' => true]);
-        $vehiculeB = $this->makeVehicule(['type_vehicule_id' => $type->id, 'derogation_impayes_autorisee' => true]);
+        $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id]);
+        $vehiculeA = $this->makeVehicule(['type_vehicule_id' => $type->id, 'derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 2_000_000]);
+        $vehiculeB = $this->makeVehicule(['type_vehicule_id' => $type->id, 'derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 2_000_000]);
 
-        $type->update(['seuil_derogation_impayes' => 3_000_000]);
+        $vehiculeA->update(['seuil_derogation_impayes' => 3_000_000]);
 
         $this->assertSame(3_000_000, $this->service->evaluer($this->org->id, $vehiculeA->id, null)['seuil_impayes']);
-        $this->assertSame(3_000_000, $this->service->evaluer($this->org->id, $vehiculeB->id, null)['seuil_impayes']);
+        $this->assertSame(2_000_000, $this->service->evaluer($this->org->id, $vehiculeB->id, null)['seuil_impayes']);
     }
 
     // ── Comportement strict du seuil : dette = seuil autorisé, dette > seuil bloqué ─
@@ -270,12 +260,11 @@ class SolvabiliteServiceTest extends TestCase
         $this->assertTrue($this->service->evaluer($this->org->id, $vehicule->id, null)['blocked']);
     }
 
-    /** Seuil standard à 0 mais dérogation du type au-dessus : le véhicule dérogatoire n'est pas bloqué. */
-    public function test_seuil_standard_zero_avec_derogation_du_type_au_dessus(): void
+    /** Seuil standard à 0 mais plafond dérogatoire du véhicule au-dessus : le véhicule dérogatoire n'est pas bloqué. */
+    public function test_seuil_standard_zero_avec_derogation_du_vehicule_au_dessus(): void
     {
         Parametre::setVentesControleImpayes($this->org->id, true, 0);
-        $type = $this->makeType(3_000_000);
-        $vehicule = $this->makeVehicule(['type_vehicule_id' => $type->id, 'derogation_impayes_autorisee' => true]);
+        $vehicule = $this->makeVehicule(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 3_000_000]);
         // Encaissement de 1 GNF : neutralise le verrou « première régularisation » sans changer
         // le reste à payer (2 500 001 - 1 = 2 500 000), pour isoler le comportement du seuil.
         $facture = $this->makeFacture(2_500_001, StatutFactureVente::PARTIEL, $vehicule->id);
@@ -344,13 +333,12 @@ class SolvabiliteServiceTest extends TestCase
     {
         Parametre::setVentesControleImpayes($this->org->id, true, 0);
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
-        $type = $this->makeType(5_000_000);
         $vehiculeA = Vehicule::factory()->create(['organization_id' => $this->org->id, 'proprietaire_id' => $proprietaire->id]);
         $vehiculeB = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
-            'type_vehicule_id' => $type->id,
             'derogation_impayes_autorisee' => true,
+            'seuil_derogation_impayes' => 5_000_000,
         ]);
 
         $this->makeFacture(3_000_000, StatutFactureVente::IMPAYEE, $vehiculeA->id);
@@ -600,5 +588,48 @@ class SolvabiliteServiceTest extends TestCase
             $this->assertStringContainsString('aucun paiement', $e->errors()['impayes'][0]);
             $this->assertStringContainsString($facture->reference, $e->errors()['impayes'][0]);
         }
+    }
+
+    /**
+     * Un plafond dérogatoire très élevé ne doit jamais permettre de contourner le verrou
+     * absolu « première régularisation » (cf. docblock de classe et section métier « Point à
+     * confirmer » de l'analyse du 22/08/2026) — ce verrou est totalement indépendant du calcul
+     * de seuil/dérogation.
+     */
+    public function test_derogation_avec_plafond_enorme_ne_contourne_jamais_le_verrou_premiere_regularisation(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 0);
+        $vehicule = $this->makeVehicule(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 999_999_999]);
+        $facture = $this->makeFacture(10_000, StatutFactureVente::IMPAYEE, $vehicule->id);
+
+        $resultat = $this->service->evaluer($this->org->id, $vehicule->id, null);
+
+        $this->assertTrue($resultat['blocage_premiere_facture']);
+        $this->assertTrue($resultat['blocked']);
+        $this->assertSame($facture->reference, $resultat['facture_bloquante_reference']);
+    }
+
+    // ── Le plafond ne compare JAMAIS la dette existante au montant d'une nouvelle vente
+    // (décision produit du 22/08/2026, EN CORRECTION d'une tentative d'« exposition projetée »
+    // testée le même jour puis abandonnée — cf. docblock de classe) ───────────────────────────
+
+    /**
+     * Régression ABDOULAYE (22/08/2026) : un véhicule en dérogation SANS aucune dette existante
+     * ne doit jamais être bloqué, quelle que soit la taille de sa toute première vente — le
+     * plafond borne l'encours d'impayés déjà accumulé, jamais la taille d'une transaction.
+     * evaluer() n'accepte d'ailleurs plus aucun montant de vente en cours : seule la dette déjà
+     * existante entre dans le calcul (cas réel : plafond 500 000 GNF, vente de 10 800 000 GNF
+     * refusée à tort avant cette correction).
+     */
+    public function test_vehicule_en_derogation_sans_dette_nest_jamais_bloque_quel_que_soit_le_plafond(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 0);
+        $vehicule = $this->makeVehicule(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 500_000]);
+
+        $resultat = $this->service->evaluer($this->org->id, $vehicule->id, null);
+
+        $this->assertSame(0, $resultat['total_remaining']);
+        $this->assertSame('derogation', $resultat['seuil_origine']);
+        $this->assertFalse($resultat['blocked'], 'aucune dette existante → jamais bloqué, quel que soit le plafond');
     }
 }

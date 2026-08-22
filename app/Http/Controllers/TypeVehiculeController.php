@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Enums\CategorieTarifaireVehicule;
-use App\Models\Parametre;
 use App\Models\TypeVehicule;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -31,7 +30,6 @@ class TypeVehiculeController extends Controller
                 'description' => $t->description,
                 'categorie_tarifaire' => $t->categorie_tarifaire?->value,
                 'categorie_tarifaire_label' => $t->categorie_tarifaire?->label(),
-                'seuil_derogation_impayes' => $t->seuil_derogation_impayes,
                 'is_active' => $t->is_active,
                 'vehicules_count' => $t->vehicules()->count(),
             ]);
@@ -47,7 +45,6 @@ class TypeVehiculeController extends Controller
 
         return Inertia::render('TypeVehicules/Create', [
             'categoriesTarifaires' => CategorieTarifaireVehicule::options(),
-            'seuilStandardImpayes' => Parametre::getVentesSeuilImpayesMax(auth()->user()->organization_id),
         ]);
     }
 
@@ -64,7 +61,6 @@ class TypeVehiculeController extends Controller
             ],
             'description' => 'nullable|string|max:500',
             'categorie_tarifaire' => ['nullable', Rule::in(CategorieTarifaireVehicule::values())],
-            'seuil_derogation_impayes' => $this->seuilDerogationRules($orgId),
             'is_active' => 'boolean',
         ], $this->messages());
 
@@ -84,11 +80,9 @@ class TypeVehiculeController extends Controller
                 'nom' => $typeVehicule->nom,
                 'description' => $typeVehicule->description,
                 'categorie_tarifaire' => $typeVehicule->categorie_tarifaire?->value,
-                'seuil_derogation_impayes' => $typeVehicule->seuil_derogation_impayes,
                 'is_active' => $typeVehicule->is_active,
             ],
             'categoriesTarifaires' => CategorieTarifaireVehicule::options(),
-            'seuilStandardImpayes' => Parametre::getVentesSeuilImpayesMax($typeVehicule->organization_id),
         ]);
     }
 
@@ -107,7 +101,6 @@ class TypeVehiculeController extends Controller
             ],
             'description' => 'nullable|string|max:500',
             'categorie_tarifaire' => ['nullable', Rule::in(CategorieTarifaireVehicule::values())],
-            'seuil_derogation_impayes' => $this->seuilDerogationRules($orgId),
             'is_active' => 'boolean',
         ], $this->messages());
 
@@ -115,26 +108,6 @@ class TypeVehiculeController extends Controller
 
         return redirect()->route('type-vehicules.index')
             ->with('success', 'Type de véhicule mis à jour.');
-    }
-
-    /**
-     * Un seuil dérogatoire n'a de sens que s'il augmente réellement le plafond par rapport au
-     * seuil standard des paramètres de vente — sinon la dérogation ne dérogerait à rien
-     * (cf. cadrage du 19/08/2026).
-     *
-     * @return array<int, mixed>
-     */
-    private function seuilDerogationRules(string $orgId): array
-    {
-        return [
-            'nullable', 'integer', 'min:0', 'max:999999999',
-            function (string $attribute, mixed $value, \Closure $fail) use ($orgId) {
-                $seuilStandard = Parametre::getVentesSeuilImpayesMax($orgId);
-                if ($value !== null && $value < $seuilStandard) {
-                    $fail("Le seuil de dérogation doit être supérieur ou égal au seuil standard actuel ({$seuilStandard} GNF).");
-                }
-            },
-        ];
     }
 
     public function destroy(TypeVehicule $typeVehicule): RedirectResponse
