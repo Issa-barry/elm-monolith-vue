@@ -151,7 +151,10 @@ const filterFields = computed<FilterField[]>(() =>
                   inline: true,
                   options: [
                       { value: 'a_payer', label: 'À payer' },
-                      { value: 'partiellement_paye', label: 'Partiellement payé' },
+                      {
+                          value: 'partiellement_paye',
+                          label: 'Partiellement payé',
+                      },
                       { value: 'paye', label: 'Payé' },
                   ],
               },
@@ -547,7 +550,10 @@ function exportPdf() {
             <!-- Commissions par véhicule (livreur/propriétaire uniquement) -->
             <!-- data-key="vehicule_id" : point d'extension pour un futur détail par ligne
                  (commandes/commissions composant le montant), via un DataTable expander. -->
-            <div v-if="isVehiculeType" class="overflow-x-auto rounded-xl border bg-card">
+            <div
+                v-if="isVehiculeType"
+                class="overflow-x-auto rounded-xl border bg-card"
+            >
                 <DataTable
                     :value="vehicules"
                     :paginator="vehicules.length > 20"
@@ -722,7 +728,10 @@ function exportPdf() {
                     striped-rows
                     removable-sort
                     class="text-sm"
-                    :pt="{ root: { class: 'w-full min-w-[900px]' }, tbody: { class: 'divide-y' } }"
+                    :pt="{
+                        root: { class: 'w-full min-w-[900px]' },
+                        tbody: { class: 'divide-y' },
+                    }"
                 >
                     <Column
                         field="beneficiaire_nom"
