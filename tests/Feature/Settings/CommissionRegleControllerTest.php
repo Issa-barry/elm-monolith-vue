@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Settings;
 
+use App\Enums\CommissionMode;
 use App\Enums\CommissionRegleStatut;
 use App\Models\Categorie;
 use App\Models\CommissionCibleType;
@@ -38,7 +39,7 @@ class CommissionRegleControllerTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->component('settings/CommissionRegles/Index')
                 ->has('lignes', 2) // globale + 1 catégorie
-                ->has('cibles', 2) // propriétaire + livraison
+                ->has('cibles', 3) // propriétaire + livraison + site
             );
     }
 
@@ -127,6 +128,40 @@ class CommissionRegleControllerTest extends TestCase
             CommissionRegle::where('organization_id', $this->org->id)
                 ->where('statut', CommissionRegleStatut::ACTIVE->value)
                 ->count(),
+        );
+    }
+
+    /** @test */
+    public function cree_une_regle_globale_pour_le_site_en_mode_direct(): void
+    {
+        $this->actingAs($this->user)
+            ->post('/settings/commissions', [
+                'cible_type' => CommissionCibleType::CODE_SITE,
+                'scope_type' => 'global',
+                'montant' => 1000,
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('commission_regles', [
+            'organization_id' => $this->org->id,
+            'cible_type' => CommissionCibleType::CODE_SITE,
+            'scope_type' => 'global',
+            'montant' => 1000.00,
+            // DIRECT au même titre que propriétaire : un seul bénéficiaire déterministe (le
+            // site lui-même), jamais de répartition à calculer.
+            'mode' => CommissionMode::DIRECT->value,
+            'statut' => CommissionRegleStatut::ACTIVE->value,
+        ]);
+    }
+
+    /** @test */
+    public function la_colonne_du_tableau_expose_le_libelle_site(): void
+    {
+        $response = $this->actingAs($this->user)->get('/settings/commissions');
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('cibles.2.code', CommissionCibleType::CODE_SITE)
+            ->where('cibles.2.libelle', 'Site')
         );
     }
 

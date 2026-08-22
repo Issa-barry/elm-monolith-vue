@@ -10,9 +10,16 @@
  * reste, elle, la référence et n'est pas limitée à cette liste.
  *
  * Deux modes d'usage :
- * - v-model (Wizard.vue, formulaire Inertia réactif via useForm) : `v-model="form.telephone"`.
+ * - v-model (Wizard.vue, Employes/Create.vue|Edit.vue, formulaire Inertia réactif via useForm) :
+ *   `v-model="form.telephone"`.
  * - `name` (Login.vue, formulaire natif via <Form>) : rend un <input type="hidden" :name>
  *   interne avec le numéro complet, pas besoin de gérer l'état côté parent.
+ *
+ * `rememberChoice` (défaut true) persiste le pays choisi dans localStorage sous une clé PARTAGÉE
+ * entre tous les usages — pertinent pour Login.vue ("se souvenir de mon pays"), pas pour un
+ * formulaire administratif (ex: création d'employé) où le défaut doit rester déterministe
+ * (toujours le premier pays de `countries`/DEFAULT_PAYS) indépendamment du pays de connexion de
+ * l'opérateur : ces écrans passent `:remember-choice="false"`.
  */
 import Select from 'primevue/select';
 import { computed, ref, watch } from 'vue';
@@ -52,6 +59,18 @@ const props = withDefaults(
         tabindexCountry?: number;
         tabindexInput?: number;
         countries?: CountryOption[];
+        /** Mémorise le pays choisi (localStorage, partagé avec Login.vue) pour le reproposer à
+         * la prochaine visite — pertinent pour "se souvenir de mon pays de connexion", pas pour
+         * un formulaire administratif où le défaut doit rester déterministe (toujours le premier
+         * pays de la liste, ex: Guinée) quel que soit le pays de connexion de l'opérateur. */
+        rememberChoice?: boolean;
+        /** true par défaut (Login.vue/Wizard.vue : le téléphone est toujours obligatoire là où
+         * ce composant a été introduit). À mettre à `false` explicitement pour un formulaire où
+         * le téléphone reste facultatif (ex: Employes/Create.vue) — sans quoi l'attribut HTML
+         * `required` bloque silencieusement la soumission native du formulaire quand le champ
+         * est laissé vide : aucune requête n'est envoyée, aucune erreur JS, le bouton "submit"
+         * semble simplement ne rien faire. */
+        required?: boolean;
     }>(),
     {
         modelValue: '',
@@ -64,6 +83,8 @@ const props = withDefaults(
         // par défaut de defineProps() de référencer une variable du scope module (hoisting) —
         // paysOptions ci-dessous retombe déjà sur DEFAULT_PAYS quand countries est absent/vide.
         countries: undefined,
+        rememberChoice: true,
+        required: true,
     },
 );
 
@@ -77,8 +98,10 @@ const emit = defineEmits<{
 }>();
 
 const STORAGE_KEY = 'login_country_code';
-const savedCode =
-    globalThis.localStorage?.getItem(STORAGE_KEY) ?? paysOptions.value[0].code;
+const savedCode = props.rememberChoice
+    ? (globalThis.localStorage?.getItem(STORAGE_KEY) ??
+      paysOptions.value[0].code)
+    : paysOptions.value[0].code;
 const selectedCountryCode = ref(
     paysOptions.value.some((p) => p.code === savedCode)
         ? savedCode
@@ -86,7 +109,8 @@ const selectedCountryCode = ref(
 );
 
 watch(selectedCountryCode, (code) => {
-    globalThis.localStorage?.setItem(STORAGE_KEY, code);
+    if (props.rememberChoice)
+        globalThis.localStorage?.setItem(STORAGE_KEY, code);
 });
 
 const selectedPays = computed(
@@ -236,7 +260,7 @@ defineExpose({ phoneIsValid, phoneClientError });
                 autocomplete="tel-national"
                 inputmode="numeric"
                 :autofocus="autofocus"
-                required
+                :required="required"
                 :maxlength="
                     phoneDigits.startsWith('0')
                         ? selectedPays.localLength + 1

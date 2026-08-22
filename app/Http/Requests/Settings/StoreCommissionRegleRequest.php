@@ -16,12 +16,14 @@ class StoreCommissionRegleRequest extends FormRequest
     public function rules(): array
     {
         return [
-            // Phase 2 : uniquement les deux cibles déjà couvertes par le pont Phase 1.
-            // equipe_depot / it seront ajoutées à ce référentiel en Phase 3 (cf.
-            // conception cible §0.2.4 — bénéficiaire IT explicitement non tranché).
+            // Phase 2 : les trois cibles couvertes par le pont Phase 1 + Site (commission
+            // attribuée directement au site métier de l'opération, décision produit
+            // 2026-08-21). `it` reste réservée à la Phase 3 (cf. conception cible §0.2.4 —
+            // bénéficiaire IT explicitement non tranché).
             'cible_type' => ['required', Rule::in([
                 CommissionCibleType::CODE_PROPRIETAIRE,
                 CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+                CommissionCibleType::CODE_SITE,
             ])],
             'scope_type' => ['required', Rule::in(['categorie', 'global'])],
             'categorie_id' => ['required_if:scope_type,categorie', 'nullable', 'string', 'exists:categories,id'],

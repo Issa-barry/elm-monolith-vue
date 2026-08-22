@@ -49,8 +49,16 @@ return [
 
         'file' => [
             'driver' => 'file',
-            'path' => storage_path('framework/cache/data'),
-            'lock_path' => storage_path('framework/cache/data'),
+            // FileStore ignore totalement `cache.prefix` (CacheManager::createFileDriver
+            // ne lui passe que path/lock_path, jamais prefix — contrairement à
+            // Redis/Memcached) : sans CACHE_PATH_SUFFIX, .env et .env.e2e écrivent dans
+            // le même storage/framework/cache/data malgré des APP_NAME différents. Ça
+            // fait fuiter le rate limiter Fortify (clé telephone|ip) entre les deux :
+            // un login e2e échoué peut griller le quota "Trop de tentatives" du serveur
+            // de dev pour le même numéro. .env.e2e définit CACHE_PATH_SUFFIX=-e2e pour
+            // isoler physiquement ce cache ; dev/prod restent inchangés (suffix vide).
+            'path' => storage_path('framework/cache/data'.env('CACHE_PATH_SUFFIX', '')),
+            'lock_path' => storage_path('framework/cache/data'.env('CACHE_PATH_SUFFIX', '')),
         ],
 
         'memcached' => [

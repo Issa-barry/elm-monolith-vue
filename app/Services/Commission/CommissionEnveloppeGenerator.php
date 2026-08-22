@@ -139,7 +139,7 @@ class CommissionEnveloppeGenerator
 
     private static function genererParReglesDansTransaction(CommandeVente $commande, CommissionProcessus $processus): void
     {
-        $commande->loadMissing(['lignes.variante.produit.categorie', 'vehicule.equipe.membres.livreur', 'vehicule.proprietaire']);
+        $commande->loadMissing(['lignes.variante.produit.categorie', 'vehicule.equipe.membres.livreur', 'vehicule.proprietaire', 'site']);
 
         $vehicule = $commande->vehicule;
         if (! $vehicule) {
@@ -150,6 +150,15 @@ class CommissionEnveloppeGenerator
         $lignes = $commande->lignes;
 
         $cibles = [CommissionCibleType::CODE_PROPRIETAIRE, CommissionCibleType::CODE_EQUIPE_LIVRAISON];
+        // Site : cible directe supplémentaire, ancrée sur le SITE métier de l'opération (pas le
+        // véhicule) — s'applique à TOUT type de site dès qu'une opération lui est rattachée
+        // (décision produit 2026-08-21 : jamais limité aux dépôts, jamais conditionné à un
+        // gérant/une fonction/un rôle). Un site absent laisse simplement la cible hors de
+        // $cibles : aucune tentative, aucune erreur — mirroring le comportement "pas de règle
+        // configurée = pas de cible" déjà appliqué partout ailleurs.
+        if ($commande->site) {
+            $cibles[] = CommissionCibleType::CODE_SITE;
+        }
 
         /** @var array<string, array<int, array{ligne: CommandeVenteLigne, montant: float, regle: CommissionRegle}>> $lignesParCible */
         $lignesParCible = [];
@@ -307,6 +316,34 @@ class CommissionEnveloppeGenerator
                         'taux' => null,
                         'montant' => round($montantParBeneficiaire[$beneficiaireId], 2),
                     ], array_keys($montantParBeneficiaire)),
+                ];
+
+                continue;
+            }
+
+            if ($cibleCode === CommissionCibleType::CODE_SITE) {
+                $site = $commande->site;
+
+                // Bénéficiaire = le Site lui-même, directement — jamais un gérant, un employé, ou
+                // un CommissionGroupe. Aucune vérification de gérant/fonction/rôle/statut/compte
+                // utilisateur (décision produit 2026-08-21) : mode DIRECT au même titre que
+                // CODE_PROPRIETAIRE ci-dessus, pas de répartition à calculer.
+                if (! $site) {
+                    $erreurs[] = "Cible {$cibleCode} : commande sans site.";
+
+                    continue;
+                }
+
+                $enveloppesACreer[$cibleCode] = [
+                    'montant' => $montantTotal,
+                    'cible_id' => $site->id,
+                    'contributions' => $contributions,
+                    'parts' => [[
+                        'beneficiaire_type' => CommissionEnveloppePart::TYPE_SITE,
+                        'beneficiaire_id' => $site->id,
+                        'taux' => null,
+                        'montant' => $montantTotal,
+                    ]],
                 ];
             }
         }
