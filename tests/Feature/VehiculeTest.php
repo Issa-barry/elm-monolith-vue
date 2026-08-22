@@ -216,17 +216,16 @@ class VehiculeTest extends TestCase
             );
     }
 
-    public function test_store_active_la_derogation_quand_le_type_a_un_seuil_configure(): void
+    public function test_store_active_la_derogation_avec_un_plafond_valide(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
-        $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'seuil_derogation_impayes' => 2_000_000]);
         $site = $this->user->sites()->first();
 
         $this->actingAs($this->user)
             ->post(route('vehicules.store'), [
                 'nom_vehicule' => 'Camion dérogation',
                 'immatriculation' => 'RC-002-GN',
-                'type_vehicule_id' => $type->id,
+                'type_vehicule_id' => $this->typeId(),
                 'proprietaire_id' => $proprietaire->id,
                 'categorie' => 'partenaire',
                 'site_id' => $site->id,
@@ -234,12 +233,14 @@ class VehiculeTest extends TestCase
                 'livraison_vente' => true,
                 'livraison_logistique' => false,
                 'derogation_impayes_autorisee' => true,
+                'seuil_derogation_impayes' => 2_000_000,
             ]);
 
         $this->assertDatabaseHas('vehicules', [
             'organization_id' => $this->org->id,
             'immatriculation' => 'RC-002-GN',
             'derogation_impayes_autorisee' => true,
+            'seuil_derogation_impayes' => 2_000_000,
         ]);
     }
 
@@ -269,8 +270,8 @@ class VehiculeTest extends TestCase
         ]);
     }
 
-    /** Le type par défaut créé par HasOrgAndUser n'a aucun seuil_derogation_impayes configuré. */
-    public function test_store_rejette_lactivation_de_la_derogation_si_le_type_nest_pas_configure(): void
+    /** Un plafond n'a de sens que s'il est renseigné — l'activation sans montant est refusée. */
+    public function test_store_rejette_lactivation_de_la_derogation_sans_plafond(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $site = $this->user->sites()->first();
@@ -293,17 +294,71 @@ class VehiculeTest extends TestCase
         $this->assertDatabaseMissing('vehicules', ['immatriculation' => 'RC-004-GN']);
     }
 
+    /** Un plafond inférieur au seuil standard de l'organisation n'a pas de sens fonctionnel. */
+    public function test_store_rejette_un_plafond_inferieur_au_seuil_standard(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 3_000_000);
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $site = $this->user->sites()->first();
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Camion sous-seuil',
+                'immatriculation' => 'RC-006-GN',
+                'type_vehicule_id' => $this->typeId(),
+                'proprietaire_id' => $proprietaire->id,
+                'categorie' => 'partenaire',
+                'site_id' => $site->id,
+                'is_active' => true,
+                'livraison_vente' => true,
+                'livraison_logistique' => false,
+                'derogation_impayes_autorisee' => true,
+                'seuil_derogation_impayes' => 2_000_000,
+            ])
+            ->assertSessionHasErrors('derogation_impayes_autorisee');
+
+        $this->assertDatabaseMissing('vehicules', ['immatriculation' => 'RC-006-GN']);
+    }
+
+    /** Un plafond égal au seuil standard est accepté (l'égalité n'est jamais un rejet). */
+    public function test_store_accepte_un_plafond_egal_au_seuil_standard(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 1_000_000);
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $site = $this->user->sites()->first();
+
+        $this->actingAs($this->user)
+            ->post(route('vehicules.store'), [
+                'nom_vehicule' => 'Camion seuil egal',
+                'immatriculation' => 'RC-007-GN',
+                'type_vehicule_id' => $this->typeId(),
+                'proprietaire_id' => $proprietaire->id,
+                'categorie' => 'partenaire',
+                'site_id' => $site->id,
+                'is_active' => true,
+                'livraison_vente' => true,
+                'livraison_logistique' => false,
+                'derogation_impayes_autorisee' => true,
+                'seuil_derogation_impayes' => 1_000_000,
+            ])
+            ->assertSessionDoesntHaveErrors('derogation_impayes_autorisee');
+
+        $this->assertDatabaseHas('vehicules', [
+            'immatriculation' => 'RC-007-GN',
+            'derogation_impayes_autorisee' => true,
+            'seuil_derogation_impayes' => 1_000_000,
+        ]);
+    }
+
     public function test_update_active_la_derogation(): void
     {
-        $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'seuil_derogation_impayes' => 5_000_000]);
         $vehicule = $this->makeVehicule($this->org);
-        $vehicule->update(['type_vehicule_id' => $type->id]);
 
         $this->actingAs($this->user)
             ->put(route('vehicules.update', $vehicule), [
                 'nom_vehicule' => $vehicule->nom_vehicule,
                 'immatriculation' => $vehicule->immatriculation,
-                'type_vehicule_id' => $type->id,
+                'type_vehicule_id' => $vehicule->type_vehicule_id,
                 'proprietaire_id' => $vehicule->proprietaire_id,
                 'categorie' => 'partenaire',
                 'site_id' => $vehicule->site_id,
@@ -311,24 +366,26 @@ class VehiculeTest extends TestCase
                 'livraison_vente' => true,
                 'livraison_logistique' => false,
                 'derogation_impayes_autorisee' => true,
+                'seuil_derogation_impayes' => 5_000_000,
             ])
             ->assertRedirect(route('vehicules.edit', $vehicule));
 
-        $this->assertTrue($vehicule->fresh()->derogation_impayes_autorisee);
+        $vehicule->refresh();
+        $this->assertTrue($vehicule->derogation_impayes_autorisee);
+        $this->assertSame(5_000_000, $vehicule->seuil_derogation_impayes);
     }
 
     /** Repasser le toggle à false désactive la dérogation. */
     public function test_update_peut_desactiver_la_derogation(): void
     {
-        $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'seuil_derogation_impayes' => 5_000_000]);
         $vehicule = $this->makeVehicule($this->org);
-        $vehicule->update(['type_vehicule_id' => $type->id, 'derogation_impayes_autorisee' => true]);
+        $vehicule->update(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 5_000_000]);
 
         $this->actingAs($this->user)
             ->put(route('vehicules.update', $vehicule), [
                 'nom_vehicule' => $vehicule->nom_vehicule,
                 'immatriculation' => $vehicule->immatriculation,
-                'type_vehicule_id' => $type->id,
+                'type_vehicule_id' => $vehicule->type_vehicule_id,
                 'proprietaire_id' => $vehicule->proprietaire_id,
                 'categorie' => 'partenaire',
                 'site_id' => $vehicule->site_id,
@@ -336,41 +393,71 @@ class VehiculeTest extends TestCase
                 'livraison_vente' => true,
                 'livraison_logistique' => false,
                 'derogation_impayes_autorisee' => false,
+                'seuil_derogation_impayes' => 5_000_000,
             ])
             ->assertRedirect(route('vehicules.edit', $vehicule));
 
         $this->assertFalse($vehicule->fresh()->derogation_impayes_autorisee);
     }
 
-    public function test_edit_expose_la_derogation_le_seuil_du_type_et_le_seuil_global(): void
+    public function test_edit_expose_la_derogation_et_le_seuil_global(): void
     {
         Parametre::setVentesControleImpayes($this->org->id, true, 300_000);
-        $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'seuil_derogation_impayes' => 1_200_000]);
         $vehicule = $this->makeVehicule($this->org);
-        $vehicule->update(['type_vehicule_id' => $type->id, 'derogation_impayes_autorisee' => true]);
+        $vehicule->update(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 1_200_000]);
 
         $this->actingAs($this->user)
             ->get(route('vehicules.edit', $vehicule))
-            ->assertInertia(fn (Assert $page) => $page
+            ->assertInertia(fn ($page) => $page
                 ->component('Vehicules/Edit')
                 ->where('vehicule.derogation_impayes_autorisee', true)
                 ->where('seuil_global_impayes', 300_000)
             );
     }
 
-    public function test_show_expose_le_seuil_du_type_pour_lorigine_de_la_derogation(): void
+    public function test_show_expose_le_plafond_propre_du_vehicule(): void
     {
-        $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'seuil_derogation_impayes' => 4_000_000]);
         $vehicule = $this->makeVehicule($this->org);
-        $vehicule->update(['type_vehicule_id' => $type->id, 'derogation_impayes_autorisee' => true]);
+        $vehicule->update(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 4_000_000]);
 
         $this->actingAs($this->user)
             ->get(route('vehicules.show', $vehicule))
-            ->assertInertia(fn (Assert $page) => $page
+            ->assertInertia(fn ($page) => $page
                 ->component('Vehicules/Show')
                 ->where('vehicule.derogation_impayes_autorisee', true)
-                ->where('vehicule.type_seuil_derogation_impayes', 4_000_000)
+                ->where('vehicule.seuil_derogation_impayes', 4_000_000)
             );
+    }
+
+    /**
+     * Changer le type d'un véhicule dérogatoire n'affecte jamais son plafond — désormais
+     * individuel au véhicule, jamais hérité du type (décision produit du 22/08/2026).
+     */
+    public function test_changer_le_type_naffecte_jamais_le_plafond_derogatoire(): void
+    {
+        $autreType = TypeVehicule::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($this->org);
+        $vehicule->update(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 4_000_000]);
+
+        $this->actingAs($this->user)
+            ->put(route('vehicules.update', $vehicule), [
+                'nom_vehicule' => $vehicule->nom_vehicule,
+                'immatriculation' => $vehicule->immatriculation,
+                'type_vehicule_id' => $autreType->id,
+                'proprietaire_id' => $vehicule->proprietaire_id,
+                'categorie' => 'partenaire',
+                'site_id' => $vehicule->site_id,
+                'is_active' => true,
+                'livraison_vente' => true,
+                'livraison_logistique' => false,
+                'derogation_impayes_autorisee' => true,
+                'seuil_derogation_impayes' => 4_000_000,
+            ])
+            ->assertRedirect(route('vehicules.edit', $vehicule));
+
+        $vehicule->refresh();
+        $this->assertSame($autreType->id, $vehicule->type_vehicule_id);
+        $this->assertSame(4_000_000, $vehicule->seuil_derogation_impayes);
     }
 
     /** Un véhicule fraîchement créé n'a jamais la dérogation activée par défaut. */
@@ -399,58 +486,145 @@ class VehiculeTest extends TestCase
         $this->assertFalse($vehicule->derogation_impayes_autorisee);
     }
 
-    // ── toggle-derogation (fiche véhicule, cf. Vehicules/Show.vue) ──────────────
+    // ── derogation-impayes (fiche véhicule, cf. Vehicules/Show.vue) ─────────────
 
-    public function test_toggle_derogation_active_puis_desactive(): void
+    public function test_update_derogation_active_avec_un_plafond_puis_desactive(): void
     {
-        $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'seuil_derogation_impayes' => 5_000_000]);
         $vehicule = $this->makeVehicule($this->org);
-        $vehicule->update(['type_vehicule_id' => $type->id]);
 
         $this->actingAs($this->user)
-            ->patch(route('vehicules.toggle-derogation', $vehicule))
+            ->patch(route('vehicules.derogation-impayes.update', $vehicule), [
+                'derogation_impayes_autorisee' => true,
+                'seuil_derogation_impayes' => 5_000_000,
+            ])
             ->assertRedirect();
-        $this->assertTrue($vehicule->fresh()->derogation_impayes_autorisee);
+        $vehicule->refresh();
+        $this->assertTrue($vehicule->derogation_impayes_autorisee);
+        $this->assertSame(5_000_000, $vehicule->seuil_derogation_impayes);
 
         $this->actingAs($this->user)
-            ->patch(route('vehicules.toggle-derogation', $vehicule))
+            ->patch(route('vehicules.derogation-impayes.update', $vehicule), [
+                'derogation_impayes_autorisee' => false,
+            ])
             ->assertRedirect();
         $this->assertFalse($vehicule->fresh()->derogation_impayes_autorisee);
     }
 
-    /** Même règle que store()/update() : pas de dérogation sans plafond configuré sur le type. */
-    public function test_toggle_derogation_refuse_lactivation_si_le_type_nest_pas_configure(): void
+    /** Même règle que store()/update() : pas de dérogation sans plafond valide. */
+    public function test_update_derogation_refuse_lactivation_sans_plafond(): void
     {
         $vehicule = $this->makeVehicule($this->org);
-        $vehicule->update(['type_vehicule_id' => $this->typeId()]);
 
         $this->actingAs($this->user)
-            ->patch(route('vehicules.toggle-derogation', $vehicule))
+            ->patch(route('vehicules.derogation-impayes.update', $vehicule), [
+                'derogation_impayes_autorisee' => true,
+            ])
             ->assertSessionHasErrors('derogation_impayes_autorisee');
 
         $this->assertFalse($vehicule->fresh()->derogation_impayes_autorisee);
     }
 
-    /** Désactiver reste toujours possible, même si le type n'a pas (ou plus) de plafond configuré. */
-    public function test_toggle_derogation_desactive_sans_condition_sur_le_type(): void
+    /** Même règle que store()/update() : plafond inférieur au seuil standard refusé. */
+    public function test_update_derogation_refuse_un_plafond_inferieur_au_seuil_standard(): void
     {
+        Parametre::setVentesControleImpayes($this->org->id, true, 3_000_000);
         $vehicule = $this->makeVehicule($this->org);
-        $vehicule->update(['type_vehicule_id' => $this->typeId(), 'derogation_impayes_autorisee' => true]);
 
         $this->actingAs($this->user)
-            ->patch(route('vehicules.toggle-derogation', $vehicule))
+            ->patch(route('vehicules.derogation-impayes.update', $vehicule), [
+                'derogation_impayes_autorisee' => true,
+                'seuil_derogation_impayes' => 2_000_000,
+            ])
+            ->assertSessionHasErrors('derogation_impayes_autorisee');
+
+        $this->assertFalse($vehicule->fresh()->derogation_impayes_autorisee);
+    }
+
+    /** Désactiver reste toujours possible, sans condition de plafond. */
+    public function test_update_derogation_desactive_sans_condition(): void
+    {
+        $vehicule = $this->makeVehicule($this->org);
+        $vehicule->update(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 5_000_000]);
+
+        $this->actingAs($this->user)
+            ->patch(route('vehicules.derogation-impayes.update', $vehicule), [
+                'derogation_impayes_autorisee' => false,
+            ])
             ->assertRedirect();
 
         $this->assertFalse($vehicule->fresh()->derogation_impayes_autorisee);
     }
 
-    public function test_toggle_derogation_returns_403_for_other_organization(): void
+    /**
+     * Désactiver la dérogation sans renvoyer de plafond conserve le plafond déjà enregistré en
+     * base — il n'est simplement plus appliqué au calcul (cf. SolvabiliteService), pour faciliter
+     * une éventuelle réactivation ultérieure sans ressaisie.
+     */
+    public function test_update_derogation_desactivation_conserve_le_plafond_deja_enregistre(): void
+    {
+        $vehicule = $this->makeVehicule($this->org);
+        $vehicule->update(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 5_000_000]);
+
+        $this->actingAs($this->user)
+            ->patch(route('vehicules.derogation-impayes.update', $vehicule), [
+                'derogation_impayes_autorisee' => false,
+            ])
+            ->assertRedirect();
+
+        $vehicule->refresh();
+        $this->assertFalse($vehicule->derogation_impayes_autorisee);
+        $this->assertSame(5_000_000, $vehicule->seuil_derogation_impayes);
+    }
+
+    /**
+     * Réactiver sans renvoyer de nouveau plafond réutilise celui déjà enregistré en base — pas
+     * besoin de le ressaisir.
+     */
+    public function test_update_derogation_reactivation_sans_nouveau_plafond_reutilise_lancien(): void
+    {
+        $vehicule = $this->makeVehicule($this->org);
+        $vehicule->update([
+            'derogation_impayes_autorisee' => false,
+            'seuil_derogation_impayes' => 5_000_000,
+        ]);
+
+        $this->actingAs($this->user)
+            ->patch(route('vehicules.derogation-impayes.update', $vehicule), [
+                'derogation_impayes_autorisee' => true,
+            ])
+            ->assertRedirect();
+
+        $vehicule->refresh();
+        $this->assertTrue($vehicule->derogation_impayes_autorisee);
+        $this->assertSame(5_000_000, $vehicule->seuil_derogation_impayes);
+    }
+
+    /** Un plafond fourni au moment de l'activation remplace celui éventuellement déjà enregistré. */
+    public function test_update_derogation_avec_nouveau_plafond_remplace_lancien(): void
+    {
+        $vehicule = $this->makeVehicule($this->org);
+        $vehicule->update(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 5_000_000]);
+
+        $this->actingAs($this->user)
+            ->patch(route('vehicules.derogation-impayes.update', $vehicule), [
+                'derogation_impayes_autorisee' => true,
+                'seuil_derogation_impayes' => 7_500_000,
+            ])
+            ->assertRedirect();
+
+        $this->assertSame(7_500_000, $vehicule->fresh()->seuil_derogation_impayes);
+    }
+
+    public function test_update_derogation_returns_403_for_other_organization(): void
     {
         $otherOrg = Organization::factory()->create();
         $vehicule = $this->makeVehicule($otherOrg);
 
         $this->actingAs($this->user)
-            ->patch(route('vehicules.toggle-derogation', $vehicule))
+            ->patch(route('vehicules.derogation-impayes.update', $vehicule), [
+                'derogation_impayes_autorisee' => true,
+                'seuil_derogation_impayes' => 5_000_000,
+            ])
             ->assertStatus(403);
     }
 

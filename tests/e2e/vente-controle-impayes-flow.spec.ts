@@ -153,7 +153,7 @@ test.describe('Paramètres > Ventes — défauts contrôle des impayés et commi
     });
 });
 
-// ── Type de véhicule — seuil dérogatoire d'impayés ──────────────────────────
+// ── Véhicule — dérogation au seuil d'impayés (individuelle, portée par le véhicule) ──
 // Note : contrairement à /backoffice/vehicules et /backoffice/clients, la suppression sur
 // /backoffice/type-vehicules passe par un window.confirm() natif (pas le menu "..." +
 // modale attendus par registerCleanup()/cleanupRowsByPrefix()) et reste bloquée tant qu'un
@@ -161,11 +161,7 @@ test.describe('Paramètres > Ventes — défauts contrôle des impayés et commi
 // nettoyés automatiquement (clutter de test à faible risque, jamais lu par une organisation
 // réelle grâce au préfixe PREFIX).
 
-async function createTypeVehiculeInApp(
-    page: Page,
-    nom: string,
-    seuilDerogation: number | null,
-): Promise<void> {
+async function createTypeVehiculeInApp(page: Page, nom: string): Promise<void> {
     await page.goto('/backoffice/type-vehicules/create');
     await expect(page).toHaveURL(/\/type-vehicules\/create$/, {
         timeout: 20_000,
@@ -173,20 +169,9 @@ async function createTypeVehiculeInApp(
 
     await page.locator('#nom').fill(nom);
 
-    if (seuilDerogation !== null) {
-        // PrimeVue InputNumber : click() -> pressSequentially() -> blur() pour committer le
-        // v-model (fill() seul pose la valeur DOM sans déclencher le parsing interne).
-        const seuilInput = page.locator('#seuil_derogation_impayes');
-        await seuilInput.click();
-        await seuilInput.pressSequentially(String(seuilDerogation));
-        await seuilInput.blur();
-    }
-
     await page.getByRole('button', { name: /créer/i }).click();
     await expect(page).toHaveURL(/\/type-vehicules$/, { timeout: 15_000 });
 }
-
-// ── Véhicule — dérogation au seuil d'impayés (portée par le type de véhicule) ──
 
 async function createVehiculeInApp(
     page: Page,
@@ -224,23 +209,23 @@ async function createVehiculeInApp(
 }
 
 test.describe("Véhicule — dérogation au seuil d'impayés", () => {
-    // Le contrôle (un Switch, cf. resources/js/components/ui/switch/Switch.vue) vit désormais
-    // directement sur la fiche véhicule (Vehicules/Show.vue) — plus sur Edit, où createVehiculeInApp()
-    // atterrit déjà après création. Accessible via son aria-label ("Dérogation impayés").
+    // Le contrôle (un Switch, cf. resources/js/components/ui/switch/Switch.vue) vit directement
+    // sur la fiche véhicule (Vehicules/Show.vue) — plus sur Edit, où createVehiculeInApp()
+    // atterrit déjà après création. Le plafond est désormais individuel au véhicule (décision
+    // produit du 22/08/2026, plus jamais porté par le type) : activer le toggle révèle un champ
+    // de saisie du plafond, confirmé par un bouton "Enregistrer" séparé — l'activation et le
+    // plafond sont envoyés ensemble en une seule requête (VehiculeController::updateDerogation()).
 
-    test("un véhicule dont le type n'a aucun seuil dérogatoire configuré ne peut pas activer la dérogation", async ({
+    test('un véhicule ne peut pas activer la dérogation sans plafond renseigné', async ({
         page,
     }) => {
         await login(page);
         const unique = `${Date.now()}-${randomDigits(3)}`;
-        const typeName = `${PREFIX} TypeSansDerog ${unique}`;
 
-        await createTypeVehiculeInApp(page, typeName, null);
         await createVehiculeInApp(
             page,
-            `${PREFIX} SansDerog ${unique}`,
+            `${PREFIX} SansPlafond ${unique}`,
             `E2EIMP-A-${unique.slice(-5)}`,
-            typeName,
         );
         await page.waitForLoadState('networkidle');
 
@@ -251,29 +236,35 @@ test.describe("Véhicule — dérogation au seuil d'impayés", () => {
         await expect(toggle).toHaveAttribute('aria-checked', 'false');
 
         await toggle.click();
+        await expect(toggle).toHaveAttribute('aria-checked', 'true');
 
-        // VehiculeController::toggleDerogation() rejette (ensureDerogationCoherente() — même
-        // règle que store()/update()) : erreur affichée en toast, le switch reste désactivé
-        // puisqu'aucune redirection réussie n'a rechargé les props.
+        const montantInput = page.locator('#seuil_derogation_impayes');
+        await expect(montantInput).toBeVisible({ timeout: 10_000 });
+
+        await page.getByRole('button', { name: /enregistrer/i }).click();
+
+        // saveDerogation() (Vehicules/Show.vue) refuse localement, sans requête serveur, tant
+        // qu'aucun plafond n'est saisi.
         await expect(
-            page.getByText(/aucun seuil de dérogation n'est configuré/i),
+            page.getByText(/renseignez un plafond d'impayés autorisé/i),
         ).toBeVisible({ timeout: 10_000 });
-        await expect(toggle).toHaveAttribute('aria-checked', 'false');
+
+        await page.reload();
+        await expect(
+            page.getByRole('switch', { name: /dérogation impayés/i }),
+        ).toHaveAttribute('aria-checked', 'false', { timeout: 10_000 });
     });
 
-    test('un véhicule dont le type a un seuil dérogatoire configuré peut activer la dérogation, et cela persiste après rechargement', async ({
+    test('un véhicule avec un plafond renseigné peut activer la dérogation, et cela persiste après rechargement', async ({
         page,
     }) => {
         await login(page);
         const unique = `${Date.now()}-${randomDigits(3)}`;
-        const typeName = `${PREFIX} TypeAvecDerog ${unique}`;
 
-        await createTypeVehiculeInApp(page, typeName, 2_000_000);
         await createVehiculeInApp(
             page,
-            `${PREFIX} AvecDerog ${unique}`,
+            `${PREFIX} AvecPlafond ${unique}`,
             `E2EIMP-B-${unique.slice(-5)}`,
-            typeName,
         );
         await page.waitForLoadState('networkidle');
 
@@ -282,6 +273,18 @@ test.describe("Véhicule — dérogation au seuil d'impayés", () => {
         });
         await expect(toggle).toBeEnabled();
         await toggle.click();
+
+        const montantInput = page.locator('#seuil_derogation_impayes');
+        await expect(montantInput).toBeVisible({ timeout: 10_000 });
+        await montantInput.click();
+        await montantInput.pressSequentially('2000000');
+        await montantInput.blur();
+        // Formatage "2 000 000" pendant la saisie (Intl.NumberFormat('fr-FR'), espace fine
+        // insécable U+202F entre les groupes) — même vérification que #seuil-impayes-input
+        // dans vente-controle-impayes-flow.spec.ts ci-dessus.
+        await expect(montantInput).toHaveValue(/^2\D000\D000$/);
+
+        await page.getByRole('button', { name: /enregistrer/i }).click();
 
         await expect(page.locator('body')).toContainText(
             /dérogation impayés activée/i,
@@ -293,6 +296,73 @@ test.describe("Véhicule — dérogation au seuil d'impayés", () => {
         await expect(
             page.getByRole('switch', { name: /dérogation impayés/i }),
         ).toHaveAttribute('aria-checked', 'true', { timeout: 10_000 });
+        await expect(page.locator('#seuil_derogation_impayes')).toHaveValue(
+            /^2\D000\D000$/,
+            { timeout: 10_000 },
+        );
+    });
+
+    /**
+     * Deux véhicules du MÊME type de véhicule, chacun avec un plafond dérogatoire propre :
+     * confirme que la dérogation n'est jamais partagée au niveau du type (cf. TypeVehicules,
+     * qui ne porte plus aucune notion d'impayés depuis le 22/08/2026).
+     */
+    test('deux véhicules du même type ont des plafonds dérogatoires indépendants', async ({
+        page,
+    }) => {
+        await login(page);
+        const unique = `${Date.now()}-${randomDigits(3)}`;
+        const typeName = `${PREFIX} TypePartage ${unique}`;
+
+        await createTypeVehiculeInApp(page, typeName);
+        await createVehiculeInApp(
+            page,
+            `${PREFIX} Large ${unique}`,
+            `E2EIMP-C-${unique.slice(-5)}`,
+            typeName,
+        );
+        await page.waitForLoadState('networkidle');
+
+        const toggle = page.getByRole('switch', {
+            name: /dérogation impayés/i,
+        });
+        await toggle.click();
+        const montantInput = page.locator('#seuil_derogation_impayes');
+        await montantInput.click();
+        await montantInput.pressSequentially('3000000');
+        await montantInput.blur();
+        await page.getByRole('button', { name: /enregistrer/i }).click();
+        await expect(page.locator('body')).toContainText(
+            /dérogation impayés activée/i,
+            { timeout: 10_000 },
+        );
+
+        await createVehiculeInApp(
+            page,
+            `${PREFIX} Etroit ${unique}`,
+            `E2EIMP-D-${unique.slice(-5)}`,
+            typeName,
+        );
+        await page.waitForLoadState('networkidle');
+
+        const toggle2 = page.getByRole('switch', {
+            name: /dérogation impayés/i,
+        });
+        await toggle2.click();
+        const montantInput2 = page.locator('#seuil_derogation_impayes');
+        await montantInput2.click();
+        await montantInput2.pressSequentially('500000');
+        await montantInput2.blur();
+        await page.getByRole('button', { name: /enregistrer/i }).click();
+        await expect(page.locator('body')).toContainText(
+            /dérogation impayés activée/i,
+            { timeout: 10_000 },
+        );
+
+        await expect(page.locator('#seuil_derogation_impayes')).toHaveValue(
+            /^500\D000$/,
+            { timeout: 10_000 },
+        );
     });
 });
 
@@ -301,8 +371,8 @@ test.describe("Véhicule — dérogation au seuil d'impayés", () => {
 // immédiatement en IMPAYEE dès la création (CommandeVenteService::creerFactureDirecte()) —
 // une vente rattachée à un véhicule ne bascule sa facture en IMPAYEE qu'à la validation du
 // chargement, une étape supplémentaire hors du périmètre de ce scénario. La dérogation
-// portée par le type de véhicule (TypeVehicule::seuil_derogation_impayes +
-// Vehicule::derogation_impayes_autorisee) applique EXACTEMENT la même règle de blocage —
+// individuelle du véhicule (Vehicule::derogation_impayes_autorisee +
+// Vehicule::seuil_derogation_impayes) applique EXACTEMENT la même règle de blocage —
 // couverte en profondeur par tests/Feature/SolvabiliteImpayesTest.php et
 // tests/Unit/SolvabiliteServiceTest.php.
 
@@ -402,7 +472,7 @@ test('vente client sous le seuil autorisée, la même dette dépassant un seuil 
     await selectClientOnVenteForm(page, nomClient);
 
     // "Commande bloquée — seuil dépassé" (blocage côté client, pas de véhicule sélectionné
-    // ici) — les variantes véhicule ("— facture impayée" pour le seuil, "— première facture
+    // ici) — les variantes véhicule ("— plafond dépassé" pour le seuil, "— première facture
     // non réglée" pour le nouveau verrou testé dans le describe ci-dessous) ne s'appliquent
     // pas à ce scénario, cf. Ventes/Create.vue.
     await expect(page.locator('body')).toContainText(/commande bloquée/i, {
@@ -448,7 +518,9 @@ async function activerVehiculeAvecEquipeMinimale(page: Page): Promise<void> {
     await expect(equipeBtn).toBeVisible({ timeout: 10_000 });
     await equipeBtn.click();
 
-    const dialog = page.locator('[role="dialog"]').filter({ hasText: /équipe/i });
+    const dialog = page
+        .locator('[role="dialog"]')
+        .filter({ hasText: /équipe/i });
     await expect(dialog).toBeVisible({ timeout: 10_000 });
 
     // Étape 1 (Membres) : un chauffeur, téléphone unique.

@@ -101,12 +101,10 @@ class VehiculeController extends Controller
             'usage_label' => $v->usage_label,
             'photo_url' => $v->photo_url,
             'is_active' => $v->is_active,
-            // Dérogation de contrôle des impayés : le véhicule ne fait que décider s'il a le
-            // droit d'utiliser le plafond de son type — le montant est porté par
-            // TypeVehicule::seuil_derogation_impayes, jamais par le véhicule (cf.
-            // SolvabiliteService::seuilApplicableVehicule()).
+            // Dérogation de contrôle des impayés : plafond individuel, propre à CE véhicule
+            // (cf. SolvabiliteService::seuilApplicableVehicule()) — jamais hérité de son type.
             'derogation_impayes_autorisee' => $v->derogation_impayes_autorisee,
-            'type_seuil_derogation_impayes' => $v->relationLoaded('typeVehicule') ? $v->typeVehicule?->seuil_derogation_impayes : null,
+            'seuil_derogation_impayes' => $v->seuil_derogation_impayes,
         ];
     }
 
@@ -509,26 +507,38 @@ class VehiculeController extends Controller
     }
 
     /**
-     * Bascule ON/OFF la dérogation directement depuis la fiche véhicule (Vehicules/Show.vue) —
-     * seul champ concerné, pas de payload complet ni de redirection vers Edit, contrairement à
-     * update(). Réutilise ensureDerogationCoherente() tel quel (même règle, jamais dupliquée) :
-     * impossible d'activer la dérogation si le type de véhicule n'a pas de plafond configuré.
-     * Même schéma que CategorieController::toggle().
+     * Active/désactive la dérogation ET son plafond, atomiquement, directement depuis la fiche
+     * véhicule (Vehicules/Show.vue) — seuls champs concernés, pas de payload complet ni de
+     * redirection vers Edit, contrairement à update(). `seuil_derogation_impayes` est facultatif
+     * dans la requête : omis, le plafond déjà enregistré en base est conservé tel quel (ex:
+     * réactiver une dérogation précédemment désactivée sans ressaisir son montant) — fourni, il
+     * remplace la valeur actuelle. Réutilise ensureDerogationCoherente() tel quel (même règle,
+     * jamais dupliquée). Même schéma que CategorieController::toggle().
      */
-    public function toggleDerogation(Vehicule $vehicule): RedirectResponse
+    public function updateDerogation(Request $request, Vehicule $vehicule): RedirectResponse
     {
         $this->authorize('update', $vehicule);
 
-        $nouvelEtat = ! $vehicule->derogation_impayes_autorisee;
+        $data = $request->validate([
+            'derogation_impayes_autorisee' => 'required|boolean',
+            'seuil_derogation_impayes' => 'nullable|integer|min:0|max:999999999',
+        ]);
+
+        $seuil = array_key_exists('seuil_derogation_impayes', $data) && $request->filled('seuil_derogation_impayes')
+            ? $data['seuil_derogation_impayes']
+            : $vehicule->seuil_derogation_impayes;
 
         $this->ensureDerogationCoherente([
-            'derogation_impayes_autorisee' => $nouvelEtat,
-            'type_vehicule_id' => $vehicule->type_vehicule_id,
+            'derogation_impayes_autorisee' => $data['derogation_impayes_autorisee'],
+            'seuil_derogation_impayes' => $seuil,
         ], $vehicule->organization_id);
 
-        $vehicule->update(['derogation_impayes_autorisee' => $nouvelEtat]);
+        $vehicule->update([
+            'derogation_impayes_autorisee' => $data['derogation_impayes_autorisee'],
+            'seuil_derogation_impayes' => $seuil,
+        ]);
 
-        $label = $nouvelEtat ? 'activée' : 'désactivée';
+        $label = $data['derogation_impayes_autorisee'] ? 'activée' : 'désactivée';
 
         return back()->with('success', "Dérogation impayés {$label}.");
     }
@@ -562,9 +572,6 @@ class VehiculeController extends Controller
             ->map(fn (TypeVehicule $t) => [
                 'value' => $t->id,
                 'label' => $t->nom,
-                // Permet au formulaire véhicule de savoir si la dérogation peut être activée
-                // pour le type sélectionné, sans requête supplémentaire — cf. VehiculeForm.vue.
-                'seuil_derogation_impayes' => $t->seuil_derogation_impayes,
             ])
             ->toArray();
     }
@@ -774,10 +781,13 @@ class VehiculeController extends Controller
             'livraison_logistique' => 'required|boolean',
             'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
             'is_active' => 'boolean',
-            // Le véhicule ne fait que demander à bénéficier du plafond dérogatoire de son type
-            // (cf. ensureDerogationCoherente()) — aucun montant saisi ici, porté par
-            // TypeVehicule::seuil_derogation_impayes.
+            // Dérogation impayés : gérée exclusivement depuis la fiche véhicule
+            // (updateDerogation(), cf. Vehicules/Show.vue), jamais depuis ce formulaire — ces
+            // deux champs ne font que transiter tels quels (round-trip, comme le fait déjà
+            // derogation_impayes_autorisee), pour ne jamais les écraser lors d'une simple
+            // modification d'un autre champ du véhicule (cf. ensureDerogationCoherente()).
             'derogation_impayes_autorisee' => 'boolean',
+            'seuil_derogation_impayes' => 'nullable|integer|min:0|max:999999999',
             'capacites' => 'array',
             'capacites.*.categorie_id' => [
                 'required', 'string',
@@ -839,11 +849,14 @@ class VehiculeController extends Controller
     }
 
     /**
-     * Un véhicule ne peut activer la dérogation que si son type de véhicule a un seuil
-     * dérogatoire configuré — sinon le toggle serait un chèque en blanc sans plafond réel
+     * Un véhicule ne peut activer la dérogation que si un plafond individuel, valide, est
+     * renseigné — sinon le toggle serait un chèque en blanc sans plafond réel
      * (SolvabiliteService::seuilApplicableVehicule() retombe alors sur le seuil global en
      * filet de sécurité, mais l'UI ne doit jamais laisser croire à une dérogation active qui
-     * n'en est pas une, cf. cadrage du 19/08/2026).
+     * n'en est pas une). Un plafond n'a de sens que s'il augmente réellement la marge par
+     * rapport au seuil standard de l'organisation — sinon la dérogation ne dérogerait à rien
+     * (même règle que l'ancienne TypeVehiculeController::seuilDerogationRules(), désormais
+     * appliquée ici — cf. décision produit du 22/08/2026).
      */
     private function ensureDerogationCoherente(array $data, string $orgId): void
     {
@@ -851,13 +864,19 @@ class VehiculeController extends Controller
             return;
         }
 
-        $type = TypeVehicule::where('organization_id', $orgId)
-            ->whereKey($data['type_vehicule_id'])
-            ->first();
+        $seuil = $data['seuil_derogation_impayes'] ?? null;
 
-        if ($type?->seuil_derogation_impayes === null) {
+        if ($seuil === null || $seuil <= 0) {
             throw ValidationException::withMessages([
-                'derogation_impayes_autorisee' => "Impossible d'activer la dérogation : aucun seuil de dérogation n'est configuré pour le type de véhicule « {$type?->nom} ».",
+                'derogation_impayes_autorisee' => 'Impossible d\'activer la dérogation : renseignez un plafond d\'impayés autorisé pour ce véhicule.',
+            ]);
+        }
+
+        $seuilStandard = Parametre::getVentesSeuilImpayesMax($orgId);
+        if ($seuil < $seuilStandard) {
+            throw ValidationException::withMessages([
+                'derogation_impayes_autorisee' => 'Le plafond doit être supérieur ou égal au seuil standard actuel ('
+                    .number_format($seuilStandard, 0, ',', ' ').' GNF).',
             ]);
         }
     }

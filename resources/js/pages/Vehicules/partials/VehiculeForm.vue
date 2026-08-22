@@ -22,8 +22,6 @@ interface Option {
 interface TypeOption {
     value: string;
     label: string;
-    /** null = aucune dérogation configurée pour ce type (cf. TypeVehicules/Edit.vue). */
-    seuil_derogation_impayes: number | null;
 }
 
 interface SiteOption {
@@ -53,7 +51,11 @@ interface FormData {
     photo: File | null;
     is_active: boolean;
     capacites: CapaciteRow[];
+    // Dérogation impayés : gérée exclusivement depuis la fiche véhicule (Vehicules/Show.vue),
+    // jamais depuis ce formulaire — ces deux champs ne font que transiter tels quels (round-trip)
+    // pour ne jamais les écraser lors d'une simple modification d'un autre champ du véhicule.
     derogation_impayes_autorisee: boolean;
+    seuil_derogation_impayes: number | null;
 }
 
 const props = defineProps<{
@@ -84,19 +86,9 @@ watch(
 );
 
 function onTypeChange(value: string) {
-    const nouveauType = props.types.find((t) => t.value === value) ?? null;
-    const derogationEncoreValide =
-        nouveauType?.seuil_derogation_impayes !== null &&
-        nouveauType?.seuil_derogation_impayes !== undefined;
-
-    emit('update:form', {
-        ...props.form,
-        type_vehicule_id: value,
-        // Le plafond dérogatoire dépend du type — si le nouveau type n'en a aucun de
-        // configuré, une dérogation restée active n'aurait plus aucun sens.
-        derogation_impayes_autorisee:
-            props.form.derogation_impayes_autorisee && derogationEncoreValide,
-    });
+    // Le plafond dérogatoire est désormais individuel au véhicule (cf. Vehicules/Show.vue) —
+    // changer de type n'a plus aucun impact sur la dérogation en cours.
+    emit('update:form', { ...props.form, type_vehicule_id: value });
 }
 
 function onPhotoChange(event: Event) {

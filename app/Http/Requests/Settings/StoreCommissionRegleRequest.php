@@ -18,12 +18,15 @@ class StoreCommissionRegleRequest extends FormRequest
         return [
             // Phase 2 : les trois cibles couvertes par le pont Phase 1 + Site (commission
             // attribuée directement au site métier de l'opération, décision produit
-            // 2026-08-21). `it` reste réservée à la Phase 3 (cf. conception cible §0.2.4 —
-            // bénéficiaire IT explicitement non tranché).
+            // 2026-08-21) + Consultant (commission versée au prestataire désigné par
+            // l'organisation, décision produit 2026-08-22). `it` reste réservée à la Phase 3
+            // (cf. conception cible §0.2.4 — bénéficiaire IT explicitement non tranché, distinct
+            // du consultant).
             'cible_type' => ['required', Rule::in([
                 CommissionCibleType::CODE_PROPRIETAIRE,
                 CommissionCibleType::CODE_EQUIPE_LIVRAISON,
                 CommissionCibleType::CODE_SITE,
+                CommissionCibleType::CODE_CONSULTANT,
             ])],
             'scope_type' => ['required', Rule::in(['categorie', 'global'])],
             'categorie_id' => ['required_if:scope_type,categorie', 'nullable', 'string', 'exists:categories,id'],

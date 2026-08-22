@@ -58,12 +58,19 @@ class PlanComptableBootstrapService
         $defs = [
             '622100' => 'Commissions propriétaires de véhicules',
             '622200' => 'Commissions livreurs',
+            '622300' => 'Commissions sites',
+            '622400' => 'Commissions consultants',
             '467110' => 'Propriétaires — commissions à payer',
             '467120' => 'Livreurs — commissions à payer',
+            '467170' => 'Sites — commissions à payer',
+            '467180' => 'Consultants — commissions à payer',
             '467130' => 'Propriétaires — avances et dépenses à récupérer',
             '467140' => 'Livreurs — avances et dépenses à récupérer',
+            '467190' => 'Sites — avances et dépenses à récupérer',
+            '467200' => 'Consultants — avances et dépenses à récupérer',
             '467150' => 'Propriétaires — charges à payer (provision de clôture)',
             '467160' => 'Livreurs — charges à payer (provision de clôture)',
+            '658100' => 'Cashback clients accordés',
             '411000' => 'Clients',
             '701000' => 'Ventes de marchandises',
             '571000' => 'Caisse',
@@ -77,6 +84,11 @@ class PlanComptableBootstrapService
             '561200' => 'Mobile Money — MTN MoMo',
             '561300' => 'Mobile Money — Djomy',
             '628800' => 'Charges diverses de gestion courante',
+            // Chantier Financement des agences (2026-08) — cf. docblock de
+            // MouvementFondsComptabilisationService et SoldeOuvertureTresorerieService.
+            '588000' => 'Virements de fonds internes (en transit)',
+            '661000' => 'Rémunérations du personnel',
+            '109000' => 'Solde d\'ouverture trésorerie (contrepartie technique)',
         ];
 
         $comptes = [];
@@ -137,6 +149,50 @@ class PlanComptableBootstrapService
             ['paiement_livreur', 'tresorerie', 'virement', '521000', 'BQ'],
             ['paiement_livreur', 'tresorerie', 'cheque', '521000', 'BQ'],
 
+            // Engagement — fiche commission site validée
+            ['fiche_site_validee', 'charge_commission', null, '622300', 'OD'],
+            ['fiche_site_validee', 'dette_tiers', null, '467170', 'OD'],
+            ['fiche_site_validee', 'avance_tiers_site', null, '467190', 'OD'],
+
+            // Engagement — fiche commission consultant validée
+            ['fiche_consultant_validee', 'charge_commission', null, '622400', 'OD'],
+            ['fiche_consultant_validee', 'dette_tiers', null, '467180', 'OD'],
+            ['fiche_consultant_validee', 'avance_tiers_prestataire', null, '467200', 'OD'],
+
+            // Règlement — paiement commission site
+            ['paiement_site', 'dette_tiers', null, '467170', null],
+            ['paiement_site', 'tresorerie', null, '571000', 'CA'],
+            ['paiement_site', 'tresorerie', 'especes', '571000', 'CA'],
+            ['paiement_site', 'tresorerie', 'mobile_money', '561000', 'MM'],
+            ['paiement_site', 'tresorerie', 'mobile_money:orange', '561100', 'MM'],
+            ['paiement_site', 'tresorerie', 'mobile_money:mtn', '561200', 'MM'],
+            ['paiement_site', 'tresorerie', 'mobile_money:djomy', '561300', 'MM'],
+            ['paiement_site', 'tresorerie', 'virement', '521000', 'BQ'],
+            ['paiement_site', 'tresorerie', 'cheque', '521000', 'BQ'],
+
+            // Règlement — paiement commission consultant
+            ['paiement_consultant', 'dette_tiers', null, '467180', null],
+            ['paiement_consultant', 'tresorerie', null, '571000', 'CA'],
+            ['paiement_consultant', 'tresorerie', 'especes', '571000', 'CA'],
+            ['paiement_consultant', 'tresorerie', 'mobile_money', '561000', 'MM'],
+            ['paiement_consultant', 'tresorerie', 'mobile_money:orange', '561100', 'MM'],
+            ['paiement_consultant', 'tresorerie', 'mobile_money:mtn', '561200', 'MM'],
+            ['paiement_consultant', 'tresorerie', 'mobile_money:djomy', '561300', 'MM'],
+            ['paiement_consultant', 'tresorerie', 'virement', '521000', 'BQ'],
+            ['paiement_consultant', 'tresorerie', 'cheque', '521000', 'BQ'],
+
+            // Versement cashback (jambe trésorerie uniquement, cf. EvenementComptable::
+            // VERSEMENT_CASHBACK et CashbackComptabilisationService).
+            ['versement_cashback', 'charge_cashback', null, '658100', null],
+            ['versement_cashback', 'tresorerie', null, '571000', 'CA'],
+            ['versement_cashback', 'tresorerie', 'especes', '571000', 'CA'],
+            ['versement_cashback', 'tresorerie', 'mobile_money', '561000', 'MM'],
+            ['versement_cashback', 'tresorerie', 'mobile_money:orange', '561100', 'MM'],
+            ['versement_cashback', 'tresorerie', 'mobile_money:mtn', '561200', 'MM'],
+            ['versement_cashback', 'tresorerie', 'mobile_money:djomy', '561300', 'MM'],
+            ['versement_cashback', 'tresorerie', 'virement', '521000', 'BQ'],
+            ['versement_cashback', 'tresorerie', 'cheque', '521000', 'BQ'],
+
             // Vente facturée (engagement — créance client constatée à la sortie du
             // statut CREEE de la facture, montant définitif). Journal VE, provisionné
             // ci-dessus mais resté inutilisé jusqu'ici (V1 se limitait aux commissions).
@@ -166,6 +222,46 @@ class PlanComptableBootstrapService
             ['depense_avance_tiers_validee', 'avance_tiers_proprietaire', null, '467130', null],
             ['depense_avance_tiers_validee', 'avance_tiers_livreur', null, '467140', null],
             ['depense_avance_tiers_validee', 'tresorerie', null, '571000', 'CA'],
+
+            // Paiement de salaire (jambe trésorerie uniquement, cf. EvenementComptable::PAIEMENT_SALAIRE
+            // et App\Services\Comptabilite\PaieComptabilisationService — pas d'engagement/dette
+            // préalable comptabilisé pour la paie, contrairement aux fiches livreur/propriétaire).
+            ['paiement_salaire', 'charge_salaire', null, '661000', null],
+            ['paiement_salaire', 'tresorerie', null, '571000', 'CA'],
+            ['paiement_salaire', 'tresorerie', 'especes', '571000', 'CA'],
+            ['paiement_salaire', 'tresorerie', 'mobile_money', '561000', 'MM'],
+            ['paiement_salaire', 'tresorerie', 'mobile_money:orange', '561100', 'MM'],
+            ['paiement_salaire', 'tresorerie', 'mobile_money:mtn', '561200', 'MM'],
+            ['paiement_salaire', 'tresorerie', 'mobile_money:djomy', '561300', 'MM'],
+            ['paiement_salaire', 'tresorerie', 'virement', '521000', 'BQ'],
+            ['paiement_salaire', 'tresorerie', 'cheque', '521000', 'BQ'],
+
+            // Mouvement de fonds interne (agence <-> siège) — la jambe "trésorerie" (compte
+            // caisse/banque/mobile money réel) est résolue directement depuis le
+            // CompteTresorerie du mouvement, jamais via ce mapping (cf.
+            // MouvementFondsComptabilisationService) : seul le compte de virements internes
+            // (58) a besoin d'être configurable ici.
+            ['mouvement_fonds_envoye', 'fonds_transit', null, '588000', 'OD'],
+            ['mouvement_fonds_recu', 'fonds_transit', null, '588000', 'OD'],
+
+            // Solde d'ouverture d'un support de trésorerie — contrepartie technique, jamais
+            // un vrai résultat/charge (cf. SoldeOuvertureTresorerieService).
+            ['solde_ouverture_tresorerie', 'contrepartie_ouverture', null, '109000', 'OD'],
+
+            // Paiement direct de commission logistique (App\Models\CommissionPayment) —
+            // circuit parallèle à paiement_livreur/paiement_proprietaire, mêmes comptes de
+            // charge (622100/622200) réutilisés : c'est la même nature de dépense, seule la
+            // source du paiement diffère (audit du 2026-08-22).
+            ['paiement_commission_logistique_direct', 'charge_commission_livreur', null, '622200', null],
+            ['paiement_commission_logistique_direct', 'charge_commission_proprietaire', null, '622100', null],
+            ['paiement_commission_logistique_direct', 'tresorerie', null, '571000', 'CA'],
+            ['paiement_commission_logistique_direct', 'tresorerie', 'especes', '571000', 'CA'],
+            ['paiement_commission_logistique_direct', 'tresorerie', 'mobile_money', '561000', 'MM'],
+            ['paiement_commission_logistique_direct', 'tresorerie', 'mobile_money:orange', '561100', 'MM'],
+            ['paiement_commission_logistique_direct', 'tresorerie', 'mobile_money:mtn', '561200', 'MM'],
+            ['paiement_commission_logistique_direct', 'tresorerie', 'mobile_money:djomy', '561300', 'MM'],
+            ['paiement_commission_logistique_direct', 'tresorerie', 'virement', '521000', 'BQ'],
+            ['paiement_commission_logistique_direct', 'tresorerie', 'cheque', '521000', 'BQ'],
 
             // Régularisation de clôture (provision, reprise automatique à la validation réelle)
             ['regularisation_cloture_fiche', 'charge_commission_proprietaire', null, '622100', 'OD'],

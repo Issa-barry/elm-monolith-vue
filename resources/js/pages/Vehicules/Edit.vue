@@ -18,7 +18,6 @@ interface Option {
 interface TypeOption {
     value: string;
     label: string;
-    seuil_derogation_impayes: number | null;
 }
 
 interface SiteOption {
@@ -44,6 +43,7 @@ interface VehiculeData {
     is_active: boolean;
     equipe_id: number | null;
     derogation_impayes_autorisee: boolean;
+    seuil_derogation_impayes: number | null;
 }
 
 const props = defineProps<{
@@ -82,7 +82,10 @@ const form = useForm({
     photo: null as File | null,
     is_active: props.vehicule.is_active,
     capacites: [...props.capacites] as CapaciteRow[],
+    // Dérogation impayés : gérée exclusivement depuis la fiche véhicule (Vehicules/Show.vue) —
+    // ces deux champs ne font que transiter tels quels, jamais modifiés depuis ce formulaire.
     derogation_impayes_autorisee: props.vehicule.derogation_impayes_autorisee,
+    seuil_derogation_impayes: props.vehicule.seuil_derogation_impayes,
 });
 
 const canSubmit = computed(() => {

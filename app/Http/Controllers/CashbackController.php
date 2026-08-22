@@ -118,14 +118,18 @@ class CashbackController extends Controller
             'date_versement.required' => 'La date de versement est obligatoire.',
         ]);
 
-        $this->cashback->verser(
-            $cashbackTransaction,
-            auth()->user(),
-            (int) $validated['montant'],
-            $validated['mode_paiement'],
-            $validated['date_versement'],
-            $validated['note'] ?? null
-        );
+        try {
+            $this->cashback->verser(
+                $cashbackTransaction,
+                auth()->user(),
+                (int) $validated['montant'],
+                $validated['mode_paiement'],
+                $validated['date_versement'],
+                $validated['note'] ?? null
+            );
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['comptabilisation' => "Versement non enregistré : {$e->getMessage()}"]);
+        }
 
         return back()->with('success', 'Versement enregistré.');
     }

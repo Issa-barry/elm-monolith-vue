@@ -34,6 +34,15 @@ class CommissionCibleType extends Model
 
     public const CODE_IT = 'it';
 
+    /**
+     * Commission versée à un prestataire externe (type PrestataireType::CONSULTANT) désigné par
+     * l'organisation via Paramètres > Commissions — bénéficiaire = App\Models\Prestataire, cf.
+     * CommissionEnveloppePart::TYPE_PRESTATAIRE et CommissionConsultantAffectation. Le
+     * prestataire concret n'est jamais codé en dur : seule sa désignation courante l'est,
+     * configurable par organisation et remplaçable sans effet rétroactif.
+     */
+    public const CODE_CONSULTANT = 'consultant';
+
     public const PERIODICITE_QUINZAINE = 'quinzaine';
 
     public const PERIODICITE_MENSUELLE = 'mensuelle';
