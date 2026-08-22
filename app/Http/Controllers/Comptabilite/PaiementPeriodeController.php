@@ -40,7 +40,7 @@ class PaiementPeriodeController extends Controller
         $orgId = auth()->user()->organization_id;
         $filters = $request->only(['type', 'statut', 'annee', 'mois', 'quinzaine', 'search']);
 
-        // Le cycle courant s'applique aux 3 types en même temps (même quinzaine) : on
+        // Le cycle courant s'applique à tous les types en même temps (même quinzaine) : on
         // s'assure que la période "en cours" de chaque type existe déjà, pour que le
         // tableau de bord puisse toujours l'afficher sans jamais avoir à la créer
         // manuellement.

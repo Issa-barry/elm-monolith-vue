@@ -1,4 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 import { loginAsElmV2Demo, selectOptionFromCombobox } from './helpers';
 
 /**
@@ -38,7 +39,10 @@ const LIVRAISON_MONTANT = 1000;
  */
 function montantPattern(amount: number): string {
     const formatted = new Intl.NumberFormat('fr-FR').format(amount);
-    return formatted.split('').map((ch) => (/\s/.test(ch) ? '\\s' : ch)).join('');
+    return formatted
+        .split('')
+        .map((ch) => (/\s/.test(ch) ? '\\s' : ch))
+        .join('');
 }
 
 test.beforeEach(async ({ page }) => {
@@ -119,12 +123,15 @@ async function configurerPartageVehicule(page: Page): Promise<void> {
     // barème Livraison est désormais > 0 (configuré par configurerBaremes()) —
     // c'est exactement le comportement backend/UI validé par les tests Feature
     // (VehiculeBaremesCommissionCategoriesTest, CommissionEnveloppeGeneratorReglesTest).
-    await expect(dialog.getByText(new RegExp(CATEGORIE_NOM, 'i'))).toBeVisible(
-        { timeout: 10_000 },
-    );
+    await expect(dialog.getByText(new RegExp(CATEGORIE_NOM, 'i'))).toBeVisible({
+        timeout: 10_000,
+    });
     await expect(
         dialog.getByText(
-            new RegExp(`${montantPattern(LIVRAISON_MONTANT)}.*unité.*Livraison`, 'i'),
+            new RegExp(
+                `${montantPattern(LIVRAISON_MONTANT)}.*unité.*Livraison`,
+                'i',
+            ),
         ),
     ).toBeVisible();
 
@@ -231,7 +238,9 @@ async function creerVenteEtEncaisser(page: Page): Promise<void> {
     await expect(encaisserItem).toBeVisible({ timeout: 5_000 });
     await encaisserItem.click();
 
-    const dialog = page.locator('[role="dialog"]').filter({ hasText: /encaisser/i });
+    const dialog = page
+        .locator('[role="dialog"]')
+        .filter({ hasText: /encaisser/i });
     await expect(dialog).toBeVisible({ timeout: 10_000 });
 
     // Montant total pré-rempli par défaut sur ce dialog — s'assurer d'un
@@ -256,11 +265,74 @@ async function creerVenteEtEncaisser(page: Page): Promise<void> {
 async function verifierCommissionVisible(page: Page): Promise<void> {
     await page.goto('/backoffice/comptabilite/commissions/vente');
     await expect(
-        page.getByRole('heading', { name: /commission livreur vente/i }),
+        page.getByRole('heading', {
+            name: /commissions des livreurs sur les ventes/i,
+        }),
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/chauffeur v2 demo/i).first()).toBeVisible({
         timeout: 15_000,
     });
+
+    const summaryCards = page
+        .getByTestId('commission-summary-cards')
+        .locator(':scope > div');
+    await expect(summaryCards).toHaveCount(4);
+    await expect(
+        page
+            .getByTestId('commission-summary-cards')
+            .getByText('Dépenses', { exact: true }),
+    ).toBeVisible();
+
+    await page.getByRole('button', { name: 'Exporter', exact: true }).click();
+    await expect(
+        page.getByRole('menuitem', { name: 'Exporter en Excel' }),
+    ).toBeVisible();
+    await expect(
+        page.getByRole('menuitem', { name: 'Exporter en PDF' }),
+    ).toBeVisible();
+
+    // La commission est encore « Partage à valider » à cette étape. Les deux
+    // exports doivent néanmoins reprendre la ligne visible, sans attendre la
+    // validation de la période.
+    const [excelDownload] = await Promise.all([
+        page.waitForEvent('download'),
+        page.getByRole('menuitem', { name: 'Exporter en Excel' }).click(),
+    ]);
+    expect(excelDownload.suggestedFilename()).toMatch(
+        /commissions-vente.*\.csv$/,
+    );
+    const excelPath = await excelDownload.path();
+    expect(excelPath).not.toBeNull();
+    const excelContent = await readFile(excelPath!, 'utf8');
+    expect(excelContent).toContain('Chauffeur V2 Demo');
+    expect(excelContent).toContain('Partage à valider');
+
+    await page.getByRole('button', { name: 'Exporter', exact: true }).click();
+    const [pdfDownload] = await Promise.all([
+        page.waitForEvent('download'),
+        page.getByRole('menuitem', { name: 'Exporter en PDF' }).click(),
+    ]);
+    expect(pdfDownload.suggestedFilename()).toMatch(
+        /commissions-vente.*\.pdf$/,
+    );
+    const pdfPath = await pdfDownload.path();
+    expect(pdfPath).not.toBeNull();
+    const pdfContent = await readFile(pdfPath!);
+    expect(pdfContent.subarray(0, 4).toString()).toBe('%PDF');
+    expect(pdfContent.length).toBeGreaterThan(1_000);
+
+    await page.getByRole('button', { name: /^Filtres/ }).click();
+    await expect(page.getByTestId('filters-drawer')).toBeVisible();
+    await expect(page.getByTestId('agency-filter')).toBeVisible();
+    await page.getByTestId('filters-drawer-close').click();
+
+    const tableScroll = page.getByTestId('commission-table-scroll');
+    await expect(tableScroll).toBeVisible();
+    expect(
+        await tableScroll.evaluate(
+            (element) => element.scrollWidth > element.clientWidth,
+        ),
+    ).toBe(true);
 }
 
 /** Ouvre la période Livreurs courante (auto-calculée à l'ouverture) puis la valide. */
@@ -304,7 +376,9 @@ async function confirmAlertDialog(
 ): Promise<void> {
     const dialog = page.locator('[role="alertdialog"]').last();
     await expect(dialog).toBeVisible({ timeout: 10_000 });
-    const acceptButton = dialog.getByRole('button', { name: buttonLabel }).last();
+    const acceptButton = dialog
+        .getByRole('button', { name: buttonLabel })
+        .last();
     await expect(acceptButton).toBeVisible({ timeout: 5_000 });
     await acceptButton.click();
     await dialog.waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});

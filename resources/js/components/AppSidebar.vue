@@ -279,6 +279,10 @@ const mainNavItems = computed((): NavItem[] => {
                     href: '/backoffice/comptabilite/commissions/proprietaires',
                 },
                 {
+                    title: 'Commission sites',
+                    href: '/backoffice/comptabilite/commissions/sites',
+                },
+                {
                     title: 'Périodes',
                     href: '/backoffice/comptabilite/periodes',
                 },

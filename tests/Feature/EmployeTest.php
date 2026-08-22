@@ -54,12 +54,17 @@ class EmployeTest extends TestCase
     private function makeEmploye(array $overrides = []): Employe
     {
         $orgId = $overrides['organization_id'] ?? $this->org->id;
+        $telephone = $overrides['telephone'] ?? ('+224'.fake()->unique()->numerify('#########'));
 
         $personne = Personne::create([
             'organization_id' => $orgId,
             'nom' => $overrides['nom'] ?? 'DIALLO',
             'prenom' => $overrides['prenom'] ?? 'Mamadou',
-            'telephone' => $overrides['telephone'] ?? ('+224'.fake()->unique()->numerify('#########')),
+            'telephone' => $telephone,
+            // Toujours en phase avec `telephone`, comme le fait Personne::resoudreOuCreer() en
+            // usage réel — sinon les contrôles d'unicité par telephone_normalise (cf.
+            // EmployeController::assertTelephoneUniqueInOrg) ne trouveraient jamais cette fixture.
+            'telephone_normalise' => Personne::normaliserTelephone($telephone),
         ]);
 
         unset($overrides['nom'], $overrides['prenom'], $overrides['telephone']);
@@ -296,5 +301,266 @@ class EmployeTest extends TestCase
             ->assertRedirect(route('employes.index'));
 
         $this->assertSoftDeleted('employes', ['id' => $employe->id]);
+    }
+
+    // ── Téléphone (indicatif pays) — cf. PhoneCountryInfo/PhoneCountryInput.vue ────────────────
+
+    public function test_store_creates_employe_with_a_valid_guinean_phone(): void
+    {
+        $response = $this->actingAs($this->user)
+            ->post(route('employes.store'), [
+                'nom' => 'BARRY', 'prenom' => 'Alpha',
+                'type_employe' => 'interne', 'statut' => 'actif',
+                'telephone' => '+224613855281',
+            ]);
+
+        $employe = Employe::where('organization_id', $this->org->id)->firstOrFail();
+        $response->assertRedirect(route('employes.edit', $employe));
+
+        $this->assertDatabaseHas('personnes', [
+            'id' => $employe->personne_id,
+            'telephone' => '+224613855281',
+            'telephone_normalise' => '224613855281',
+            'code_pays' => 'GN',
+            'pays' => 'Guinée',
+            'code_phone_pays' => '+224',
+        ]);
+    }
+
+    public function test_store_creates_employe_with_another_allowed_country(): void
+    {
+        $response = $this->actingAs($this->user)
+            ->post(route('employes.store'), [
+                'nom' => 'DUPONT', 'prenom' => 'Jean',
+                'type_employe' => 'interne', 'statut' => 'actif',
+                'telephone' => '+33612345678',
+            ]);
+
+        $employe = Employe::where('organization_id', $this->org->id)->firstOrFail();
+        $response->assertRedirect(route('employes.edit', $employe));
+
+        $this->assertDatabaseHas('personnes', [
+            'id' => $employe->personne_id,
+            'code_pays' => 'FR',
+            'pays' => 'France',
+            'code_phone_pays' => '+33',
+        ]);
+    }
+
+    public function test_store_rejects_a_number_without_a_recognizable_country_prefix(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('employes.store'), [
+                'nom' => 'TEST', 'prenom' => 'Test',
+                'type_employe' => 'interne', 'statut' => 'actif',
+                'telephone' => '613855281',
+            ])
+            ->assertSessionHasErrors('telephone');
+
+        $this->assertSame(0, Employe::where('organization_id', $this->org->id)->count());
+    }
+
+    public function test_store_rejects_an_invalid_number(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('employes.store'), [
+                'nom' => 'TEST', 'prenom' => 'Test',
+                'type_employe' => 'interne', 'statut' => 'actif',
+                'telephone' => '+2241',
+            ])
+            ->assertSessionHasErrors('telephone');
+
+        $this->assertSame(0, Employe::where('organization_id', $this->org->id)->count());
+    }
+
+    public function test_update_modifies_the_phone_number_without_changing_the_country(): void
+    {
+        $employe = $this->makeEmploye(['telephone' => '+224611111111']);
+
+        $this->actingAs($this->user)
+            ->put(route('employes.update', $employe), [
+                'nom' => $employe->nom, 'prenom' => $employe->prenom,
+                'type_employe' => $employe->type_employe->value, 'statut' => $employe->statut->value,
+                'telephone' => '+224622222222',
+            ])
+            ->assertRedirect(route('employes.edit', $employe));
+
+        $this->assertDatabaseHas('personnes', [
+            'id' => $employe->fresh()->personne_id,
+            'telephone' => '+224622222222',
+            'code_pays' => 'GN',
+        ]);
+    }
+
+    public function test_update_changes_both_country_and_phone_number(): void
+    {
+        $employe = $this->makeEmploye(['telephone' => '+224611111111']);
+
+        $this->actingAs($this->user)
+            ->put(route('employes.update', $employe), [
+                'nom' => $employe->nom, 'prenom' => $employe->prenom,
+                'type_employe' => $employe->type_employe->value, 'statut' => $employe->statut->value,
+                'telephone' => '+33612345678',
+            ])
+            ->assertRedirect(route('employes.edit', $employe));
+
+        $this->assertDatabaseHas('personnes', [
+            'id' => $employe->fresh()->personne_id,
+            'telephone' => '+33612345678',
+            'code_pays' => 'FR',
+            'code_phone_pays' => '+33',
+        ]);
+    }
+
+    /** Jamais un numéro comme "+224 +224613855281" : soumettre la valeur déjà en base ne doit
+     * jamais la faire dériver ou la dupliquer. */
+    public function test_update_without_changing_the_phone_preserves_it_exactly(): void
+    {
+        $employe = $this->makeEmploye(['telephone' => '+224611111111']);
+
+        $this->actingAs($this->user)
+            ->put(route('employes.update', $employe), [
+                'nom' => $employe->nom, 'prenom' => $employe->prenom,
+                'type_employe' => $employe->type_employe->value, 'statut' => $employe->statut->value,
+                'telephone' => '+224611111111',
+            ])
+            ->assertRedirect(route('employes.edit', $employe));
+
+        $this->assertDatabaseHas('personnes', [
+            'id' => $employe->fresh()->personne_id,
+            'telephone' => '+224611111111',
+        ]);
+    }
+
+    /** Unicité (organization_id, telephone_normalise) scopée par organisation : le même numéro
+     * dans une AUTRE organisation n'est jamais bloqué. */
+    public function test_phone_uniqueness_is_isolated_per_organization(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $this->makeEmploye(['organization_id' => $otherOrg->id, 'telephone' => '+224613855281']);
+
+        $response = $this->actingAs($this->user)
+            ->post(route('employes.store'), [
+                'nom' => 'BARRY', 'prenom' => 'Alpha',
+                'type_employe' => 'interne', 'statut' => 'actif',
+                'telephone' => '+224613855281',
+            ]);
+
+        $response->assertRedirect();
+        // Une Personne par organisation pour ce même numéro — jamais fusionnées/bloquées entre
+        // organisations (assertion scopée, insensible aux autres Personne créées par ailleurs,
+        // ex: celle du User de setUp()).
+        $this->assertSame(2, Personne::where('telephone_normalise', '224613855281')->count());
+    }
+
+    /** Une modification directe de personne->update() (contrairement à store() qui réutilise via
+     * Personne::resoudreOuCreer) doit être gardée explicitement — sinon la contrainte unique
+     * (organization_id, telephone_normalise) remonte une QueryException brute (500). */
+    public function test_update_rejects_a_phone_already_used_by_another_employee_in_the_same_organization(): void
+    {
+        $this->makeEmploye(['telephone' => '+224611111111', 'matricule' => '000050']);
+        $employe2 = $this->makeEmploye(['telephone' => '+224622222222', 'matricule' => '000051']);
+
+        $this->actingAs($this->user)
+            ->put(route('employes.update', $employe2), [
+                'nom' => $employe2->nom, 'prenom' => $employe2->prenom,
+                'type_employe' => $employe2->type_employe->value, 'statut' => $employe2->statut->value,
+                'telephone' => '+224611111111',
+            ])
+            ->assertSessionHasErrors('telephone');
+
+        $this->assertDatabaseHas('personnes', [
+            'id' => $employe2->fresh()->personne_id,
+            'telephone' => '+224622222222',
+        ]);
+    }
+
+    // ── show ──────────────────────────────────────────────────────────────────
+
+    public function test_show_returns_200_and_exposes_the_expected_fields(): void
+    {
+        $employe = $this->makeEmploye();
+
+        $response = $this->actingAs($this->user)->get(route('employes.show', $employe));
+
+        $response->assertOk();
+        $response->assertInertia(fn ($page) => $page
+            ->component('Employes/Show')
+            ->where('employe.id', $employe->id)
+            ->where('employe.nom_complet', $employe->nom_complet)
+            ->where('employe.compte', null)
+        );
+    }
+
+    public function test_show_returns_403_for_an_employe_from_another_organization(): void
+    {
+        $autreOrg = Organization::factory()->create();
+        $employe = $this->makeEmploye(['organization_id' => $autreOrg->id]);
+
+        $this->actingAs($this->user)->get(route('employes.show', $employe))->assertForbidden();
+    }
+
+    public function test_show_returns_403_without_rh_employes_read_permission(): void
+    {
+        $employe = $this->makeEmploye();
+        $sansPermission = User::factory()->create(['organization_id' => $this->org->id]);
+        $sansPermission->assignRole('admin_entreprise');
+        $sansPermission->sites()->attach($this->site->id, ['role' => 'employe', 'is_default' => true]);
+
+        $this->actingAs($sansPermission)->get(route('employes.show', $employe))->assertForbidden();
+    }
+
+    /**
+     * Aucun compte utilisateur rattaché — l'employé RH existe indépendamment de tout compte
+     * applicatif (cf. mission « jamais un compte utilisateur requis »).
+     */
+    public function test_show_indicates_no_account_when_employe_has_none(): void
+    {
+        $employe = $this->makeEmploye();
+
+        $response = $this->actingAs($this->user)->get(route('employes.show', $employe));
+
+        $response->assertInertia(fn ($page) => $page->where('employe.compte', null));
+    }
+
+    /**
+     * Compte et profil d'accès (rôle Spatie) exposés SÉPARÉMENT de la fonction RH — jamais la
+     * même notion (cf. mission).
+     */
+    public function test_show_exposes_compte_and_profil_dacces_when_a_user_account_exists(): void
+    {
+        $employe = $this->makeEmploye();
+        Role::firstOrCreate(['name' => 'manager', 'guard_name' => 'web'], ['label' => 'Manager']);
+        $compte = User::factory()->create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $employe->personne_id,
+            'is_active' => true,
+        ]);
+        $compte->assignRole('manager');
+
+        $response = $this->actingAs($this->user)->get(route('employes.show', $employe));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('employe.compte.email', $compte->email)
+            ->where('employe.compte.role_label', 'Manager')
+            ->where('employe.compte.statut', 'actif')
+        );
+    }
+
+    /**
+     * La fiche employé n'expose plus aucune donnée de commission : la commission est désormais
+     * attribuée directement au site métier de l'opération, jamais à un employé (décision produit
+     * 2026-08-21) — la clé `commission_gerant_depot` n'existe plus du tout côté payload.
+     */
+    public function test_show_never_exposes_any_commission_data(): void
+    {
+        $employe = $this->makeEmploye();
+
+        $response = $this->actingAs($this->user)->get(route('employes.show', $employe));
+
+        $response->assertInertia(fn ($page) => $page
+            ->component('Employes/Show')
+            ->missing('employe.commission_gerant_depot')
+        );
     }
 }

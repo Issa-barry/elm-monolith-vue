@@ -20,7 +20,16 @@ class CommissionCibleType extends Model
 
     public const CODE_EQUIPE_LIVRAISON = 'equipe_livraison';
 
-    // Réservés — non seedés avant la Phase 3 (cf. conception cible §0.2.4, §F).
+    /**
+     * Commission attribuée directement au SITE métier de l'opération (pas à un gérant, pas à une
+     * équipe d'employés) — bénéficiaire = App\Models\Site, cf.
+     * CommissionEnveloppePart::TYPE_SITE. Remplace définitivement l'ancienne notion de commission
+     * "gérants dépôt" (décision produit 2026-08-21) : aucune vérification de gérant, de fonction,
+     * de rôle ou d'affectation n'intervient dans cette cible.
+     */
+    public const CODE_SITE = 'site';
+
+    // Réservé — non seedé avant la Phase 3 (cf. conception cible §0.2.4, §F).
     public const CODE_EQUIPE_DEPOT = 'equipe_depot';
 
     public const CODE_IT = 'it';

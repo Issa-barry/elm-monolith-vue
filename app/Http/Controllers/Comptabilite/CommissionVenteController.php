@@ -576,8 +576,10 @@ class CommissionVenteController extends Controller
                     'site_nom' => $siteNom === 'Sans agence' ? null : $siteNom,
                     'rows' => $siteRows->values()->toArray(),
                     'totaux' => [
+                        'total_genere' => (float) $siteRows->sum('total_genere'),
                         'total_cumule' => (float) $siteRows->sum('total_cumule'),
                         'total_frais' => (float) $siteRows->sum('frais'),
+                        'total_net_valide' => (float) $siteRows->sum('net_valide'),
                         'total_deja_paye' => (float) $siteRows->sum('deja_paye'),
                         'total_reste' => (float) $siteRows->sum('reste'),
                     ],
@@ -585,7 +587,7 @@ class CommissionVenteController extends Controller
             });
 
         return $grouped->isEmpty()
-            ? [['site_nom' => null, 'rows' => [], 'totaux' => ['total_cumule' => 0, 'total_frais' => 0, 'total_deja_paye' => 0, 'total_reste' => 0]]]
+            ? [['site_nom' => null, 'rows' => [], 'totaux' => ['total_genere' => 0, 'total_cumule' => 0, 'total_frais' => 0, 'total_net_valide' => 0, 'total_deja_paye' => 0, 'total_reste' => 0]]]
             : $grouped->values()->toArray();
     }
 
@@ -600,10 +602,9 @@ class CommissionVenteController extends Controller
 
     // ── Exports ───────────────────────────────────────────────────────────────
     //
-    // Source CommissionEnveloppePart. Comme sur les écrans de paiement, les parts
-    // CREEE sont exclues : un export est un document de règlement/signature, pas
-    // un écran de visibilité générique (celle-ci reste garantie par index()/
-    // showLivreur(), jamais masquée).
+    // Source CommissionEnveloppePart. Les exports reprennent exactement le
+    // périmètre visible dans index() : tous les statuts affichés, y compris CREEE,
+    // et les mêmes filtres. Seules les parts ANNULEE restent hors de la liste.
 
     public function exportExcel(Request $request): StreamedResponse
     {
@@ -634,7 +635,7 @@ class CommissionVenteController extends Controller
         return response()->streamDownload(function () use ($rows, $periodeLabel) {
             $handle = fopen('php://output', 'w');
             fwrite($handle, "\xEF\xBB\xBF");
-            fputcsv($handle, ['Bénéficiaire', 'Téléphone', 'Véhicule(s)', 'Agence', 'Période', 'Total cumulé (GNF)', 'Dépenses (GNF)', 'Déjà payé (GNF)', 'Reste à payer (GNF)', 'Statut', 'Signature'], ';');
+            fputcsv($handle, ['Bénéficiaire', 'Téléphone', 'Véhicule(s)', 'Agence', 'Période', 'Généré (GNF)', 'Brut validé (GNF)', 'Dépenses (GNF)', 'Net validé (GNF)', 'Déjà payé (GNF)', 'Reste à payer (GNF)', 'Statut', 'Signature'], ';');
             foreach ($rows as $row) {
                 fputcsv($handle, [
                     $row['beneficiaire_nom'],
@@ -642,8 +643,10 @@ class CommissionVenteController extends Controller
                     self::vehiculesEnTexte($row['vehicules'] ?? []),
                     $row['agence'] ?? '',
                     $periodeLabel,
+                    number_format((float) $row['total_genere'], 0, ',', ' '),
                     number_format((float) $row['total_cumule'], 0, ',', ' '),
                     number_format((float) $row['frais'], 0, ',', ' '),
+                    number_format((float) $row['net_valide'], 0, ',', ' '),
                     number_format((float) $row['deja_paye'], 0, ',', ' '),
                     number_format((float) $row['reste'], 0, ',', ' '),
                     $row['statut'],
@@ -687,6 +690,7 @@ class CommissionVenteController extends Controller
             'periode_label' => $periodeLabel,
             'filters' => ['statut' => $filtreStatut, 'search' => $search],
             'sites' => $siteGroups,
+            'show_validation_columns' => true,
             'printed_by' => auth()->user()->name ?? '—',
             'generated_at' => now(),
         ])->setPaper('a4', 'landscape');
@@ -702,7 +706,7 @@ class CommissionVenteController extends Controller
             'enveloppe.source.vehicule:id,nom_vehicule,immatriculation',
         ])
             ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_LIVREUR)
-            ->where('statut', '!=', StatutCommission::CREEE->value)
+            ->where('statut', '!=', StatutCommission::ANNULEE->value)
             ->whereHas('enveloppe', function ($q) use ($orgId, $filtrePeriode) {
                 $q->where('organization_id', $orgId);
                 if ($filtrePeriode !== '') {
@@ -725,13 +729,20 @@ class CommissionVenteController extends Controller
             $first = $livParts->first();
             $beneficiaire = $first->resoudreBeneficiaire();
             $fraisDepenses = $fraisDepensesParLivreur[(string) $first->beneficiaire_id] ?? 0.0;
-            $resume = CommissionVenteCalculatorService::calculerResume(
-                (float) $livParts->sum('montant_brut'),
-                0.0, // pas de frais_supplementaires sur CommissionEnveloppePart
-                (float) $livParts->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer),
-                $fraisDepenses,
-                (float) $livParts->sum('montant_verse'),
+            $partsValidees = $livParts->filter(
+                fn (CommissionEnveloppePart $part) => $part->statut !== StatutCommission::CREEE
             );
+            $resume = CommissionVenteCalculatorService::calculerResume(
+                (float) $partsValidees->sum('montant_brut'),
+                0.0, // pas de frais_supplementaires sur CommissionEnveloppePart
+                (float) $partsValidees->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer),
+                $fraisDepenses,
+                (float) $partsValidees->sum('montant_verse'),
+            );
+            $buckets = CommissionKpiBuckets::calculer($livParts);
+            $statut = $partsValidees->isEmpty() && $buckets['en_attente_periode'] > 0.009
+                ? StatutCommission::CREEE->value
+                : $resume['statut'];
 
             $vehicules = $livParts->pluck('enveloppe.source.vehicule')
                 ->filter()->unique('id')
@@ -757,29 +768,35 @@ class CommissionVenteController extends Controller
                 'vehicules' => $vehicules->all(),
                 'agence' => $agence ?: null,
                 'periode' => $periodeLabel,
+                'total_genere' => $buckets['total_genere'],
                 'total_cumule' => $resume['brut'],
                 'frais' => $resume['frais'],
+                'net_valide' => $resume['net'],
                 'deja_paye' => $resume['verse'],
                 'reste' => $resume['reste'],
-                'statut' => StatutCommission::from($resume['statut'])->label(),
+                'statut_code' => $statut,
+                'statut' => $statut === StatutCommission::CREEE->value
+                    ? 'Partage à valider'
+                    : StatutCommission::from($statut)->label(),
             ];
         });
 
         if ($filtreStatut !== '') {
-            $statutLabel = match ($filtreStatut) {
-                'impaye' => StatutCommission::IMPAYE->label(),
-                'paye' => StatutCommission::PAYE->label(),
-                'partiel' => StatutCommission::PARTIEL->label(),
-                default => null,
-            };
-            if ($statutLabel !== null) {
-                $rows = $rows->filter(fn ($r) => $r['statut'] === $statutLabel);
+            if (in_array($filtreStatut, array_column(StatutCommission::cases(), 'value'), true)) {
+                $rows = $rows->filter(fn ($r) => $r['statut_code'] === $filtreStatut);
             }
         }
 
         if ($search !== '') {
             $s = mb_strtolower($search);
-            $rows = $rows->filter(fn ($r) => str_contains(mb_strtolower($r['beneficiaire_nom']), $s));
+            $searchDigits = preg_replace('/\D/', '', $search);
+            $rows = $rows->filter(
+                fn ($r) => str_contains(mb_strtolower($r['beneficiaire_nom']), $s)
+                    || ($searchDigits !== '' && str_contains(
+                        preg_replace('/\D/', '', (string) ($r['telephone'] ?? '')),
+                        $searchDigits,
+                    ))
+            );
         }
 
         return $rows->sortBy('beneficiaire_nom')->values();

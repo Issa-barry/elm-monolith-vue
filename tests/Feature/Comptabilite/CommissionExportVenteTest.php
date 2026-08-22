@@ -8,11 +8,13 @@ use App\Enums\CommissionScopeType;
 use App\Enums\CommissionStrategieAncrageSite;
 use App\Enums\CommissionUniteCalcul;
 use App\Enums\StatutCommandeVente;
+use App\Enums\StatutCommission;
 use App\Enums\StatutDepense;
 use App\Enums\TypePeriodePaiement;
 use App\Models\Categorie;
 use App\Models\CommandeVente;
 use App\Models\CommissionCibleType;
+use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
 use App\Models\Depense;
@@ -29,7 +31,9 @@ use App\Services\Commission\CommissionEnveloppeGenerator;
 use App\Services\CommissionAdjustmentService;
 use App\Services\PeriodeCalculatorService;
 use App\Services\PeriodePaiementService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Mockery;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -41,9 +45,9 @@ use Tests\TestCase;
  * couverts séparément par CommissionExportTest.php (moteur indépendant, non
  * concerné par ce fichier).
  *
- * Comme sur les écrans de paiement, une part encore CREEE est exclue de
- * l'export (document de règlement/signature, pas un écran de visibilité
- * générique) — la période est donc calculée puis validée avant chaque test.
+ * Les exports reprennent les mêmes bénéficiaires et les mêmes statuts que
+ * l'écran Commission vente. Une part CREEE doit donc être exportée comme
+ * « Partage à valider », au même titre que les parts validées ou payées.
  */
 class CommissionExportVenteTest extends TestCase
 {
@@ -199,7 +203,7 @@ class CommissionExportVenteTest extends TestCase
         $response->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
 
         $content = $response->streamedContent();
-        foreach (['Bénéficiaire', 'Téléphone', 'Véhicule(s)', 'Agence', 'Total cumulé', 'Dépenses', 'Déjà payé', 'Reste à payer', 'Statut', 'Signature'] as $colonne) {
+        foreach (['Bénéficiaire', 'Téléphone', 'Véhicule(s)', 'Agence', 'Généré', 'Brut validé', 'Dépenses', 'Net validé', 'Déjà payé', 'Reste à payer', 'Statut', 'Signature'] as $colonne) {
             $this->assertStringContainsString($colonne, $content);
         }
         $this->assertStringContainsString('10 000', $content);
@@ -245,19 +249,53 @@ class CommissionExportVenteTest extends TestCase
     }
 
     /** @test */
-    public function export_excel_vente_exclut_les_parts_encore_creee(): void
+    public function export_excel_vente_inclut_les_parts_encore_creee(): void
     {
-        // Deuxième vente générée APRÈS le calcul/validation de la période courante :
-        // reste CREEE, ne doit jamais apparaître dans l'export.
-        $this->genererEtActiver();
-        ['vehicule' => $vehicule2, 'equipe' => $equipe2, 'livreur' => $livreur2] = $this->makeVehiculeAvecEquipe();
-        $this->creerCommandeEtGenererCommission($vehicule2, $equipe2, $livreur2);
+        ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur] = $this->makeVehiculeAvecEquipe();
+        $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);
 
         $content = $this->actingAs($this->user)
             ->get(route('comptabilite.commissions.vente.excel'))
             ->streamedContent();
 
-        $this->assertStringNotContainsString($livreur2->nom_complet, $content);
+        $this->assertStringContainsString($livreur->nom_complet, $content);
+        $this->assertStringContainsString('10 000', $content);
+        $this->assertStringContainsString('Partage à valider', $content);
+    }
+
+    /** @test */
+    public function export_excel_vente_respecte_tous_les_filtres_de_statut_affiches(): void
+    {
+        ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur] = $this->makeVehiculeAvecEquipe();
+        $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);
+        $part = CommissionEnveloppePart::query()
+            ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_LIVREUR)
+            ->where('beneficiaire_id', $livreur->id)
+            ->firstOrFail();
+
+        $montantsVerses = [
+            StatutCommission::CREEE->value => 0,
+            StatutCommission::IMPAYE->value => 0,
+            StatutCommission::PARTIEL->value => 5000,
+            StatutCommission::PAYE->value => 10000,
+        ];
+
+        foreach ([StatutCommission::CREEE, StatutCommission::IMPAYE, StatutCommission::PARTIEL, StatutCommission::PAYE] as $statut) {
+            $part->update([
+                'statut' => $statut->value,
+                'montant_verse' => $montantsVerses[$statut->value],
+            ]);
+
+            $content = $this->actingAs($this->user)
+                ->get(route('comptabilite.commissions.vente.excel', ['statut' => $statut->value]))
+                ->streamedContent();
+
+            $this->assertStringContainsString(
+                $livreur->nom_complet,
+                $content,
+                "Le statut {$statut->value} affiché doit aussi être exporté.",
+            );
+        }
     }
 
     /** @test */
@@ -269,6 +307,49 @@ class CommissionExportVenteTest extends TestCase
 
         $response->assertOk();
         $response->assertHeader('Content-Type', 'application/pdf');
+    }
+
+    /** @test */
+    public function export_pdf_vente_recoit_les_parts_encore_creee_affichees(): void
+    {
+        ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur] = $this->makeVehiculeAvecEquipe();
+        $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);
+
+        $document = Mockery::mock(\Barryvdh\DomPDF\PDF::class);
+        $document->shouldReceive('setPaper')->once()->with('a4', 'landscape')->andReturnSelf();
+        $document->shouldReceive('download')->once()->andReturn(
+            response('pdf-test', 200, ['Content-Type' => 'application/pdf'])
+        );
+
+        Pdf::shouldReceive('loadView')
+            ->once()
+            ->with('pdf.commissions.index', Mockery::on(function (array $data) use ($livreur): bool {
+                $rows = collect($data['sites'])->flatMap(fn (array $site) => $site['rows']);
+                $row = $rows->firstWhere('beneficiaire_id', $livreur->id);
+
+                $this->assertNotNull($row);
+                $this->assertSame('Partage à valider', $row['statut']);
+                $this->assertSame(10000.0, $row['total_genere']);
+                $this->assertSame(0.0, $row['total_cumule']);
+                $this->assertTrue($data['show_validation_columns']);
+
+                $html = view('pdf.commissions.index', $data)->render();
+
+                $this->assertStringNotContainsString(
+                    '<th class="col-tel center">Téléphone</th>',
+                    $html,
+                );
+                $this->assertStringContainsString('class="ben-phone"', $html);
+                $this->assertStringContainsString((string) $livreur->telephone, $html);
+
+                return true;
+            }))
+            ->andReturn($document);
+
+        $this->actingAs($this->user)
+            ->get(route('comptabilite.commissions.vente.pdf'))
+            ->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf');
     }
 
     /** @test */
@@ -296,10 +377,11 @@ class CommissionExportVenteTest extends TestCase
         $response->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
 
         $content = $response->streamedContent();
-        foreach (['Bénéficiaire', 'Téléphone', 'Véhicule(s)', 'Agence', 'Total cumulé', 'Dépenses', 'Motif de dépense', 'Déjà payé', 'Reste à payer', 'Statut', 'Signature'] as $colonne) {
+        foreach (['Bénéficiaire', 'Téléphone', 'Véhicule(s)', 'Agence', 'Généré', 'Brut validé', 'Dépenses', 'Net validé', 'Déjà payé', 'Reste à payer', 'Statut', 'Signature'] as $colonne) {
             $this->assertStringContainsString($colonne, $content);
         }
         $this->assertStringContainsString('5 000', $content);
+        $this->assertStringContainsString('Partage à valider', $content);
     }
 
     /** @test */
@@ -329,7 +411,50 @@ class CommissionExportVenteTest extends TestCase
             ->get(route('comptabilite.commissions.proprietaires.excel'))
             ->streamedContent();
 
-        $this->assertStringContainsString('Réparation moteur', $content);
+        $this->assertStringContainsString('50 000', $content);
+    }
+
+    /** @test */
+    public function export_excel_proprietaire_respecte_les_filtres_agence_et_statut_du_drawer(): void
+    {
+        ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreur' => $livreur, 'proprietaire' => $proprietaire] = $this->makeVehiculeAvecEquipe();
+        $this->creerCommandeEtGenererCommission($vehicule, $equipe, $livreur);
+
+        $autreSite = Site::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Autre site',
+            'type' => 'depot',
+            'localisation' => 'Conakry',
+        ]);
+
+        $creees = $this->actingAs($this->user)
+            ->get(route('comptabilite.commissions.proprietaires.excel', [
+                'statut' => ['creee'],
+                'site_ids' => [$this->defaultSite->id],
+            ]))
+            ->streamedContent();
+
+        $this->assertStringContainsString($proprietaire->nom_complet, $creees);
+        $this->assertStringContainsString('Partage à valider', $creees);
+
+        $autreAgence = $this->actingAs($this->user)
+            ->get(route('comptabilite.commissions.proprietaires.excel', [
+                'statut' => ['creee'],
+                'site_ids' => [$autreSite->id],
+            ]))
+            ->streamedContent();
+
+        $this->assertStringNotContainsString($proprietaire->nom_complet, $autreAgence);
+    }
+
+    /** @test */
+    public function export_excel_proprietaire_necessite_permission(): void
+    {
+        $userSansPermission = $this->makeUserWithPermissions($this->org, []);
+
+        $this->actingAs($userSansPermission)
+            ->get(route('comptabilite.commissions.proprietaires.excel'))
+            ->assertStatus(403);
     }
 
     /** @test */
