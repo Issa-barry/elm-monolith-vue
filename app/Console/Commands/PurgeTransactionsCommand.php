@@ -4,7 +4,6 @@ namespace App\Console\Commands;
 
 use App\Models\CashbackSolde;
 use App\Models\CashbackTransaction;
-use App\Models\CashbackVersement;
 use App\Models\CommandeAchat;
 use App\Models\CommandeAchatLigne;
 use App\Models\CommandeVente;
@@ -12,8 +11,6 @@ use App\Models\CommandeVenteLigne;
 use App\Models\CommissionEnveloppe;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionPayment;
-use App\Models\EncaissementVente;
-use App\Models\JournalTresorerie;
 use App\Models\MouvementStock;
 use App\Models\Organization;
 use App\Models\PieceComptable;
@@ -43,14 +40,17 @@ class PurgeTransactionsCommand extends Command
 
     protected $description = 'Efface ventes, achats, commissions et données dérivées (cashback, stock, écritures comptables) — conserve comptes/sites/produits/véhicules/livreurs/propriétaires/clients/dépenses/RH';
 
-    /** Événements compta (compta_pieces.type_evenement) générés par les ventes. */
-    private const EVENEMENTS_COMPTA_VENTE = ['vente_facturee', 'encaissement_vente_recu'];
-
-    /** Sources (journal_tresorerie.source_type) à effacer : vente, commission, cashback. */
-    private const SOURCES_TRESORERIE_A_EFFACER = [
-        EncaissementVente::class,
-        CashbackVersement::class,
-        CommissionPayment::class,
+    /**
+     * Événements compta (compta_pieces.type_evenement) générés par les sources que cette
+     * commande efface (ventes, commission logistique directe, cashback) — dépenses, fiches
+     * propriétaire/livreur/site/consultant et paie ne sont jamais touchées par cette commande,
+     * donc leurs événements n'apparaissent pas ici.
+     */
+    private const EVENEMENTS_COMPTA_A_EFFACER = [
+        'vente_facturee',
+        'encaissement_vente_recu',
+        'paiement_commission_logistique_direct',
+        'versement_cashback',
     ];
 
     /** Sources (mouvements_stock.source_type) à effacer : uniquement vente/achat, jamais transfert. */
@@ -82,8 +82,7 @@ class PurgeTransactionsCommand extends Command
             'commission_payments' => $scoped(CommissionPayment::query())->count(),
             'cashback_transactions' => $scoped(CashbackTransaction::query())->count(),
             'mouvements_stock (vente/achat)' => $scoped(MouvementStock::whereIn('source_type', self::SOURCES_STOCK_A_EFFACER))->count(),
-            'compta_pieces (vente)' => $scoped(PieceComptable::whereIn('type_evenement', self::EVENEMENTS_COMPTA_VENTE))->count(),
-            'journal_tresorerie (vente/commission/cashback)' => $scoped(JournalTresorerie::whereIn('source_type', self::SOURCES_TRESORERIE_A_EFFACER))->count(),
+            'compta_pieces (vente/commission/cashback)' => $scoped(PieceComptable::whereIn('type_evenement', self::EVENEMENTS_COMPTA_A_EFFACER))->count(),
         ];
 
         $this->table(['Table', 'Lignes concernées'], collect($counts)->map(fn ($n, $label) => [$label, $n])->values()->all());
@@ -160,14 +159,11 @@ class PurgeTransactionsCommand extends Command
                 DB::table('commande_sequences')->delete();
             }
 
-            // Écritures comptables générales : uniquement celles des événements
-            // vente_facturee / encaissement_vente_recu — dépenses, fiches propriétaire/livreur
-            // et paie restent intactes (compta_ecritures cascade via piece_comptable_id).
-            $scoped(PieceComptable::whereIn('type_evenement', self::EVENEMENTS_COMPTA_VENTE))->delete();
-
-            // Journal de trésorerie : uniquement les entrées sourcées vente/commission/cashback —
-            // dépenses, fiches de paiement et paie restent intactes.
-            $scoped(JournalTresorerie::whereIn('source_type', self::SOURCES_TRESORERIE_A_EFFACER))->delete();
+            // Écritures comptables générales : uniquement celles des événements listés
+            // ci-dessus (vente, commission logistique directe, cashback) — dépenses, fiches
+            // propriétaire/livreur/site/consultant et paie restent intactes (compta_ecritures
+            // cascade via piece_comptable_id).
+            $scoped(PieceComptable::whereIn('type_evenement', self::EVENEMENTS_COMPTA_A_EFFACER))->delete();
         });
 
         $this->info('Ventes, achats, commissions et données dérivées effacés.');

@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use App\Services\Comptabilite\CommissionPaymentComptabilisationService;
-use App\Services\JournalTresorerieService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -40,8 +39,6 @@ class CommissionPayment extends Model
     protected static function booted(): void
     {
         static::created(function (self $p) {
-            JournalTresorerieService::enregistrerCommissionLogistique($p);
-
             // Comptabilité générale : déplace de la trésorerie réelle — bloquant depuis
             // l'audit du 2026-08-22 (même raison que PaiementFichePaiement/PaiePaiement).
             // CommissionPaymentService::payer()/payerLivreur() englobent déjà cette

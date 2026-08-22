@@ -28,7 +28,7 @@ use App\Http\Controllers\Comptabilite\CommissionVenteController as ComptabiliteC
 use App\Http\Controllers\Comptabilite\CompteTresorerieController;
 use App\Http\Controllers\Comptabilite\FinancementAgenceController;
 use App\Http\Controllers\Comptabilite\HistoriqueActionsController;
-use App\Http\Controllers\Comptabilite\JournalTresorerieController;
+use App\Http\Controllers\Comptabilite\JournalFinancierController;
 use App\Http\Controllers\Comptabilite\MouvementFondsController;
 use App\Http\Controllers\Comptabilite\PaiementFicheController;
 use App\Http\Controllers\Comptabilite\PaiementFichePaiementController;
@@ -491,7 +491,7 @@ Route::prefix('backoffice')->group(function () {
             Route::post('fiches/{fiche}/paiements', [PaiementFichePaiementController::class, 'store'])->name('fiches.paiements.store');
             Route::delete('fiches-paiements/{paiement}', [PaiementFichePaiementController::class, 'destroy'])->name('fiches.paiements.destroy');
 
-            Route::get('journal', [JournalTresorerieController::class, 'index'])->name('journal');
+            Route::get('journal', [JournalFinancierController::class, 'index'])->name('journal');
 
             // ── Commission livreurs logistique ────────────────────────────────────
             Route::get('commissions/logistique', [ComptabiliteCommissionLogistiqueController::class, 'index'])

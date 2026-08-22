@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\Services\JournalTresorerieService;
+use App\Services\Comptabilite\CashbackComptabilisationService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -36,7 +36,11 @@ class CashbackVersement extends Model
         static::creating(fn (self $v) => $v->created_by ??= Auth::id());
 
         static::created(function (self $v) {
-            JournalTresorerieService::enregistrerCashback($v);
+            // Comptabilité générale : déplace de la trésorerie réelle — bloquant,
+            // même convention que PaiePaiement/PaiementFichePaiement/CommissionPayment
+            // (cf. CashbackComptabilisationService). L'appelant (CashbackService::verser())
+            // englobe cette création dans une transaction.
+            app(CashbackComptabilisationService::class)->comptabiliserVersement($v);
         });
     }
 

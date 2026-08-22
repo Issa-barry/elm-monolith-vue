@@ -17,6 +17,16 @@ enum EvenementComptable: string
     case FICHE_LIVREUR_VALIDEE = 'fiche_livreur_validee';
     case PAIEMENT_PROPRIETAIRE = 'paiement_proprietaire';
     case PAIEMENT_LIVREUR = 'paiement_livreur';
+    // Commission site et commission consultant (App\Models\PaiementFiche,
+    // beneficiaire_type='site'|'prestataire') — même traitement engagement +
+    // règlement que propriétaire/livreur (cf. FicheComptabilisationService),
+    // resté non branché jusqu'au chantier du 2026-08-22 (TYPES_SUPPORTES ne
+    // couvrait que proprietaire/livreur alors que PeriodeCalculatorService
+    // génère bien des PaiementFiche pour ces deux types).
+    case FICHE_SITE_VALIDEE = 'fiche_site_validee';
+    case FICHE_CONSULTANT_VALIDEE = 'fiche_consultant_validee';
+    case PAIEMENT_SITE = 'paiement_site';
+    case PAIEMENT_CONSULTANT = 'paiement_consultant';
     case DEPENSE_INTERNE_VALIDEE = 'depense_interne_validee';
     case DEPENSE_AVANCE_TIERS_VALIDEE = 'depense_avance_tiers_validee';
     case REGULARISATION_CLOTURE_FICHE = 'regularisation_cloture_fiche';
@@ -45,6 +55,11 @@ enum EvenementComptable: string
     // uniquement, comme PAIEMENT_SALAIRE : aucun engagement préalable comptabilisé pour les
     // CommissionLogistiquePart aujourd'hui (audit du 2026-08-22).
     case PAIEMENT_COMMISSION_LOGISTIQUE_DIRECT = 'paiement_commission_logistique_direct';
+    // Versement de cashback à un client (App\Models\CashbackVersement) — jambe
+    // trésorerie uniquement, même convention que PAIEMENT_SALAIRE : c'était
+    // auparavant la seule trace financière de ce flux (JournalTresorerie),
+    // aucune écriture dans compta_ecritures (audit du 2026-08-22).
+    case VERSEMENT_CASHBACK = 'versement_cashback';
 
     public function label(): string
     {
@@ -53,6 +68,10 @@ enum EvenementComptable: string
             self::FICHE_LIVREUR_VALIDEE => 'Fiche livreur validée',
             self::PAIEMENT_PROPRIETAIRE => 'Paiement propriétaire',
             self::PAIEMENT_LIVREUR => 'Paiement livreur',
+            self::FICHE_SITE_VALIDEE => 'Fiche commission site validée',
+            self::FICHE_CONSULTANT_VALIDEE => 'Fiche commission consultant validée',
+            self::PAIEMENT_SITE => 'Paiement commission site',
+            self::PAIEMENT_CONSULTANT => 'Paiement commission consultant',
             self::DEPENSE_INTERNE_VALIDEE => 'Dépense interne validée',
             self::DEPENSE_AVANCE_TIERS_VALIDEE => 'Dépense imputée à un tiers (avance)',
             self::REGULARISATION_CLOTURE_FICHE => 'Régularisation de clôture (fiche non validée)',
@@ -62,6 +81,8 @@ enum EvenementComptable: string
             self::MOUVEMENT_FONDS_ENVOYE => 'Mouvement de fonds — envoi',
             self::MOUVEMENT_FONDS_RECU => 'Mouvement de fonds — réception',
             self::SOLDE_OUVERTURE_TRESORERIE => 'Solde d\'ouverture trésorerie',
+            self::PAIEMENT_COMMISSION_LOGISTIQUE_DIRECT => 'Paiement direct commission logistique',
+            self::VERSEMENT_CASHBACK => 'Versement cashback',
         };
     }
 }

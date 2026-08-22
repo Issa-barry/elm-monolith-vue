@@ -11,7 +11,10 @@ use Illuminate\Support\Carbon;
 
 /**
  * Traduit les événements du workflow Période/Fiche (déjà existant, inchangé)
- * en écritures comptables SYSCOHADA pour propriétaires et livreurs.
+ * en écritures comptables SYSCOHADA pour propriétaires, livreurs, sites et
+ * consultants (beneficiaire_type 'proprietaire'/'livreur'/'site'/'prestataire').
+ * Le type 'salarie' n'y apparaît jamais : la paie suit un circuit dédié
+ * (PaieLigne/PaiePaiement → PaieComptabilisationService), pas PaiementFiche.
  *
  * Déclencheur d'engagement volontairement à la VALIDATION de la fiche, pas à
  * chaque CommissionPart générée : avant validation les montants peuvent
@@ -22,7 +25,26 @@ use Illuminate\Support\Carbon;
  */
 class FicheComptabilisationService
 {
-    private const TYPES_SUPPORTES = ['proprietaire', 'livreur'];
+    // 'site' et 'prestataire' (commission consultant) ajoutés le 2026-08-22 :
+    // PeriodeCalculatorService::calculerSites()/calculerConsultants() génèrent
+    // bien des PaiementFiche pour ces deux types (PaiementFiche::getBeneficiaireModel()
+    // les résout déjà) — seule cette liste les excluait, laissant leur validation
+    // et leur paiement totalement hors comptabilité générale.
+    private const TYPES_SUPPORTES = ['proprietaire', 'livreur', 'site', 'prestataire'];
+
+    private const EVENEMENT_VALIDATION = [
+        'livreur' => EvenementComptable::FICHE_LIVREUR_VALIDEE,
+        'proprietaire' => EvenementComptable::FICHE_PROPRIETAIRE_VALIDEE,
+        'site' => EvenementComptable::FICHE_SITE_VALIDEE,
+        'prestataire' => EvenementComptable::FICHE_CONSULTANT_VALIDEE,
+    ];
+
+    private const EVENEMENT_PAIEMENT = [
+        'livreur' => EvenementComptable::PAIEMENT_LIVREUR,
+        'proprietaire' => EvenementComptable::PAIEMENT_PROPRIETAIRE,
+        'site' => EvenementComptable::PAIEMENT_SITE,
+        'prestataire' => EvenementComptable::PAIEMENT_CONSULTANT,
+    ];
 
     public function __construct(
         private readonly EcritureComptableService $ecritures,
@@ -41,9 +63,7 @@ class FicheComptabilisationService
 
         $futRegularisee = $this->reprendreRegularisationSiExistante($fiche);
 
-        $evenement = $fiche->beneficiaire_type === 'livreur'
-            ? EvenementComptable::FICHE_LIVREUR_VALIDEE
-            : EvenementComptable::FICHE_PROPRIETAIRE_VALIDEE;
+        $evenement = self::EVENEMENT_VALIDATION[$fiche->beneficiaire_type];
 
         $lignes = [
             [
@@ -107,9 +127,7 @@ class FicheComptabilisationService
             return null;
         }
 
-        $evenement = $fiche->beneficiaire_type === 'livreur'
-            ? EvenementComptable::PAIEMENT_LIVREUR
-            : EvenementComptable::PAIEMENT_PROPRIETAIRE;
+        $evenement = self::evenementPaiementPour($fiche->beneficiaire_type);
 
         $lignes = [
             [
@@ -142,6 +160,16 @@ class FicheComptabilisationService
             siteId: $paiement->site_id,
             createdBy: $paiement->created_by,
         );
+    }
+
+    /**
+     * Exposé publiquement pour PaiementFichePaiement::deleted() : retrouver
+     * quel événement a produit la pièce à contrepasser quand un paiement est
+     * supprimé, sans dupliquer cette table de correspondance.
+     */
+    public static function evenementPaiementPour(string $beneficiaireType): ?EvenementComptable
+    {
+        return self::EVENEMENT_PAIEMENT[$beneficiaireType] ?? null;
     }
 
     private function reprendreRegularisationSiExistante(PaiementFiche $fiche): bool

@@ -18,8 +18,7 @@ use Illuminate\Support\Carbon;
  * Point d'attention (règle #22 de la spec) : une dépense catégorie VEHICULE/
  * PROPRIETAIRE/LIVREUR n'est PAS une charge d'ELM — DepenseImputationService
  * la traite déjà aujourd'hui comme une simple retenue sur la commission du
- * bénéficiaire (aucun enregistrement dans journal_tresorerie pour ces
- * catégories, cf. DepenseObserver::updated()). Elle est donc comptabilisée
+ * bénéficiaire. Elle est donc comptabilisée
  * comme une AVANCE récupérable sur le tiers (créance), jamais comme une
  * charge — la retenue sur la fiche mensuelle (FicheComptabilisationService,
  * rôle "avance_tiers") vient ensuite simplement SOLDER cette créance, sans
