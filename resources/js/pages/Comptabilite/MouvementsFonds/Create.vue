@@ -61,6 +61,8 @@ function onFileChange(e: Event) {
 function submit() {
     form.post('/backoffice/comptabilite/tresorerie/mouvements', {
         forceFormData: true,
+        preserveState: true,
+        preserveScroll: true,
     });
 }
 </script>

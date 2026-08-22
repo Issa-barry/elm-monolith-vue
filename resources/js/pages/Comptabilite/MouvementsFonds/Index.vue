@@ -127,6 +127,7 @@ function confirmerMotif() {
         { motif: motif.value },
         {
             preserveScroll: true,
+            preserveState: true,
             onSuccess: () => {
                 motifDialogOpen.value = false;
             },

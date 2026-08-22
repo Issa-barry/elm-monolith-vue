@@ -42,6 +42,7 @@ const form = useForm({
 function creerSupport() {
     form.post('/backoffice/comptabilite/tresorerie/supports', {
         preserveScroll: true,
+        preserveState: true,
         onSuccess: () => form.reset('libelle', 'moyen_paiement_defaut'),
     });
 }
@@ -62,6 +63,7 @@ function ouvrirSolde(id: string) {
 function enregistrerSolde() {
     soldeForm.post('/backoffice/comptabilite/tresorerie/soldes-ouverture', {
         preserveScroll: true,
+        preserveState: true,
         onSuccess: () => {
             soldeDialogPourId.value = null;
         },
@@ -93,49 +95,81 @@ function validerSolde(compte: CompteTresorerie) {
             </div>
 
             <form
-                class="grid gap-4 rounded-xl border bg-card p-4 sm:grid-cols-5"
+                class="grid items-start gap-4 rounded-xl border bg-card p-4 sm:grid-cols-5"
                 @submit.prevent="creerSupport"
             >
-                <select
-                    v-model="form.site_id"
-                    class="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                >
-                    <option value="" disabled>Site…</option>
-                    <option v-for="s in sites" :key="s.id" :value="s.id">
-                        {{ s.nom }}
-                    </option>
-                </select>
-                <select
-                    v-model="form.type"
-                    class="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                >
-                    <option
-                        v-for="t in type_options"
-                        :key="t.value"
-                        :value="t.value"
+                <div class="space-y-1">
+                    <select
+                        v-model="form.site_id"
+                        class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                     >
-                        {{ t.label }}
-                    </option>
-                </select>
-                <select
-                    v-model="form.compte_comptable_id"
-                    class="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                >
-                    <option value="" disabled>Compte comptable…</option>
-                    <option
-                        v-for="c in comptes_comptables"
-                        :key="c.id"
-                        :value="c.id"
+                        <option value="" disabled>Site…</option>
+                        <option v-for="s in sites" :key="s.id" :value="s.id">
+                            {{ s.nom }}
+                        </option>
+                    </select>
+                    <p
+                        v-if="form.errors.site_id"
+                        class="text-xs text-red-600 dark:text-red-400"
                     >
-                        {{ c.numero }} — {{ c.libelle }}
-                    </option>
-                </select>
-                <input
-                    v-model="form.libelle"
-                    type="text"
-                    placeholder="Libellé (ex: Caisse Matoto)"
-                    class="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                />
+                        {{ form.errors.site_id }}
+                    </p>
+                </div>
+                <div class="space-y-1">
+                    <select
+                        v-model="form.type"
+                        class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                    >
+                        <option
+                            v-for="t in type_options"
+                            :key="t.value"
+                            :value="t.value"
+                        >
+                            {{ t.label }}
+                        </option>
+                    </select>
+                    <p
+                        v-if="form.errors.type"
+                        class="text-xs text-red-600 dark:text-red-400"
+                    >
+                        {{ form.errors.type }}
+                    </p>
+                </div>
+                <div class="space-y-1">
+                    <select
+                        v-model="form.compte_comptable_id"
+                        class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                    >
+                        <option value="" disabled>Compte comptable…</option>
+                        <option
+                            v-for="c in comptes_comptables"
+                            :key="c.id"
+                            :value="c.id"
+                        >
+                            {{ c.numero }} — {{ c.libelle }}
+                        </option>
+                    </select>
+                    <p
+                        v-if="form.errors.compte_comptable_id"
+                        class="text-xs text-red-600 dark:text-red-400"
+                    >
+                        {{ form.errors.compte_comptable_id }}
+                    </p>
+                </div>
+                <div class="space-y-1">
+                    <input
+                        v-model="form.libelle"
+                        type="text"
+                        placeholder="Libellé (ex: Caisse Matoto)"
+                        class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                    />
+                    <p
+                        v-if="form.errors.libelle"
+                        class="text-xs text-red-600 dark:text-red-400"
+                    >
+                        {{ form.errors.libelle }}
+                    </p>
+                </div>
                 <button
                     type="submit"
                     :disabled="form.processing"
@@ -229,6 +263,12 @@ function validerSolde(compte: CompteTresorerie) {
                             type="date"
                             class="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                         />
+                        <p
+                            v-if="soldeForm.errors.date_situation"
+                            class="text-xs text-red-600 dark:text-red-400"
+                        >
+                            {{ soldeForm.errors.date_situation }}
+                        </p>
                     </div>
                     <div class="space-y-1.5">
                         <label class="text-sm">Montant (GNF)</label>
