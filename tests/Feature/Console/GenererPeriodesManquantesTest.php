@@ -18,8 +18,8 @@ class GenererPeriodesManquantesTest extends TestCase
         $this->artisan('periodes:generer-manquantes', ['--annee' => 2026])
             ->assertExitCode(0);
 
-        // 4 types (livreur, propriétaire, salarié, site) × 12 mois × 2 quinzaines par organisation.
-        $this->assertDatabaseCount('paiement_periodes', 192);
+        // 5 types (livreur, propriétaire, salarié, site, consultant) × 12 mois × 2 quinzaines par organisation.
+        $this->assertDatabaseCount('paiement_periodes', 240);
         $this->assertDatabaseHas('paiement_periodes', [
             'organization_id' => $orgA->id,
             'reference' => 'PAY-202607-P1-LIV',
@@ -37,6 +37,6 @@ class GenererPeriodesManquantesTest extends TestCase
         $this->artisan('periodes:generer-manquantes', ['--annee' => 2026]);
         $this->artisan('periodes:generer-manquantes', ['--annee' => 2026]);
 
-        $this->assertDatabaseCount('paiement_periodes', 96);
+        $this->assertDatabaseCount('paiement_periodes', 120);
     }
 }

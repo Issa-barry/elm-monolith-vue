@@ -15,6 +15,7 @@ use App\Models\DroitCreationDepense;
 use App\Models\Employe;
 use App\Models\Livreur;
 use App\Models\Organization;
+use App\Models\Prestataire;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\User;
@@ -222,6 +223,26 @@ class DepenseController extends Controller
 
             $results = $results->merge($vehicules);
 
+            // Prestataire : identité physique (Personne) OU morale (EntrepriseTierce) selon le
+            // prestataire — nom_complet est un accesseur PHP, pas une colonne, donc filtré en
+            // mémoire plutôt qu'en LIKE SQL (volumes bornés par organisation, cf. convention déjà
+            // appliquée aux écrans Commission v2).
+            $prestataires = Depense::where('organization_id', $orgId)
+                ->where('beneficiaire_type', 'prestataire')
+                ->with('prestataireBeneficiaire')
+                ->get()
+                ->pluck('prestataireBeneficiaire')
+                ->filter()
+                ->unique('id')
+                ->filter(fn ($p) => str_contains(mb_strtolower((string) $p->nom_complet), mb_strtolower($q)))
+                ->take(4)
+                ->map(fn ($p) => [
+                    'label' => $p->nom_complet,
+                    'value' => $p->nom_complet,
+                ]);
+
+            $results = $results->merge($prestataires);
+
             return response()->json($results->unique('value')->take(8)->values());
         }
 
@@ -250,6 +271,22 @@ class DepenseController extends Controller
                 $results = $results->merge($items);
             }
 
+            $prestataires = Depense::where('organization_id', $orgId)
+                ->where('beneficiaire_type', 'prestataire')
+                ->with('prestataireBeneficiaire')
+                ->get()
+                ->pluck('prestataireBeneficiaire')
+                ->filter()
+                ->unique('id')
+                ->filter(fn ($p) => $p->phone && str_contains(preg_replace('/\D/', '', (string) $p->phone), $digits ?: $q))
+                ->take(4)
+                ->map(fn ($p) => [
+                    'label' => $p->nom_complet.' — '.$p->phone,
+                    'value' => $p->phone,
+                ]);
+
+            $results = $results->merge($prestataires);
+
             return response()->json($results->unique('value')->take(8)->values());
         }
 
@@ -268,6 +305,7 @@ class DepenseController extends Controller
             'proprietaire' => $this->buildProprietaireDetail($id, $orgId),
             'livreur' => $this->buildLivreurDetail($id, $orgId),
             'employe' => $this->buildEmployeDetail($id, $orgId),
+            'prestataire' => $this->buildPrestataireDetail($id, $orgId),
             default => null,
         };
 
@@ -358,6 +396,22 @@ class DepenseController extends Controller
             'telephone' => $e->telephone ?? '—',
             'poste' => $e->type_employe?->label() ?? '—',
             'site' => $e->site?->nom ?? '—',
+        ];
+    }
+
+    private function buildPrestataireDetail(string $id, string $orgId): ?array
+    {
+        $p = Prestataire::with(['personne', 'entrepriseTierce'])->where('organization_id', $orgId)->find($id);
+        if (! $p) {
+            return null;
+        }
+
+        return [
+            'type' => 'prestataire',
+            'nom' => $p->nom_complet ?? '—',
+            'telephone' => $p->phone ?? '—',
+            'poste' => $p->type_label,
+            'site' => '—',
         ];
     }
 
@@ -484,6 +538,7 @@ class DepenseController extends Controller
             'employes' => $this->loadEmployes($orgId),
             'livreurs' => $this->loadLivreurs($orgId),
             'proprietaires' => $this->loadProprietaires($orgId),
+            'prestataires' => $this->loadPrestataires($orgId),
             'default_site_id' => $this->defaultSiteId(),
             'categories' => CategorieDepense::optionsConcerne(),
             'can_change_site' => $user->isAdmin(),
@@ -569,6 +624,7 @@ class DepenseController extends Controller
             'employes' => $this->loadEmployes($orgId),
             'livreurs' => $this->loadLivreurs($orgId),
             'proprietaires' => $this->loadProprietaires($orgId),
+            'prestataires' => $this->loadPrestataires($orgId),
             'categories' => CategorieDepense::optionsConcerne(),
             'can_change_site' => $user->isAdmin(),
         ]);
@@ -847,6 +903,10 @@ class DepenseController extends Controller
                                 $p->orWhereRaw("{$norm} LIKE ?", [$likeTel]);
                             }
                         }))
+                    )
+                    ->orWhere(fn ($w2) => $w2
+                        ->where('beneficiaire_type', 'prestataire')
+                        ->whereHas('prestataireBeneficiaire', $this->matchPrestataireIdentite($like, $likeTel, $norm))
                     );
             });
         }
@@ -883,6 +943,9 @@ class DepenseController extends Controller
                 )->orWhere(fn ($w2) => $w2
                     ->where('beneficiaire_type', 'vehicule')
                     ->whereHas('vehiculeBeneficiaire', fn ($q) => $q->where('nom_vehicule', 'LIKE', $like))
+                )->orWhere(fn ($w2) => $w2
+                    ->where('beneficiaire_type', 'prestataire')
+                    ->whereHas('prestataireBeneficiaire', $this->matchPrestataireIdentite($like, $likeTel, $norm))
                 );
             });
         }
@@ -903,6 +966,12 @@ class DepenseController extends Controller
                 )->orWhere(fn ($w2) => $w2
                     ->where('beneficiaire_type', 'proprietaire')
                     ->whereHas('proprietaireBeneficiaire', $matchTel)
+                )->orWhere(fn ($w2) => $w2
+                    ->where('beneficiaire_type', 'prestataire')
+                    ->whereHas('prestataireBeneficiaire', fn ($q) => $q
+                        ->whereHas('personne', fn ($p) => $p->whereRaw("{$norm} LIKE ?", [$likeTel]))
+                        ->orWhereHas('entrepriseTierce', fn ($e) => $e->whereRaw("REPLACE(REPLACE(telephone, ' ', ''), '-', '') LIKE ?", [$likeTel]))
+                    )
                 );
             });
         }
@@ -912,6 +981,31 @@ class DepenseController extends Controller
         }
 
         return $query;
+    }
+
+    /**
+     * Un Prestataire porte son identité soit via Personne (physique) soit via EntrepriseTierce
+     * (morale) — jamais les deux, cf. Prestataire::$appends. Les recherches "concerne"/"search"
+     * doivent matcher les deux chemins, contrairement à employe/livreur/proprietaire qui n'ont
+     * qu'une seule identité possible (Personne).
+     */
+    private function matchPrestataireIdentite(string $like, ?string $likeTel, string $norm): \Closure
+    {
+        return function ($q) use ($like, $likeTel, $norm) {
+            $q->whereHas('personne', function ($p) use ($like, $likeTel, $norm) {
+                $p->where('nom', 'LIKE', $like)
+                    ->orWhere('prenom', 'LIKE', $like)
+                    ->orWhereRaw("CONCAT(prenom, ' ', nom) LIKE ?", [$like]);
+                if ($likeTel) {
+                    $p->orWhereRaw("{$norm} LIKE ?", [$likeTel]);
+                }
+            })->orWhereHas('entrepriseTierce', function ($e) use ($like, $likeTel) {
+                $e->where('raison_sociale', 'LIKE', $like);
+                if ($likeTel) {
+                    $e->orWhereRaw("REPLACE(REPLACE(telephone, ' ', ''), '-', '') LIKE ?", [$likeTel]);
+                }
+            });
+        };
     }
 
     private function transformDepense(Depense $d, array $labelCache, array $vehiculeInfoCache, ?User $user = null, ?DroitCreationDepense $droitValidation = null): array
@@ -1015,18 +1109,31 @@ class DepenseController extends Controller
             } else {
                 // Identité civile portée par Personne (nom/prenom/telephone) — nom_complet
                 // reste une colonne propre au livreur, utilisée en repli par libelleAffichage().
-                $fields = $type === 'livreur'
-                    ? ['id', 'personne_id', 'nom_complet']
-                    : ['id', 'personne_id'];
+                // Prestataire est à part : identité physique (Personne) OU morale
+                // (EntrepriseTierce), jamais une colonne directe — d'où fields=null (toutes
+                // colonnes) et les accesseurs nom_complet/phone plutôt que nom/prenom/telephone.
+                $fields = match (true) {
+                    $type === 'livreur' => ['id', 'personne_id', 'nom_complet'],
+                    $type === 'prestataire' => null,
+                    default => ['id', 'personne_id'],
+                };
 
                 $models = match ($type) {
                     'employe' => Employe::with('personne')->findMany($ids, $fields),
                     'livreur' => Livreur::with('personne')->findMany($ids, $fields),
                     'proprietaire' => Proprietaire::with('personne')->findMany($ids, $fields),
+                    'prestataire' => Prestataire::with(['personne', 'entrepriseTierce'])->findMany($ids),
                     default => collect(),
                 };
 
                 foreach ($models as $model) {
+                    if ($type === 'prestataire') {
+                        $labelCache["prestataire:{$model->id}"] = $model->nom_complet;
+                        $labelCache["tel:prestataire:{$model->id}"] = $model->phone;
+
+                        continue;
+                    }
+
                     $labelCache["{$type}:{$model->id}"] = $type === 'livreur'
                         ? $model->libelleAffichage()
                         : trim("{$model->prenom} {$model->nom}");
@@ -1080,6 +1187,7 @@ class DepenseController extends Controller
             'livreur' => ($l = Livreur::find($id)) ? ($l->nom_complet ?? $l->telephone) : null,
             'proprietaire' => trim(optional(Proprietaire::find($id))?->prenom.' '.optional(Proprietaire::find($id))?->nom),
             'vehicule' => optional(Vehicule::find($id))->nom_vehicule,
+            'prestataire' => optional(Prestataire::find($id))->nom_complet,
             default => null,
         };
     }
@@ -1171,6 +1279,20 @@ class DepenseController extends Controller
             ->map(fn ($p) => [
                 'id' => $p->id,
                 'nom_complet' => trim("{$p->prenom} {$p->nom}"),
+            ])
+            ->values();
+    }
+
+    private function loadPrestataires(string $orgId)
+    {
+        return Prestataire::with(['personne', 'entrepriseTierce'])
+            ->where('organization_id', $orgId)
+            ->where('is_active', true)
+            ->get()
+            ->sortBy('nom_complet')
+            ->map(fn (Prestataire $p) => [
+                'id' => $p->id,
+                'nom_complet' => $p->nom_complet,
             ])
             ->values();
     }

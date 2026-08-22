@@ -77,6 +77,10 @@ class SeedCommissionsV2FondationsCommand extends Command
             ['organization_id' => null, 'code' => CommissionCibleType::CODE_SITE],
             ['libelle' => 'Site', 'periodicite' => CommissionCibleType::PERIODICITE_QUINZAINE],
         );
+        CommissionCibleType::firstOrCreate(
+            ['organization_id' => null, 'code' => CommissionCibleType::CODE_CONSULTANT],
+            ['libelle' => 'Consultant', 'periodicite' => CommissionCibleType::PERIODICITE_MENSUELLE],
+        );
     }
 
     private function seedPourOrganisation(string $organizationId, bool $activer): void

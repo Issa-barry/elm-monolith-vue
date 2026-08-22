@@ -23,6 +23,7 @@ class Site extends Model
         'code',
         'type',
         'statut',
+        'is_siege_principal',
         'localisation',
         'pays',
         'ville',
@@ -40,6 +41,7 @@ class Site extends Model
         return [
             'type' => SiteType::class,
             'statut' => SiteStatut::class,
+            'is_siege_principal' => 'boolean',
         ];
     }
 
@@ -63,6 +65,21 @@ class Site extends Model
                     $num++;
                 } while (static::withTrashed()->where('organization_id', $orgId)->where('code', $code)->exists());
                 $site->code = $code;
+            }
+
+            // Auto-désignation du siège principal (cf. SiegeResolverService) : seulement
+            // quand c'est le TOUT PREMIER site de type siège de l'organisation — jamais un
+            // ->first() arbitraire sur une liste déjà ambiguë. Un deuxième site "siège" créé
+            // ensuite reste explicitement non-principal tant qu'un admin ne le désigne pas
+            // via SiegeResolverService::assignerPrincipal().
+            if ($site->type === SiteType::SIEGE && empty($site->is_siege_principal)) {
+                $aDejaUnPrincipal = static::where('organization_id', $site->organization_id)
+                    ->where('type', SiteType::SIEGE->value)
+                    ->where('is_siege_principal', true)
+                    ->exists();
+                if (! $aDejaUnPrincipal) {
+                    $site->is_siege_principal = true;
+                }
             }
         });
     }

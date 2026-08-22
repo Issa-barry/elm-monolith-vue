@@ -105,4 +105,22 @@ class CommissionIndexFilterContractTest extends TestCase
             ->where('selected_periode', '2026-08-P1')
         );
     }
+
+    /**
+     * Consultant n'a pas de socle "site" (désignation au niveau organisation, cf. mission) : pas
+     * de site_ids à restituer, seulement statut/période/consultant_id.
+     */
+    public function test_consultants_restitue_son_filtre_specifique_sans_socle_site(): void
+    {
+        $this->get('/backoffice/comptabilite/commissions/consultants?'.http_build_query([
+            'statut' => ['impaye'],
+            'periode' => ['2026-08-M'],
+            'consultant_id' => ['some-prestataire-id'],
+        ]))->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->component('Comptabilite/CommissionConsultant/Index')
+            ->where('filtre_statut', 'impaye')
+            ->where('filtre_consultant_id', 'some-prestataire-id')
+            ->where('selected_periode', '2026-08-M')
+        );
+    }
 }

@@ -29,6 +29,12 @@ class CommissionEnveloppePart extends Model
     /** Bénéficiaire = App\Models\Site directement (commission site, jamais une personne). */
     public const TYPE_SITE = 'site';
 
+    /**
+     * Bénéficiaire = App\Models\Prestataire (commission consultant) — le prestataire concret est
+     * résolu via CommissionConsultantAffectation au moment de la génération, jamais codé en dur.
+     */
+    public const TYPE_PRESTATAIRE = 'prestataire';
+
     protected $table = 'commission_enveloppe_parts';
 
     protected $fillable = [
@@ -150,6 +156,7 @@ class CommissionEnveloppePart extends Model
             self::TYPE_PROPRIETAIRE => Proprietaire::find($this->beneficiaire_id),
             self::TYPE_EMPLOYE => Employe::find($this->beneficiaire_id),
             self::TYPE_SITE => Site::find($this->beneficiaire_id),
+            self::TYPE_PRESTATAIRE => Prestataire::find($this->beneficiaire_id),
             default => null,
         };
     }

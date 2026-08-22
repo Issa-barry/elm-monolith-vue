@@ -1,6 +1,6 @@
 <?php
 
-namespace Tests\Feature\Comptabilite;
+namespace Tests\Feature\Tresorerie;
 
 use App\Enums\CommissionActivationStatut;
 use App\Enums\StatutContrat;
@@ -24,7 +24,7 @@ use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
-use App\Services\BesoinTresorerieService;
+use App\Services\Tresorerie\ObligationsAgenceService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
@@ -33,18 +33,18 @@ use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
-class BesoinTresorerieServiceTest extends TestCase
+class ObligationsAgenceServiceTest extends TestCase
 {
     use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
 
-    private BesoinTresorerieService $service;
+    private ObligationsAgenceService $service;
 
     protected function setUp(): void
     {
         parent::setUp();
         $this->initOrgAndUser(['comptabilite.read']);
         Feature::for($this->org)->activate(ModuleFeature::COMPTABILITE);
-        $this->service = app(BesoinTresorerieService::class);
+        $this->service = app(ObligationsAgenceService::class);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -320,7 +320,7 @@ class BesoinTresorerieServiceTest extends TestCase
         $this->makeEmploye($matoto, 500_000);
 
         $rows = $this->service->calculerPourMois($this->org->id, 2026, 8);
-        $total = BesoinTresorerieService::totalGeneral($rows);
+        $total = $this->service->totalGeneral($rows);
 
         $this->assertSame(400_000.0, $total['livreurs_p1']);
         $this->assertSame(500_000.0, $total['salaires']);
@@ -393,7 +393,7 @@ class BesoinTresorerieServiceTest extends TestCase
         ]);
 
         $rows = $this->service->calculerPourMois($this->org->id, 2026, 8);
-        $total = BesoinTresorerieService::totalGeneral($rows);
+        $total = $this->service->totalGeneral($rows);
 
         // Seule la commission de $this->org (100 000) doit apparaître — jamais les
         // 999 000 GNF de l'autre organisation.

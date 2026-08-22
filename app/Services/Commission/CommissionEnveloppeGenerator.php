@@ -12,6 +12,7 @@ use App\Enums\StatutCommission;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
 use App\Models\CommissionCibleType;
+use App\Models\CommissionConsultantAffectation;
 use App\Models\CommissionEnveloppe;
 use App\Models\CommissionEnveloppeLigne;
 use App\Models\CommissionEnveloppePart;
@@ -159,6 +160,12 @@ class CommissionEnveloppeGenerator
         if ($commande->site) {
             $cibles[] = CommissionCibleType::CODE_SITE;
         }
+        // Consultant : toujours candidate, contrairement à Site — elle ne dépend d'aucune donnée
+        // de la commande, seulement d'une désignation au niveau organisation (cf.
+        // CommissionConsultantAffectation). Une organisation qui n'a jamais configuré de barème
+        // consultant ne verra jamais cette cible produire de contribution (absence de règle = 0,
+        // décision AMOA #4) : aucun impact pour les organisations existantes.
+        $cibles[] = CommissionCibleType::CODE_CONSULTANT;
 
         /** @var array<string, array<int, array{ligne: CommandeVenteLigne, montant: float, regle: CommissionRegle}>> $lignesParCible */
         $lignesParCible = [];
@@ -341,6 +348,36 @@ class CommissionEnveloppeGenerator
                     'parts' => [[
                         'beneficiaire_type' => CommissionEnveloppePart::TYPE_SITE,
                         'beneficiaire_id' => $site->id,
+                        'taux' => null,
+                        'montant' => $montantTotal,
+                    ]],
+                ];
+
+                continue;
+            }
+
+            if ($cibleCode === CommissionCibleType::CODE_CONSULTANT) {
+                // Bénéficiaire = le prestataire actuellement désigné par l'organisation, jamais
+                // un prestataire codé en dur (cf. CommissionConsultantAffectation). Un barème
+                // consultant configuré sans désignation active est une incohérence de
+                // paramétrage, jamais un simple "rien à payer" : même traitement tout-ou-rien
+                // qu'un véhicule sans propriétaire ci-dessus (décision AMOA #4 — explicite et
+                // traçable, jamais silencieux, cf. CommissionGenerationAttempt).
+                $affectation = CommissionConsultantAffectation::actifPour($commande->organization_id);
+
+                if (! $affectation) {
+                    $erreurs[] = "Cible {$cibleCode} : aucun consultant désigné pour cette organisation.";
+
+                    continue;
+                }
+
+                $enveloppesACreer[$cibleCode] = [
+                    'montant' => $montantTotal,
+                    'cible_id' => $affectation->prestataire_id,
+                    'contributions' => $contributions,
+                    'parts' => [[
+                        'beneficiaire_type' => CommissionEnveloppePart::TYPE_PRESTATAIRE,
+                        'beneficiaire_id' => $affectation->prestataire_id,
                         'taux' => null,
                         'montant' => $montantTotal,
                     ]],

@@ -19,7 +19,7 @@ class RolesAndPermissionsSeeder extends Seeder
         // Opérations
         'logistique', 'transferts', 'receptions',
         // Finances
-        'depenses', 'comptabilite', 'journal-financier',
+        'depenses', 'comptabilite', 'journal-financier', 'tresorerie',
         // RH
         'rh-employes', 'rh-contrats', 'rh-paie',
         // Administration
@@ -85,6 +85,13 @@ class RolesAndPermissionsSeeder extends Seeder
         Permission::firstOrCreate(['name' => 'pieces-identite.valider']);
         Permission::firstOrCreate(['name' => 'pieces-identite.rejeter']);
         Permission::firstOrCreate(['name' => 'comptabilite.payer']);
+        // — Trésorerie (mouvements de fonds agence <-> siège) —
+        Permission::firstOrCreate(['name' => 'tresorerie.envoyer']);
+        Permission::firstOrCreate(['name' => 'tresorerie.recevoir']);
+        Permission::firstOrCreate(['name' => 'tresorerie.annuler']);
+        Permission::firstOrCreate(['name' => 'tresorerie.rejeter']);
+        Permission::firstOrCreate(['name' => 'tresorerie.gerer_soldes_ouverture']);
+        Permission::firstOrCreate(['name' => 'tresorerie.exporter']);
         // — Dépenses (workflow) —
         Permission::firstOrCreate(['name' => 'depenses.soumettre']);
         Permission::firstOrCreate(['name' => 'depenses.valider']);
@@ -184,6 +191,9 @@ class RolesAndPermissionsSeeder extends Seeder
             'comptabilite.create',      'comptabilite.read',      'comptabilite.update',      'comptabilite.delete',
             'comptabilite.payer',
             'journal-financier.create', 'journal-financier.read', 'journal-financier.update', 'journal-financier.delete',
+            'tresorerie.create',        'tresorerie.read',        'tresorerie.update',        'tresorerie.delete',
+            'tresorerie.envoyer',       'tresorerie.recevoir',    'tresorerie.annuler',       'tresorerie.rejeter',
+            'tresorerie.gerer_soldes_ouverture', 'tresorerie.exporter',
             // RH
             'rh-employes.create',       'rh-employes.read',       'rh-employes.update',       'rh-employes.delete',
             'rh-contrats.create',       'rh-contrats.read',       'rh-contrats.update',       'rh-contrats.delete',
@@ -241,6 +251,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'depenses.soumettre',       'depenses.valider',       'depenses.rejeter', 'depenses.annuler',
             'comptabilite.read',        'comptabilite.payer',
             'journal-financier.read',
+            'tresorerie.create',        'tresorerie.read',
+            'tresorerie.envoyer',       'tresorerie.recevoir',
             // RH
             'rh-employes.create',       'rh-employes.read',       'rh-employes.update',
             'rh-contrats.create',       'rh-contrats.read',       'rh-contrats.update',
@@ -286,6 +298,9 @@ class RolesAndPermissionsSeeder extends Seeder
             'depenses.read',
             'comptabilite.read',      'comptabilite.payer',
             'journal-financier.read',
+            'tresorerie.create',      'tresorerie.read',        'tresorerie.update',
+            'tresorerie.envoyer',     'tresorerie.recevoir',    'tresorerie.annuler',     'tresorerie.rejeter',
+            'tresorerie.gerer_soldes_ouverture', 'tresorerie.exporter',
             'cashback.read',
             'rh-paie.read',
         ]);
