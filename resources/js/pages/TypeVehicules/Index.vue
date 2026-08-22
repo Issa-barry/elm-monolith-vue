@@ -14,13 +14,8 @@ interface TypeVehiculeRow {
     description: string | null;
     categorie_tarifaire: string | null;
     categorie_tarifaire_label: string | null;
-    seuil_derogation_impayes: number | null;
     is_active: boolean;
     vehicules_count: number;
-}
-
-function formatGNF(val: number): string {
-    return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
 }
 
 const props = defineProps<{ types: TypeVehiculeRow[] }>();
@@ -127,7 +122,6 @@ function destroy(id: string) {
                         >
                             <th class="px-4 py-3">Nom</th>
                             <th class="px-4 py-3">Catégorie tarifaire</th>
-                            <th class="px-4 py-3">Dérogation impayés</th>
                             <th class="px-4 py-3 text-center">Statut</th>
                             <th class="px-4 py-3 text-center">Véhicules</th>
                             <th class="px-4 py-3" />
@@ -150,15 +144,6 @@ function destroy(id: string) {
                             </td>
                             <td class="px-4 py-3 text-muted-foreground">
                                 {{ type.categorie_tarifaire_label || '—' }}
-                            </td>
-                            <td class="px-4 py-3 text-muted-foreground">
-                                {{
-                                    type.seuil_derogation_impayes !== null
-                                        ? formatGNF(
-                                              type.seuil_derogation_impayes,
-                                          )
-                                        : '—'
-                                }}
                             </td>
                             <td class="px-4 py-3 text-center">
                                 <span
@@ -202,7 +187,7 @@ function destroy(id: string) {
                         </tr>
                         <tr v-if="typesFiltres.length === 0">
                             <td
-                                colspan="6"
+                                colspan="5"
                                 class="px-4 py-10 text-center text-sm text-muted-foreground"
                             >
                                 Aucun type de véhicule trouvé.

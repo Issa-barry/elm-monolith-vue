@@ -49,16 +49,34 @@ class TresorerieDisponibiliteService
     /**
      * Fonds envoyés vers ce site mais pas encore confirmés reçus — jamais
      * comptés dans disponiblePourSite() (aucune pièce postée côté destination
-     * tant que non reçu), affichés séparément pour que le siège comprenne
-     * pourquoi une agence semble encore "à financer" alors qu'un envoi est
-     * déjà en cours.
+     * tant que non reçu). Inclut CONTESTE : un litige non résolu ne rend les
+     * fonds disponibles nulle part tant qu'il n'est pas tranché (RECU ou
+     * RETOURNE).
+     *
+     * Si $echeanceDebut/$echeanceFin sont fournis, ne compte que les
+     * mouvements visant CETTE échéance (evite qu'un même envoi couvre deux
+     * besoins différents dans le calcul) plus ceux sans échéance déclarée
+     * (remise/financement générique — traité prudemment comme pouvant
+     * couvrir n'importe quel besoin, jamais ignoré : cf. revue Codex du
+     * 2026-08-22 sur le risque de double financement).
      */
-    public function fondsEnTransitVersSite(string $organizationId, string $siteId): float
+    public function fondsEnTransitVersSite(string $organizationId, string $siteId, ?Carbon $echeanceDebut = null, ?Carbon $echeanceFin = null): float
     {
-        return round((float) MouvementFonds::where('organization_id', $organizationId)
+        $query = MouvementFonds::where('organization_id', $organizationId)
             ->where('site_destination_id', $siteId)
-            ->where('statut', StatutMouvementFonds::ENVOYE->value)
-            ->sum('montant'), 2);
+            ->whereIn('statut', [StatutMouvementFonds::ENVOYE->value, StatutMouvementFonds::CONTESTE->value]);
+
+        if ($echeanceDebut && $echeanceFin) {
+            $query->where(fn ($q) => $q
+                ->whereNull('echeance_debut')
+                ->orWhere(fn ($q2) => $q2
+                    ->whereDate('echeance_debut', $echeanceDebut->toDateString())
+                    ->whereDate('echeance_fin', $echeanceFin->toDateString())
+                )
+            );
+        }
+
+        return round((float) $query->sum('montant'), 2);
     }
 
     /**

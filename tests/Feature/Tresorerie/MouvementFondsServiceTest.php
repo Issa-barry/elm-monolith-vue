@@ -184,15 +184,32 @@ class MouvementFondsServiceTest extends TestCase
         $this->service->annuler($mouvement, $this->user->id, 'Trop tard');
     }
 
-    public function test_rejeter_contrepasse_la_piece_d_envoi(): void
+    public function test_contester_ne_contrepasse_rien(): void
     {
         $mouvement = $this->creerMouvement(500_000);
         $mouvement = $this->service->envoyer($mouvement, $this->user->id);
         $pieceEnvoiId = $mouvement->piece_comptable_envoi_id;
 
-        $rejete = $this->service->rejeter($mouvement, $this->user->id, 'Fonds jamais reçus physiquement');
+        $conteste = $this->service->contester($mouvement, $this->user->id, 'Fonds jamais reçus selon le destinataire');
 
-        $this->assertSame(StatutMouvementFonds::REJETE, $rejete->statut);
+        $this->assertSame(StatutMouvementFonds::CONTESTE, $conteste->statut);
+
+        // Aucune contrepassation à ce stade : une contestation n'est pas une preuve
+        // que l'argent est physiquement revenu à l'origine (revue Codex du 2026-08-22).
+        $piece = PieceComptable::find($pieceEnvoiId);
+        $this->assertSame(StatutPieceComptable::VALIDEE, $piece->fresh()->statut);
+    }
+
+    public function test_confirmer_retour_contrepasse_la_piece_d_envoi(): void
+    {
+        $mouvement = $this->creerMouvement(500_000);
+        $mouvement = $this->service->envoyer($mouvement, $this->user->id);
+        $mouvement = $this->service->contester($mouvement, $this->user->id, 'Fonds jamais reçus');
+        $pieceEnvoiId = $mouvement->piece_comptable_envoi_id;
+
+        $retourne = $this->service->confirmerRetour($mouvement, $this->user->id, 'Convoyeur a rapporté les fonds au siège');
+
+        $this->assertSame(StatutMouvementFonds::RETOURNE, $retourne->statut);
 
         $piece = PieceComptable::find($pieceEnvoiId);
         $this->assertTrue($piece->fresh()->statut === StatutPieceComptable::CONTREPASSEE);
@@ -203,6 +220,26 @@ class MouvementFondsServiceTest extends TestCase
             ->selectRaw('COALESCE(SUM(debit),0) - COALESCE(SUM(credit),0) as solde')
             ->value('solde');
         $this->assertEquals(0.0, (float) $solde);
+    }
+
+    public function test_confirmer_retour_refuse_sans_contestation_prealable(): void
+    {
+        $mouvement = $this->creerMouvement(500_000);
+        $mouvement = $this->service->envoyer($mouvement, $this->user->id);
+
+        $this->expectException(TransitionMouvementFondsInvalideException::class);
+        $this->service->confirmerRetour($mouvement, $this->user->id, 'Sans contestation préalable');
+    }
+
+    public function test_recevoir_leve_une_contestation(): void
+    {
+        $mouvement = $this->creerMouvement(500_000);
+        $mouvement = $this->service->envoyer($mouvement, $this->user->id);
+        $mouvement = $this->service->contester($mouvement, $this->user->id, 'Erreur initiale du destinataire');
+
+        $recu = $this->service->recevoir($mouvement, $this->user->id);
+
+        $this->assertSame(StatutMouvementFonds::RECU, $recu->statut);
     }
 
     public function test_isole_les_organisations_a_la_creation(): void

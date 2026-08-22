@@ -58,9 +58,21 @@ interface VehiculeCard {
     statut_validation: 'a_verifier' | 'validee' | 'a_reverifier' | 'payee';
 }
 
+interface BeneficiaireFiche {
+    fiche_id: string;
+    beneficiaire_nom: string;
+    montant_brut: number;
+    montant_net: number;
+    montant_paye: number;
+    reste: number;
+    statut: string;
+    statut_label: string;
+}
+
 const props = defineProps<{
     periode: Periode;
     vehicules: VehiculeCard[];
+    beneficiaires: BeneficiaireFiche[];
     filters: Record<string, string>;
     recalcul: {
         effectue: boolean;
@@ -81,40 +93,73 @@ const props = defineProps<{
     };
 }>();
 
-const filterFields: FilterField[] = [
-    {
-        key: 'vehicule',
-        label: 'Véhicule',
-        type: 'text',
-        placeholder: 'Nom ou immatriculation…',
-        inline: true,
-    },
-    {
-        key: 'livreur',
-        label: 'Livreur',
-        type: 'text',
-        placeholder: 'Nom du livreur…',
-        inline: true,
-    },
-    {
-        key: 'proprietaire',
-        label: 'Propriétaire',
-        type: 'text',
-        placeholder: 'Nom du propriétaire…',
-    },
-    {
-        key: 'etat',
-        label: 'État',
-        type: 'select',
-        inline: true,
-        options: [
-            { value: 'a_verifier', label: 'À vérifier' },
-            { value: 'validee', label: 'Validé' },
-            { value: 'a_reverifier', label: 'À revérifier' },
-            { value: 'payee', label: 'Payé' },
-        ],
-    },
-];
+// Périodes livreur/propriétaire : ancrées véhicule (la commission s'ancre sur un véhicule).
+// Autres types (salarié, site, consultant) : aucun concept de véhicule, chaque fiche EST déjà
+// la ligne bénéficiaire — filtres et statuts adaptés en conséquence (cf. showBeneficiaires).
+const isVehiculeType = computed(() =>
+    ['livreur', 'proprietaire'].includes(props.periode.type),
+);
+
+const filterFields = computed<FilterField[]>(() =>
+    isVehiculeType.value
+        ? [
+              {
+                  key: 'vehicule',
+                  label: 'Véhicule',
+                  type: 'text',
+                  placeholder: 'Nom ou immatriculation…',
+                  inline: true,
+              },
+              {
+                  key: 'livreur',
+                  label: 'Livreur',
+                  type: 'text',
+                  placeholder: 'Nom du livreur…',
+                  inline: true,
+              },
+              {
+                  key: 'proprietaire',
+                  label: 'Propriétaire',
+                  type: 'text',
+                  placeholder: 'Nom du propriétaire…',
+              },
+              {
+                  key: 'etat',
+                  label: 'État',
+                  type: 'select',
+                  inline: true,
+                  options: [
+                      { value: 'a_verifier', label: 'À vérifier' },
+                      { value: 'validee', label: 'Validé' },
+                      { value: 'a_reverifier', label: 'À revérifier' },
+                      { value: 'payee', label: 'Payé' },
+                  ],
+              },
+          ]
+        : [
+              {
+                  key: 'beneficiaire',
+                  label: 'Bénéficiaire',
+                  type: 'text',
+                  placeholder: 'Nom…',
+                  inline: true,
+              },
+              {
+                  key: 'etat',
+                  label: 'État',
+                  type: 'select',
+                  inline: true,
+                  options: [
+                      { value: 'a_payer', label: 'À payer' },
+                      {
+                          value: 'partiellement_paye',
+                          label: 'Partiellement payé',
+                      },
+                      { value: 'paye', label: 'Payé' },
+                  ],
+              },
+          ],
+);
 
 const STATUT_VALIDATION_LABELS: Record<string, string> = {
     a_verifier: 'À vérifier',
@@ -173,6 +218,8 @@ const voirCommissionsUrl = computed(() => {
             return `/backoffice/comptabilite/salaires`;
         case 'site':
             return `/backoffice/comptabilite/commissions/sites`;
+        case 'consultant':
+            return `/backoffice/comptabilite/commissions/consultants`;
         default:
             return '/backoffice/comptabilite/periodes';
     }
@@ -494,14 +541,19 @@ function exportPdf() {
                 :url="`/backoffice/comptabilite/periodes/${periode.id}`"
                 :values="filters"
                 :fields="filterFields"
-                :result-count="vehicules.length"
+                :result-count="
+                    isVehiculeType ? vehicules.length : beneficiaires.length
+                "
                 hide-agence-selector
             />
 
-            <!-- Commissions par véhicule -->
+            <!-- Commissions par véhicule (livreur/propriétaire uniquement) -->
             <!-- data-key="vehicule_id" : point d'extension pour un futur détail par ligne
                  (commandes/commissions composant le montant), via un DataTable expander. -->
-            <div class="overflow-x-auto rounded-xl border bg-card">
+            <div
+                v-if="isVehiculeType"
+                class="overflow-x-auto rounded-xl border bg-card"
+            >
                 <DataTable
                     :value="vehicules"
                     :paginator="vehicules.length > 20"
@@ -652,6 +704,117 @@ function exportPdf() {
                                     </Button>
                                 </Link>
                             </div>
+                        </template>
+                    </Column>
+
+                    <template #empty>
+                        <div
+                            class="py-16 text-center text-sm text-muted-foreground"
+                        >
+                            Aucune commission trouvée pour cette période.
+                        </div>
+                    </template>
+                </DataTable>
+            </div>
+
+            <!-- Commissions par bénéficiaire (salarié/site/consultant) : une ligne = une fiche,
+                 aucun regroupement par véhicule (concept absent pour ces types). -->
+            <div v-else class="overflow-x-auto rounded-xl border bg-card">
+                <DataTable
+                    :value="beneficiaires"
+                    :paginator="beneficiaires.length > 20"
+                    :rows="20"
+                    data-key="fiche_id"
+                    striped-rows
+                    removable-sort
+                    class="text-sm"
+                    :pt="{
+                        root: { class: 'w-full min-w-[900px]' },
+                        tbody: { class: 'divide-y' },
+                    }"
+                >
+                    <Column
+                        field="beneficiaire_nom"
+                        header="Bénéficiaire"
+                        sortable
+                        style="min-width: 220px"
+                    >
+                        <template #body="{ data }">
+                            <span class="font-medium">{{
+                                data.beneficiaire_nom
+                            }}</span>
+                        </template>
+                    </Column>
+
+                    <Column
+                        field="montant_brut"
+                        header="Brut"
+                        sortable
+                        style="width: 150px"
+                    >
+                        <template #body="{ data }">
+                            <span class="text-muted-foreground tabular-nums">{{
+                                fmt(data.montant_brut)
+                            }}</span>
+                        </template>
+                    </Column>
+
+                    <Column
+                        field="montant_net"
+                        header="Net à payer"
+                        sortable
+                        style="width: 150px"
+                    >
+                        <template #body="{ data }">
+                            <span class="font-semibold tabular-nums">{{
+                                fmt(data.montant_net)
+                            }}</span>
+                        </template>
+                    </Column>
+
+                    <Column
+                        field="montant_paye"
+                        header="Déjà payé"
+                        sortable
+                        style="width: 140px"
+                    >
+                        <template #body="{ data }">
+                            <span class="text-muted-foreground tabular-nums">{{
+                                fmt(data.montant_paye)
+                            }}</span>
+                        </template>
+                    </Column>
+
+                    <Column
+                        field="reste"
+                        header="Reste à payer"
+                        sortable
+                        style="width: 140px"
+                    >
+                        <template #body="{ data }">
+                            <span
+                                class="tabular-nums"
+                                :class="
+                                    data.reste > 0
+                                        ? 'font-medium text-amber-600 dark:text-amber-400'
+                                        : 'text-muted-foreground'
+                                "
+                                >{{ fmt(data.reste) }}</span
+                            >
+                        </template>
+                    </Column>
+
+                    <Column
+                        field="statut"
+                        header="Statut"
+                        sortable
+                        style="width: 160px"
+                    >
+                        <template #body="{ data }">
+                            <StatusDot
+                                :status="data.statut"
+                                :label="data.statut_label"
+                            />
                         </template>
                     </Column>
 

@@ -61,53 +61,57 @@ class EncaissementVenteController extends Controller
         // cascade (auto-clôture, cashback) doivent réussir ou échouer ensemble : un
         // échec en cours de route ne doit jamais laisser une commission générée pour un
         // encaissement finalement non persisté.
-        DB::transaction(function () use ($facture_vente, $commande, $data) {
-            $facture_vente->encaissements()->create([
-                'montant' => $data['montant'],
-                'date_encaissement' => $data['date_encaissement'],
-                'mode_paiement' => $data['mode_paiement'],
-                'note' => $data['note'] ?? null,
-                'created_by' => auth()->id(),
-            ]);
+        try {
+            DB::transaction(function () use ($facture_vente, $commande, $data) {
+                $facture_vente->encaissements()->create([
+                    'montant' => $data['montant'],
+                    'date_encaissement' => $data['date_encaissement'],
+                    'mode_paiement' => $data['mode_paiement'],
+                    'note' => $data['note'] ?? null,
+                    'created_by' => auth()->id(),
+                ]);
 
-            // Audit: log on the parent commande
-            if ($commande) {
-                $this->auditService->record(
-                    $commande,
-                    AuditEvent::ENCAISSEMENT_ADDED,
-                    auth()->user(),
-                    null,
-                    [
-                        'montant' => (float) $data['montant'],
-                        'mode_paiement' => $data['mode_paiement'],
-                        'date_encaissement' => $data['date_encaissement'],
-                    ],
-                );
-            }
+                // Audit: log on the parent commande
+                if ($commande) {
+                    $this->auditService->record(
+                        $commande,
+                        AuditEvent::ENCAISSEMENT_ADDED,
+                        auth()->user(),
+                        null,
+                        [
+                            'montant' => (float) $data['montant'],
+                            'mode_paiement' => $data['mode_paiement'],
+                            'date_encaissement' => $data['date_encaissement'],
+                        ],
+                    );
+                }
 
-            $etaitPayee = $facture_vente->isPayee();
-            $facture_vente->recalculStatut();
-            $estPayeeMaintenant = $facture_vente->isPayee();
+                $etaitPayee = $facture_vente->isPayee();
+                $facture_vente->recalculStatut();
+                $estPayeeMaintenant = $facture_vente->isPayee();
 
-            // Auto-transition LIVRAISON_EN_COURS → LIVREE au premier encaissement.
-            if ($commande?->isLivraisonEnCours()) {
-                CommandeVenteService::passerEnLivree($commande);
-                CommandeVenteActiviteService::log($commande, 'livree');
-            }
+                // Auto-transition LIVRAISON_EN_COURS → LIVREE au premier encaissement.
+                if ($commande?->isLivraisonEnCours()) {
+                    CommandeVenteService::passerEnLivree($commande);
+                    CommandeVenteActiviteService::log($commande, 'livree');
+                }
 
-            // Auto-clôture si LIVREE + facture payée + commissions versées.
-            $commande?->cloturerSiComplete();
+                // Auto-clôture si LIVREE + facture payée + commissions versées.
+                $commande?->cloturerSiComplete();
 
-            // Cashback: declenche uniquement quand la facture passe a "payee".
-            if (! $etaitPayee && $estPayeeMaintenant) {
-                if ($commande && $commande->organization_id && $commande->client_id) {
-                    $org = Organization::find($commande->organization_id);
-                    if ($org && Feature::for($org)->active(ModuleFeature::CASHBACK)) {
-                        app(CashbackService::class)->processVente($commande);
+                // Cashback: declenche uniquement quand la facture passe a "payee".
+                if (! $etaitPayee && $estPayeeMaintenant) {
+                    if ($commande && $commande->organization_id && $commande->client_id) {
+                        $org = Organization::find($commande->organization_id);
+                        if ($org && Feature::for($org)->active(ModuleFeature::CASHBACK)) {
+                            app(CashbackService::class)->processVente($commande);
+                        }
                     }
                 }
-            }
-        });
+            });
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['comptabilisation' => "Encaissement non enregistré : {$e->getMessage()}"]);
+        }
 
         return redirect()->back()->with('success', 'Encaissement enregistre.');
     }

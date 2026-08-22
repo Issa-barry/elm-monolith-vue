@@ -14,6 +14,42 @@ use Tests\TestCase;
  */
 class PeriodeComptableServiceTest extends TestCase
 {
+    // ── periodicityFor ────────────────────────────────────────────────────────
+
+    /** @test */
+    public function it_uses_quinzaine_for_livreur(): void
+    {
+        $this->assertSame('quinzaine', PeriodeComptableService::periodicityFor('livreur'));
+    }
+
+    /** @test */
+    public function it_uses_quinzaine_for_site(): void
+    {
+        // Même déclencheur (une vente) que l'équipe de livraison → même cadence quinzaine.
+        $this->assertSame('quinzaine', PeriodeComptableService::periodicityFor('site'));
+    }
+
+    /** @test */
+    public function it_uses_mensuelle_for_proprietaire(): void
+    {
+        $this->assertSame('mensuelle', PeriodeComptableService::periodicityFor('proprietaire'));
+    }
+
+    /** @test */
+    public function it_uses_mensuelle_for_salarie(): void
+    {
+        $this->assertSame('mensuelle', PeriodeComptableService::periodicityFor('salarie'));
+    }
+
+    /** @test */
+    public function it_uses_mensuelle_for_consultant(): void
+    {
+        // Décision produit V1 (2026-08-22, documentée dans PeriodeComptableService) : le
+        // consultant est payé au rythme mensuel type honoraires, jamais la quinzaine des
+        // livreurs, même si sa commission est générée à chaque vente comme pour un site.
+        $this->assertSame('mensuelle', PeriodeComptableService::periodicityFor('consultant'));
+    }
+
     // ── codeForLivreur ────────────────────────────────────────────────────────
 
     /** @test */

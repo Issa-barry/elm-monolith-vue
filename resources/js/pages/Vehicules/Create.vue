@@ -18,7 +18,6 @@ interface Option {
 interface TypeOption {
     value: string;
     label: string;
-    seuil_derogation_impayes: number | null;
 }
 interface SiteOption {
     id: string;
@@ -68,7 +67,10 @@ const form = useForm({
     photo: null as File | null,
     is_active: true,
     capacites: [] as CapaciteRow[],
+    // Dérogation impayés : jamais activée à la création, gérée exclusivement depuis la fiche
+    // véhicule une fois créé (cf. Vehicules/Show.vue).
     derogation_impayes_autorisee: false,
+    seuil_derogation_impayes: null as number | null,
 });
 
 const canSubmit = computed(() => {

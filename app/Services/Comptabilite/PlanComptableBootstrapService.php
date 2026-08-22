@@ -197,6 +197,21 @@ class PlanComptableBootstrapService
             // un vrai résultat/charge (cf. SoldeOuvertureTresorerieService).
             ['solde_ouverture_tresorerie', 'contrepartie_ouverture', null, '109000', 'OD'],
 
+            // Paiement direct de commission logistique (App\Models\CommissionPayment) —
+            // circuit parallèle à paiement_livreur/paiement_proprietaire, mêmes comptes de
+            // charge (622100/622200) réutilisés : c'est la même nature de dépense, seule la
+            // source du paiement diffère (audit du 2026-08-22).
+            ['paiement_commission_logistique_direct', 'charge_commission_livreur', null, '622200', null],
+            ['paiement_commission_logistique_direct', 'charge_commission_proprietaire', null, '622100', null],
+            ['paiement_commission_logistique_direct', 'tresorerie', null, '571000', 'CA'],
+            ['paiement_commission_logistique_direct', 'tresorerie', 'especes', '571000', 'CA'],
+            ['paiement_commission_logistique_direct', 'tresorerie', 'mobile_money', '561000', 'MM'],
+            ['paiement_commission_logistique_direct', 'tresorerie', 'mobile_money:orange', '561100', 'MM'],
+            ['paiement_commission_logistique_direct', 'tresorerie', 'mobile_money:mtn', '561200', 'MM'],
+            ['paiement_commission_logistique_direct', 'tresorerie', 'mobile_money:djomy', '561300', 'MM'],
+            ['paiement_commission_logistique_direct', 'tresorerie', 'virement', '521000', 'BQ'],
+            ['paiement_commission_logistique_direct', 'tresorerie', 'cheque', '521000', 'BQ'],
+
             // Régularisation de clôture (provision, reprise automatique à la validation réelle)
             ['regularisation_cloture_fiche', 'charge_commission_proprietaire', null, '622100', 'OD'],
             ['regularisation_cloture_fiche', 'dette_tiers_provisoire_proprietaire', null, '467150', 'OD'],

@@ -6,10 +6,17 @@ use RuntimeException;
 
 /**
  * Levée quand un événement métier ne peut pas être comptabilisé faute de
- * mapping compte configuré pour l'organisation. Volontairement bruyante côté
- * moteur comptable — mais les points d'accroche métier (Observers/listeners)
- * doivent l'attraper et ne jamais laisser une comptabilité non configurée
- * bloquer une opération métier (mode shadow), cf. règle #26 de la spec.
+ * mapping compte configuré pour l'organisation.
+ *
+ * Pour un événement qui déplace de la trésorerie réelle (paiement de fiche,
+ * de salaire, dépense validée, encaissement) : NE DOIT PLUS être avalée en
+ * mode shadow — le point d'accroche métier doit la laisser propager pour
+ * annuler l'opération dans la même transaction (revue Codex du 2026-08-22,
+ * corrige la règle #26 d'origine). Pour un événement qui ne touche aucun
+ * compte de trésorerie (fiche_*_validee, vente_facturee — engagement/dette
+ * seulement) : le mode shadow reste approprié, le blast radius d'un blocage
+ * (chargement, validation de période) étant disproportionné par rapport au
+ * bénéfice, cf. docblocks de CommandeVenteService/PaiementPeriodeController.
  */
 class MappingComptableIndisponibleException extends RuntimeException
 {

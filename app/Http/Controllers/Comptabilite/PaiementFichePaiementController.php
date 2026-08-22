@@ -12,6 +12,7 @@ use App\Services\CommissionEnveloppePartAllocationService;
 use App\Services\PeriodePayabilityChecker;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 class PaiementFichePaiementController extends Controller
@@ -39,25 +40,33 @@ class PaiementFichePaiementController extends Controller
             'note' => ['nullable', 'string'],
         ]);
 
-        $paiement = PaiementFichePaiement::create([
-            'fiche_id' => $fiche->id,
-            'organization_id' => $fiche->organization_id,
-            'site_id' => $fiche->site_id,
-            'montant' => $data['montant'],
-            'mode_paiement' => $data['mode_paiement'],
-            'moyen_paiement_detail' => $data['mode_paiement'] === ModePaiement::MOBILE_MONEY->value
-                ? ($data['moyen_paiement_detail'] ?? null)
-                : null,
-            'date_paiement' => $data['date_paiement'],
-            'note' => $data['note'] ?? null,
-        ]);
+        try {
+            $paiement = DB::transaction(function () use ($fiche, $data) {
+                $paiement = PaiementFichePaiement::create([
+                    'fiche_id' => $fiche->id,
+                    'organization_id' => $fiche->organization_id,
+                    'site_id' => $fiche->site_id,
+                    'montant' => $data['montant'],
+                    'mode_paiement' => $data['mode_paiement'],
+                    'moyen_paiement_detail' => $data['mode_paiement'] === ModePaiement::MOBILE_MONEY->value
+                        ? ($data['moyen_paiement_detail'] ?? null)
+                        : null,
+                    'date_paiement' => $data['date_paiement'],
+                    'note' => $data['note'] ?? null,
+                ]);
 
-        // Reporte ce paiement sur les CommissionEnveloppePart sous-jacentes de la
-        // fiche, pour que Commission vente/propriétaire restent synchronisées avec
-        // ce paiement (une seule chaîne de paiement). Auto-scopé et sans effet pour
-        // une fiche logistique : partsPourFiche() ne trouve rien à allouer quand
-        // aucune ligne de la fiche ne référence CommissionEnveloppePart.
-        CommissionEnveloppePartAllocationService::allouer($fiche, $paiement);
+                // Reporte ce paiement sur les CommissionEnveloppePart sous-jacentes de la
+                // fiche, pour que Commission vente/propriétaire restent synchronisées avec
+                // ce paiement (une seule chaîne de paiement). Auto-scopé et sans effet pour
+                // une fiche logistique : partsPourFiche() ne trouve rien à allouer quand
+                // aucune ligne de la fiche ne référence CommissionEnveloppePart.
+                CommissionEnveloppePartAllocationService::allouer($fiche, $paiement);
+
+                return $paiement;
+            });
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['comptabilisation' => "Paiement non enregistré : {$e->getMessage()}"]);
+        }
 
         $montantFmt = number_format((float) $data['montant'], 0, ',', "\u{202F}");
         app(AuditLogService::class)->record($fiche, AuditEvent::PAID, auth()->user(), null, null, [

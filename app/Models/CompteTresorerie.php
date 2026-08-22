@@ -39,6 +39,49 @@ class CompteTresorerie extends Model
         ];
     }
 
+    protected static function boot(): void
+    {
+        parent::boot();
+
+        static::creating(function (CompteTresorerie $support) {
+            $libelle = trim((string) $support->libelle);
+            if ($libelle !== '') {
+                $support->libelle = $libelle;
+
+                return;
+            }
+
+            $type = $support->type instanceof TypeSupportTresorerie
+                ? $support->type
+                : TypeSupportTresorerie::from((string) $support->type);
+            $siteNom = Site::whereKey($support->site_id)->value('nom') ?? '';
+            $base = self::libelleBase($type, $siteNom);
+
+            $candidat = $base;
+            $suffixe = 2;
+            while (static::where('organization_id', $support->organization_id)
+                ->where('site_id', $support->site_id)
+                ->where('libelle', $candidat)
+                ->exists()) {
+                $candidat = "{$base} ({$suffixe})";
+                $suffixe++;
+            }
+
+            $support->libelle = $candidat;
+        });
+    }
+
+    /**
+     * Libellé de base généré automatiquement quand l'utilisateur n'en saisit
+     * pas : "{Type} de {Site}" (ex: "Caisse de Cba"). Pure, testable sans BDD
+     * — le dédoublonnage (suffixe " (2)", " (3)"...) est géré par le hook
+     * creating() ci-dessus, qui a besoin d'interroger la base.
+     */
+    public static function libelleBase(TypeSupportTresorerie $type, string $siteNom): string
+    {
+        return trim("{$type->label()} de {$siteNom}");
+    }
+
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);

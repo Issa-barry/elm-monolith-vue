@@ -34,6 +34,8 @@ class MouvementFonds extends Model
         'montant',
         'moyen_transfert',
         'reference_externe',
+        'echeance_debut',
+        'echeance_fin',
         'date_envoi',
         'date_reception',
         'justificatif_path',
@@ -54,6 +56,8 @@ class MouvementFonds extends Model
             'montant' => 'decimal:2',
             'date_envoi' => 'date',
             'date_reception' => 'date',
+            'echeance_debut' => 'date',
+            'echeance_fin' => 'date',
             'statut' => StatutMouvementFonds::class,
         ];
     }
@@ -76,7 +80,7 @@ class MouvementFonds extends Model
         do {
             $reference = $prefix.str_pad((string) $num, 5, '0', STR_PAD_LEFT);
             $num++;
-        } while (static::where('reference', $reference)->exists());
+        } while (static::where('organization_id', $organizationId)->where('reference', $reference)->exists());
 
         return $reference;
     }
@@ -143,6 +147,11 @@ class MouvementFonds extends Model
     public function isEnvoye(): bool
     {
         return $this->statut === StatutMouvementFonds::ENVOYE;
+    }
+
+    public function isConteste(): bool
+    {
+        return $this->statut === StatutMouvementFonds::CONTESTE;
     }
 
     public function isTerminal(): bool

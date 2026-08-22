@@ -35,6 +35,7 @@ use App\Services\Commission\CommissionEnveloppeGenerator;
 use App\Services\PeriodeCalculatorService;
 use App\Services\PeriodePaiementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -261,6 +262,29 @@ class CommissionConsultantTest extends TestCase
         $response->assertInertia(fn ($page) => $page->has('beneficiaires', 0));
     }
 
+    /**
+     * Un consultant désactivé (Prestataire.is_active=false, ex: fin de contrat) reste visible
+     * avec son historique — la désactivation ne concerne que l'éligibilité à de FUTURES
+     * commissions (CommissionConsultantAffectation::actifPour ignore un prestataire inactif),
+     * jamais la visibilité comptable rétroactive (cf. mission §3).
+     */
+    /** @test */
+    public function un_consultant_desactive_reste_visible_avec_son_historique(): void
+    {
+        $consultant = $this->creerConsultant();
+        $this->genererCommissionPourConsultant($consultant, 200, 5); // 1000 GNF
+
+        $consultant->update(['is_active' => false]);
+
+        $response = $this->actingAs($this->user)->get(route('comptabilite.commissions.consultants.index'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->has('beneficiaires', 1)
+            ->where('beneficiaires.0.beneficiaire_id', $consultant->id)
+            ->where('beneficiaires.0.total_genere', 1000)
+        );
+    }
+
     /** @test */
     public function index_nexpose_jamais_les_commissions_dune_autre_organisation(): void
     {
@@ -390,5 +414,37 @@ class CommissionConsultantTest extends TestCase
         $this->assertEqualsWithDelta(1000.0, (float) $fiche->montant_net, 0.01);
         $this->assertSame($consultant->nom_complet, $fiche->beneficiaire_nom);
         $this->assertNull($fiche->site_id);
+    }
+
+    /**
+     * L'écran "Détail de période" (partagé avec livreur/propriétaire) doit afficher le
+     * consultant comme ligne bénéficiaire directe — jamais le tableau "Véhicule/Immatriculation/
+     * Membres" vide avec "Aucune commission trouvée" alors que les cartes de synthèse affichent
+     * un montant non nul (incohérence UI signalée) : ce concept de véhicule n'existe pas pour une
+     * commission consultant.
+     */
+    /** @test */
+    public function le_detail_de_periode_affiche_le_consultant_comme_beneficiaire_pas_comme_vehicule(): void
+    {
+        $consultant = $this->creerConsultant();
+        $this->genererCommissionPourConsultant($consultant, 200, 5); // 1000 GNF
+
+        $periode = app(PeriodePaiementService::class)->getOrCreatePeriod(
+            $this->org->id,
+            TypePeriodePaiement::CONSULTANT,
+            now(),
+            $this->user->id,
+        );
+
+        $response = $this->actingAs($this->user)->get(route('comptabilite.periodes.show', $periode));
+
+        $response->assertInertia(fn (Assert $page) => $page
+            ->component('Comptabilite/Periodes/Show')
+            ->where('vehicules', [])
+            ->has('beneficiaires', 1)
+            ->where('beneficiaires.0.beneficiaire_nom', $consultant->nom_complet)
+            ->where('beneficiaires.0.montant_net', 1000)
+            ->where('stats.total_net', 1000)
+        );
     }
 }

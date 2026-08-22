@@ -11,7 +11,6 @@ use App\Services\Comptabilite\DepenseComptabilisationService;
 use App\Services\JournalTresorerieService;
 use App\Services\PaieCalculService;
 use App\Services\PeriodeCalculatorService;
-use Illuminate\Support\Facades\Log;
 
 class DepenseObserver
 {
@@ -52,16 +51,11 @@ class DepenseObserver
 
     private function comptabiliser(Depense $depense): void
     {
-        // Comptabilité générale, en aval — ne doit jamais empêcher une dépense
-        // métier d'être validée (mode shadow, règle #26 de la spec).
-        try {
-            $this->depenseComptabilisation->comptabiliserDepenseValidee($depense);
-        } catch (\Throwable $e) {
-            Log::error('Comptabilisation dépense validée échouée', [
-                'depense_id' => $depense->id,
-                'error' => $e->getMessage(),
-            ]);
-        }
+        // Comptabilité générale : une dépense validée décaisse de la trésorerie réelle
+        // — bloquant depuis la revue Codex du 2026-08-22 (même raison que
+        // PaiementFichePaiement/PaiePaiement). DepenseController::valider() englobe
+        // déjà ce changement de statut dans une transaction.
+        $this->depenseComptabilisation->comptabiliserDepenseValidee($depense);
     }
 
     private function recalculerPeriodePaiement(Depense $depense): void

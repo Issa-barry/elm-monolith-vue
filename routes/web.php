@@ -256,7 +256,7 @@ Route::prefix('backoffice')->group(function () {
 
             Route::resource('type-vehicules', TypeVehiculeController::class)->except(['show']);
             Route::resource('vehicules', VehiculeController::class);
-            Route::patch('vehicules/{vehicule}/toggle-derogation', [VehiculeController::class, 'toggleDerogation'])->name('vehicules.toggle-derogation');
+            Route::patch('vehicules/{vehicule}/derogation-impayes', [VehiculeController::class, 'updateDerogation'])->name('vehicules.derogation-impayes.update');
             Route::post('vehicules/{vehicule}/frais', [VehiculeController::class, 'storeFrais'])->name('vehicules.frais.store');
             Route::patch('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'updateFrais'])->name('vehicules.frais.update');
             Route::delete('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'destroyFrais'])->name('vehicules.frais.destroy');
@@ -470,7 +470,8 @@ Route::prefix('backoffice')->group(function () {
                 Route::post('mouvements/{mouvement}/envoyer', [MouvementFondsController::class, 'envoyer'])->name('mouvements.envoyer');
                 Route::post('mouvements/{mouvement}/recevoir', [MouvementFondsController::class, 'recevoir'])->name('mouvements.recevoir');
                 Route::post('mouvements/{mouvement}/annuler', [MouvementFondsController::class, 'annuler'])->name('mouvements.annuler');
-                Route::post('mouvements/{mouvement}/rejeter', [MouvementFondsController::class, 'rejeter'])->name('mouvements.rejeter');
+                Route::post('mouvements/{mouvement}/contester', [MouvementFondsController::class, 'contester'])->name('mouvements.contester');
+                Route::post('mouvements/{mouvement}/confirmer-retour', [MouvementFondsController::class, 'confirmerRetour'])->name('mouvements.confirmer-retour');
 
                 Route::get('supports', [CompteTresorerieController::class, 'index'])->name('supports.index');
                 Route::post('supports', [CompteTresorerieController::class, 'store'])->name('supports.store');
