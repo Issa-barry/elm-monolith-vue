@@ -15,7 +15,7 @@ import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     CheckCircle,
@@ -39,7 +39,7 @@ import Textarea from 'primevue/textarea';
 import Tooltip from 'primevue/tooltip';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
 const vTooltip = Tooltip;
 
@@ -120,6 +120,17 @@ const props = defineProps<{
 const { can } = usePermissions();
 const confirm = useConfirm();
 const toast = useToast();
+
+// Accès direct à /backoffice/ventes/create bloqué (aucun stock disponible pour ce site) :
+// CommandeVenteController::create()/store() ne renvoient jamais une page 403, ils redirigent
+// ici avec un flash 'error' (partagé globalement par HandleInertiaRequests) — affiché en toast
+// top-right plutôt qu'en page d'erreur, cf. règle projet <Toast position="top-right">.
+onMounted(() => {
+    const flash = (usePage().props as { flash?: { error?: string } }).flash;
+    if (flash?.error) {
+        toast.add({ severity: 'error', summary: flash.error, life: 6000 });
+    }
+});
 
 const { onRowClick, bodyRowPt } = useClickableTableRow<Commande>(
     (commande) => `/backoffice/ventes/${commande.id}`,

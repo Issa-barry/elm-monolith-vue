@@ -258,41 +258,50 @@ function saveVente() {
                         </div>
                     </div>
 
-                    <div class="flex items-start gap-3 px-6 py-5">
-                        <Checkbox
-                            v-model="autoriseVenteStockNegatif"
-                            :binary="true"
-                            input-id="autorise-vente-stock-negatif"
-                            class="mt-0.5"
-                        />
-                        <div>
-                            <label
-                                for="autorise-vente-stock-negatif"
-                                class="cursor-pointer text-sm font-medium"
-                            >
-                                Autoriser les ventes sans stock disponible
-                            </label>
-                            <p class="mt-1 text-xs text-muted-foreground">
-                                Lorsqu'elle est décochée, ELM bloque les
-                                ventes lorsque le stock disponible est
-                                insuffisant.
-                            </p>
-                            <p
-                                v-if="autoriseVenteStockNegatif"
-                                class="mt-1 text-xs text-muted-foreground"
-                            >
-                                Le PDV et les commandes vente peuvent être
-                                validés même si le stock est insuffisant. Le
-                                stock peut alors devenir négatif jusqu'au
-                                prochain réapprovisionnement ou ajustement.
-                            </p>
-                            <p class="mt-2 text-xs text-muted-foreground/70">
-                                S'applique au PDV et aux commandes vente
-                                uniquement — les transferts entre agences et
-                                les ajustements manuels restent toujours
-                                bloqués au-delà du stock disponible.
-                            </p>
+                    <div class="px-6 py-5">
+                        <p class="text-sm font-medium">
+                            Autoriser les ventes sans stock disponible
+                        </p>
+
+                        <div class="mt-3 flex items-center gap-6">
+                            <div class="flex items-center gap-2">
+                                <Checkbox
+                                    input-id="vente-stock-negatif-oui"
+                                    :model-value="autoriseVenteStockNegatif"
+                                    :binary="true"
+                                    @update:model-value="
+                                        autoriseVenteStockNegatif = true
+                                    "
+                                />
+                                <label
+                                    for="vente-stock-negatif-oui"
+                                    class="cursor-pointer text-sm"
+                                    >Oui</label
+                                >
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <Checkbox
+                                    input-id="vente-stock-negatif-non"
+                                    :model-value="!autoriseVenteStockNegatif"
+                                    :binary="true"
+                                    @update:model-value="
+                                        autoriseVenteStockNegatif = false
+                                    "
+                                />
+                                <label
+                                    for="vente-stock-negatif-non"
+                                    class="cursor-pointer text-sm"
+                                    >Non</label
+                                >
+                            </div>
                         </div>
+
+                        <p class="mt-3 text-xs text-muted-foreground">
+                            Non : ventes bloquées si stock insuffisant.
+                        </p>
+                        <p class="text-xs text-muted-foreground">
+                            PDV et commandes uniquement.
+                        </p>
                     </div>
                 </div>
 

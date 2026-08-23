@@ -77,7 +77,7 @@ class CommandeVenteCreationBloqueeTest extends TestCase
             ->get('/backoffice/ventes')
             ->assertInertia(fn ($page) => $page
                 ->where('can_creer_commande', false)
-                ->where('raison_blocage_commande', 'Impossible de créer une commande : aucun stock disponible pour ce site.')
+                ->where('raison_blocage_commande', 'Aucun stock disponible pour ce site.')
             );
     }
 
@@ -116,11 +116,16 @@ class CommandeVenteCreationBloqueeTest extends TestCase
 
     // ── Accès direct à la route (contournement du bouton) ────────────────────
 
+    /**
+     * Jamais une page 403 : un accès direct malgré le blocage redirige vers la liste des
+     * ventes avec un flash 'error', affiché en toast top-right côté Ventes/Index.vue.
+     */
     public function test_acces_direct_a_create_est_refuse_si_bloque(): void
     {
         $this->actingAs($this->user)
             ->get('/backoffice/ventes/create')
-            ->assertForbidden();
+            ->assertRedirect('/backoffice/ventes')
+            ->assertSessionHas('error', 'Impossible de créer une commande : aucun stock disponible pour ce site.');
     }
 
     public function test_acces_direct_a_create_fonctionne_si_stock_suffisant(): void
@@ -143,7 +148,8 @@ class CommandeVenteCreationBloqueeTest extends TestCase
                     ['produit_id' => $this->produit->id, 'qte' => 1, 'prix_vente' => 2000],
                 ],
             ])
-            ->assertForbidden();
+            ->assertRedirect('/backoffice/ventes')
+            ->assertSessionHas('error', 'Impossible de créer une commande : aucun stock disponible pour ce site.');
 
         $this->assertDatabaseCount('commandes_ventes', 0);
     }
