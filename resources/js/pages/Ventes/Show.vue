@@ -434,7 +434,7 @@ function relancerCommissions() {
                     summary: 'Échec de la relance',
                     detail:
                         errors.commissions ??
-                        "La génération a de nouveau échoué.",
+                        'La génération a de nouveau échoué.',
                     life: 5000,
                 }),
             onFinish: () => (relanceCommissionsProcessing.value = false),
@@ -953,8 +953,8 @@ function stepLabel(idx: number, defaultLabel: string): string {
                     </p>
                     <p class="mt-1">
                         Corrigez la configuration concernée puis relancez la
-                        génération — la commande reste payée mais ne peut pas
-                        se clôturer tant que ce n'est pas fait.
+                        génération — la commande reste payée mais ne peut pas se
+                        clôturer tant que ce n'est pas fait.
                     </p>
                     <Button
                         type="button"

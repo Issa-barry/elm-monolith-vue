@@ -280,9 +280,9 @@ function goToStep2() {
 // exactement le barème — plus aucun pourcentage (décision AMOA post-Phase 2,
 // révisée suite à l'incident CMD-230826-004).
 
-const partagesParCategorie = ref<
-    Record<string, CommissionMontantFixeMembre[]>
->({});
+const partagesParCategorie = ref<Record<string, CommissionMontantFixeMembre[]>>(
+    {},
+);
 
 function membreLabels(): string[] {
     const roleCounts: Record<string, number> = {};
@@ -346,10 +346,7 @@ function onPartageCategorieUpdate(
 const partageValide = computed(() =>
     categoriesAvecPartageLivraison.value.every((cat) => {
         const parts = partagesParCategorie.value[cat.categorie_id] ?? [];
-        const total = parts.reduce(
-            (s, p) => s + (p.montant_unitaire || 0),
-            0,
-        );
+        const total = parts.reduce((s, p) => s + (p.montant_unitaire || 0), 0);
         return parts.length > 0 && total === cat.montant_livraison;
     }),
 );
@@ -395,7 +392,10 @@ function formatPhone(local: string): string {
 }
 
 /** Montant fixe par unité attribué à un membre pour une catégorie. */
-function montantUnitaireMembre(categorieId: string, membreIndex: number): string {
+function montantUnitaireMembre(
+    categorieId: string,
+    membreIndex: number,
+): string {
     const part = partagesParCategorie.value[categorieId]?.[membreIndex];
     if (!part) return '—';
 
@@ -744,14 +744,10 @@ const hasStep1Errors = computed(() =>
                         Aucune répartition livreurs nécessaire pour cette
                         catégorie.
                     </p>
-                    <p
-                        v-else
-                        class="mt-2 text-sm font-medium"
-                    >
+                    <p v-else class="mt-2 text-sm font-medium">
                         Commission Livreur à répartir :
                         {{ formatGNF(cat.montant_livraison) }} / unité — la
-                        totalité de ce montant doit être attribuée aux
-                        membres.
+                        totalité de ce montant doit être attribuée aux membres.
                     </p>
                 </div>
 
@@ -815,8 +811,7 @@ const hasStep1Errors = computed(() =>
                         / unité
                     </p>
                     <p class="mt-0.5 text-xs font-medium text-muted-foreground">
-                        Livreur : {{ formatGNF(cat.montant_livraison) }} /
-                        unité
+                        Livreur : {{ formatGNF(cat.montant_livraison) }} / unité
                     </p>
                 </div>
                 <table v-if="cat.montant_livraison > 0" class="w-full text-sm">
@@ -848,9 +843,7 @@ const hasStep1Errors = computed(() =>
                             <td
                                 class="px-4 py-2.5 text-right font-mono text-xs"
                             >
-                                {{
-                                    montantUnitaireMembre(cat.categorie_id, i)
-                                }}
+                                {{ montantUnitaireMembre(cat.categorie_id, i) }}
                             </td>
                         </tr>
                     </tbody>

@@ -100,9 +100,7 @@ defineExpose({
             </tbody>
             <tfoot>
                 <tr class="border-t bg-muted/20">
-                    <td class="px-3 py-2.5 text-sm font-semibold">
-                        Enveloppe
-                    </td>
+                    <td class="px-3 py-2.5 text-sm font-semibold">Enveloppe</td>
                     <td
                         class="px-3 py-2.5 text-right font-mono text-sm font-semibold"
                     >

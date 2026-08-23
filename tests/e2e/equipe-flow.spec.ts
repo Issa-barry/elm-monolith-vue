@@ -217,11 +217,11 @@ test('créer une équipe depuis la fiche véhicule avec stepper', async ({
     // Maman V2 Demo" qui configure elle-même son propre barème — jamais sur
     // "elm", pour ne pas polluer l'état partagé par toutes les autres specs.
     await dialog.getByRole('button', { name: /suivant/i }).click();
-    await expect(
-        dialog.getByText(/répartition livreurs/i).first(),
-    ).toBeVisible({
-        timeout: 5_000,
-    });
+    await expect(dialog.getByText(/répartition livreurs/i).first()).toBeVisible(
+        {
+            timeout: 5_000,
+        },
+    );
     await expect(
         dialog.getByText(/aucun barème de commission actif/i),
     ).toBeVisible({ timeout: 5_000 });
