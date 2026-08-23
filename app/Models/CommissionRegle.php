@@ -33,6 +33,7 @@ class CommissionRegle extends Model
         'mode',
         'unite_calcul',
         'montant',
+        'consultant_id',
         'effective_from',
         'effective_to',
         'remplace_regle_id',
@@ -80,6 +81,11 @@ class CommissionRegle extends Model
     public function processus(): BelongsTo
     {
         return $this->belongsTo(CommissionProcessus::class, 'processus_id');
+    }
+
+    public function consultant(): BelongsTo
+    {
+        return $this->belongsTo(Prestataire::class, 'consultant_id');
     }
 
     public function remplaceePar(): BelongsTo

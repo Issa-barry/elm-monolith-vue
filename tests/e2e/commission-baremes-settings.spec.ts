@@ -1,140 +1,91 @@
 import { expect, test } from '@playwright/test';
 import { login } from './helpers';
 
-/**
- * Paramètres → Commissions (barèmes PAR_UNITE_VENDUE, Phase 2) — vérifie que
- * l'action "Définir" est visible sans survol (pas seulement au hover, cf.
- * correction UX) et que le cycle définir → afficher → modifier → afficher
- * fonctionne de bout en bout.
- */
-
 test.beforeEach(async ({ page }) => {
     await login(page);
-});
-
-test('définir un barème sur une cellule vide, puis le modifier', async ({
-    page,
-}) => {
     await page.goto('/settings/commissions');
     await expect(
         page.getByRole('heading', { name: /^commissions$/i }),
     ).toBeVisible();
-
-    const row = page
-        .locator('tbody tr', { hasText: /toutes catégories/i })
-        .first();
-    await expect(row).toBeVisible();
-
-    const proprietaireCell = row.getByRole('button').first();
-
-    // Cellule vide : l'action "Définir" doit être visible sans survol —
-    // jamais la seule façon de découvrir que la cellule est interactive.
-    await expect(proprietaireCell).toContainText(/définir/i);
-    await expect(proprietaireCell).not.toContainText('—');
-
-    await proprietaireCell.click();
-    const dialog = page.getByRole('dialog', { name: /propriétaire/i });
-    await expect(dialog).toBeVisible({ timeout: 5_000 });
-
-    await dialog.locator('#cr-montant').fill('650');
-    await dialog.getByRole('button', { name: /enregistrer/i }).click();
-
-    await expect(dialog).toBeHidden({ timeout: 10_000 });
-    await expect(page.getByText(/barème enregistré/i)).toBeVisible({
-        timeout: 5_000,
-    });
-    await expect(proprietaireCell).toContainText('650');
-    await expect(proprietaireCell).not.toContainText('—');
-
-    // Rouvrir la même cellule, maintenant pré-remplie : la modifier doit
-    // remplacer la valeur affichée, jamais la dupliquer ni la conserver.
-    await proprietaireCell.click();
-    await expect(dialog).toBeVisible({ timeout: 5_000 });
-    await expect(dialog.locator('#cr-montant')).toHaveValue('650');
-
-    await dialog.locator('#cr-montant').fill('700');
-    await dialog.getByRole('button', { name: /enregistrer/i }).click();
-
-    await expect(dialog).toBeHidden({ timeout: 10_000 });
-    await expect(proprietaireCell).toContainText('700');
-    await expect(proprietaireCell).not.toContainText('650');
 });
 
-test('le champ montant bloque les caractères non numériques à la frappe et au collage', async ({
+test('impose la catégorie avant les montants et explique une ligne incomplète', async ({
     page,
 }) => {
-    await page.goto('/settings/commissions');
+    await page.getByTestId('commission-add-row').click();
+    const row = page.locator('[data-testid^="commission-row-"]').last();
 
-    const row = page
-        .locator('tbody tr', { hasText: /toutes catégories/i })
-        .first();
-    await row.getByRole('button').first().click();
-
-    const dialog = page.getByRole('dialog', { name: /propriétaire/i });
-    await expect(dialog).toBeVisible({ timeout: 5_000 });
-    const montantInput = dialog.locator('#cr-montant');
-
-    // Champ potentiellement déjà pré-rempli (règle existante réutilisée d'un
-    // run précédent) — repartir d'un champ vide avant de taper.
-    await montantInput.fill('');
-
-    // Frappe caractère par caractère (pressSequentially déclenche de vrais
-    // événements keydown, contrairement à fill()) : seuls les chiffres
-    // doivent apparaître, le reste bloqué avant même d'entrer dans le champ.
-    await montantInput.pressSequentially('5+5-5.5,5e5 5abc5');
-    await expect(montantInput).toHaveValue('55555555');
-
-    await montantInput.fill('');
-
-    // Collage : un texte collé contenant autre chose que des chiffres est
-    // nettoyé (seuls les chiffres conservés), jamais inséré tel quel.
-    await montantInput.evaluate((el) => {
-        const input = el as HTMLInputElement;
-        const dataTransfer = new DataTransfer();
-        dataTransfer.setData('text', '5+555-88');
-        input.dispatchEvent(
-            new ClipboardEvent('paste', {
-                clipboardData: dataTransfer,
-                bubbles: true,
-                cancelable: true,
-            }),
-        );
+    const category = row.getByLabel(/catégorie de la ligne/i);
+    const proprietaire = row.getByLabel(/propriétaire/i);
+    const livreur = row.getByLabel(/livreur/i);
+    const site = row.getByLabel(/^site/i);
+    const consultant = row.getByRole('button', {
+        name: /configurer le consultant/i,
     });
-    await expect(montantInput).toHaveValue('555588');
+
+    await expect(category).toBeEnabled();
+    await expect(proprietaire).toBeDisabled();
+    await expect(livreur).toBeDisabled();
+    await expect(site).toBeDisabled();
+    await expect(consultant).toBeDisabled();
+
+    // Le bouton reste actionnable lorsqu'il existe des modifications : son clic
+    // doit montrer précisément quoi compléter au lieu de rester silencieux.
+    await page.getByTestId('commission-save').click();
+    await expect(row.getByText('Choisissez une catégorie.')).toBeVisible();
+    await expect(
+        page.getByRole('dialog', { name: /vérifier avant d’enregistrer/i }),
+    ).toBeHidden();
+
+    await category.click();
+    await page.getByRole('option').first().click();
+
+    await expect(proprietaire).toBeEnabled();
+    await expect(livreur).toBeEnabled();
+    await expect(site).toBeEnabled();
+    await expect(consultant).toBeEnabled();
 });
 
-test('un montant à 0 est accepté et enregistré — 0 GNF signifie "aucune commission", distinct de "—" non configuré', async ({
+test('réinitialise les tarifs et le consultant quand la catégorie change', async ({
     page,
 }) => {
-    await page.goto('/settings/commissions');
+    await page.getByTestId('commission-add-row').click();
+    const row = page.locator('[data-testid^="commission-row-"]').last();
+    const category = row.getByLabel(/catégorie de la ligne/i);
 
-    const row = page
-        .locator('tbody tr', { hasText: /toutes catégories/i })
-        .first();
-    // Colonne Livraison (jamais touchée par les autres tests de ce fichier,
-    // qui n'éditent que Propriétaire) — évite toute dépendance à l'ordre des tests.
-    const livraisonCell = row.getByRole('button').nth(1);
+    await category.click();
+    await page.getByRole('option').first().click();
 
-    await livraisonCell.click();
-    const dialog = page.getByRole('dialog', { name: /livraison/i });
-    await expect(dialog).toBeVisible({ timeout: 5_000 });
+    const proprietaire = row.getByLabel(/propriétaire/i);
+    const livreur = row.getByLabel(/livreur/i);
+    const site = row.getByLabel(/^site/i);
+    await proprietaire.fill('800');
+    await livreur.fill('950');
+    await site.fill('200');
 
-    await dialog.locator('#cr-montant').fill('0');
-    await dialog.getByRole('button', { name: /enregistrer/i }).click();
-
-    await expect(dialog).toBeHidden({ timeout: 10_000 });
-    await expect(page.getByText(/barème enregistré/i)).toBeVisible({
-        timeout: 5_000,
+    const consultantAction = row.getByRole('button', {
+        name: /configurer le consultant/i,
     });
+    await consultantAction.click();
 
-    // "0 GNF" affiché explicitement — jamais confondu avec "—" (non configuré).
-    await expect(livraisonCell).toContainText('0 GNF');
-    await expect(livraisonCell).not.toContainText('—');
-    await expect(livraisonCell).not.toContainText(/définir/i);
+    const dialog = page.getByRole('dialog', {
+        name: /commission consultant/i,
+    });
+    await dialog.getByLabel(/consultant bénéficiaire/i).click();
+    await page.getByRole('option').first().click();
+    await dialog.getByLabel(/montant par unité vendue/i).fill('50');
+    await dialog.getByTestId('commission-consultant-apply').click();
+    await expect(dialog).toBeHidden();
+    await expect(consultantAction).toContainText('50 GNF');
 
-    // Rouvrir : la valeur 0 doit être fidèlement restituée, pas vide.
-    await livraisonCell.click();
-    await expect(dialog).toBeVisible({ timeout: 5_000 });
-    await expect(dialog.locator('#cr-montant')).toHaveValue('0');
-    await dialog.getByRole('button', { name: /annuler/i }).click();
+    await category.click();
+    const categoryOptions = page.getByRole('option');
+    expect(await categoryOptions.count()).toBeGreaterThan(1);
+    await categoryOptions.nth(1).click();
+
+    await expect(proprietaire).toHaveValue('');
+    await expect(livreur).toHaveValue('');
+    await expect(site).toHaveValue('');
+    await expect(consultantAction).toContainText('Ajouter');
+    await expect(consultantAction).not.toContainText('50 GNF');
 });
