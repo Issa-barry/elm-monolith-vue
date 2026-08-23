@@ -5,6 +5,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { Head, router } from '@inertiajs/vue3';
 import {
+    AlertTriangle,
     Check,
     CheckCheck,
     ChevronDown,
@@ -15,6 +16,7 @@ import {
     Save,
     Shield,
 } from 'lucide-vue-next';
+import ToggleSwitch from 'primevue/toggleswitch';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
@@ -35,6 +37,7 @@ interface RoleConfig {
 const props = defineProps<{
     config: RoleConfig[];
     sites: SiteItem[];
+    autorise_vente_stock_negatif: boolean;
 }>();
 
 const ADMIN_ROLES = new Set(['super_admin', 'admin_entreprise']);
@@ -170,6 +173,35 @@ function save() {
         },
     );
 }
+
+// ── Gestion des ventes et du stock ─────────────────────────────────────────
+// Politique globale d'organisation, distincte des droits d'ajustement manuel ci-dessus :
+// celle-ci dit COMMENT l'organisation se comporte quand une vente (PDV/commande vente)
+// dépasse le stock disponible, pas QUI peut ajuster le stock à la main — carte séparée,
+// bouton Enregistrer séparé (cf. StockAjustementController::update()).
+const autoriseVenteStockNegatif = ref(props.autorise_vente_stock_negatif);
+const savingVente = ref(false);
+const flashSuccessVente = ref(false);
+
+function saveVente() {
+    savingVente.value = true;
+    router.put(
+        '/settings/produits',
+        { autorise_vente_stock_negatif: autoriseVenteStockNegatif.value },
+        {
+            onSuccess: () => {
+                flashSuccessVente.value = true;
+                setTimeout(() => (flashSuccessVente.value = false), 3000);
+                toast.add({
+                    severity: 'success',
+                    summary: 'Paramètres produits mis à jour',
+                    life: 3000,
+                });
+            },
+            onFinish: () => (savingVente.value = false),
+        },
+    );
+}
 </script>
 
 <template>
@@ -182,6 +214,78 @@ function save() {
                     title="Paramètres produits"
                     description="Configuration des droits et des périmètres agences pour le module Produits."
                 />
+
+                <!-- Gestion des ventes et du stock : politique globale d'organisation, carte
+                     séparée des droits d'ajustement ci-dessous — celle-ci dit COMMENT
+                     l'organisation se comporte quand une vente dépasse le disponible, pas QUI
+                     peut ajuster le stock à la main. -->
+                <div
+                    class="overflow-hidden rounded-xl border bg-card shadow-sm"
+                >
+                    <div
+                        class="flex items-center justify-between border-b bg-muted/30 px-6 py-3"
+                    >
+                        <div class="flex items-center gap-2">
+                            <AlertTriangle
+                                class="h-4 w-4 text-muted-foreground"
+                            />
+                            <p class="text-sm font-medium">
+                                Gestion des ventes et du stock
+                            </p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <transition name="fade">
+                                <span
+                                    v-if="flashSuccessVente"
+                                    class="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400"
+                                >
+                                    <CheckCheck class="h-4 w-4" />
+                                    Sauvegardé
+                                </span>
+                            </transition>
+                            <Button
+                                size="sm"
+                                :disabled="savingVente"
+                                @click="saveVente"
+                            >
+                                <Save class="mr-2 h-4 w-4" />
+                                {{
+                                    savingVente
+                                        ? 'Enregistrement…'
+                                        : 'Enregistrer'
+                                }}
+                            </Button>
+                        </div>
+                    </div>
+
+                    <div class="flex items-start justify-between gap-6 px-6 py-5">
+                        <div>
+                            <p class="text-sm font-medium">
+                                Autoriser les ventes sans stock disponible
+                            </p>
+                            <p
+                                v-if="autoriseVenteStockNegatif"
+                                class="mt-1 text-xs text-muted-foreground"
+                            >
+                                Le PDV et les commandes vente peuvent être
+                                validés même si le stock est insuffisant. Le
+                                stock peut alors devenir négatif jusqu'au
+                                prochain réapprovisionnement ou ajustement.
+                            </p>
+                            <p v-else class="mt-1 text-xs text-muted-foreground">
+                                ELM bloque toute vente lorsque la quantité
+                                demandée dépasse le stock disponible.
+                            </p>
+                            <p class="mt-2 text-xs text-muted-foreground/70">
+                                S'applique au PDV et aux commandes vente
+                                uniquement — les transferts entre agences et
+                                les ajustements manuels restent toujours
+                                bloqués au-delà du stock disponible.
+                            </p>
+                        </div>
+                        <ToggleSwitch v-model="autoriseVenteStockNegatif" />
+                    </div>
+                </div>
 
                 <div
                     class="overflow-hidden rounded-xl border bg-card shadow-sm"

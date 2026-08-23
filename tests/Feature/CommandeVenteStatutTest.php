@@ -123,7 +123,7 @@ class CommandeVenteStatutTest extends TestCase
      * @param  array<string, mixed>  $attrs  Surcharges pour CommandeVente::factory()
      * @return array{commande: CommandeVente, ligne: CommandeVenteLigne, produit: Produit, vehicule: Vehicule}
      */
-    private function makeCommandeWithLigne(array $attrs = [], ?Vehicule $vehicule = null): array
+    private function makeCommandeWithLigne(array $attrs = [], ?Vehicule $vehicule = null, bool $seedStock = true): array
     {
         $cible = $attrs['statut'] ?? StatutCommandeVente::BROUILLON;
         unset($attrs['statut']);
@@ -133,6 +133,10 @@ class CommandeVenteStatutTest extends TestCase
             ['nom' => 'Produit Test', 'categorie_id' => $this->categorie->id],
             ['prix_vente' => 2000, 'prix_usine' => 1500],
         );
+
+        if ($seedStock) {
+            $this->seedVarianteStockSuffisant($produit->variantePrincipale()->first(), $this->defaultSite);
+        }
 
         if (! $vehicule) {
             $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
@@ -508,7 +512,7 @@ class CommandeVenteStatutTest extends TestCase
         // silencieusement ignorée faute d'équipe.
         ['commande' => $commande, 'ligne' => $ligne, 'produit' => $produit] = $this->makeCommandeWithLigne([
             'statut' => StatutCommandeVente::CHARGEMENT_EN_COURS,
-        ]);
+        ], seedStock: false);
 
         $variante = $produit->variantePrincipale()->first();
         VarianteStock::create([
@@ -549,33 +553,33 @@ class CommandeVenteStatutTest extends TestCase
         // connu est l'agrégat global Produit::qte_stock (pas encore de ligne
         // variante_stocks pour aucun site). Décision produit (régression
         // multi-agences) : ce legacy n'est JAMAIS hérité implicitement par le
-        // premier site touché — l'ordre dans lequel les sites sont mouvementés ne
-        // doit jamais décider de l'agence propriétaire d'un stock historique non
-        // ventilé. Le site démarre à 0 et la sortie y est bornée à 0.
+        // premier site touché. Le site démarre à 0 : le chargement est donc
+        // refusé (stock insuffisant), jamais silencieusement clampé (cf.
+        // correctif du 23/08/2026 — suppression du clamp silencieux).
         ['commande' => $commande, 'ligne' => $ligne, 'produit' => $produit] = $this->makeCommandeWithLigne([
             'statut' => StatutCommandeVente::CHARGEMENT_EN_COURS,
-        ]);
+        ], seedStock: false);
         $produit->update(['qte_stock' => 1000]);
 
         $this->actingAs($this->user)
             ->post(route('ventes.statut.avancer', $commande), [
                 'lignes' => [['id' => $ligne->id, 'quantite_chargee' => 80, 'type_ecart' => 'surplus']],
             ])
-            ->assertRedirect();
+            ->assertSessionHasErrors('statut');
 
-        $this->assertDatabaseHas('variante_stocks', [
+        $this->assertDatabaseMissing('variante_stocks', [
             'produit_variante_id' => $produit->variantePrincipale()->first()->id,
             'site_id' => $this->defaultSite->id,
-            'qte_stock' => 0,
         ]);
-        $this->assertEquals(0, $produit->fresh()->qte_stock);
+        // Le legacy n'est jamais consulté ni modifié par ce refus.
+        $this->assertEquals(1000, $produit->fresh()->qte_stock);
     }
 
-    public function test_valider_chargement_cree_le_stock_site_et_le_borne_a_zero_si_insuffisant(): void
+    public function test_valider_chargement_refuse_si_stock_site_insuffisant(): void
     {
         ['commande' => $commande, 'ligne' => $ligne, 'produit' => $produit] = $this->makeCommandeWithLigne([
             'statut' => StatutCommandeVente::CHARGEMENT_EN_COURS,
-        ]);
+        ], seedStock: false);
 
         // Aucun VarianteStock existant pour cette variante/site avant validation.
 
@@ -583,16 +587,16 @@ class CommandeVenteStatutTest extends TestCase
             ->post(route('ventes.statut.avancer', $commande), [
                 'lignes' => [['id' => $ligne->id, 'quantite_chargee' => 2, 'type_ecart' => 'conforme']],
             ])
-            ->assertRedirect();
+            ->assertSessionHasErrors('statut');
 
-        // Le physique passe avant la comptabilité : on ne bloque jamais le
-        // workflow pour insuffisance de stock, on borne à 0.
-        $this->assertDatabaseHas('variante_stocks', [
+        // Refusé avant toute écriture : aucune ligne variante_stocks créée, la commande
+        // reste en CHARGEMENT_EN_COURS (cf. correctif du 23/08/2026 — suppression du
+        // clamp silencieux à 0).
+        $this->assertDatabaseMissing('variante_stocks', [
             'produit_variante_id' => $produit->variantePrincipale()->first()->id,
             'site_id' => $this->defaultSite->id,
-            'qte_stock' => 0,
         ]);
-        $this->assertEquals(0, $produit->fresh()->qte_stock);
+        $this->assertEquals(StatutCommandeVente::CHARGEMENT_EN_COURS, $commande->fresh()->statut);
     }
 
     public function test_relancer_validation_chargement_ne_cree_pas_de_doublons(): void

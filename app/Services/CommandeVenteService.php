@@ -10,6 +10,7 @@ use App\Enums\StatutFactureVente;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
 use App\Models\FactureVente;
+use App\Models\Parametre;
 use App\Services\Comptabilite\VenteComptabilisationService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -177,8 +178,13 @@ class CommandeVenteService
         DB::transaction(function () use ($commande, $lignesData) {
             self::appliquerQuantitesChargees($commande, $lignesData);
             self::recalculerTotaux($commande);
-            self::decrementerStock($commande);
+            // validerPreconditions() (→ checkDisponibiliteStock()) DOIT s'exécuter avant
+            // decrementerStock() : sinon le stock serait déjà décrémenté (ou l'exception déjà
+            // levée depuis l'intérieur de MouvementStockService::appliquer(), sans jamais
+            // atteindre ce contrôle) avant même d'avoir pu vérifier la disponibilité ligne par
+            // ligne avec un message d'erreur groupé.
             self::validerPreconditions($commande->fresh(), StatutCommandeVente::LIVRAISON_EN_COURS);
+            self::decrementerStock($commande);
 
             $commande->update([
                 'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
@@ -271,13 +277,28 @@ class CommandeVenteService
      * la sortie physique de stock a lieu que le véhicule soit pris en charge
      * par l'usine ou non. Idempotent : ne redécrémente jamais une ligne déjà
      * traitée (le workflow ne repasse de toute façon jamais par ce statut).
+     *
+     * Ignore les lignes dont le produit ne gère pas de stock (type service) — même
+     * convention que PdvCheckoutService::buildLignes(), qui ne les fait jamais transiter
+     * par MouvementStockService.
+     *
+     * allowNegative (cf. MouvementStockService::appliquer()) suit la politique globale
+     * d'organisation (Parametre::isVentesAutoriseesSansStock()), lue une seule fois — jamais
+     * par produit : c'est checkDisponibiliteStock() qui a déjà statué, en amont, sur ce qui
+     * est autorisé.
      */
     private static function decrementerStock(CommandeVente $commande): void
     {
-        $commande->load('lignes');
+        $commande->load('lignes.variante.produit.produitType');
         $userId = Auth::id();
+        $autoriseVenteStockNegatif = Parametre::isVentesAutoriseesSansStock($commande->organization_id);
 
         foreach ($commande->lignes as $ligne) {
+            $produit = $ligne->variante?->produit;
+            if (! $produit?->produitType?->gere_stock) {
+                continue;
+            }
+
             $quantite = $ligne->quantite_chargee ?? $ligne->quantite_demandee;
 
             MouvementStockService::sortirStock(
@@ -288,6 +309,7 @@ class CommandeVenteService
                 sourceType: CommandeVenteLigne::class,
                 sourceId: $ligne->id,
                 userId: $userId,
+                allowNegative: $autoriseVenteStockNegatif,
             );
         }
     }
@@ -420,7 +442,11 @@ class CommandeVenteService
         }
     }
 
-    /** CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS : toutes les quantités chargées renseignées. */
+    /**
+     * CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS : toutes les quantités chargées renseignées,
+     * puis (uniquement si c'est le cas) chaque ligne vérifiée contre le stock disponible du
+     * site — cf. checkDisponibiliteStock().
+     */
     private static function checkValiderChargement(CommandeVente $commande, array &$errors): void
     {
         $commande->loadMissing('lignes');
@@ -429,6 +455,45 @@ class CommandeVenteService
 
         if ($manquantes->isNotEmpty()) {
             $errors[] = 'Toutes les lignes doivent avoir une quantité chargée renseignée.';
+
+            return;
+        }
+
+        self::checkDisponibiliteStock($commande, $errors);
+    }
+
+    /**
+     * Vérifie, ligne par ligne et sur le site de la commande, que la quantité chargée ne
+     * dépasse pas le stock disponible — sauf si la politique globale d'organisation autorise
+     * explicitement la vente au-delà du disponible (Parametre::isVentesAutoriseesSansStock(),
+     * paramètre DSI 23/08/2026, réservé au PDV et aux commandes vente, jamais aux
+     * transferts/ajustements, et jamais un réglage par produit). Avant ce correctif, AUCUN
+     * contrôle de disponibilité n'existait ici : le chargement passait toujours, et
+     * MouvementStockService::appliquer() clampait silencieusement la sortie à 0 (cf. audit
+     * stock du 23/08/2026 — mouvement dont le calcul stock_avant/delta/stock_apres ne
+     * correspondait plus à la réalité). Ignore les lignes dont le produit ne gère pas de stock
+     * (type service) — même convention que PdvCheckoutService::buildLignes().
+     */
+    private static function checkDisponibiliteStock(CommandeVente $commande, array &$errors): void
+    {
+        if (Parametre::isVentesAutoriseesSansStock($commande->organization_id)) {
+            return;
+        }
+
+        $commande->loadMissing('lignes.variante.produit.produitType');
+
+        foreach ($commande->lignes as $ligne) {
+            $produit = $ligne->variante?->produit;
+            if (! $produit?->produitType?->gere_stock) {
+                continue;
+            }
+
+            $quantite = $ligne->quantite_chargee ?? $ligne->quantite_demandee;
+            $disponible = MouvementStockService::quantiteDisponible($ligne->variante_id, $commande->site_id);
+
+            if ($quantite > $disponible) {
+                $errors[] = "Stock insuffisant pour « {$produit->nom} » sur ce site : {$quantite} demandés, {$disponible} disponibles.";
+            }
         }
     }
 }

@@ -104,6 +104,28 @@ class DepenseTypeTest extends TestCase
         ]);
     }
 
+    public function test_store_generates_new_code_when_matching_code_is_soft_deleted(): void
+    {
+        $type = DepenseType::factory()->create([
+            'organization_id' => $this->org->id,
+            'libelle' => 'Carburant',
+            'code' => 'carburant',
+        ]);
+        $type->delete();
+
+        $this->post('/settings/depense-types', [
+            'libelle' => 'Carburant',
+            'categorie' => CategorieDepense::VEHICULE->value,
+            'is_active' => true,
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('depense_types', [
+            'organization_id' => $this->org->id,
+            'code' => 'carburant_2',
+            'deleted_at' => null,
+        ]);
+    }
+
     public function test_store_requires_libelle(): void
     {
         $this->post('/settings/depense-types', [

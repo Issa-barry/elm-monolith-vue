@@ -165,6 +165,8 @@ class CommandeVenteModeTarificationTest extends TestCase
             'total_ligne' => 350_000.0,
         ]);
 
+        $this->seedVarianteStockSuffisant($produit->variantePrincipale()->first(), $this->defaultSite);
+
         // En production, ces transitions n'ont jamais lieu hors d'une requête
         // authentifiée (created_by du mouvement de stock en dépend) — on
         // s'assure donc ici d'un utilisateur courant, comme le ferait le

@@ -37,7 +37,11 @@ class StockStatutService
 
     public function statutPour(int $qte, int $seuil, bool $alerteActive): StockStatut
     {
-        if ($qte <= 0) {
+        if ($qte < 0) {
+            return StockStatut::STOCK_NEGATIF;
+        }
+
+        if ($qte === 0) {
             return StockStatut::RUPTURE;
         }
 

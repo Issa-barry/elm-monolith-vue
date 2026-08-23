@@ -168,6 +168,8 @@ class CommissionConsultantTest extends TestCase
             'total_ligne' => $quantite * (float) $variante->prix_vente,
         ]);
 
+        $this->seedVarianteStockSuffisant($variante, $this->site);
+
         $this->actingAs($this->user);
         CommandeVenteService::confirmer($commande);
         CommandeVenteService::demarrerChargement($commande);

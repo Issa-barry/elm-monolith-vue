@@ -132,6 +132,8 @@ class CommissionTriggerLogistiqueTest extends TestCase
             'quantite_chargee' => $qteChargee,
         ]);
 
+        $this->seedVarianteStockSuffisant($this->produit->variantePrincipale()->first(), $this->siteSrc);
+
         return $transfert;
     }
 
