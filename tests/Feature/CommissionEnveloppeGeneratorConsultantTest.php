@@ -78,8 +78,7 @@ class CommissionEnveloppeGeneratorConsultantTest extends TestCase
         CommissionScopeType $scope = CommissionScopeType::GLOBAL,
         ?string $scopeId = null,
         ?string $consultantId = null,
-    ): CommissionRegle
-    {
+    ): CommissionRegle {
         return CommissionRegle::create([
             'organization_id' => $this->org->id,
             'processus_id' => $this->processus->id,
