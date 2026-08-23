@@ -56,6 +56,7 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     ko: 'bg-red-500',
     expiree: 'bg-red-500',
     echoue: 'bg-red-500',
+    erreur: 'bg-red-500',
     rupture: 'bg-red-500',
 
     // Orange — partiel / en attente / soumis

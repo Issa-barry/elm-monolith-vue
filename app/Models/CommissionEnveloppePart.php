@@ -42,6 +42,7 @@ class CommissionEnveloppePart extends Model
         'beneficiaire_type',
         'beneficiaire_id',
         'taux_repartition_snapshot',
+        'montant_unitaire_snapshot',
         'montant_brut',
         'montant_net',
         'montant_verse',
@@ -58,6 +59,7 @@ class CommissionEnveloppePart extends Model
     {
         return [
             'taux_repartition_snapshot' => 'decimal:2',
+            'montant_unitaire_snapshot' => 'integer',
             'montant_brut' => 'decimal:2',
             'montant_net' => 'decimal:2',
             'montant_verse' => 'decimal:2',

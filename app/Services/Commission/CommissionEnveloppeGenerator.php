@@ -95,47 +95,61 @@ class CommissionEnveloppeGenerator
             ],
         );
 
-        $dejaGenere = CommissionEnveloppe::query()
-            ->where('source_type', CommandeVente::class)
-            ->where('source_id', $commande->id)
-            ->exists();
-        if ($dejaGenere) {
-            return;
-        }
+        // Verrou de ligne sur la commande le temps de vérifier l'idempotence et de
+        // générer : deux déclenchements concurrents pour la même commande (retry,
+        // webhook, double appel résiduel côté déclencheur) se sérialisent — le second,
+        // une fois le verrou obtenu, retrouve l'enveloppe déjà créée et s'arrête, au lieu
+        // de produire deux tentatives quasi simultanées (cf. incident CMD-230826-004, 2
+        // tentatives ERREUR à 1s d'écart). Défense en profondeur : le correctif du double
+        // appel constaté est côté déclencheurs (cf. EncaissementVenteController) — ce
+        // verrou couvre tout futur appel qui dupliquerait malgré tout le déclenchement.
+        // Transaction imbriquée (savepoint) sans risque : la génération elle-même garde
+        // sa propre transaction interne isolée juste en dessous.
+        DB::transaction(function () use ($commande, $processus, $declenchePar, $declencheurUserId, $generation) {
+            CommandeVente::whereKey($commande->id)->lockForUpdate()->value('id');
 
-        try {
-            DB::transaction(fn () => $generation($processus));
+            $dejaGenere = CommissionEnveloppe::query()
+                ->where('source_type', CommandeVente::class)
+                ->where('source_id', $commande->id)
+                ->exists();
+            if ($dejaGenere) {
+                return;
+            }
 
-            CommissionGenerationAttempt::create([
-                'organization_id' => $commande->organization_id,
-                'source_type' => CommandeVente::class,
-                'source_id' => $commande->id,
-                'processus_id' => $processus->id,
-                'statut' => CommissionGenerationStatut::SUCCES->value,
-                'declenchee_par' => $declenchePar->value,
-                'created_by' => $declencheurUserId,
-            ]);
-        } catch (InvalidArgumentException $e) {
-            Log::warning('Génération commission v2 en erreur : '.$e->getMessage(), [
-                'commande_id' => $commande->id,
-            ]);
+            try {
+                DB::transaction(fn () => $generation($processus));
 
-            CommissionGenerationAttempt::create([
-                'organization_id' => $commande->organization_id,
-                'source_type' => CommandeVente::class,
-                'source_id' => $commande->id,
-                'processus_id' => $processus->id,
-                'statut' => CommissionGenerationStatut::ERREUR->value,
-                'motif_erreur' => $e->getMessage(),
-                'detail_erreur' => ['erreurs' => [$e->getMessage()]],
-                'declenchee_par' => $declenchePar->value,
-                'created_by' => $declencheurUserId,
-            ]);
+                CommissionGenerationAttempt::create([
+                    'organization_id' => $commande->organization_id,
+                    'source_type' => CommandeVente::class,
+                    'source_id' => $commande->id,
+                    'processus_id' => $processus->id,
+                    'statut' => CommissionGenerationStatut::SUCCES->value,
+                    'declenchee_par' => $declenchePar->value,
+                    'created_by' => $declencheurUserId,
+                ]);
+            } catch (InvalidArgumentException $e) {
+                Log::warning('Génération commission v2 en erreur : '.$e->getMessage(), [
+                    'commande_id' => $commande->id,
+                ]);
 
-            // Volontairement pas de rethrow : un échec de génération n'est jamais
-            // une erreur de l'opération commerciale qui l'a déclenchée. L'opération
-            // reste "à régulariser", jamais rollbackée.
-        }
+                CommissionGenerationAttempt::create([
+                    'organization_id' => $commande->organization_id,
+                    'source_type' => CommandeVente::class,
+                    'source_id' => $commande->id,
+                    'processus_id' => $processus->id,
+                    'statut' => CommissionGenerationStatut::ERREUR->value,
+                    'motif_erreur' => $e->getMessage(),
+                    'detail_erreur' => ['erreurs' => [$e->getMessage()]],
+                    'declenchee_par' => $declenchePar->value,
+                    'created_by' => $declencheurUserId,
+                ]);
+
+                // Volontairement pas de rethrow : un échec de génération n'est jamais
+                // une erreur de l'opération commerciale qui l'a déclenchée. L'opération
+                // reste "à régulariser", jamais rollbackée.
+            }
+        });
     }
 
     // ── Voie réelle Phase 2+ : barèmes fixes PAR_UNITE_VENDUE ────────────────
@@ -244,10 +258,9 @@ class CommissionEnveloppeGenerator
                 }
 
                 // Toujours synchronisé pour disposer d'un CommissionGroupe stable (cible_id,
-                // traçabilité inchangée) — sa propre logique de rescale/blended % n'est en
-                // revanche plus utilisée pour le calcul du montant ci-dessous : le partage
-                // Livraison est désormais défini PAR CATÉGORIE (décision AMOA post-Phase 2),
-                // jamais un seul pourcentage valable pour toute la commande.
+                // traçabilité inchangée) — le partage réel n'est cependant plus calculé via ce
+                // groupe : le partage Livreur est défini PAR CATÉGORIE, en montants GNF entiers
+                // fixes (equipe_livraison_partages_categorie), jamais un pourcentage.
                 $groupe = CommissionGroupeSyncService::syncEquipeLivraisonVehicule($vehicule);
 
                 $parCategorie = collect($contributions)->groupBy(
@@ -255,28 +268,53 @@ class CommissionEnveloppeGenerator
                 );
 
                 $montantParBeneficiaire = [];
+                $montantUnitaireParBeneficiaire = [];
                 $typeParBeneficiaire = [];
+                $montantTotalEquipe = 0;
                 $repartitionEchouee = false;
 
                 foreach ($parCategorie as $categorieId => $contribsCategorie) {
                     if ($categorieId === 'sans_categorie') {
-                        $erreurs[] = "Cible {$cibleCode} : une ligne sans catégorie ne peut pas résoudre de partage Livraison.";
+                        $erreurs[] = "Cible {$cibleCode} : une ligne sans catégorie ne peut pas résoudre de partage Livreur.";
                         $repartitionEchouee = true;
 
                         continue;
                     }
 
-                    $montantCategorie = round((float) $contribsCategorie->sum('montant'), 2);
+                    // Barème Livreur résolu au niveau CATÉGORIE uniquement (jamais variante/
+                    // produit) : le partage entre livreurs n'a lui-même jamais été défini plus
+                    // finement qu'une catégorie (cf. EquipeLivraisonPartageCategorie) — même
+                    // résolution que celle utilisée pour valider la config à la sauvegarde de
+                    // l'équipe (EquipeLivraisonController::validatePartagesCategorie), pour
+                    // garantir que l'enveloppe validée à la saisie et l'enveloppe utilisée à la
+                    // génération sont toujours identiques. Une éventuelle règle plus spécifique
+                    // (variante/produit) sur une ligne de cette catégorie n'est donc pas prise en
+                    // compte ici, contrairement aux autres cibles — limite assumée, cohérente
+                    // avec le fait que le partage Livreur n'existe jamais à un grain plus fin.
+                    $regleCategorie = CommissionRegleResolver::resolve(
+                        $commande->organization_id,
+                        $processus->id,
+                        $cibleCode,
+                        null,
+                        null,
+                        $categorieId,
+                        $earnedAt,
+                    );
 
-                    // Barème Livraison configuré à 0 pour cette catégorie : valeur métier
-                    // valide ("aucune commission à distribuer"), jamais un partage à
-                    // exiger ni une erreur — rien à répartir, on passe à la suivante.
-                    if ($montantCategorie <= 0) {
+                    $enveloppeUnitaire = (int) round((float) ($regleCategorie?->montant ?? 0));
+
+                    // Barème Livreur configuré à 0 pour cette catégorie : valeur métier valide
+                    // ("aucune commission à distribuer"), jamais un partage à exiger ni une
+                    // erreur — rien à répartir, on passe à la suivante.
+                    if ($enveloppeUnitaire <= 0) {
                         continue;
                     }
 
+                    $quantiteCategorie = (int) $contribsCategorie->sum(fn (array $c) => (float) $c['ligne']->quantite_chargee);
+
                     $partages = EquipeLivraisonPartageCategorie::where('equipe_id', $vehicule->equipe->id)
                         ->where('categorie_id', $categorieId)
+                        ->actifA($earnedAt)
                         ->get();
 
                     if ($partages->isEmpty()) {
@@ -286,8 +324,13 @@ class CommissionEnveloppeGenerator
                         continue;
                     }
 
+                    $membresValidation = $partages->map(fn (EquipeLivraisonPartageCategorie $p) => (object) [
+                        'beneficiaire_id' => $p->livreur_id,
+                        'montant_unitaire' => $p->montant_unitaire,
+                    ]);
+
                     try {
-                        $partsCategorie = CommissionRepartitionEngine::repartir($montantCategorie, $partages);
+                        CommissionPartageLivraisonValidator::valider($membresValidation, $enveloppeUnitaire);
                     } catch (InvalidArgumentException $e) {
                         $erreurs[] = "Cible {$cibleCode} : {$e->getMessage()}";
                         $repartitionEchouee = true;
@@ -295,35 +338,39 @@ class CommissionEnveloppeGenerator
                         continue;
                     }
 
-                    foreach ($partsCategorie as $p) {
-                        $beneficiaireId = $p['beneficiaire_id'];
-                        $montantParBeneficiaire[$beneficiaireId] = ($montantParBeneficiaire[$beneficiaireId] ?? 0.0) + $p['montant'];
-                        $typeParBeneficiaire[$beneficiaireId] = $p['beneficiaire_type'];
+                    foreach ($partages as $partage) {
+                        $beneficiaireId = $partage->livreur_id;
+                        $montantMembre = $quantiteCategorie * (int) $partage->montant_unitaire;
+
+                        $montantParBeneficiaire[$beneficiaireId] = ($montantParBeneficiaire[$beneficiaireId] ?? 0) + $montantMembre;
+                        $montantUnitaireParBeneficiaire[$beneficiaireId] = (int) $partage->montant_unitaire;
+                        $typeParBeneficiaire[$beneficiaireId] = CommissionEnveloppePart::TYPE_LIVREUR;
                     }
+
+                    $montantTotalEquipe += $quantiteCategorie * $enveloppeUnitaire;
                 }
 
                 if ($repartitionEchouee) {
                     continue;
                 }
 
-                // Toutes les catégories contributrices avaient un barème Livraison à 0
-                // (ou aucune n'a résolu de règle) : rien à distribuer, aucune enveloppe
-                // à créer — même silence que l'absence de règle (décision AMOA #4).
+                // Toutes les catégories contributrices avaient un barème Livreur à 0 (ou
+                // aucune n'a résolu de règle) : rien à distribuer, aucune enveloppe à créer —
+                // même silence que l'absence de règle (décision AMOA #4).
                 if (empty($montantParBeneficiaire)) {
                     continue;
                 }
 
                 $enveloppesACreer[$cibleCode] = [
-                    'montant' => $montantTotal,
+                    'montant' => $montantTotalEquipe,
                     'cible_id' => $groupe->id,
                     'contributions' => $contributions,
-                    // Un seul taux "de la commande" n'existe plus (il varie par catégorie) —
-                    // laissé null, jamais un pourcentage moyen trompeur.
                     'parts' => array_map(fn (string $beneficiaireId) => [
                         'beneficiaire_type' => $typeParBeneficiaire[$beneficiaireId],
                         'beneficiaire_id' => $beneficiaireId,
                         'taux' => null,
-                        'montant' => round($montantParBeneficiaire[$beneficiaireId], 2),
+                        'montant_unitaire' => $montantUnitaireParBeneficiaire[$beneficiaireId],
+                        'montant' => $montantParBeneficiaire[$beneficiaireId],
                     ], array_keys($montantParBeneficiaire)),
                 ];
 
@@ -447,6 +494,7 @@ class CommissionEnveloppeGenerator
                     'beneficiaire_type' => $p['beneficiaire_type'],
                     'beneficiaire_id' => $p['beneficiaire_id'],
                     'taux_repartition_snapshot' => $p['taux'],
+                    'montant_unitaire_snapshot' => $p['montant_unitaire'] ?? null,
                     'montant_brut' => $p['montant'],
                     'montant_net' => $p['montant'],
                     'statut' => StatutCommission::CREEE->value,

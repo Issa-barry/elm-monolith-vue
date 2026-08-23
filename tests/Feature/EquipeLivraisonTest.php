@@ -3,7 +3,15 @@
 namespace Tests\Feature;
 
 use App\Enums\CategorieVehicule;
+use App\Enums\CommissionActivationStatut;
+use App\Enums\CommissionMode;
+use App\Enums\CommissionScopeType;
+use App\Enums\CommissionStrategieAncrageSite;
+use App\Enums\CommissionUniteCalcul;
 use App\Models\Categorie;
+use App\Models\CommissionCibleType;
+use App\Models\CommissionProcessus;
+use App\Models\CommissionRegle;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\EquipeLivreur;
@@ -35,6 +43,31 @@ class EquipeLivraisonTest extends TestCase
             'equipes-livraison.create',
             'equipes-livraison.update',
             'equipes-livraison.delete',
+        ]);
+
+        // Barème Livreur (100 GNF/unité, portée globale) requis pour valider les montants
+        // fixes du partage : CommissionPartageLivraisonValidator compare la somme des
+        // montants membres à ce barème — 100 est choisi pour que les valeurs déjà
+        // utilisées par ces tests (autrefois des %) restent numériquement inchangées.
+        $processus = CommissionProcessus::create([
+            'organization_id' => $this->org->id,
+            'code' => CommissionProcessus::CODE_VENTE,
+            'libelle' => 'Vente',
+            'declencheur' => 'chargement_valide',
+            'strategie_ancrage_site' => CommissionStrategieAncrageSite::OPERATION->value,
+            'statut' => CommissionActivationStatut::ACTIF->value,
+        ]);
+        CommissionRegle::create([
+            'organization_id' => $this->org->id,
+            'processus_id' => $processus->id,
+            'libelle' => 'Livreur — Global',
+            'scope_type' => CommissionScopeType::GLOBAL->value,
+            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+            'mode' => CommissionMode::A_REPARTIR->value,
+            'unite_calcul' => CommissionUniteCalcul::PAR_UNITE_VENDUE->value,
+            'montant' => 100,
+            'effective_from' => now()->subDay()->toDateString(),
+            'statut' => 'active',
         ]);
     }
 
@@ -650,7 +683,7 @@ class EquipeLivraisonTest extends TestCase
                 [
                     'categorie_id' => $categorie->id,
                     'parts' => [
-                        ['membre_ordre' => 0, 'part_pourcentage' => 100],
+                        ['membre_ordre' => 0, 'montant_unitaire' => 100],
                     ],
                 ],
             ],
@@ -673,7 +706,7 @@ class EquipeLivraisonTest extends TestCase
             'equipe_id' => $equipe->id,
             'categorie_id' => $this->categorieDefaut()->id,
             'livreur_id' => $membre->livreur_id,
-            'part_pourcentage' => 100,
+            'montant_unitaire' => 100,
         ]);
         // Jamais alimentés par ce contrôleur : le propriétaire vient du
         // barème (Paramètres → Commissions), pas de ce contrôleur ; le partage
@@ -725,15 +758,15 @@ class EquipeLivraisonTest extends TestCase
                     [
                         'categorie_id' => $sachets->id,
                         'parts' => [
-                            ['membre_ordre' => 0, 'part_pourcentage' => 50],
-                            ['membre_ordre' => 1, 'part_pourcentage' => 50],
+                            ['membre_ordre' => 0, 'montant_unitaire' => 50],
+                            ['membre_ordre' => 1, 'montant_unitaire' => 50],
                         ],
                     ],
                     [
                         'categorie_id' => $bouteilles->id,
                         'parts' => [
-                            ['membre_ordre' => 0, 'part_pourcentage' => 60],
-                            ['membre_ordre' => 1, 'part_pourcentage' => 40],
+                            ['membre_ordre' => 0, 'montant_unitaire' => 60],
+                            ['membre_ordre' => 1, 'montant_unitaire' => 40],
                         ],
                     ],
                 ],
@@ -746,15 +779,15 @@ class EquipeLivraisonTest extends TestCase
 
         $this->assertDatabaseHas('equipe_livraison_partages_categorie', [
             'equipe_id' => $equipe->id, 'categorie_id' => $sachets->id,
-            'livreur_id' => $chauffeur->livreur_id, 'part_pourcentage' => 50,
+            'livreur_id' => $chauffeur->livreur_id, 'montant_unitaire' => 50,
         ]);
         $this->assertDatabaseHas('equipe_livraison_partages_categorie', [
             'equipe_id' => $equipe->id, 'categorie_id' => $bouteilles->id,
-            'livreur_id' => $chauffeur->livreur_id, 'part_pourcentage' => 60,
+            'livreur_id' => $chauffeur->livreur_id, 'montant_unitaire' => 60,
         ]);
         $this->assertDatabaseHas('equipe_livraison_partages_categorie', [
             'equipe_id' => $equipe->id, 'categorie_id' => $bouteilles->id,
-            'livreur_id' => $convoyeur->livreur_id, 'part_pourcentage' => 40,
+            'livreur_id' => $convoyeur->livreur_id, 'montant_unitaire' => 40,
         ]);
     }
 
@@ -780,8 +813,8 @@ class EquipeLivraisonTest extends TestCase
                 'partages_categorie' => [[
                     'categorie_id' => $categorie->id,
                     'parts' => [
-                        ['membre_ordre' => 0, 'part_pourcentage' => 70],
-                        ['membre_ordre' => 1, 'part_pourcentage' => 50],
+                        ['membre_ordre' => 0, 'montant_unitaire' => 70],
+                        ['membre_ordre' => 1, 'montant_unitaire' => 50],
                     ],
                 ]],
             ]))
@@ -800,14 +833,19 @@ class EquipeLivraisonTest extends TestCase
                 'partages_categorie' => [[
                     'categorie_id' => $categorie->id,
                     'parts' => [
-                        ['membre_ordre' => 0, 'part_pourcentage' => 60],
+                        ['membre_ordre' => 0, 'montant_unitaire' => 60],
                     ],
                 ]],
             ]))
             ->assertStatus(422);
     }
 
-    public function test_store_rejette_une_part_par_membre_hors_bornes(): void
+    /**
+     * Plus de borne supérieure par membre (un montant fixe n'est jamais "hors
+     * bornes" en soi, seule la somme compte) — mais le montant reste un entier
+     * positif : une valeur négative est rejetée par la validation de champ.
+     */
+    public function test_store_rejette_un_montant_negatif(): void
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $vehicule = $this->makeVehicule($proprietaire->id);
@@ -819,11 +857,11 @@ class EquipeLivraisonTest extends TestCase
                 'partages_categorie' => [[
                     'categorie_id' => $categorie->id,
                     'parts' => [
-                        ['membre_ordre' => 0, 'part_pourcentage' => 150],
+                        ['membre_ordre' => 0, 'montant_unitaire' => -50],
                     ],
                 ]],
             ]))
-            ->assertSessionHasErrors('partages_categorie.0.parts.0.part_pourcentage');
+            ->assertSessionHasErrors('partages_categorie.0.parts.0.montant_unitaire');
     }
 
     public function test_store_rejette_un_membre_ordre_qui_ne_correspond_a_aucun_membre(): void
@@ -839,7 +877,7 @@ class EquipeLivraisonTest extends TestCase
                 'partages_categorie' => [[
                     'categorie_id' => $categorie->id,
                     'parts' => [
-                        ['membre_ordre' => 5, 'part_pourcentage' => 100],
+                        ['membre_ordre' => 5, 'montant_unitaire' => 100],
                     ],
                 ]],
             ]))
@@ -880,8 +918,11 @@ class EquipeLivraisonTest extends TestCase
         $equipe = EquipeLivraison::where('organization_id', $this->org->id)->firstOrFail();
         $membre = EquipeLivreur::where('equipe_id', $equipe->id)->firstOrFail();
 
-        // Modifier : même membre, mais nouvelle part pour la même catégorie —
-        // ne doit jamais laisser coexister l'ancienne (100) et la nouvelle (100).
+        // Modifier : même membre, mais nouvelle part pour la même catégorie — ne doit
+        // jamais laisser coexister DEUX lignes ACTIVES (ancienne et nouvelle). Versionné
+        // (jamais de delete) : l'ancienne ligne est fermée (effective_to renseigné), pas
+        // supprimée — pour qu'une relance de commission historique puisse encore la
+        // résoudre à sa date réelle.
         $this->actingAs($this->user)
             ->patch(route('equipes-livraison.update', $equipe), $this->validPayloadAvecPartage([
                 'vehicule_id' => $vehicule->id,
@@ -897,7 +938,15 @@ class EquipeLivraisonTest extends TestCase
             1,
             EquipeLivraisonPartageCategorie::where('equipe_id', $equipe->id)
                 ->where('categorie_id', $categorie->id)
+                ->whereNull('effective_to')
                 ->count(),
+        );
+        $this->assertEquals(
+            2,
+            EquipeLivraisonPartageCategorie::where('equipe_id', $equipe->id)
+                ->where('categorie_id', $categorie->id)
+                ->count(),
+            'L\'ancienne version reste en base (fermée), jamais supprimée.',
         );
     }
 

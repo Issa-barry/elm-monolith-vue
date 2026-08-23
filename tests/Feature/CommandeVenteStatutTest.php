@@ -204,7 +204,8 @@ class CommandeVenteStatutTest extends TestCase
     /**
      * Crée un véhicule avec une équipe à 2 membres (chauffeur + convoyeur).
      */
-    private function makeVehiculeAvecEquipe(float $partChauffeur = 58.33, float $partConvoyeur = 41.67): Vehicule
+    /** $montantChauffeur/$montantConvoyeur : montants GNF fixes, doivent sommer au barème équipe (100, cf. setUp()). */
+    private function makeVehiculeAvecEquipe(int $montantChauffeur = 58, int $montantConvoyeur = 42): Vehicule
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $vehicule = Vehicule::factory()->create([
@@ -226,11 +227,13 @@ class CommandeVenteStatutTest extends TestCase
         EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $convoyeur->id, 'role' => 'convoyeur', 'ordre' => 1]);
         EquipeLivraisonPartageCategorie::create([
             'equipe_id' => $equipe->id, 'categorie_id' => $this->categorie->id,
-            'livreur_id' => $chauffeur->id, 'part_pourcentage' => $partChauffeur,
+            'livreur_id' => $chauffeur->id, 'part_pourcentage' => 0,
+            'montant_unitaire' => $montantChauffeur, 'effective_from' => now()->subDay(),
         ]);
         EquipeLivraisonPartageCategorie::create([
             'equipe_id' => $equipe->id, 'categorie_id' => $this->categorie->id,
-            'livreur_id' => $convoyeur->id, 'part_pourcentage' => $partConvoyeur,
+            'livreur_id' => $convoyeur->id, 'part_pourcentage' => 0,
+            'montant_unitaire' => $montantConvoyeur, 'effective_from' => now()->subDay(),
         ]);
 
         return $vehicule->fresh();
@@ -461,7 +464,7 @@ class CommandeVenteStatutTest extends TestCase
 
     public function test_valider_chargement_cree_les_commissions_chauffeur_et_convoyeur_selon_qte_chargee(): void
     {
-        $vehicule = $this->makeVehiculeAvecEquipe(partChauffeur: 58.33, partConvoyeur: 41.67);
+        $vehicule = $this->makeVehiculeAvecEquipe(montantChauffeur: 58, montantConvoyeur: 42);
         ['commande' => $commande, 'ligne' => $ligne, 'vehicule' => $vehicule] = $this->makeCommandeWithLigne([
             'statut' => StatutCommandeVente::CHARGEMENT_EN_COURS,
         ], $vehicule);
@@ -489,10 +492,9 @@ class CommandeVenteStatutTest extends TestCase
         $parts = $commission->parts()->get()->keyBy('beneficiaire_id');
 
         // Commission calculée directement sur la quantité chargée (1 pack, jamais
-        // les 2 demandées) : barème équipe = 100/pack × 1 = 100, réparti
-        // 58,33 % / 41,67 % → chauffeur 58.33, convoyeur 41.67.
-        $this->assertEquals(58.33, round((float) $parts[$chauffeurId]->montant_brut, 2));
-        $this->assertEquals(41.67, round((float) $parts[$convoyeurId]->montant_brut, 2));
+        // les 2 demandées) : montant fixe chauffeur=58, convoyeur=42 × 1 pack.
+        $this->assertEquals(58.0, (float) $parts[$chauffeurId]->montant_brut);
+        $this->assertEquals(42.0, (float) $parts[$convoyeurId]->montant_brut);
         // Créée seulement — ne devient IMPAYE qu'à la validation de la période de paiement.
         $this->assertEquals('creee', $commission->statut->value);
         $this->assertEquals('creee', $parts[$chauffeurId]->statut->value);
@@ -723,9 +725,14 @@ class CommandeVenteStatutTest extends TestCase
 
     public function test_encaissement_complet_depuis_livraison_cloture_la_commande(): void
     {
+        // Non éligible aux commissions : ce test porte sur la transition de clôture
+        // elle-même, pas sur la génération de commission — un véhicule éligible SANS
+        // équipe configurée échouerait désormais sa génération (ERREUR) et bloquerait
+        // à raison la clôture (cf. cloturerSiComplete(), incident CMD-230826-004).
         ['commande' => $commande] = $this->makeCommandeWithLigne([
             'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
             'total_commande' => 4000,
+            'commission_eligible_snapshot' => false,
         ]);
 
         $facture = $commande->fresh()->facture;

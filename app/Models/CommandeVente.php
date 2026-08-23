@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\CommissionGenerationStatut;
 use App\Enums\ModeTarification;
 use App\Enums\StatutCommandeVente;
 use App\Services\CommandeNumeroService;
@@ -217,7 +218,15 @@ class CommandeVente extends Model
      * Clôture automatiquement la commande si :
      *  - statut LIVREE (workflow logistique) ou FACTURATION (vente directe)
      *  - la facture est entièrement payée
-     *  - toutes les commissions sont versées (ou absentes)
+     *  - les commissions dues sont soit inexistantes de façon légitime
+     *    (véhicule non éligible), soit générées avec succès ET versées
+     *
+     * Ne clôture JAMAIS silencieusement une commande éligible dont la
+     * génération de commission a échoué ou n'a pas encore été tentée — cf.
+     * incident CMD-230826-004 : une collection de commissions vide suite à un
+     * échec de génération était auparavant traitée comme "tout payé" par
+     * vacuité logique (Collection::every() sur une collection vide renvoie
+     * toujours true).
      */
     public function cloturerSiComplete(): bool
     {
@@ -226,9 +235,7 @@ class CommandeVente extends Model
         }
 
         $facture = $this->load('facture')->facture;
-        $commissionsVersees = $this->commissions()->get()->every(fn ($c) => $c->isPaye());
-
-        if (! $facture?->isPayee() || ! $commissionsVersees) {
+        if (! $facture?->isPayee() || ! $this->commissionsPretesPourCloture()) {
             return false;
         }
 
@@ -236,5 +243,31 @@ class CommandeVente extends Model
         $this->closed_at = now();
 
         return $this->saveQuietly();
+    }
+
+    private function commissionsPretesPourCloture(): bool
+    {
+        if (! $this->commission_eligible_snapshot) {
+            // Véhicule non éligible aux commissions : rien n'est dû, clôture légitime.
+            return true;
+        }
+
+        $processusId = CommissionProcessus::where('organization_id', $this->organization_id)
+            ->where('code', CommissionProcessus::CODE_VENTE)
+            ->value('id');
+
+        $statutGeneration = $processusId
+            ? CommissionGenerationAttempt::statutCourant(self::class, $this->id, $processusId)
+            : null;
+
+        // ERREUR (à régulariser) ou aucune tentative alors que la commande est éligible
+        // et a déjà atteint son déclencheur (facture payée / chargement validé, déjà
+        // garanti par les gardes ci-dessus) : jamais de clôture silencieuse, on attend
+        // une tentative réussie.
+        if ($statutGeneration !== CommissionGenerationStatut::SUCCES) {
+            return false;
+        }
+
+        return $this->commissions()->get()->every(fn (CommissionEnveloppe $c) => $c->isPaye());
     }
 }

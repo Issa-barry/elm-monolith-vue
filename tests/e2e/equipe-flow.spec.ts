@@ -217,9 +217,11 @@ test('créer une équipe depuis la fiche véhicule avec stepper', async ({
     // Maman V2 Demo" qui configure elle-même son propre barème — jamais sur
     // "elm", pour ne pas polluer l'état partagé par toutes les autres specs.
     await dialog.getByRole('button', { name: /suivant/i }).click();
-    await expect(dialog.getByText(/partage/i).first()).toBeVisible({
-        timeout: 5_000,
-    });
+    await expect(dialog.getByText(/répartition livreurs/i).first()).toBeVisible(
+        {
+            timeout: 5_000,
+        },
+    );
     await expect(
         dialog.getByText(/aucun barème de commission actif/i),
     ).toBeVisible({ timeout: 5_000 });
@@ -252,9 +254,10 @@ test('créer une équipe depuis la fiche véhicule avec stepper', async ({
     });
 });
 
-// L'auto-complétion du reliquat entre 2 bénéficiaires (CommissionShareEditor
-// ::recomputeAutoFill) exigerait de configurer un barème de commission — mais
-// l'organisation "elm" utilisée ici est partagée avec de nombreuses autres
+// La répartition en montants fixes entre plusieurs bénéficiaires
+// (CommissionMontantFixeEditor, "Reste à attribuer") exigerait de configurer
+// un barème de commission — mais l'organisation "elm" utilisée ici est
+// partagée avec de nombreuses autres
 // specs (achats, packing, produits…) et n'a délibérément aucun CommissionRegle
 // seedé par défaut ; y configurer un barème depuis ce test pollueriait l'état
 // partagé pour toutes les autres. Ce scénario est couvert sur l'organisation

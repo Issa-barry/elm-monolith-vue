@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Enums\AuditEvent;
 use App\Enums\CategorieTarifaireVehicule;
 use App\Enums\ClientType;
+use App\Enums\CommissionGenerationDeclenchePar;
+use App\Enums\CommissionGenerationStatut;
 use App\Enums\ModeTarification;
 use App\Enums\MotifAnnulation;
 use App\Enums\ProduitStatut;
@@ -14,6 +16,8 @@ use App\Jobs\NotifierLivreursCommandeVenteJob;
 use App\Models\AuditLog;
 use App\Models\Client;
 use App\Models\CommandeVente;
+use App\Models\CommissionGenerationAttempt;
+use App\Models\CommissionProcessus;
 use App\Models\Parametre;
 use App\Models\Produit;
 use App\Models\ProduitVariante;
@@ -22,6 +26,7 @@ use App\Models\Vehicule;
 use App\Services\AuditLogService;
 use App\Services\CommandeVenteActiviteService;
 use App\Services\CommandeVenteService;
+use App\Services\Commission\CommissionEnveloppeGenerator;
 use App\Services\PrixUsineResolver;
 use App\Services\SolvabiliteService;
 use App\Services\VehiculeCapaciteService;
@@ -527,6 +532,7 @@ class CommandeVenteController extends Controller
                 ])->values(),
             ] : null,
             'commission_statut' => $this->getCommissionStatutGlobal($commande),
+            'commission_generation_statut' => $this->getCommissionGenerationStatut($commande),
         ]);
     }
 
@@ -738,6 +744,75 @@ class CommandeVenteController extends Controller
         }
 
         return ['value' => 'impaye', 'label' => 'Impayée'];
+    }
+
+    /**
+     * Statut de la DERNIÈRE tentative de génération de commission (distinct de
+     * commission_statut, qui ne reflète que le paiement de commissions déjà
+     * générées avec succès) — retourne null tant que rien n'est en anomalie :
+     * pas éligible, aucune tentative encore, ou dernière tentative réussie.
+     * Ne remonte que le cas ERREUR ("à régulariser"), seul cas nécessitant une
+     * alerte visible (cf. incident CMD-230826-004, où cet état n'était visible
+     * nulle part dans l'UI faute d'être exposé ici).
+     */
+    private function getCommissionGenerationStatut(CommandeVente $commande): ?array
+    {
+        if (! $commande->commission_eligible_snapshot) {
+            return null;
+        }
+
+        $processusId = CommissionProcessus::where('organization_id', $commande->organization_id)
+            ->where('code', CommissionProcessus::CODE_VENTE)
+            ->value('id');
+
+        if (! $processusId) {
+            return null;
+        }
+
+        $derniere = CommissionGenerationAttempt::where('source_type', CommandeVente::class)
+            ->where('source_id', $commande->id)
+            ->where('processus_id', $processusId)
+            ->latest('created_at')
+            ->first();
+
+        if (! $derniere || $derniere->statut !== CommissionGenerationStatut::ERREUR) {
+            return null;
+        }
+
+        return [
+            'value' => 'erreur',
+            'label' => $derniere->statut->label(),
+            'motif' => $derniere->motif_erreur,
+        ];
+    }
+
+    /**
+     * Relance manuelle après un échec de génération de commission ("à
+     * régulariser") — rejoue le mécanisme officiel (CommissionEnveloppeGenerator),
+     * jamais un recalcul ad hoc. Idempotent par construction : si une enveloppe
+     * existe déjà (généré entre-temps), l'appel est un no-op silencieux.
+     */
+    public function relancerCommissions(CommandeVente $commande_vente): RedirectResponse
+    {
+        $this->authorize('update', $commande_vente);
+
+        CommissionEnveloppeGenerator::genererPourCommandeVente(
+            $commande_vente,
+            CommissionGenerationDeclenchePar::UTILISATEUR,
+            auth()->id(),
+        );
+
+        $statut = $this->getCommissionGenerationStatut($commande_vente);
+
+        $commande_vente->cloturerSiComplete();
+
+        if ($statut !== null && $statut['value'] === 'erreur') {
+            return redirect()->route('ventes.show', $commande_vente)->withErrors([
+                'commissions' => "La génération a de nouveau échoué : {$statut['motif']}",
+            ]);
+        }
+
+        return redirect()->route('ventes.show', $commande_vente)->with('success', 'Commissions générées avec succès.');
     }
 
     private function mapCommandeForIndex(CommandeVente $c, mixed $user): array

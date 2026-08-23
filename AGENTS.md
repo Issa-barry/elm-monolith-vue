@@ -1,6 +1,6 @@
 # Standards UI — à respecter impérativement
 
-Ces deux règles sont contrôlées automatiquement par `node scripts/check-ui-standards.mjs`,
+Ces trois règles sont contrôlées automatiquement par `node scripts/check-ui-standards.mjs`,
 exécuté dans le CI (`.github/workflows/lint.yml`, job `quality`, step "Check UI standards").
 Une PR qui les viole échoue le check **avant merge**. Lance `npm run lint:standards` en local
 pour vérifier avant de pousser.
@@ -45,9 +45,22 @@ Toute page de liste (Index) avec des filtres doit utiliser
 - Ne déclare pas plusieurs `ref` nommées `filterXxx`/`filtreXxx` sans importer `DataFilters.vue` —
   c'est exactement le pattern détecté par le check CI comme "filtre fait maison".
 
+## 3. Toasts : toujours en haut à droite
+
+Tout composant PrimeVue `<Toast>` doit déclarer explicitement :
+
+```vue
+<Toast position="top-right" />
+```
+
+- **Interdit** : `bottom-right`, `bottom-left`, `bottom-center`, `center` ou une position dynamique.
+- Cette règle s'applique au Toast global comme aux groupes spécialisés déclarés dans une page.
+- Les appels `toast.add(...)` restent inchangés : la position est contrôlée par le composant `<Toast>` qui reçoit le message.
+- Cette règle est vérifiée dans les pages, les composants et les layouts, sans échappatoire.
+
 ## Échappatoire
 
 Si un cas est légitimement hors-périmètre (ex: un badge qui ressemble à un statut mais qui est
 en fait une catégorie), ajoute le commentaire `ui-standard-ignore-file` n'importe où dans le
-fichier `.vue` pour désactiver les deux checks sur ce fichier. À utiliser avec parcimonie — c'est
-une échappatoire, pas un moyen de contourner la règle par défaut.
+fichier `.vue` pour désactiver les checks Badge/DataFilters sur ce fichier. À utiliser avec
+parcimonie — ce commentaire ne désactive jamais la règle Toast en haut à droite.

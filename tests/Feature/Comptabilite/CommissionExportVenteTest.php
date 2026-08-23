@@ -109,7 +109,9 @@ class CommissionExportVenteTest extends TestCase
             'equipe_id' => $equipe->id,
             'categorie_id' => $categorie->id,
             'livreur_id' => $livreur->id,
-            'part_pourcentage' => 100,
+            'part_pourcentage' => 0,
+            'montant_unitaire' => 1000,
+            'effective_from' => now()->subDay(),
         ]);
 
         CommissionRegle::create([

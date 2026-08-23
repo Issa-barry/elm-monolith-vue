@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import StatusDot from '@/components/StatusDot.vue';
 import TicketCommandeVente from '@/components/print/TicketCommandeVente.vue';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -15,6 +16,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import {
+    AlertTriangle,
     ArrowLeft,
     CheckCircle,
     CheckCircle2,
@@ -175,11 +177,21 @@ interface CommissionStatut {
     label: string;
 }
 
+/** Statut de la DERNIÈRE tentative de génération de commission — distinct de
+ * commission_statut (paiement de commissions déjà générées). Non-null
+ * uniquement en cas d'échec ("à régulariser"), cf. CommandeVenteController. */
+interface CommissionGenerationStatut {
+    value: 'erreur';
+    label: string;
+    motif: string | null;
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps<{
     commande: CommandeData;
     facture: FactureData | null;
     commission_statut: CommissionStatut | null;
+    commission_generation_statut: CommissionGenerationStatut | null;
     historiques: AuditEntry[];
     activites: ActiviteEntry[];
 }>();
@@ -398,6 +410,38 @@ function demarrerChargement() {
     );
 }
 
+// ── Relance génération commission ("à régulariser") ──────────────────────────
+const relanceCommissionsProcessing = ref(false);
+
+function relancerCommissions() {
+    if (relanceCommissionsProcessing.value) return;
+    relanceCommissionsProcessing.value = true;
+    router.post(
+        `/backoffice/ventes/${props.commande.id}/commissions/relancer`,
+        {},
+        {
+            preserveScroll: true,
+            onSuccess: () =>
+                toast.add({
+                    severity: 'success',
+                    summary: 'Commissions générées',
+                    detail: 'La génération a été relancée avec succès.',
+                    life: 3000,
+                }),
+            onError: (errors) =>
+                toast.add({
+                    severity: 'error',
+                    summary: 'Échec de la relance',
+                    detail:
+                        errors.commissions ??
+                        'La génération a de nouveau échoué.',
+                    life: 5000,
+                }),
+            onFinish: () => (relanceCommissionsProcessing.value = false),
+        },
+    );
+}
+
 // ── Chargement dialog ─────────────────────────────────────────────────────────
 const chargementDialogVisible = ref(false);
 
@@ -592,6 +636,21 @@ function connectorIsActive(idx: number): boolean {
     if (currentStepIdx.value === -1) return false;
     if (isCommandeDirecte.value && idx < 4) return false;
     return idx < currentStepIdx.value;
+}
+
+// L'étape "Commissions" (idx 5) doit rester visuellement en anomalie tant que
+// la dernière tentative de génération a échoué — jamais confondue avec "en
+// cours" (bleu) ou "faite" (vert), cf. incident CMD-230826-004 où cet état
+// n'était visible nulle part.
+const COMMISSIONS_STEP_IDX = 5;
+const commissionsEnErreur = computed(
+    () => props.commission_generation_statut?.value === 'erreur',
+);
+
+function stepLabel(idx: number, defaultLabel: string): string {
+    return idx === COMMISSIONS_STEP_IDX && commissionsEnErreur.value
+        ? 'À régulariser'
+        : defaultLabel;
 }
 </script>
 
@@ -834,10 +893,13 @@ function connectorIsActive(idx: number): boolean {
                             <div
                                 :class="[
                                     'flex h-9 w-9 items-center justify-center rounded-full transition-all',
-                                    stepState(idx) === 'done'
-                                        ? 'bg-emerald-500 text-white shadow-sm'
-                                        : '',
-                                    stepState(idx) === 'current'
+                                    idx === 5 && commissionsEnErreur
+                                        ? 'bg-red-500 text-white shadow-sm'
+                                        : stepState(idx) === 'done'
+                                          ? 'bg-emerald-500 text-white shadow-sm'
+                                          : '',
+                                    stepState(idx) === 'current' &&
+                                    !(idx === 5 && commissionsEnErreur)
                                         ? 'bg-blue-600 text-white shadow-md ring-4 ring-blue-100 dark:ring-blue-900/50'
                                         : '',
                                     stepState(idx) === 'future'
@@ -850,10 +912,13 @@ function connectorIsActive(idx: number): boolean {
                             <span
                                 :class="[
                                     'mt-1.5 text-center text-[11px] leading-tight font-medium',
-                                    stepState(idx) === 'current'
-                                        ? 'text-blue-600 dark:text-blue-400'
-                                        : '',
-                                    stepState(idx) === 'done'
+                                    idx === 5 && commissionsEnErreur
+                                        ? 'text-red-600 dark:text-red-400'
+                                        : stepState(idx) === 'current'
+                                          ? 'text-blue-600 dark:text-blue-400'
+                                          : '',
+                                    stepState(idx) === 'done' &&
+                                    !(idx === 5 && commissionsEnErreur)
                                         ? 'text-emerald-600 dark:text-emerald-400'
                                         : '',
                                     stepState(idx) === 'future'
@@ -861,7 +926,7 @@ function connectorIsActive(idx: number): boolean {
                                         : '',
                                 ]"
                             >
-                                {{ step.shortLabel }}
+                                {{ stepLabel(idx, step.shortLabel) }}
                             </span>
                         </div>
                         <!-- Connecteur -->
@@ -877,6 +942,36 @@ function connectorIsActive(idx: number): boolean {
                     </template>
                 </div>
             </div>
+
+            <!-- Alerte persistante : commission "à régulariser" ──────────────── -->
+            <Alert v-if="commission_generation_statut" variant="destructive">
+                <AlertTriangle class="size-4" />
+                <AlertTitle>Commission à régulariser</AlertTitle>
+                <AlertDescription>
+                    <p v-if="commission_generation_statut.motif">
+                        {{ commission_generation_statut.motif }}
+                    </p>
+                    <p class="mt-1">
+                        Corrigez la configuration concernée puis relancez la
+                        génération — la commande reste payée mais ne peut pas se
+                        clôturer tant que ce n'est pas fait.
+                    </p>
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        class="mt-3"
+                        :disabled="relanceCommissionsProcessing"
+                        @click="relancerCommissions"
+                    >
+                        {{
+                            relanceCommissionsProcessing
+                                ? 'Relance en cours…'
+                                : 'Relancer la génération'
+                        }}
+                    </Button>
+                </AlertDescription>
+            </Alert>
 
             <!-- Navigation par onglets ──────────────────────────────────────── -->
             <div class="flex border-b">
@@ -974,6 +1069,11 @@ function connectorIsActive(idx: number): boolean {
                                 v-if="commission_statut"
                                 :status="commission_statut.value"
                                 :label="`Commission : ${commission_statut.label}`"
+                            />
+                            <StatusDot
+                                v-if="commission_generation_statut"
+                                :status="commission_generation_statut.value"
+                                :label="`Commission : ${commission_generation_statut.label}`"
                             />
                         </div>
                     </div>

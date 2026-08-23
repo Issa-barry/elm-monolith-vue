@@ -232,6 +232,10 @@ class CommandeVenteTest extends TestCase
 
     public function test_cloture_automatique_commande_directe_sur_paiement_complet(): void
     {
+        // Non éligible aux commissions : une commande directe sans véhicule ne peut de
+        // toute façon jamais générer de commission équipe_livraison (cf.
+        // cloturerSiComplete(), qui ne clôture plus silencieusement une commande
+        // éligible en échec de génération — incident CMD-230826-004).
         ['client' => $client] = $this->makeContext($this->org);
 
         $commande = CommandeVente::factory()->create([
@@ -240,6 +244,7 @@ class CommandeVenteTest extends TestCase
             'client_id' => $client->id,
             'statut' => StatutCommandeVente::FACTURATION,
             'total_commande' => 3000,
+            'commission_eligible_snapshot' => false,
         ]);
 
         $facture = FactureVente::create([
@@ -1101,11 +1106,17 @@ class CommandeVenteTest extends TestCase
 
     public function test_auto_cloture_when_facture_fully_paid_and_no_commissions(): void
     {
+        // Non éligible aux commissions (aucun véhicule lié) : ce test porte sur la
+        // clôture elle-même quand il n'y a explicitement rien à générer — jamais un
+        // scénario où la génération échouerait (cf. cloturerSiComplete(), qui ne
+        // clôture plus silencieusement une commande éligible en échec de génération,
+        // incident CMD-230826-004).
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
             'site_id' => $this->defaultSite->id,
             'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
             'total_commande' => 5000,
+            'commission_eligible_snapshot' => false,
         ]);
 
         $facture = FactureVente::create([
