@@ -374,6 +374,8 @@ class CommandeVenteController extends Controller
             $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null);
             [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $context->modeTarification, $context->categorieTarifaireVehicule);
 
+            $this->assertStockDisponiblePourLignes($orgId, $userSite->id, $lignesData);
+
             $commande = CommandeVente::create([
                 'organization_id' => $orgId,
                 'site_id' => $userSite->id,
@@ -628,6 +630,11 @@ class CommandeVenteController extends Controller
 
         $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null);
         [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $context->modeTarification, $context->categorieTarifaireVehicule);
+
+        // Le site ne change jamais lors d'une modification de brouillon (pas de champ site_id
+        // dans commandeValidationRules()) : on contrôle donc contre le site déjà porté par la
+        // commande, jamais celui de l'utilisateur qui modifie (qui pourrait être différent).
+        $this->assertStockDisponiblePourLignes($vente->organization_id, $vente->site_id, $lignesData);
 
         $vente->update([
             'vehicule_id' => $data['vehicule_id'] ?? null,
@@ -1147,6 +1154,36 @@ class CommandeVenteController extends Controller
         }
 
         return redirect()->route('ventes.index')->with('error', self::MESSAGE_BLOCAGE_TOAST);
+    }
+
+    /**
+     * Contrôle de disponibilité au moment de CRÉER ou MODIFIER une commande (24/08/2026) —
+     * avant ce correctif, une commande pouvait être créée avec une quantité supérieure au
+     * stock, le seul contrôle existant intervenait au chargement (cf. CommandeVenteService::
+     * checkDisponibiliteStock()). Délègue entièrement à CommandeVenteService::
+     * verifierDisponibiliteLignes() — jamais de logique dupliquée ici, ce contrôleur ne fait
+     * que traduire le résultat en ValidationException affichée dans le formulaire. $lignesData
+     * est le format déjà produit par buildLignesDataAndTotal() (variante_id résolu +
+     * quantite_demandee), jamais recalculé.
+     *
+     * @param  array<int, array{variante_id: string, quantite_demandee: int}>  $lignesData
+     *
+     * @throws ValidationException si au moins une ligne dépasse le disponible
+     */
+    private function assertStockDisponiblePourLignes(string $orgId, string $siteId, array $lignesData): void
+    {
+        $errors = [];
+
+        CommandeVenteService::verifierDisponibiliteLignes(
+            $orgId,
+            $siteId,
+            array_map(fn (array $l) => ['variante_id' => $l['variante_id'], 'quantite' => $l['quantite_demandee']], $lignesData),
+            $errors,
+        );
+
+        if (! empty($errors)) {
+            throw ValidationException::withMessages(['lignes' => $errors]);
+        }
     }
 
     /**

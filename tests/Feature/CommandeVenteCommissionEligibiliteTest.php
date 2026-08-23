@@ -58,6 +58,13 @@ class CommandeVenteCommissionEligibiliteTest extends TestCase
         // explicitement ici pour ne jamais dépendre de ce défaut.
         Parametre::setDeclencheurCommissionVente($this->org->id, DeclencheurCommissionVente::CHARGEMENT_VALIDE);
 
+        // Ce fichier teste l'éligibilité aux commissions, pas la disponibilité du stock — le
+        // produit par défaut (type 'materiel') n'est pas vendable, donc jamais compté par
+        // CommandeVenteService::siteAutoriseNouvelleCommande() : sans cette politique
+        // permissive, store() bloquerait la création dès la première ligne (24/08/2026,
+        // contrôles de stock à la création/modification/chargement).
+        Parametre::setVentesAutoriserStockNegatif($this->org->id, true);
+
         $this->defaultSite = Site::create([
             'organization_id' => $this->org->id,
             'nom' => 'Site Principal',
