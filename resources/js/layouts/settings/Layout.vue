@@ -39,12 +39,12 @@ const sidebarNavItems = computed((): NavItem[] => {
 
     if (can('parametres.update')) {
         items.push(
-            { title: 'Parametrage systeme', href: editParametres().url },
-            { title: 'Paramètres produits', href: '/settings/produits' },
-            { title: 'Paramètres dépenses', href: '/settings/depenses' },
-            { title: 'Paramètres ventes', href: '/settings/ventes' },
-            { title: 'Paramètres commissions', href: '/settings/commissions' },
-            { title: 'Modules metier', href: '/settings/modules' },
+            { title: 'Imports et modèles', href: editParametres().url },
+            { title: 'Produits', href: '/settings/produits' },
+            { title: 'Dépenses', href: '/settings/depenses' },
+            { title: 'Ventes', href: '/settings/ventes' },
+            { title: 'Commissions', href: '/settings/commissions' },
+            { title: 'Modules', href: '/settings/modules' },
             { title: 'Thème', href: '/settings/theme' },
         );
     }
