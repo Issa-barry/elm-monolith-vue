@@ -64,22 +64,26 @@ class MouvementStockService
             ->lockForUpdate()
             ->first();
 
+        $stockAvant = $varianteStock?->qte_stock ?? 0;
+        $delta = $type === 'entree' ? $quantite : -$quantite;
+        $stockApres = $stockAvant + $delta;
+
+        // Contrôle AVANT toute écriture : un refus ne doit laisser AUCUNE trace, pas même une
+        // ligne VarianteStock nouvellement matérialisée à 0 pour une variante/site qui n'en
+        // avait encore aucune — sinon un refus aurait le même effet de bord qu'un succès partiel
+        // (transforme silencieusement "non initialisé" en "0 explicite"), pour rien.
+        if ($type === 'sortie' && $stockApres < 0 && ! $allowNegative) {
+            throw ValidationException::withMessages([
+                'stock' => "Stock insuffisant : {$quantite} demandés, {$stockAvant} disponibles.",
+            ]);
+        }
+
         if (! $varianteStock) {
             $varianteStock = VarianteStock::create([
                 'organization_id' => $orgId,
                 'produit_variante_id' => $varianteId,
                 'site_id' => $siteId,
                 'qte_stock' => 0,
-            ]);
-        }
-
-        $stockAvant = $varianteStock->qte_stock;
-        $delta = $type === 'entree' ? $quantite : -$quantite;
-        $stockApres = $stockAvant + $delta;
-
-        if ($type === 'sortie' && $stockApres < 0 && ! $allowNegative) {
-            throw ValidationException::withMessages([
-                'stock' => "Stock insuffisant : {$quantite} demandés, {$stockAvant} disponibles.",
             ]);
         }
 

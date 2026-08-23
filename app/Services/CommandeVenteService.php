@@ -20,6 +20,25 @@ use Illuminate\Validation\ValidationException;
 class CommandeVenteService
 {
     /**
+     * Décide si une NOUVELLE commande peut être créée pour ce site — bouton « Nouvelle
+     * commande » de la page Ventes et route de création elle-même (les deux appellent cette
+     * même méthode, cf. CommandeVenteController::index()/create()/store()). Toujours vrai si
+     * la politique globale autorise la vente sans stock (Parametre::
+     * isVentesAutoriseesSansStock()) ; sinon faux UNIQUEMENT si le site n'a absolument aucun
+     * stock vendable (total = 0) — un garde-fou volontairement grossier ("ce site n'a rien à
+     * vendre"), pas une garantie ligne par ligne : le contrôle fin par variante reste fait au
+     * moment réel de la vente (PDV, chargement de commande), jamais dupliqué ici.
+     */
+    public static function siteAutoriseNouvelleCommande(string $orgId, string $siteId): bool
+    {
+        if (Parametre::isVentesAutoriseesSansStock($orgId)) {
+            return true;
+        }
+
+        return app(StockStatutService::class)->stockTotalVendableSite($orgId, $siteId) !== 0;
+    }
+
+    /**
      * Workflow : BROUILLON → A_CHARGER → CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS → LIVREE → CLOTUREE
      *            ↘ ANNULEE (depuis BROUILLON ou A_CHARGER seulement)
      *

@@ -16,7 +16,7 @@ import {
     Save,
     Shield,
 } from 'lucide-vue-next';
-import ToggleSwitch from 'primevue/toggleswitch';
+import Checkbox from 'primevue/checkbox';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
@@ -258,10 +258,24 @@ function saveVente() {
                         </div>
                     </div>
 
-                    <div class="flex items-start justify-between gap-6 px-6 py-5">
+                    <div class="flex items-start gap-3 px-6 py-5">
+                        <Checkbox
+                            v-model="autoriseVenteStockNegatif"
+                            :binary="true"
+                            input-id="autorise-vente-stock-negatif"
+                            class="mt-0.5"
+                        />
                         <div>
-                            <p class="text-sm font-medium">
+                            <label
+                                for="autorise-vente-stock-negatif"
+                                class="cursor-pointer text-sm font-medium"
+                            >
                                 Autoriser les ventes sans stock disponible
+                            </label>
+                            <p class="mt-1 text-xs text-muted-foreground">
+                                Lorsqu'elle est décochée, ELM bloque les
+                                ventes lorsque le stock disponible est
+                                insuffisant.
                             </p>
                             <p
                                 v-if="autoriseVenteStockNegatif"
@@ -272,10 +286,6 @@ function saveVente() {
                                 stock peut alors devenir négatif jusqu'au
                                 prochain réapprovisionnement ou ajustement.
                             </p>
-                            <p v-else class="mt-1 text-xs text-muted-foreground">
-                                ELM bloque toute vente lorsque la quantité
-                                demandée dépasse le stock disponible.
-                            </p>
                             <p class="mt-2 text-xs text-muted-foreground/70">
                                 S'applique au PDV et aux commandes vente
                                 uniquement — les transferts entre agences et
@@ -283,7 +293,6 @@ function saveVente() {
                                 bloqués au-delà du stock disponible.
                             </p>
                         </div>
-                        <ToggleSwitch v-model="autoriseVenteStockNegatif" />
                     </div>
                 </div>
 

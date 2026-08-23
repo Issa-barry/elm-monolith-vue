@@ -144,4 +144,29 @@ class StockStatutService
 
         return ['ruptures' => $ruptures, 'faibles' => $faibles, 'total' => $ruptures + $faibles];
     }
+
+    /**
+     * Stock total (toutes variantes gérées en stock ET vendables) d'un site donné — utilisé
+     * UNIQUEMENT pour décider si la création d'une nouvelle commande vente doit être bloquée
+     * quand la politique globale interdit la vente sans stock (cf. Parametre::
+     * isVentesAutoriseesSansStock(), CommandeVenteService::siteAutoriseNouvelleCommande()).
+     * C'est un signal volontairement grossier ("ce site n'a-t-il absolument rien à vendre ?"),
+     * pas une garantie que chaque variante précise sera disponible — le contrôle fin reste fait
+     * ligne par ligne au moment réel de la vente (PDV, chargement de commande).
+     */
+    public function stockTotalVendableSite(string $organizationId, string $siteId): int
+    {
+        return (int) DB::table('variante_stocks as vs')
+            ->join('produit_variantes as pv', 'pv.id', '=', 'vs.produit_variante_id')
+            ->join('produits as p', 'p.id', '=', 'pv.produit_id')
+            ->join('produit_types as pt', 'pt.id', '=', 'p.produit_type_id')
+            ->where('p.organization_id', $organizationId)
+            ->where('vs.site_id', $siteId)
+            ->where('p.statut', '!=', 'archive')
+            ->where('pt.gere_stock', true)
+            ->where('pt.vendable', true)
+            ->whereNull('p.deleted_at')
+            ->whereNull('pv.deleted_at')
+            ->sum('vs.qte_stock');
+    }
 }

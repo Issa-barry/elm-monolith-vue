@@ -36,9 +36,12 @@ import Dialog from 'primevue/dialog';
 import InputNumber from 'primevue/inputnumber';
 import Select from 'primevue/select';
 import Textarea from 'primevue/textarea';
+import Tooltip from 'primevue/tooltip';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
+
+const vTooltip = Tooltip;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Commande {
@@ -109,6 +112,8 @@ const props = defineProps<{
     statuts_actifs: string[];
     sites: SiteOption[];
     is_admin: boolean;
+    can_creer_commande: boolean;
+    raison_blocage_commande: string | null;
     filters: Filters;
 }>();
 
@@ -416,7 +421,7 @@ function confirmDelete(c: Commande) {
                 </Link>
                 <span class="text-base font-semibold">Ventes</span>
                 <Link
-                    v-if="can('ventes.create')"
+                    v-if="can('ventes.create') && can_creer_commande"
                     href="/backoffice/ventes/create"
                 >
                     <Button size="sm" class="h-8 px-3 text-xs">
@@ -424,6 +429,16 @@ function confirmDelete(c: Commande) {
                         Nouveau
                     </Button>
                 </Link>
+                <Button
+                    v-else-if="can('ventes.create')"
+                    size="sm"
+                    class="h-8 px-3 text-xs"
+                    disabled
+                    v-tooltip.bottom="raison_blocage_commande"
+                >
+                    <Plus class="mr-1 h-3.5 w-3.5" />
+                    Nouveau
+                </Button>
                 <div v-else class="w-8" />
             </div>
 
@@ -527,7 +542,7 @@ function confirmDelete(c: Commande) {
                 <ShoppingCart class="h-10 w-10 opacity-30" />
                 <p class="text-sm">Aucune commande trouvée.</p>
                 <Link
-                    v-if="can('ventes.create')"
+                    v-if="can('ventes.create') && can_creer_commande"
                     href="/backoffice/ventes/create"
                 >
                     <Button variant="outline" size="sm">
@@ -535,6 +550,16 @@ function confirmDelete(c: Commande) {
                         Créer la première commande
                     </Button>
                 </Link>
+                <Button
+                    v-else-if="can('ventes.create')"
+                    variant="outline"
+                    size="sm"
+                    disabled
+                    v-tooltip.top="raison_blocage_commande"
+                >
+                    <Plus class="mr-2 h-4 w-4" />
+                    Créer la première commande
+                </Button>
             </div>
         </div>
 
@@ -551,7 +576,7 @@ function confirmDelete(c: Commande) {
                     </p>
                 </div>
                 <Link
-                    v-if="can('ventes.create')"
+                    v-if="can('ventes.create') && can_creer_commande"
                     href="/backoffice/ventes/create"
                 >
                     <Button>
@@ -559,6 +584,14 @@ function confirmDelete(c: Commande) {
                         Nouvelle commande
                     </Button>
                 </Link>
+                <Button
+                    v-else-if="can('ventes.create')"
+                    disabled
+                    v-tooltip.left="raison_blocage_commande"
+                >
+                    <Plus class="mr-2 h-4 w-4" />
+                    Nouvelle commande
+                </Button>
             </div>
 
             <!-- KPI cards -->
@@ -870,7 +903,7 @@ function confirmDelete(c: Commande) {
                             <ShoppingCart class="h-12 w-12 opacity-30" />
                             <p class="text-sm">Aucune commande trouvée.</p>
                             <Link
-                                v-if="can('ventes.create')"
+                                v-if="can('ventes.create') && can_creer_commande"
                                 href="/backoffice/ventes/create"
                             >
                                 <Button variant="outline" size="sm">
@@ -878,6 +911,16 @@ function confirmDelete(c: Commande) {
                                     Créer la première commande
                                 </Button>
                             </Link>
+                            <Button
+                                v-else-if="can('ventes.create')"
+                                variant="outline"
+                                size="sm"
+                                disabled
+                                v-tooltip.top="raison_blocage_commande"
+                            >
+                                <Plus class="mr-2 h-4 w-4" />
+                                Créer la première commande
+                            </Button>
                         </div>
                     </template>
                 </DataTable>

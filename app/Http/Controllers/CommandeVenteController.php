@@ -259,6 +259,21 @@ class CommandeVenteController extends Controller
                 ->map(fn ($s) => ['id' => $s->id, 'nom' => $s->nom])->values()
             : [];
 
+        // Bouton « Nouvelle commande » : bloqué uniquement quand la politique globale interdit
+        // la vente sans stock ET que le site personnel de l'utilisateur (celui qui sera
+        // effectivement utilisé par create()/store(), cf. getUserSiteModel()) n'a absolument
+        // rien à vendre. Un utilisateur sans aucun site attaché (cas déjà géré par
+        // getUserSiteModel(), qui abort() dès l'accès à create()) n'est jamais bloqué ICI —
+        // cette page reste consultable, le vrai gate se déclenche à create()/store().
+        $canCreerCommande = true;
+        $raisonBlocageCommande = null;
+        if ($userSiteId = $this->getUserSiteIdOrNull()) {
+            $canCreerCommande = CommandeVenteService::siteAutoriseNouvelleCommande($orgId, $userSiteId);
+            if (! $canCreerCommande) {
+                $raisonBlocageCommande = 'Impossible de créer une commande : aucun stock disponible pour ce site.';
+            }
+        }
+
         return Inertia::render('Ventes/Index', [
             'commandes' => $mapped->values(),
             'totaux' => $totaux,
@@ -267,6 +282,8 @@ class CommandeVenteController extends Controller
             'statuts' => StatutCommandeVente::options(),
             'sites' => $sites,
             'is_admin' => $user->isAdmin(),
+            'can_creer_commande' => $canCreerCommande,
+            'raison_blocage_commande' => $raisonBlocageCommande,
             'filters' => [
                 'site_ids' => $siteIds,
                 'date_debut' => $dateDebut,
@@ -289,6 +306,7 @@ class CommandeVenteController extends Controller
         $this->authorize('create', CommandeVente::class);
 
         $orgId = auth()->user()->organization_id;
+        $this->abortIfCreationBloquee($orgId, $this->getUserSiteModel()->id);
 
         return Inertia::render('Ventes/Create', [
             'produits' => $this->produitsActifs($orgId),
@@ -310,6 +328,11 @@ class CommandeVenteController extends Controller
         abort_if(! $orgId, 403, "Votre compte n'est associé à aucune organisation.");
 
         $userSite = $this->getUserSiteModel();
+        // Défense en profondeur : le bouton « Nouvelle commande » est déjà désactivé côté
+        // Ventes/Index et create() refuse déjà l'accès direct à la page — ce contrôle empêche
+        // en plus un POST direct (contournement de l'UI) de créer une commande sur un site sans
+        // aucun stock vendable, quand la politique globale l'interdit.
+        $this->abortIfCreationBloquee($orgId, $userSite->id);
 
         $data = $request->validate($this->commandeValidationRules(), $this->commandeValidationMessages());
 
@@ -1075,6 +1098,37 @@ class CommandeVenteController extends Controller
         abort_if(! $site, 403, "Votre compte n'est rattaché à aucun site. Contactez votre administrateur.");
 
         return $site;
+    }
+
+    /**
+     * Variante non-bloquante de getUserSiteModel(), pour index() : cette page reste
+     * consultable même par un utilisateur sans aucun site attaché (contrairement à
+     * create()/store(), qui abortent) — null désactive simplement le calcul du blocage du
+     * bouton « Nouvelle commande » plutôt que de faire 403 toute la liste des commandes.
+     */
+    private function getUserSiteIdOrNull(): ?string
+    {
+        $user = auth()->user();
+
+        return $user->sites()->wherePivot('is_default', true)->value('sites.id')
+            ?? $user->sites()->value('sites.id');
+    }
+
+    /**
+     * Bloque la création d'une nouvelle commande vente quand la politique globale interdit la
+     * vente sans stock ET que le site personnel de l'utilisateur n'a absolument aucun stock
+     * vendable (cf. CommandeVenteService::siteAutoriseNouvelleCommande()). Appelé par
+     * create() (accès direct à la page) et store() (POST direct) — même contrôle,
+     * jamais dupliqué en logique, pour que désactiver le bouton côté Ventes/Index ne soit
+     * jamais la seule protection.
+     */
+    private function abortIfCreationBloquee(string $orgId, string $siteId): void
+    {
+        abort_unless(
+            CommandeVenteService::siteAutoriseNouvelleCommande($orgId, $siteId),
+            403,
+            'Impossible de créer une commande : aucun stock disponible pour ce site.'
+        );
     }
 
     private function produitsActifs(string $orgId): Collection

@@ -189,6 +189,20 @@ class CommandeVenteCommissionEligibiliteTest extends TestCase
      */
     private function creerCommande(Vehicule $vehicule, Produit $produit): CommandeVente
     {
+        // Le chargement (CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS, ci-dessous) décrémente
+        // désormais réellement le stock du site — refusé depuis le 23/08/2026 si insuffisant
+        // (suppression du clamp silencieux). Ce fichier teste l'éligibilité aux commissions,
+        // pas la disponibilité du stock : on seed largement au-delà des 100 chargées, sur TOUS
+        // les sites de l'organisation — initOrgAndUser() attache déjà un site par défaut en
+        // interne, et $this->defaultSite ci-dessus en attache un second également marqué
+        // is_default=true (pattern préexistant à ce fichier) : lequel des deux
+        // getUserSiteModel() résout réellement pour la commande créée via ventes.store n'est
+        // pas garanti, donc on couvre les deux plutôt que de fiabiliser cette ambiguïté
+        // préexistante, hors périmètre de ce chantier stock.
+        Site::where('organization_id', $this->org->id)->get()->each(
+            fn (Site $site) => $this->seedVarianteStockSuffisant($produit->variantePrincipale()->first(), $site)
+        );
+
         $this->actingAs($this->user)
             ->post(route('ventes.store'), [
                 'vehicule_id' => $vehicule->id,
