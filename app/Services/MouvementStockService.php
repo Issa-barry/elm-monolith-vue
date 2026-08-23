@@ -240,7 +240,7 @@ class MouvementStockService
      * appelants décident au cas par cas selon Produit::autorise_vente_stock_negatif,
      * jamais un défaut implicite ici.
      *
-     * @throws \Illuminate\Validation\ValidationException si la sortie dépasse le disponible et $allowNegative est faux
+     * @throws ValidationException si la sortie dépasse le disponible et $allowNegative est faux
      */
     public static function sortirStock(
         string $varianteId,

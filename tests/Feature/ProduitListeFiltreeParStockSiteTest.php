@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\Organization;
 use App\Models\Parametre;
+use App\Models\Produit;
+use App\Models\ProduitType;
 use App\Models\Site;
 use App\Models\User;
 use App\Models\VarianteStock;
@@ -56,7 +58,7 @@ class ProduitListeFiltreeParStockSiteTest extends TestCase
         $this->user->sites()->attach($this->autreSite->id, ['role' => 'employe']);
     }
 
-    private function makeProduitVendable(string $nom): \App\Models\Produit
+    private function makeProduitVendable(string $nom): Produit
     {
         return $this->makeProduitAvecVariante(
             $this->org,
@@ -65,7 +67,7 @@ class ProduitListeFiltreeParStockSiteTest extends TestCase
         );
     }
 
-    private function seedStock(\App\Models\Produit $produit, Site $site, int $qte): void
+    private function seedStock(Produit $produit, Site $site, int $qte): void
     {
         VarianteStock::updateOrCreate(
             ['produit_variante_id' => $produit->variantePrincipale()->first()->id, 'site_id' => $site->id],
@@ -141,7 +143,7 @@ class ProduitListeFiltreeParStockSiteTest extends TestCase
         $temoin = $this->makeProduitVendable('Témoin');
         $this->seedStock($temoin, $this->site, 5);
 
-        $typeVendableSansStock = \App\Models\ProduitType::create([
+        $typeVendableSansStock = ProduitType::create([
             'organization_id' => $this->org->id,
             'nom' => 'Prestation',
             'code' => 'prestation',

@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Models\VarianteStock;
 use App\Services\MouvementStockService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\Concerns\HasProduitVariante;
@@ -209,7 +210,7 @@ class StockIsolationMultiSiteTest extends TestCase
                 userId: $this->admin->id,
             );
             $this->fail('Une ValidationException était attendue.');
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             // attendu
         }
 

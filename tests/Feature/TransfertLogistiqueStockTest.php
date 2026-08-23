@@ -15,6 +15,7 @@ use App\Models\VarianteStock;
 use App\Services\MouvementStockService;
 use App\Services\TransfertLogistiqueService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 use Tests\Concerns\HasProduitVariante;
 use Tests\TestCase;
 
@@ -151,7 +152,7 @@ class TransfertLogistiqueStockTest extends TestCase
         try {
             TransfertLogistiqueService::avancerStatut($transfert);
             $this->fail('Le transfert aurait dû être refusé pour stock insuffisant.');
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             // attendu
         }
 

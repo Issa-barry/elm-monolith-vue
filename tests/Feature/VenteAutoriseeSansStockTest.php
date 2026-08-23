@@ -6,6 +6,7 @@ use App\Enums\StatutCommandeVente;
 use App\Enums\StatutTransfert;
 use App\Models\Client;
 use App\Models\CommandeVente;
+use App\Models\CommandeVenteLigne;
 use App\Models\Organization;
 use App\Models\Parametre;
 use App\Models\Produit;
@@ -213,7 +214,7 @@ class VenteAutoriseeSansStockTest extends TestCase
 
     // ── Commande vente — chargement ──────────────────────────────────────────
 
-    /** @return array{0: CommandeVente, 1: \App\Models\CommandeVenteLigne} */
+    /** @return array{0: CommandeVente, 1: CommandeVenteLigne} */
     private function makeCommandeEnChargement(int $quantiteDemandee): array
     {
         $client = Client::factory()->create(['organization_id' => $this->org->id, 'type' => 'externe']);

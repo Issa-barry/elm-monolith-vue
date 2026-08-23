@@ -6,9 +6,11 @@ use App\Models\Client;
 use App\Models\Organization;
 use App\Models\Parametre;
 use App\Models\Produit;
+use App\Models\ProduitType;
 use App\Models\Site;
 use App\Models\User;
 use App\Models\VarianteStock;
+use Database\Seeders\ProduitTypeDefaultSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
@@ -224,9 +226,9 @@ class CommandeVenteCreationBloqueeTest extends TestCase
 
     private function produitTypeIdMatiereProduction(): string
     {
-        \Database\Seeders\ProduitTypeDefaultSeeder::seedPourOrganisation($this->org->id);
+        ProduitTypeDefaultSeeder::seedPourOrganisation($this->org->id);
 
-        return \App\Models\ProduitType::where('organization_id', $this->org->id)
+        return ProduitType::where('organization_id', $this->org->id)
             ->where('code', 'matiere_production')
             ->value('id');
     }
