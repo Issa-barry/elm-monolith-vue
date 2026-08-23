@@ -125,15 +125,17 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
         return ['vehicule' => $vehicule->fresh(), 'equipe' => $equipe, 'livreurs' => $livreurs];
     }
 
-    /** @param  array<string, float>  $partsParLivreurId */
-    private function definirPartageCategorie(EquipeLivraison $equipe, Categorie $categorie, array $partsParLivreurId): void
+    /** @param  array<string, int>  $montantsParLivreurId  Montants GNF fixes par unité, doivent sommer exactement au barème Livreur de la catégorie. */
+    private function definirPartageCategorie(EquipeLivraison $equipe, Categorie $categorie, array $montantsParLivreurId): void
     {
-        foreach ($partsParLivreurId as $livreurId => $pct) {
+        foreach ($montantsParLivreurId as $livreurId => $montant) {
             EquipeLivraisonPartageCategorie::create([
                 'equipe_id' => $equipe->id,
                 'categorie_id' => $categorie->id,
                 'livreur_id' => $livreurId,
-                'part_pourcentage' => $pct,
+                'part_pourcentage' => 0,
+                'montant_unitaire' => $montant,
+                'effective_from' => now()->subDay(),
             ]);
         }
     }
@@ -189,8 +191,8 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
 
         ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreurs' => $livreurs] = $this->makeVehiculeAvecEquipe(2);
         $this->definirPartageCategorie($equipe, $categorie, [
-            $livreurs[0]->id => 60,
-            $livreurs[1]->id => 40,
+            $livreurs[0]->id => 180,
+            $livreurs[1]->id => 120,
         ]);
 
         $produit = $this->makeProduit($categorie->id);
@@ -205,8 +207,8 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
         $this->assertSame(1500.0, (float) $enveloppeLiv->montant_total); // 300 × 5
 
         $parts = CommissionEnveloppePart::where('enveloppe_id', $enveloppeLiv->id)->orderBy('montant_brut', 'desc')->get();
-        $this->assertEqualsWithDelta(900.0, (float) $parts[0]->montant_brut, 0.01); // 60%
-        $this->assertEqualsWithDelta(600.0, (float) $parts[1]->montant_brut, 0.01); // 40%
+        $this->assertEqualsWithDelta(900.0, (float) $parts[0]->montant_brut, 0.01); // 180 × 5
+        $this->assertEqualsWithDelta(600.0, (float) $parts[1]->montant_brut, 0.01); // 120 × 5
     }
 
     // ── Barème catégorie prévaut sur le global ───────────────────────────────
@@ -221,7 +223,7 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
         $this->creerRegle(CommissionCibleType::CODE_EQUIPE_LIVRAISON, 300);
 
         ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreurs' => $livreurs] = $this->makeVehiculeAvecEquipe(1);
-        $this->definirPartageCategorie($equipe, $categorie, [$livreurs[0]->id => 100]);
+        $this->definirPartageCategorie($equipe, $categorie, [$livreurs[0]->id => 300]);
 
         $produit = $this->makeProduit($categorie->id);
         $commande = $this->creerCommandeAvecLignes($vehicule, [[$produit, 4]]);
@@ -252,9 +254,9 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
         [$chauffeur, $convoyeur] = $livreurs;
 
         // Partage DISTINCT par catégorie — exactement le scénario métier motivant
-        // cette évolution : 50/50 sur Sachets, 60/40 sur Bouteilles.
-        $this->definirPartageCategorie($equipe, $sachets, [$chauffeur->id => 50, $convoyeur->id => 50]);
-        $this->definirPartageCategorie($equipe, $bouteilles, [$chauffeur->id => 60, $convoyeur->id => 40]);
+        // cette évolution : 50/50 sur Sachets (barème 300), 60/40 sur Bouteilles (barème 400).
+        $this->definirPartageCategorie($equipe, $sachets, [$chauffeur->id => 150, $convoyeur->id => 150]);
+        $this->definirPartageCategorie($equipe, $bouteilles, [$chauffeur->id => 240, $convoyeur->id => 160]);
 
         $produitSachets = $this->makeProduit($sachets->id);
         $produitBouteilles = $this->makeProduit($bouteilles->id);
@@ -358,8 +360,8 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
 
         ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreurs' => $livreurs] = $this->makeVehiculeAvecEquipe(2);
         $this->definirPartageCategorie($equipe, $categorie, [
-            $livreurs[0]->id => 50,
-            $livreurs[1]->id => 50,
+            $livreurs[0]->id => 150,
+            $livreurs[1]->id => 150,
         ]);
 
         $produit = $this->makeProduit($categorie->id);
@@ -388,7 +390,7 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
         $this->creerRegle(CommissionCibleType::CODE_EQUIPE_LIVRAISON, 1000, CommissionScopeType::CATEGORIE, $categorie->id);
 
         ['vehicule' => $vehicule, 'equipe' => $equipe, 'livreurs' => $livreurs] = $this->makeVehiculeAvecEquipe(1);
-        $this->definirPartageCategorie($equipe, $categorie, [$livreurs[0]->id => 100]);
+        $this->definirPartageCategorie($equipe, $categorie, [$livreurs[0]->id => 1000]);
 
         $produit = $this->makeProduit($categorie->id);
         $commande = $this->creerCommandeAvecLignes($vehicule, [[$produit, 1]]);

@@ -80,9 +80,9 @@ class CommissionAjustementVenteTest extends TestCase
     }
 
     /**
-     * Véhicule + équipe de 3 livreurs partageant l'enveloppe Livraison à
-     * 50 % / 37,5 % / 12,5 % (Oumar 60000 / Abdoulaye 45000 / Kadiatou 15000
-     * sur un total de 120000).
+     * Véhicule + équipe de 3 livreurs partageant l'enveloppe Livraison en
+     * montants fixes 600/450/150 GNF par unité (Oumar 60000 / Abdoulaye 45000
+     * / Kadiatou 15000 sur un total de 120000, pour 100 packs vendus).
      *
      * @return array{vehicule: Vehicule, equipe: EquipeLivraison, livreurs: array<string, Livreur>, categorie: Categorie}
      */
@@ -99,15 +99,19 @@ class CommissionAjustementVenteTest extends TestCase
         $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachets', 'statut' => 'actif']);
 
         $livreurs = [];
-        $parts = ['Oumar' => 50, 'Abdoulaye' => 37.5, 'Kadiatou' => 12.5];
-        foreach ($parts as $nom => $pourcentage) {
+        // Montants fixes GNF/unité (remplacent les anciens % 50/37,5/12,5) : sommes à
+        // 1200, le barème équipe ci-dessous — mêmes montants finaux qu'avant (×100 packs).
+        $parts = ['Oumar' => 600, 'Abdoulaye' => 450, 'Kadiatou' => 150];
+        foreach ($parts as $nom => $montantUnitaire) {
             $livreur = Livreur::factory()->create(['organization_id' => $this->org->id, 'nom_complet' => $nom.$suffixNoms]);
             EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $livreur->id, 'role' => 'chauffeur', 'ordre' => 0]);
             EquipeLivraisonPartageCategorie::create([
                 'equipe_id' => $equipe->id,
                 'categorie_id' => $categorie->id,
                 'livreur_id' => $livreur->id,
-                'part_pourcentage' => $pourcentage,
+                'part_pourcentage' => 0,
+                'montant_unitaire' => $montantUnitaire,
+                'effective_from' => now()->subDay(),
             ]);
             $livreurs[$nom] = $livreur;
         }

@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CommissionCibleType;
+use App\Models\CommissionProcessus;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\EquipeLivreur;
@@ -10,6 +12,8 @@ use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
 use App\Models\VehiculeCapacite;
+use App\Services\Commission\CommissionPartageLivraisonValidator;
+use App\Services\Commission\CommissionRegleResolver;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -17,6 +21,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response as InertiaResponse;
+use InvalidArgumentException;
 
 /**
  * Le propriétaire n'appartient pas au partage de commission : son montant vient
@@ -56,7 +61,7 @@ class EquipeLivraisonController extends Controller
         $nomVehicule = $vehiculeSelectionne?->nom_vehicule ?? '';
 
         $data = $request->validate($this->rules($request, $orgId, null), $this->messages());
-        $this->validatePartagesCategorie($data['partages_categorie'] ?? []);
+        $this->validatePartagesCategorie($data['partages_categorie'] ?? [], $orgId);
         $this->validateUniquePhones($data['membres']);
         $this->validateMembresExclusivite($data['membres'], $orgId);
 
@@ -115,7 +120,7 @@ class EquipeLivraisonController extends Controller
         $nomVehicule = $vehiculeSelectionne?->nom_vehicule ?? '';
 
         $data = $request->validate($this->rules($request, $orgId, $equipes_livraison->id), $this->messages());
-        $this->validatePartagesCategorie($data['partages_categorie'] ?? []);
+        $this->validatePartagesCategorie($data['partages_categorie'] ?? [], $orgId);
         $this->validateUniquePhones($data['membres']);
         $this->validateMembresExclusivite($data['membres'], $orgId, $equipes_livraison->id);
 
@@ -195,17 +200,18 @@ class EquipeLivraisonController extends Controller
             'membres.*.role' => ['required', Rule::in(['chauffeur', 'convoyeur'])],
             'membres.*.taux_commission_logistique' => 'nullable|numeric|min:0|max:100',
             'membres.*.ordre' => 'nullable|integer|min:0',
-            // Partage Livraison PAR CATÉGORIE : plus un seul pourcentage par membre valable
-            // pour toutes les catégories — chaque catégorie ayant son propre barème
-            // Livraison, son partage entre livreurs est lui aussi défini indépendamment
-            // (cf. validatePartagesCategorie()).
+            // Partage Livreur PAR CATÉGORIE : chaque catégorie a son propre barème
+            // Livreur (GNF/unité), son partage entre livreurs est donc défini
+            // indépendamment, en montants GNF entiers fixes dont la somme doit égaler
+            // exactement le barème (cf. validatePartagesCategorie(),
+            // CommissionPartageLivraisonValidator — plus aucun pourcentage).
             'partages_categorie' => 'nullable|array',
             'partages_categorie.*.categorie_id' => [
                 'required', 'string',
                 Rule::exists('categories', 'id')->where('organization_id', $orgId),
             ],
             'partages_categorie.*.parts' => 'required|array|min:1',
-            'partages_categorie.*.parts.*.part_pourcentage' => 'required|numeric|min:0|max:100',
+            'partages_categorie.*.parts.*.montant_unitaire' => 'required|integer|min:0',
             'partages_categorie.*.parts.*.membre_ordre' => [
                 'required', 'integer', 'min:0',
                 function ($attribute, $value, $fail) use ($request) {
@@ -411,42 +417,78 @@ class EquipeLivraisonController extends Controller
     }
 
     /**
-     * Vérifie que, POUR CHAQUE catégorie soumise, la somme des parts
-     * des livreurs totalise 100 % — le propriétaire n'appartient jamais à ce
-     * partage (décision AMOA #1), son montant vient du barème Paramètres →
-     * Commissions. Une catégorie absente du payload n'est simplement pas
-     * validée ici (elle reste "non configurée" pour cette équipe, cf.
-     * CommissionEnveloppeGenerator qui bloque alors sa génération).
+     * Vérifie que, POUR CHAQUE catégorie soumise, la somme des montants fixes
+     * des livreurs égale exactement l'enveloppe du barème Livreur (GNF/unité)
+     * — le propriétaire n'appartient jamais à ce partage (décision AMOA #1),
+     * son montant vient du barème Paramètres → Commissions. Une catégorie
+     * absente du payload n'est simplement pas validée ici (elle reste "non
+     * configurée" pour cette équipe, cf. CommissionEnveloppeGenerator qui
+     * bloque alors sa génération).
+     *
+     * Source unique de la règle (CommissionPartageLivraisonValidator), aussi
+     * rejouée par CommissionEnveloppeGenerator à la génération — jamais de
+     * formule dupliquée entre les deux points d'entrée.
      */
-    private function validatePartagesCategorie(array $partagesCategorie): void
+    private function validatePartagesCategorie(array $partagesCategorie, string $orgId): void
     {
-        foreach ($partagesCategorie as $pc) {
-            $total = array_reduce(
-                $pc['parts'],
-                fn (float $sum, array $p): float => $sum + (float) ($p['part_pourcentage'] ?? 0),
-                0.0
-            );
+        if (empty($partagesCategorie)) {
+            return;
+        }
 
-            if (abs($total - 100.0) > 0.01) {
-                abort(422, sprintf(
-                    'La somme des parts (%.2f %%) doit être égale à 100 %% pour chaque catégorie.',
-                    $total
-                ));
+        $processus = CommissionProcessus::where('organization_id', $orgId)
+            ->where('code', CommissionProcessus::CODE_VENTE)
+            ->first();
+
+        foreach ($partagesCategorie as $pc) {
+            $regle = $processus
+                ? CommissionRegleResolver::resolve(
+                    $orgId,
+                    $processus->id,
+                    CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+                    null,
+                    null,
+                    $pc['categorie_id'],
+                    now(),
+                )
+                : null;
+
+            $enveloppe = (int) round((float) ($regle?->montant ?? 0));
+
+            $membres = collect($pc['parts'])->map(fn (array $p) => (object) [
+                'beneficiaire_id' => $p['membre_ordre'],
+                'montant_unitaire' => $p['montant_unitaire'] ?? null,
+            ]);
+
+            try {
+                CommissionPartageLivraisonValidator::valider($membres, $enveloppe);
+            } catch (InvalidArgumentException $e) {
+                abort(422, $e->getMessage());
             }
         }
     }
 
     /**
-     * Remplace intégralement le partage Livraison par catégorie de cette
-     * équipe — jamais de fusion partielle avec l'existant, exactement comme
+     * Remplace intégralement le partage Livreur par catégorie de cette équipe
+     * — jamais de fusion partielle avec l'existant, exactement comme
      * $equipe->membres()->delete() + recréation pour les membres eux-mêmes.
      * $livreurIdParOrdre résout la position déclarée côté payload
      * (membre_ordre, jamais stable côté client pour un nouveau membre sans
      * livreur_id) vers le Livreur réellement créé/résolu par resolveOrCreateLivreur().
+     *
+     * Versionné (jamais de delete) : les lignes actives sont closes
+     * (effective_to) puis les nouvelles insérées (effective_to NULL) — permet
+     * à une relance de commission historique de résoudre le partage
+     * réellement en vigueur à la date du fait générateur, pas la config
+     * courante. part_pourcentage reçoit un placeholder 0 (colonne legacy en
+     * cours de retrait, plus jamais lue par ce flux).
      */
     private function syncPartagesCategorie(string $equipeId, array $partagesCategorie, array $livreurIdParOrdre): void
     {
-        EquipeLivraisonPartageCategorie::where('equipe_id', $equipeId)->delete();
+        $maintenant = now();
+
+        EquipeLivraisonPartageCategorie::where('equipe_id', $equipeId)
+            ->whereNull('effective_to')
+            ->update(['effective_to' => $maintenant]);
 
         foreach ($partagesCategorie as $pc) {
             foreach ($pc['parts'] as $p) {
@@ -454,7 +496,10 @@ class EquipeLivraisonController extends Controller
                     'equipe_id' => $equipeId,
                     'categorie_id' => $pc['categorie_id'],
                     'livreur_id' => $livreurIdParOrdre[$p['membre_ordre']],
-                    'part_pourcentage' => (float) $p['part_pourcentage'],
+                    'part_pourcentage' => 0,
+                    'montant_unitaire' => (int) $p['montant_unitaire'],
+                    'effective_from' => $maintenant,
+                    'effective_to' => null,
                 ]);
             }
         }
@@ -522,9 +567,9 @@ class EquipeLivraisonController extends Controller
             'partages_categorie.*.categorie_id.required' => 'La catégorie est obligatoire.',
             'partages_categorie.*.categorie_id.exists' => 'La catégorie sélectionnée est introuvable.',
             'partages_categorie.*.parts.required' => 'Le partage doit avoir au moins un bénéficiaire.',
-            'partages_categorie.*.parts.*.part_pourcentage.required' => 'La part est obligatoire.',
-            'partages_categorie.*.parts.*.part_pourcentage.min' => 'La part ne peut pas être négative.',
-            'partages_categorie.*.parts.*.part_pourcentage.max' => 'La part ne peut pas dépasser 100 %.',
+            'partages_categorie.*.parts.*.montant_unitaire.required' => 'Le montant est obligatoire.',
+            'partages_categorie.*.parts.*.montant_unitaire.integer' => 'Le montant doit être un entier GNF, sans décimales.',
+            'partages_categorie.*.parts.*.montant_unitaire.min' => 'Le montant ne peut pas être négatif.',
         ];
     }
 }

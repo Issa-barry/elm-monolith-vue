@@ -210,6 +210,7 @@ Route::prefix('backoffice')->group(function () {
             Route::patch('ventes/{commande_vente}/annuler', [CommandeVenteController::class, 'annuler'])->name('ventes.annuler');
             Route::post('ventes/{commande_vente}/statut/avancer', [CommandeVenteStatutController::class, 'avancer'])->name('ventes.statut.avancer');
             Route::post('ventes/{commande_vente}/statut/annuler', [CommandeVenteStatutController::class, 'annuler'])->name('ventes.statut.annuler');
+            Route::post('ventes/{commande_vente}/commissions/relancer', [CommandeVenteController::class, 'relancerCommissions'])->name('ventes.commissions.relancer');
             Route::get('factures', [FactureVenteController::class, 'index'])->name('factures.index');
 
             // Encaissements factures

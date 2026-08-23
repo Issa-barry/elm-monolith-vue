@@ -158,7 +158,7 @@ class EquipeLivraisonMoteurRoundTripTest extends TestCase
                 'partages_categorie' => [[
                     'categorie_id' => $categorie->id,
                     'parts' => [
-                        ['membre_ordre' => 0, 'part_pourcentage' => 100],
+                        ['membre_ordre' => 0, 'montant_unitaire' => 300],
                     ],
                 ]],
             ])

@@ -111,7 +111,7 @@ class CommandeVenteCommissionEligibiliteTest extends TestCase
      * pour que CommissionEnveloppeGenerator (seule voie de génération désormais) ne reste pas
      * silencieusement sans règle à résoudre — cf. CommissionRegleResolver::resolve().
      */
-    private function attacherEquipe(Vehicule $vehicule, float $partChauffeur = 66.67, float $partConvoyeur = 33.33): void
+    private function attacherEquipe(Vehicule $vehicule, int $montantChauffeur = 667, int $montantConvoyeur = 333): void
     {
         $categorie = $this->categorie;
 
@@ -140,13 +140,17 @@ class CommandeVenteCommissionEligibiliteTest extends TestCase
             'equipe_id' => $equipe->id,
             'categorie_id' => $categorie->id,
             'livreur_id' => $chauffeur->id,
-            'part_pourcentage' => $partChauffeur,
+            'part_pourcentage' => 0,
+            'montant_unitaire' => $montantChauffeur,
+            'effective_from' => now()->subDay(),
         ]);
         EquipeLivraisonPartageCategorie::create([
             'equipe_id' => $equipe->id,
             'categorie_id' => $categorie->id,
             'livreur_id' => $convoyeur->id,
-            'part_pourcentage' => $partConvoyeur,
+            'part_pourcentage' => 0,
+            'montant_unitaire' => $montantConvoyeur,
+            'effective_from' => now()->subDay(),
         ]);
 
         CommissionRegle::create([
