@@ -87,8 +87,13 @@ const currentPath = typeof window !== undefined ? window.location.pathname : '';
 
             <Separator class="my-4 lg:hidden" />
 
-            <div :class="['flex-1', !wide && 'md:max-w-2xl']">
-                <section :class="[!wide && 'max-w-xl', 'space-y-12']">
+            <div :class="['min-w-0 flex-1', !wide && 'md:max-w-2xl']">
+                <section
+                    :class="[
+                        !wide && 'max-w-xl',
+                        'max-w-full min-w-0 space-y-12',
+                    ]"
+                >
                     <slot />
                 </section>
             </div>

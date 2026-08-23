@@ -8,6 +8,7 @@ use App\Enums\CommissionGenerationStatut;
 use App\Enums\CommissionStrategieAncrageSite;
 use App\Enums\CommissionUniteCalcul;
 use App\Enums\OrigineCommissionPart;
+use App\Enums\PrestataireType;
 use App\Enums\StatutCommission;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
@@ -21,6 +22,7 @@ use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
 use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\Parametre;
+use App\Models\Prestataire;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -357,31 +359,54 @@ class CommissionEnveloppeGenerator
             }
 
             if ($cibleCode === CommissionCibleType::CODE_CONSULTANT) {
-                // Bénéficiaire = le prestataire actuellement désigné par l'organisation, jamais
-                // un prestataire codé en dur (cf. CommissionConsultantAffectation). Un barème
-                // consultant configuré sans désignation active est une incohérence de
-                // paramétrage, jamais un simple "rien à payer" : même traitement tout-ou-rien
-                // qu'un véhicule sans propriétaire ci-dessus (décision AMOA #4 — explicite et
-                // traçable, jamais silencieux, cf. CommissionGenerationAttempt).
-                $affectation = CommissionConsultantAffectation::actifPour($commande->organization_id);
+                // Le bénéficiaire est porté par chaque règle de catégorie. Le repli sur
+                // l'ancienne affectation globale ne sert qu'aux règles historiques créées
+                // avant l'introduction du paramétrage par catégorie.
+                $affectationHistorique = CommissionConsultantAffectation::actifPour(
+                    $commande->organization_id,
+                );
+                $parConsultant = collect($contributions)->groupBy(
+                    fn (array $contribution) => $contribution['regle']->consultant_id
+                        ?? $affectationHistorique?->prestataire_id
+                        ?? 'sans_consultant',
+                );
 
-                if (! $affectation) {
-                    $erreurs[] = "Cible {$cibleCode} : aucun consultant désigné pour cette organisation.";
+                foreach ($parConsultant as $consultantId => $contributionsConsultant) {
+                    if ($consultantId === 'sans_consultant') {
+                        $erreurs[] = "Cible {$cibleCode} : une catégorie n'a aucun consultant désigné.";
 
-                    continue;
+                        continue;
+                    }
+
+                    $consultantActif = Prestataire::whereKey($consultantId)
+                        ->where('organization_id', $commande->organization_id)
+                        ->where('type', PrestataireType::CONSULTANT->value)
+                        ->where('is_active', true)
+                        ->exists();
+
+                    if (! $consultantActif) {
+                        $erreurs[] = "Cible {$cibleCode} : le consultant {$consultantId} n'est plus actif.";
+
+                        continue;
+                    }
+
+                    $montantConsultant = round(
+                        (float) $contributionsConsultant->sum('montant'),
+                        2,
+                    );
+                    $enveloppesACreer["{$cibleCode}:{$consultantId}"] = [
+                        'cible_type' => $cibleCode,
+                        'montant' => $montantConsultant,
+                        'cible_id' => $consultantId,
+                        'contributions' => $contributionsConsultant->all(),
+                        'parts' => [[
+                            'beneficiaire_type' => CommissionEnveloppePart::TYPE_PRESTATAIRE,
+                            'beneficiaire_id' => $consultantId,
+                            'taux' => null,
+                            'montant' => $montantConsultant,
+                        ]],
+                    ];
                 }
-
-                $enveloppesACreer[$cibleCode] = [
-                    'montant' => $montantTotal,
-                    'cible_id' => $affectation->prestataire_id,
-                    'contributions' => $contributions,
-                    'parts' => [[
-                        'beneficiaire_type' => CommissionEnveloppePart::TYPE_PRESTATAIRE,
-                        'beneficiaire_id' => $affectation->prestataire_id,
-                        'taux' => null,
-                        'montant' => $montantTotal,
-                    ]],
-                ];
             }
         }
 
@@ -395,7 +420,7 @@ class CommissionEnveloppeGenerator
                 'source_type' => CommandeVente::class,
                 'source_id' => $commande->id,
                 'processus_id' => $processus->id,
-                'cible_type' => $cibleCode,
+                'cible_type' => $e['cible_type'] ?? $cibleCode,
                 'cible_id' => $e['cible_id'],
                 'montant_total' => $e['montant'],
                 'earned_at' => $earnedAt,
