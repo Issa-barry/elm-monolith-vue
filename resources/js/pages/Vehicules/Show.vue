@@ -55,10 +55,10 @@ interface MembreEquipeDetail {
     ordre: number;
 }
 
-/** V2 uniquement — partage Livraison déjà enregistré, groupé par catégorie. */
+/** V2 uniquement — partage Livreur déjà enregistré, groupé par catégorie (montants GNF fixes). */
 interface PartageCategorieDetail {
     categorie_id: string;
-    parts: Array<{ livreur_id: string; part_pourcentage: number }>;
+    parts: Array<{ livreur_id: string; montant_unitaire: number }>;
 }
 
 interface EquipeData {

@@ -1,6 +1,6 @@
 # Standards UI — à respecter impérativement
 
-Ces deux règles sont contrôlées automatiquement par `node scripts/check-ui-standards.mjs`,
+Ces trois règles sont contrôlées automatiquement par `node scripts/check-ui-standards.mjs`,
 exécuté dans le CI (`.github/workflows/lint.yml`, job `quality`, step "Check UI standards").
 Une PR qui les viole échoue le check **avant merge**. Lance `npm run lint:standards` en local
 pour vérifier avant de pousser.
@@ -45,9 +45,67 @@ Toute page de liste (Index) avec des filtres doit utiliser
 - Ne déclare pas plusieurs `ref` nommées `filterXxx`/`filtreXxx` sans importer `DataFilters.vue` —
   c'est exactement le pattern détecté par le check CI comme "filtre fait maison".
 
+## 3. Toasts : toujours en haut à droite
+
+Tout composant PrimeVue `<Toast>` doit déclarer explicitement :
+
+```vue
+<Toast position="top-right" />
+```
+
+- **Interdit** : `bottom-right`, `bottom-left`, `bottom-center`, `center` ou une position dynamique.
+- Cette règle s'applique au Toast global comme aux groupes spécialisés déclarés dans une page.
+- Les appels `toast.add(...)` restent inchangés : la position est contrôlée par le composant `<Toast>` qui reçoit le message.
+- Cette règle est vérifiée dans les pages, les composants et les layouts, sans échappatoire.
+
+## 4. Règles métier : backend obligatoire
+
+Toute règle qui bloque ou autorise une action métier (stock, solde, statut, permission,
+plafond...) doit être contrôlée côté **backend**. Une désactivation de bouton, un filtre
+frontend ou un message dans Vue améliore l'expérience, mais ne remplace jamais la règle
+métier serveur.
+
+- Centralise la règle dans le service, la policy ou le mécanisme métier existant.
+- Contrôle à nouveau les opérations différées ou concurrentes au moment de leur exécution
+  réelle (ex. création de commande puis validation du chargement).
+- Une page ou une action bloquée côté interface doit toujours avoir son équivalent backend.
+
+## 5. Paramètres et choix Oui / Non
+
+Tout paramètre d'organisation doit être isolé par `organization_id`, protégé par la permission
+existante la plus adaptée et avoir une valeur par défaut sûre.
+
+- Pour un booléen, utiliser une seule case à cocher clairement libellée.
+- Si les deux choix **Oui** et **Non** doivent être visibles, utiliser des boutons radio ; deux
+  cases à cocher seraient ambiguës.
+- Les paramètres ne doivent jamais être modifiables seulement dans le frontend : vérifier la
+  permission également côté backend.
+
+## 6. Historique, motifs et filtres de modale
+
+Le motif d'un mouvement ou d'une activité doit provenir de sa source métier réelle (vente,
+transfert, ajustement, production...), jamais être déduit seulement du signe ou du montant.
+
+- `DataFilters.vue` est obligatoire pour les filtres des pages **Index**. Un filtre simple dans
+  une modale d'historique peut suivre le composant déjà utilisé dans cette modale.
+- N'ajoute au filtre que des motifs réellement pris en charge par les données et le backend.
+
+## 7. Vérifications avant livraison
+
+Après toute modification UI, lance au minimum :
+
+```bash
+npm run lint:standards
+```
+
+Ajoute et exécute les tests pertinents (Feature, Unit et/ou E2E) pour les règles métier ou les
+parcours utilisateurs modifiés. Dans le compte rendu final, indique les commandes exécutées et
+leurs résultats.
+
 ## Échappatoire
 
 Si un cas est légitimement hors-périmètre (ex: un badge qui ressemble à un statut mais qui est
 en fait une catégorie), ajoute le commentaire `ui-standard-ignore-file` n'importe où dans le
-fichier `.vue` pour désactiver les deux checks sur ce fichier. À utiliser avec parcimonie — c'est
-une échappatoire, pas un moyen de contourner la règle par défaut.
+fichier `.vue` pour désactiver les checks Badge/DataFilters sur ce fichier. Ajoute à côté une
+brève explication du cas hors-périmètre. À utiliser avec parcimonie — ce commentaire ne
+désactive jamais la règle Toast en haut à droite.

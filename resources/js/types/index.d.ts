@@ -24,7 +24,12 @@ export type Resource =
     | 'depenses'
     | 'users'
     | 'parametres'
-    | 'logistique';
+    | 'logistique'
+    | 'comptabilite'
+    | 'rh-employes'
+    | 'rh-contrats'
+    | 'rh-paie'
+    | 'propositions';
 export type CrudAction = 'create' | 'read' | 'update' | 'delete';
 export type StandalonePermission =
     | 'logistique.commission.verser'

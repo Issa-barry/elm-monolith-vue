@@ -53,7 +53,7 @@ test('paiement de salaire depuis la page Salaires — le solde diminue', async (
     await page.goto('/backoffice/comptabilite/salaires');
 
     await expect(
-        page.getByRole('heading', { name: /salaires/i }).first(),
+        page.getByRole('heading', { name: /paiement salaire/i }).first(),
     ).toBeVisible({ timeout: 15_000 });
 
     const payerBtn = page

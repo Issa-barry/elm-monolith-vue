@@ -586,7 +586,14 @@ function submit() {
 }
 
 function confirmerEtCreer() {
-    form.post('/backoffice/ventes');
+    // Sans onError, un refus (ex: stock insuffisant) laissait la modale de confirmation
+    // ouverte indéfiniment, masquant le message d'erreur déjà affiché sur le formulaire
+    // sous-jacent (form.errors.lignes ci-dessous) — 24/08/2026.
+    form.post('/backoffice/ventes', {
+        onError: () => {
+            showConfirmDialog.value = false;
+        },
+    });
 }
 </script>
 

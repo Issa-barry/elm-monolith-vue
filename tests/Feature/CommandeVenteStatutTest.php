@@ -123,7 +123,7 @@ class CommandeVenteStatutTest extends TestCase
      * @param  array<string, mixed>  $attrs  Surcharges pour CommandeVente::factory()
      * @return array{commande: CommandeVente, ligne: CommandeVenteLigne, produit: Produit, vehicule: Vehicule}
      */
-    private function makeCommandeWithLigne(array $attrs = [], ?Vehicule $vehicule = null): array
+    private function makeCommandeWithLigne(array $attrs = [], ?Vehicule $vehicule = null, bool $seedStock = true): array
     {
         $cible = $attrs['statut'] ?? StatutCommandeVente::BROUILLON;
         unset($attrs['statut']);
@@ -133,6 +133,10 @@ class CommandeVenteStatutTest extends TestCase
             ['nom' => 'Produit Test', 'categorie_id' => $this->categorie->id],
             ['prix_vente' => 2000, 'prix_usine' => 1500],
         );
+
+        if ($seedStock) {
+            $this->seedVarianteStockSuffisant($produit->variantePrincipale()->first(), $this->defaultSite);
+        }
 
         if (! $vehicule) {
             $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
@@ -204,7 +208,8 @@ class CommandeVenteStatutTest extends TestCase
     /**
      * Crée un véhicule avec une équipe à 2 membres (chauffeur + convoyeur).
      */
-    private function makeVehiculeAvecEquipe(float $partChauffeur = 58.33, float $partConvoyeur = 41.67): Vehicule
+    /** $montantChauffeur/$montantConvoyeur : montants GNF fixes, doivent sommer au barème équipe (100, cf. setUp()). */
+    private function makeVehiculeAvecEquipe(int $montantChauffeur = 58, int $montantConvoyeur = 42): Vehicule
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $vehicule = Vehicule::factory()->create([
@@ -226,11 +231,13 @@ class CommandeVenteStatutTest extends TestCase
         EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $convoyeur->id, 'role' => 'convoyeur', 'ordre' => 1]);
         EquipeLivraisonPartageCategorie::create([
             'equipe_id' => $equipe->id, 'categorie_id' => $this->categorie->id,
-            'livreur_id' => $chauffeur->id, 'part_pourcentage' => $partChauffeur,
+            'livreur_id' => $chauffeur->id, 'part_pourcentage' => 0,
+            'montant_unitaire' => $montantChauffeur, 'effective_from' => now()->subDay(),
         ]);
         EquipeLivraisonPartageCategorie::create([
             'equipe_id' => $equipe->id, 'categorie_id' => $this->categorie->id,
-            'livreur_id' => $convoyeur->id, 'part_pourcentage' => $partConvoyeur,
+            'livreur_id' => $convoyeur->id, 'part_pourcentage' => 0,
+            'montant_unitaire' => $montantConvoyeur, 'effective_from' => now()->subDay(),
         ]);
 
         return $vehicule->fresh();
@@ -461,7 +468,7 @@ class CommandeVenteStatutTest extends TestCase
 
     public function test_valider_chargement_cree_les_commissions_chauffeur_et_convoyeur_selon_qte_chargee(): void
     {
-        $vehicule = $this->makeVehiculeAvecEquipe(partChauffeur: 58.33, partConvoyeur: 41.67);
+        $vehicule = $this->makeVehiculeAvecEquipe(montantChauffeur: 58, montantConvoyeur: 42);
         ['commande' => $commande, 'ligne' => $ligne, 'vehicule' => $vehicule] = $this->makeCommandeWithLigne([
             'statut' => StatutCommandeVente::CHARGEMENT_EN_COURS,
         ], $vehicule);
@@ -489,10 +496,9 @@ class CommandeVenteStatutTest extends TestCase
         $parts = $commission->parts()->get()->keyBy('beneficiaire_id');
 
         // Commission calculée directement sur la quantité chargée (1 pack, jamais
-        // les 2 demandées) : barème équipe = 100/pack × 1 = 100, réparti
-        // 58,33 % / 41,67 % → chauffeur 58.33, convoyeur 41.67.
-        $this->assertEquals(58.33, round((float) $parts[$chauffeurId]->montant_brut, 2));
-        $this->assertEquals(41.67, round((float) $parts[$convoyeurId]->montant_brut, 2));
+        // les 2 demandées) : montant fixe chauffeur=58, convoyeur=42 × 1 pack.
+        $this->assertEquals(58.0, (float) $parts[$chauffeurId]->montant_brut);
+        $this->assertEquals(42.0, (float) $parts[$convoyeurId]->montant_brut);
         // Créée seulement — ne devient IMPAYE qu'à la validation de la période de paiement.
         $this->assertEquals('creee', $commission->statut->value);
         $this->assertEquals('creee', $parts[$chauffeurId]->statut->value);
@@ -506,7 +512,7 @@ class CommandeVenteStatutTest extends TestCase
         // silencieusement ignorée faute d'équipe.
         ['commande' => $commande, 'ligne' => $ligne, 'produit' => $produit] = $this->makeCommandeWithLigne([
             'statut' => StatutCommandeVente::CHARGEMENT_EN_COURS,
-        ]);
+        ], seedStock: false);
 
         $variante = $produit->variantePrincipale()->first();
         VarianteStock::create([
@@ -547,33 +553,33 @@ class CommandeVenteStatutTest extends TestCase
         // connu est l'agrégat global Produit::qte_stock (pas encore de ligne
         // variante_stocks pour aucun site). Décision produit (régression
         // multi-agences) : ce legacy n'est JAMAIS hérité implicitement par le
-        // premier site touché — l'ordre dans lequel les sites sont mouvementés ne
-        // doit jamais décider de l'agence propriétaire d'un stock historique non
-        // ventilé. Le site démarre à 0 et la sortie y est bornée à 0.
+        // premier site touché. Le site démarre à 0 : le chargement est donc
+        // refusé (stock insuffisant), jamais silencieusement clampé (cf.
+        // correctif du 23/08/2026 — suppression du clamp silencieux).
         ['commande' => $commande, 'ligne' => $ligne, 'produit' => $produit] = $this->makeCommandeWithLigne([
             'statut' => StatutCommandeVente::CHARGEMENT_EN_COURS,
-        ]);
+        ], seedStock: false);
         $produit->update(['qte_stock' => 1000]);
 
         $this->actingAs($this->user)
             ->post(route('ventes.statut.avancer', $commande), [
                 'lignes' => [['id' => $ligne->id, 'quantite_chargee' => 80, 'type_ecart' => 'surplus']],
             ])
-            ->assertRedirect();
+            ->assertSessionHasErrors('statut');
 
-        $this->assertDatabaseHas('variante_stocks', [
+        $this->assertDatabaseMissing('variante_stocks', [
             'produit_variante_id' => $produit->variantePrincipale()->first()->id,
             'site_id' => $this->defaultSite->id,
-            'qte_stock' => 0,
         ]);
-        $this->assertEquals(0, $produit->fresh()->qte_stock);
+        // Le legacy n'est jamais consulté ni modifié par ce refus.
+        $this->assertEquals(1000, $produit->fresh()->qte_stock);
     }
 
-    public function test_valider_chargement_cree_le_stock_site_et_le_borne_a_zero_si_insuffisant(): void
+    public function test_valider_chargement_refuse_si_stock_site_insuffisant(): void
     {
         ['commande' => $commande, 'ligne' => $ligne, 'produit' => $produit] = $this->makeCommandeWithLigne([
             'statut' => StatutCommandeVente::CHARGEMENT_EN_COURS,
-        ]);
+        ], seedStock: false);
 
         // Aucun VarianteStock existant pour cette variante/site avant validation.
 
@@ -581,16 +587,16 @@ class CommandeVenteStatutTest extends TestCase
             ->post(route('ventes.statut.avancer', $commande), [
                 'lignes' => [['id' => $ligne->id, 'quantite_chargee' => 2, 'type_ecart' => 'conforme']],
             ])
-            ->assertRedirect();
+            ->assertSessionHasErrors('statut');
 
-        // Le physique passe avant la comptabilité : on ne bloque jamais le
-        // workflow pour insuffisance de stock, on borne à 0.
-        $this->assertDatabaseHas('variante_stocks', [
+        // Refusé avant toute écriture : aucune ligne variante_stocks créée, la commande
+        // reste en CHARGEMENT_EN_COURS (cf. correctif du 23/08/2026 — suppression du
+        // clamp silencieux à 0).
+        $this->assertDatabaseMissing('variante_stocks', [
             'produit_variante_id' => $produit->variantePrincipale()->first()->id,
             'site_id' => $this->defaultSite->id,
-            'qte_stock' => 0,
         ]);
-        $this->assertEquals(0, $produit->fresh()->qte_stock);
+        $this->assertEquals(StatutCommandeVente::CHARGEMENT_EN_COURS, $commande->fresh()->statut);
     }
 
     public function test_relancer_validation_chargement_ne_cree_pas_de_doublons(): void
@@ -723,9 +729,14 @@ class CommandeVenteStatutTest extends TestCase
 
     public function test_encaissement_complet_depuis_livraison_cloture_la_commande(): void
     {
+        // Non éligible aux commissions : ce test porte sur la transition de clôture
+        // elle-même, pas sur la génération de commission — un véhicule éligible SANS
+        // équipe configurée échouerait désormais sa génération (ERREUR) et bloquerait
+        // à raison la clôture (cf. cloturerSiComplete(), incident CMD-230826-004).
         ['commande' => $commande] = $this->makeCommandeWithLigne([
             'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
             'total_commande' => 4000,
+            'commission_eligible_snapshot' => false,
         ]);
 
         $facture = $commande->fresh()->facture;

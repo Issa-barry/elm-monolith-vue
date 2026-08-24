@@ -39,6 +39,8 @@ use App\Http\Controllers\ContactController;
 use App\Http\Controllers\ContratController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DepenseController;
+use App\Http\Controllers\DepenseTypeController;
+use App\Http\Controllers\DepenseTypeImportController;
 use App\Http\Controllers\EmployeController;
 use App\Http\Controllers\EncaissementVenteController;
 use App\Http\Controllers\EquipeLivraisonController;
@@ -210,6 +212,7 @@ Route::prefix('backoffice')->group(function () {
             Route::patch('ventes/{commande_vente}/annuler', [CommandeVenteController::class, 'annuler'])->name('ventes.annuler');
             Route::post('ventes/{commande_vente}/statut/avancer', [CommandeVenteStatutController::class, 'avancer'])->name('ventes.statut.avancer');
             Route::post('ventes/{commande_vente}/statut/annuler', [CommandeVenteStatutController::class, 'annuler'])->name('ventes.statut.annuler');
+            Route::post('ventes/{commande_vente}/commissions/relancer', [CommandeVenteController::class, 'relancerCommissions'])->name('ventes.commissions.relancer');
             Route::get('factures', [FactureVenteController::class, 'index'])->name('factures.index');
 
             // Encaissements factures
@@ -413,6 +416,22 @@ Route::prefix('backoffice')->group(function () {
             Route::get('depenses/suggestions', [DepenseController::class, 'suggestions'])->name('depenses.suggestions');
             Route::get('depenses/concerne-detail', [DepenseController::class, 'concereneDetail'])->name('depenses.concerne-detail');
             Route::get('depenses/vehicule-detail', [DepenseController::class, 'vehiculeDetail'])->name('depenses.vehicule-detail');
+
+            // ── Types de dépense — sous-page du module Dépenses (déménagée des
+            // Paramètres, cf. routes/settings.php pour la redirection de l'ancienne
+            // URL). Déclarée avant Route::resource('depenses', ...) ci-dessous pour
+            // ne jamais être capturée par son wildcard {depense}.
+            Route::get('depenses/types', [DepenseTypeController::class, 'index'])->name('depenses.types.index');
+            Route::post('depenses/types', [DepenseTypeController::class, 'store'])->name('depenses.types.store');
+            Route::put('depenses/types/{depense_type}', [DepenseTypeController::class, 'update'])->name('depenses.types.update');
+            Route::patch('depenses/types/{depense_type}/toggle', [DepenseTypeController::class, 'toggle'])->name('depenses.types.toggle');
+            Route::delete('depenses/types/{depense_type}', [DepenseTypeController::class, 'destroy'])->name('depenses.types.destroy');
+            Route::get('depenses/types/export/excel', [DepenseTypeController::class, 'exportExcel'])->name('depenses.types.export.excel');
+            Route::get('depenses/types/export/pdf', [DepenseTypeController::class, 'exportPdf'])->name('depenses.types.export.pdf');
+            Route::get('depenses/types/import/modele', [DepenseTypeImportController::class, 'modele'])->name('depenses.types.import.modele');
+            Route::post('depenses/types/import/analyser', [DepenseTypeImportController::class, 'analyser'])->name('depenses.types.import.analyser');
+            Route::post('depenses/types/import/confirmer', [DepenseTypeImportController::class, 'confirmer'])->name('depenses.types.import.confirmer');
+
             Route::resource('depenses', DepenseController::class);
             Route::patch('depenses/{depense}/soumettre', [DepenseController::class, 'soumettre'])->name('depenses.soumettre');
             Route::patch('depenses/{depense}/valider', [DepenseController::class, 'valider'])->name('depenses.valider');

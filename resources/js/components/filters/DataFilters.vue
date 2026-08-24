@@ -513,7 +513,7 @@ const hasActiveFilters = computed(
                                         localValues[
                                             field.startKey ??
                                                 `${field.key}_debut`
-                                        ]
+                                        ] as string | number | undefined
                                     "
                                     type="date"
                                     class="h-9"
@@ -525,7 +525,7 @@ const hasActiveFilters = computed(
                                     v-model="
                                         localValues[
                                             field.endKey ?? `${field.key}_fin`
-                                        ]
+                                        ] as string | number | undefined
                                     "
                                     type="date"
                                     class="h-9"
@@ -540,7 +540,12 @@ const hasActiveFilters = computed(
                         >
                             <Label>{{ field.label }}</Label>
                             <Input
-                                v-model="localValues[field.key]"
+                                v-model="
+                                    localValues[field.key] as
+                                        | string
+                                        | number
+                                        | undefined
+                                "
                                 type="date"
                                 class="h-9"
                             />
@@ -553,7 +558,12 @@ const hasActiveFilters = computed(
                         >
                             <Label>{{ field.label }}</Label>
                             <Input
-                                v-model.number="localValues[field.key]"
+                                v-model.number="
+                                    localValues[field.key] as
+                                        | string
+                                        | number
+                                        | undefined
+                                "
                                 type="number"
                                 :placeholder="field.placeholder"
                                 class="h-9"
@@ -584,7 +594,12 @@ const hasActiveFilters = computed(
                         <div v-else class="space-y-1.5">
                             <Label>{{ field.label }}</Label>
                             <Input
-                                v-model="localValues[field.key]"
+                                v-model="
+                                    localValues[field.key] as
+                                        | string
+                                        | number
+                                        | undefined
+                                "
                                 type="text"
                                 :placeholder="field.placeholder ?? ''"
                                 class="h-9"

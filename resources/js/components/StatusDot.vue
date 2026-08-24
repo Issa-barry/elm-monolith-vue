@@ -56,6 +56,7 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     ko: 'bg-red-500',
     expiree: 'bg-red-500',
     echoue: 'bg-red-500',
+    erreur: 'bg-red-500',
     rupture: 'bg-red-500',
 
     // Orange — partiel / en attente / soumis
@@ -72,6 +73,7 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     stock_faible: 'bg-amber-500',
     a_financer: 'bg-orange-500',
     donnees_incompletes: 'bg-amber-500',
+    stock_negatif: 'bg-orange-500',
 };
 
 const DEFAULT_DOT_CLASS = 'bg-zinc-400 dark:bg-zinc-500';

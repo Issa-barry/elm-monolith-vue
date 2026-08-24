@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Models\VarianteStock;
 use App\Services\MouvementStockService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\Concerns\HasProduitVariante;
@@ -195,20 +196,28 @@ class StockIsolationMultiSiteTest extends TestCase
         $produit->resynchroniserQteStock();
         $variante = $produit->variantePrincipale()->first();
 
-        // Site B : jamais touché. Une vente y échouerait en pratique (stock 0 < demandé),
-        // mais on vérifie ici directement que sortirStock() ne fait jamais hériter le
-        // legacy de A — la primitive clampe à 0, elle ne part jamais de 500.
-        MouvementStockService::sortirStock(
-            varianteId: $variante->id,
-            siteId: $this->siteB->id,
-            orgId: $this->org->id,
-            quantite: 1,
-            sourceType: 'test-vente',
-            sourceId: 'ligne-2',
-            userId: $this->admin->id,
-        );
+        // Site B : jamais touché (0 disponible). Depuis le correctif du 23/08/2026
+        // (suppression du clamp silencieux), la sortie est désormais REFUSÉE en entier —
+        // jamais un repli implicite sur les 500 du legacy de A, jamais un clamp à 0.
+        try {
+            MouvementStockService::sortirStock(
+                varianteId: $variante->id,
+                siteId: $this->siteB->id,
+                orgId: $this->org->id,
+                quantite: 1,
+                sourceType: 'test-vente',
+                sourceId: 'ligne-2',
+                userId: $this->admin->id,
+            );
+            $this->fail('Une ValidationException était attendue.');
+        } catch (ValidationException $e) {
+            // attendu
+        }
 
-        $this->assertEquals(0, VarianteStock::where('produit_variante_id', $variante->id)->where('site_id', $this->siteB->id)->value('qte_stock'));
+        $this->assertDatabaseMissing('variante_stocks', [
+            'produit_variante_id' => $variante->id,
+            'site_id' => $this->siteB->id,
+        ]);
         $this->assertEquals(500, VarianteStock::where('produit_variante_id', $variante->id)->where('site_id', $this->siteA->id)->value('qte_stock'));
     }
 

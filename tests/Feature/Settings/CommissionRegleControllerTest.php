@@ -4,10 +4,13 @@ namespace Tests\Feature\Settings;
 
 use App\Enums\CommissionMode;
 use App\Enums\CommissionRegleStatut;
+use App\Enums\PrestataireType;
 use App\Models\Categorie;
 use App\Models\CommissionCibleType;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
+use App\Models\Personne;
+use App\Models\Prestataire;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -29,7 +32,7 @@ class CommissionRegleControllerTest extends TestCase
     }
 
     /** @test */
-    public function affiche_la_page_avec_une_ligne_globale_et_une_ligne_par_categorie(): void
+    public function affiche_les_categories_comme_options_sans_creer_de_ligne_par_defaut(): void
     {
         Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachets', 'statut' => 'actif']);
 
@@ -38,9 +41,140 @@ class CommissionRegleControllerTest extends TestCase
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->component('settings/CommissionRegles/Index')
-                ->has('lignes', 2) // globale + 1 catégorie
+                ->has('lignes', 0)
+                ->has('categories', 1)
+                ->where('categories.0.label', 'Sachets')
                 ->has('cibles', 4) // propriétaire + livraison + site + consultant
             );
+    }
+
+    /** @test */
+    public function enregistre_atomiquement_le_consultant_et_les_montants_dune_categorie(): void
+    {
+        $categorie = Categorie::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Bouteilles',
+            'statut' => 'actif',
+        ]);
+        $personne = Personne::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Diallo',
+            'prenom' => 'Aminata',
+        ]);
+        $consultant = Prestataire::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
+            'type' => PrestataireType::CONSULTANT->value,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($this->user)
+            ->post('/settings/commissions/configuration', [
+                'lignes' => [[
+                    'categorie_id' => $categorie->id,
+                    'consultant_id' => $consultant->id,
+                    'montants' => [
+                        CommissionCibleType::CODE_PROPRIETAIRE => 800,
+                        CommissionCibleType::CODE_EQUIPE_LIVRAISON => 950,
+                        CommissionCibleType::CODE_SITE => 200,
+                        CommissionCibleType::CODE_CONSULTANT => 50,
+                    ],
+                ]],
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('commission_regles', [
+            'organization_id' => $this->org->id,
+            'scope_id' => $categorie->id,
+            'cible_type' => CommissionCibleType::CODE_CONSULTANT,
+            'consultant_id' => $consultant->id,
+            'montant' => 50,
+        ]);
+        $this->assertSame(4, CommissionRegle::where('organization_id', $this->org->id)
+            ->where('scope_type', 'categorie')
+            ->where('scope_id', $categorie->id)
+            ->where('statut', CommissionRegleStatut::ACTIVE->value)
+            ->count());
+    }
+
+    /** @test */
+    public function refuse_toute_la_configuration_sans_consultant(): void
+    {
+        $categorie = Categorie::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Bouteilles',
+            'statut' => 'actif',
+        ]);
+
+        $this->actingAs($this->user)
+            ->post('/settings/commissions/configuration', [
+                'lignes' => [[
+                    'categorie_id' => $categorie->id,
+                    'consultant_id' => null,
+                    'montants' => [
+                        CommissionCibleType::CODE_PROPRIETAIRE => 800,
+                        CommissionCibleType::CODE_EQUIPE_LIVRAISON => 950,
+                        CommissionCibleType::CODE_SITE => 200,
+                        CommissionCibleType::CODE_CONSULTANT => 50,
+                    ],
+                ]],
+            ])
+            ->assertSessionHasErrors('lignes.0.consultant_id');
+
+        $this->assertDatabaseCount('commission_regles', 0);
+    }
+
+    /** @test */
+    public function une_configuration_explicitement_enregistree_clot_les_regles_globales(): void
+    {
+        $categorie = Categorie::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Bouteilles',
+            'statut' => 'actif',
+        ]);
+        $personne = Personne::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Bah',
+            'prenom' => 'Mariam',
+        ]);
+        $consultant = Prestataire::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
+            'type' => PrestataireType::CONSULTANT->value,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($this->user)->post('/settings/commissions', [
+            'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
+            'scope_type' => 'global',
+            'montant' => 600,
+        ]);
+
+        $this->actingAs($this->user)->post('/settings/commissions/configuration', [
+            'lignes' => [[
+                'categorie_id' => $categorie->id,
+                'consultant_id' => $consultant->id,
+                'montants' => [
+                    CommissionCibleType::CODE_PROPRIETAIRE => 800,
+                    CommissionCibleType::CODE_EQUIPE_LIVRAISON => 950,
+                    CommissionCibleType::CODE_SITE => 200,
+                    CommissionCibleType::CODE_CONSULTANT => 50,
+                ],
+            ]],
+        ])->assertSessionHasNoErrors();
+
+        $this->assertDatabaseMissing('commission_regles', [
+            'organization_id' => $this->org->id,
+            'scope_type' => 'global',
+            'statut' => CommissionRegleStatut::ACTIVE->value,
+        ]);
+        $this->assertDatabaseHas('commission_regles', [
+            'scope_id' => $categorie->id,
+            'cible_type' => CommissionCibleType::CODE_CONSULTANT,
+            'consultant_id' => $consultant->id,
+            'statut' => CommissionRegleStatut::ACTIVE->value,
+        ]);
     }
 
     /** @test */

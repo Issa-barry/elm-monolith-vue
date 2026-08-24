@@ -129,14 +129,16 @@ async function configurerPartageVehicule(page: Page): Promise<void> {
     await expect(
         dialog.getByText(
             new RegExp(
-                `${montantPattern(LIVRAISON_MONTANT)}.*unité.*Livraison`,
+                `${montantPattern(LIVRAISON_MONTANT)}.*unité.*Livreur`,
                 'i',
             ),
         ),
     ).toBeVisible();
 
-    // Un seul chauffeur : auto-complété à 100 % (cf. initPartagesParCategorie()).
-    await expect(dialog.getByText('100 %').first()).toBeVisible({
+    // Un seul chauffeur : l'enveloppe entière lui revient automatiquement (cf.
+    // initPartagesParCategorie()) — plus aucun pourcentage, "Répartition complète"
+    // s'affiche dès l'ouverture (montant fixe = LIVRAISON_MONTANT).
+    await expect(dialog.getByText(/répartition complète/i)).toBeVisible({
         timeout: 5_000,
     });
 

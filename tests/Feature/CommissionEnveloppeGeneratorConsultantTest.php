@@ -72,8 +72,13 @@ class CommissionEnveloppeGeneratorConsultantTest extends TestCase
         ]);
     }
 
-    private function creerRegle(string $cibleType, float $montant, CommissionScopeType $scope = CommissionScopeType::GLOBAL, ?string $scopeId = null): CommissionRegle
-    {
+    private function creerRegle(
+        string $cibleType,
+        float $montant,
+        CommissionScopeType $scope = CommissionScopeType::GLOBAL,
+        ?string $scopeId = null,
+        ?string $consultantId = null,
+    ): CommissionRegle {
         return CommissionRegle::create([
             'organization_id' => $this->org->id,
             'processus_id' => $this->processus->id,
@@ -84,6 +89,7 @@ class CommissionEnveloppeGeneratorConsultantTest extends TestCase
             'mode' => 'direct',
             'unite_calcul' => CommissionUniteCalcul::PAR_UNITE_VENDUE->value,
             'montant' => $montant,
+            'consultant_id' => $consultantId,
             'effective_from' => now()->subDay()->toDateString(),
             'statut' => 'active',
         ]);
@@ -166,6 +172,7 @@ class CommissionEnveloppeGeneratorConsultantTest extends TestCase
                 'total_ligne' => $quantite * (float) $variante->prix_vente,
             ]);
             $lignesData[] = ['id' => $ligne->id, 'quantite_chargee' => $quantite, 'type_ecart' => 'conforme'];
+            $this->seedVarianteStockSuffisant($variante, $site);
         }
 
         $this->actingAs($this->user);
@@ -199,6 +206,61 @@ class CommissionEnveloppeGeneratorConsultantTest extends TestCase
         $this->assertSame(CommissionEnveloppePart::TYPE_PRESTATAIRE, $part->beneficiaire_type);
         $this->assertSame($consultant->id, $part->beneficiaire_id);
         $this->assertEqualsWithDelta(1000.0, (float) $part->montant_brut, 0.01);
+    }
+
+    /** @test */
+    public function une_vente_multicategorie_genere_une_enveloppe_par_consultant_configure(): void
+    {
+        $categorieSachets = Categorie::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Sachets',
+            'statut' => 'actif',
+        ]);
+        $categorieBouteilles = Categorie::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Bouteilles',
+            'statut' => 'actif',
+        ]);
+        $consultantSachets = $this->creerConsultant();
+        $consultantBouteilles = $this->creerConsultant();
+
+        $this->creerRegle(
+            CommissionCibleType::CODE_CONSULTANT,
+            100,
+            CommissionScopeType::CATEGORIE,
+            $categorieSachets->id,
+            $consultantSachets->id,
+        );
+        $this->creerRegle(
+            CommissionCibleType::CODE_CONSULTANT,
+            250,
+            CommissionScopeType::CATEGORIE,
+            $categorieBouteilles->id,
+            $consultantBouteilles->id,
+        );
+
+        ['vehicule' => $vehicule] = $this->makeVehiculeAvecEquipe();
+        $produitSachets = $this->makeProduit($categorieSachets->id);
+        $produitBouteilles = $this->makeProduit($categorieBouteilles->id);
+        $commande = $this->creerCommandeAvecLignes($vehicule, $this->site, [
+            [$produitSachets, 2],
+            [$produitBouteilles, 3],
+        ]);
+
+        CommissionEnveloppeGenerator::genererPourCommandeVente($commande);
+
+        $this->assertDatabaseHas('commission_enveloppes', [
+            'source_id' => $commande->id,
+            'cible_type' => CommissionCibleType::CODE_CONSULTANT,
+            'cible_id' => $consultantSachets->id,
+            'montant_total' => 200,
+        ]);
+        $this->assertDatabaseHas('commission_enveloppes', [
+            'source_id' => $commande->id,
+            'cible_type' => CommissionCibleType::CODE_CONSULTANT,
+            'cible_id' => $consultantBouteilles->id,
+            'montant_total' => 750,
+        ]);
     }
 
     /** @test */

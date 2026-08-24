@@ -662,13 +662,14 @@ class VehiculeController extends Controller
     private function partagesCategorieExistants(string $equipeId): array
     {
         return EquipeLivraisonPartageCategorie::where('equipe_id', $equipeId)
+            ->whereNull('effective_to')
             ->get()
             ->groupBy('categorie_id')
             ->map(fn (Collection $parts, string $categorieId) => [
                 'categorie_id' => $categorieId,
                 'parts' => $parts->map(fn (EquipeLivraisonPartageCategorie $p) => [
                     'livreur_id' => $p->livreur_id,
-                    'part_pourcentage' => (float) $p->part_pourcentage,
+                    'montant_unitaire' => (int) $p->montant_unitaire,
                 ])->values()->all(),
             ])
             ->values()

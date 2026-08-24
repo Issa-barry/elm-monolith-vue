@@ -32,6 +32,20 @@ jobs:
       - name: Install PHP dependencies
         run: composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
 
+      # --no-scripts ci-dessus saute le post-autoload-dump qui copie .env.example → .env,
+      # requis pour que `php artisan` puisse booter (APP_KEY).
+      - name: Prepare Laravel environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      # `resources/js/routes` et `resources/js/actions` sont gitignorés (générés par le
+      # plugin Vite `wayfinder`, cf. vite.config.ts) — vue-tsc les résout par import mais
+      # rien ne les génère ici puisque ce job ne lance jamais `vite build`. --with-form
+      # pour matcher formVariants: true du plugin (cf. vite.config.ts / npm run e2e:build).
+      - name: Generate Wayfinder routes/actions
+        run: php artisan wayfinder:generate --with-form
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -49,6 +63,12 @@ jobs:
 
       - name: Lint frontend (ESLint)
         run: npx eslint . --max-warnings 0
+
+      - name: Typecheck frontend (vue-tsc)
+        run: npm run typecheck
+
+      - name: Unit test frontend (Vitest)
+        run: npm run test:unit:frontend
 
       - name: Check UI standards (StatusDot / DataFilters)
         run: node scripts/check-ui-standards.mjs

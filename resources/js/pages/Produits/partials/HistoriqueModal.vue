@@ -2,12 +2,13 @@
 import { stripHtml } from '@/lib/stripHtml';
 import { ArrowDown, ArrowUp, Loader2 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
+import Dropdown from 'primevue/dropdown';
 import Tab from 'primevue/tab';
 import TabList from 'primevue/tablist';
 import TabPanel from 'primevue/tabpanel';
 import TabPanels from 'primevue/tabpanels';
 import Tabs from 'primevue/tabs';
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 interface StockMouvement {
     id: string;
@@ -16,11 +17,21 @@ interface StockMouvement {
     stock_avant: number | null;
     stock_apres: number | null;
     notes: string | null;
+    /** Clé stable du motif (ex: "vente", "transfert", "apres_production") — cf.
+     * MouvementStockMotifService::classify(). Sert au filtre ci-dessous. */
+    motif_type: string;
+    /** Texte affiché dans la colonne Motif (ex: "Vente — CMD-230826-002"). */
+    motif_label: string;
     site_nom: string | null;
     site_code: string | null;
     createur_nom: string | null;
     created_at: string;
     is_initial?: boolean;
+}
+
+interface MotifOption {
+    value: string;
+    label: string;
 }
 
 interface AuditEntry {
@@ -39,16 +50,50 @@ const props = defineProps<{
     modifications: AuditEntry[];
     loading?: boolean;
     title?: string;
+    /** Motifs réellement présents dans les mouvements chargés — jamais de valeur
+     * inventée côté front, cf. ProduitController::historique()/show(). */
+    motifOptions?: MotifOption[];
 }>();
 
 const emit = defineEmits<{
     (e: 'update:visible', val: boolean): void;
+    /** Émis quand l'utilisateur change le filtre Motif — permet au parent de
+     * recharger l'historique côté backend (cf. Produits/Stock/Index.vue) pour
+     * rester correct au-delà de la fenêtre chargée (take(200)). */
+    (e: 'filter-motif', motif: string | null): void;
 }>();
 
 const localVisible = computed({
     get: () => props.visible,
     set: (val) => emit('update:visible', val),
 });
+
+const selectedMotif = ref<string | null>(null);
+
+// Réinitialise le filtre à chaque ouverture (le composant reste monté entre deux
+// produits/variantes consultés — cf. Produits/Stock/Index.vue qui ne fait pas de v-if).
+watch(
+    () => props.visible,
+    (val) => {
+        if (val) selectedMotif.value = null;
+    },
+);
+
+const motifSelectOptions = computed(() => [
+    { value: null as string | null, label: 'Tous les motifs' },
+    ...(props.motifOptions ?? []),
+]);
+
+const ajustementsFiltres = computed(() => {
+    if (!selectedMotif.value) return props.ajustements;
+    return props.ajustements.filter(
+        (m) => m.motif_type === selectedMotif.value,
+    );
+});
+
+function onMotifChange() {
+    emit('filter-motif', selectedMotif.value);
+}
 
 const eventTextColor: Record<string, string> = {
     created: 'text-blue-600 dark:text-blue-400',
@@ -164,109 +209,147 @@ function formatQte(val: number | null | undefined): string {
                     >
                         Aucun ajustement de stock enregistré.
                     </div>
-                    <div v-else class="overflow-x-auto pt-2">
-                        <table class="w-full text-sm">
-                            <thead>
-                                <tr
-                                    class="border-b text-xs text-muted-foreground"
-                                >
-                                    <th class="pr-4 pb-2 text-left font-medium">
-                                        Date
-                                    </th>
-                                    <th class="pr-4 pb-2 text-left font-medium">
-                                        Site
-                                    </th>
-                                    <th class="pr-4 pb-2 text-left font-medium">
-                                        Par
-                                    </th>
-                                    <th
-                                        class="pr-4 pb-2 text-center font-medium"
+                    <template v-else>
+                        <div class="flex items-center gap-2 pt-2">
+                            <label
+                                for="historique-motif-filter"
+                                class="text-xs font-medium text-muted-foreground"
+                            >
+                                Motif
+                            </label>
+                            <Dropdown
+                                v-model="selectedMotif"
+                                input-id="historique-motif-filter"
+                                :options="motifSelectOptions"
+                                option-label="label"
+                                option-value="value"
+                                class="w-56"
+                                :pt="{
+                                    root: {
+                                        'data-testid':
+                                            'historique-motif-filter',
+                                    },
+                                }"
+                                @change="onMotifChange"
+                            />
+                        </div>
+
+                        <div
+                            v-if="ajustementsFiltres.length === 0"
+                            class="py-8 text-center text-sm text-muted-foreground"
+                        >
+                            Aucun mouvement pour ce motif.
+                        </div>
+                        <div v-else class="overflow-x-auto pt-2">
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr
+                                        class="border-b text-xs text-muted-foreground"
                                     >
-                                        Action
-                                    </th>
-                                    <th
-                                        class="pr-4 pb-2 text-right font-medium"
-                                    >
-                                        Avant
-                                    </th>
-                                    <th
-                                        class="pr-4 pb-2 text-right font-medium"
-                                    >
-                                        Après
-                                    </th>
-                                    <th class="pb-2 text-left font-medium">
-                                        Motif
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-border/50">
-                                <tr
-                                    v-for="m in ajustements"
-                                    :key="m.id"
-                                    class="group"
-                                >
-                                    <td
-                                        class="py-2 pr-4 font-mono text-xs whitespace-nowrap text-muted-foreground"
-                                    >
-                                        {{ m.created_at }}
-                                    </td>
-                                    <td class="py-2 pr-4 text-xs">
-                                        <span
-                                            v-if="m.site_code || m.site_nom"
-                                            class="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-xs font-medium text-muted-foreground"
+                                        <th
+                                            class="pr-4 pb-2 text-left font-medium"
                                         >
-                                            {{ m.site_code ?? m.site_nom }}
-                                        </span>
-                                        <span
-                                            v-else
-                                            class="text-muted-foreground"
-                                            >—</span
+                                            Date
+                                        </th>
+                                        <th
+                                            class="pr-4 pb-2 text-left font-medium"
                                         >
-                                    </td>
-                                    <td class="py-2 pr-4 text-xs">
-                                        {{ m.createur_nom || '—' }}
-                                    </td>
-                                    <td class="py-2 pr-4 text-center">
-                                        <span
-                                            v-if="m.is_initial"
-                                            class="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-950/30 dark:text-blue-400"
+                                            Site
+                                        </th>
+                                        <th
+                                            class="pr-4 pb-2 text-left font-medium"
                                         >
-                                            {{ m.quantite }}
-                                        </span>
-                                        <span
-                                            v-else-if="m.type === 'entree'"
-                                            class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"
+                                            Par
+                                        </th>
+                                        <th
+                                            class="pr-4 pb-2 text-center font-medium"
                                         >
-                                            <ArrowUp class="h-3 w-3" />
-                                            +{{ m.quantite }}
-                                        </span>
-                                        <span
-                                            v-else
-                                            class="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-950/30 dark:text-red-400"
+                                            Action
+                                        </th>
+                                        <th
+                                            class="pr-4 pb-2 text-right font-medium"
                                         >
-                                            <ArrowDown class="h-3 w-3" />
-                                            -{{ m.quantite }}
-                                        </span>
-                                    </td>
-                                    <td
-                                        class="py-2 pr-4 text-right text-muted-foreground tabular-nums"
+                                            Avant
+                                        </th>
+                                        <th
+                                            class="pr-4 pb-2 text-right font-medium"
+                                        >
+                                            Après
+                                        </th>
+                                        <th class="pb-2 text-left font-medium">
+                                            Motif
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-border/50">
+                                    <tr
+                                        v-for="m in ajustementsFiltres"
+                                        :key="m.id"
+                                        class="group"
                                     >
-                                        {{ formatQte(m.stock_avant) }}
-                                    </td>
-                                    <td
-                                        class="py-2 pr-4 text-right font-semibold tabular-nums"
-                                    >
-                                        {{ formatQte(m.stock_apres) }}
-                                    </td>
-                                    <td
-                                        class="py-2 text-xs text-muted-foreground"
-                                    >
-                                        {{ m.notes || '—' }}
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
+                                        <td
+                                            class="py-2 pr-4 font-mono text-xs whitespace-nowrap text-muted-foreground"
+                                        >
+                                            {{ m.created_at }}
+                                        </td>
+                                        <td class="py-2 pr-4 text-xs">
+                                            <span
+                                                v-if="m.site_code || m.site_nom"
+                                                class="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-xs font-medium text-muted-foreground"
+                                            >
+                                                {{ m.site_code ?? m.site_nom }}
+                                            </span>
+                                            <span
+                                                v-else
+                                                class="text-muted-foreground"
+                                                >—</span
+                                            >
+                                        </td>
+                                        <td class="py-2 pr-4 text-xs">
+                                            {{ m.createur_nom || '—' }}
+                                        </td>
+                                        <td class="py-2 pr-4 text-center">
+                                            <span
+                                                v-if="m.is_initial"
+                                                class="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-950/30 dark:text-blue-400"
+                                            >
+                                                {{ m.quantite }}
+                                            </span>
+                                            <span
+                                                v-else-if="m.type === 'entree'"
+                                                class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"
+                                            >
+                                                <ArrowUp class="h-3 w-3" />
+                                                +{{ m.quantite }}
+                                            </span>
+                                            <span
+                                                v-else
+                                                class="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-950/30 dark:text-red-400"
+                                            >
+                                                <ArrowDown class="h-3 w-3" />
+                                                -{{ m.quantite }}
+                                            </span>
+                                        </td>
+                                        <td
+                                            class="py-2 pr-4 text-right text-muted-foreground tabular-nums"
+                                        >
+                                            {{ formatQte(m.stock_avant) }}
+                                        </td>
+                                        <td
+                                            class="py-2 pr-4 text-right font-semibold tabular-nums"
+                                        >
+                                            {{ formatQte(m.stock_apres) }}
+                                        </td>
+                                        <td
+                                            class="py-2 text-xs text-muted-foreground"
+                                        >
+                                            {{ m.motif_label || '—' }}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </template>
                 </TabPanel>
 
                 <!-- ─── Onglet Modifications ─── -->

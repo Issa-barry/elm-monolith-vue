@@ -3,7 +3,6 @@
 use App\Http\Controllers\ImportFlotteController;
 use App\Http\Controllers\Settings\CommissionRegleController;
 use App\Http\Controllers\Settings\DepenseParametrageController;
-use App\Http\Controllers\Settings\DepenseTypeController;
 use App\Http\Controllers\Settings\ModuleController;
 use App\Http\Controllers\Settings\OrganisationController;
 use App\Http\Controllers\Settings\ParametreController;
@@ -54,6 +53,7 @@ Route::middleware('auth')->group(function () {
     Route::put('settings/ventes', [VenteParametrageController::class, 'update'])->name('settings.ventes.update');
 
     Route::get('settings/commissions', [CommissionRegleController::class, 'index'])->name('settings.commissions.index');
+    Route::post('settings/commissions/configuration', [CommissionRegleController::class, 'storeConfiguration'])->name('settings.commissions.configuration.store');
     Route::post('settings/commissions', [CommissionRegleController::class, 'store'])->name('settings.commissions.store');
     Route::post('settings/commissions/consultant', [CommissionRegleController::class, 'updateConsultant'])->name('settings.commissions.consultant.update');
 
@@ -63,13 +63,11 @@ Route::middleware('auth')->group(function () {
     Route::get('settings/depenses', [DepenseParametrageController::class, 'edit'])->name('settings.depenses');
     Route::put('settings/depenses/droits', [DepenseParametrageController::class, 'updateDroits'])->name('settings.depenses.droits');
 
-    Route::prefix('settings/depense-types')->name('settings.depense-types.')->group(function () {
-        Route::get('/', [DepenseTypeController::class, 'index'])->name('index');
-        Route::post('/', [DepenseTypeController::class, 'store'])->name('store');
-        Route::put('/{depense_type}', [DepenseTypeController::class, 'update'])->name('update');
-        Route::patch('/{depense_type}/toggle', [DepenseTypeController::class, 'toggle'])->name('toggle');
-        Route::delete('/{depense_type}', [DepenseTypeController::class, 'destroy'])->name('destroy');
-    });
+    // La gestion des types de dépense a déménagé dans le module Dépenses (cf.
+    // routes/web.php, groupe module:depenses) — cette page n'existe plus dans
+    // les Paramètres. Redirection propre pour toute URL déjà en circulation
+    // (favori, lien partagé) plutôt qu'un 404 sec.
+    Route::redirect('settings/depense-types', '/backoffice/depenses/types');
 
     Route::prefix('settings/imports-flotte')->name('imports-flotte.')->group(function () {
         Route::get('/', [ImportFlotteController::class, 'index'])->name('index');

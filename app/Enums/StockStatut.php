@@ -12,6 +12,12 @@ enum StockStatut: string
     case DISPONIBLE = 'disponible';
     case STOCK_FAIBLE = 'stock_faible';
     case RUPTURE = 'rupture';
+    // Stock < 0 : vente(s) acceptée(s) au-delà du disponible — organisation avec le paramètre
+    // global "Autoriser les ventes sans stock disponible" actif (cf. Parametre::
+    // isVentesAutoriseesSansStock(), MouvementStockService::appliquer()). Jamais confondu avec
+    // RUPTURE (= 0) — la quantité négative reste affichée telle quelle, jamais ramenée à 0
+    // (cf. décision produit du 23/08/2026).
+    case STOCK_NEGATIF = 'stock_negatif';
 
     public function label(): string
     {
@@ -19,6 +25,7 @@ enum StockStatut: string
             self::DISPONIBLE => 'Disponible',
             self::STOCK_FAIBLE => 'Stock faible',
             self::RUPTURE => 'Rupture de stock',
+            self::STOCK_NEGATIF => 'Stock négatif',
         };
     }
 }

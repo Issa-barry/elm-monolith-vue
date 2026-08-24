@@ -59,12 +59,12 @@ interface Option {
     label: string;
 }
 
-interface Filters {
+type Filters = {
     statut?: string;
     type_employe?: string;
     type_contrat?: string;
     search?: string;
-}
+};
 
 const props = defineProps<{
     employes: Employe[];

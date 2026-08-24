@@ -134,7 +134,8 @@ class CommissionTriggerVenteTest extends TestCase
         return ['processus' => $processus, 'categorie' => $categorie];
     }
 
-    private function makeVehiculeAvecEquipe(?Organization $org = null, float $partChauffeur = 66.67, float $partConvoyeur = 33.33): Vehicule
+    /** $montantChauffeur/$montantConvoyeur : montants GNF fixes, doivent sommer au barème équipe (300 par défaut, cf. ensureBareme()). */
+    private function makeVehiculeAvecEquipe(?Organization $org = null, int $montantChauffeur = 200, int $montantConvoyeur = 100): Vehicule
     {
         $org ??= $this->org;
         ['categorie' => $categorie] = $this->ensureBareme($org);
@@ -158,16 +159,20 @@ class CommissionTriggerVenteTest extends TestCase
         EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $chauffeur->id, 'role' => 'chauffeur', 'ordre' => 0]);
         EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $convoyeur->id, 'role' => 'convoyeur', 'ordre' => 1]);
 
-        if ($partChauffeur > 0) {
+        if ($montantChauffeur > 0) {
             EquipeLivraisonPartageCategorie::create([
                 'equipe_id' => $equipe->id, 'categorie_id' => $categorie->id,
-                'livreur_id' => $chauffeur->id, 'part_pourcentage' => $partChauffeur,
+                'livreur_id' => $chauffeur->id, 'part_pourcentage' => 0,
+                'montant_unitaire' => $montantChauffeur,
+                'effective_from' => now()->subDay(),
             ]);
         }
-        if ($partConvoyeur > 0) {
+        if ($montantConvoyeur > 0) {
             EquipeLivraisonPartageCategorie::create([
                 'equipe_id' => $equipe->id, 'categorie_id' => $categorie->id,
-                'livreur_id' => $convoyeur->id, 'part_pourcentage' => $partConvoyeur,
+                'livreur_id' => $convoyeur->id, 'part_pourcentage' => 0,
+                'montant_unitaire' => $montantConvoyeur,
+                'effective_from' => now()->subDay(),
             ]);
         }
 
@@ -207,7 +212,9 @@ class CommissionTriggerVenteTest extends TestCase
         EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $chauffeur->id, 'role' => 'chauffeur', 'ordre' => 0]);
         EquipeLivraisonPartageCategorie::create([
             'equipe_id' => $equipe->id, 'categorie_id' => $categorie->id,
-            'livreur_id' => $chauffeur->id, 'part_pourcentage' => 100,
+            'livreur_id' => $chauffeur->id, 'part_pourcentage' => 0,
+            'montant_unitaire' => 300,
+            'effective_from' => now()->subDay(),
         ]);
 
         return $vehicule->fresh();
@@ -243,6 +250,8 @@ class CommissionTriggerVenteTest extends TestCase
             'prix_vente_snapshot' => 2000.0,
             'total_ligne' => 4000.0,
         ]);
+
+        $this->seedVarianteStockSuffisant($produit->variantePrincipale()->first(), $site ?? $this->defaultSite);
 
         return compact('commande', 'ligne');
     }

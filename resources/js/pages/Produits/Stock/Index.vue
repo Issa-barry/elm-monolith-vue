@@ -24,7 +24,7 @@ import HistoriqueModal from '../partials/HistoriqueModal.vue';
 interface Site {
     id: string;
     nom: string;
-    code: string | null;
+    code: string;
 }
 
 interface StockRow {
@@ -75,10 +75,17 @@ interface StockMouvement {
     stock_avant: number | null;
     stock_apres: number | null;
     notes: string | null;
+    motif_type: string;
+    motif_label: string;
     site_nom: string | null;
     site_code: string | null;
     createur_nom: string | null;
     created_at: string;
+}
+
+interface MotifOption {
+    value: string;
+    label: string;
 }
 
 interface AuditEntry {
@@ -194,21 +201,22 @@ function ouvrirAjustement(row: StockRow): void {
 const historiqueTitre = ref('Historique du stock');
 const ajustements = ref<StockMouvement[]>([]);
 const modifications = ref<AuditEntry[]>([]);
+const motifsDisponibles = ref<MotifOption[]>([]);
 const showHistoriqueModal = ref(false);
 const historiqueLoading = ref(false);
+const historiqueRow = ref<StockRow | null>(null);
 
-async function ouvrirHistorique(row: StockRow): Promise<void> {
-    historiqueTitre.value =
-        row.produit_nom + ' · ' + row.variante_libelle + ' · ' + row.site_nom;
-    ajustements.value = [];
-    modifications.value = [];
-    showHistoriqueModal.value = true;
+async function chargerHistorique(motif: string | null): Promise<void> {
+    const row = historiqueRow.value;
+    if (!row) return;
+
     historiqueLoading.value = true;
 
     const params = new URLSearchParams({
         variante_id: row.variante_id,
         site_id: row.site_id,
     });
+    if (motif) params.set('motif', motif);
 
     try {
         const response = await fetch(
@@ -227,6 +235,7 @@ async function ouvrirHistorique(row: StockRow): Promise<void> {
         const data = await response.json();
         ajustements.value = data.ajustements ?? [];
         modifications.value = data.modifications ?? [];
+        motifsDisponibles.value = data.motifs_disponibles ?? [];
     } catch {
         showHistoriqueModal.value = false;
         toast.add({
@@ -238,6 +247,21 @@ async function ouvrirHistorique(row: StockRow): Promise<void> {
     } finally {
         historiqueLoading.value = false;
     }
+}
+
+async function ouvrirHistorique(row: StockRow): Promise<void> {
+    historiqueTitre.value =
+        row.produit_nom + ' · ' + row.variante_libelle + ' · ' + row.site_nom;
+    historiqueRow.value = row;
+    ajustements.value = [];
+    modifications.value = [];
+    motifsDisponibles.value = [];
+    showHistoriqueModal.value = true;
+    await chargerHistorique(null);
+}
+
+function onFilterMotif(motif: string | null): void {
+    chargerHistorique(motif);
 }
 </script>
 
@@ -273,7 +297,7 @@ async function ouvrirHistorique(row: StockRow): Promise<void> {
                 <div class="overflow-x-auto" data-testid="stock-table-scroll">
                     <table
                         data-testid="stock-table"
-                        class="w-full min-w-[1120px] text-sm"
+                        class="w-full min-w-[980px] text-sm"
                     >
                         <thead
                             class="border-b bg-muted/40 text-xs text-muted-foreground"
@@ -286,12 +310,6 @@ async function ouvrirHistorique(row: StockRow): Promise<void> {
                                     Variante
                                 </th>
                                 <th class="px-4 py-3 text-left font-medium">
-                                    SKU
-                                </th>
-                                <th class="px-4 py-3 text-left font-medium">
-                                    Catégorie
-                                </th>
-                                <th class="px-4 py-3 text-left font-medium">
                                     Agence
                                 </th>
                                 <th class="px-4 py-3 text-right font-medium">
@@ -301,7 +319,7 @@ async function ouvrirHistorique(row: StockRow): Promise<void> {
                                     État
                                 </th>
                                 <th class="px-4 py-3 text-right font-medium">
-                                    Seuil
+                                    Stock minimum
                                 </th>
                                 <th class="px-4 py-3 text-left font-medium">
                                     Dernier mouvement
@@ -317,7 +335,7 @@ async function ouvrirHistorique(row: StockRow): Promise<void> {
                                 :key="row.variante_id + '-' + row.site_id"
                                 class="transition-colors hover:bg-muted/25"
                             >
-                                <td class="px-4 py-3 font-medium">
+                                <td class="px-4 py-3">
                                     <Link
                                         :href="
                                             '/backoffice/produits/' +
@@ -327,15 +345,15 @@ async function ouvrirHistorique(row: StockRow): Promise<void> {
                                     >
                                         {{ row.produit_nom }}
                                     </Link>
+                                    <div
+                                        v-if="row.sku"
+                                        class="mt-0.5 font-mono text-xs text-muted-foreground"
+                                    >
+                                        SKU {{ row.sku }}
+                                    </div>
                                 </td>
                                 <td class="px-4 py-3 text-muted-foreground">
                                     {{ row.variante_libelle }}
-                                </td>
-                                <td class="px-4 py-3 font-mono text-xs">
-                                    {{ row.sku }}
-                                </td>
-                                <td class="px-4 py-3 text-muted-foreground">
-                                    {{ row.categorie_nom ?? '—' }}
                                 </td>
                                 <td class="px-4 py-3">
                                     <div class="font-medium">
@@ -446,7 +464,7 @@ async function ouvrirHistorique(row: StockRow): Promise<void> {
                                 </td>
                             </tr>
                             <tr v-if="stocks.data.length === 0">
-                                <td colspan="10" class="px-6 py-16 text-center">
+                                <td colspan="8" class="px-6 py-16 text-center">
                                     <PackageOpen
                                         class="mx-auto h-10 w-10 text-muted-foreground/40"
                                     />
@@ -542,8 +560,10 @@ async function ouvrirHistorique(row: StockRow): Promise<void> {
             v-model:visible="showHistoriqueModal"
             :ajustements="ajustements"
             :modifications="modifications"
+            :motif-options="motifsDisponibles"
             :loading="historiqueLoading"
             :title="historiqueTitre"
+            @filter-motif="onFilterMotif"
         />
     </AppLayout>
 </template>

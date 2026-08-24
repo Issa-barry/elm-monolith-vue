@@ -39,7 +39,6 @@ import DataTable from 'primevue/datatable';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import AjusterStockModal from './partials/AjusterStockModal.vue';
 import HistoriqueModal from './partials/HistoriqueModal.vue';
 import ProduitsMobile from './partials/ProduitsMobile.vue';
 
@@ -123,9 +122,6 @@ const props = defineProps<{
     statuts: FilterOption[];
     filters: Filters;
     can_ajuster_stock: boolean;
-    can_augmenter_stock: boolean;
-    can_diminuer_stock: boolean;
-    sites_autorises: Site[];
 }>();
 
 const { can } = usePermissions();
@@ -370,16 +366,6 @@ function exportExcel(): void {
     });
 }
 
-// ── Modal ajustement stock ────────────────────────────────────────────────────
-
-const stockAjustementProduit = ref<Produit | null>(null);
-const showStockModal = ref(false);
-
-function openStockModal(produit: Produit) {
-    stockAjustementProduit.value = produit;
-    showStockModal.value = true;
-}
-
 // ── Modal historique ──────────────────────────────────────────────────────────
 
 interface StockMouvement {
@@ -389,6 +375,8 @@ interface StockMouvement {
     stock_avant: number | null;
     stock_apres: number | null;
     notes: string | null;
+    motif_type: string;
+    motif_label: string;
     site_nom: string | null;
     site_code: string | null;
     createur_nom: string | null;
@@ -936,22 +924,28 @@ function confirmArchive(produit: Produit) {
                                             <History class="h-4 w-4" />
                                             Historique
                                         </DropdownMenuItem>
+                                        <!-- « Voir le stock » remplace l'ancien « Ajuster le stock » direct
+                                        (modale) sur cette liste — redondant avec la page Stock, qui identifie
+                                        clairement site et variante. L'ajustement lui-même reste disponible
+                                        UNIQUEMENT depuis Produits/Stock/Index.vue (site+variante identifiés)
+                                        et, pour les produits à variantes, depuis la fiche détail ci-dessous. -->
                                         <DropdownMenuItem
-                                            v-if="
-                                                can_ajuster_stock &&
-                                                data.has_stock &&
-                                                !data.has_variantes
-                                            "
+                                            v-if="data.has_stock"
                                             class="cursor-pointer"
-                                            @click="openStockModal(data)"
+                                            as-child
                                         >
-                                            <Sliders class="h-4 w-4" />
-                                            Ajuster le stock
+                                            <Link
+                                                :href="`/backoffice/produits/stock?search=${encodeURIComponent(data.nom)}`"
+                                                class="flex items-center gap-2"
+                                            >
+                                                <Package class="h-4 w-4" />
+                                                Voir le stock
+                                            </Link>
                                         </DropdownMenuItem>
                                         <!-- Produit à variantes : l'ajustement se fait depuis sa fiche,
                                         où le choix de la variante est possible (cf. Show.vue). -->
                                         <DropdownMenuItem
-                                            v-else-if="
+                                            v-if="
                                                 can_ajuster_stock &&
                                                 data.has_stock &&
                                                 data.has_variantes
@@ -1076,16 +1070,6 @@ function confirmArchive(produit: Produit) {
                 :on-archive="confirmArchive"
             />
         </div>
-
-        <!-- Modal ajustement stock -->
-        <AjusterStockModal
-            v-if="stockAjustementProduit"
-            v-model:visible="showStockModal"
-            :produit="stockAjustementProduit"
-            :sites-autorises="sites_autorises"
-            :can-augmenter="can_augmenter_stock"
-            :can-diminuer="can_diminuer_stock"
-        />
 
         <!-- Modal historique -->
         <HistoriqueModal

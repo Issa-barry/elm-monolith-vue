@@ -90,6 +90,8 @@ class VenteComptabilisationTriggerTest extends TestCase
             'total_ligne' => 4000.0,
         ]);
 
+        $this->seedVarianteStockSuffisant($produit->variantePrincipale()->first(), $this->defaultSite);
+
         return compact('commande', 'ligne');
     }
 

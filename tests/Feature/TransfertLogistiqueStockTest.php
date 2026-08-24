@@ -15,6 +15,7 @@ use App\Models\VarianteStock;
 use App\Services\MouvementStockService;
 use App\Services\TransfertLogistiqueService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 use Tests\Concerns\HasProduitVariante;
 use Tests\TestCase;
 
@@ -145,14 +146,22 @@ class TransfertLogistiqueStockTest extends TestCase
 
         $transfert = $this->makeTransfertEnChargement(10);
 
-        // La sortie source clampe à 0 (jamais négatif) et ne récupère jamais les 500
-        // du legacy — une vraie insuffisance de stock serait normalement bloquée en
-        // amont (formulaire de chargement), ce test vérifie uniquement l'absence
-        // d'héritage implicite du legacy par le site source.
-        TransfertLogistiqueService::avancerStatut($transfert);
+        // Le site source n'a aucune ligne variante_stocks (0 disponible) : le transfert est
+        // refusé — jamais un repli implicite sur les 500 du legacy, jamais un clamp silencieux
+        // à 0 (cf. correctif du 23/08/2026, remplace l'ancien comportement clampé).
+        try {
+            TransfertLogistiqueService::avancerStatut($transfert);
+            $this->fail('Le transfert aurait dû être refusé pour stock insuffisant.');
+        } catch (ValidationException $e) {
+            // attendu
+        }
 
         $variante = $this->produit->variantePrincipale()->first();
-        $this->assertEquals(0, VarianteStock::where('produit_variante_id', $variante->id)->where('site_id', $this->siteSource->id)->value('qte_stock'));
+        $this->assertDatabaseMissing('variante_stocks', [
+            'produit_variante_id' => $variante->id,
+            'site_id' => $this->siteSource->id,
+        ]);
+        $this->assertEquals(StatutTransfert::CHARGEMENT, $transfert->fresh()->statut);
     }
 
     public function test_invalider_une_reception_annule_lentree_stock_destination(): void

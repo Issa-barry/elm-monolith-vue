@@ -13,7 +13,9 @@ use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 /**
- * Tests des paramètres dépenses : droits de validation par rôle.
+ * Tests des paramètres dépenses : droits de validation par rôle uniquement —
+ * la classification des types de dépense a déménagé dans le module Dépenses
+ * (cf. Tests\Feature\DepenseTypeTest, routes /backoffice/depenses/types).
  *
  * - GET /settings/depenses : accessible avec parametres.update
  * - PUT /settings/depenses/droits : sauvegarde peut_valider, perimetre, sites
@@ -67,6 +69,9 @@ class DepenseParametrageTest extends TestCase
                 ->component('settings/DepenseParametrage')
                 ->has('config')
                 ->has('sites')
+                // Les types de dépense ne sont plus rendus par cette page.
+                ->missing('types')
+                ->missing('categories')
             );
     }
 

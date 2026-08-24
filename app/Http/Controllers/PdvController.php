@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Enums\ProduitStatut;
 use App\Http\Requests\PdvCheckoutRequest;
 use App\Models\Client;
+use App\Models\Parametre;
 use App\Models\Produit;
+use App\Models\VarianteStock;
 use App\Models\Vehicule;
 use App\Services\PdvCheckoutService;
 use Illuminate\Http\RedirectResponse;
@@ -23,7 +25,7 @@ class PdvController extends Controller
     {
         $orgId = auth()->user()->organization_id;
 
-        $produits = $this->produitsPdv($orgId);
+        $produits = $this->produitsPdv($orgId, $this->getUserSiteId());
 
         $vehicules = Vehicule::with([
             'equipe.livreurs' => fn ($q) => $q->wherePivot('role', 'chauffeur'),
@@ -70,17 +72,14 @@ class PdvController extends Controller
 
         abort_if(! $orgId, 403, "Votre compte n'est associé à aucune organisation.");
 
-        $userSite = $user->sites()
-            ->wherePivot('is_default', true)
-            ->first(['sites.id'])
-            ?? $user->sites()->first(['sites.id']);
+        $userSiteId = $this->getUserSiteId();
 
-        abort_if(! $userSite, 403, "Votre compte n'est rattaché à aucun site.");
+        abort_if(! $userSiteId, 403, "Votre compte n'est rattaché à aucun site.");
 
         $commande = $this->service->checkout(
             $request->validated(),
             $user,
-            $userSite->id,
+            $userSiteId,
         );
 
         $commande->load(['lignes.variante.produit']);
@@ -104,6 +103,20 @@ class PdvController extends Controller
     }
 
     /**
+     * Site par défaut de l'utilisateur — même résolution que le reste de l'app (cf.
+     * CommandeVenteController::getUserSiteModel()), jamais dupliquée en logique différente.
+     * Retourne null plutôt que d'aborter : index() reste consultable (sans filtrage de stock)
+     * même pour un utilisateur sans site, checkout() garde son propre abort_if explicite.
+     */
+    private function getUserSiteId(): ?string
+    {
+        $user = auth()->user();
+
+        return $user->sites()->wherePivot('is_default', true)->value('sites.id')
+            ?? $user->sites()->value('sites.id');
+    }
+
+    /**
      * Le PDV ne propose pour l'instant qu'une grille de produits (pas de sélecteur de variante
      * — Phase 3) : on affiche prix/stock/référence de la variante par défaut (ou la première)
      * comme représentative. PdvCheckoutService::resolveVariante() exigera un variante_id
@@ -112,17 +125,39 @@ class PdvController extends Controller
      * `code_barres` est transmis en plus de `code` (référence) pour que la recherche PDV
      * (filteredProducts côté frontend) retrouve un article aussi bien par sa référence que
      * par un scan de code-barres — les deux notions sont distinctes (cf. ProduitVariante).
+     *
+     * $siteId : quand fourni ET que la politique globale interdit la vente sans stock
+     * (Parametre::isVentesAutoriseesSansStock() = false), un produit géré en stock sans aucun
+     * disponible sur CE site est exclu de la grille — jamais sur l'agrégat global du produit
+     * (décision produit du 24/08/2026). Le champ `stock` affiché devient aussi le stock réel du
+     * site courant plutôt que l'agrégat legacy, pour ne jamais afficher un nombre trompeur à
+     * côté d'une grille désormais filtrée par site.
      */
-    private function produitsPdv(string $orgId): Collection
+    private function produitsPdv(string $orgId, ?string $siteId): Collection
     {
-        return Produit::where('organization_id', $orgId)
+        $autoriseVenteStockNegatif = Parametre::isVentesAutoriseesSansStock($orgId);
+
+        $produits = Produit::where('organization_id', $orgId)
             ->where('statut', ProduitStatut::ACTIF)
             ->whereHas('produitType', fn ($q) => $q->where('vendable', true))
-            ->with(['variantes', 'medias'])
+            ->with(['variantes', 'medias', 'produitType'])
             ->orderBy('nom')
-            ->get()
-            ->map(function (Produit $p) {
+            ->get();
+
+        $varianteIds = $produits->flatMap(fn (Produit $p) => $p->variantes->pluck('id'))->all();
+        $stocksParVariante = $siteId
+            ? VarianteStock::where('site_id', $siteId)->whereIn('produit_variante_id', $varianteIds)->pluck('qte_stock', 'produit_variante_id')
+            : collect();
+
+        return $produits
+            ->map(function (Produit $p) use ($stocksParVariante, $autoriseVenteStockNegatif, $siteId) {
                 $variante = $p->variantes->firstWhere('is_default', true) ?? $p->variantes->first();
+                $gereStock = (bool) $p->produitType?->gere_stock;
+                $disponibleSite = (int) ($stocksParVariante[$variante?->id] ?? 0);
+
+                if ($siteId && $gereStock && ! $autoriseVenteStockNegatif && $disponibleSite <= 0) {
+                    return null;
+                }
 
                 return [
                     'id' => $p->id,
@@ -132,10 +167,12 @@ class PdvController extends Controller
                     'name' => $p->nom,
                     'subtitle' => $p->description ?? '',
                     'category' => null,
-                    'stock' => (int) $p->qte_stock,
+                    'stock' => $siteId && $gereStock ? $disponibleSite : (int) $p->qte_stock,
                     'unitPrice' => (int) ($variante?->prix_vente ?? 0),
                     'image' => $p->image_url ?? null,
                 ];
-            })->values();
+            })
+            ->filter()
+            ->values();
     }
 }

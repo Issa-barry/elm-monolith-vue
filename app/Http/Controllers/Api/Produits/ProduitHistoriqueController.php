@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\MouvementStock;
 use App\Models\Produit;
+use App\Services\MouvementStockMotifService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -17,11 +18,13 @@ class ProduitHistoriqueController extends Controller
 
         $varianteIds = $produit->variantes()->pluck('id');
 
-        $mouvements = MouvementStock::whereIn('produit_variante_id', $varianteIds)
+        $mouvementsCollection = MouvementStock::whereIn('produit_variante_id', $varianteIds)
             ->with(['createur:id,personne_id', 'createur.personne'])
             ->orderByDesc('created_at')
             ->take(200)
-            ->get()
+            ->get();
+
+        $mouvements = MouvementStockMotifService::annoter($mouvementsCollection)
             ->map(fn (MouvementStock $m) => [
                 'id' => $m->id,
                 'type' => $m->type,
@@ -29,6 +32,8 @@ class ProduitHistoriqueController extends Controller
                 'stock_avant' => $m->stock_avant,
                 'stock_apres' => $m->stock_apres,
                 'notes' => $m->notes,
+                'motif_type' => $m->motif_type,
+                'motif_label' => $m->motif_label,
                 'createur' => $m->createur
                     ? trim(($m->createur->prenom ?? '').' '.($m->createur->nom ?? ''))
                     : null,
@@ -51,6 +56,8 @@ class ProduitHistoriqueController extends Controller
                 'stock_avant' => 0,
                 'stock_apres' => (int) $creation->new_values['qte_stock'],
                 'notes' => 'Stock initial — création du produit',
+                'motif_type' => 'stock_initial',
+                'motif_label' => 'Stock initial',
                 'createur' => $creation->actor_name_snapshot,
                 'created_at' => $creation->created_at?->toISOString(),
                 'is_initial' => true,

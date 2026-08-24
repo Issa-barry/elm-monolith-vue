@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 /**
- * Vérifie le respect de deux standards UI internes que les outils de lint
+ * Vérifie le respect de trois standards UI internes que les outils de lint
  * généralistes (ESLint/Prettier) ne couvrent pas :
  *
  *  1. Statut affiché avec un badge à fond coloré (pill) au lieu du composant
  *     `StatusDot.vue` (point coloré + texte simple).
  *  2. Page avec plusieurs filtres "faits maison" (refs `filterXxx`) sans
  *     utiliser le composant standard `DataFilters.vue`.
+ *  3. Toast PrimeVue placé ailleurs qu'en haut à droite.
  *
  * Pourquoi un script dédié plutôt qu'une règle ESLint custom : ESLint analyse
  * du JS/TS, pas des classes Tailwind dans un template Vue. Une règle AST
@@ -14,15 +15,20 @@
  * lignes, pour un gain équivalent.
  *
  * Échappatoire volontaire : un commentaire `ui-standard-ignore-file` n'importe
- * où dans le fichier désactive les deux checks pour ce fichier (cas
- * légitimes : catégorie/rôle/type, pas un statut).
+ * où dans le fichier désactive les checks Badge/DataFilters pour ce fichier
+ * (cas légitimes : catégorie/rôle/type, pas un statut). La position des Toasts
+ * reste obligatoire et ne peut pas être ignorée.
  */
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 const ROOT = join(import.meta.dirname, '..');
-const SCAN_DIRS = ['resources/js/pages', 'resources/js/components'];
+const SCAN_DIRS = [
+    'resources/js/pages',
+    'resources/js/components',
+    'resources/js/layouts',
+];
 const EXCLUDE_PATHS = [
     'resources/js/components/ui',
     'resources/js/components/StatusDot.vue',
@@ -44,6 +50,8 @@ const DATAFILTERS_IMPORT_RE =
 // internes de PrimeVue comme `globalFilter` ou `filtersMeta`.
 const FILTER_REF_RE =
     /\b(?:const|let)\s+((?:filtre|[Ff]ilter)[A-Z]\w*)\s*=\s*ref\(/g;
+const TOAST_TAG_RE = /<Toast\b[\s\S]*?>/g;
+const TOAST_TOP_RIGHT_RE = /\bposition\s*=\s*["']top-right["']/;
 
 /** @returns {string[]} absolute paths of .vue files under dir */
 function walkVueFiles(dir) {
@@ -109,8 +117,18 @@ function checkHomemadeFilters(content, lines) {
     return { line: firstLine || 1, names };
 }
 
+function checkToastPositions(content) {
+    const hits = [];
+    for (const match of content.matchAll(TOAST_TAG_RE)) {
+        if (TOAST_TOP_RIGHT_RE.test(match[0])) continue;
+        const line = content.slice(0, match.index).split('\n').length;
+        hits.push(line);
+    }
+    return hits;
+}
+
 function main() {
-    /** @type {{file: string, line: number, type: 'badge'|'filter', detail: string}[]} */
+    /** @type {{file: string, line: number, type: 'badge'|'filter'|'toast', detail: string}[]} */
     const violations = [];
 
     for (const dir of SCAN_DIRS) {
@@ -127,6 +145,16 @@ function main() {
             if (isExcluded(relPath)) continue;
 
             const content = readFileSync(file, 'utf8');
+
+            for (const line of checkToastPositions(content)) {
+                violations.push({
+                    file: relPath,
+                    line,
+                    type: 'toast',
+                    detail: 'Toast hors standard détecté. Tout <Toast> PrimeVue doit déclarer explicitement position="top-right".',
+                });
+            }
+
             if (IGNORE_FILE_RE.test(content)) continue;
 
             const lines = content.split('\n');
@@ -155,7 +183,9 @@ function main() {
     }
 
     if (violations.length === 0) {
-        console.log('✓ Standards UI (StatusDot / DataFilters) respectés.');
+        console.log(
+            '✓ Standards UI (StatusDot / DataFilters / Toast top-right) respectés.',
+        );
         return;
     }
 
@@ -167,7 +197,7 @@ function main() {
     }
     console.error(
         "Si le badge/filtre n'est volontairement PAS un statut/filtre (ex: catégorie, rôle, type), " +
-            'ajoute un commentaire `ui-standard-ignore-file` en haut du fichier pour désactiver ce check.',
+            'ajoute un commentaire `ui-standard-ignore-file` en haut du fichier. La règle Toast top-right ne peut pas être ignorée.',
     );
     process.exitCode = 1;
 }

@@ -137,7 +137,9 @@ class TransfertLogistiqueService
     }
 
     /**
-     * CHARGEMENT → TRANSIT : toutes les quantités chargées doivent être renseignées.
+     * CHARGEMENT → TRANSIT : toutes les quantités chargées doivent être renseignées, puis
+     * (uniquement si c'est le cas) chaque ligne vérifiée contre le stock disponible du site
+     * source — cf. checkDisponibiliteStockSource().
      */
     private static function checkTransit(TransfertLogistique $t, array &$errors): void
     {
@@ -147,6 +149,38 @@ class TransfertLogistiqueService
 
         if ($manquantes->isNotEmpty()) {
             $errors[] = 'Toutes les lignes doivent avoir une quantité chargée renseignée.';
+
+            return;
+        }
+
+        self::checkDisponibiliteStockSource($t, $errors);
+    }
+
+    /**
+     * Vérifie, ligne par ligne, que la quantité chargée ne dépasse pas le stock disponible du
+     * site source — TOUJOURS strict, même pour un produit dont autorise_vente_stock_negatif
+     * est actif : ce paramètre est réservé au PDV et aux commandes vente (cf. Produit et
+     * décision produit du 23/08/2026), jamais aux transferts — un transfert déplace un stock
+     * qui doit déjà exister physiquement ailleurs, contrairement à une vente client. Avant ce
+     * correctif, aucun contrôle n'existait ici : MouvementStockService::appliquer() clampait
+     * silencieusement la sortie source à 0 (cf. audit stock du 23/08/2026). Ignore les lignes
+     * dont le produit ne gère pas de stock (type service).
+     */
+    private static function checkDisponibiliteStockSource(TransfertLogistique $t, array &$errors): void
+    {
+        $t->loadMissing('lignes.variante.produit.produitType');
+
+        foreach ($t->lignes as $ligne) {
+            $produit = $ligne->variante?->produit;
+            if (! $produit?->produitType?->gere_stock) {
+                continue;
+            }
+
+            $disponible = MouvementStockService::quantiteDisponible($ligne->variante_id, $t->site_source_id);
+
+            if ($ligne->quantite_chargee > $disponible) {
+                $errors[] = "Stock insuffisant pour « {$produit->nom} » sur le site source : {$ligne->quantite_chargee} demandés, {$disponible} disponibles.";
+            }
         }
     }
 

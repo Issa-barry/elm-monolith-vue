@@ -137,6 +137,7 @@ class CommissionEnveloppeGeneratorSiteTest extends TestCase
                 'total_ligne' => $quantite * (float) $variante->prix_vente,
             ]);
             $lignesData[] = ['id' => $ligne->id, 'quantite_chargee' => $quantite, 'type_ecart' => 'conforme'];
+            $this->seedVarianteStockSuffisant($variante, $site);
         }
 
         $this->actingAs($this->user);

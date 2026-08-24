@@ -135,7 +135,9 @@ class CommissionEnveloppeFichePaymentTest extends TestCase
             'equipe_id' => $equipe->id,
             'categorie_id' => $categorie->id,
             'livreur_id' => $livreur->id,
-            'part_pourcentage' => 100,
+            'part_pourcentage' => 0,
+            'montant_unitaire' => 1000,
+            'effective_from' => now()->subDay(),
         ]);
 
         $this->creerRegle(CommissionCibleType::CODE_PROPRIETAIRE, 500, CommissionScopeType::CATEGORIE, $categorie->id);
@@ -163,6 +165,8 @@ class CommissionEnveloppeFichePaymentTest extends TestCase
             'prix_vente_snapshot' => (float) $variante->prix_vente,
             'total_ligne' => 10 * (float) $variante->prix_vente,
         ]);
+
+        $this->seedVarianteStockSuffisant($variante, $this->defaultSite);
 
         $this->actingAs($this->user);
         CommandeVenteService::confirmer($commande);

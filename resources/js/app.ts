@@ -20,7 +20,7 @@ import type { ThemeSharedProps } from './types/theme';
 // même méthode HTTP (PUT/PATCH/DELETE) ce qui génère un 405. On force un
 // rechargement complet pour que l'utilisateur puisse se reconnecter.
 router.on('invalid', (event) => {
-    const status = (event.detail.response as Response).status;
+    const status = event.detail.response.status;
     if (status === 419 || status === 401) {
         event.preventDefault();
         window.location.reload();

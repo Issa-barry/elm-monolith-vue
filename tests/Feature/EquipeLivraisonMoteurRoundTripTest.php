@@ -87,6 +87,8 @@ class EquipeLivraisonMoteurRoundTripTest extends TestCase
             'total_ligne' => $quantite * (float) $variante->prix_vente,
         ]);
 
+        $this->seedVarianteStockSuffisant($variante, $this->defaultSite);
+
         $this->actingAs($this->user);
         CommandeVenteService::confirmer($commande);
         CommandeVenteService::demarrerChargement($commande);
@@ -158,7 +160,7 @@ class EquipeLivraisonMoteurRoundTripTest extends TestCase
                 'partages_categorie' => [[
                     'categorie_id' => $categorie->id,
                     'parts' => [
-                        ['membre_ordre' => 0, 'part_pourcentage' => 100],
+                        ['membre_ordre' => 0, 'montant_unitaire' => 300],
                     ],
                 ]],
             ])
