@@ -175,20 +175,22 @@ function submit() {
 
                 <template v-if="typeImport === 'livreurs'">
                     <p class="mt-2 text-sm text-muted-foreground">
-                        Feuille <strong>livreurs</strong> : un livreur par ligne,
-                        lié à un véhicule existant par son immatriculation. Le
-                        téléphone est obligatoire ; indiquez le nom complet ou nom + prénom.
+                        Feuille <strong>livreurs</strong> : un livreur par
+                        ligne, lié à un véhicule existant par son
+                        immatriculation. Le téléphone est obligatoire ; indiquez
+                        le nom complet ou nom + prénom.
                     </p>
                 </template>
                 <template v-else>
                     <p class="mt-2 text-sm text-muted-foreground">
                         Deux feuilles : <strong>vehicules</strong> (véhicules et
-                        propriétaires) et <strong>livreurs</strong> (liés au véhicule
-                        par l'immatriculation).
+                        propriétaires) et <strong>livreurs</strong> (liés au
+                        véhicule par l'immatriculation).
                     </p>
                     <p class="mt-2 text-sm text-muted-foreground">
-                        Les capacités et l'usage vente/logistique sont facultatifs.
-                        Sans choix, le véhicule est disponible pour la vente uniquement.
+                        Les capacités et l'usage vente/logistique sont
+                        facultatifs. Sans choix, le véhicule est disponible pour
+                        la vente uniquement.
                     </p>
                 </template>
                 <a

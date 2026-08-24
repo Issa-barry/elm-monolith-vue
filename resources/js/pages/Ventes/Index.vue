@@ -914,7 +914,9 @@ function confirmDelete(c: Commande) {
                             <ShoppingCart class="h-12 w-12 opacity-30" />
                             <p class="text-sm">Aucune commande trouvée.</p>
                             <Link
-                                v-if="can('ventes.create') && can_creer_commande"
+                                v-if="
+                                    can('ventes.create') && can_creer_commande
+                                "
                                 href="/backoffice/ventes/create"
                             >
                                 <Button variant="outline" size="sm">

@@ -65,7 +65,7 @@ const sidebarNavGroups = computed((): SidebarNavGroup[] => {
                     },
                     { title: 'Ventes', href: '/settings/ventes' },
                     { title: 'Commissions', href: '/settings/commissions' },
-        { title: 'Applications', href: '/settings/modules' },
+                    { title: 'Applications', href: '/settings/modules' },
                 ],
             },
             {

@@ -64,7 +64,8 @@ function isAdminRole(roleName: string): boolean {
     return ADMIN_ROLES.includes(roleName);
 }
 
-const nonAdminRows = () => droitsForm.value.filter((r) => !isAdminRole(r.role_name));
+const nonAdminRows = () =>
+    droitsForm.value.filter((r) => !isAdminRole(r.role_name));
 
 type ColState = 'all' | 'partial' | 'none';
 
@@ -165,7 +166,9 @@ function saveDroits() {
                     description="Qui peut valider les dépenses, et sur quel périmètre d'agences."
                 />
 
-                <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
+                <div
+                    class="overflow-hidden rounded-xl border bg-card shadow-sm"
+                >
                     <!-- En-tête -->
                     <div
                         class="flex items-center justify-between border-b bg-muted/30 px-6 py-3"
@@ -239,8 +242,7 @@ function saveDroits() {
                                             >
                                                 <Check
                                                     v-if="
-                                                        columnState() ===
-                                                        'all'
+                                                        columnState() === 'all'
                                                     "
                                                     class="h-4 w-4"
                                                 />
@@ -331,9 +333,7 @@ function saveDroits() {
                                         </td>
                                         <!-- Peut valider -->
                                         <td class="px-8 py-4 text-center">
-                                            <div
-                                                class="flex justify-center"
-                                            >
+                                            <div class="flex justify-center">
                                                 <div
                                                     v-if="
                                                         isAdminRole(
@@ -342,9 +342,7 @@ function saveDroits() {
                                                     "
                                                     class="flex h-5 w-5 items-center justify-center rounded border-2 border-primary bg-primary text-primary-foreground opacity-60"
                                                 >
-                                                    <Check
-                                                        class="h-3 w-3"
-                                                    />
+                                                    <Check class="h-3 w-3" />
                                                 </div>
                                                 <button
                                                     v-else
@@ -370,18 +368,14 @@ function saveDroits() {
                                         <td class="px-6 py-4">
                                             <div
                                                 v-if="
-                                                    isAdminRole(
-                                                        entry.role_name,
-                                                    )
+                                                    isAdminRole(entry.role_name)
                                                 "
                                                 class="text-xs text-muted-foreground italic"
                                             >
                                                 Toutes les agences
                                             </div>
                                             <button
-                                                v-else-if="
-                                                    entry.peut_valider
-                                                "
+                                                v-else-if="entry.peut_valider"
                                                 type="button"
                                                 class="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
                                                 @click="
@@ -419,9 +413,7 @@ function saveDroits() {
                                         v-if="
                                             !isAdminRole(entry.role_name) &&
                                             entry.peut_valider &&
-                                            isPorteeExpanded(
-                                                entry.role_name,
-                                            )
+                                            isPorteeExpanded(entry.role_name)
                                         "
                                         :key="entry.role_name + '-portee'"
                                         class="border-b bg-muted/5"
@@ -474,8 +466,7 @@ function saveDroits() {
                                                 >
                                                     <div
                                                         v-if="
-                                                            sites.length ===
-                                                            0
+                                                            sites.length === 0
                                                         "
                                                         class="text-xs text-muted-foreground italic"
                                                     >
@@ -534,9 +525,7 @@ function saveDroits() {
                                                                 }}</span
                                                             >
                                                             <span
-                                                                v-if="
-                                                                    site.code
-                                                                "
+                                                                v-if="site.code"
                                                                 class="ml-auto shrink-0 font-mono text-xs opacity-50"
                                                                 >{{
                                                                     site.code
@@ -570,8 +559,8 @@ function saveDroits() {
                             Non accordé</span
                         >
                         <span class="flex items-center gap-1.5"
-                            ><Shield class="h-3 w-3 text-blue-500" /> Admin
-                            — accès automatique</span
+                            ><Shield class="h-3 w-3 text-blue-500" /> Admin —
+                            accès automatique</span
                         >
                     </div>
                 </div>

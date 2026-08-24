@@ -259,8 +259,7 @@ const mainNavItems = computed((): NavItem[] => {
             title: 'Dépenses',
             href: '/backoffice/depenses',
             icon: Receipt,
-            items:
-                depensesSousItems.length > 1 ? depensesSousItems : undefined,
+            items: depensesSousItems.length > 1 ? depensesSousItems : undefined,
         });
     }
 

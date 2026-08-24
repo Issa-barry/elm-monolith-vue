@@ -119,7 +119,8 @@ const filtered = computed(() => {
 
 function buildExportParams(): URLSearchParams {
     const params = new URLSearchParams();
-    if (selectedCategorie.value) params.set('categorie', selectedCategorie.value);
+    if (selectedCategorie.value)
+        params.set('categorie', selectedCategorie.value);
     if (selectedStatut.value) params.set('statut', selectedStatut.value);
     return params;
 }

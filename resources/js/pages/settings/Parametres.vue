@@ -145,7 +145,10 @@ function toggleBoolean(p: Parametre) {
                                 <Download class="h-3.5 w-3.5" />
                                 Télécharger
                             </a>
-                            <Link v-else href="/settings/imports-flotte/nouveau">
+                            <Link
+                                v-else
+                                href="/settings/imports-flotte/nouveau"
+                            >
                                 <Button size="sm" variant="outline">
                                     <Upload class="mr-1.5 h-3.5 w-3.5" />
                                     Importer

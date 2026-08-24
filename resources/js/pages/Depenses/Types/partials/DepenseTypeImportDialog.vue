@@ -178,9 +178,9 @@ function fermer() {
                     <strong>commentaire_obligatoire</strong> et
                     <strong>justificatif_obligatoire</strong> (Oui/Non) et
                     <strong>statut</strong> (Actif/Inactif) sont optionnelles.
-                    Un libellé déjà utilisé dans votre organisation est
-                    toujours refusé — aucun type existant n'est jamais modifié
-                    par un import.
+                    Un libellé déjà utilisé dans votre organisation est toujours
+                    refusé — aucun type existant n'est jamais modifié par un
+                    import.
                 </p>
                 <a
                     href="/backoffice/depenses/types/import/modele"
@@ -276,9 +276,9 @@ function fermer() {
                         <h3
                             class="text-sm font-semibold text-red-700 dark:text-red-400"
                         >
-                            {{ lignesErreur.length }} ligne(s) en erreur —
-                            aucun type ne sera importé tant qu'elles ne sont
-                            pas corrigées
+                            {{ lignesErreur.length }} ligne(s) en erreur — aucun
+                            type ne sera importé tant qu'elles ne sont pas
+                            corrigées
                         </h3>
                     </div>
                     <ul class="mt-3 space-y-2">
