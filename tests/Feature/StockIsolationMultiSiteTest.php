@@ -214,10 +214,13 @@ class StockIsolationMultiSiteTest extends TestCase
             // attendu
         }
 
-        $this->assertDatabaseMissing('variante_stocks', [
-            'produit_variante_id' => $variante->id,
-            'site_id' => $this->siteB->id,
-        ]);
+        // Depuis VarianteStock::lockOuCreer() (correctif de concurrence du 25/08/2026), le refus
+        // peut désormais matérialiser une ligne à 0 pour cette variante/site — observationnellement
+        // identique à « aucune ligne » pour le reste de l'application (quantiteDisponible() etc.),
+        // jamais un repli sur le legacy : ce qui compte est que qte_stock reste strictement à 0,
+        // jamais une valeur empruntée à un autre site.
+        $qteStockSiteB = VarianteStock::where('produit_variante_id', $variante->id)->where('site_id', $this->siteB->id)->value('qte_stock');
+        $this->assertTrue($qteStockSiteB === null || $qteStockSiteB === 0);
         $this->assertEquals(500, VarianteStock::where('produit_variante_id', $variante->id)->where('site_id', $this->siteA->id)->value('qte_stock'));
     }
 

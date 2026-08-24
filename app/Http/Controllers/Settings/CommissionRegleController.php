@@ -38,11 +38,16 @@ use Inertia\Response;
  *
  * Depuis la refonte 2026-08-24 : un bénéficiaire non coché n'a simplement pas de
  * règle active (jamais un montant à 0) et un barème peut être décliné par type de
- * véhicule (montant standard obligatoire + exceptions optionnelles), cf.
- * CommissionRegleResolver.
+ * véhicule : montant général pour tous les types, avec des exceptions optionnelles
+ * pour certains types, cf. CommissionRegleResolver.
  */
 class CommissionRegleController extends Controller
 {
+    public function redirectConfiguration(): RedirectResponse
+    {
+        return to_route('settings.commissions.index');
+    }
+
     public function index(): Response
     {
         $this->authorize('viewAny', CommissionRegle::class);
@@ -101,7 +106,7 @@ class CommissionRegleController extends Controller
                     'scope_id' => $c->id,
                     'libelle' => $c->nom,
                 ],
-                $this->configurationPourCategorie($reglesActives, $c->id, $cibles),
+                $this->configurationPourCategorie($reglesActives, $c->id, $cibles, $typesVehicules),
             ))
             ->filter(fn (array $ligne) => ! empty($ligne['beneficiaires']))
             ->values()
@@ -132,37 +137,47 @@ class CommissionRegleController extends Controller
     }
 
     /**
-     * Regroupe les règles actives d'une catégorie en bénéficiaires cochés (montant
-     * standard, type_vehicule_id NULL, montant > 0) + exceptions par type de
-     * véhicule (montant > 0, ne conserve que les cibles toujours bénéficiaires).
-     * Une ancienne règle à 0 n'est jamais remontée : elle se lit comme "aucun
-     * bénéficiaire" (lecture seule, aucune migration destructive).
+     * Regroupe le barème général (tous types de véhicules) et ses exceptions.
+     * Une règle spécifique remplace le montant général uniquement pour son type
+     * de véhicule ; les autres types continuent d'utiliser le montant général.
      */
-    private function configurationPourCategorie(Collection $reglesActives, string $categorieId, array $cibles): array
-    {
+    private function configurationPourCategorie(
+        Collection $reglesActives,
+        string $categorieId,
+        array $cibles,
+        Collection $typesVehicules,
+    ): array {
         $reglesCategorie = $reglesActives->filter(
             fn (CommissionRegle $r) => $r->scope_type->value === 'categorie' && $r->scope_id === $categorieId
         );
 
-        $standards = $reglesCategorie->filter(fn (CommissionRegle $r) => $r->type_vehicule_id === null);
-
+        $standards = $reglesCategorie->filter(
+            fn (CommissionRegle $r) => $r->type_vehicule_id === null && (float) $r->montant > 0
+        );
+        $specifiques = $reglesCategorie->filter(
+            fn (CommissionRegle $r) => $r->type_vehicule_id !== null && (float) $r->montant > 0
+        );
         $beneficiaires = [];
         $montantsStandard = [];
         $consultantId = null;
         $consultantLabel = null;
 
         foreach ($cibles as $cible) {
-            $regle = $standards->first(fn (CommissionRegle $r) => $r->cible_type === $cible['code']);
+            $regleStandard = $standards->first(fn (CommissionRegle $r) => $r->cible_type === $cible['code']);
+            $regle = $regleStandard
+                ?? $specifiques->first(fn (CommissionRegle $r) => $r->cible_type === $cible['code']);
             if (! $regle || (float) $regle->montant <= 0) {
                 continue;
             }
 
             $beneficiaires[] = $cible['code'];
-            $montantsStandard[$cible['code']] = [
-                'montant' => (float) $regle->montant,
-                'effective_from' => $regle->effective_from->toDateString(),
-                'regle_id' => $regle->id,
-            ];
+            if ($regleStandard) {
+                $montantsStandard[$cible['code']] = [
+                    'montant' => (float) $regleStandard->montant,
+                    'effective_from' => $regleStandard->effective_from->toDateString(),
+                    'regle_id' => $regleStandard->id,
+                ];
+            }
 
             if ($cible['code'] === CommissionCibleType::CODE_CONSULTANT) {
                 $consultantId = $regle->consultant_id;
@@ -170,16 +185,17 @@ class CommissionRegleController extends Controller
             }
         }
 
-        $exceptions = $reglesCategorie
-            ->filter(fn (CommissionRegle $r) => $r->type_vehicule_id !== null
-                && (float) $r->montant > 0
-                && in_array($r->cible_type, $beneficiaires, true)
-            )
+        $tarifsVehicules = $specifiques
             ->groupBy('type_vehicule_id')
-            ->map(function (Collection $regles, string $typeVehiculeId) {
+            ->map(function (Collection $reglesDuType, string $typeVehiculeId) use ($standards, $beneficiaires, $typesVehicules) {
                 $montants = [];
-                foreach ($regles as $regle) {
-                    $montants[$regle->cible_type] = [
+                foreach ($beneficiaires as $cibleType) {
+                    $regle = $reglesDuType->first(fn (CommissionRegle $r) => $r->cible_type === $cibleType)
+                        ?? $standards->first(fn (CommissionRegle $r) => $r->cible_type === $cibleType);
+                    if (! $regle) {
+                        continue;
+                    }
+                    $montants[$cibleType] = [
                         'montant' => (float) $regle->montant,
                         'effective_from' => $regle->effective_from->toDateString(),
                         'regle_id' => $regle->id,
@@ -188,7 +204,7 @@ class CommissionRegleController extends Controller
 
                 return [
                     'type_vehicule_id' => $typeVehiculeId,
-                    'type_vehicule_label' => $regles->first()->typeVehicule?->nom ?? '—',
+                    'type_vehicule_label' => $typesVehicules->firstWhere('id', $typeVehiculeId)?->nom ?? '—',
                     'montants' => $montants,
                 ];
             })
@@ -200,14 +216,14 @@ class CommissionRegleController extends Controller
             'montants_standard' => $montantsStandard,
             'consultant_id' => $consultantId,
             'consultant_label' => $consultantLabel,
-            'exceptions' => $exceptions,
+            'exceptions' => $tarifsVehicules,
         ];
     }
 
     /**
      * Enregistre atomiquement toute la configuration visible après confirmation :
-     * bénéficiaires cochés, consultant, montants standards et exceptions par type
-     * de véhicule. Une catégorie absente du payload voit toutes ses règles closes
+     * bénéficiaires cochés, consultant, barème général et exceptions véhicule.
+     * Une catégorie absente du payload voit toutes ses règles closes
      * (retrait complet) ; c'est aussi le mécanisme utilisé par le bouton
      * "Supprimer" du front, qui renvoie la configuration complète moins la
      * catégorie retirée.
@@ -258,16 +274,17 @@ class CommissionRegleController extends Controller
             }
         });
 
-        return back()->with('success', 'Configuration des commissions enregistrée.');
+        return to_route('settings.commissions.index')
+            ->with('success', 'Configuration des commissions enregistrée.');
     }
 
     /**
-     * Traduit une ligne du payload (bénéficiaires + montants standard + exceptions
-     * véhicule) en un ensemble désiré de règles (cible_type, type_vehicule_id) et
+     * Traduit une ligne du payload en un ensemble désiré de règles
+     * (cible_type, type_vehicule_id) et
      * fait converger l'état actif de la catégorie vers cet ensemble : ferme ce qui
      * n'est plus désiré, verse (no-op si inchangé, sinon clôture + nouvelle
-     * version) ce qui l'est. Une exception dont le montant est identique au
-     * standard soumis n'est jamais persistée (pas d'exception inutile).
+     * version) ce qui l'est. Les règles sans type constituent le barème général ;
+     * les règles typées sont ses exceptions.
      */
     private function enregistrerConfigurationCategorie(
         string $orgId,
@@ -277,27 +294,18 @@ class CommissionRegleController extends Controller
     ): void {
         $categorieId = $ligne['categorie_id'];
         $beneficiaires = $ligne['beneficiaires'];
-        $montantsStandard = $ligne['montants_standard'];
         $consultantId = in_array(CommissionCibleType::CODE_CONSULTANT, $beneficiaires, true)
             ? $ligne['consultant_id']
             : null;
 
-        // clé interne 'std' = barème standard (type_vehicule_id NULL).
         $desired = [];
         foreach ($beneficiaires as $cibleType) {
-            $desired[$cibleType]['std'] = (int) $montantsStandard[$cibleType];
+            $desired[$cibleType]['std'] = (int) $ligne['montants_standard'][$cibleType];
         }
-        foreach ($ligne['exceptions'] ?? [] as $exception) {
-            $typeVehiculeId = $exception['type_vehicule_id'];
-            foreach ($exception['montants'] ?? [] as $cibleType => $montant) {
-                if (! in_array($cibleType, $beneficiaires, true)) {
-                    continue;
-                }
-                $montant = (int) $montant;
-                if ($montant === (int) $montantsStandard[$cibleType]) {
-                    continue;
-                }
-                $desired[$cibleType][$typeVehiculeId] = $montant;
+        foreach ($ligne['exceptions'] ?? [] as $tarifVehicule) {
+            $typeVehiculeId = $tarifVehicule['type_vehicule_id'];
+            foreach ($tarifVehicule['montants'] as $cibleType => $montant) {
+                $desired[$cibleType][$typeVehiculeId] = (int) $montant;
             }
         }
 

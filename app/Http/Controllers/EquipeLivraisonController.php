@@ -61,7 +61,11 @@ class EquipeLivraisonController extends Controller
         $nomVehicule = $vehiculeSelectionne?->nom_vehicule ?? '';
 
         $data = $request->validate($this->rules($request, $orgId, null), $this->messages());
-        $this->validatePartagesCategorie($data['partages_categorie'] ?? [], $orgId);
+        $this->validatePartagesCategorie(
+            $data['partages_categorie'] ?? [],
+            $orgId,
+            $vehiculeSelectionne?->type_vehicule_id,
+        );
         $this->validateUniquePhones($data['membres']);
         $this->validateMembresExclusivite($data['membres'], $orgId);
 
@@ -120,7 +124,11 @@ class EquipeLivraisonController extends Controller
         $nomVehicule = $vehiculeSelectionne?->nom_vehicule ?? '';
 
         $data = $request->validate($this->rules($request, $orgId, $equipes_livraison->id), $this->messages());
-        $this->validatePartagesCategorie($data['partages_categorie'] ?? [], $orgId);
+        $this->validatePartagesCategorie(
+            $data['partages_categorie'] ?? [],
+            $orgId,
+            $vehiculeSelectionne?->type_vehicule_id,
+        );
         $this->validateUniquePhones($data['membres']);
         $this->validateMembresExclusivite($data['membres'], $orgId, $equipes_livraison->id);
 
@@ -429,8 +437,11 @@ class EquipeLivraisonController extends Controller
      * rejouée par CommissionEnveloppeGenerator à la génération — jamais de
      * formule dupliquée entre les deux points d'entrée.
      */
-    private function validatePartagesCategorie(array $partagesCategorie, string $orgId): void
-    {
+    private function validatePartagesCategorie(
+        array $partagesCategorie,
+        string $orgId,
+        ?string $typeVehiculeId,
+    ): void {
         if (empty($partagesCategorie)) {
             return;
         }
@@ -449,6 +460,7 @@ class EquipeLivraisonController extends Controller
                     null,
                     $pc['categorie_id'],
                     now(),
+                    $typeVehiculeId,
                 )
                 : null;
 

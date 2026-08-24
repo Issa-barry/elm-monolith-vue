@@ -66,6 +66,44 @@ return [
             ]) : [],
         ],
 
+        // Connexion MySQL dédiée aux tests de concurrence réelle (cf.
+        // tests/Feature/Stock/VarianteStockConcurrenceTest.php) — deux connexions nommées
+        // distinctes (mysql_testing / mysql_testing_2) pointant sur la MÊME base, pour obtenir
+        // deux transactions réellement indépendantes depuis un seul processus PHP. Jamais la
+        // base de dev (DB_DATABASE) ni la base de test sqlite en mémoire (phpunit.xml) : nom de
+        // base dédié par défaut, isolé même si les variables DB_TESTING_* ne sont pas définies.
+        'mysql_testing' => [
+            'driver' => 'mysql',
+            'host' => env('DB_TESTING_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => env('DB_TESTING_PORT', env('DB_PORT', '3306')),
+            'database' => env('DB_TESTING_CONCURRENCY_DATABASE', 'elm_monolithe_concurrency_test'),
+            'username' => env('DB_TESTING_USERNAME', env('DB_USERNAME', 'root')),
+            'password' => env('DB_TESTING_PASSWORD', env('DB_PASSWORD', '')),
+            'unix_socket' => env('DB_SOCKET', ''),
+            'charset' => env('DB_CHARSET', 'utf8mb4'),
+            'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+        ],
+
+        'mysql_testing_2' => [
+            'driver' => 'mysql',
+            'host' => env('DB_TESTING_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => env('DB_TESTING_PORT', env('DB_PORT', '3306')),
+            'database' => env('DB_TESTING_CONCURRENCY_DATABASE', 'elm_monolithe_concurrency_test'),
+            'username' => env('DB_TESTING_USERNAME', env('DB_USERNAME', 'root')),
+            'password' => env('DB_TESTING_PASSWORD', env('DB_PASSWORD', '')),
+            'unix_socket' => env('DB_SOCKET', ''),
+            'charset' => env('DB_CHARSET', 'utf8mb4'),
+            'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+        ],
+
         'mariadb' => [
             'driver' => 'mariadb',
             'url' => env('DB_URL'),

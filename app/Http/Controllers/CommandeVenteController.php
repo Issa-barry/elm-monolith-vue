@@ -1209,8 +1209,11 @@ class CommandeVenteController extends Controller
             ->get();
 
         $varianteIds = $produits->flatMap(fn (Produit $p) => $p->variantes->pluck('id'))->all();
+        // Disponible = physique − engagé (StockReservationService, 25/08/2026) : un produit
+        // entièrement engagé par des commandes vente confirmées ne doit plus apparaître comme
+        // sélectionnable ici, même si son stock physique brut reste positif.
         $stocksParVariante = $siteId
-            ? VarianteStock::where('site_id', $siteId)->whereIn('produit_variante_id', $varianteIds)->pluck('qte_stock', 'produit_variante_id')
+            ? VarianteStock::where('site_id', $siteId)->whereIn('produit_variante_id', $varianteIds)->get(['produit_variante_id', 'qte_stock', 'qte_reservee'])->keyBy('produit_variante_id')
             : collect();
 
         return $produits
@@ -1219,7 +1222,8 @@ class CommandeVenteController extends Controller
                 $gereStock = (bool) $p->produitType?->gere_stock;
 
                 if ($siteId && $gereStock && ! $autoriseVenteStockNegatif) {
-                    $disponible = (int) ($stocksParVariante[$variante?->id] ?? 0);
+                    $stock = $stocksParVariante[$variante?->id] ?? null;
+                    $disponible = $stock ? ((int) $stock->qte_stock - (int) $stock->qte_reservee) : 0;
                     if ($disponible <= 0) {
                         return null;
                     }

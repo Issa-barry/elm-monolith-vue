@@ -135,7 +135,7 @@ class CommandeVenteService
         $commande->loadMissing('lignes');
 
         foreach ($commande->lignes as $ligne) {
-            StockReservationService::liberer(CommandeVenteLigne::class, $ligne->id, $commande->site_id);
+            StockReservationService::liberer(CommandeVenteLigne::class, $ligne->id, $commande->site_id, $commande->organization_id);
         }
     }
 
@@ -385,7 +385,7 @@ class CommandeVenteService
             // réellement chargée — un écart négatif (moins chargé que demandé) rend
             // automatiquement le surplus non chargé disponible pour d'autres commandes (cf.
             // StockReservationService::consommer()).
-            StockReservationService::consommer(CommandeVenteLigne::class, $ligne->id, $commande->site_id);
+            StockReservationService::consommer(CommandeVenteLigne::class, $ligne->id, $commande->site_id, $commande->organization_id);
 
             MouvementStockService::sortirStock(
                 varianteId: $ligne->variante_id,
@@ -633,7 +633,7 @@ class CommandeVenteService
             $disponible = MouvementStockService::quantiteDisponible($ligne['variante_id'], $siteId);
 
             if (! empty($ligne['ligne_id'])) {
-                $disponible += StockReservationService::quantiteReserveeActivePourSource(CommandeVenteLigne::class, $ligne['ligne_id'], $siteId);
+                $disponible += StockReservationService::quantiteReserveeActivePourSource(CommandeVenteLigne::class, $ligne['ligne_id'], $siteId, $orgId);
             }
 
             if ($ligne['quantite'] > $disponible) {

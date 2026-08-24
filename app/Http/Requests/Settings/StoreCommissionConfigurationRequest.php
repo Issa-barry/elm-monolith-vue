@@ -10,6 +10,9 @@ use Illuminate\Validation\Rule;
 
 class StoreCommissionConfigurationRequest extends FormRequest
 {
+    /** Toujours revenir à la page de configuration, jamais à l'endpoint POST. */
+    protected $redirectRoute = 'settings.commissions.index';
+
     private const CIBLE_CODES = [
         CommissionCibleType::CODE_PROPRIETAIRE,
         CommissionCibleType::CODE_EQUIPE_LIVRAISON,
@@ -37,7 +40,9 @@ class StoreCommissionConfigurationRequest extends FormRequest
                     ->where('statut', 'actif'),
             ],
             'lignes.*.beneficiaires' => ['required', 'array', 'min:1'],
-            'lignes.*.beneficiaires.*' => ['distinct', Rule::in(self::CIBLE_CODES)],
+            // L'unicité est contrôlée par ligne dans withValidator(). La règle
+            // distinct sur ce wildcard comparerait à tort deux catégories entre elles.
+            'lignes.*.beneficiaires.*' => [Rule::in(self::CIBLE_CODES)],
             'lignes.*.consultant_id' => [
                 'nullable',
                 'string',
@@ -51,7 +56,6 @@ class StoreCommissionConfigurationRequest extends FormRequest
             'lignes.*.exceptions.*.type_vehicule_id' => [
                 'required',
                 'string',
-                'distinct',
                 Rule::exists('type_vehicules', 'id')
                     ->where('organization_id', $organizationId)
                     ->where('is_active', true),
@@ -65,9 +69,9 @@ class StoreCommissionConfigurationRequest extends FormRequest
      * classiques (dépendance entre `beneficiaires` et les clés dynamiques de
      * `montants_standard`/`exceptions.*.montants`) :
      * - consultant_id requis seulement si `consultant` est coché ;
-     * - un montant entier strictement positif (1–99 999 999) pour chaque
-     *   bénéficiaire coché, ni plus ni moins ;
-     * - les montants d'exception ne peuvent porter que sur des bénéficiaires cochés.
+     * - un montant général est obligatoire pour chaque bénéficiaire coché ;
+     * - une exception véhicule reprend exactement ces bénéficiaires avec ses
+     *   propres montants.
      */
     public function withValidator(ValidatorContract $validator): void
     {
@@ -75,6 +79,25 @@ class StoreCommissionConfigurationRequest extends FormRequest
             foreach ($this->input('lignes', []) as $index => $ligne) {
                 $beneficiaires = is_array($ligne['beneficiaires'] ?? null) ? $ligne['beneficiaires'] : [];
                 $montantsStandard = is_array($ligne['montants_standard'] ?? null) ? $ligne['montants_standard'] : [];
+                $tarifsVehicules = is_array($ligne['exceptions'] ?? null) ? $ligne['exceptions'] : [];
+
+                if (count($beneficiaires) !== count(array_unique($beneficiaires))) {
+                    $validator->errors()->add(
+                        "lignes.{$index}.beneficiaires",
+                        'Un bénéficiaire ne peut être coché qu’une seule fois dans une catégorie.',
+                    );
+                }
+
+                $typesVehicules = array_values(array_filter(array_map(
+                    fn (mixed $exception) => is_array($exception) ? ($exception['type_vehicule_id'] ?? null) : null,
+                    $tarifsVehicules,
+                )));
+                if (count($typesVehicules) !== count(array_unique($typesVehicules))) {
+                    $validator->errors()->add(
+                        "lignes.{$index}.exceptions",
+                        'Un type de véhicule ne peut avoir qu’une seule exception dans une catégorie.',
+                    );
+                }
 
                 if (in_array(CommissionCibleType::CODE_CONSULTANT, $beneficiaires, true) && empty($ligne['consultant_id'])) {
                     $validator->errors()->add(
@@ -98,29 +121,32 @@ class StoreCommissionConfigurationRequest extends FormRequest
                     if (! in_array($cibleType, $beneficiaires, true)) {
                         $validator->errors()->add(
                             "lignes.{$index}.montants_standard.{$cibleType}",
-                            'Ce bénéficiaire n’est pas coché.',
+                            'Ce montant général n’est pas autorisé.',
                         );
                     }
                 }
 
-                $exceptions = is_array($ligne['exceptions'] ?? null) ? $ligne['exceptions'] : [];
-                foreach ($exceptions as $exceptionIndex => $exception) {
+                foreach ($tarifsVehicules as $exceptionIndex => $exception) {
                     $montants = is_array($exception['montants'] ?? null) ? $exception['montants'] : [];
+
+                    foreach ($beneficiaires as $cibleType) {
+                        if (! in_array($cibleType, self::CIBLE_CODES, true)) {
+                            continue;
+                        }
+                        $this->validerMontant(
+                            $validator,
+                            $montants[$cibleType] ?? null,
+                            "lignes.{$index}.exceptions.{$exceptionIndex}.montants.{$cibleType}",
+                        );
+                    }
 
                     foreach ($montants as $cibleType => $montant) {
                         if (! in_array($cibleType, $beneficiaires, true)) {
                             $validator->errors()->add(
                                 "lignes.{$index}.exceptions.{$exceptionIndex}.montants.{$cibleType}",
-                                'Ce bénéficiaire n’est pas coché.',
+                                'Ce bénéficiaire n’est pas coché dans le barème général.',
                             );
-
-                            continue;
                         }
-                        $this->validerMontant(
-                            $validator,
-                            $montant,
-                            "lignes.{$index}.exceptions.{$exceptionIndex}.montants.{$cibleType}",
-                        );
                     }
                 }
             }
@@ -152,7 +178,6 @@ class StoreCommissionConfigurationRequest extends FormRequest
             'lignes.*.beneficiaires.min' => 'Cochez au moins un bénéficiaire.',
             'lignes.*.consultant_id.exists' => 'Ce consultant doit être actif et appartenir à votre organisation.',
             'lignes.*.exceptions.*.type_vehicule_id.required' => 'Choisissez un type de véhicule.',
-            'lignes.*.exceptions.*.type_vehicule_id.distinct' => 'Ce type de véhicule a déjà une exception sur cette catégorie.',
             'lignes.*.exceptions.*.type_vehicule_id.exists' => 'Ce type de véhicule n’est pas disponible pour votre organisation.',
         ];
     }

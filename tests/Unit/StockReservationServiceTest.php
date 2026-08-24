@@ -154,7 +154,7 @@ class StockReservationServiceTest extends TestCase
         $this->seedStock(100);
         StockReservationService::reserver($this->varianteId, $this->site->id, $this->org->id, 40, 'commande_test', 'ligne-1', $this->user->id);
 
-        StockReservationService::liberer('commande_test', 'ligne-1', $this->site->id);
+        StockReservationService::liberer('commande_test', 'ligne-1', $this->site->id, $this->org->id);
 
         $this->assertSame(0, VarianteStock::where('produit_variante_id', $this->varianteId)->where('site_id', $this->site->id)->value('qte_reservee'));
         $this->assertDatabaseHas('stock_reservations', [
@@ -166,7 +166,7 @@ class StockReservationServiceTest extends TestCase
 
     public function test_liberer_est_idempotent_sans_reservation_active(): void
     {
-        StockReservationService::liberer('commande_test', 'inexistante', $this->site->id);
+        StockReservationService::liberer('commande_test', 'inexistante', $this->site->id, $this->org->id);
 
         $this->assertSame(0, StockReservation::count());
     }
@@ -176,7 +176,7 @@ class StockReservationServiceTest extends TestCase
         $this->seedStock(100);
         StockReservationService::reserver($this->varianteId, $this->site->id, $this->org->id, 40, 'commande_test', 'ligne-1', $this->user->id);
 
-        StockReservationService::consommer('commande_test', 'ligne-1', $this->site->id);
+        StockReservationService::consommer('commande_test', 'ligne-1', $this->site->id, $this->org->id);
 
         $this->assertSame(0, VarianteStock::where('produit_variante_id', $this->varianteId)->where('site_id', $this->site->id)->value('qte_reservee'));
         $this->assertDatabaseHas('stock_reservations', [
@@ -191,10 +191,36 @@ class StockReservationServiceTest extends TestCase
         $this->seedStock(100);
         StockReservationService::reserver($this->varianteId, $this->site->id, $this->org->id, 40, 'commande_test', 'ligne-1', $this->user->id);
 
-        $this->assertSame(40, StockReservationService::quantiteReserveeActivePourSource('commande_test', 'ligne-1', $this->site->id));
+        $this->assertSame(40, StockReservationService::quantiteReserveeActivePourSource('commande_test', 'ligne-1', $this->site->id, $this->org->id));
 
-        StockReservationService::liberer('commande_test', 'ligne-1', $this->site->id);
+        StockReservationService::liberer('commande_test', 'ligne-1', $this->site->id, $this->org->id);
 
-        $this->assertSame(0, StockReservationService::quantiteReserveeActivePourSource('commande_test', 'ligne-1', $this->site->id));
+        $this->assertSame(0, StockReservationService::quantiteReserveeActivePourSource('commande_test', 'ligne-1', $this->site->id, $this->org->id));
+    }
+
+    /**
+     * Défense en profondeur (25/08/2026) : liberer()/consommer() filtrent désormais
+     * explicitement par organization_id — une organisation ne doit jamais pouvoir agir sur une
+     * réservation d'une autre organisation, même en connaissant son (source_type, source_id,
+     * site_id) exacts (jamais réaliste en pratique vu l'unicité globale des ULID, mais le filtre
+     * doit être une défense explicite, pas une dépendance implicite).
+     */
+    public function test_liberer_ignore_une_reservation_dune_autre_organisation(): void
+    {
+        $autreOrg = Organization::factory()->create();
+
+        $this->seedStock(100);
+        StockReservationService::reserver($this->varianteId, $this->site->id, $this->org->id, 40, 'commande_test', 'ligne-1', $this->user->id);
+
+        // Tente de libérer avec le même (source_type, source_id, site_id) mais l'ID d'une AUTRE
+        // organisation : doit être un no-op, la réservation reste active.
+        StockReservationService::liberer('commande_test', 'ligne-1', $this->site->id, $autreOrg->id);
+
+        $this->assertSame(40, VarianteStock::where('produit_variante_id', $this->varianteId)->where('site_id', $this->site->id)->value('qte_reservee'));
+        $this->assertDatabaseHas('stock_reservations', [
+            'source_type' => 'commande_test',
+            'source_id' => 'ligne-1',
+            'statut' => StatutReservationStock::ACTIVE->value,
+        ]);
     }
 }

@@ -145,15 +145,20 @@ class PdvController extends Controller
             ->get();
 
         $varianteIds = $produits->flatMap(fn (Produit $p) => $p->variantes->pluck('id'))->all();
+        // Disponible = physique − engagé (StockReservationService, 25/08/2026) : la grille PDV
+        // affichait auparavant le stock physique brut comme « stock », permettant de vendre un
+        // article déjà entièrement engagé par une commande vente confirmée en attente de
+        // chargement — exactement le scénario que la réservation doit empêcher.
         $stocksParVariante = $siteId
-            ? VarianteStock::where('site_id', $siteId)->whereIn('produit_variante_id', $varianteIds)->pluck('qte_stock', 'produit_variante_id')
+            ? VarianteStock::where('site_id', $siteId)->whereIn('produit_variante_id', $varianteIds)->get(['produit_variante_id', 'qte_stock', 'qte_reservee'])->keyBy('produit_variante_id')
             : collect();
 
         return $produits
             ->map(function (Produit $p) use ($stocksParVariante, $autoriseVenteStockNegatif, $siteId) {
                 $variante = $p->variantes->firstWhere('is_default', true) ?? $p->variantes->first();
                 $gereStock = (bool) $p->produitType?->gere_stock;
-                $disponibleSite = (int) ($stocksParVariante[$variante?->id] ?? 0);
+                $stock = $stocksParVariante[$variante?->id] ?? null;
+                $disponibleSite = $stock ? ((int) $stock->qte_stock - (int) $stock->qte_reservee) : 0;
 
                 if ($siteId && $gereStock && ! $autoriseVenteStockNegatif && $disponibleSite <= 0) {
                     return null;

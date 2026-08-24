@@ -57,28 +57,19 @@ class StockReservationService
             return;
         }
 
-        $varianteStock = VarianteStock::where('produit_variante_id', $varianteId)
-            ->where('site_id', $siteId)
-            ->lockForUpdate()
-            ->first();
+        // VarianteStock::lockOuCreer() (25/08/2026) : même primitive de concurrence que
+        // MouvementStockService::appliquer() — jamais un lockForUpdate()->first() suivi d'un
+        // create() séparé, qui laisserait une fenêtre de course sur (produit_variante_id,
+        // site_id) au tout premier mouvement/réservation d'une variante sur un site.
+        $varianteStock = VarianteStock::lockOuCreer($varianteId, $siteId, $orgId);
 
-        $qteStock = $varianteStock?->qte_stock ?? 0;
-        $qteReserveeExistante = $varianteStock?->qte_reservee ?? 0;
+        $qteStock = $varianteStock->qte_stock;
+        $qteReserveeExistante = $varianteStock->qte_reservee;
         $disponible = $qteStock - $qteReserveeExistante;
 
         if ($quantite > $disponible && ! $allowNegative) {
             throw ValidationException::withMessages([
                 'stock' => "Stock insuffisant pour réserver : {$quantite} demandés, {$disponible} disponibles.",
-            ]);
-        }
-
-        if (! $varianteStock) {
-            $varianteStock = VarianteStock::create([
-                'organization_id' => $orgId,
-                'produit_variante_id' => $varianteId,
-                'site_id' => $siteId,
-                'qte_stock' => 0,
-                'qte_reservee' => 0,
             ]);
         }
 
@@ -103,9 +94,9 @@ class StockReservationService
      * marque la réservation LIBEREE. Idempotent : no-op si aucune réservation active pour cette
      * source (jamais réservée, ou déjà libérée/consommée).
      */
-    public static function liberer(string $sourceType, string $sourceId, string $siteId): void
+    public static function liberer(string $sourceType, string $sourceId, string $siteId, string $orgId): void
     {
-        self::terminer($sourceType, $sourceId, $siteId, StatutReservationStock::LIBEREE);
+        self::terminer($sourceType, $sourceId, $siteId, $orgId, StatutReservationStock::LIBEREE);
     }
 
     /**
@@ -117,14 +108,21 @@ class StockReservationService
      * libérée dans tous les cas, jamais partiellement : l'écart non chargé redevient
      * automatiquement disponible pour d'autres commandes. Idempotent.
      */
-    public static function consommer(string $sourceType, string $sourceId, string $siteId): void
+    public static function consommer(string $sourceType, string $sourceId, string $siteId, string $orgId): void
     {
-        self::terminer($sourceType, $sourceId, $siteId, StatutReservationStock::CONSOMMEE);
+        self::terminer($sourceType, $sourceId, $siteId, $orgId, StatutReservationStock::CONSOMMEE);
     }
 
-    private static function terminer(string $sourceType, string $sourceId, string $siteId, StatutReservationStock $statutFinal): void
+    /**
+     * $orgId explicite dans CHAQUE recherche (25/08/2026) — jusqu'ici, seule l'unicité globale
+     * des ULID source_id empêchait une fuite entre organisations ; ce filtre est désormais une
+     * défense explicite, cohérente avec le reste du module (MouvementStockService, StockController),
+     * plutôt qu'une dépendance implicite à l'unicité des identifiants.
+     */
+    private static function terminer(string $sourceType, string $sourceId, string $siteId, string $orgId, StatutReservationStock $statutFinal): void
     {
-        $reservation = StockReservation::where('source_type', $sourceType)
+        $reservation = StockReservation::where('organization_id', $orgId)
+            ->where('source_type', $sourceType)
             ->where('source_id', $sourceId)
             ->where('site_id', $siteId)
             ->where('statut', StatutReservationStock::ACTIVE)
@@ -134,7 +132,8 @@ class StockReservationService
             return;
         }
 
-        $varianteStock = VarianteStock::where('produit_variante_id', $reservation->produit_variante_id)
+        $varianteStock = VarianteStock::where('organization_id', $orgId)
+            ->where('produit_variante_id', $reservation->produit_variante_id)
             ->where('site_id', $siteId)
             ->lockForUpdate()
             ->first();
@@ -152,9 +151,10 @@ class StockReservationService
      * jamais être bloquée par SA PROPRE réservation), cf. CommandeVenteService::
      * verifierDisponibiliteLignes().
      */
-    public static function quantiteReserveeActivePourSource(string $sourceType, string $sourceId, string $siteId): int
+    public static function quantiteReserveeActivePourSource(string $sourceType, string $sourceId, string $siteId, string $orgId): int
     {
-        return (int) StockReservation::where('source_type', $sourceType)
+        return (int) StockReservation::where('organization_id', $orgId)
+            ->where('source_type', $sourceType)
             ->where('source_id', $sourceId)
             ->where('site_id', $siteId)
             ->where('statut', StatutReservationStock::ACTIVE)

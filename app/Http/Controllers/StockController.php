@@ -12,6 +12,7 @@ use App\Models\ProduitVariante;
 use App\Models\Site;
 use App\Models\User;
 use App\Services\DroitAjustementStockService;
+use App\Services\MouvementStockMotifService;
 use App\Services\StockStatutService;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
@@ -175,9 +176,15 @@ class StockController extends Controller
             ->whereIn('produit_variante_id', $varianteIds)
             ->whereIn('site_id', $siteIds)
             ->orderByDesc('created_at')
-            ->get(['id', 'produit_variante_id', 'site_id', 'type', 'quantite', 'created_at'])
+            ->get(['id', 'produit_variante_id', 'site_id', 'type', 'quantite', 'source_type', 'source_id', 'notes', 'created_at'])
             ->unique(fn (MouvementStock $mouvement) => $mouvement->produit_variante_id.'|'.$mouvement->site_id)
             ->keyBy(fn (MouvementStock $mouvement) => $mouvement->produit_variante_id.'|'.$mouvement->site_id);
+
+        // Motif + source (« Vente CMD-… », « Transfert TR-… », ou le motif saisi pour un
+        // ajustement manuel) — jamais déduit du seul signe/montant du mouvement, cf. AGENTS.md
+        // §6. Réutilise MouvementStockMotifService::annoter(), déjà utilisé par la modale
+        // Historique, plutôt que de dupliquer cette résolution ici.
+        MouvementStockMotifService::annoter($derniersMouvements);
 
         $stocks->setCollection($rows->map(function ($row) use ($variantes, $derniersMouvements, $sitesAjustablesIds) {
             $variante = $variantes->get($row->variante_id);
@@ -204,15 +211,21 @@ class StockController extends Controller
                 'site_id' => $row->site_id,
                 'site_nom' => $row->site_nom,
                 'site_code' => $row->site_code,
-                'qte_stock' => (int) $row->qte_disponible,
+                'qte_disponible' => (int) $row->qte_disponible,
                 'qte_physique' => (int) $row->qte_physique,
-                'qte_reservee' => (int) $row->qte_reservee,
+                'qte_engagee' => (int) $row->qte_reservee,
+                // Bloqué et Entrant ne sont pas encore calculés côté backend (Lot 3 / Lot 2) —
+                // explicitement null, jamais 0 : un 0 laisserait croire à un contrôle déjà fait
+                // (cf. audit stock du 25/08/2026, « ne jamais afficher de fausse valeur »).
+                'qte_bloquee' => null,
+                'qte_entrante' => null,
                 'seuil_effectif' => (int) $row->seuil_effectif,
                 'statut' => $statut->value,
                 'statut_label' => $statut->label(),
                 'dernier_mouvement' => $dernierMouvement ? [
                     'type' => $dernierMouvement->type,
                     'quantite' => (int) $dernierMouvement->quantite,
+                    'motif_label' => $dernierMouvement->motif_label,
                     'created_at' => $dernierMouvement->created_at?->format('d/m/Y H:i'),
                 ] : null,
                 'can_ajuster' => $sitesAjustablesIds->contains((string) $row->site_id),
