@@ -281,6 +281,17 @@ function formatMontant(value: string | number): string {
     return `${new Intl.NumberFormat('fr-FR').format(Number(value))} GNF`;
 }
 
+function effectiveVehicleAmount(
+    ligne: DraftLigne,
+    exception: DraftException,
+    code: string,
+): string {
+    if (!ligne.beneficiaires[code]) return '';
+
+    const override = exception.overrides[code];
+    return override?.active ? override.montant : ligne.montants[code];
+}
+
 function blockNonIntegerKeydown(event: KeyboardEvent): void {
     const allowed = [
         'Backspace',
@@ -524,9 +535,9 @@ function submitConfiguration(): void {
             confirmationVisible.value = false;
             toast.add({
                 severity: 'success',
-                summary: 'Configuration enregistrée',
-                detail: 'Les nouvelles règles s’appliquent aux ventes futures.',
-                life: 4000,
+                summary: 'Commissions enregistrées',
+                detail: 'Les nouveaux montants s’appliquent aux ventes futures.',
+                life: 5000,
             });
         },
         onError: () => {
@@ -569,58 +580,210 @@ function submitConfiguration(): void {
                         </Button>
                     </div>
 
-                    <div v-if="draftLignes.length" class="divide-y">
-                        <div
-                            v-for="(ligne, index) in draftLignes"
-                            :key="ligne.key"
-                            class="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6"
-                            :data-testid="`commission-row-${index}`"
-                        >
-                            <div class="flex min-w-0 items-start gap-3">
-                                <div
-                                    class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-muted/30"
+                    <div v-if="draftLignes.length" class="overflow-x-auto">
+                        <div class="min-w-[960px]">
+                            <div
+                                class="grid items-center gap-3 border-b bg-muted/20 px-5 py-2.5 sm:px-6"
+                                :style="{
+                                    gridTemplateColumns: `minmax(240px, 1.5fr) repeat(${props.cibles.length}, minmax(130px, 1fr)) 112px`,
+                                }"
+                            >
+                                <span
+                                    class="text-xs font-medium text-muted-foreground"
                                 >
-                                    <Coins
-                                        class="h-4 w-4 text-muted-foreground"
-                                    />
-                                </div>
-                                <div class="min-w-0">
-                                    <p class="truncate font-medium">
-                                        {{ categoryLabel(ligne.categorie_id) }}
-                                    </p>
-                                    <p
-                                        class="mt-0.5 truncate text-xs text-muted-foreground"
-                                    >
-                                        {{ beneficiairesSummary(ligne) }}
-                                    </p>
-                                    <p
-                                        class="mt-0.5 text-xs text-muted-foreground"
-                                    >
-                                        {{ baremeSummary(ligne) }}
-                                    </p>
-                                </div>
+                                    Catégorie / véhicule
+                                </span>
+                                <span
+                                    v-for="cible in props.cibles"
+                                    :key="cible.code"
+                                    class="text-xs font-medium text-muted-foreground"
+                                >
+                                    {{ cible.libelle }}
+                                </span>
+                                <span
+                                    class="text-right text-xs font-medium text-muted-foreground"
+                                >
+                                    Actions
+                                </span>
                             </div>
-                            <div class="flex shrink-0 items-center gap-2">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    :data-testid="`commission-edit-${index}`"
-                                    @click="openEditDialog(index)"
+
+                            <div
+                                v-for="(ligne, index) in draftLignes"
+                                :key="ligne.key"
+                                class="border-b last:border-b-0"
+                                :data-testid="`commission-row-${index}`"
+                            >
+                                <div
+                                    class="grid items-center gap-3 px-5 py-4 sm:px-6"
+                                    :style="{
+                                        gridTemplateColumns: `minmax(240px, 1.5fr) repeat(${props.cibles.length}, minmax(130px, 1fr)) 112px`,
+                                    }"
                                 >
-                                    <Pencil class="h-4 w-4" />
-                                    Modifier
-                                </Button>
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    class="text-muted-foreground hover:text-destructive"
-                                    :aria-label="`Retirer ${categoryLabel(ligne.categorie_id)}`"
-                                    @click="removeLigne(index)"
+                                    <div
+                                        class="flex min-w-0 items-center gap-3"
+                                    >
+                                        <div
+                                            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-muted/30"
+                                        >
+                                            <Coins
+                                                class="h-4 w-4 text-muted-foreground"
+                                            />
+                                        </div>
+                                        <div class="min-w-0">
+                                            <p class="truncate font-medium">
+                                                {{
+                                                    categoryLabel(
+                                                        ligne.categorie_id,
+                                                    )
+                                                }}
+                                            </p>
+                                            <p
+                                                class="mt-0.5 text-xs text-muted-foreground"
+                                            >
+                                                {{ baremeSummary(ligne) }}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div
+                                        v-for="cible in props.cibles"
+                                        :key="cible.code"
+                                        class="min-w-0"
+                                    >
+                                        <template
+                                            v-if="
+                                                ligne.beneficiaires[cible.code]
+                                            "
+                                        >
+                                            <p class="font-medium tabular-nums">
+                                                {{
+                                                    formatMontant(
+                                                        ligne.montants[
+                                                            cible.code
+                                                        ],
+                                                    )
+                                                }}
+                                            </p>
+                                            <p
+                                                v-if="
+                                                    cible.code ===
+                                                    CONSULTANT_CODE
+                                                "
+                                                class="truncate text-xs text-muted-foreground"
+                                            >
+                                                {{
+                                                    consultantLabel(
+                                                        ligne.consultant_id,
+                                                    )
+                                                }}
+                                            </p>
+                                        </template>
+                                        <span
+                                            v-else
+                                            class="text-sm text-muted-foreground"
+                                        >
+                                            —
+                                        </span>
+                                    </div>
+
+                                    <div
+                                        class="flex items-center justify-end gap-1"
+                                    >
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            :data-testid="`commission-edit-${index}`"
+                                            @click="openEditDialog(index)"
+                                        >
+                                            <Pencil class="h-4 w-4" />
+                                            Modifier
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            class="text-muted-foreground hover:text-destructive"
+                                            :aria-label="`Retirer ${categoryLabel(ligne.categorie_id)}`"
+                                            @click="removeLigne(index)"
+                                        >
+                                            <Trash2 class="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                <div
+                                    v-for="exception in ligne.modeVehicule ===
+                                    'par_vehicule'
+                                        ? ligne.exceptions
+                                        : []"
+                                    :key="exception.key"
+                                    class="grid items-center gap-3 border-t bg-muted/10 px-5 py-3 sm:px-6"
+                                    :style="{
+                                        gridTemplateColumns: `minmax(240px, 1.5fr) repeat(${props.cibles.length}, minmax(130px, 1fr)) 112px`,
+                                    }"
                                 >
-                                    <Trash2 class="h-4 w-4" />
-                                </Button>
+                                    <div class="min-w-0 border-l-2 pl-4">
+                                        <p class="truncate text-sm font-medium">
+                                            {{
+                                                typeVehiculeLabel(
+                                                    exception.type_vehicule_id,
+                                                )
+                                            }}
+                                        </p>
+                                        <p
+                                            class="text-xs text-muted-foreground"
+                                        >
+                                            Tarif spécifique
+                                        </p>
+                                    </div>
+
+                                    <div
+                                        v-for="cible in props.cibles"
+                                        :key="cible.code"
+                                        class="min-w-0"
+                                    >
+                                        <template
+                                            v-if="
+                                                effectiveVehicleAmount(
+                                                    ligne,
+                                                    exception,
+                                                    cible.code,
+                                                ) !== ''
+                                            "
+                                        >
+                                            <p class="font-medium tabular-nums">
+                                                {{
+                                                    formatMontant(
+                                                        effectiveVehicleAmount(
+                                                            ligne,
+                                                            exception,
+                                                            cible.code,
+                                                        ),
+                                                    )
+                                                }}
+                                            </p>
+                                            <p
+                                                class="text-xs text-muted-foreground"
+                                            >
+                                                {{
+                                                    exception.overrides[
+                                                        cible.code
+                                                    ]?.active
+                                                        ? 'Montant différent'
+                                                        : 'Montant général'
+                                                }}
+                                            </p>
+                                        </template>
+                                        <span
+                                            v-else
+                                            class="text-sm text-muted-foreground"
+                                        >
+                                            —
+                                        </span>
+                                    </div>
+                                    <span aria-hidden="true"></span>
+                                </div>
                             </div>
                         </div>
                     </div>
