@@ -32,7 +32,7 @@ test('search by name filters the list', async ({ page }) => {
     await page.goto('/backoffice/users');
 
     // Recherche par prénom – doit trouver
-    const search = getVisibleSearchInput(page);
+    const search = await getVisibleSearchInput(page);
     await search.fill(prenom);
     await search.press('Enter');
     await page.waitForLoadState('networkidle');
@@ -61,7 +61,7 @@ test('search by email filters the list', async ({ page }) => {
     await createUser(page, { prenom, nom, tel, email });
 
     await page.goto('/backoffice/users');
-    const search = getVisibleSearchInput(page);
+    const search = await getVisibleSearchInput(page);
     await search.fill(email);
     await search.press('Enter');
     await page.waitForLoadState('networkidle');
@@ -161,7 +161,7 @@ test('prenom is saved as title case and nom as uppercase', async ({ page }) => {
 
     // Le nom doit apparaître en majuscules dans la liste
     await page.goto('/backoffice/users');
-    const search = getVisibleSearchInput(page);
+    const search = await getVisibleSearchInput(page);
     await search.fill('mamadou barry');
     await search.press('Enter');
     await page.waitForLoadState('networkidle');

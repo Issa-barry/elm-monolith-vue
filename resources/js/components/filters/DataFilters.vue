@@ -603,6 +603,10 @@ const hasActiveFilters = computed(
                                 type="text"
                                 :placeholder="field.placeholder ?? ''"
                                 class="h-9"
+                                @keydown.enter="
+                                    applyFilters();
+                                    filterDrawerOpen = false;
+                                "
                             />
                         </div>
                     </template>

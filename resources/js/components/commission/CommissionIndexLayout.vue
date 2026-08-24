@@ -3,6 +3,7 @@ import CommissionIndexSummaryCards from '@/components/commission/CommissionIndex
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import ListPageActions from '@/components/ListPageActions.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -96,47 +97,51 @@ defineEmits<{
                 </div>
             </div>
 
-            <div class="flex items-center gap-2">
-                <DropdownMenu>
-                    <DropdownMenuTrigger as-child>
-                        <Button
-                            variant="outline"
-                            data-testid="commission-export-trigger"
-                        >
-                            <Download class="mr-2 h-4 w-4" />
-                            Exporter
-                            <ChevronDown class="ml-2 h-3.5 w-3.5" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" class="w-48">
-                        <DropdownMenuItem
-                            class="cursor-pointer"
-                            data-testid="commission-export-excel"
-                            @click="$emit('exportExcel')"
-                        >
-                            <FileSpreadsheet class="h-4 w-4" />
-                            Exporter en Excel
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                            class="cursor-pointer"
-                            data-testid="commission-export-pdf"
-                            @click="$emit('exportPdf')"
-                        >
-                            <FileText class="h-4 w-4" />
-                            Exporter en PDF
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-                <DataFilters
-                    trigger-only
-                    :url="filterUrl"
-                    :values="filterValues"
-                    :fields="filterFields"
-                    :sites="sites"
-                    :hide-agence-selector="hideAgenceSelector"
-                    :result-count="resultCount"
-                />
-            </div>
+            <ListPageActions>
+                <template #export>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger as-child>
+                            <Button
+                                variant="outline"
+                                data-testid="commission-export-trigger"
+                            >
+                                <Download class="mr-2 h-4 w-4" />
+                                Exporter
+                                <ChevronDown class="ml-2 h-3.5 w-3.5" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" class="w-48">
+                            <DropdownMenuItem
+                                class="cursor-pointer"
+                                data-testid="commission-export-excel"
+                                @click="$emit('exportExcel')"
+                            >
+                                <FileSpreadsheet class="h-4 w-4" />
+                                Exporter en Excel
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                class="cursor-pointer"
+                                data-testid="commission-export-pdf"
+                                @click="$emit('exportPdf')"
+                            >
+                                <FileText class="h-4 w-4" />
+                                Exporter en PDF
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </template>
+                <template #filters>
+                    <DataFilters
+                        trigger-only
+                        :url="filterUrl"
+                        :values="filterValues"
+                        :fields="filterFields"
+                        :sites="sites"
+                        :hide-agence-selector="hideAgenceSelector"
+                        :result-count="resultCount"
+                    />
+                </template>
+            </ListPageActions>
         </div>
 
         <slot name="after-header" />

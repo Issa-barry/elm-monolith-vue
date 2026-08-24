@@ -3,6 +3,7 @@ import CommissionIndexSummaryCards from '@/components/commission/CommissionIndex
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import ListPageActions from '@/components/ListPageActions.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { shallowMount } from '@vue/test-utils';
@@ -54,6 +55,12 @@ function mountLayout(resultCount = 2) {
         },
         global: {
             renderStubDefaultSlot: true,
+            // ListPageActions ne porte que des slots nommés (#export,
+            // #filters) : un shallow-stub ne les rendrait pas (contrairement
+            // au slot par défaut couvert par renderStubDefaultSlot), donc on
+            // le laisse se rendre réellement pour garder DataFilters/le menu
+            // export accessibles aux assertions ci-dessous.
+            stubs: { ListPageActions: false },
         },
     });
 }
@@ -86,6 +93,20 @@ describe('CommissionIndexLayout', () => {
             status: 'ouverte',
             label: 'Ouverte',
         });
+
+        // Standard partagé : les actions d'en-tête passent par ListPageActions,
+        // qui impose Exporter avant Filtres (DataFilters, shallow-stubbé ici,
+        // matérialise sa place dans l'ordre via son propre élément stub).
+        expect(wrapper.findComponent(ListPageActions).exists()).toBe(true);
+        const exportTrigger = wrapper.get(
+            '[data-testid="commission-export-trigger"]',
+        );
+        const filtersStub = wrapper.get('data-filters-stub');
+        expect(
+            exportTrigger.element.compareDocumentPosition(filtersStub.element) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+
         expect(
             wrapper.find('[data-testid="commission-table-scroll"]').exists(),
         ).toBe(true);

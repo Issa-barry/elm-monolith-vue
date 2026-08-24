@@ -2,6 +2,7 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import ListPageActions from '@/components/ListPageActions.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -128,9 +129,13 @@ const desktopTypeFiltered = computed(() => {
 });
 
 const mobileFiltered = computed(() => {
+    // Reprend le filtre Type appliqué via le bouton Filtres mobile (partagé
+    // avec le desktop) puis affine avec la recherche texte propre au mobile.
+    let list = props.sites;
+    if (type.value) list = list.filter((s) => s.type === type.value);
     const q = mobileSearch.value.trim().toLowerCase();
-    if (!q) return props.sites;
-    return props.sites.filter(
+    if (!q) return list;
+    return list.filter(
         (s) =>
             s.nom.toLowerCase().includes(q) ||
             s.code.toLowerCase().includes(q) ||
@@ -308,9 +313,9 @@ function confirmDelete(s: Site) {
                 <div v-else class="h-8 w-[72px]" />
             </div>
 
-            <!-- Search -->
-            <div class="px-3 py-2">
-                <div class="relative">
+            <!-- Search + Filtres -->
+            <div class="flex items-center gap-2 px-3 py-2">
+                <div class="relative flex-1">
                     <Search
                         class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                     />
@@ -321,6 +326,14 @@ function confirmDelete(s: Site) {
                         class="w-full rounded-lg border bg-background py-2 pr-3 pl-9 text-sm outline-none focus:ring-2 focus:ring-ring"
                     />
                 </div>
+                <DataFilters
+                    trigger-only
+                    :fields="filterFields"
+                    :values="{ search, type }"
+                    :result-count="desktopTypeFiltered.length"
+                    @apply="handleApply"
+                    @reset="resetFilters"
+                />
             </div>
 
             <!-- Card list -->
@@ -449,57 +462,62 @@ function confirmDelete(s: Site) {
                         }}
                     </p>
                 </div>
-                <div class="flex items-center gap-2">
-                    <Button variant="outline" @click="exportExcel">
-                        <Download class="mr-2 h-4 w-4" />
-                        Exporter Excel
-                    </Button>
-                    <DropdownMenu v-if="can('sites.create')">
-                        <DropdownMenuTrigger as-child>
-                            <Button variant="outline">
-                                <Upload class="mr-2 h-4 w-4" />
-                                Importer
-                                <ChevronDown class="ml-2 h-3.5 w-3.5" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" class="w-56">
-                            <DropdownMenuItem
-                                class="cursor-pointer"
-                                @click="importDialogVisible = true"
-                            >
-                                <Upload class="h-4 w-4" />
-                                Importer des sites
-                            </DropdownMenuItem>
-                            <DropdownMenuItem as-child>
-                                <a
-                                    href="/backoffice/sites/import/modele"
-                                    class="flex w-full items-center gap-2"
-                                >
-                                    <Download class="h-4 w-4" />
-                                    Télécharger le modèle
-                                </a>
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                    <Link
-                        v-if="can('sites.create')"
-                        href="/backoffice/sites/create"
-                    >
-                        <Button>
-                            <Plus class="mr-2 h-4 w-4" />
-                            Nouveau site
+                <ListPageActions>
+                    <template #export>
+                        <Button variant="outline" @click="exportExcel">
+                            <Download class="mr-2 h-4 w-4" />
+                            Exporter Excel
                         </Button>
-                    </Link>
-                </div>
+                    </template>
+                    <template v-if="can('sites.create')" #import>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger as-child>
+                                <Button variant="outline">
+                                    <Upload class="mr-2 h-4 w-4" />
+                                    Importer
+                                    <ChevronDown class="ml-2 h-3.5 w-3.5" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" class="w-56">
+                                <DropdownMenuItem
+                                    class="cursor-pointer"
+                                    @click="importDialogVisible = true"
+                                >
+                                    <Upload class="h-4 w-4" />
+                                    Importer des sites
+                                </DropdownMenuItem>
+                                <DropdownMenuItem as-child>
+                                    <a
+                                        href="/backoffice/sites/import/modele"
+                                        class="flex w-full items-center gap-2"
+                                    >
+                                        <Download class="h-4 w-4" />
+                                        Télécharger le modèle
+                                    </a>
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </template>
+                    <template #filters>
+                        <DataFilters
+                            trigger-only
+                            :fields="filterFields"
+                            :values="{ search, type }"
+                            :result-count="desktopTypeFiltered.length"
+                            @apply="handleApply"
+                            @reset="resetFilters"
+                        />
+                    </template>
+                    <template v-if="can('sites.create')" #primary>
+                        <Link href="/backoffice/sites/create">
+                            <Button>
+                                <Plus class="mr-2 h-4 w-4" />
+                                Nouveau site
+                            </Button>
+                        </Link>
+                    </template>
+                </ListPageActions>
             </div>
-
-            <DataFilters
-                :fields="filterFields"
-                :values="{ search, type }"
-                :result-count="desktopTypeFiltered.length"
-                @apply="handleApply"
-                @reset="resetFilters"
-            />
 
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable

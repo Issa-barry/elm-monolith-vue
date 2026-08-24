@@ -333,8 +333,18 @@ export async function applyDrawerFilterOption(
     await page.getByTestId('filters-apply').click();
 }
 
-export function getVisibleSearchInput(page: Page): Locator {
-    return page
+/**
+ * Trouve le champ de recherche/texte visible de la page courante.
+ *
+ * Standard UI (AGENTS.md §2) : les pages de liste migrées vers
+ * `DataFilters trigger-only` n'affichent plus leurs champs en barre — ils
+ * vivent dans le drawer Filtres. Sur ces pages, aucun input ne matche tant
+ * que le drawer n'est pas ouvert : on ouvre alors le bouton Filtres de
+ * l'en-tête avant de chercher le champ, pour que ce helper continue de
+ * fonctionner à l'identique pour tous ses appelants (pages migrées ou non).
+ */
+export async function getVisibleSearchInput(page: Page): Promise<Locator> {
+    const direct = page
         .locator(
             // Le testid `filter-inline-*` est aussi posé sur le wrapper <div> des filtres
             // select/multi-select (cf. DataFilters.vue) — restreint à `input` pour ne jamais
@@ -344,6 +354,25 @@ export function getVisibleSearchInput(page: Page): Locator {
             '[data-testid="search-input"]:visible, input[data-testid^="filter-inline-"]:visible, input[placeholder*="rechercher" i]:not([data-testid="global-search"]):visible, input[placeholder*="recherche" i]:not([data-testid="global-search"]):visible',
         )
         .first();
+
+    if (await direct.isVisible({ timeout: 1_000 }).catch(() => false)) {
+        return direct;
+    }
+
+    const filtresBtn = page.getByRole('button', { name: /^filtres/i }).first();
+    if (await filtresBtn.isVisible({ timeout: 1_000 }).catch(() => false)) {
+        await filtresBtn.click();
+        const inDrawer = page
+            .locator(
+                '[data-testid="filters-drawer"] input[type="text"]:visible, [data-testid="filters-drawer"] input[type="search"]:visible',
+            )
+            .first();
+        if (await inDrawer.isVisible({ timeout: 3_000 }).catch(() => false)) {
+            return inDrawer;
+        }
+    }
+
+    return direct;
 }
 
 export async function openRowActions(row: Locator): Promise<void> {
@@ -607,7 +636,7 @@ export async function findUserInList(
     query: string,
 ): Promise<Locator> {
     await page.goto('/backoffice/users');
-    const search = getVisibleSearchInput(page);
+    const search = await getVisibleSearchInput(page);
     await search.fill(query);
     await search.press('Enter');
     const row = page
@@ -623,7 +652,7 @@ export async function findRowByName(
     page: Page,
     name: string,
 ): Promise<Locator> {
-    const search = getVisibleSearchInput(page);
+    const search = await getVisibleSearchInput(page);
     await search.fill(name);
     await search.press('Enter');
     await page.waitForLoadState('networkidle');
@@ -656,7 +685,7 @@ export async function cleanupRowsByPrefix(
     await login(page);
     await page.goto(route);
 
-    const searchInput = getVisibleSearchInput(page);
+    const searchInput = await getVisibleSearchInput(page);
     await searchInput.fill(prefix);
     await searchInput.press('Enter');
     await page.waitForLoadState('networkidle');

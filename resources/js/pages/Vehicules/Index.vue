@@ -2,6 +2,7 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import ListPageActions from '@/components/ListPageActions.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -83,14 +84,8 @@ const { onRowClick, bodyRowPt } = useClickableTableRow<Vehicule>(
     (vehicule) => `/backoffice/vehicules/${vehicule.id}`,
 );
 
-// Mobile — filtrage immédiat
-const mobileSearch = ref('');
-const mobileFilterType = ref('');
-const mobileFilterStatut = ref('');
-const mobileFilterUsage = ref('');
-const mobileFilterAgence = ref('');
-
-// Desktop
+// Filtres — état unique partagé entre le bouton Filtres desktop et mobile
+// (même DataFilters trigger-only des deux côtés, cf. template).
 const search = ref('');
 const filterType = ref<string | null>(null);
 const filterStatut = ref<string | null>(null);
@@ -228,42 +223,6 @@ const vehiculeStats = computed(() => {
     };
 });
 
-const mobileFiltered = computed(() =>
-    props.vehicules.filter((v) => {
-        const q = mobileSearch.value.trim().toLowerCase();
-        const matchSearch =
-            !q ||
-            v.nom_vehicule.toLowerCase().includes(q) ||
-            v.immatriculation.toLowerCase().includes(q) ||
-            v.type_label.toLowerCase().includes(q) ||
-            (v.proprietaire_nom ?? '').toLowerCase().includes(q) ||
-            (v.proprietaire_telephone ?? '')
-                .replace(/\D/g, '')
-                .includes(q.replace(/\D/g, '')) ||
-            (v.agence_nom ?? '').toLowerCase().includes(q) ||
-            (v.equipe_nom ?? '').toLowerCase().includes(q) ||
-            v.capacites.some((c) => String(c.capacite_max).includes(q));
-        const matchType =
-            !mobileFilterType.value || v.type_label === mobileFilterType.value;
-        const matchStatut = !mobileFilterStatut.value
-            ? true
-            : mobileFilterStatut.value === 'actif'
-              ? v.is_active
-              : !v.is_active;
-        const matchUsage =
-            !mobileFilterUsage.value ||
-            matchesUsageFilter(v, mobileFilterUsage.value);
-        const matchAgence =
-            !mobileFilterAgence.value ||
-            (mobileFilterAgence.value === '__none__'
-                ? !v.agence_nom
-                : v.agence_nom === mobileFilterAgence.value);
-        return (
-            matchSearch && matchType && matchStatut && matchUsage && matchAgence
-        );
-    }),
-);
-
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
     { title: 'Véhicules', href: '/backoffice/vehicules' },
@@ -334,67 +293,47 @@ function confirmDelete(v: Vehicule) {
                 <div class="h-8 w-[72px]" />
             </div>
 
-            <!-- Search + filtres mobile -->
-            <div class="space-y-2 px-3 py-2">
-                <div class="relative">
+            <!-- Search + Filtres (même état que le desktop, cf. filterFields) -->
+            <div class="flex items-center gap-2 px-3 py-2">
+                <div class="relative flex-1">
                     <Search
                         class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                     />
                     <input
-                        v-model="mobileSearch"
+                        v-model="search"
                         type="search"
                         placeholder="Rechercher..."
                         class="w-full rounded-lg border bg-background py-2 pr-3 pl-9 text-sm outline-none focus:ring-2 focus:ring-ring"
                     />
                 </div>
-                <div class="flex gap-2">
-                    <select
-                        v-model="mobileFilterType"
-                        class="flex-1 rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    >
-                        <option value="">Tous les types</option>
-                        <option v-for="t in typeOptions" :key="t" :value="t">
-                            {{ t }}
-                        </option>
-                    </select>
-                    <select
-                        v-model="mobileFilterUsage"
-                        class="flex-1 rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    >
-                        <option value="">Tous usages</option>
-                        <option value="vente">Vente</option>
-                        <option value="logistique">Logistique</option>
-                        <option value="aucun">Usage non défini</option>
-                    </select>
-                    <select
-                        v-model="mobileFilterStatut"
-                        class="flex-1 rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    >
-                        <option value="">Tous les statuts</option>
-                        <option value="actif">Actif</option>
-                        <option value="inactif">Inactif</option>
-                    </select>
-                    <select
-                        v-model="mobileFilterAgence"
-                        class="flex-1 rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    >
-                        <option value="">Toutes agences</option>
-                        <option
-                            v-for="agence in agenceOptions"
-                            :key="agence"
-                            :value="agence"
-                        >
-                            {{ agence }}
-                        </option>
-                        <option value="__none__">Non rattachée</option>
-                    </select>
-                </div>
+                <DataFilters
+                    trigger-only
+                    :values="{
+                        nom: search,
+                        type: filterType ?? '',
+                        usage: filterUsage ?? '',
+                        statut: filterStatut ?? '',
+                        agence: filterAgence ?? '',
+                    }"
+                    :fields="filterFields"
+                    :result-count="filteredVehicules.length"
+                    @apply="
+                        (vals) => {
+                            search = (vals.nom as string) || '';
+                            filterType = (vals.type as string) || null;
+                            filterUsage = (vals.usage as string) || null;
+                            filterStatut = (vals.statut as string) || null;
+                            filterAgence = (vals.agence as string) || null;
+                        }
+                    "
+                    @reset="resetFilters"
+                />
             </div>
 
             <!-- Card list -->
             <div class="divide-y">
                 <div
-                    v-for="v in mobileFiltered"
+                    v-for="v in filteredVehicules"
                     :key="v.id"
                     class="flex items-center gap-3.5 px-4 py-3.5 transition-colors active:bg-muted/40"
                 >
@@ -500,7 +439,7 @@ function confirmDelete(v: Vehicule) {
 
             <!-- Empty state -->
             <div
-                v-if="mobileFiltered.length === 0"
+                v-if="filteredVehicules.length === 0"
                 class="flex flex-col items-center gap-3 py-16 text-muted-foreground"
             >
                 <Car class="h-12 w-12 opacity-30" />
@@ -522,35 +461,66 @@ function confirmDelete(v: Vehicule) {
                         }}
                     </p>
                 </div>
-                <DropdownMenu v-if="can('imports-flotte.create')">
-                    <DropdownMenuTrigger as-child>
-                        <Button variant="outline">
-                            <Upload class="mr-2 h-4 w-4" />
-                            Importer
-                            <ChevronDown class="ml-2 h-3.5 w-3.5" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" class="w-56">
-                        <DropdownMenuItem as-child>
-                            <Link
-                                href="/settings/imports-flotte/nouveau"
-                                class="flex w-full items-center gap-2"
-                            >
-                                <Upload class="h-4 w-4" />
-                                Importer
-                            </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem as-child>
-                            <a
-                                href="/settings/imports-flotte/modele"
-                                class="flex w-full items-center gap-2"
-                            >
-                                <Download class="h-4 w-4" />
-                                Télécharger le modèle
-                            </a>
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                <ListPageActions>
+                    <template v-if="can('imports-flotte.create')" #import>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger as-child>
+                                <Button variant="outline">
+                                    <Upload class="mr-2 h-4 w-4" />
+                                    Importer
+                                    <ChevronDown class="ml-2 h-3.5 w-3.5" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" class="w-56">
+                                <DropdownMenuItem as-child>
+                                    <Link
+                                        href="/settings/imports-flotte/nouveau"
+                                        class="flex w-full items-center gap-2"
+                                    >
+                                        <Upload class="h-4 w-4" />
+                                        Importer
+                                    </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem as-child>
+                                    <a
+                                        href="/settings/imports-flotte/modele"
+                                        class="flex w-full items-center gap-2"
+                                    >
+                                        <Download class="h-4 w-4" />
+                                        Télécharger le modèle
+                                    </a>
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </template>
+                    <template #filters>
+                        <DataFilters
+                            trigger-only
+                            :values="{
+                                nom: search,
+                                type: filterType ?? '',
+                                usage: filterUsage ?? '',
+                                statut: filterStatut ?? '',
+                                agence: filterAgence ?? '',
+                            }"
+                            :fields="filterFields"
+                            :result-count="filteredVehicules.length"
+                            @apply="
+                                (vals) => {
+                                    search = (vals.nom as string) || '';
+                                    filterType = (vals.type as string) || null;
+                                    filterUsage =
+                                        (vals.usage as string) || null;
+                                    filterStatut =
+                                        (vals.statut as string) || null;
+                                    filterAgence =
+                                        (vals.agence as string) || null;
+                                }
+                            "
+                            @reset="resetFilters"
+                        />
+                    </template>
+                </ListPageActions>
             </div>
 
             <!-- Mini stats — vue d'ensemble indépendante des filtres -->
@@ -635,29 +605,6 @@ function confirmDelete(v: Vehicule) {
                     <span class="text-muted-foreground">{{ t.count }}</span>
                 </span>
             </div>
-
-            <!-- Filtres -->
-            <DataFilters
-                :values="{
-                    nom: search,
-                    type: filterType ?? '',
-                    usage: filterUsage ?? '',
-                    statut: filterStatut ?? '',
-                    agence: filterAgence ?? '',
-                }"
-                :fields="filterFields"
-                :result-count="filteredVehicules.length"
-                @apply="
-                    (vals) => {
-                        search = (vals.nom as string) || '';
-                        filterType = (vals.type as string) || null;
-                        filterUsage = (vals.usage as string) || null;
-                        filterStatut = (vals.statut as string) || null;
-                        filterAgence = (vals.agence as string) || null;
-                    }
-                "
-                @reset="resetFilters"
-            />
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">
