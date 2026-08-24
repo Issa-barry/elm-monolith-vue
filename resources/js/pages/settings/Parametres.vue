@@ -31,7 +31,7 @@ const toast = useToast();
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Paramètres', href: '/settings/profile' },
-    { title: 'Paramétrage système', href: edit().url },
+    { title: 'Imports et modèles', href: edit().url },
 ];
 
 const groupeLabels: Record<string, string> = {
@@ -51,28 +51,15 @@ const cleLabels: Record<string, string> = {
     cashback_montant_gain: 'Montant du cashback versé (GNF)',
 };
 
-const importTemplates = [
-    {
-        key: 'produits',
-        title: 'Template Produits',
-        description: 'Champs de création des produits.',
-    },
-    {
-        key: 'sites',
-        title: 'Template Sites',
-        description: 'Champs de création des sites.',
-    },
-    {
-        key: 'users',
-        title: 'Template Utilisateurs',
-        description: 'Champs de création des utilisateurs (sans mot de passe).',
-    },
-    {
-        key: 'clients',
-        title: 'Template Clients',
-        description: 'Champs de création des clients.',
-    },
-];
+const importItems = computed(() => [
+    { key: 'produits', title: 'Modèle Produits', action: 'download' },
+    { key: 'sites', title: 'Modèle Sites', action: 'download' },
+    { key: 'users', title: 'Modèle Utilisateurs', action: 'download' },
+    { key: 'clients', title: 'Modèle Clients', action: 'download' },
+    ...(can('imports-flotte.create')
+        ? [{ key: 'flotte', title: 'Import flotte', action: 'import' }]
+        : []),
+]);
 
 const grouped = computed(() => {
     const map: Record<string, Parametre[]> = {};
@@ -121,13 +108,13 @@ function toggleBoolean(p: Parametre) {
 
 <template>
     <AppLayout :breadcrumbs="breadcrumbs">
-        <Head title="Paramétrage système" />
+        <Head title="Imports et modèles" />
 
         <SettingsLayout>
             <div class="space-y-8">
                 <HeadingSmall
-                    title="Paramétrage système"
-                    description="Configurez les paramètres globaux de l'application"
+                    title="Imports et modèles"
+                    description="Téléchargez les modèles et importez vos données."
                 />
 
                 <div class="overflow-hidden rounded-xl border bg-card">
@@ -136,65 +123,38 @@ function toggleBoolean(p: Parametre) {
                     >
                         <Download class="h-4 w-4 text-muted-foreground" />
                         <h3 class="text-sm font-semibold text-foreground">
-                            Templates d'import
+                            Imports et modèles Excel
                         </h3>
                     </div>
                     <div class="divide-y">
                         <div
-                            v-for="template in importTemplates"
-                            :key="template.key"
+                            v-for="item in importItems"
+                            :key="item.key"
                             class="flex items-center justify-between gap-4 px-5 py-4"
                         >
                             <div class="min-w-0 flex-1">
                                 <p class="text-sm font-medium">
-                                    {{ template.title }}
-                                </p>
-                                <p class="mt-0.5 text-xs text-muted-foreground">
-                                    {{ template.description }}
+                                    {{ item.title }}
                                 </p>
                             </div>
                             <a
-                                :href="`/settings/parametres/templates/${template.key}`"
+                                v-if="item.action === 'download'"
+                                :href="`/settings/parametres/templates/${item.key}`"
                                 class="inline-flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted"
                             >
                                 <Download class="h-3.5 w-3.5" />
                                 Télécharger
                             </a>
+                            <Link
+                                v-else
+                                href="/settings/imports-flotte/nouveau"
+                            >
+                                <Button size="sm" variant="outline">
+                                    <Upload class="mr-1.5 h-3.5 w-3.5" />
+                                    Importer
+                                </Button>
+                            </Link>
                         </div>
-                    </div>
-                </div>
-
-                <div
-                    v-if="can('imports-flotte.create')"
-                    class="overflow-hidden rounded-xl border bg-card"
-                >
-                    <div
-                        class="flex items-center gap-2 border-b bg-muted/30 px-5 py-3"
-                    >
-                        <Upload class="h-4 w-4 text-muted-foreground" />
-                        <h3 class="text-sm font-semibold text-foreground">
-                            Import en masse
-                        </h3>
-                    </div>
-                    <div
-                        class="flex items-center justify-between gap-4 px-5 py-4"
-                    >
-                        <div class="min-w-0 flex-1">
-                            <p class="text-sm font-medium">
-                                Propriétaires, véhicules et livreurs
-                            </p>
-                            <p class="mt-0.5 text-xs text-muted-foreground">
-                                Créez plusieurs propriétaires, véhicules et
-                                équipes de livraison en une fois à partir d'un
-                                fichier Excel.
-                            </p>
-                        </div>
-                        <Link href="/settings/imports-flotte/nouveau">
-                            <Button size="sm" variant="outline">
-                                <Upload class="mr-1.5 h-3.5 w-3.5" />
-                                Importer
-                            </Button>
-                        </Link>
                     </div>
                 </div>
 

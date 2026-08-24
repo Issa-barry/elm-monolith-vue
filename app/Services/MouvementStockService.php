@@ -8,6 +8,7 @@ use App\Models\TransfertLigne;
 use App\Models\TransfertLogistique;
 use App\Models\VarianteStock;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Gestion des mouvements de stock, ventilés par site. Point d'entrée unique
@@ -27,9 +28,24 @@ class MouvementStockService
     /**
      * Primitive unique de mutation du stock par site. Verrouille (lockForUpdate)
      * la ligne VarianteStock concernée — tous les appelants s'exécutent déjà dans
-     * une DB::transaction — l'initialise à 0 si absente, applique le delta (jamais
-     * en dessous de 0), resynchronise Produit::qte_stock, et trace un
-     * MouvementStock avec stock_avant/stock_apres complets.
+     * une DB::transaction — l'initialise à 0 si absente, applique le delta,
+     * resynchronise Produit::qte_stock, et trace un MouvementStock avec
+     * stock_avant/stock_apres complets.
+     *
+     * $allowNegative gouverne ce qui se passe quand une sortie dépasse le stock
+     * disponible : soit elle est refusée EN ENTIER avant toute écriture (défaut —
+     * aucun mouvement créé, stock inchangé), soit elle est appliquée EN ENTIER,
+     * quitte à faire passer le stock sous 0 (cf. Produit::autorise_vente_stock_negatif).
+     * Il n'existe plus de troisième voie : jamais de clamp silencieux à 0 qui
+     * n'appliquerait qu'une partie du delta demandé (cf. audit stock du 23/08/2026 —
+     * un mouvement dont le calcul stock_avant/delta/stock_apres ne correspond plus
+     * à la réalité rend le journal non réconciliable). Le contrôle est fait ICI,
+     * sous le verrou — jamais seulement par un pré-contrôle dans l'appelant, qui
+     * laisserait une fenêtre de concurrence (cf. faille TOCTOU relevée sur
+     * ProduitController::ajusterStock() avant ce correctif) ou pourrait être
+     * contourné par un appel direct au service.
+     *
+     * @throws ValidationException si la sortie dépasse le disponible et $allowNegative est faux
      */
     public static function appliquer(
         string $varianteId,
@@ -41,11 +57,26 @@ class MouvementStockService
         ?string $sourceId = null,
         ?string $userId = null,
         ?string $notes = null,
+        bool $allowNegative = false,
     ): MouvementStock {
         $varianteStock = VarianteStock::where('produit_variante_id', $varianteId)
             ->where('site_id', $siteId)
             ->lockForUpdate()
             ->first();
+
+        $stockAvant = $varianteStock?->qte_stock ?? 0;
+        $delta = $type === 'entree' ? $quantite : -$quantite;
+        $stockApres = $stockAvant + $delta;
+
+        // Contrôle AVANT toute écriture : un refus ne doit laisser AUCUNE trace, pas même une
+        // ligne VarianteStock nouvellement matérialisée à 0 pour une variante/site qui n'en
+        // avait encore aucune — sinon un refus aurait le même effet de bord qu'un succès partiel
+        // (transforme silencieusement "non initialisé" en "0 explicite"), pour rien.
+        if ($type === 'sortie' && $stockApres < 0 && ! $allowNegative) {
+            throw ValidationException::withMessages([
+                'stock' => "Stock insuffisant : {$quantite} demandés, {$stockAvant} disponibles.",
+            ]);
+        }
 
         if (! $varianteStock) {
             $varianteStock = VarianteStock::create([
@@ -55,10 +86,6 @@ class MouvementStockService
                 'qte_stock' => 0,
             ]);
         }
-
-        $stockAvant = $varianteStock->qte_stock;
-        $delta = $type === 'entree' ? $quantite : -$quantite;
-        $stockApres = max(0, $stockAvant + $delta);
 
         $varianteStock->update(['qte_stock' => $stockApres]);
 
@@ -208,6 +235,12 @@ class MouvementStockService
      * (chargement logistique) et PdvCheckoutService (vente comptoir) — pas par les
      * transferts inter-sites, qui suivent un timing différent (voir
      * enregistrerSortieSource()/enregistrerEntreeDestination() ci-dessus).
+     *
+     * $allowNegative : cf. appliquer(). Réservé aux ventes (PDV/commande vente) — les
+     * appelants décident au cas par cas selon Produit::autorise_vente_stock_negatif,
+     * jamais un défaut implicite ici.
+     *
+     * @throws ValidationException si la sortie dépasse le disponible et $allowNegative est faux
      */
     public static function sortirStock(
         string $varianteId,
@@ -217,6 +250,7 @@ class MouvementStockService
         string $sourceType,
         string $sourceId,
         ?string $userId,
+        bool $allowNegative = false,
     ): void {
         if ($quantite <= 0) {
             return;
@@ -241,6 +275,7 @@ class MouvementStockService
             sourceType: $sourceType,
             sourceId: $sourceId,
             userId: $userId,
+            allowNegative: $allowNegative,
         );
     }
 

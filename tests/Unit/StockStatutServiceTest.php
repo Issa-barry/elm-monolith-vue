@@ -37,6 +37,19 @@ class StockStatutServiceTest extends TestCase
         $this->assertSame(StockStatut::RUPTURE, $this->service->statutPour(0, 10, false));
     }
 
+    /**
+     * Depuis le correctif du 23/08/2026 (politique globale "Autoriser les ventes sans stock
+     * disponible"), une quantité strictement négative est un état distinct de RUPTURE — jamais
+     * la même valeur affichée artificiellement comme 0 (cf. MouvementStockService::appliquer(),
+     * qui n'applique plus de clamp).
+     */
+    public function test_qte_negative_est_stock_negatif_jamais_rupture(): void
+    {
+        $this->assertSame(StockStatut::STOCK_NEGATIF, $this->service->statutPour(-1, 10, true));
+        $this->assertSame(StockStatut::STOCK_NEGATIF, $this->service->statutPour(-250, 10, false));
+        $this->assertNotSame(StockStatut::RUPTURE, $this->service->statutPour(-1, 10, true));
+    }
+
     public function test_rupture_est_independante_du_choix_alerte(): void
     {
         // La rupture est un fait de disponibilité, pas une préférence de notification —

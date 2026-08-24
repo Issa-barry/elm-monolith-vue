@@ -9,6 +9,7 @@ use App\Enums\StatutCommandeVente;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
 use App\Models\FactureVente;
+use App\Models\Parametre;
 use App\Models\Produit;
 use App\Models\ProduitVariante;
 use App\Models\User;
@@ -58,7 +59,7 @@ class PdvCheckoutService
             );
 
             $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null);
-            [$lignesData, $total, $stockTrackedVarianteIds] = $this->buildLignes($data['lignes'], $user->organization_id, (string) $siteId, $context->modeTarification, $context->categorieTarifaireVehicule);
+            [$lignesData, $total, $stockTrackedVarianteIds, $autoriseVenteStockNegatif] = $this->buildLignes($data['lignes'], $user->organization_id, (string) $siteId, $context->modeTarification, $context->categorieTarifaireVehicule);
 
             $commande = CommandeVente::create([
                 'organization_id' => $user->organization_id,
@@ -90,6 +91,7 @@ class PdvCheckoutService
                     sourceType: CommandeVenteLigne::class,
                     sourceId: $ligneModel->id,
                     userId: $user->id,
+                    allowNegative: $autoriseVenteStockNegatif,
                 );
             }
 
@@ -210,6 +212,11 @@ class PdvCheckoutService
             ->get()
             ->keyBy('produit_variante_id');
 
+        // Politique globale d'organisation (Paramètres > Paramètres produits, DSI 23/08/2026) —
+        // jamais un réglage par produit : soit toutes les ventes de l'organisation peuvent
+        // dépasser le disponible, soit aucune. Lue une seule fois, jamais par ligne.
+        $autoriseVenteStockNegatif = Parametre::isVentesAutoriseesSansStock($orgId);
+
         $lignesData = [];
         $stockTrackedVarianteIds = [];
         $total = 0;
@@ -226,7 +233,10 @@ class PdvCheckoutService
                 // sur aucune agence en particulier) — cf. MouvementStockService::quantiteDisponible().
                 $disponible = (int) ($stocksSite->get($variante->id)?->qte_stock ?? 0);
 
-                if ($disponible < $qte) {
+                // La vente continue même sous le disponible si la politique globale l'autorise —
+                // le stock devient négatif au lieu d'être refusé, jamais de clamp silencieux
+                // (cf. MouvementStockService::appliquer()).
+                if (! $autoriseVenteStockNegatif && $disponible < $qte) {
                     throw ValidationException::withMessages([
                         'lignes' => "Stock insuffisant pour « {$produit->nom} » sur ce site (disponible : {$disponible}, demandé : {$qte}).",
                     ]);
@@ -249,6 +259,6 @@ class PdvCheckoutService
             $total += $totalLigne;
         }
 
-        return [$lignesData, $total, $stockTrackedVarianteIds];
+        return [$lignesData, $total, $stockTrackedVarianteIds, $autoriseVenteStockNegatif];
     }
 }

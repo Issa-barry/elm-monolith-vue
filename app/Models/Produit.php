@@ -149,7 +149,7 @@ class Produit extends Model
 
         return app(StockStatutService::class)
             ->detailParVarianteEtSite($this)
-            ->contains(fn (array $d) => $d['statut'] === StockStatut::RUPTURE->value);
+            ->contains(fn (array $d) => in_array($d['statut'], [StockStatut::RUPTURE->value, StockStatut::STOCK_NEGATIF->value], true));
     }
 
     /**

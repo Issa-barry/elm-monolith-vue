@@ -58,6 +58,13 @@ class CommandeVenteCommissionEligibiliteTest extends TestCase
         // explicitement ici pour ne jamais dépendre de ce défaut.
         Parametre::setDeclencheurCommissionVente($this->org->id, DeclencheurCommissionVente::CHARGEMENT_VALIDE);
 
+        // Ce fichier teste l'éligibilité aux commissions, pas la disponibilité du stock — le
+        // produit par défaut (type 'materiel') n'est pas vendable, donc jamais compté par
+        // CommandeVenteService::siteAutoriseNouvelleCommande() : sans cette politique
+        // permissive, store() bloquerait la création dès la première ligne (24/08/2026,
+        // contrôles de stock à la création/modification/chargement).
+        Parametre::setVentesAutoriserStockNegatif($this->org->id, true);
+
         $this->defaultSite = Site::create([
             'organization_id' => $this->org->id,
             'nom' => 'Site Principal',
@@ -189,6 +196,20 @@ class CommandeVenteCommissionEligibiliteTest extends TestCase
      */
     private function creerCommande(Vehicule $vehicule, Produit $produit): CommandeVente
     {
+        // Le chargement (CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS, ci-dessous) décrémente
+        // désormais réellement le stock du site — refusé depuis le 23/08/2026 si insuffisant
+        // (suppression du clamp silencieux). Ce fichier teste l'éligibilité aux commissions,
+        // pas la disponibilité du stock : on seed largement au-delà des 100 chargées, sur TOUS
+        // les sites de l'organisation — initOrgAndUser() attache déjà un site par défaut en
+        // interne, et $this->defaultSite ci-dessus en attache un second également marqué
+        // is_default=true (pattern préexistant à ce fichier) : lequel des deux
+        // getUserSiteModel() résout réellement pour la commande créée via ventes.store n'est
+        // pas garanti, donc on couvre les deux plutôt que de fiabiliser cette ambiguïté
+        // préexistante, hors périmètre de ce chantier stock.
+        Site::where('organization_id', $this->org->id)->get()->each(
+            fn (Site $site) => $this->seedVarianteStockSuffisant($produit->variantePrincipale()->first(), $site)
+        );
+
         $this->actingAs($this->user)
             ->post(route('ventes.store'), [
                 'vehicule_id' => $vehicule->id,

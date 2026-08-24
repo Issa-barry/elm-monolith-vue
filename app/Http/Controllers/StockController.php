@@ -128,7 +128,8 @@ class StockController extends Controller
         }
 
         match ($filters['stock_statut']) {
-            StockStatut::RUPTURE->value => $query->whereRaw("{$quantite} <= 0"),
+            StockStatut::STOCK_NEGATIF->value => $query->whereRaw("{$quantite} < 0"),
+            StockStatut::RUPTURE->value => $query->whereRaw("{$quantite} = 0"),
             StockStatut::STOCK_FAIBLE->value => $query
                 ->where('p.alerte_stock_active', true)
                 ->whereRaw("{$quantite} > 0")

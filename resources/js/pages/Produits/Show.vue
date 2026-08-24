@@ -129,11 +129,18 @@ interface StockMouvement {
     stock_avant: number | null;
     stock_apres: number | null;
     notes: string | null;
+    motif_type: string;
+    motif_label: string;
     site_nom: string | null;
     site_code: string | null;
     created_at: string | null;
     createur_nom: string | null;
     is_initial?: boolean;
+}
+
+interface MotifOption {
+    value: string;
+    label: string;
 }
 
 interface AuditEntry {
@@ -161,6 +168,7 @@ interface VarianteStockEntry {
 const props = defineProps<{
     produit: Produit;
     mouvements: StockMouvement[];
+    motifs_disponibles: MotifOption[];
     historiques: AuditEntry[];
     can_ajuster_stock: boolean;
     can_augmenter_stock: boolean;
@@ -939,7 +947,7 @@ const ajustements = props.mouvements.map((m) => ({
                                 <td
                                     class="py-2.5 pl-6 text-xs text-muted-foreground"
                                 >
-                                    {{ m.notes || '—' }}
+                                    {{ m.motif_label || '—' }}
                                 </td>
                             </tr>
                         </tbody>
@@ -952,6 +960,7 @@ const ajustements = props.mouvements.map((m) => ({
             v-model:visible="showHistoriqueModal"
             :ajustements="ajustements"
             :modifications="historiques"
+            :motif-options="motifs_disponibles"
             :title="`Historique — ${produit.nom}`"
         />
         <AjusterStockModal

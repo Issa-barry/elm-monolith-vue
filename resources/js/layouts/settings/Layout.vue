@@ -22,34 +22,65 @@ const isAdmin = computed(
     () => hasRole('super_admin') || hasRole('admin_entreprise'),
 );
 
-const sidebarNavItems = computed((): NavItem[] => {
-    const items: NavItem[] = [
-        { title: 'Profil', href: editProfile() },
-        { title: 'Mot de passe', href: editPassword() },
-        { title: 'Double authentification', href: show() },
-        { title: 'Apparence', href: editAppearance() },
+interface SidebarNavGroup {
+    title: string;
+    items: NavItem[];
+}
+
+const sidebarNavGroups = computed((): SidebarNavGroup[] => {
+    const groups: SidebarNavGroup[] = [
+        {
+            title: 'Mon compte',
+            items: [
+                { title: 'Profil', href: editProfile() },
+                { title: 'Mot de passe', href: editPassword() },
+                { title: 'Double authentification', href: show() },
+                { title: 'Apparence', href: editAppearance() },
+            ],
+        },
     ];
 
     if (isAdmin.value) {
-        items.push(
-            { title: 'Organisation', href: editOrganisation() },
-            { title: 'Roles & Permissions', href: '/backoffice/roles' },
-        );
+        groups.push({
+            title: 'Organisation',
+            items: [
+                {
+                    title: "Informations de l'organisation",
+                    href: editOrganisation(),
+                },
+                { title: 'Rôles et permissions', href: '/backoffice/roles' },
+            ],
+        });
     }
 
     if (can('parametres.update')) {
-        items.push(
-            { title: 'Parametrage systeme', href: editParametres().url },
-            { title: 'Paramètres produits', href: '/settings/produits' },
-            { title: 'Paramètres dépenses', href: '/settings/depenses' },
-            { title: 'Paramètres ventes', href: '/settings/ventes' },
-            { title: 'Paramètres commissions', href: '/settings/commissions' },
-            { title: 'Modules metier', href: '/settings/modules' },
-            { title: 'Thème', href: '/settings/theme' },
+        groups.push(
+            {
+                title: 'Gestion',
+                items: [
+                    { title: 'Produits', href: '/settings/produits' },
+                    {
+                        title: 'Validation des dépenses',
+                        href: '/settings/depenses',
+                    },
+                    { title: 'Ventes', href: '/settings/ventes' },
+                    { title: 'Commissions', href: '/settings/commissions' },
+                    { title: 'Applications', href: '/settings/modules' },
+                ],
+            },
+            {
+                title: 'Administration',
+                items: [
+                    {
+                        title: 'Imports et modèles',
+                        href: editParametres().url,
+                    },
+                ],
+            },
         );
     }
 
-    return items;
+    return groups;
 });
 
 const currentPath = typeof window !== undefined ? window.location.pathname : '';
@@ -67,21 +98,37 @@ const currentPath = typeof window !== undefined ? window.location.pathname : '';
                 <nav
                     class="flex gap-1 overflow-x-auto pb-2 sm:flex-col sm:space-y-1 sm:overflow-x-visible sm:pb-0"
                 >
-                    <Button
-                        v-for="item in sidebarNavItems"
-                        :key="toUrl(item.href)"
-                        variant="ghost"
-                        :class="[
-                            'shrink-0 justify-start sm:w-full',
-                            { 'bg-muted': urlIsActive(item.href, currentPath) },
-                        ]"
-                        as-child
+                    <div
+                        v-for="group in sidebarNavGroups"
+                        :key="group.title"
+                        class="flex shrink-0 gap-1 sm:mt-3 sm:flex-col sm:gap-0.5"
                     >
-                        <Link :href="item.href">
-                            <component :is="item.icon" class="h-4 w-4" />
-                            {{ item.title }}
-                        </Link>
-                    </Button>
+                        <p
+                            class="hidden px-2 pb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase sm:block"
+                        >
+                            {{ group.title }}
+                        </p>
+                        <Button
+                            v-for="item in group.items"
+                            :key="toUrl(item.href)"
+                            variant="ghost"
+                            :class="[
+                                'shrink-0 justify-start sm:w-full',
+                                {
+                                    'bg-muted': urlIsActive(
+                                        item.href,
+                                        currentPath,
+                                    ),
+                                },
+                            ]"
+                            as-child
+                        >
+                            <Link :href="item.href">
+                                <component :is="item.icon" class="h-4 w-4" />
+                                {{ item.title }}
+                            </Link>
+                        </Button>
+                    </div>
                 </nav>
             </aside>
 

@@ -20,6 +20,7 @@ use App\Models\VarianteStock;
 use App\Services\AuditLogService;
 use App\Services\DroitAjustementStockService;
 use App\Services\MediaService;
+use App\Services\MouvementStockMotifService;
 use App\Services\MouvementStockService;
 use App\Services\ProduitService;
 use App\Services\StockStatutService;
@@ -396,11 +397,16 @@ class ProduitController extends Controller
             })
             ->values();
 
-        $mouvements = MouvementStock::whereIn('produit_variante_id', $varianteIds)
+        $mouvementsBaseQuery = MouvementStock::whereIn('produit_variante_id', $varianteIds);
+        $motifsDisponibles = MouvementStockMotifService::optionsDisponibles(clone $mouvementsBaseQuery);
+
+        $mouvementsCollection = (clone $mouvementsBaseQuery)
             ->with(['createur:id,personne_id', 'createur.personne', 'site:id,nom,code', 'variante:id,combo_hash'])
             ->orderByDesc('created_at')
             ->take(100)
-            ->get()
+            ->get();
+
+        $mouvements = MouvementStockMotifService::annoter($mouvementsCollection)
             ->map(fn (MouvementStock $m) => [
                 'id' => $m->id,
                 'type' => $m->type,
@@ -408,6 +414,8 @@ class ProduitController extends Controller
                 'stock_avant' => $m->stock_avant,
                 'stock_apres' => $m->stock_apres,
                 'notes' => $m->notes,
+                'motif_type' => $m->motif_type,
+                'motif_label' => $m->motif_label,
                 'site_nom' => $m->site?->nom,
                 'site_code' => $m->site?->code,
                 'created_at' => $m->created_at?->toISOString(),
@@ -431,12 +439,15 @@ class ProduitController extends Controller
                 'stock_avant' => 0,
                 'stock_apres' => (int) $creation->new_values['qte_stock'],
                 'notes' => 'Stock initial — création du produit',
+                'motif_type' => 'stock_initial',
+                'motif_label' => 'Stock initial',
                 'site_nom' => null,
                 'site_code' => null,
                 'created_at' => $creation->created_at?->toISOString(),
                 'createur_nom' => $creation->actor_name_snapshot,
                 'is_initial' => true,
             ];
+            $motifsDisponibles[] = ['value' => 'stock_initial', 'label' => 'Stock initial'];
         }
 
         $variantePrincipale = $produit->variantes->firstWhere('is_default', true) ?? $produit->variantes->first();
@@ -522,6 +533,7 @@ class ProduitController extends Controller
                 ]),
             ],
             'mouvements' => collect($mouvements),
+            'motifs_disponibles' => $motifsDisponibles,
             'historiques' => $this->loadModifications($produit),
             'can_ajuster_stock' => $canAjuster,
             'can_augmenter_stock' => $canAugmenter,
@@ -553,13 +565,25 @@ class ProduitController extends Controller
             $sitesConsultables = collect([$siteId]);
         }
 
-        $ajustements = MouvementStock::whereIn('produit_variante_id', $varianteIds)
+        $baseQuery = MouvementStock::whereIn('produit_variante_id', $varianteIds)
             ->where('organization_id', $produit->organization_id)
-            ->whereIn('site_id', $sitesConsultables)
+            ->whereIn('site_id', $sitesConsultables);
+
+        $motifsDisponibles = MouvementStockMotifService::optionsDisponibles(clone $baseQuery);
+
+        $motif = $request->string('motif')->trim()->toString();
+        $query = clone $baseQuery;
+        if ($motif !== '') {
+            $query = MouvementStockMotifService::appliquerFiltre($query, $motif);
+        }
+
+        $mouvements = $query
             ->with(['createur:id,personne_id', 'createur.personne', 'site:id,nom,code'])
             ->orderByDesc('created_at')
             ->take(200)
-            ->get()
+            ->get();
+
+        $ajustements = MouvementStockMotifService::annoter($mouvements)
             ->map(fn (MouvementStock $m) => [
                 'id' => $m->id,
                 'type' => $m->type,
@@ -567,6 +591,8 @@ class ProduitController extends Controller
                 'stock_avant' => $m->stock_avant,
                 'stock_apres' => $m->stock_apres,
                 'notes' => $m->notes,
+                'motif_type' => $m->motif_type,
+                'motif_label' => $m->motif_label,
                 'site_nom' => $m->site?->nom,
                 'site_code' => $m->site?->code,
                 'createur_nom' => $m->createur
@@ -578,6 +604,7 @@ class ProduitController extends Controller
         return response()->json([
             'ajustements' => $ajustements,
             'modifications' => $this->loadModifications($produit),
+            'motifs_disponibles' => $motifsDisponibles,
         ]);
     }
 

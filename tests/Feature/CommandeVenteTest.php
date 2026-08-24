@@ -33,6 +33,11 @@ class CommandeVenteTest extends TestCase
         parent::setUp();
         $this->initOrgAndUser(['ventes.read', 'ventes.create', 'ventes.update', 'ventes.delete']);
 
+        // Ce fichier ne teste pas la disponibilité du stock — évite que le nouveau contrôle de
+        // CommandeVenteController::store() (23/08/2026, cf. CommandeVenteService::
+        // siteAutoriseNouvelleCommande()) ne bloque des commandes de test sans rapport avec le stock.
+        Parametre::setVentesAutoriserStockNegatif($this->org->id, true);
+
         // Attacher un site par défaut pour passer le middleware RequireSiteAssigned
         $this->defaultSite = Site::create([
             'organization_id' => $this->org->id,

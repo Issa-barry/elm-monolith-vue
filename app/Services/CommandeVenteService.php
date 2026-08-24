@@ -10,6 +10,8 @@ use App\Enums\StatutFactureVente;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
 use App\Models\FactureVente;
+use App\Models\Parametre;
+use App\Models\ProduitVariante;
 use App\Services\Comptabilite\VenteComptabilisationService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +20,25 @@ use Illuminate\Validation\ValidationException;
 
 class CommandeVenteService
 {
+    /**
+     * Décide si une NOUVELLE commande peut être créée pour ce site — bouton « Nouvelle
+     * commande » de la page Ventes et route de création elle-même (les deux appellent cette
+     * même méthode, cf. CommandeVenteController::index()/create()/store()). Toujours vrai si
+     * la politique globale autorise la vente sans stock (Parametre::
+     * isVentesAutoriseesSansStock()) ; sinon faux UNIQUEMENT si le site n'a absolument aucun
+     * stock vendable (total = 0) — un garde-fou volontairement grossier ("ce site n'a rien à
+     * vendre"), pas une garantie ligne par ligne : le contrôle fin par variante reste fait au
+     * moment réel de la vente (PDV, chargement de commande), jamais dupliqué ici.
+     */
+    public static function siteAutoriseNouvelleCommande(string $orgId, string $siteId): bool
+    {
+        if (Parametre::isVentesAutoriseesSansStock($orgId)) {
+            return true;
+        }
+
+        return app(StockStatutService::class)->stockTotalVendableSite($orgId, $siteId) !== 0;
+    }
+
     /**
      * Workflow : BROUILLON → A_CHARGER → CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS → LIVREE → CLOTUREE
      *            ↘ ANNULEE (depuis BROUILLON ou A_CHARGER seulement)
@@ -177,8 +198,13 @@ class CommandeVenteService
         DB::transaction(function () use ($commande, $lignesData) {
             self::appliquerQuantitesChargees($commande, $lignesData);
             self::recalculerTotaux($commande);
-            self::decrementerStock($commande);
+            // validerPreconditions() (→ checkDisponibiliteStock()) DOIT s'exécuter avant
+            // decrementerStock() : sinon le stock serait déjà décrémenté (ou l'exception déjà
+            // levée depuis l'intérieur de MouvementStockService::appliquer(), sans jamais
+            // atteindre ce contrôle) avant même d'avoir pu vérifier la disponibilité ligne par
+            // ligne avec un message d'erreur groupé.
             self::validerPreconditions($commande->fresh(), StatutCommandeVente::LIVRAISON_EN_COURS);
+            self::decrementerStock($commande);
 
             $commande->update([
                 'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
@@ -271,13 +297,28 @@ class CommandeVenteService
      * la sortie physique de stock a lieu que le véhicule soit pris en charge
      * par l'usine ou non. Idempotent : ne redécrémente jamais une ligne déjà
      * traitée (le workflow ne repasse de toute façon jamais par ce statut).
+     *
+     * Ignore les lignes dont le produit ne gère pas de stock (type service) — même
+     * convention que PdvCheckoutService::buildLignes(), qui ne les fait jamais transiter
+     * par MouvementStockService.
+     *
+     * allowNegative (cf. MouvementStockService::appliquer()) suit la politique globale
+     * d'organisation (Parametre::isVentesAutoriseesSansStock()), lue une seule fois — jamais
+     * par produit : c'est checkDisponibiliteStock() qui a déjà statué, en amont, sur ce qui
+     * est autorisé.
      */
     private static function decrementerStock(CommandeVente $commande): void
     {
-        $commande->load('lignes');
+        $commande->load('lignes.variante.produit.produitType');
         $userId = Auth::id();
+        $autoriseVenteStockNegatif = Parametre::isVentesAutoriseesSansStock($commande->organization_id);
 
         foreach ($commande->lignes as $ligne) {
+            $produit = $ligne->variante?->produit;
+            if (! $produit?->produitType?->gere_stock) {
+                continue;
+            }
+
             $quantite = $ligne->quantite_chargee ?? $ligne->quantite_demandee;
 
             MouvementStockService::sortirStock(
@@ -288,6 +329,7 @@ class CommandeVenteService
                 sourceType: CommandeVenteLigne::class,
                 sourceId: $ligne->id,
                 userId: $userId,
+                allowNegative: $autoriseVenteStockNegatif,
             );
         }
     }
@@ -420,7 +462,11 @@ class CommandeVenteService
         }
     }
 
-    /** CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS : toutes les quantités chargées renseignées. */
+    /**
+     * CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS : toutes les quantités chargées renseignées,
+     * puis (uniquement si c'est le cas) chaque ligne vérifiée contre le stock disponible du
+     * site — cf. checkDisponibiliteStock().
+     */
     private static function checkValiderChargement(CommandeVente $commande, array &$errors): void
     {
         $commande->loadMissing('lignes');
@@ -429,6 +475,78 @@ class CommandeVenteService
 
         if ($manquantes->isNotEmpty()) {
             $errors[] = 'Toutes les lignes doivent avoir une quantité chargée renseignée.';
+
+            return;
+        }
+
+        self::checkDisponibiliteStock($commande, $errors);
+    }
+
+    /**
+     * Vérifie, ligne par ligne et sur le site de la commande, que la quantité chargée ne
+     * dépasse pas le stock disponible — cf. verifierDisponibiliteLignes() ci-dessous, point
+     * d'entrée unique réutilisé par CommandeVenteController::store()/update() (création et
+     * modification, 24/08/2026) ET par ce contrôle au chargement. Le stock a pu changer entre
+     * la création d'une commande et son chargement (autre vente entre-temps, ajustement...) :
+     * ce second contrôle reste donc indispensable même si le premier a déjà validé la commande
+     * à sa création.
+     */
+    private static function checkDisponibiliteStock(CommandeVente $commande, array &$errors): void
+    {
+        $commande->loadMissing('lignes');
+
+        $lignes = $commande->lignes->map(fn (CommandeVenteLigne $l) => [
+            'variante_id' => $l->variante_id,
+            'quantite' => $l->quantite_chargee ?? $l->quantite_demandee,
+        ])->all();
+
+        self::verifierDisponibiliteLignes($commande->organization_id, $commande->site_id, $lignes, $errors);
+    }
+
+    /**
+     * Cœur RÉUTILISABLE du contrôle de disponibilité — jamais dupliqué en logique dans les
+     * contrôleurs. Vérifie que chaque ligne (variante_id => quantité) ne dépasse pas le stock
+     * disponible du site donné, sauf si la politique globale d'organisation autorise
+     * explicitement la vente au-delà du disponible (Parametre::isVentesAutoriseesSansStock(),
+     * paramètre DSI, réservé au PDV et aux commandes vente — jamais aux transferts/
+     * ajustements, et jamais un réglage par produit). Appelée par :
+     *  - CommandeVenteController::store()/update() (création/modification d'une commande,
+     *    24/08/2026 — avant cette date, une commande pouvait être créée avec une quantité
+     *    supérieure au stock, le seul contrôle existant était au chargement) ;
+     *  - checkDisponibiliteStock() ci-dessus (chargement) ;
+     *  - PdvCheckoutService::buildLignes() reste néanmoins un contrôle SÉPARÉ (verrouillage
+     *    lockForUpdate() + vente comptoir immédiate, pas de brouillon à valider plus tard) —
+     *    jamais dupliqué en RÈGLE (même Parametre, même MouvementStockService::
+     *    quantiteDisponible()), seulement en mécanique d'appel.
+     * Ignore les lignes dont le produit ne gère pas de stock (type service).
+     *
+     * @param  array<int, array{variante_id: string, quantite: int}>  $lignes
+     * @param  array<int, string>  $errors  Passé par référence, une entrée par ligne en anomalie.
+     */
+    public static function verifierDisponibiliteLignes(string $orgId, string $siteId, array $lignes, array &$errors): void
+    {
+        if (Parametre::isVentesAutoriseesSansStock($orgId)) {
+            return;
+        }
+
+        $varianteIds = array_column($lignes, 'variante_id');
+        $variantes = ProduitVariante::with('produit.produitType')
+            ->whereIn('id', $varianteIds)
+            ->get()
+            ->keyBy('id');
+
+        foreach ($lignes as $ligne) {
+            $variante = $variantes->get($ligne['variante_id']);
+            $produit = $variante?->produit;
+            if (! $produit?->produitType?->gere_stock) {
+                continue;
+            }
+
+            $disponible = MouvementStockService::quantiteDisponible($ligne['variante_id'], $siteId);
+
+            if ($ligne['quantite'] > $disponible) {
+                $errors[] = "Stock insuffisant pour « {$produit->nom} » : {$ligne['quantite']} demandés, {$disponible} disponibles.";
+            }
         }
     }
 }

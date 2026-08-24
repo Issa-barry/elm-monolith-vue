@@ -204,6 +204,8 @@ class CommissionCmd230826004NonRegressionTest extends TestCase
             'total_ligne' => 3400 * (float) $variante->prix_vente,
         ]);
 
+        $this->seedVarianteStockSuffisant($variante, $this->defaultSite);
+
         $this->actingAs($this->user);
         CommandeVenteService::confirmer($commande);
         CommandeVenteService::demarrerChargement($commande);
