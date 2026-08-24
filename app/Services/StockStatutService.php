@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\ProduitStatut;
 use App\Enums\StockStatut;
 use App\Models\Parametre;
 use App\Models\Produit;
@@ -146,27 +147,49 @@ class StockStatutService
     }
 
     /**
-     * Stock total (toutes variantes gérées en stock ET vendables) d'un site donné — utilisé
-     * UNIQUEMENT pour décider si la création d'une nouvelle commande vente doit être bloquée
-     * quand la politique globale interdit la vente sans stock (cf. Parametre::
+     * Le site a-t-il au moins UN produit réellement vendable, maintenant — utilisé UNIQUEMENT
+     * pour décider si la création d'une nouvelle commande vente doit être bloquée quand la
+     * politique globale interdit la vente sans stock (cf. Parametre::
      * isVentesAutoriseesSansStock(), CommandeVenteService::siteAutoriseNouvelleCommande()).
-     * C'est un signal volontairement grossier ("ce site n'a-t-il absolument rien à vendre ?"),
-     * pas une garantie que chaque variante précise sera disponible — le contrôle fin reste fait
-     * ligne par ligne au moment réel de la vente (PDV, chargement de commande).
+     * Volontairement une EXISTENCE, jamais une somme de quantités (remplace l'ancienne
+     * stockTotalVendableSite() : un produit à +5 et un autre à -5 sur le même site donnerait une
+     * somme nulle alors qu'un produit est bel et bien vendable — une quantité négative isolée ne
+     * doit, à l'inverse, jamais suffire à elle seule à autoriser une création). C'est un signal
+     * volontairement grossier ("ce site a-t-il quelque chose à vendre ?"), pas une garantie que
+     * chaque variante précise sera disponible — le contrôle fin reste fait ligne par ligne au
+     * moment réel de la vente (PDV, création/modification de commande, chargement).
+     *
+     * Vrai si :
+     *  (a) au moins une variante d'un produit ACTIF, vendable, géré en stock, a une quantité
+     *      STRICTEMENT positive sur ce site ; ou
+     *  (b) au moins un produit ACTIF, vendable, qui NE gère PAS de stock (type "service")
+     *      existe dans l'organisation — vendable indépendamment de tout stock physique sur ce
+     *      site, même convention que verifierDisponibiliteLignes()/produitsActifs(), qui
+     *      ignorent déjà ces lignes dans le contrôle de disponibilité.
      */
-    public function stockTotalVendableSite(string $organizationId, string $siteId): int
+    public function sitePossedeStockVendable(string $organizationId, string $siteId): bool
     {
-        return (int) DB::table('variante_stocks as vs')
+        $existeServiceVendableSansStock = Produit::where('organization_id', $organizationId)
+            ->where('statut', ProduitStatut::ACTIF)
+            ->whereHas('produitType', fn ($q) => $q->where('vendable', true)->where('gere_stock', false))
+            ->exists();
+
+        if ($existeServiceVendableSansStock) {
+            return true;
+        }
+
+        return DB::table('variante_stocks as vs')
             ->join('produit_variantes as pv', 'pv.id', '=', 'vs.produit_variante_id')
             ->join('produits as p', 'p.id', '=', 'pv.produit_id')
             ->join('produit_types as pt', 'pt.id', '=', 'p.produit_type_id')
             ->where('p.organization_id', $organizationId)
             ->where('vs.site_id', $siteId)
-            ->where('p.statut', '!=', 'archive')
+            ->where('p.statut', ProduitStatut::ACTIF->value)
             ->where('pt.gere_stock', true)
             ->where('pt.vendable', true)
+            ->where('vs.qte_stock', '>', 0)
             ->whereNull('p.deleted_at')
             ->whereNull('pv.deleted_at')
-            ->sum('vs.qte_stock');
+            ->exists();
     }
 }

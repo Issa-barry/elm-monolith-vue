@@ -8,7 +8,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { edit } from '@/routes/parametres';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, Link, useForm, type InertiaForm } from '@inertiajs/vue3';
 import { Download, Settings, Upload } from 'lucide-vue-next';
 import { useToast } from 'primevue/usetoast';
 import { computed } from 'vue';
@@ -70,7 +70,7 @@ const grouped = computed(() => {
     return map;
 });
 
-const forms: Record<number, ReturnType<typeof useForm>> = {};
+const forms: Record<number, InertiaForm<{ valeur: string }>> = {};
 
 function getForm(p: Parametre) {
     if (!forms[p.id]) {

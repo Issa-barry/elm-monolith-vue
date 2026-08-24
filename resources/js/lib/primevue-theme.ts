@@ -46,7 +46,7 @@ export type PrimeVueSurfaceName =
     | 'neutral'
     | 'gray';
 
-const PRIMEVUE_PRESETS: Record<PrimeVueThemeName, object> = {
+const PRIMEVUE_PRESETS: Record<PrimeVueThemeName, Record<string, unknown>> = {
     aura: Aura,
     lara: Lara,
     material: Material,

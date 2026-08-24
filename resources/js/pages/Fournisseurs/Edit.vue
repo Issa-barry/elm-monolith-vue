@@ -5,7 +5,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { ArrowLeft, CheckCircle, Save } from 'lucide-vue-next';
 import { computed, watch } from 'vue';
-import FournisseurForm from './partials/FournisseurForm.vue';
+import FournisseurForm, { type FormData } from './partials/FournisseurForm.vue';
 
 interface FournisseurData {
     id: string;
@@ -55,9 +55,9 @@ function submit() {
     form.put(`/backoffice/fournisseurs/${props.fournisseur.id}`);
 }
 
-function handleFormUpdate(updated: Record<string, unknown>) {
-    const changed = Object.keys(updated).filter(
-        (k) => (form as Record<string, unknown>)[k] !== updated[k],
+function handleFormUpdate(updated: FormData) {
+    const changed = (Object.keys(updated) as (keyof FormData)[]).filter(
+        (k) => form[k] !== updated[k],
     );
     Object.assign(form, updated);
     if (changed.length) form.clearErrors(...changed);

@@ -22,6 +22,15 @@ import {
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
+interface SiteStock {
+    site_id: string;
+    site_code: string | null;
+    site_nom: string | null;
+    qte_stock: number;
+    statut: 'disponible' | 'stock_faible' | 'rupture';
+    updated_at: string | null;
+}
+
 // Reprend exactement la forme de l'interface Produit de Index.vue (même objets passés tels
 // quels, cf. :produits="props.produits") — les deux interfaces doivent rester structurellement
 // identiques sur les champs communs, sinon vue-tsc traite les callbacks onDelete/onArchive
@@ -53,7 +62,7 @@ interface Produit {
     has_variantes: boolean;
     last_mouvement_type: 'entree' | 'sortie' | null;
     last_mouvement_quantite: number | null;
-    stocks_par_site: unknown[];
+    stocks_par_site: SiteStock[];
 }
 
 const props = defineProps<{

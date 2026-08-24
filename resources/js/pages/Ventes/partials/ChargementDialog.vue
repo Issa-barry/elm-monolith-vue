@@ -11,7 +11,7 @@ import { ref, watch } from 'vue';
 
 interface LigneProp {
     id: string;
-    produit_nom: string;
+    produit_nom: string | null;
     quantite_demandee: number;
     quantite_chargee: number | null;
     type_ecart: string | null;
@@ -56,7 +56,7 @@ watch(
             dialogErrors.value = [];
             chargementLignes.value = props.lignes.map((l) => ({
                 id: l.id,
-                produit_nom: l.produit_nom,
+                produit_nom: l.produit_nom ?? '—',
                 quantite_demandee: l.quantite_demandee,
                 quantite_chargee: l.quantite_chargee ?? l.quantite_demandee,
                 type_ecart: l.type_ecart ?? 'conforme',

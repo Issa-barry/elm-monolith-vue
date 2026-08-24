@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import FonctionRhSelect from '@/components/rh/FonctionRhSelect.vue';
+import FonctionRhSelect, {
+    type FonctionRhOption,
+} from '@/components/rh/FonctionRhSelect.vue';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -26,7 +28,7 @@ const props = defineProps<{
     userName: string;
     roleOptions: Option[];
     siteOptions: Option[];
-    fonctionOptions: Option[];
+    fonctionOptions: FonctionRhOption[];
     typeEmployeOptions: Option[];
     statutOptions: Option[];
 }>();

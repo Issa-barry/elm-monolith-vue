@@ -275,12 +275,7 @@ watch(
                                         />
                                     </PinInputGroup>
                                 </PinInput>
-                                <InputError
-                                    :message="
-                                        errors?.confirmTwoFactorAuthentication
-                                            ?.code
-                                    "
-                                />
+                                <InputError :message="errors?.code" />
                             </div>
 
                             <div class="flex w-full items-center space-x-5">

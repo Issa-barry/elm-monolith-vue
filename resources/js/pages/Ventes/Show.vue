@@ -451,7 +451,7 @@ const MOTIFS_ANNULATION = [
     { value: 'doublon', label: 'Doublon' },
     { value: 'rupture_stock', label: 'Rupture de stock' },
     { value: 'autre', label: 'Autre' },
-] as const;
+];
 
 const annulerDialogVisible = ref(false);
 const annulerForm = useForm({

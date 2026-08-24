@@ -137,9 +137,9 @@ class ProduitListeFiltreeParStockSiteTest extends TestCase
      */
     public function test_create_najamais_ne_filtre_un_produit_qui_ne_gere_pas_de_stock(): void
     {
-        // Témoin avec stock (cf. commentaire du test précédent) : sans lui, stockTotalVendableSite()
-        // resterait à 0 (le produit sans gere_stock n'y contribue jamais) et la page serait
-        // bloquée en entier avant même d'atteindre le filtrage testé ici.
+        // Témoin avec stock (cf. commentaire du test précédent) : sans lui, sitePossedeStockVendable()
+        // resterait faux (le produit sans gere_stock ci-dessous n'a pas encore été créé à ce
+        // stade) et la page serait bloquée en entier avant même d'atteindre le filtrage testé ici.
         $temoin = $this->makeProduitVendable('Témoin');
         $this->seedStock($temoin, $this->site, 5);
 
