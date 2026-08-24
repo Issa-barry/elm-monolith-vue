@@ -173,11 +173,14 @@ test('« Voir le stock » ouvre la page Stock filtrée sur ce produit, sans les 
 
     // La page Stock est bien pré-filtrée sur CE produit : ses lignes apparaissent dans le
     // tableau (pas seulement quelque part sur la page), et le témoin — pourtant lui aussi en
-    // stock — n'apparaît dans AUCUNE ligne des résultats filtrés.
+    // stock — n'apparaît dans AUCUNE ligne des résultats filtrés. Pas de toHaveCount(1) sur le
+    // produit filtré : Stock/Index.vue affiche une ligne par COUPLE variante × site (toutes les
+    // agences de l'organisation, pas seulement celles ayant un stock ajusté), donc un même
+    // produit y apparaît légitimement en plusieurs lignes.
     const stockRows = page.locator('[data-testid="stock-table"] tbody tr');
     await expect(
         stockRows.filter({ hasText: new RegExp(escapeRegExp(productName), 'i') }),
-    ).toHaveCount(1, { timeout: 10_000 });
+    ).not.toHaveCount(0, { timeout: 10_000 });
     await expect(
         stockRows.filter({ hasText: new RegExp(escapeRegExp(temoinName), 'i') }),
     ).toHaveCount(0);

@@ -220,6 +220,7 @@ function saveVente() {
                      l'organisation se comporte quand une vente dépasse le disponible, pas QUI
                      peut ajuster le stock à la main. -->
                 <div
+                    data-testid="parametre-vente-stock-card"
                     class="overflow-hidden rounded-xl border bg-card shadow-sm"
                 >
                     <div
@@ -245,6 +246,7 @@ function saveVente() {
                             </transition>
                             <Button
                                 size="sm"
+                                data-testid="parametre-vente-stock-save"
                                 :disabled="savingVente"
                                 @click="saveVente"
                             >
