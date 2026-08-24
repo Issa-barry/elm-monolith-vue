@@ -16,7 +16,6 @@ import {
     Plus,
     Save,
     Trash2,
-    Truck,
 } from 'lucide-vue-next';
 import Dialog from 'primevue/dialog';
 import Select from 'primevue/select';
@@ -102,12 +101,18 @@ interface PayloadLigne {
     beneficiaires: string[];
     consultant_id: string | null;
     montants_standard: Record<string, number>;
-    exceptions: Array<{ type_vehicule_id: string; montants: Record<string, number> }>;
+    exceptions: Array<{
+        type_vehicule_id: string;
+        montants: Record<string, number>;
+    }>;
 }
 
 function emptyOverrides(): Record<string, ExceptionOverride> {
     return Object.fromEntries(
-        props.cibles.map((cible) => [cible.code, { active: false, montant: '' }]),
+        props.cibles.map((cible) => [
+            cible.code,
+            { active: false, montant: '' },
+        ]),
     );
 }
 
@@ -154,7 +159,9 @@ function emptyDraftLigne(): DraftLigne {
     return {
         key: `new-${nextLineKey++}`,
         categorie_id: null,
-        beneficiaires: Object.fromEntries(props.cibles.map((c) => [c.code, false])),
+        beneficiaires: Object.fromEntries(
+            props.cibles.map((c) => [c.code, false]),
+        ),
         montants: Object.fromEntries(props.cibles.map((c) => [c.code, ''])),
         consultant_id: null,
         modeVehicule: 'standard',
@@ -184,13 +191,17 @@ function toPayloadLigne(ligne: DraftLigne): PayloadLigne {
                       const montants: Record<string, number> = {};
                       beneficiaires.forEach((code) => {
                           const override = exception.overrides[code];
-                          if (override?.active && override.montant.trim() !== '') {
+                          if (
+                              override?.active &&
+                              override.montant.trim() !== ''
+                          ) {
                               montants[code] = Number(override.montant);
                           }
                       });
 
                       return {
-                          type_vehicule_id: exception.type_vehicule_id as string,
+                          type_vehicule_id:
+                              exception.type_vehicule_id as string,
                           montants,
                       };
                   })
@@ -208,12 +219,16 @@ function toPayloadLigne(ligne: DraftLigne): PayloadLigne {
 }
 
 const draftLignes = ref<DraftLigne[]>(
-    props.lignes.map((ligne, index) => hydrateLigne(ligne, `existing-${index}`)),
+    props.lignes.map((ligne, index) =>
+        hydrateLigne(ligne, `existing-${index}`),
+    ),
 );
 
 const initialSnapshot = JSON.stringify(draftLignes.value.map(toPayloadLigne));
 const hasChanges = computed(
-    () => JSON.stringify(draftLignes.value.map(toPayloadLigne)) !== initialSnapshot,
+    () =>
+        JSON.stringify(draftLignes.value.map(toPayloadLigne)) !==
+        initialSnapshot,
 );
 
 const canAddCategory = computed(
@@ -253,11 +268,13 @@ function beneficiairesSummary(ligne: DraftLigne): string {
 }
 
 function baremeSummary(ligne: DraftLigne): string {
-    if (ligne.modeVehicule !== 'par_vehicule') return 'Barème standard';
+    if (ligne.modeVehicule !== 'par_vehicule') {
+        return 'Tous les types de véhicules';
+    }
     const n = ligne.exceptions.filter((e) => e.type_vehicule_id).length;
-    if (n === 0) return 'Barème standard';
+    if (n === 0) return 'Tous les types de véhicules';
 
-    return `Barème standard + ${n} exception${n > 1 ? 's' : ''} véhicule`;
+    return `${n} type${n > 1 ? 's' : ''} avec un tarif spécifique`;
 }
 
 function formatMontant(value: string | number): string {
@@ -301,6 +318,9 @@ const dialogMode = ref<'add' | 'edit'>('add');
 const editingIndex = ref<number | null>(null);
 const dialogDraft = ref<DraftLigne>(emptyDraftLigne());
 const dialogErrors = ref<Record<string, string>>({});
+// Replié dès qu'un consultant est déjà désigné (affiche juste son nom + « Changer »)
+// pour ne pas ré-afficher un select déjà résolu à chaque ouverture du dialog.
+const consultantPickerOpen = ref(true);
 
 const checkedCibles = computed(() =>
     props.cibles.filter((c) => dialogDraft.value.beneficiaires[c.code]),
@@ -337,6 +357,7 @@ function openAddDialog(): void {
     editingIndex.value = null;
     dialogDraft.value = emptyDraftLigne();
     dialogErrors.value = {};
+    consultantPickerOpen.value = true;
     dialogVisible.value = true;
 }
 
@@ -345,6 +366,7 @@ function openEditDialog(index: number): void {
     editingIndex.value = index;
     dialogDraft.value = cloneDraftLigne(draftLignes.value[index]);
     dialogErrors.value = {};
+    consultantPickerOpen.value = !dialogDraft.value.consultant_id;
     dialogVisible.value = true;
 }
 
@@ -352,7 +374,12 @@ function toggleBeneficiaire(code: string, checked: boolean): void {
     dialogDraft.value.beneficiaires[code] = checked;
     delete dialogErrors.value.beneficiaires;
 
-    if (checked) return;
+    if (checked) {
+        if (code === CONSULTANT_CODE) {
+            consultantPickerOpen.value = !dialogDraft.value.consultant_id;
+        }
+        return;
+    }
 
     dialogDraft.value.montants[code] = '';
     if (code === CONSULTANT_CODE) dialogDraft.value.consultant_id = null;
@@ -371,6 +398,19 @@ function addException(): void {
 
 function removeException(index: number): void {
     dialogDraft.value.exceptions.splice(index, 1);
+}
+
+function setVehicleMode(mode: 'standard' | 'par_vehicule'): void {
+    dialogDraft.value.modeVehicule = mode;
+    delete dialogErrors.value.vehicle_rates;
+
+    if (
+        mode === 'par_vehicule' &&
+        dialogDraft.value.exceptions.length === 0 &&
+        props.typesVehicules.length > 0
+    ) {
+        addException();
+    }
 }
 
 function validateDialog(): boolean {
@@ -402,10 +442,24 @@ function validateDialog(): boolean {
     }
 
     if (dialogDraft.value.modeVehicule === 'par_vehicule') {
+        if (dialogDraft.value.exceptions.length === 0) {
+            errors.vehicle_rates =
+                'Ajoutez au moins un type de véhicule concerné.';
+        }
+
         dialogDraft.value.exceptions.forEach((exception, index) => {
             if (!exception.type_vehicule_id) {
                 errors[`exception_${index}_type`] =
                     'Choisissez un type de véhicule.';
+            }
+
+            if (
+                !checkedCibles.value.some(
+                    (cible) => exception.overrides[cible.code]?.active,
+                )
+            ) {
+                errors[`exception_${index}_overrides`] =
+                    'Modifiez au moins un montant pour ce véhicule.';
             }
 
             checkedCibles.value.forEach((cible) => {
@@ -417,7 +471,8 @@ function validateDialog(): boolean {
                     errors[`exception_${index}_${cible.code}`] =
                         'Montant entier requis (supérieur à 0).';
                 } else if (Number(raw) > 99_999_999) {
-                    errors[`exception_${index}_${cible.code}`] = 'Montant trop élevé.';
+                    errors[`exception_${index}_${cible.code}`] =
+                        'Montant trop élevé.';
                 }
             });
         });
@@ -431,6 +486,9 @@ function confirmDialog(): void {
     if (!validateDialog()) return;
 
     const toSave = cloneDraftLigne(dialogDraft.value);
+    if (toSave.modeVehicule === 'standard') {
+        toSave.exceptions = [];
+    }
     if (dialogMode.value === 'add') {
         draftLignes.value.push(toSave);
     } else if (editingIndex.value !== null) {
@@ -652,11 +710,11 @@ function submitConfiguration(): void {
                 ? 'Ajouter une catégorie'
                 : `Modifier — ${categoryLabel(dialogDraft.categorie_id)}`
         "
-        :style="{ width: 'min(640px, 96vw)' }"
+        :style="{ width: 'min(1100px, 96vw)' }"
         :dismissable-mask="false"
     >
-        <div class="space-y-6 pt-1">
-            <div>
+        <div class="max-h-[65vh] space-y-6 overflow-y-auto pt-1 pr-1">
+            <div v-if="dialogMode === 'add'">
                 <Label class="mb-1.5">
                     Catégorie
                     <span class="text-destructive">*</span>
@@ -667,7 +725,7 @@ function submitConfiguration(): void {
                     option-label="label"
                     option-value="value"
                     placeholder="Choisir la catégorie"
-                    class="w-full"
+                    class="w-full max-w-sm"
                     :invalid="Boolean(dialogErrors.categorie_id)"
                     aria-label="Catégorie"
                     @update:model-value="
@@ -688,13 +746,15 @@ function submitConfiguration(): void {
                     Qui bénéficie d’une commission ?
                     <span class="text-destructive">*</span>
                 </Label>
-                <div class="space-y-3">
+                <div
+                    class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+                >
                     <div
                         v-for="cible in props.cibles"
                         :key="cible.code"
                         class="rounded-lg border p-3"
                     >
-                        <label class="flex cursor-pointer items-center gap-3">
+                        <label class="flex cursor-pointer items-center gap-2.5">
                             <Checkbox
                                 :model-value="
                                     dialogDraft.beneficiaires[cible.code]
@@ -713,360 +773,496 @@ function submitConfiguration(): void {
 
                         <div
                             v-if="dialogDraft.beneficiaires[cible.code]"
-                            class="mt-3 space-y-3 pl-7"
+                            class="mt-3 space-y-2"
                         >
-                            <div v-if="cible.code === CONSULTANT_CODE">
+                            <div class="relative">
+                                <Input
+                                    v-model="dialogDraft.montants[cible.code]"
+                                    type="text"
+                                    inputmode="numeric"
+                                    placeholder="ex. 650"
+                                    class="pr-12"
+                                    :class="{
+                                        'border-destructive':
+                                            dialogErrors[
+                                                `montant_${cible.code}`
+                                            ],
+                                    }"
+                                    :aria-label="`Montant standard — ${cible.libelle}`"
+                                    @keydown="blockNonIntegerKeydown"
+                                    @paste="
+                                        dialogDraft.montants[cible.code] =
+                                            numericPasteValue($event)
+                                    "
+                                    @input="
+                                        delete dialogErrors[
+                                            `montant_${cible.code}`
+                                        ]
+                                    "
+                                />
+                                <span
+                                    class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[11px] text-muted-foreground"
+                                >
+                                    GNF
+                                </span>
+                            </div>
+                            <p
+                                v-if="dialogErrors[`montant_${cible.code}`]"
+                                class="text-xs text-destructive"
+                            >
+                                {{ dialogErrors[`montant_${cible.code}`] }}
+                            </p>
+
+                            <template v-if="cible.code === CONSULTANT_CODE">
                                 <template
                                     v-if="props.consultantsEligibles.length"
                                 >
-                                    <Label class="mb-1.5">
-                                        Consultant bénéficiaire
-                                        <span class="text-destructive"
-                                            >*</span
-                                        >
-                                    </Label>
-                                    <Select
-                                        :model-value="
-                                            dialogDraft.consultant_id
+                                    <div
+                                        v-if="
+                                            dialogDraft.consultant_id &&
+                                            !consultantPickerOpen
                                         "
-                                        :options="props.consultantsEligibles"
-                                        option-label="label"
-                                        option-value="value"
-                                        placeholder="Choisir un consultant"
-                                        class="w-full"
-                                        :invalid="
-                                            Boolean(
-                                                dialogErrors.consultant_id,
-                                            )
-                                        "
-                                        aria-label="Consultant bénéficiaire"
-                                        @update:model-value="
-                                            dialogDraft.consultant_id = $event;
-                                            delete dialogErrors.consultant_id;
-                                        "
-                                    />
-                                    <p
-                                        v-if="dialogErrors.consultant_id"
-                                        class="mt-1 text-xs text-destructive"
+                                        class="flex items-center justify-between gap-2 rounded-md bg-muted/40 px-2.5 py-1.5"
                                     >
-                                        {{ dialogErrors.consultant_id }}
-                                    </p>
+                                        <span
+                                            class="truncate text-xs font-medium"
+                                            >{{
+                                                consultantLabel(
+                                                    dialogDraft.consultant_id,
+                                                )
+                                            }}</span
+                                        >
+                                        <button
+                                            type="button"
+                                            class="shrink-0 text-xs font-medium text-primary underline-offset-4 hover:underline"
+                                            @click="consultantPickerOpen = true"
+                                        >
+                                            Changer
+                                        </button>
+                                    </div>
+                                    <template v-else>
+                                        <Select
+                                            :model-value="
+                                                dialogDraft.consultant_id
+                                            "
+                                            :options="
+                                                props.consultantsEligibles
+                                            "
+                                            option-label="label"
+                                            option-value="value"
+                                            placeholder="Choisir un consultant"
+                                            class="w-full"
+                                            :invalid="
+                                                Boolean(
+                                                    dialogErrors.consultant_id,
+                                                )
+                                            "
+                                            aria-label="Consultant bénéficiaire"
+                                            @update:model-value="
+                                                dialogDraft.consultant_id =
+                                                    $event;
+                                                consultantPickerOpen = false;
+                                                delete dialogErrors.consultant_id;
+                                            "
+                                        />
+                                        <p
+                                            v-if="dialogErrors.consultant_id"
+                                            class="mt-1 text-xs text-destructive"
+                                        >
+                                            {{ dialogErrors.consultant_id }}
+                                        </p>
+                                    </template>
                                 </template>
                                 <div
                                     v-else
-                                    class="rounded-lg border border-destructive/40 bg-destructive/5 p-3"
+                                    class="rounded-lg border border-destructive/40 bg-destructive/5 p-2.5"
                                 >
                                     <p
-                                        class="text-sm font-medium text-destructive"
+                                        class="text-xs font-medium text-destructive"
                                     >
-                                        Aucun consultant actif disponible
+                                        Aucun consultant actif
                                     </p>
                                     <p
-                                        class="mt-1 text-xs text-muted-foreground"
+                                        class="mt-1 text-[11px] text-muted-foreground"
                                     >
                                         Créez d’abord un prestataire de type
                                         Consultant.
                                     </p>
                                     <Link
                                         href="/backoffice/prestataires/create"
-                                        class="mt-2 inline-block text-sm font-medium text-primary underline-offset-4 hover:underline"
+                                        class="mt-1.5 inline-block text-xs font-medium text-primary underline-offset-4 hover:underline"
                                     >
-                                        Créer un prestataire Consultant
+                                        Créer un prestataire
                                     </Link>
                                 </div>
-                            </div>
-
-                            <div>
-                                <Label class="mb-1.5">
-                                    Montant standard
-                                    <span class="text-destructive">*</span>
-                                </Label>
-                                <div class="relative">
-                                    <Input
-                                        v-model="
-                                            dialogDraft.montants[cible.code]
-                                        "
-                                        type="text"
-                                        inputmode="numeric"
-                                        placeholder="ex. 650"
-                                        class="pr-12"
-                                        :class="{
-                                            'border-destructive':
-                                                dialogErrors[
-                                                    `montant_${cible.code}`
-                                                ],
-                                        }"
-                                        :aria-label="`Montant standard — ${cible.libelle}`"
-                                        @keydown="blockNonIntegerKeydown"
-                                        @paste="
-                                            dialogDraft.montants[
-                                                cible.code
-                                            ] = numericPasteValue($event)
-                                        "
-                                        @input="
-                                            delete dialogErrors[
-                                                `montant_${cible.code}`
-                                            ]
-                                        "
-                                    />
-                                    <span
-                                        class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[11px] text-muted-foreground"
-                                    >
-                                        GNF
-                                    </span>
-                                </div>
-                                <p
-                                    v-if="
-                                        dialogErrors[`montant_${cible.code}`]
-                                    "
-                                    class="mt-1 text-xs text-destructive"
-                                >
-                                    {{
-                                        dialogErrors[`montant_${cible.code}`]
-                                    }}
-                                </p>
-                            </div>
+                            </template>
                         </div>
                     </div>
                 </div>
                 <p
                     v-if="dialogErrors.beneficiaires"
-                    class="mt-1 text-xs text-destructive"
+                    class="mt-2 text-xs text-destructive"
                 >
                     {{ dialogErrors.beneficiaires }}
                 </p>
             </div>
 
-            <div v-if="checkedCibles.length">
-                <Label class="mb-2">Montants selon le type de véhicule</Label>
-                <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <button
-                        type="button"
-                        class="rounded-lg border px-3 py-2 text-left text-sm font-medium transition-colors"
-                        :class="
-                            dialogDraft.modeVehicule === 'standard'
-                                ? 'border-primary bg-primary/5 text-primary'
-                                : 'text-muted-foreground hover:bg-muted/40'
-                        "
-                        :aria-pressed="dialogDraft.modeVehicule === 'standard'"
-                        @click="dialogDraft.modeVehicule = 'standard'"
+            <section v-if="checkedCibles.length" class="space-y-3">
+                <div>
+                    <Label class="mb-2">Véhicules concernés</Label>
+                    <div
+                        class="grid grid-cols-1 gap-2 sm:grid-cols-2"
+                        role="radiogroup"
+                        aria-label="Application des montants selon le type de véhicule"
                     >
-                        Même montant pour tous les véhicules
-                    </button>
-                    <button
-                        type="button"
-                        class="rounded-lg border px-3 py-2 text-left text-sm font-medium transition-colors"
-                        :class="
-                            dialogDraft.modeVehicule === 'par_vehicule'
-                                ? 'border-primary bg-primary/5 text-primary'
-                                : 'text-muted-foreground hover:bg-muted/40'
-                        "
-                        :aria-pressed="
-                            dialogDraft.modeVehicule === 'par_vehicule'
-                        "
-                        @click="dialogDraft.modeVehicule = 'par_vehicule'"
-                    >
-                        Montants différents selon le type de véhicule
-                    </button>
+                        <button
+                            type="button"
+                            role="radio"
+                            class="rounded-lg border px-4 py-3 text-left transition-colors"
+                            :class="
+                                dialogDraft.modeVehicule === 'standard'
+                                    ? 'border-primary bg-primary/5'
+                                    : 'hover:bg-muted/40'
+                            "
+                            :aria-checked="
+                                dialogDraft.modeVehicule === 'standard'
+                            "
+                            @click="setVehicleMode('standard')"
+                        >
+                            <span class="block text-sm font-medium">
+                                Tous les types de véhicules
+                            </span>
+                            <span
+                                class="mt-0.5 block text-xs text-muted-foreground"
+                            >
+                                Les montants ci-dessus sont identiques pour
+                                tous.
+                            </span>
+                        </button>
+                        <button
+                            type="button"
+                            role="radio"
+                            class="rounded-lg border px-4 py-3 text-left transition-colors"
+                            :class="
+                                dialogDraft.modeVehicule === 'par_vehicule'
+                                    ? 'border-primary bg-primary/5'
+                                    : 'hover:bg-muted/40'
+                            "
+                            :aria-checked="
+                                dialogDraft.modeVehicule === 'par_vehicule'
+                            "
+                            :disabled="props.typesVehicules.length === 0"
+                            @click="setVehicleMode('par_vehicule')"
+                        >
+                            <span class="block text-sm font-medium">
+                                Montants différents selon le type
+                            </span>
+                            <span
+                                class="mt-0.5 block text-xs text-muted-foreground"
+                            >
+                                Sélectionnez les véhicules dont le tarif change.
+                            </span>
+                        </button>
+                    </div>
                 </div>
 
                 <div
                     v-if="dialogDraft.modeVehicule === 'par_vehicule'"
-                    class="mt-4 space-y-4"
+                    class="space-y-3"
                 >
-                    <p class="text-xs text-muted-foreground">
-                        Les véhicules sans exception ci-dessous utilisent
-                        automatiquement le montant standard.
+                    <div class="flex items-center justify-between gap-4">
+                        <div>
+                            <p class="text-sm font-medium">
+                                Tarifs par type de véhicule
+                            </p>
+                            <p class="text-xs text-muted-foreground">
+                                Les types non sélectionnés gardent les montants
+                                indiqués au-dessus.
+                            </p>
+                        </div>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            class="shrink-0"
+                            :disabled="!canAddException"
+                            @click="addException"
+                        >
+                            <Plus class="h-4 w-4" />
+                            Ajouter un type
+                        </Button>
+                    </div>
+
+                    <p
+                        v-if="dialogErrors.vehicle_rates"
+                        class="text-xs text-destructive"
+                    >
+                        {{ dialogErrors.vehicle_rates }}
                     </p>
 
-                    <div
-                        v-for="(exception, exceptionIndex) in dialogDraft.exceptions"
-                        :key="exception.key"
-                        class="rounded-lg border p-3"
-                    >
-                        <div class="flex items-start justify-between gap-2">
-                            <div class="min-w-0 flex-1">
-                                <Label class="mb-1.5">
-                                    <Truck class="h-3.5 w-3.5" />
-                                    Type de véhicule
-                                    <span class="text-destructive">*</span>
-                                </Label>
-                                <Select
-                                    :model-value="exception.type_vehicule_id"
-                                    :options="
-                                        exceptionVehicleOptions(exception)
-                                    "
-                                    option-label="label"
-                                    option-value="value"
-                                    placeholder="Choisir le type de véhicule"
-                                    class="w-full"
-                                    :invalid="
-                                        Boolean(
-                                            dialogErrors[
-                                                `exception_${exceptionIndex}_type`
-                                            ],
-                                        )
-                                    "
-                                    aria-label="Type de véhicule de l'exception"
-                                    @update:model-value="
-                                        exception.type_vehicule_id = $event;
-                                        delete dialogErrors[
-                                            `exception_${exceptionIndex}_type`
-                                        ];
-                                    "
-                                />
-                                <p
-                                    v-if="
-                                        dialogErrors[
-                                            `exception_${exceptionIndex}_type`
-                                        ]
-                                    "
-                                    class="mt-1 text-xs text-destructive"
-                                >
-                                    {{
-                                        dialogErrors[
-                                            `exception_${exceptionIndex}_type`
-                                        ]
-                                    }}
-                                </p>
-                            </div>
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                class="mt-6 shrink-0 text-muted-foreground hover:text-destructive"
-                                aria-label="Retirer cette exception"
-                                @click="removeException(exceptionIndex)"
-                            >
-                                <Trash2 class="h-4 w-4" />
-                            </Button>
-                        </div>
-
-                        <div class="mt-3 space-y-2">
+                    <div class="overflow-x-auto rounded-lg border">
+                        <div class="min-w-max">
                             <div
-                                v-for="cible in checkedCibles"
-                                :key="cible.code"
-                                class="rounded-md border p-2.5"
+                                class="grid items-center gap-2 border-b bg-muted/30 px-3 py-2"
+                                :style="{
+                                    gridTemplateColumns: `180px repeat(${props.cibles.length}, minmax(160px, 1fr)) 40px`,
+                                }"
                             >
-                                <label
-                                    class="flex cursor-pointer items-center gap-2.5"
+                                <span
+                                    class="text-xs font-medium text-muted-foreground"
                                 >
-                                    <Checkbox
+                                    Type de véhicule
+                                </span>
+                                <span
+                                    v-for="cible in props.cibles"
+                                    :key="cible.code"
+                                    class="text-xs font-medium text-muted-foreground"
+                                >
+                                    {{ cible.libelle }}
+                                </span>
+                                <span class="sr-only">Actions</span>
+                            </div>
+
+                            <div
+                                v-for="(
+                                    exception, exceptionIndex
+                                ) in dialogDraft.exceptions"
+                                :key="exception.key"
+                                class="grid items-start gap-2 border-b px-3 py-3 last:border-b-0"
+                                :style="{
+                                    gridTemplateColumns: `180px repeat(${props.cibles.length}, minmax(160px, 1fr)) 40px`,
+                                }"
+                            >
+                                <div>
+                                    <Select
                                         :model-value="
-                                            exception.overrides[cible.code]
-                                                .active
+                                            exception.type_vehicule_id
                                         "
-                                        @update:model-value="
-                                            exception.overrides[
-                                                cible.code
-                                            ].active = $event === true;
-                                            if ($event !== true)
-                                                exception.overrides[
-                                                    cible.code
-                                                ].montant = '';
+                                        :options="
+                                            exceptionVehicleOptions(exception)
                                         "
-                                    />
-                                    <span class="text-xs font-medium">
-                                        {{ cible.libelle }} — montant
-                                        différent du standard
-                                    </span>
-                                </label>
-                                <div
-                                    v-if="
-                                        exception.overrides[cible.code].active
-                                    "
-                                    class="relative mt-2"
-                                >
-                                    <Input
-                                        v-model="
-                                            exception.overrides[cible.code]
-                                                .montant
-                                        "
-                                        type="text"
-                                        inputmode="numeric"
-                                        placeholder="ex. 700"
-                                        class="pr-12"
-                                        :class="{
-                                            'border-destructive':
+                                        option-label="label"
+                                        option-value="value"
+                                        placeholder="Choisir un type"
+                                        class="w-full"
+                                        :invalid="
+                                            Boolean(
                                                 dialogErrors[
-                                                    `exception_${exceptionIndex}_${cible.code}`
+                                                    `exception_${exceptionIndex}_type`
                                                 ],
-                                        }"
-                                        :aria-label="`Montant exception — ${cible.libelle}`"
-                                        @keydown="blockNonIntegerKeydown"
-                                        @paste="
-                                            exception.overrides[
-                                                cible.code
-                                            ].montant = numericPasteValue(
-                                                $event,
                                             )
                                         "
-                                        @input="
+                                        aria-label="Type de véhicule concerné"
+                                        @update:model-value="
+                                            exception.type_vehicule_id = $event;
                                             delete dialogErrors[
-                                                `exception_${exceptionIndex}_${cible.code}`
-                                            ]
+                                                `exception_${exceptionIndex}_type`
+                                            ];
                                         "
                                     />
-                                    <span
-                                        class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[11px] text-muted-foreground"
+                                    <p
+                                        v-if="
+                                            dialogErrors[
+                                                `exception_${exceptionIndex}_type`
+                                            ]
+                                        "
+                                        class="mt-1 text-xs text-destructive"
                                     >
-                                        GNF
-                                    </span>
+                                        {{
+                                            dialogErrors[
+                                                `exception_${exceptionIndex}_type`
+                                            ]
+                                        }}
+                                    </p>
                                 </div>
-                                <p
-                                    v-else
-                                    class="mt-1 text-xs text-muted-foreground"
+
+                                <div
+                                    v-for="cible in props.cibles"
+                                    :key="cible.code"
+                                    class="min-w-0"
                                 >
-                                    Utilise le montant standard.
-                                </p>
+                                    <template
+                                        v-if="
+                                            dialogDraft.beneficiaires[
+                                                cible.code
+                                            ]
+                                        "
+                                    >
+                                        <label
+                                            class="flex cursor-pointer items-center gap-2 text-xs"
+                                        >
+                                            <Checkbox
+                                                :model-value="
+                                                    exception.overrides[
+                                                        cible.code
+                                                    ].active
+                                                "
+                                                @update:model-value="
+                                                    exception.overrides[
+                                                        cible.code
+                                                    ].active = $event === true;
+                                                    if ($event !== true)
+                                                        exception.overrides[
+                                                            cible.code
+                                                        ].montant = '';
+                                                    delete dialogErrors[
+                                                        `exception_${exceptionIndex}_overrides`
+                                                    ];
+                                                "
+                                            />
+                                            Montant différent
+                                        </label>
+                                        <div
+                                            v-if="
+                                                exception.overrides[cible.code]
+                                                    .active
+                                            "
+                                            class="relative mt-2"
+                                        >
+                                            <Input
+                                                v-model="
+                                                    exception.overrides[
+                                                        cible.code
+                                                    ].montant
+                                                "
+                                                type="text"
+                                                inputmode="numeric"
+                                                placeholder="Nouveau montant"
+                                                class="pr-12"
+                                                :class="{
+                                                    'border-destructive':
+                                                        dialogErrors[
+                                                            `exception_${exceptionIndex}_${cible.code}`
+                                                        ],
+                                                }"
+                                                :aria-label="`Montant pour ce véhicule — ${cible.libelle}`"
+                                                @keydown="
+                                                    blockNonIntegerKeydown
+                                                "
+                                                @paste="
+                                                    exception.overrides[
+                                                        cible.code
+                                                    ].montant =
+                                                        numericPasteValue(
+                                                            $event,
+                                                        )
+                                                "
+                                                @input="
+                                                    delete dialogErrors[
+                                                        `exception_${exceptionIndex}_${cible.code}`
+                                                    ]
+                                                "
+                                            />
+                                            <span
+                                                class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[11px] text-muted-foreground"
+                                            >
+                                                GNF
+                                            </span>
+                                        </div>
+                                        <p
+                                            v-else
+                                            class="mt-2 text-sm font-medium tabular-nums"
+                                        >
+                                            <span
+                                                v-if="
+                                                    dialogDraft.montants[
+                                                        cible.code
+                                                    ]
+                                                "
+                                            >
+                                                {{
+                                                    formatMontant(
+                                                        dialogDraft.montants[
+                                                            cible.code
+                                                        ],
+                                                    )
+                                                }}
+                                            </span>
+                                            <span
+                                                v-else
+                                                class="font-normal text-muted-foreground"
+                                            >
+                                                Montant à saisir
+                                            </span>
+                                        </p>
+                                        <p
+                                            v-if="
+                                                dialogErrors[
+                                                    `exception_${exceptionIndex}_${cible.code}`
+                                                ]
+                                            "
+                                            class="mt-1 text-xs text-destructive"
+                                        >
+                                            {{
+                                                dialogErrors[
+                                                    `exception_${exceptionIndex}_${cible.code}`
+                                                ]
+                                            }}
+                                        </p>
+                                    </template>
+                                    <button
+                                        v-else
+                                        type="button"
+                                        class="text-left text-xs font-medium text-primary underline-offset-4 hover:underline"
+                                        :aria-label="`Activer la commission ${cible.libelle}`"
+                                        @click="
+                                            toggleBeneficiaire(cible.code, true)
+                                        "
+                                    >
+                                        + Activer
+                                    </button>
+                                </div>
+
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    class="shrink-0 text-muted-foreground hover:text-destructive"
+                                    aria-label="Retirer ce type de véhicule"
+                                    @click="removeException(exceptionIndex)"
+                                >
+                                    <Trash2 class="h-4 w-4" />
+                                </Button>
+
                                 <p
                                     v-if="
                                         dialogErrors[
-                                            `exception_${exceptionIndex}_${cible.code}`
+                                            `exception_${exceptionIndex}_overrides`
                                         ]
                                     "
-                                    class="mt-1 text-xs text-destructive"
+                                    class="col-span-full text-xs text-destructive"
                                 >
                                     {{
                                         dialogErrors[
-                                            `exception_${exceptionIndex}_${cible.code}`
+                                            `exception_${exceptionIndex}_overrides`
                                         ]
                                     }}
                                 </p>
                             </div>
                         </div>
                     </div>
-
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        :disabled="!canAddException"
-                        @click="addException"
-                    >
-                        <Plus class="h-4 w-4" />
-                        Ajouter une exception
-                    </Button>
                 </div>
-            </div>
+            </section>
         </div>
 
-        <div class="mt-6 flex justify-end gap-2">
-            <Button
-                type="button"
-                variant="outline"
-                @click="dialogVisible = false"
-            >
-                Annuler
-            </Button>
-            <Button
-                type="button"
-                data-testid="commission-dialog-save"
-                @click="confirmDialog"
-            >
-                Enregistrer la catégorie
-            </Button>
-        </div>
+        <template #footer>
+            <div class="flex justify-end gap-2">
+                <Button
+                    type="button"
+                    variant="outline"
+                    @click="dialogVisible = false"
+                >
+                    Annuler
+                </Button>
+                <Button
+                    type="button"
+                    data-testid="commission-dialog-save"
+                    @click="confirmDialog"
+                >
+                    Appliquer
+                </Button>
+            </div>
+        </template>
     </Dialog>
 
     <Dialog
@@ -1091,7 +1287,7 @@ function submitConfiguration(): void {
 
                 <div class="mt-3">
                     <p class="text-xs font-medium text-muted-foreground">
-                        Montant standard
+                        Montants pour tous les véhicules
                     </p>
                     <ul class="mt-1 space-y-0.5 text-sm">
                         <li
@@ -1122,7 +1318,7 @@ function submitConfiguration(): void {
                     class="mt-3 space-y-2"
                 >
                     <p class="text-xs font-medium text-muted-foreground">
-                        Exceptions par type de véhicule
+                        Tarifs spécifiques par type de véhicule
                     </p>
                     <div
                         v-for="exception in ligne.exceptions"
@@ -1143,8 +1339,7 @@ function submitConfiguration(): void {
                                 {{ cible.libelle }} :
                                 <span
                                     v-if="
-                                        exception.overrides[cible.code]
-                                            ?.active
+                                        exception.overrides[cible.code]?.active
                                     "
                                     class="font-medium tabular-nums"
                                     >{{
@@ -1154,9 +1349,9 @@ function submitConfiguration(): void {
                                         )
                                     }}</span
                                 >
-                                <span v-else class="text-muted-foreground"
-                                    >montant standard</span
-                                >
+                                <span v-else class="text-muted-foreground">
+                                    même montant que tous les véhicules
+                                </span>
                             </li>
                         </ul>
                     </div>
@@ -1168,9 +1363,8 @@ function submitConfiguration(): void {
             >
                 <CircleAlert class="mt-0.5 h-4 w-4 shrink-0" />
                 <p>
-                    Les catégories absentes ne généreront aucune commission.
-                    Ces changements s’appliqueront uniquement aux ventes
-                    futures.
+                    Les catégories absentes ne généreront aucune commission. Ces
+                    changements s’appliqueront uniquement aux ventes futures.
                 </p>
             </div>
 
