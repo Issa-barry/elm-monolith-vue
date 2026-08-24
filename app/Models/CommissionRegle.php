@@ -29,6 +29,7 @@ class CommissionRegle extends Model
         'libelle',
         'scope_type',
         'scope_id',
+        'type_vehicule_id',
         'cible_type',
         'mode',
         'unite_calcul',
@@ -86,6 +87,11 @@ class CommissionRegle extends Model
     public function consultant(): BelongsTo
     {
         return $this->belongsTo(Prestataire::class, 'consultant_id');
+    }
+
+    public function typeVehicule(): BelongsTo
+    {
+        return $this->belongsTo(TypeVehicule::class, 'type_vehicule_id');
     }
 
     public function remplaceePar(): BelongsTo

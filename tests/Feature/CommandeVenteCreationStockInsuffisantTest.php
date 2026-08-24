@@ -273,37 +273,77 @@ class CommandeVenteCreationStockInsuffisantTest extends TestCase
         ]);
     }
 
-    // ── Le stock peut changer entre création et chargement : recontrôlé ──────
+    // ── Le stock peut changer entre création et confirmation : recontrôlé ────
 
-    public function test_le_chargement_recontrole_le_stock_meme_apres_une_creation_validee(): void
+    /**
+     * Correctif du 24/08/2026 (StockReservationService) : la commande RÉSERVE sa quantité dès
+     * la confirmation (BROUILLON → A_CHARGER), plus seulement au chargement — le stock a pu
+     * changer entre la création du brouillon et sa confirmation (autre commande confirmée
+     * entre-temps), donc la confirmation le recontrôle elle aussi. Avant ce correctif, ce même
+     * scénario n'échouait qu'au CHARGEMENT (validerChargement()) — trop tard : une seconde
+     * commande concurrente aurait déjà pu être confirmée entre-temps en promettant le même
+     * stock.
+     */
+    public function test_la_confirmation_recontrole_le_stock_meme_apres_une_creation_validee(): void
     {
         // Créée avec 100 <= 1000 disponibles à cet instant (cf. creerCommandeBrouillon()) : autorisée.
         $commande = $this->creerCommandeBrouillon(100);
-        $ligne = $commande->lignes()->first();
 
-        // Une autre vente (ou ajustement) fait chuter le stock du site à 30 AVANT le chargement.
+        // Une autre vente (ou ajustement) fait chuter le stock du site à 30 AVANT la confirmation.
         $this->seedStock(30);
+
+        $this->actingAs($this->user);
+
+        try {
+            CommandeVenteService::confirmer($commande);
+            $this->fail('Une ValidationException était attendue.');
+        } catch (ValidationException $e) {
+            // attendu : le stock a changé depuis la création, la confirmation le revérifie.
+        }
+
+        $this->assertEquals(StatutCommandeVente::BROUILLON, $commande->fresh()->statut);
+        $this->assertDatabaseHas('variante_stocks', [
+            'produit_variante_id' => $this->produit->variantePrincipale()->first()->id,
+            'site_id' => $this->site->id,
+            'qte_stock' => 30,
+            'qte_reservee' => 0,
+        ]);
+    }
+
+    /**
+     * La réservation créée à la confirmation couvre la quantité DEMANDÉE — un écart positif au
+     * chargement (plus chargé que réservé) reste soumis à un contrôle de disponibilité pour le
+     * surplus, jamais couvert automatiquement par la réservation existante.
+     */
+    public function test_le_chargement_recontrole_le_stock_pour_un_ecart_positif_non_couvert_par_la_reservation(): void
+    {
+        $commande = $this->creerCommandeBrouillon(100);
+        $ligne = $commande->lignes()->first();
+        $this->seedStock(100);
 
         $this->actingAs($this->user);
         CommandeVenteService::confirmer($commande);
         CommandeVenteService::demarrerChargement($commande);
 
+        // 100 sont réservés (et physiquement disponibles) ; aucun stock supplémentaire n'est
+        // arrivé — un chargement de 150 (surplus) doit donc être refusé.
         try {
             CommandeVenteService::validerChargement($commande, [[
                 'id' => $ligne->id,
-                'quantite_chargee' => 100,
-                'type_ecart' => 'conforme',
+                'quantite_chargee' => 150,
+                'type_ecart' => 'surplus',
             ]]);
             $this->fail('Une ValidationException était attendue.');
         } catch (ValidationException $e) {
-            // attendu : le stock a changé depuis la création, le chargement le revérifie.
+            // attendu
         }
 
         $this->assertEquals(StatutCommandeVente::CHARGEMENT_EN_COURS, $commande->fresh()->statut);
         $this->assertDatabaseHas('variante_stocks', [
             'produit_variante_id' => $this->produit->variantePrincipale()->first()->id,
             'site_id' => $this->site->id,
-            'qte_stock' => 30,
+            'qte_stock' => 100,
+            'qte_reservee' => 100,
         ]);
     }
 

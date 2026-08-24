@@ -17,10 +17,12 @@ class VarianteStock extends Model
         'produit_variante_id',
         'site_id',
         'qte_stock',
+        'qte_reservee',
     ];
 
     protected $casts = [
         'qte_stock' => 'integer',
+        'qte_reservee' => 'integer',
     ];
 
     // ── Relations ─────────────────────────────────────────────────────────────

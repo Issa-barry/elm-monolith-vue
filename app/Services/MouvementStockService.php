@@ -65,6 +65,7 @@ class MouvementStockService
             ->first();
 
         $stockAvant = $varianteStock?->qte_stock ?? 0;
+        $qteReservee = $varianteStock?->qte_reservee ?? 0;
         $delta = $type === 'entree' ? $quantite : -$quantite;
         $stockApres = $stockAvant + $delta;
 
@@ -72,9 +73,16 @@ class MouvementStockService
         // ligne VarianteStock nouvellement matérialisée à 0 pour une variante/site qui n'en
         // avait encore aucune — sinon un refus aurait le même effet de bord qu'un succès partiel
         // (transforme silencieusement "non initialisé" en "0 explicite"), pour rien.
-        if ($type === 'sortie' && $stockApres < 0 && ! $allowNegative) {
+        //
+        // Le plancher est qte_reservee (jamais juste 0) depuis l'introduction de
+        // StockReservationService (24/08/2026) : une sortie ne doit jamais faire passer le stock
+        // physique sous ce qui est activement promis à d'autres commandes confirmées — sauf
+        // quand cette sortie EST la consommation de cette réservation, auquel cas l'appelant a
+        // déjà libéré la réservation concernée avant d'appeler appliquer() (cf.
+        // StockReservationService::consommer(), CommandeVenteService::decrementerStock()).
+        if ($type === 'sortie' && $stockApres < $qteReservee && ! $allowNegative) {
             throw ValidationException::withMessages([
-                'stock' => "Stock insuffisant : {$quantite} demandés, {$stockAvant} disponibles.",
+                'stock' => "Stock insuffisant : {$quantite} demandés, ".($stockAvant - $qteReservee).' disponibles.',
             ]);
         }
 
@@ -280,14 +288,23 @@ class MouvementStockService
     }
 
     /**
-     * Quantité disponible pour une variante sur un site donné. Un site sans ligne
-     * VarianteStock a strictement 0 de disponible — jamais de repli sur l'agrégat
-     * legacy Produit::qte_stock, qui ne renseigne sur aucune agence en particulier.
+     * Quantité disponible pour une variante sur un site donné = stock physique moins réservé
+     * (StockReservationService — commandes vente confirmées, pas encore chargées). Un site sans
+     * ligne VarianteStock a strictement 0 de disponible — jamais de repli sur l'agrégat legacy
+     * Produit::qte_stock, qui ne renseigne sur aucune agence en particulier. Point d'entrée
+     * UNIQUE de ce calcul, réutilisé par toute la chaîne de vente (CommandeVenteService::
+     * verifierDisponibiliteLignes(), ProduitController::ajusterStock(),
+     * TransfertLogistiqueService::checkDisponibiliteStockSource()) — jamais dupliqué en logique.
+     * PdvCheckoutService::buildLignes() reste une exception : verrouillage groupé de plusieurs
+     * lignes en une seule requête (concurrence PDV), mais applique le même calcul physique
+     * moins réservé.
      */
     public static function quantiteDisponible(string $varianteId, string $siteId): int
     {
-        return (int) (VarianteStock::where('produit_variante_id', $varianteId)
+        $stock = VarianteStock::where('produit_variante_id', $varianteId)
             ->where('site_id', $siteId)
-            ->value('qte_stock') ?? 0);
+            ->first(['qte_stock', 'qte_reservee']);
+
+        return (int) ($stock->qte_stock ?? 0) - (int) ($stock->qte_reservee ?? 0);
     }
 }

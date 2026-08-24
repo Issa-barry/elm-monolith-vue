@@ -200,6 +200,7 @@ class CommissionEnveloppeGenerator
                     $produit?->id,
                     $categorie?->id,
                     $earnedAt,
+                    $vehicule->type_vehicule_id,
                 );
 
                 // Absence de règle = 0 pour cette cible sur cette ligne, jamais une
@@ -299,6 +300,7 @@ class CommissionEnveloppeGenerator
                         null,
                         $categorieId,
                         $earnedAt,
+                        $vehicule->type_vehicule_id,
                     );
 
                     $enveloppeUnitaire = (int) round((float) ($regleCategorie?->montant ?? 0));

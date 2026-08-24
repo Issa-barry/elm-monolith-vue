@@ -591,7 +591,11 @@ const hasActiveFilters = computed(
                         </div>
 
                         <!-- text -->
-                        <div v-else class="space-y-1.5">
+                        <div
+                            v-else
+                            :data-testid="`filter-field-${field.key}`"
+                            class="space-y-1.5"
+                        >
                             <Label>{{ field.label }}</Label>
                             <Input
                                 v-model="

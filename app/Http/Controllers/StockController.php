@@ -74,7 +74,15 @@ class StockController extends Controller
 
     private function stockQuery(string $orgId, array $siteIds, int $seuilOrganisation, array $filters): Builder
     {
-        $quantite = 'COALESCE(vs.qte_stock, 0)';
+        $physique = 'COALESCE(vs.qte_stock, 0)';
+        $reserve = 'COALESCE(vs.qte_reservee, 0)';
+        // « Disponible » = ce qui reste réellement vendable — physique moins réservé (commandes
+        // vente confirmées, pas encore chargées, cf. StockReservationService). L'État affiché
+        // ci-dessous se base sur CETTE quantité, jamais le physique brut : un stock physique
+        // positif mais entièrement réservé doit apparaître en Rupture, pas Disponible (24/08/2026,
+        // même bug que la page Commande CMD-* : deux commandes pouvaient toutes deux promettre le
+        // même stock tant que rien n'était retenu entre la confirmation et le chargement).
+        $quantite = "({$physique} - {$reserve})";
         $seuil = 'COALESCE(p.seuil_alerte_stock, ?)';
 
         $query = DB::table('produit_variantes as pv')
@@ -113,7 +121,9 @@ class StockController extends Controller
                 's.nom as site_nom',
                 's.code as site_code',
             ])
-            ->selectRaw("{$quantite} as qte_stock")
+            ->selectRaw("{$quantite} as qte_disponible")
+            ->selectRaw("{$physique} as qte_physique")
+            ->selectRaw("{$reserve} as qte_reservee")
             ->selectRaw("{$seuil} as seuil_effectif", [$seuilOrganisation]);
 
         if ($filters['search'] !== '') {
@@ -171,8 +181,12 @@ class StockController extends Controller
 
         $stocks->setCollection($rows->map(function ($row) use ($variantes, $derniersMouvements, $sitesAjustablesIds) {
             $variante = $variantes->get($row->variante_id);
+            // L'état (Rupture / Stock faible / Disponible) se base sur le DISPONIBLE — jamais le
+            // physique brut : un stock physique positif mais entièrement réservé par des
+            // commandes confirmées n'est plus vendable, il ne doit donc jamais afficher
+            // « Disponible » (cf. commentaire de stockQuery()).
             $statut = $this->stockStatutService->statutPour(
-                (int) $row->qte_stock,
+                (int) $row->qte_disponible,
                 (int) $row->seuil_effectif,
                 (bool) $row->alerte_stock_active,
             );
@@ -190,7 +204,9 @@ class StockController extends Controller
                 'site_id' => $row->site_id,
                 'site_nom' => $row->site_nom,
                 'site_code' => $row->site_code,
-                'qte_stock' => (int) $row->qte_stock,
+                'qte_stock' => (int) $row->qte_disponible,
+                'qte_physique' => (int) $row->qte_physique,
+                'qte_reservee' => (int) $row->qte_reservee,
                 'seuil_effectif' => (int) $row->seuil_effectif,
                 'statut' => $statut->value,
                 'statut_label' => $statut->label(),

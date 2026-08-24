@@ -355,19 +355,43 @@ export async function getVisibleSearchInput(page: Page): Promise<Locator> {
         )
         .first();
 
-    if (await direct.isVisible({ timeout: 1_000 }).catch(() => false)) {
+    // `waitFor` (contrairement à `isVisible({ timeout })`, un contrôle
+    // ~immédiat) attend activement que l'élément apparaisse — nécessaire ici
+    // car cette fonction est souvent appelée juste après une navigation
+    // Inertia, pendant que Vue est encore en train de monter l'en-tête ; un
+    // simple contrôle instantané renverrait `false` par excès de prudence et
+    // figerait ce helper sur un sélecteur mort en permanence pour l'appel.
+    const directVisible = await direct
+        .waitFor({ state: 'visible', timeout: 8_000 })
+        .then(() => true)
+        .catch(() => false);
+    if (directVisible) {
         return direct;
     }
 
     const filtresBtn = page.getByRole('button', { name: /^filtres/i }).first();
-    if (await filtresBtn.isVisible({ timeout: 1_000 }).catch(() => false)) {
+    const filtresVisible = await filtresBtn
+        .waitFor({ state: 'visible', timeout: 8_000 })
+        .then(() => true)
+        .catch(() => false);
+    if (filtresVisible) {
         await filtresBtn.click();
+        // Restreint aux vrais champs texte (type: 'text' de DataFilters, cf.
+        // `filter-field-<key>` posé sur ce champ précis) et exclut
+        // explicitement les inputs internes PrimeVue (`[data-pc-section]`,
+        // ex: le hidden input readonly du MultiSelect Agence/Statut) — sans
+        // ça `.first()` peut résoudre vers un input non éditable et bloquer
+        // indéfiniment un `.fill()`.
         const inDrawer = page
             .locator(
-                '[data-testid="filters-drawer"] input[type="text"]:visible, [data-testid="filters-drawer"] input[type="search"]:visible',
+                '[data-testid="filters-drawer"] [data-testid^="filter-field-"] input[type="text"]:visible:not([data-pc-section]), [data-testid="filters-drawer"] [data-testid^="filter-field-"] input[type="search"]:visible:not([data-pc-section])',
             )
             .first();
-        if (await inDrawer.isVisible({ timeout: 3_000 }).catch(() => false)) {
+        const inDrawerVisible = await inDrawer
+            .waitFor({ state: 'visible', timeout: 5_000 })
+            .then(() => true)
+            .catch(() => false);
+        if (inDrawerVisible) {
             return inDrawer;
         }
     }

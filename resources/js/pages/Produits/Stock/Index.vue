@@ -39,7 +39,10 @@ interface StockRow {
     site_id: string;
     site_nom: string;
     site_code: string | null;
+    /** Disponible = physique − réservé (commandes vente confirmées, pas encore chargées). */
     qte_stock: number;
+    qte_physique: number;
+    qte_reservee: number;
     seuil_effectif: number;
     statut: 'disponible' | 'stock_faible' | 'rupture';
     statut_label: string;
@@ -166,13 +169,15 @@ const produitAjustement = computed(() => {
         id: row.produit_id,
         nom: row.produit_nom,
         sku: row.sku,
-        qte_stock: row.qte_stock,
+        // Le modal ajuste le stock PHYSIQUE (jamais le disponible) : c'est row.qte_physique qui
+        // sert de base à son aperçu "stock après ajustement".
+        qte_stock: row.qte_physique,
         stocks_par_site: [
             {
                 site_id: row.site_id,
                 site_code: row.site_code,
                 site_nom: row.site_nom,
-                qte_stock: row.qte_stock,
+                qte_stock: row.qte_physique,
             },
         ],
         variantes: [
@@ -366,10 +371,21 @@ function onFilterMotif(motif: string | null): void {
                                         {{ row.site_code }}
                                     </div>
                                 </td>
-                                <td
-                                    class="px-4 py-3 text-right text-base font-semibold tabular-nums"
-                                >
-                                    {{ formatNombre(row.qte_stock) }}
+                                <td class="px-4 py-3 text-right">
+                                    <div
+                                        class="text-base font-semibold tabular-nums"
+                                    >
+                                        {{ formatNombre(row.qte_stock) }}
+                                    </div>
+                                    <div
+                                        v-if="row.qte_reservee > 0"
+                                        class="mt-0.5 text-xs whitespace-nowrap text-muted-foreground tabular-nums"
+                                    >
+                                        Physique
+                                        {{ formatNombre(row.qte_physique) }} ·
+                                        Réservé
+                                        {{ formatNombre(row.qte_reservee) }}
+                                    </div>
                                 </td>
                                 <td class="px-4 py-3">
                                     <StatusDot
@@ -551,7 +567,7 @@ function onFilterMotif(motif: string | null): void {
                 {
                     variante_id: selectedStock.variante_id,
                     site_id: selectedStock.site_id,
-                    qte_stock: selectedStock.qte_stock,
+                    qte_stock: selectedStock.qte_physique,
                 },
             ]"
         />

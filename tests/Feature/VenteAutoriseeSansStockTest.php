@@ -241,10 +241,17 @@ class VenteAutoriseeSansStockTest extends TestCase
         return [$commande, $ligne];
     }
 
+    /**
+     * La confirmation (BROUILLON → A_CHARGER) réserve désormais la quantité demandée dès cette
+     * étape (cf. StockReservationService, correctif du 24/08/2026) : une commande de 100 sur un
+     * stock de 100 réserve tout le disponible. Un écart positif au chargement (101 chargés au
+     * lieu des 100 réservés, sans stock supplémentaire arrivé entre-temps) reste donc soumis au
+     * même refus, désormais porté par le contrôle du SURPLUS non couvert par la réservation.
+     */
     public function test_commande_vente_refuse_le_chargement_si_stock_insuffisant_et_politique_off(): void
     {
         $this->seedStock(100);
-        [$commande, $ligne] = $this->makeCommandeEnChargement(101);
+        [$commande, $ligne] = $this->makeCommandeEnChargement(100);
 
         try {
             CommandeVenteService::validerChargement($commande, [[

@@ -169,6 +169,50 @@ class CommandeVenteStatutTest extends TestCase
     }
 
     /**
+     * Construit directement une commande en CHARGEMENT_EN_COURS SANS passer par confirmer() —
+     * qui réserve désormais du stock dès BROUILLON → A_CHARGER (cf. StockReservationService,
+     * correctif du 24/08/2026) et refuserait donc la confirmation elle-même pour un site au
+     * disponible insuffisant, avant même d'atteindre le chargement. Utilisé uniquement par les
+     * tests ci-dessous qui exercent decrementerStock() sur un site dont variante_stocks n'a
+     * jamais été touché — un scénario qui ne peut plus survenir via le workflow réel (confirmer()
+     * bloquerait déjà), mais dont le comportement de decrementerStock() lui-même reste à couvrir
+     * indépendamment.
+     */
+    private function creerCommandeEnChargementSansReservationPrealable(int $qte = 2): array
+    {
+        $produit = $this->makeProduitAvecVariante(
+            $this->org,
+            ['nom' => 'Produit Test', 'categorie_id' => $this->categorie->id],
+            ['prix_vente' => 2000, 'prix_usine' => 1500],
+        );
+
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'proprietaire_id' => $proprietaire->id,
+            'capacite_packs' => 10,
+        ]);
+
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->defaultSite->id,
+            'vehicule_id' => $vehicule->id,
+            'statut' => StatutCommandeVente::CHARGEMENT_EN_COURS,
+            'total_commande' => $qte * 2000,
+        ]);
+
+        $ligne = $commande->lignes()->create([
+            'variante_id' => $produit->variantePrincipale()->first()->id,
+            'quantite_demandee' => $qte,
+            'prix_usine_snapshot' => 1500.0,
+            'prix_vente_snapshot' => 2000.0,
+            'total_ligne' => $qte * 2000.0,
+        ]);
+
+        return compact('commande', 'ligne', 'produit');
+    }
+
+    /**
      * Fait progresser une commande BROUILLON jusqu'au statut cible en passant
      * réellement par CommandeVenteService (confirmer / demarrerChargement /
      * validerChargement), pour que facture et commissions soient créées comme
@@ -507,12 +551,10 @@ class CommandeVenteStatutTest extends TestCase
 
     public function test_valider_chargement_decremente_le_stock_du_site(): void
     {
-        // Aucune équipe assignée sur ce véhicule (cf. makeCommandeWithLigne) :
+        // Aucune équipe assignée sur ce véhicule (cf. creerCommandeEnChargementSansReservationPrealable) :
         // la sortie de stock doit avoir lieu même quand la commission est
         // silencieusement ignorée faute d'équipe.
-        ['commande' => $commande, 'ligne' => $ligne, 'produit' => $produit] = $this->makeCommandeWithLigne([
-            'statut' => StatutCommandeVente::CHARGEMENT_EN_COURS,
-        ], seedStock: false);
+        ['commande' => $commande, 'ligne' => $ligne, 'produit' => $produit] = $this->creerCommandeEnChargementSansReservationPrealable();
 
         $variante = $produit->variantePrincipale()->first();
         VarianteStock::create([
@@ -556,9 +598,7 @@ class CommandeVenteStatutTest extends TestCase
         // premier site touché. Le site démarre à 0 : le chargement est donc
         // refusé (stock insuffisant), jamais silencieusement clampé (cf.
         // correctif du 23/08/2026 — suppression du clamp silencieux).
-        ['commande' => $commande, 'ligne' => $ligne, 'produit' => $produit] = $this->makeCommandeWithLigne([
-            'statut' => StatutCommandeVente::CHARGEMENT_EN_COURS,
-        ], seedStock: false);
+        ['commande' => $commande, 'ligne' => $ligne, 'produit' => $produit] = $this->creerCommandeEnChargementSansReservationPrealable();
         $produit->update(['qte_stock' => 1000]);
 
         $this->actingAs($this->user)
@@ -577,9 +617,7 @@ class CommandeVenteStatutTest extends TestCase
 
     public function test_valider_chargement_refuse_si_stock_site_insuffisant(): void
     {
-        ['commande' => $commande, 'ligne' => $ligne, 'produit' => $produit] = $this->makeCommandeWithLigne([
-            'statut' => StatutCommandeVente::CHARGEMENT_EN_COURS,
-        ], seedStock: false);
+        ['commande' => $commande, 'ligne' => $ligne, 'produit' => $produit] = $this->creerCommandeEnChargementSansReservationPrealable();
 
         // Aucun VarianteStock existant pour cette variante/site avant validation.
 
