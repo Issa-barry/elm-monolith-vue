@@ -59,10 +59,13 @@ const sidebarNavGroups = computed((): SidebarNavGroup[] => {
                 title: 'Gestion',
                 items: [
                     { title: 'Produits', href: '/settings/produits' },
-                    { title: 'Dépenses', href: '/settings/depenses' },
+                    {
+                        title: 'Validation des dépenses',
+                        href: '/settings/depenses',
+                    },
                     { title: 'Ventes', href: '/settings/ventes' },
                     { title: 'Commissions', href: '/settings/commissions' },
-                    { title: 'Modules', href: '/settings/modules' },
+        { title: 'Applications', href: '/settings/modules' },
                 ],
             },
             {

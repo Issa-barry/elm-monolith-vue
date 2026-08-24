@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Requests\Settings;
+namespace App\Http\Requests;
 
 use App\Enums\CategorieDepense;
 use Illuminate\Foundation\Http\FormRequest;

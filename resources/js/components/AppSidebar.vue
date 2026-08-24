@@ -245,12 +245,24 @@ const mainNavItems = computed((): NavItem[] => {
         });
     }
 
-    if (canSee('depenses.read', 'depenses'))
+    if (canSee('depenses.read', 'depenses')) {
+        const depensesSousItems: NavItem[] = [
+            { title: 'Liste des dépenses', href: '/backoffice/depenses' },
+        ];
+        if (can('parametres.read')) {
+            depensesSousItems.push({
+                title: 'Types de dépense',
+                href: '/backoffice/depenses/types',
+            });
+        }
         items.push({
             title: 'Dépenses',
             href: '/backoffice/depenses',
             icon: Receipt,
+            items:
+                depensesSousItems.length > 1 ? depensesSousItems : undefined,
         });
+    }
 
     if (rhItems.value.length > 0) {
         items.push({

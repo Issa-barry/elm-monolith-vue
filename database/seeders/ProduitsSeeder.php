@@ -18,10 +18,18 @@ class ProduitsSeeder extends Seeder
     public function run(): void
     {
         $org = Organization::where('slug', 'elm')->firstOrFail();
-        // Site par défaut pour le stock initial (avant refonte : qte_stock était un compteur
-        // global sur Produit, migré vers un site au premier ajustement manuel — désormais
-        // on l'attribue directement à un site réel dès le seed).
-        $siteParDefaut = Site::where('organization_id', $org->id)->orderBy('created_at')->first();
+        // Stock initial ventilé sur CHAQUE site actif de l'org (avant refonte : qte_stock était
+        // un compteur global sur Produit, migré vers un site au premier ajustement manuel —
+        // désormais on l'attribue directement à des sites réels dès le seed). Ne provisionner
+        // que le premier site créé laissait tous les autres sites à 0 : inoffensif tant que
+        // MouvementStockService::appliquer() clampait silencieusement une sortie insuffisante à
+        // 0, mais le correctif du 23/08/2026 (refus strict, plus de clamp) transforme ce 0 en
+        // ValidationException dès qu'un scénario (transfert, vente...) part d'un autre site —
+        // cf. global-setup.ts, dont le transfert échouait systématiquement pour cette raison.
+        $sitesActifs = Site::where('organization_id', $org->id)
+            ->where('statut', 'active')
+            ->orderBy('created_at')
+            ->get();
 
         // Types de produit — provisionnés par ProduitTypeDefaultSeeder (doit tourner avant ce
         // seeder, cf. DatabaseSeeder), résolus ici par leur code stable.
@@ -153,13 +161,15 @@ class ProduitsSeeder extends Seeder
             $produit = $produitService->creer([...$data, 'organization_id' => $org->id]);
             $variante = $produit->variantePrincipale()->first();
 
-            if ($qteInitiale > 0 && $siteParDefaut && $variante) {
-                VarianteStock::create([
-                    'organization_id' => $org->id,
-                    'produit_variante_id' => $variante->id,
-                    'site_id' => $siteParDefaut->id,
-                    'qte_stock' => $qteInitiale,
-                ]);
+            if ($qteInitiale > 0 && $variante) {
+                foreach ($sitesActifs as $site) {
+                    VarianteStock::create([
+                        'organization_id' => $org->id,
+                        'produit_variante_id' => $variante->id,
+                        'site_id' => $site->id,
+                        'qte_stock' => $qteInitiale,
+                    ]);
+                }
                 $produit->resynchroniserQteStock();
             }
         }
