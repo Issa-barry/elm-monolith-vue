@@ -395,6 +395,14 @@ const gainPreview = computed(() => {
     return base * qte;
 });
 
+// Erreur métier générale renvoyée par le backend (ex: transfert déjà commissionné),
+// pas liée à un champ précis du formulaire — hors du typage strict de FormDataErrors.
+const commissionGeneralError = computed(
+    () =>
+        (commissionForm.errors as Record<string, string | undefined>)
+            .commission,
+);
+
 watch(showCommissionDialog, (open) => {
     if (open) {
         commissionForm.quantite_reference = totalQuantiteRecue.value;
@@ -1581,10 +1589,10 @@ function activiteDotClass(action: string): string {
                     </p>
                 </div>
                 <p
-                    v-if="commissionForm.errors.commission"
+                    v-if="commissionGeneralError"
                     class="text-xs text-destructive"
                 >
-                    {{ commissionForm.errors.commission }}
+                    {{ commissionGeneralError }}
                 </p>
 
                 <!-- Aperçu du gain total -->

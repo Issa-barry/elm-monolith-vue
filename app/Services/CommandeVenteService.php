@@ -25,10 +25,13 @@ class CommandeVenteService
      * commande » de la page Ventes et route de création elle-même (les deux appellent cette
      * même méthode, cf. CommandeVenteController::index()/create()/store()). Toujours vrai si
      * la politique globale autorise la vente sans stock (Parametre::
-     * isVentesAutoriseesSansStock()) ; sinon faux UNIQUEMENT si le site n'a absolument aucun
-     * stock vendable (total = 0) — un garde-fou volontairement grossier ("ce site n'a rien à
-     * vendre"), pas une garantie ligne par ligne : le contrôle fin par variante reste fait au
-     * moment réel de la vente (PDV, chargement de commande), jamais dupliqué ici.
+     * isVentesAutoriseesSansStock()) ; sinon délègue à StockStatutService::
+     * sitePossedeStockVendable() — une EXISTENCE ("ce site a-t-il au moins un produit
+     * vendable maintenant ?"), jamais une somme de quantités : un produit à +5 et un autre à
+     * -5 sur le même site reste vendable, une quantité négative isolée ne l'est jamais. Un
+     * garde-fou volontairement grossier, pas une garantie ligne par ligne : le contrôle fin
+     * par variante reste fait au moment réel de la vente (PDV, chargement de commande), jamais
+     * dupliqué ici.
      */
     public static function siteAutoriseNouvelleCommande(string $orgId, string $siteId): bool
     {
@@ -36,7 +39,7 @@ class CommandeVenteService
             return true;
         }
 
-        return app(StockStatutService::class)->stockTotalVendableSite($orgId, $siteId) !== 0;
+        return app(StockStatutService::class)->sitePossedeStockVendable($orgId, $siteId);
     }
 
     /**

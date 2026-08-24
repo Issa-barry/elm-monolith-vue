@@ -299,7 +299,7 @@ const MOTIFS_ANNULATION = [
     { value: 'doublon', label: 'Doublon' },
     { value: 'rupture_stock', label: 'Rupture de stock' },
     { value: 'autre', label: 'Autre' },
-] as const;
+];
 
 const annulerForm = useForm({
     motif_annulation_code: '' as string,

@@ -87,9 +87,11 @@ describe('CommissionIndexLayout', () => {
             label: 'Ouverte',
         });
         expect(
-            wrapper.get('[data-testid="commission-table-scroll"]').exists(),
+            wrapper.find('[data-testid="commission-table-scroll"]').exists(),
         ).toBe(true);
-        expect(wrapper.get('[data-testid="domain-table"]').exists()).toBe(true);
+        expect(wrapper.find('[data-testid="domain-table"]').exists()).toBe(
+            true,
+        );
     });
 
     it('émet les deux actions du menu export', async () => {
@@ -109,7 +111,7 @@ describe('CommissionIndexLayout', () => {
         const wrapper = mountLayout(0);
 
         expect(
-            wrapper.get('[data-testid="commission-empty-state"]').exists(),
+            wrapper.find('[data-testid="commission-empty-state"]').exists(),
         ).toBe(true);
         expect(
             wrapper.find('[data-testid="commission-table-scroll"]').exists(),

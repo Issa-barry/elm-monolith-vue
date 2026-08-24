@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/sidebar';
 import { usePermissions } from '@/composables/usePermissions';
 import { dashboard, home } from '@/routes';
-import { type NavItem } from '@/types';
+import { type NavItem, type PermissionKey } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
 import {
     Briefcase,
@@ -52,7 +52,7 @@ const transfertsAReceptionner = computed(
 );
 
 /** Guard combiné permission + module actif */
-const canSee = (permission: string, module: string): boolean =>
+const canSee = (permission: PermissionKey, module: string): boolean =>
     can(permission) && moduleActive(module);
 
 const rhItems = computed((): NavItem[] => {

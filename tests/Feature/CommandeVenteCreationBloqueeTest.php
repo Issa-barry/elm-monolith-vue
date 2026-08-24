@@ -21,9 +21,14 @@ use Tests\TestCase;
  * uniquement quand la politique globale interdit la vente sans stock (Parametre::
  * isVentesAutoriseesSansStock()) ET que le site personnel de l'utilisateur (celui que
  * CommandeVenteController::getUserSiteModel() utilisera réellement pour la commande) n'a
- * absolument aucun stock vendable — cf. CommandeVenteService::siteAutoriseNouvelleCommande().
- * Le blocage vit aussi bien dans les props Inertia (état du bouton) que dans create()/store()
- * (accès direct par URL non contournable) — pas seulement côté frontend.
+ * absolument AUCUN produit vendable maintenant — cf. CommandeVenteService::
+ * siteAutoriseNouvelleCommande() / StockStatutService::sitePossedeStockVendable(). C'est une
+ * EXISTENCE ("le site a-t-il quelque chose à vendre ?"), jamais une somme de quantités : un
+ * produit à +5 et un autre à -5 sur le même site reste vendable (décision produit du
+ * 24/08/2026), une quantité négative isolée ne l'est jamais, et un produit/service qui ne gère
+ * pas de stock physique (type "service") reste toujours vendable, quel que soit le stock du
+ * site. Le blocage vit aussi bien dans les props Inertia (état du bouton) que dans
+ * create()/store() (accès direct par URL non contournable) — pas seulement côté frontend.
  */
 class CommandeVenteCreationBloqueeTest extends TestCase
 {
@@ -104,12 +109,71 @@ class CommandeVenteCreationBloqueeTest extends TestCase
             ->assertInertia(fn ($page) => $page->where('can_creer_commande', true));
     }
 
-    public function test_bouton_actif_si_stock_site_negatif_mais_non_nul(): void
+    /**
+     * Remplace l'ancien test qui affirmait à tort qu'un stock négatif isolé rendait le bouton
+     * actif : sitePossedeStockVendable() exige une quantité STRICTEMENT positive quelque part
+     * sur le site — une quantité négative (résidu d'une politique précédemment activée, ou
+     * d'une vente en négatif) ne rend jamais, à elle seule, un site vendable.
+     */
+    public function test_bouton_bloque_si_seul_stock_du_site_est_negatif(): void
     {
-        // Politique désactivée, mais le stock du site n'est pas exactement 0 (déjà négatif
-        // suite à une politique précédemment activée) — le garde-fou est "total = 0", pas
-        // "total <= 0" : seul un site VRAIMENT vide bloque le bouton.
         $this->seedStock(-5);
+
+        $this->actingAs($this->user)
+            ->get('/backoffice/ventes')
+            ->assertInertia(fn ($page) => $page
+                ->where('can_creer_commande', false)
+                ->where('raison_blocage_commande', 'Aucun stock disponible pour ce site.')
+            );
+    }
+
+    /**
+     * Un produit à +5 ET un autre à -5 sur le même site : le site a bien un produit
+     * réellement vendable (celui à +5). Une somme des deux quantités donnerait 0 et
+     * masquerait à tort ce produit vendable — exactement le bug corrigé le 24/08/2026 (cf.
+     * StockStatutService::sitePossedeStockVendable(), qui n'utilise plus jamais de somme).
+     */
+    public function test_bouton_actif_si_un_produit_positif_malgre_un_autre_negatif_sur_le_site(): void
+    {
+        $this->seedStock(5);
+
+        $autreProduit = $this->makeProduitAvecVariante(
+            $this->org,
+            ['nom' => 'Pack Négatif', 'type' => 'fabricable'],
+            ['prix_vente' => 2000, 'prix_usine' => 1500],
+        );
+        VarianteStock::updateOrCreate(
+            ['produit_variante_id' => $autreProduit->variantePrincipale()->first()->id, 'site_id' => $this->site->id],
+            ['organization_id' => $this->org->id, 'qte_stock' => -5],
+        );
+
+        $this->actingAs($this->user)
+            ->get('/backoffice/ventes')
+            ->assertInertia(fn ($page) => $page->where('can_creer_commande', true));
+    }
+
+    /**
+     * Un produit/service vendable qui NE gère PAS de stock (ex: prestation) rend le bouton
+     * actif même si le site n'a absolument aucune ligne de stock physique — $this->produit
+     * (fabricable, gere_stock=true) reste à 0 tout au long de ce test : seul le service ici
+     * rend le site vendable.
+     */
+    public function test_bouton_actif_si_un_service_vendable_sans_stock_existe(): void
+    {
+        $typeService = ProduitType::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Prestation',
+            'code' => 'prestation',
+            'gere_stock' => false,
+            'vendable' => true,
+            'achetable' => false,
+            'statut' => 'actif',
+        ]);
+        $this->makeProduitAvecVariante(
+            $this->org,
+            ['nom' => 'Livraison express', 'produit_type_id' => $typeService->id],
+            ['prix_vente' => 5000],
+        );
 
         $this->actingAs($this->user)
             ->get('/backoffice/ventes')

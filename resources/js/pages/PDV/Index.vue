@@ -577,7 +577,7 @@ type SerialLike = {
 const savedSerialPort = ref<SerialPortLike | null>(null);
 
 async function getSerialPort(): Promise<SerialPortLike | null> {
-    const serial = (navigator as Record<string, unknown>).serial as
+    const serial = (navigator as unknown as Record<string, unknown>).serial as
         | SerialLike
         | undefined;
     if (!serial) return null;
@@ -599,7 +599,7 @@ async function getSerialPort(): Promise<SerialPortLike | null> {
 async function printTicketSerial(): Promise<void> {
     if (!ticketCommande.value) return;
 
-    const nav = navigator as Record<string, unknown>;
+    const nav = navigator as unknown as Record<string, unknown>;
     if (!nav.serial) {
         toast.add({
             severity: 'warn',
@@ -643,7 +643,7 @@ async function printTicketSerial(): Promise<void> {
 }
 
 async function connectPrinter(): Promise<void> {
-    const serial = (navigator as Record<string, unknown>).serial as
+    const serial = (navigator as unknown as Record<string, unknown>).serial as
         | SerialLike
         | undefined;
     if (!serial) {

@@ -40,7 +40,7 @@ function isItemActive(href: NavItem['href']) {
     );
 }
 
-function isParentActive(item: NavItem) {
+function isParentActive(item: NavItem): boolean {
     return (
         isItemActive(item.href) ||
         !!item.items?.some((subItem) => isParentActive(subItem))

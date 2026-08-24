@@ -27,6 +27,23 @@ export default defineConfig({
         tailwindcss(),
         wayfinder({
             formVariants: true,
+            // Les helpers Wayfinder (resources/js/routes, resources/js/actions) sont des
+            // fichiers PARTAGÉS, non isolés par environnement (contrairement à buildDirectory
+            // ci-dessus) — et `npm run dev` tourne en continu en local pendant qu'on lance
+            // `npm run e2e:build` : son propre plugin Wayfinder régénère ces mêmes fichiers
+            // avec l'APP_URL de dev (http://localhost:8000) dès qu'un fichier PHP surveillé
+            // change, en pleine course avec la génération e2e (~3 min de build) — le bundle
+            // e2e finissait avec un mélange incohérent d'URLs 8000/8080 selon l'ordre
+            // d'arrivée, et le formulaire de connexion POSTait alors vers le mauvais serveur
+            // (24/08/2026, aucun test E2E ne pouvait plus se connecter). On ne peut pas
+            // supprimer cette fenêtre de course sans séparer les fichiers générés par
+            // environnement (changement plus large, hors périmètre) : à la place,
+            // `npm run e2e:build` (package.json) génère explicitement avec --env=e2e AVANT
+            // `vite build`, et ce plugin saute sa propre régénération pendant ce build précis
+            // — la fenêtre de course résiduelle (lecture initiale du graphe de modules par
+            // Rollup) tombe de ~3 min à quelques millisecondes.
+            actions: process.env.APP_ENV !== 'e2e',
+            routes: process.env.APP_ENV !== 'e2e',
         }),
         vue({
             template: {

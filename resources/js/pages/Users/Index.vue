@@ -2,6 +2,7 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import { type FonctionRhOption } from '@/components/rh/FonctionRhSelect.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -73,7 +74,7 @@ const props = defineProps<{
     pending_registrations: PendingUser[];
     validation_role_options: Option[];
     validation_site_options: Option[];
-    validation_fonction_options: Option[];
+    validation_fonction_options: FonctionRhOption[];
     type_employe_options: Option[];
     statut_employe_options: Option[];
     role_labels: Record<string, string>;

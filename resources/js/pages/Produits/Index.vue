@@ -375,6 +375,8 @@ interface StockMouvement {
     stock_avant: number | null;
     stock_apres: number | null;
     notes: string | null;
+    motif_type: string;
+    motif_label: string;
     site_nom: string | null;
     site_code: string | null;
     createur_nom: string | null;

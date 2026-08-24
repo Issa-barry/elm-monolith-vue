@@ -24,7 +24,7 @@ import HistoriqueModal from '../partials/HistoriqueModal.vue';
 interface Site {
     id: string;
     nom: string;
-    code: string | null;
+    code: string;
 }
 
 interface StockRow {
