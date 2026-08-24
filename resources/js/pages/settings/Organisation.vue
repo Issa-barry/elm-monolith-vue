@@ -26,7 +26,7 @@ interface Props {
 const props = defineProps<Props>();
 
 const breadcrumbItems: BreadcrumbItem[] = [
-    { title: 'Organisation', href: edit().url },
+    { title: "Informations de l'organisation", href: edit().url },
 ];
 
 const form = useForm({
@@ -78,12 +78,12 @@ function submit() {
 
 <template>
     <AppLayout :breadcrumbs="breadcrumbItems">
-        <Head title="Organisation" />
+        <Head title="Informations de l'organisation" />
 
         <SettingsLayout>
             <div class="flex flex-col space-y-6">
                 <HeadingSmall
-                    title="Organisation"
+                    title="Informations de l'organisation"
                     description="Identité affichée dans l'application (nom, logo)"
                 />
 
