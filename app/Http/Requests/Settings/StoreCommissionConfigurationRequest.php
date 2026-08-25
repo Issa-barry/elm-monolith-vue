@@ -153,16 +153,22 @@ class StoreCommissionConfigurationRequest extends FormRequest
         });
     }
 
+    /**
+     * 0 est une valeur métier légitime, distincte de "non coché" : un bénéficiaire
+     * coché peut n'avoir droit à rien par défaut (montant général = 0) tout en
+     * étant réintroduit uniquement pour certains types de véhicule via une
+     * exception positive (ex: Site jamais commissionné sauf en Tricycle).
+     */
     private function validerMontant(ValidatorContract $validator, mixed $montant, string $attribut): void
     {
         if ($montant === null || $montant === '') {
-            $validator->errors()->add($attribut, 'Saisissez un montant entier, supérieur à 0.');
+            $validator->errors()->add($attribut, 'Saisissez un montant entier, 0 ou plus.');
 
             return;
         }
 
-        if (! preg_match('/^\d+$/', (string) $montant) || (int) $montant < 1 || (int) $montant > 99_999_999) {
-            $validator->errors()->add($attribut, 'Saisissez un montant entier, supérieur à 0.');
+        if (! preg_match('/^\d+$/', (string) $montant) || (int) $montant < 0 || (int) $montant > 99_999_999) {
+            $validator->errors()->add($attribut, 'Saisissez un montant entier, 0 ou plus.');
         }
     }
 
