@@ -164,11 +164,7 @@ const hasActiveFilters = computed(() =>
 );
 
 function clearFilters(): void {
-    router.get(
-        STOCK_URL,
-        {},
-        { preserveScroll: true, replace: true },
-    );
+    router.get(STOCK_URL, {}, { preserveScroll: true, replace: true });
 }
 
 function formatNombre(value: number | null): string {
@@ -409,8 +405,7 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                                         }}</span>
                                         <span
                                             v-if="
-                                                row.variante_libelle &&
-                                                row.sku
+                                                row.variante_libelle && row.sku
                                             "
                                         >
                                             ·
@@ -434,9 +429,7 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                                         {{ row.site_code }}
                                     </div>
                                 </td>
-                                <td
-                                    class="px-4 py-3 text-right tabular-nums"
-                                >
+                                <td class="px-4 py-3 text-right tabular-nums">
                                     {{ formatNombre(row.qte_physique) }}
                                 </td>
                                 <td
@@ -563,10 +556,7 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                                 </td>
                             </tr>
                             <tr v-if="stocks.data.length === 0">
-                                <td
-                                    colspan="11"
-                                    class="px-6 py-16 text-center"
-                                >
+                                <td colspan="11" class="px-6 py-16 text-center">
                                     <PackageOpen
                                         class="mx-auto h-10 w-10 text-muted-foreground/40"
                                     />
@@ -597,8 +587,8 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                     />
                     <p class="mt-3 font-medium">Aucun stock à afficher</p>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        Aucun produit gérant le stock ne correspond aux
-                        filtres actuels.
+                        Aucun produit gérant le stock ne correspond aux filtres
+                        actuels.
                     </p>
                 </div>
 
@@ -611,9 +601,7 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                     <div class="flex items-start justify-between gap-2">
                         <div class="min-w-0">
                             <Link
-                                :href="
-                                    '/backoffice/produits/' + row.produit_id
-                                "
+                                :href="'/backoffice/produits/' + row.produit_id"
                                 class="font-medium hover:text-primary hover:underline"
                             >
                                 {{ row.produit_nom }}
@@ -622,9 +610,7 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                                 <span v-if="row.variante_libelle">{{
                                     row.variante_libelle
                                 }}</span>
-                                <span
-                                    v-if="row.variante_libelle && row.sku"
-                                >
+                                <span v-if="row.variante_libelle && row.sku">
                                     ·
                                 </span>
                                 <span v-if="row.sku" class="font-mono"
@@ -644,10 +630,10 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                         />
                     </div>
 
-                    <div class="mt-3 rounded-lg bg-muted/40 px-3 py-2 text-center">
-                        <p class="text-xs text-muted-foreground">
-                            Disponible
-                        </p>
+                    <div
+                        class="mt-3 rounded-lg bg-muted/40 px-3 py-2 text-center"
+                    >
+                        <p class="text-xs text-muted-foreground">Disponible</p>
                         <p class="text-2xl font-bold tabular-nums">
                             {{ formatNombre(row.qte_disponible) }}
                         </p>
@@ -698,7 +684,10 @@ function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
                     <div
                         class="mt-3 flex items-center justify-between text-xs text-muted-foreground"
                     >
-                        <span>Alerte à {{ formatNombre(row.seuil_effectif) }}</span>
+                        <span
+                            >Alerte à
+                            {{ formatNombre(row.seuil_effectif) }}</span
+                        >
                         <span v-if="row.dernier_mouvement" class="text-right">
                             <span
                                 class="font-medium"
