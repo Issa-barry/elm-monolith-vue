@@ -381,7 +381,11 @@ class DepenseController extends Controller
 
     private function buildLivreurDetail(string $id, string $orgId): ?array
     {
-        $l = Livreur::with(['personne', 'equipes:id,nom'])
+        // EquipeLivraison::nom est un accesseur PHP calculé (vehicule?->nom_vehicule), jamais
+        // une colonne réelle de equipes_livraison — le sélectionner via with('equipes:id,nom')
+        // provoquait une erreur SQL ("Unknown column"). On charge donc son vehicule (dont
+        // l'accesseur dépend) plutôt que de tenter de sélectionner l'accesseur lui-même.
+        $l = Livreur::with(['personne', 'equipes.vehicule:id,nom_vehicule'])
             ->where('organization_id', $orgId)
             ->find($id);
 

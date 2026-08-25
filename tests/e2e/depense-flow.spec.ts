@@ -261,8 +261,12 @@ test('stat cards reflect active filters', async ({ page }) => {
         .first();
     await expect(valideesCard).toHaveText('0');
 
-    await searchInput.fill('');
-    await searchInput.press('Enter');
+    // Filtres en mode trigger-only (AGENTS.md §2) : le drawer se referme après le premier
+    // Appliquer (touche Entrée) — le champ recherche n'est donc plus dans le DOM, il faut
+    // rouvrir "Filtres" (via un nouvel appel, pas réutiliser le Locator devenu obsolète).
+    const searchInputAgain = await getVisibleSearchInput(page);
+    await searchInputAgain.fill('');
+    await searchInputAgain.press('Enter');
     await page.waitForLoadState('networkidle');
 
     await expect(totalCard).not.toHaveText('0', { timeout: 10_000 });
