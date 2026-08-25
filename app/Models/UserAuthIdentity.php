@@ -27,6 +27,13 @@ class UserAuthIdentity extends Model
         'verified_at', 'verification_token', 'verification_expires_at', 'is_primary',
     ];
 
+    // Défense en profondeur (cf. HandleInertiaRequests::authUserPayload()) : ce modèle
+    // n'est censé être sérialisé nulle part côté frontend, mais un jeton de vérification
+    // (OTP/lien email) reste un secret d'authentification — jamais dans un JSON, même par
+    // accident futur, indépendamment de sa valeur actuelle (souvent null, jamais "sûr" pour
+    // autant).
+    protected $hidden = ['verification_token'];
+
     protected function casts(): array
     {
         return [
