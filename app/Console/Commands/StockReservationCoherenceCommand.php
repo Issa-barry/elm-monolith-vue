@@ -21,7 +21,7 @@ class StockReservationCoherenceCommand extends Command
 {
     protected $signature = 'stock:verifier-coherence-reservations {--organization= : ID d\'organisation ; toutes si omis}';
 
-    protected $description = "Détecte les écarts entre variante_stocks.qte_reservee et la somme des réservations actives — ne corrige jamais automatiquement.";
+    protected $description = 'Détecte les écarts entre variante_stocks.qte_reservee et la somme des réservations actives — ne corrige jamais automatiquement.';
 
     public function handle(): int
     {
@@ -78,7 +78,7 @@ class StockReservationCoherenceCommand extends Command
             return self::SUCCESS;
         }
 
-        $this->warn(count($ecarts)." écart(s) détecté(s) — AUCUNE correction automatique effectuée :");
+        $this->warn(count($ecarts).' écart(s) détecté(s) — AUCUNE correction automatique effectuée :');
         $this->table(
             ['Organisation', 'Variante', 'Site', 'qte_reservee (compteur)', 'Somme réservations actives'],
             $ecarts,
