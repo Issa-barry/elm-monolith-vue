@@ -58,7 +58,10 @@ class RaceLockOuCreerCommand extends Command
 
             file_put_contents($syncDir.'/b_ready', '1');
 
-            $deadline = microtime(true) + 10;
+            // 30s : même marge que l'attente symétrique côté test principal (cf.
+            // VarianteStockConcurrenceTest::attendreFichier()) — reste borné, jamais un blocage
+            // indéfini si le processus principal ne signale jamais "go".
+            $deadline = microtime(true) + 30;
             while (! file_exists($syncDir.'/go') && microtime(true) < $deadline) {
                 usleep(20000);
             }

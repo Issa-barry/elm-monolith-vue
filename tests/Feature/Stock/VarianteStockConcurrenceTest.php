@@ -199,9 +199,17 @@ class VarianteStockConcurrenceTest extends TestCase
         }
     }
 
+    /**
+     * 30s (pas 10s) : le sous-processus B doit démarrer un interpréteur PHP, amorcer tout le
+     * framework Laravel puis ouvrir une connexion MySQL avant de pouvoir écrire "b_ready" — sous
+     * charge système forte (ex : exécuté au sein de la suite complète, des milliers de tests
+     * juste avant), ce démarrage peut dépasser 10s sans qu'il s'agisse d'un défaut de
+     * lockOuCreer() lui-même (constaté : 5/5 exécutions isolées passent en ~5-6s chacune ; le
+     * seul échec observé survenait au sein d'une exécution de ~70 minutes de la suite complète).
+     */
     private function attendreFichier(string $path, string $messageEchec, bool $autoriserErreur = false): void
     {
-        $deadline = microtime(true) + 10;
+        $deadline = microtime(true) + 30;
         while (! file_exists($path) && microtime(true) < $deadline) {
             usleep(20000);
         }
