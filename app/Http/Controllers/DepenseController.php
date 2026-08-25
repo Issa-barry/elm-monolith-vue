@@ -27,6 +27,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -186,13 +187,30 @@ class DepenseController extends Controller
         if ($field === 'concerne') {
             $results = collect();
 
+            // livreur/proprietaire : recherche par leur propre nom OU par le nom du véhicule
+            // auquel ils sont rattachés (livreur → equipes.vehicule, proprietaire → vehicules) —
+            // en pratique, on identifie souvent ces bénéficiaires par le véhicule plutôt que
+            // par leur nom propre.
+            $vehiculeRelationParType = [
+                'livreur' => 'equipes.vehicule',
+                'proprietaire' => 'vehicules',
+            ];
+
             foreach (['employe' => 'employeBeneficiaire', 'livreur' => 'livreurBeneficiaire', 'proprietaire' => 'proprietaireBeneficiaire'] as $type => $relation) {
+                $vehiculeRelation = $vehiculeRelationParType[$type] ?? null;
+
                 $items = Depense::where('organization_id', $orgId)
                     ->where('beneficiaire_type', $type)
-                    ->whereHas($relation, fn ($qb) => $qb->whereHas('personne', fn ($p) => $p
-                        ->where('nom', 'LIKE', $like)
-                        ->orWhere('prenom', 'LIKE', $like)
-                    ))
+                    ->whereHas($relation, function ($qb) use ($like, $vehiculeRelation) {
+                        $qb->where(fn ($q) => $q->whereHas('personne', fn ($p) => $p
+                            ->where('nom', 'LIKE', $like)
+                            ->orWhere('prenom', 'LIKE', $like)
+                        ));
+
+                        if ($vehiculeRelation) {
+                            $qb->orWhereHas($vehiculeRelation, fn ($v) => $v->where('nom_vehicule', 'LIKE', $like));
+                        }
+                    })
                     ->with([$relation, $relation.'.personne'])
                     ->get()
                     ->pluck($relation)
@@ -1246,19 +1264,21 @@ class DepenseController extends Controller
         return Employe::with('personne')
             ->where('organization_id', $orgId)
             ->where('statut', 'actif')
-            ->get(['id', 'personne_id', 'matricule'])
+            ->get(['id', 'personne_id', 'matricule', 'site_id'])
             ->sortBy('nom')
             ->map(fn ($e) => [
                 'id' => $e->id,
                 'nom_complet' => trim("{$e->prenom} {$e->nom}"),
                 'matricule' => $e->matricule,
+                'telephone' => $e->telephone,
+                'site_nom' => $e->site?->nom,
             ])
             ->values();
     }
 
     private function loadLivreurs(string $orgId)
     {
-        return Livreur::with('personne')
+        return Livreur::with(['personne', 'equipes.vehicule'])
             ->where('organization_id', $orgId)
             ->where('is_active', true)
             ->orderBy('nom_complet')
@@ -1266,12 +1286,18 @@ class DepenseController extends Controller
             ->map(fn ($l) => [
                 'id' => $l->id,
                 'nom_complet' => $l->libelleAffichage(),
+                'telephone' => $l->telephone,
+                // Permet de retrouver un livreur par le nom/l'immatriculation du véhicule
+                // auquel il est rattaché (Depenses/Create.vue et Edit.vue), en plus de son
+                // propre nom/téléphone — deux champs distincts, pas un libellé combiné, pour
+                // que le picker propose un champ de recherche dédié par critère.
+                ...$this->vehiculeInfoDepuis($l->equipes->pluck('vehicule')),
             ]);
     }
 
     private function loadProprietaires(string $orgId)
     {
-        return Proprietaire::with('personne')
+        return Proprietaire::with(['personne', 'vehicules'])
             ->where('organization_id', $orgId)
             ->where('is_active', true)
             ->get(['id', 'personne_id'])
@@ -1279,6 +1305,10 @@ class DepenseController extends Controller
             ->map(fn ($p) => [
                 'id' => $p->id,
                 'nom_complet' => trim("{$p->prenom} {$p->nom}"),
+                'telephone' => $p->telephone,
+                // Idem : retrouver un propriétaire par le nom/l'immatriculation d'un véhicule
+                // qui lui appartient — deux champs distincts (cf. loadLivreurs()).
+                ...$this->vehiculeInfoDepuis($p->vehicules),
             ])
             ->values();
     }
@@ -1293,8 +1323,26 @@ class DepenseController extends Controller
             ->map(fn (Prestataire $p) => [
                 'id' => $p->id,
                 'nom_complet' => $p->nom_complet,
+                'telephone' => $p->phone,
             ])
             ->values();
+    }
+
+    /**
+     * Noms et immatriculations des véhicules de la collection, chacun joint par ", " —
+     * deux champs distincts (pas un libellé combiné) pour que le picker propose un champ de
+     * recherche dédié par critère (cf. loadLivreurs()/loadProprietaires()).
+     *
+     * @return array{vehicule_noms: ?string, vehicule_immatriculations: ?string}
+     */
+    private function vehiculeInfoDepuis(Collection $vehicules): array
+    {
+        $vehicules = $vehicules->filter()->unique('id');
+
+        return [
+            'vehicule_noms' => $vehicules->pluck('nom_vehicule')->filter()->implode(', ') ?: null,
+            'vehicule_immatriculations' => $vehicules->pluck('immatriculation')->filter()->implode(', ') ?: null,
+        ];
     }
 
     private function defaultSiteId(): ?string
