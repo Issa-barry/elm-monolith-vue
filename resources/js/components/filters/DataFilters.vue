@@ -590,6 +590,25 @@ const hasActiveFilters = computed(
                             />
                         </div>
 
+                        <!-- autocomplete -->
+                        <div
+                            v-else-if="
+                                field.type === 'autocomplete' &&
+                                field.suggestionsUrl
+                            "
+                            :data-testid="`filter-field-${field.key}`"
+                        >
+                            <FilterAutocomplete
+                                v-model="localValues[field.key] as string"
+                                :label="field.label"
+                                :suggestions-url="field.suggestionsUrl"
+                                :field-name="field.suggestionsField ?? field.key"
+                                :placeholder="field.placeholder ?? ''"
+                                :disabled="field.disabled ?? false"
+                                full-width
+                            />
+                        </div>
+
                         <!-- text -->
                         <div
                             v-else
