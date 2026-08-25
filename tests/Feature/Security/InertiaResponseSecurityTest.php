@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Security;
 
+use App\Http\Middleware\HandleInertiaRequests;
+use App\Models\UserAuthIdentity;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -55,9 +57,20 @@ class InertiaResponseSecurityTest extends TestCase
 
     public function test_inertia_xhr_navigation_still_returns_proper_inertia_json(): void
     {
+        // Une navigation Inertia (SPA) réelle envoie toujours sa version d'assets
+        // connue — l'omettre déclenche à raison un 409 (rechargement complet requis),
+        // cf. HandleInertiaRequests::version(). On la calcule pour simuler une vraie
+        // navigation interne, pas un premier chargement de page.
+        $version = (new HandleInertiaRequests)->version(request());
+
         $response = $this->actingAs($this->user)
-            ->withHeaders(['X-Inertia' => 'true'])
+            ->withHeaders(['X-Inertia' => 'true', 'X-Inertia-Version' => $version])
             ->get(route('type-vehicules.index'));
+
+        fwrite(STDERR, "\n[DEBUG version] ".var_export($version, true)."\n");
+        fwrite(STDERR, '[DEBUG status] '.$response->getStatusCode()."\n");
+        fwrite(STDERR, '[DEBUG content-type] '.$response->headers->get('Content-Type')."\n");
+        fwrite(STDERR, '[DEBUG body] '.substr($response->getContent(), 0, 500)."\n");
 
         $response->assertStatus(200);
         $response->assertHeader('Content-Type', 'application/json');
@@ -68,10 +81,14 @@ class InertiaResponseSecurityTest extends TestCase
     public function test_default_cache_control_is_the_strict_no_store_variant(): void
     {
         $response = $this->actingAs($this->user)->get(route('type-vehicules.index'));
-        $this->assertSame(
-            'no-store, no-cache, must-revalidate, private',
-            $response->headers->get('Cache-Control'),
-        );
+        $cacheControl = $response->headers->get('Cache-Control');
+
+        // Symfony réordonne les directives alphabétiquement (cf. ResponseHeaderBag::
+        // getCacheControlHeader()) : on vérifie le contenu, pas l'ordre exact.
+        $this->assertStringContainsString('no-store', $cacheControl);
+        $this->assertStringContainsString('no-cache', $cacheControl);
+        $this->assertStringContainsString('must-revalidate', $cacheControl);
+        $this->assertStringContainsString('private', $cacheControl);
     }
 
     // ── auth.user : liste blanche, jamais le modèle brut ────────────────────────
@@ -119,9 +136,9 @@ class InertiaResponseSecurityTest extends TestCase
 
     public function test_verification_token_is_never_serialized_on_user_auth_identity(): void
     {
-        $identity = \App\Models\UserAuthIdentity::create([
+        $identity = UserAuthIdentity::create([
             'user_id' => $this->user->id,
-            'type' => \App\Models\UserAuthIdentity::TYPE_EMAIL,
+            'type' => UserAuthIdentity::TYPE_EMAIL,
             'value' => 'test-otp@example.com',
             'normalized_value' => 'test-otp@example.com',
             'verification_token' => 'super-secret-otp-token',

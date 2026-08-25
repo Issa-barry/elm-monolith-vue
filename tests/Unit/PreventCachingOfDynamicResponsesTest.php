@@ -18,7 +18,11 @@ class PreventCachingOfDynamicResponsesTest extends TestCase
             fn () => new Response('ok'),
         );
 
-        $this->assertSame('no-store, no-cache, must-revalidate, private', $response->headers->get('Cache-Control'));
+        $cacheControl = $response->headers->get('Cache-Control');
+        $this->assertStringContainsString('no-store', $cacheControl);
+        $this->assertStringContainsString('no-cache', $cacheControl);
+        $this->assertStringContainsString('must-revalidate', $cacheControl);
+        $this->assertStringContainsString('private', $cacheControl);
         $this->assertSame('no-cache', $response->headers->get('Pragma'));
     }
 
@@ -36,6 +40,11 @@ class PreventCachingOfDynamicResponsesTest extends TestCase
             },
         );
 
-        $this->assertSame('private, max-age=300', $response->headers->get('Cache-Control'));
+        // Symfony réordonne les directives alphabétiquement (cf. ResponseHeaderBag::
+        // getCacheControlHeader()) : on vérifie le contenu, pas l'ordre exact.
+        $cacheControl = $response->headers->get('Cache-Control');
+        $this->assertStringContainsString('max-age=300', $cacheControl);
+        $this->assertStringContainsString('private', $cacheControl);
+        $this->assertStringNotContainsString('no-store', $cacheControl);
     }
 }

@@ -34,11 +34,21 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class PreventCachingOfDynamicResponses
 {
+    /**
+     * Valeur que Symfony assigne lui-même à TOUTE Response dès sa construction quand
+     * rien n'a été fourni explicitement (cf. ResponseHeaderBag::__construct() /
+     * computeCacheControlValue()) — `headers->has('Cache-Control')` est donc TOUJOURS
+     * vrai et ne permet jamais de distinguer "valeur par défaut Symfony, jamais
+     * choisie par personne" de "choix explicite du contrôleur". D'où cette comparaison
+     * à la valeur exacte plutôt qu'un simple has().
+     */
+    private const SYMFONY_DEFAULT_CACHE_CONTROL = 'no-cache, private';
+
     public function handle(Request $request, Closure $next): Response
     {
         $response = $next($request);
 
-        if (! $response->headers->has('Cache-Control')) {
+        if ($response->headers->get('Cache-Control') === self::SYMFONY_DEFAULT_CACHE_CONTROL) {
             $response->headers->set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
             $response->headers->set('Pragma', 'no-cache');
         }
