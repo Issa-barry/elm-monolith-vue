@@ -26,24 +26,50 @@ doit utiliser le composant `resources/js/components/StatusDot.vue` :
   (ex: type de produit, rôle utilisateur, catégorie de dépense) peuvent garder un fond coloré —
   ce ne sont pas des statuts.
 
-## 2. Filtres de liste : toujours `DataFilters.vue`
+## 2. Pages de liste : actions d'en-tête + filtres en mode `trigger-only`
 
-Toute page de liste (Index) avec des filtres doit utiliser
-`resources/js/components/filters/DataFilters.vue`, pas des `<select>`/`<Dropdown>` faits main :
+Toute page de liste (Index) doit suivre la structure d'en-tête standard, portée par
+`resources/js/components/ListPageActions.vue` :
 
-```vue
-<DataFilters url="/produits" :values="filters" :fields="filterFields" />
+```
+[Titre + sous-titre]                     [Exporter] [Importer] [Filtres] [Nouveau]
 ```
 
+```vue
+<ListPageActions>
+    <template #export>...</template>
+    <template #import>...</template>
+    <template #filters>
+        <DataFilters trigger-only url="/produits" :values="filters" :fields="filterFields" />
+    </template>
+    <template #primary>...</template>
+</ListPageActions>
+```
+
+- **Ordre strict, imposé par le composant** (pas par la page) : `Exporter → Importer → Filtres →
+  Nouveau`. Une page ne place plus ces boutons elle-même dans un `<div class="flex gap-2">` fait
+  main — elle passe par les slots `#export`/`#import`/`#filters`/`#primary` de `ListPageActions`.
+- Si une action n'existe pas pour la page, le slot correspondant est simplement omis (pas de
+  bouton fantôme).
+- Le bouton primaire (`#primary`) est toujours `Nouveau <entité>`, tout à droite.
+- Toute page de liste avec des filtres doit utiliser
+  `resources/js/components/filters/DataFilters.vue` en mode **`trigger-only`** : un seul bouton
+  **Filtres** dans l'en-tête (slot `#filters`), qui ouvre le drawer — plus de grosse barre de
+  champs au-dessus du tableau. Le drawer reste l'unique endroit où les champs sont affichés.
 - **Aucun champ de recherche globale** (`search`) : supprimé du composant et de toutes les pages.
-  Les pages font leur propre filtre texte via un champ `type: 'text'` avec `inline: true`.
-- Ordre standard de la barre : **[Agence] → [Statut] → [Autres filtres inline] → [Bouton Filtres]**.
-  - Les champs affichés directement dans la barre ont `inline: true` dans `filterFields`.
-  - Les champs avancés (sans `inline`) vont dans le drawer (bouton **Filtres**).
+  Les pages font leur propre filtre texte via un champ `type: 'text'`.
+- Ordre des champs dans le drawer : **Agence (auto, si données multi-sites) → Statut → Recherche →
+  période/dates → autres filtres métier** (véhicule, client, propriétaire, type, catégorie,
+  montant...).
 - Le filtre Agence est obligatoire dès qu'une page affiche des données multi-sites, et doit
   envoyer `site_ids[]` au backend.
+- `DataFilters`/l'URL/le backend restent l'unique source de vérité des filtres (préparation d'une
+  future évolution "filtres de colonnes" façon Apollo/PrimeVue — pas encore développée). Ne crée
+  jamais un filtrage local différent sur une liste déjà pilotée par le backend.
 - Ne déclare pas plusieurs `ref` nommées `filterXxx`/`filtreXxx` sans importer `DataFilters.vue` —
   c'est exactement le pattern détecté par le check CI comme "filtre fait maison".
+- Une liste sans filtre pertinent n'a pas de slot `#filters` ; une liste sans création n'a pas de
+  slot `#primary`.
 
 ## 3. Toasts : toujours en haut à droite
 

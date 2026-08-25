@@ -10,6 +10,7 @@ use App\Enums\CommissionUniteCalcul;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
 use App\Models\Organization;
+use App\Models\TypeVehicule;
 use App\Services\Commission\CommissionRegleResolver;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -41,8 +42,12 @@ class CommissionRegleResolverTest extends TestCase
         ]);
     }
 
-    private function creerRegle(CommissionScopeType $scope, ?string $scopeId, float $montant = 100): CommissionRegle
-    {
+    private function creerRegle(
+        CommissionScopeType $scope,
+        ?string $scopeId,
+        float $montant = 100,
+        ?string $typeVehiculeId = null,
+    ): CommissionRegle {
         return CommissionRegle::create([
             'organization_id' => $this->org->id,
             'processus_id' => $this->processus->id,
@@ -53,6 +58,7 @@ class CommissionRegleResolverTest extends TestCase
             'mode' => CommissionMode::A_REPARTIR->value,
             'unite_calcul' => CommissionUniteCalcul::PAR_UNITE_VENDUE->value,
             'montant' => $montant,
+            'type_vehicule_id' => $typeVehiculeId,
             'effective_from' => Carbon::today()->subDay(),
             'statut' => 'active',
         ]);
@@ -85,6 +91,34 @@ class CommissionRegleResolverTest extends TestCase
         );
 
         $this->assertSame($categorie->id, $resolue?->id);
+    }
+
+    /** @test */
+    public function une_exception_vehicule_remplace_le_bareme_general_uniquement_pour_ce_type(): void
+    {
+        $tricycle = TypeVehicule::factory()->create(['organization_id' => $this->org->id]);
+        $camion = TypeVehicule::factory()->create(['organization_id' => $this->org->id]);
+        $generale = $this->creerRegle(CommissionScopeType::CATEGORIE, 'cat-1', 400);
+        $exception = $this->creerRegle(
+            CommissionScopeType::CATEGORIE,
+            'cat-1',
+            650,
+            $tricycle->id,
+        );
+
+        $pourTricycle = CommissionRegleResolver::resolve(
+            $this->org->id, $this->processus->id, 'equipe_livraison',
+            varianteId: null, produitId: null, categorieId: 'cat-1',
+            date: Carbon::today(), typeVehiculeId: $tricycle->id,
+        );
+        $pourCamion = CommissionRegleResolver::resolve(
+            $this->org->id, $this->processus->id, 'equipe_livraison',
+            varianteId: null, produitId: null, categorieId: 'cat-1',
+            date: Carbon::today(), typeVehiculeId: $camion->id,
+        );
+
+        $this->assertSame($exception->id, $pourTricycle?->id);
+        $this->assertSame($generale->id, $pourCamion?->id);
     }
 
     /** @test */

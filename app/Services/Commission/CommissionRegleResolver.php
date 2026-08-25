@@ -12,6 +12,11 @@ use Carbon\CarbonInterface;
  * Variante exacte -> Produit -> Catégorie exacte -> Règle globale -> Aucune règle.
  * Absence de règle = null (pas d'exception) : c'est à l'appelant de traduire
  * "aucune règle" en "commission = 0 pour cette cible" (décision AMOA #4).
+ *
+ * Type de véhicule : axe secondaire imbriqué dans chaque niveau de portée
+ * (jamais un niveau de portée à part) — à chaque niveau, une exception pour le
+ * type de véhicule exact prévaut sur le barème standard (type_vehicule_id NULL)
+ * du même niveau, avant de retomber sur le niveau de portée suivant.
  */
 class CommissionRegleResolver
 {
@@ -23,6 +28,7 @@ class CommissionRegleResolver
         ?string $produitId,
         ?string $categorieId,
         CarbonInterface $date,
+        ?string $typeVehiculeId = null,
     ): ?CommissionRegle {
         $candidats = [];
 
@@ -38,7 +44,14 @@ class CommissionRegleResolver
         $candidats[] = [CommissionScopeType::GLOBAL, null];
 
         foreach ($candidats as [$scopeType, $scopeId]) {
-            $regle = self::chercher($organizationId, $processusId, $cibleType, $scopeType, $scopeId, $date);
+            if ($typeVehiculeId !== null) {
+                $regle = self::chercher($organizationId, $processusId, $cibleType, $scopeType, $scopeId, $date, $typeVehiculeId);
+                if ($regle) {
+                    return $regle;
+                }
+            }
+
+            $regle = self::chercher($organizationId, $processusId, $cibleType, $scopeType, $scopeId, $date, null);
             if ($regle) {
                 return $regle;
             }
@@ -54,6 +67,7 @@ class CommissionRegleResolver
         CommissionScopeType $scopeType,
         ?string $scopeId,
         CarbonInterface $date,
+        ?string $typeVehiculeId,
     ): ?CommissionRegle {
         $query = CommissionRegle::query()
             ->where('organization_id', $organizationId)
@@ -68,6 +82,12 @@ class CommissionRegleResolver
             $query->whereNull('scope_id');
         } else {
             $query->where('scope_id', $scopeId);
+        }
+
+        if ($typeVehiculeId === null) {
+            $query->whereNull('type_vehicule_id');
+        } else {
+            $query->where('type_vehicule_id', $typeVehiculeId);
         }
 
         return $query->first();

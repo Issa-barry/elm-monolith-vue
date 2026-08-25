@@ -2,11 +2,12 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import ListPageActions from '@/components/ListPageActions.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowDown,
     ArrowUp,
@@ -39,13 +40,20 @@ interface StockRow {
     site_id: string;
     site_nom: string;
     site_code: string | null;
-    qte_stock: number;
+    /** Disponible = physique − engagé − bloqué (bloqué pas encore implémenté). */
+    qte_disponible: number;
+    qte_physique: number;
+    qte_engagee: number;
+    /** null = non implémenté côté backend — jamais une fausse valeur à 0. */
+    qte_bloquee: number | null;
+    qte_entrante: number | null;
     seuil_effectif: number;
     statut: 'disponible' | 'stock_faible' | 'rupture';
     statut_label: string;
     dernier_mouvement: {
         type: 'entree' | 'sortie';
         quantite: number;
+        motif_label: string | null;
         created_at: string;
     } | null;
     can_ajuster: boolean;
@@ -110,10 +118,12 @@ const props = defineProps<{
 
 const toast = useToast();
 
+const STOCK_URL = '/backoffice/produits/stock';
+
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
     { title: 'Produits', href: '/backoffice/produits' },
-    { title: 'Stock', href: '/backoffice/produits/stock' },
+    { title: 'Stock', href: STOCK_URL },
 ];
 
 const filterFields = computed<FilterField[]>(() => [
@@ -121,7 +131,6 @@ const filterFields = computed<FilterField[]>(() => [
         key: 'stock_statut',
         type: 'select',
         label: 'État du stock',
-        inline: true,
         placeholder: 'Tous les états',
         options: props.stock_statuts.map((statut) => ({
             value: statut.value ?? '',
@@ -132,7 +141,6 @@ const filterFields = computed<FilterField[]>(() => [
         key: 'search',
         type: 'text',
         label: 'Produit ou SKU',
-        inline: true,
         placeholder: 'Nom ou référence…',
     },
     {
@@ -147,7 +155,20 @@ const filterFields = computed<FilterField[]>(() => [
     },
 ]);
 
-function formatNombre(value: number): string {
+const hasActiveFilters = computed(() =>
+    Boolean(
+        props.filters.search ||
+            props.filters.categorie_id ||
+            props.filters.stock_statut,
+    ),
+);
+
+function clearFilters(): void {
+    router.get(STOCK_URL, {}, { preserveScroll: true, replace: true });
+}
+
+function formatNombre(value: number | null): string {
+    if (value === null) return '—';
     return new Intl.NumberFormat('fr-FR').format(value);
 }
 
@@ -166,13 +187,15 @@ const produitAjustement = computed(() => {
         id: row.produit_id,
         nom: row.produit_nom,
         sku: row.sku,
-        qte_stock: row.qte_stock,
+        // Le modal ajuste le stock PHYSIQUE (jamais le disponible) : c'est row.qte_physique qui
+        // sert de base à son aperçu "stock après ajustement".
+        qte_stock: row.qte_physique,
         stocks_par_site: [
             {
                 site_id: row.site_id,
                 site_code: row.site_code,
                 site_nom: row.site_nom,
-                qte_stock: row.qte_stock,
+                qte_stock: row.qte_physique,
             },
         ],
         variantes: [
@@ -263,6 +286,11 @@ async function ouvrirHistorique(row: StockRow): Promise<void> {
 function onFilterMotif(motif: string | null): void {
     chargerHistorique(motif);
 }
+
+function mouvementSigneLabel(m: StockRow['dernier_mouvement']): string {
+    if (!m) return '';
+    return (m.type === 'entree' ? '+' : '-') + formatNombre(m.quantite);
+}
 </script>
 
 <template>
@@ -270,7 +298,7 @@ function onFilterMotif(motif: string | null): void {
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex h-full flex-1 flex-col gap-5 p-4 md:p-6">
-            <header class="flex flex-wrap items-start justify-between gap-3">
+            <div class="flex flex-wrap items-start justify-between gap-3">
                 <div>
                     <h1 class="text-2xl font-semibold tracking-tight">Stock</h1>
                     <p class="mt-1 text-sm text-muted-foreground">
@@ -281,23 +309,38 @@ function onFilterMotif(motif: string | null): void {
                         et par agence
                     </p>
                 </div>
-            </header>
+                <ListPageActions>
+                    <template #filters>
+                        <DataFilters
+                            trigger-only
+                            :url="STOCK_URL"
+                            :values="filters"
+                            :sites="sites"
+                            :fields="filterFields"
+                            :result-count="stocks.total"
+                        />
+                    </template>
+                </ListPageActions>
+            </div>
 
-            <DataFilters
-                url="/backoffice/produits/stock"
-                :values="filters"
-                :sites="sites"
-                :fields="filterFields"
-                :result-count="stocks.total"
-            />
+            <div v-if="hasActiveFilters" class="flex items-center gap-2">
+                <button
+                    type="button"
+                    class="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                    @click="clearFilters"
+                >
+                    Réinitialiser les filtres
+                </button>
+            </div>
 
+            <!-- ── Desktop : tableau complet ─────────────────────────────────── -->
             <section
-                class="overflow-hidden rounded-xl border bg-card shadow-sm"
+                class="hidden overflow-hidden rounded-xl border bg-card shadow-sm md:block"
             >
                 <div class="overflow-x-auto" data-testid="stock-table-scroll">
                     <table
                         data-testid="stock-table"
-                        class="w-full min-w-[980px] text-sm"
+                        class="w-full min-w-[1180px] text-sm"
                     >
                         <thead
                             class="border-b bg-muted/40 text-xs text-muted-foreground"
@@ -307,19 +350,28 @@ function onFilterMotif(motif: string | null): void {
                                     Produit
                                 </th>
                                 <th class="px-4 py-3 text-left font-medium">
-                                    Variante
-                                </th>
-                                <th class="px-4 py-3 text-left font-medium">
                                     Agence
+                                </th>
+                                <th class="px-4 py-3 text-right font-medium">
+                                    Physique
+                                </th>
+                                <th class="px-4 py-3 text-right font-medium">
+                                    Engagé
+                                </th>
+                                <th class="px-4 py-3 text-right font-medium">
+                                    Bloqué
                                 </th>
                                 <th class="px-4 py-3 text-right font-medium">
                                     Disponible
                                 </th>
-                                <th class="px-4 py-3 text-left font-medium">
-                                    État
+                                <th class="px-4 py-3 text-right font-medium">
+                                    Entrant
                                 </th>
                                 <th class="px-4 py-3 text-right font-medium">
-                                    Stock minimum
+                                    Alerte à
+                                </th>
+                                <th class="px-4 py-3 text-left font-medium">
+                                    État
                                 </th>
                                 <th class="px-4 py-3 text-left font-medium">
                                     Dernier mouvement
@@ -346,14 +398,25 @@ function onFilterMotif(motif: string | null): void {
                                         {{ row.produit_nom }}
                                     </Link>
                                     <div
-                                        v-if="row.sku"
-                                        class="mt-0.5 font-mono text-xs text-muted-foreground"
+                                        class="mt-0.5 text-xs text-muted-foreground"
                                     >
-                                        SKU {{ row.sku }}
+                                        <span v-if="row.variante_libelle">{{
+                                            row.variante_libelle
+                                        }}</span>
+                                        <span
+                                            v-if="
+                                                row.variante_libelle && row.sku
+                                            "
+                                        >
+                                            ·
+                                        </span>
+                                        <span
+                                            v-if="row.sku"
+                                            data-testid="stock-row-sku"
+                                            class="font-mono"
+                                            >SKU {{ row.sku }}</span
+                                        >
                                     </div>
-                                </td>
-                                <td class="px-4 py-3 text-muted-foreground">
-                                    {{ row.variante_libelle }}
                                 </td>
                                 <td class="px-4 py-3">
                                     <div class="font-medium">
@@ -366,21 +429,44 @@ function onFilterMotif(motif: string | null): void {
                                         {{ row.site_code }}
                                     </div>
                                 </td>
+                                <td class="px-4 py-3 text-right tabular-nums">
+                                    {{ formatNombre(row.qte_physique) }}
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-right tabular-nums"
+                                    :class="
+                                        row.qte_engagee > 0
+                                            ? 'text-amber-700 dark:text-amber-400'
+                                            : 'text-muted-foreground'
+                                    "
+                                >
+                                    {{ formatNombre(row.qte_engagee) }}
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-right text-muted-foreground tabular-nums"
+                                >
+                                    {{ formatNombre(row.qte_bloquee) }}
+                                </td>
                                 <td
                                     class="px-4 py-3 text-right text-base font-semibold tabular-nums"
                                 >
-                                    {{ formatNombre(row.qte_stock) }}
+                                    {{ formatNombre(row.qte_disponible) }}
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-right text-muted-foreground tabular-nums"
+                                >
+                                    {{ formatNombre(row.qte_entrante) }}
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-right text-muted-foreground tabular-nums"
+                                >
+                                    {{ formatNombre(row.seuil_effectif) }}
                                 </td>
                                 <td class="px-4 py-3">
                                     <StatusDot
                                         :status="row.statut"
                                         :label="row.statut_label"
                                     />
-                                </td>
-                                <td
-                                    class="px-4 py-3 text-right text-muted-foreground tabular-nums"
-                                >
-                                    {{ formatNombre(row.seuil_effectif) }}
                                 </td>
                                 <td class="px-4 py-3">
                                     <div
@@ -408,15 +494,21 @@ function onFilterMotif(motif: string | null): void {
                                                 class="h-3.5 w-3.5"
                                             />
                                             {{
-                                                row.dernier_mouvement.type ===
-                                                'entree'
-                                                    ? '+'
-                                                    : '-'
-                                            }}{{
-                                                formatNombre(
-                                                    row.dernier_mouvement
-                                                        .quantite,
+                                                mouvementSigneLabel(
+                                                    row.dernier_mouvement,
                                                 )
+                                            }}
+                                        </div>
+                                        <div
+                                            v-if="
+                                                row.dernier_mouvement
+                                                    .motif_label
+                                            "
+                                            class="text-xs whitespace-nowrap text-muted-foreground"
+                                        >
+                                            {{
+                                                row.dernier_mouvement
+                                                    .motif_label
                                             }}
                                         </div>
                                         <div
@@ -464,7 +556,7 @@ function onFilterMotif(motif: string | null): void {
                                 </td>
                             </tr>
                             <tr v-if="stocks.data.length === 0">
-                                <td colspan="8" class="px-6 py-16 text-center">
+                                <td colspan="11" class="px-6 py-16 text-center">
                                     <PackageOpen
                                         class="mx-auto h-10 w-10 text-muted-foreground/40"
                                     />
@@ -481,6 +573,161 @@ function onFilterMotif(motif: string | null): void {
                             </tr>
                         </tbody>
                     </table>
+                </div>
+            </section>
+
+            <!-- ── Mobile : cartes empilées, jamais de débordement horizontal ──── -->
+            <section class="flex flex-col gap-3 md:hidden">
+                <div
+                    v-if="stocks.data.length === 0"
+                    class="rounded-xl border bg-card px-6 py-16 text-center shadow-sm"
+                >
+                    <PackageOpen
+                        class="mx-auto h-10 w-10 text-muted-foreground/40"
+                    />
+                    <p class="mt-3 font-medium">Aucun stock à afficher</p>
+                    <p class="mt-1 text-sm text-muted-foreground">
+                        Aucun produit gérant le stock ne correspond aux filtres
+                        actuels.
+                    </p>
+                </div>
+
+                <div
+                    v-for="row in stocks.data"
+                    :key="row.variante_id + '-' + row.site_id"
+                    data-testid="stock-card"
+                    class="rounded-xl border bg-card p-4 shadow-sm"
+                >
+                    <div class="flex items-start justify-between gap-2">
+                        <div class="min-w-0">
+                            <Link
+                                :href="'/backoffice/produits/' + row.produit_id"
+                                class="font-medium hover:text-primary hover:underline"
+                            >
+                                {{ row.produit_nom }}
+                            </Link>
+                            <div class="mt-0.5 text-xs text-muted-foreground">
+                                <span v-if="row.variante_libelle">{{
+                                    row.variante_libelle
+                                }}</span>
+                                <span v-if="row.variante_libelle && row.sku">
+                                    ·
+                                </span>
+                                <span v-if="row.sku" class="font-mono"
+                                    >SKU {{ row.sku }}</span
+                                >
+                            </div>
+                            <div class="mt-0.5 text-xs text-muted-foreground">
+                                {{ row.site_nom
+                                }}<span v-if="row.site_code">
+                                    ({{ row.site_code }})</span
+                                >
+                            </div>
+                        </div>
+                        <StatusDot
+                            :status="row.statut"
+                            :label="row.statut_label"
+                        />
+                    </div>
+
+                    <div
+                        class="mt-3 rounded-lg bg-muted/40 px-3 py-2 text-center"
+                    >
+                        <p class="text-xs text-muted-foreground">Disponible</p>
+                        <p class="text-2xl font-bold tabular-nums">
+                            {{ formatNombre(row.qte_disponible) }}
+                        </p>
+                    </div>
+
+                    <div class="mt-3 grid grid-cols-4 gap-2 text-center">
+                        <div>
+                            <p class="text-[11px] text-muted-foreground">
+                                Physique
+                            </p>
+                            <p class="text-sm font-medium tabular-nums">
+                                {{ formatNombre(row.qte_physique) }}
+                            </p>
+                        </div>
+                        <div>
+                            <p class="text-[11px] text-muted-foreground">
+                                Engagé
+                            </p>
+                            <p
+                                class="text-sm font-medium tabular-nums"
+                                :class="
+                                    row.qte_engagee > 0
+                                        ? 'text-amber-700 dark:text-amber-400'
+                                        : ''
+                                "
+                            >
+                                {{ formatNombre(row.qte_engagee) }}
+                            </p>
+                        </div>
+                        <div>
+                            <p class="text-[11px] text-muted-foreground">
+                                Bloqué
+                            </p>
+                            <p class="text-sm font-medium tabular-nums">
+                                {{ formatNombre(row.qte_bloquee) }}
+                            </p>
+                        </div>
+                        <div>
+                            <p class="text-[11px] text-muted-foreground">
+                                Entrant
+                            </p>
+                            <p class="text-sm font-medium tabular-nums">
+                                {{ formatNombre(row.qte_entrante) }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div
+                        class="mt-3 flex items-center justify-between text-xs text-muted-foreground"
+                    >
+                        <span
+                            >Alerte à
+                            {{ formatNombre(row.seuil_effectif) }}</span
+                        >
+                        <span v-if="row.dernier_mouvement" class="text-right">
+                            <span
+                                class="font-medium"
+                                :class="
+                                    row.dernier_mouvement.type === 'entree'
+                                        ? 'text-emerald-700 dark:text-emerald-400'
+                                        : 'text-red-700 dark:text-red-400'
+                                "
+                                >{{
+                                    mouvementSigneLabel(row.dernier_mouvement)
+                                }}</span
+                            >
+                            · {{ row.dernier_mouvement.created_at }}
+                        </span>
+                        <span v-else>Aucun mouvement</span>
+                    </div>
+
+                    <div class="mt-3 flex gap-2">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            class="flex-1"
+                            data-testid="stock-history-button"
+                            @click="ouvrirHistorique(row)"
+                        >
+                            <History class="mr-1.5 h-4 w-4" />
+                            Historique
+                        </Button>
+                        <Button
+                            v-if="row.can_ajuster"
+                            variant="outline"
+                            size="sm"
+                            class="flex-1"
+                            data-testid="stock-adjust-button"
+                            @click="ouvrirAjustement(row)"
+                        >
+                            <SlidersHorizontal class="mr-1.5 h-4 w-4" />
+                            Ajuster
+                        </Button>
+                    </div>
                 </div>
             </section>
 
@@ -551,7 +798,7 @@ function onFilterMotif(motif: string | null): void {
                 {
                     variante_id: selectedStock.variante_id,
                     site_id: selectedStock.site_id,
-                    qte_stock: selectedStock.qte_stock,
+                    qte_stock: selectedStock.qte_physique,
                 },
             ]"
         />

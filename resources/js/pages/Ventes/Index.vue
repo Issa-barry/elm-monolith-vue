@@ -2,6 +2,7 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import ListPageActions from '@/components/ListPageActions.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -482,9 +483,9 @@ function confirmDelete(c: Commande) {
                 </div>
             </div>
 
-            <!-- Search -->
-            <div class="border-t border-b px-4 py-2">
-                <div class="relative">
+            <!-- Search + Filtres -->
+            <div class="flex items-center gap-2 border-t border-b px-4 py-2">
+                <div class="relative flex-1">
                     <Search
                         class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                     />
@@ -495,6 +496,15 @@ function confirmDelete(c: Commande) {
                         class="h-9 w-full rounded-md border border-input bg-background pr-3 pl-8 text-sm placeholder:text-muted-foreground focus:ring-1 focus:ring-ring focus:outline-none"
                     />
                 </div>
+                <DataFilters
+                    trigger-only
+                    url="/backoffice/ventes"
+                    :base-params="{ periode: 'all' }"
+                    :values="filterValues"
+                    :sites="sites"
+                    :result-count="commandesFiltrees.length"
+                    :fields="filterFields"
+                />
             </div>
 
             <!-- Card list -->
@@ -586,23 +596,38 @@ function confirmDelete(c: Commande) {
                         Suivi et encaissement des commandes.
                     </p>
                 </div>
-                <Link
-                    v-if="can('ventes.create') && can_creer_commande"
-                    href="/backoffice/ventes/create"
-                >
-                    <Button>
-                        <Plus class="mr-2 h-4 w-4" />
-                        Nouvelle commande
-                    </Button>
-                </Link>
-                <Button
-                    v-else-if="can('ventes.create')"
-                    disabled
-                    v-tooltip.left="raison_blocage_commande"
-                >
-                    <Plus class="mr-2 h-4 w-4" />
-                    Nouvelle commande
-                </Button>
+                <ListPageActions>
+                    <template #filters>
+                        <DataFilters
+                            trigger-only
+                            url="/backoffice/ventes"
+                            :base-params="{ periode: 'all' }"
+                            :values="filterValues"
+                            :sites="sites"
+                            :result-count="commandesFiltrees.length"
+                            :fields="filterFields"
+                        />
+                    </template>
+                    <template #primary>
+                        <Link
+                            v-if="can('ventes.create') && can_creer_commande"
+                            href="/backoffice/ventes/create"
+                        >
+                            <Button>
+                                <Plus class="mr-2 h-4 w-4" />
+                                Nouvelle commande
+                            </Button>
+                        </Link>
+                        <Button
+                            v-else-if="can('ventes.create')"
+                            disabled
+                            v-tooltip.left="raison_blocage_commande"
+                        >
+                            <Plus class="mr-2 h-4 w-4" />
+                            Nouvelle commande
+                        </Button>
+                    </template>
+                </ListPageActions>
             </div>
 
             <!-- KPI cards -->
@@ -633,16 +658,6 @@ function confirmDelete(c: Commande) {
                     </p>
                 </div>
             </div>
-
-            <!-- Filtres -->
-            <DataFilters
-                url="/backoffice/ventes"
-                :base-params="{ periode: 'all' }"
-                :values="filterValues"
-                :sites="sites"
-                :result-count="commandesFiltrees.length"
-                :fields="filterFields"
-            />
 
             <!-- Tableau -->
             <div class="overflow-x-auto rounded-xl border bg-card">

@@ -1,12 +1,18 @@
 #!/usr/bin/env node
 /**
- * Vérifie le respect de trois standards UI internes que les outils de lint
+ * Vérifie le respect de standards UI internes que les outils de lint
  * généralistes (ESLint/Prettier) ne couvrent pas :
  *
  *  1. Statut affiché avec un badge à fond coloré (pill) au lieu du composant
  *     `StatusDot.vue` (point coloré + texte simple).
  *  2. Page avec plusieurs filtres "faits maison" (refs `filterXxx`) sans
  *     utiliser le composant standard `DataFilters.vue`.
+ *  2bis. Sur les pages de liste déjà migrées vers le standard "actions
+ *     d'en-tête" (AGENTS.md §2) : import de `ListPageActions.vue` et usage de
+ *     `DataFilters` en mode `trigger-only`. Allowlist positive
+ *     (`LIST_PAGE_ACTIONS_REQUIRED`) plutôt qu'un ban général — la
+ *     standardisation se fait page par page, une page absente de la liste
+ *     n'est pas encore contrôlée et ne casse pas le CI.
  *  3. Toast PrimeVue placé ailleurs qu'en haut à droite.
  *
  * Pourquoi un script dédié plutôt qu'une règle ESLint custom : ESLint analyse
@@ -15,9 +21,9 @@
  * lignes, pour un gain équivalent.
  *
  * Échappatoire volontaire : un commentaire `ui-standard-ignore-file` n'importe
- * où dans le fichier désactive les checks Badge/DataFilters pour ce fichier
- * (cas légitimes : catégorie/rôle/type, pas un statut). La position des Toasts
- * reste obligatoire et ne peut pas être ignorée.
+ * où dans le fichier désactive les checks Badge/DataFilters/ListPageActions
+ * pour ce fichier (cas légitimes : catégorie/rôle/type, pas un statut). La
+ * position des Toasts reste obligatoire et ne peut pas être ignorée.
  */
 
 import { readFileSync, readdirSync } from 'node:fs';
@@ -52,6 +58,28 @@ const FILTER_REF_RE =
     /\b(?:const|let)\s+((?:filtre|[Ff]ilter)[A-Z]\w*)\s*=\s*ref\(/g;
 const TOAST_TAG_RE = /<Toast\b[\s\S]*?>/g;
 const TOAST_TOP_RIGHT_RE = /\bposition\s*=\s*["']top-right["']/;
+
+const LIST_PAGE_ACTIONS_IMPORT_RE =
+    /from\s+['"]@\/components\/ListPageActions\.vue['"]/;
+const DATAFILTERS_TAG_RE = /<DataFilters\b/g;
+const TRIGGER_ONLY_RE = /\btrigger-only\b|:trigger-only\s*=/;
+
+// Phase 1 de la standardisation des pages de liste (AGENTS.md §2) : chemins
+// des pages déjà migrées vers <ListPageActions> + <DataFilters trigger-only>.
+// Allowlist volontairement positive (pas un ban général sur toutes les pages
+// utilisant DataFilters) pour que le check reste adoptable pendant que les
+// pages restantes sont migrées progressivement — ajoute un chemin ici dès
+// qu'une page est migrée, ne retire jamais une page de cette liste après coup.
+const LIST_PAGE_ACTIONS_REQUIRED = [
+    'resources/js/pages/Sites/Index.vue',
+    'resources/js/pages/Ventes/Index.vue',
+    'resources/js/pages/Proprietaires/Index.vue',
+    'resources/js/pages/Depenses/Types/Index.vue',
+    'resources/js/pages/Produits/Index.vue',
+    'resources/js/pages/Vehicules/Index.vue',
+    'resources/js/components/commission/CommissionIndexLayout.vue',
+    'resources/js/pages/Produits/Stock/Index.vue',
+];
 
 /** @returns {string[]} absolute paths of .vue files under dir */
 function walkVueFiles(dir) {
@@ -117,6 +145,40 @@ function checkHomemadeFilters(content, lines) {
     return { line: firstLine || 1, names };
 }
 
+/**
+ * @returns {{line: number, detail: string}[]} violations pour une page listée
+ * dans LIST_PAGE_ACTIONS_REQUIRED : import manquant de ListPageActions.vue, ou
+ * un <DataFilters> sans trigger-only (grosse barre manuelle refusée).
+ */
+function checkListPageActions(relPath, content) {
+    if (!LIST_PAGE_ACTIONS_REQUIRED.includes(relPath)) return [];
+
+    const hits = [];
+
+    if (!LIST_PAGE_ACTIONS_IMPORT_RE.test(content)) {
+        hits.push({
+            line: 1,
+            detail: "Page migrée vers le standard de liste (AGENTS.md §2) : elle doit importer et utiliser <ListPageActions> pour ses actions d'en-tête (Exporter/Importer/Filtres/Nouveau).",
+        });
+    }
+
+    for (const match of content.matchAll(DATAFILTERS_TAG_RE)) {
+        const tagEnd = content.indexOf('>', match.index);
+        const tag = content.slice(
+            match.index,
+            tagEnd === -1 ? match.index + 200 : tagEnd + 1,
+        );
+        if (!TRIGGER_ONLY_RE.test(tag)) {
+            hits.push({
+                line: content.slice(0, match.index).split('\n').length,
+                detail: 'DataFilters doit être utilisé en mode trigger-only sur cette page migrée (une grosse barre de filtres manuelle au-dessus du tableau est refusée, cf. AGENTS.md §2).',
+            });
+        }
+    }
+
+    return hits;
+}
+
 function checkToastPositions(content) {
     const hits = [];
     for (const match of content.matchAll(TOAST_TAG_RE)) {
@@ -168,6 +230,15 @@ function main() {
                 });
             }
 
+            for (const hit of checkListPageActions(relPath, content)) {
+                violations.push({
+                    file: relPath,
+                    line: hit.line,
+                    type: 'list-page-actions',
+                    detail: hit.detail,
+                });
+            }
+
             if (relPath.startsWith('resources/js/pages/')) {
                 const filterHit = checkHomemadeFilters(content, lines);
                 if (filterHit) {
@@ -184,7 +255,7 @@ function main() {
 
     if (violations.length === 0) {
         console.log(
-            '✓ Standards UI (StatusDot / DataFilters / Toast top-right) respectés.',
+            '✓ Standards UI (StatusDot / DataFilters / ListPageActions / Toast top-right) respectés.',
         );
         return;
     }

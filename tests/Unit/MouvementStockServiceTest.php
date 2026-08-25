@@ -178,4 +178,32 @@ class MouvementStockServiceTest extends TestCase
         $this->assertSame($stockApresAttendu, $mouvement->stock_apres);
         $this->assertSame($stockAvant + $delta, $mouvement->stock_apres);
     }
+
+    /**
+     * Correctif du 25/08/2026 : mouvements_stock.created_by est passé de cascadeOnDelete() à
+     * nullOnDelete() — supprimer un compte utilisateur ne doit plus effacer son historique de
+     * mouvements de stock (contraire au principe d'immuabilité du journal, cf. docblock de
+     * classe). User::delete() est un hard delete (pas de SoftDeletes sur ce modèle) : la
+     * contrainte FK s'applique donc réellement à chaque suppression de compte.
+     */
+    public function test_supprimer_un_utilisateur_conserve_lhistorique_des_mouvements_de_stock(): void
+    {
+        $this->seedStock(100);
+
+        $mouvement = MouvementStockService::appliquer(
+            varianteId: $this->varianteId,
+            siteId: $this->site->id,
+            orgId: $this->org->id,
+            type: 'sortie',
+            quantite: 10,
+            userId: $this->user->id,
+        );
+
+        $this->user->delete();
+
+        $this->assertDatabaseHas('mouvements_stock', [
+            'id' => $mouvement->id,
+            'created_by' => null,
+        ]);
+    }
 }

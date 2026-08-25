@@ -555,6 +555,8 @@ Route::prefix('backoffice')->group(function () {
             // ── Commission consultants ──────────────────────────────────────────────
             Route::get('commissions/consultants', [CommissionConsultantController::class, 'index'])
                 ->name('commissions.consultants.index');
+            Route::get('commissions/consultants/{consultantId}', [CommissionConsultantController::class, 'show'])
+                ->name('commissions.consultants.show');
             Route::get('commissions/consultants/export/excel', [CommissionConsultantController::class, 'exportExcel'])
                 ->name('commissions.consultants.excel');
             Route::get('commissions/consultants/export/pdf', [CommissionConsultantController::class, 'exportPdf'])

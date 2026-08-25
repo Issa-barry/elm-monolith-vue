@@ -60,7 +60,7 @@ test('create prestataire -> edit status -> verify inactive in list', async ({
 }) => {
     const prenom = await createPrestataire(page, `${Date.now()}`.slice(-6));
 
-    const search = getVisibleSearchInput(page);
+    const search = await getVisibleSearchInput(page);
     await search.fill(prenom);
     await search.press('Enter');
     await page.waitForLoadState('networkidle');
@@ -105,7 +105,7 @@ test('create prestataire -> delete from list', async ({ page }) => {
         `${Date.now()}${randomDigits(2)}`.slice(-8),
     );
 
-    const search = getVisibleSearchInput(page);
+    const search = await getVisibleSearchInput(page);
     await search.fill(prenom);
     await search.press('Enter');
     await page.waitForLoadState('networkidle');

@@ -113,7 +113,7 @@ test('le menu Produits propose « Voir le stock » et plus « Ajuster le stock �
 
     await page.goto('/backoffice/produits');
     await expect(page).toHaveURL(/\/produits$/);
-    const searchInput = getVisibleSearchInput(page);
+    const searchInput = await getVisibleSearchInput(page);
     await searchInput.fill(productName);
     await searchInput.press('Enter');
     await page.waitForLoadState('networkidle');
@@ -148,7 +148,7 @@ test('« Voir le stock » ouvre la page Stock filtrée sur ce produit, sans les 
 
     await page.goto('/backoffice/produits');
     await expect(page).toHaveURL(/\/produits$/);
-    const searchInput = getVisibleSearchInput(page);
+    const searchInput = await getVisibleSearchInput(page);
     await searchInput.fill(productName);
     await searchInput.press('Enter');
     await page.waitForLoadState('networkidle');

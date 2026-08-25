@@ -6,6 +6,7 @@ use App\Http\Middleware\EnsureOrganizationHasSite;
 use App\Http\Middleware\EnsurePasswordIsNotExpired;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\PreventCachingOfDynamicResponses;
 use App\Http\Middleware\RequireActiveLivreur;
 use App\Http\Middleware\RequireModuleEnabled;
 use App\Http\Middleware\RequireSiteAssigned;
@@ -84,6 +85,7 @@ return Application::configure(basePath: dirname(__DIR__))
             HandleAppearance::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
+            PreventCachingOfDynamicResponses::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

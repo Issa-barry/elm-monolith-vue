@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AuditDrawer from '@/components/AuditDrawer.vue';
+import ClickableTableRow from '@/components/ClickableTableRow.vue';
 import CommissionIndexLayout from '@/components/commission/CommissionIndexLayout.vue';
 import type { FilterField } from '@/components/filters/DataFilters.vue';
 import StatusDot from '@/components/StatusDot.vue';
@@ -252,9 +253,11 @@ function fmt(val: number | null | undefined) {
                     </tr>
                 </thead>
                 <tbody class="divide-y">
-                    <tr
+                    <ClickableTableRow
                         v-for="b in beneficiaires"
                         :key="b.beneficiaire_id"
+                        :href="`/backoffice/comptabilite/commissions/consultants/${b.beneficiaire_id}`"
+                        :aria-label="`Voir le détail de ${b.beneficiaire_nom}`"
                         class="even:bg-muted/20"
                     >
                         <td
@@ -347,7 +350,7 @@ function fmt(val: number | null | undefined) {
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         </td>
-                    </tr>
+                    </ClickableTableRow>
                 </tbody>
             </table>
         </CommissionIndexLayout>

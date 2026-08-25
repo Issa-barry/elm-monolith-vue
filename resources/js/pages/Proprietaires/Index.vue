@@ -1,4 +1,5 @@
 ﻿<script setup lang="ts">
+import ListPageActions from '@/components/ListPageActions.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -82,13 +83,6 @@ const statut = ref<string>('tous');
 
 const filterFields: FilterField[] = [
     {
-        key: 'search',
-        label: 'Rechercher',
-        type: 'text',
-        inline: true,
-        placeholder: 'Rechercher...',
-    },
-    {
         key: 'statut',
         label: 'Statut',
         type: 'select',
@@ -97,6 +91,13 @@ const filterFields: FilterField[] = [
             { value: 'actif', label: 'Actifs' },
             { value: 'inactif', label: 'Inactifs' },
         ],
+    },
+    {
+        key: 'search',
+        label: 'Rechercher',
+        type: 'text',
+        inline: true,
+        placeholder: 'Rechercher...',
     },
 ];
 
@@ -132,9 +133,15 @@ const filteredProprietaires = computed(() => {
 });
 
 const mobileFiltered = computed(() => {
+    // Reprend le filtre Statut appliqué via le bouton Filtres mobile (partagé
+    // avec le desktop) puis affine avec la recherche texte propre au mobile.
+    let list = props.proprietaires;
+    if (statut.value !== 'tous') {
+        list = list.filter((p) => p.is_active === (statut.value === 'actif'));
+    }
     const q = mobileSearch.value.trim().toLowerCase();
-    if (!q) return props.proprietaires;
-    return props.proprietaires.filter(
+    if (!q) return list;
+    return list.filter(
         (p) =>
             p.nom_affichage.toLowerCase().includes(q) ||
             (p.surnom ?? '').toLowerCase().includes(q) ||
@@ -225,9 +232,9 @@ function confirmDelete(p: Proprietaire) {
                 <div v-else class="h-8 w-[72px]" />
             </div>
 
-            <!-- Search -->
-            <div class="px-3 py-2">
-                <div class="relative">
+            <!-- Search + Filtres -->
+            <div class="flex items-center gap-2 px-3 py-2">
+                <div class="relative flex-1">
                     <Search
                         class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                     />
@@ -238,6 +245,19 @@ function confirmDelete(p: Proprietaire) {
                         class="w-full rounded-lg border bg-background py-2 pr-3 pl-9 text-sm outline-none focus:ring-2 focus:ring-ring"
                     />
                 </div>
+                <DataFilters
+                    trigger-only
+                    :values="{ search: search, statut: statut }"
+                    :fields="filterFields"
+                    :result-count="filteredProprietaires.length"
+                    @apply="
+                        (vals) => {
+                            search = (vals.search as string) || '';
+                            statut = (vals.statut as string) || 'tous';
+                        }
+                    "
+                    @reset="resetFilters"
+                />
             </div>
 
             <!-- Card list -->
@@ -398,15 +418,31 @@ function confirmDelete(p: Proprietaire) {
                         }}
                     </p>
                 </div>
-                <Link
-                    v-if="can('proprietaires.create')"
-                    href="/backoffice/proprietaires/create"
-                >
-                    <Button>
-                        <Plus class="mr-2 h-4 w-4" />
-                        Nouveau propriétaire
-                    </Button>
-                </Link>
+                <ListPageActions>
+                    <template #filters>
+                        <DataFilters
+                            trigger-only
+                            :values="{ search: search, statut: statut }"
+                            :fields="filterFields"
+                            :result-count="filteredProprietaires.length"
+                            @apply="
+                                (vals) => {
+                                    search = (vals.search as string) || '';
+                                    statut = (vals.statut as string) || 'tous';
+                                }
+                            "
+                            @reset="resetFilters"
+                        />
+                    </template>
+                    <template v-if="can('proprietaires.create')" #primary>
+                        <Link href="/backoffice/proprietaires/create">
+                            <Button>
+                                <Plus class="mr-2 h-4 w-4" />
+                                Nouveau propriétaire
+                            </Button>
+                        </Link>
+                    </template>
+                </ListPageActions>
             </div>
 
             <!-- Stats -->
@@ -438,19 +474,6 @@ function confirmDelete(p: Proprietaire) {
             </div>
 
             <!-- Tableau -->
-            <DataFilters
-                :values="{ search: search, statut: statut }"
-                :fields="filterFields"
-                :result-count="filteredProprietaires.length"
-                @apply="
-                    (vals) => {
-                        search = (vals.search as string) || '';
-                        statut = (vals.statut as string) || 'tous';
-                    }
-                "
-                @reset="resetFilters"
-            />
-
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
                     :value="filteredProprietaires"

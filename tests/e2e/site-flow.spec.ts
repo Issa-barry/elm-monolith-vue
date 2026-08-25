@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page, test } from '@playwright/test';
 import {
+    closeFilterDrawerIfOpen,
     ensureModuleEnabled,
     escapeRegExp,
     getVisibleSearchInput,
@@ -57,7 +58,7 @@ async function createSite(page: Page, suffix: string): Promise<string> {
 test('create site -> open details page', async ({ page }) => {
     const nom = await createSite(page, `${Date.now()}`.slice(-6));
 
-    const search = getVisibleSearchInput(page);
+    const search = await getVisibleSearchInput(page);
     await search.fill(nom);
     await search.press('Enter');
     await page.waitForLoadState('networkidle');
@@ -85,7 +86,7 @@ test('create site -> edit -> delete', async ({ page }) => {
         `${Date.now()}${randomDigits(2)}`.slice(-8),
     );
 
-    const search = getVisibleSearchInput(page);
+    const search = await getVisibleSearchInput(page);
     await search.fill(nom);
     await search.press('Enter');
     await page.waitForLoadState('networkidle');
@@ -133,4 +134,55 @@ test('create site -> edit -> delete', async ({ page }) => {
     await search.press('Enter');
     await page.waitForLoadState('networkidle');
     await expect(rowByName(page, nom)).toHaveCount(0);
+});
+
+test('en-tête standard : Exporter → Importer → Filtres → Nouveau, drawer fonctionnel', async ({
+    page,
+}) => {
+    await page.goto('/backoffice/sites');
+    await closeFilterDrawerIfOpen(page);
+
+    const actions = page.getByTestId('list-page-actions');
+    const buttons = actions.getByRole('button');
+    const names = await buttons.allTextContents();
+    const normalized = names.map((n) => n.trim().toLowerCase());
+
+    // Ordre imposé par ListPageActions.vue, quel que soit l'ordre de
+    // déclaration des slots côté page (cf. AGENTS.md §2).
+    const exportIdx = normalized.findIndex((n) => n.includes('exporter'));
+    const importIdx = normalized.findIndex((n) => n.includes('importer'));
+    const filtresIdx = normalized.findIndex((n) => n.includes('filtres'));
+    const nouveauIdx = normalized.findIndex((n) => n.includes('nouveau'));
+
+    expect(exportIdx).toBeGreaterThanOrEqual(0);
+    expect(importIdx).toBeGreaterThan(exportIdx);
+    expect(filtresIdx).toBeGreaterThan(importIdx);
+    expect(nouveauIdx).toBeGreaterThan(filtresIdx);
+
+    // Le drawer Filtres s'ouvre et propose le filtre Type (pas de grande
+    // barre de champs affichée avant ouverture).
+    await buttons.nth(filtresIdx).click();
+    await expect(page.getByTestId('filters-drawer')).toBeVisible({
+        timeout: 5_000,
+    });
+    await expect(page.getByText('Type', { exact: true })).toBeVisible();
+});
+
+test('mobile : le bouton Nouveau reste visible et Filtres reste accessible', async ({
+    page,
+}) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto('/backoffice/sites');
+    await closeFilterDrawerIfOpen(page);
+
+    await expect(
+        page.getByRole('link', { name: /^nouveau$/i }).first(),
+    ).toBeVisible({ timeout: 10_000 });
+
+    const filtresBtn = page.getByRole('button', { name: /^filtres/i }).first();
+    await expect(filtresBtn).toBeVisible({ timeout: 10_000 });
+    await filtresBtn.click();
+    await expect(page.getByTestId('filters-drawer')).toBeVisible({
+        timeout: 5_000,
+    });
 });

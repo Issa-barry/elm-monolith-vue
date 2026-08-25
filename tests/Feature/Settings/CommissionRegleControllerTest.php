@@ -11,6 +11,7 @@ use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
 use App\Models\Personne;
 use App\Models\Prestataire;
+use App\Models\TypeVehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -49,6 +50,14 @@ class CommissionRegleControllerTest extends TestCase
     }
 
     /** @test */
+    public function redirige_un_get_accidentel_de_lendpoint_configuration_vers_la_page_commissions(): void
+    {
+        $this->actingAs($this->user)
+            ->get('/settings/commissions/configuration')
+            ->assertRedirect('/settings/commissions');
+    }
+
+    /** @test */
     public function enregistre_atomiquement_le_consultant_et_les_montants_dune_categorie(): void
     {
         $categorie = Categorie::create([
@@ -72,16 +81,23 @@ class CommissionRegleControllerTest extends TestCase
             ->post('/settings/commissions/configuration', [
                 'lignes' => [[
                     'categorie_id' => $categorie->id,
+                    'beneficiaires' => [
+                        CommissionCibleType::CODE_PROPRIETAIRE,
+                        CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+                        CommissionCibleType::CODE_SITE,
+                        CommissionCibleType::CODE_CONSULTANT,
+                    ],
                     'consultant_id' => $consultant->id,
-                    'montants' => [
+                    'montants_standard' => [
                         CommissionCibleType::CODE_PROPRIETAIRE => 800,
                         CommissionCibleType::CODE_EQUIPE_LIVRAISON => 950,
                         CommissionCibleType::CODE_SITE => 200,
                         CommissionCibleType::CODE_CONSULTANT => 50,
                     ],
+                    'exceptions' => [],
                 ]],
             ])
-            ->assertRedirect()
+            ->assertRedirect(route('settings.commissions.index'))
             ->assertSessionHasNoErrors();
 
         $this->assertDatabaseHas('commission_regles', [
@@ -111,15 +127,15 @@ class CommissionRegleControllerTest extends TestCase
             ->post('/settings/commissions/configuration', [
                 'lignes' => [[
                     'categorie_id' => $categorie->id,
+                    'beneficiaires' => [CommissionCibleType::CODE_CONSULTANT],
                     'consultant_id' => null,
-                    'montants' => [
-                        CommissionCibleType::CODE_PROPRIETAIRE => 800,
-                        CommissionCibleType::CODE_EQUIPE_LIVRAISON => 950,
-                        CommissionCibleType::CODE_SITE => 200,
+                    'montants_standard' => [
                         CommissionCibleType::CODE_CONSULTANT => 50,
                     ],
+                    'exceptions' => [],
                 ]],
             ])
+            ->assertRedirect(route('settings.commissions.index'))
             ->assertSessionHasErrors('lignes.0.consultant_id');
 
         $this->assertDatabaseCount('commission_regles', 0);
@@ -154,13 +170,20 @@ class CommissionRegleControllerTest extends TestCase
         $this->actingAs($this->user)->post('/settings/commissions/configuration', [
             'lignes' => [[
                 'categorie_id' => $categorie->id,
+                'beneficiaires' => [
+                    CommissionCibleType::CODE_PROPRIETAIRE,
+                    CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+                    CommissionCibleType::CODE_SITE,
+                    CommissionCibleType::CODE_CONSULTANT,
+                ],
                 'consultant_id' => $consultant->id,
-                'montants' => [
+                'montants_standard' => [
                     CommissionCibleType::CODE_PROPRIETAIRE => 800,
                     CommissionCibleType::CODE_EQUIPE_LIVRAISON => 950,
                     CommissionCibleType::CODE_SITE => 200,
                     CommissionCibleType::CODE_CONSULTANT => 50,
                 ],
+                'exceptions' => [],
             ]],
         ])->assertSessionHasNoErrors();
 
@@ -173,6 +196,170 @@ class CommissionRegleControllerTest extends TestCase
             'scope_id' => $categorie->id,
             'cible_type' => CommissionCibleType::CODE_CONSULTANT,
             'consultant_id' => $consultant->id,
+            'statut' => CommissionRegleStatut::ACTIVE->value,
+        ]);
+    }
+
+    /** @test */
+    public function un_type_de_vehicule_peut_remplacer_le_bareme_general_par_une_exception(): void
+    {
+        $categorie = Categorie::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Bouteilles',
+            'statut' => 'actif',
+        ]);
+        $tricycle = TypeVehicule::where('organization_id', $this->org->id)
+            ->where('nom', 'Tricycle')
+            ->firstOrFail();
+        $camion = TypeVehicule::where('organization_id', $this->org->id)
+            ->where('nom', 'Camion')
+            ->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->post('/settings/commissions/configuration', [
+                'lignes' => [[
+                    'categorie_id' => $categorie->id,
+                    'beneficiaires' => [
+                        CommissionCibleType::CODE_PROPRIETAIRE,
+                        CommissionCibleType::CODE_SITE,
+                    ],
+                    'consultant_id' => null,
+                    'montants_standard' => [
+                        CommissionCibleType::CODE_PROPRIETAIRE => 500,
+                        CommissionCibleType::CODE_SITE => 200,
+                    ],
+                    'exceptions' => [[
+                        'type_vehicule_id' => $tricycle->id,
+                        'montants' => [
+                            CommissionCibleType::CODE_PROPRIETAIRE => 600,
+                            CommissionCibleType::CODE_SITE => 250,
+                        ],
+                    ]],
+                ]],
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('commission_regles', [
+            'scope_id' => $categorie->id,
+            'type_vehicule_id' => null,
+            'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
+            'montant' => 500,
+            'statut' => CommissionRegleStatut::ACTIVE->value,
+        ]);
+        $this->assertDatabaseHas('commission_regles', [
+            'scope_id' => $categorie->id,
+            'type_vehicule_id' => $tricycle->id,
+            'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
+            'montant' => 600,
+            'statut' => CommissionRegleStatut::ACTIVE->value,
+        ]);
+        $this->assertDatabaseHas('commission_regles', [
+            'scope_id' => $categorie->id,
+            'type_vehicule_id' => $tricycle->id,
+            'cible_type' => CommissionCibleType::CODE_SITE,
+            'montant' => 250,
+            'statut' => CommissionRegleStatut::ACTIVE->value,
+        ]);
+        $this->assertDatabaseMissing('commission_regles', [
+            'scope_id' => $categorie->id,
+            'type_vehicule_id' => $camion->id,
+            'statut' => CommissionRegleStatut::ACTIVE->value,
+        ]);
+    }
+
+    /** @test */
+    public function ajoute_une_categorie_avec_exception_sans_effacer_la_configuration_existante(): void
+    {
+        $bouteille = Categorie::create([
+            'organization_id' => $this->org->id,
+            'nom' => "Bouteille d'eau",
+            'statut' => 'actif',
+        ]);
+        $sachet = Categorie::create([
+            'organization_id' => $this->org->id,
+            'nom' => "Sachet d'eau",
+            'statut' => 'actif',
+        ]);
+        $personne = Personne::create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Barry',
+            'prenom' => 'Fello',
+        ]);
+        $consultant = Prestataire::create([
+            'organization_id' => $this->org->id,
+            'personne_id' => $personne->id,
+            'type' => PrestataireType::CONSULTANT->value,
+            'is_active' => true,
+        ]);
+        $tricycle = TypeVehicule::where('organization_id', $this->org->id)
+            ->where('nom', 'Tricycle')
+            ->firstOrFail();
+
+        $bouteillePayload = [
+            'categorie_id' => $bouteille->id,
+            'beneficiaires' => [
+                CommissionCibleType::CODE_PROPRIETAIRE,
+                CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+                CommissionCibleType::CODE_SITE,
+                CommissionCibleType::CODE_CONSULTANT,
+            ],
+            'consultant_id' => $consultant->id,
+            'montants_standard' => [
+                CommissionCibleType::CODE_PROPRIETAIRE => 800,
+                CommissionCibleType::CODE_EQUIPE_LIVRAISON => 950,
+                CommissionCibleType::CODE_SITE => 200,
+                CommissionCibleType::CODE_CONSULTANT => 50,
+            ],
+            'exceptions' => [],
+        ];
+
+        $this->actingAs($this->user)
+            ->post('/settings/commissions/configuration', ['lignes' => [$bouteillePayload]])
+            ->assertSessionHasNoErrors();
+
+        $this->actingAs($this->user)
+            ->post('/settings/commissions/configuration', [
+                'lignes' => [
+                    $bouteillePayload,
+                    [
+                        'categorie_id' => $sachet->id,
+                        'beneficiaires' => [
+                            CommissionCibleType::CODE_PROPRIETAIRE,
+                            CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+                            CommissionCibleType::CODE_CONSULTANT,
+                        ],
+                        'consultant_id' => $consultant->id,
+                        'montants_standard' => [
+                            CommissionCibleType::CODE_PROPRIETAIRE => 600,
+                            CommissionCibleType::CODE_EQUIPE_LIVRAISON => 230,
+                            CommissionCibleType::CODE_CONSULTANT => 50,
+                        ],
+                        'exceptions' => [[
+                            'type_vehicule_id' => $tricycle->id,
+                            'montants' => [
+                                CommissionCibleType::CODE_PROPRIETAIRE => 650,
+                                CommissionCibleType::CODE_EQUIPE_LIVRAISON => 250,
+                                CommissionCibleType::CODE_CONSULTANT => 50,
+                            ],
+                        ]],
+                    ],
+                ],
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(4, CommissionRegle::where('scope_id', $bouteille->id)
+            ->where('statut', CommissionRegleStatut::ACTIVE->value)
+            ->count());
+        $this->assertSame(6, CommissionRegle::where('scope_id', $sachet->id)
+            ->where('statut', CommissionRegleStatut::ACTIVE->value)
+            ->count());
+        $this->assertDatabaseHas('commission_regles', [
+            'scope_id' => $sachet->id,
+            'type_vehicule_id' => $tricycle->id,
+            'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
+            'montant' => 650,
             'statut' => CommissionRegleStatut::ACTIVE->value,
         ]);
     }

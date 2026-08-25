@@ -242,7 +242,7 @@ test('stat cards reflect active filters', async ({ page }) => {
     const totalBefore = parseInt((await totalCard.textContent()) ?? '0', 10);
     expect(totalBefore).toBeGreaterThan(0);
 
-    const searchInput = getVisibleSearchInput(page);
+    const searchInput = await getVisibleSearchInput(page);
     await searchInput.fill('ZZZZNO_MATCH_9999');
     await searchInput.press('Enter');
     await page.waitForLoadState('networkidle');
