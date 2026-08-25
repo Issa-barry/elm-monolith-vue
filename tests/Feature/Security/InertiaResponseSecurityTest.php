@@ -67,15 +67,18 @@ class InertiaResponseSecurityTest extends TestCase
             ->withHeaders(['X-Inertia' => 'true', 'X-Inertia-Version' => $version])
             ->get(route('type-vehicules.index'));
 
-        fwrite(STDERR, "\n[DEBUG version] ".var_export($version, true)."\n");
-        fwrite(STDERR, '[DEBUG status] '.$response->getStatusCode()."\n");
-        fwrite(STDERR, '[DEBUG content-type] '.$response->headers->get('Content-Type')."\n");
-        fwrite(STDERR, '[DEBUG body] '.substr($response->getContent(), 0, 500)."\n");
-
         $response->assertStatus(200);
         $response->assertHeader('Content-Type', 'application/json');
         $response->assertHeader('X-Inertia', 'true');
-        $response->assertInertia(fn ($page) => $page->component('TypeVehicules/Index'));
+
+        // assertInertia() s'appuie sur assertViewHas('page') (cf. AssertableInertia::
+        // fromTestResponse()) : elle ne fonctionne que pour la variante HTML (vue Blade
+        // avec data-page embarqué), jamais pour la vraie réponse JSON d'une navigation
+        // XHR X-Inertia — on vérifie donc directement le corps JSON décodé ici.
+        $page = json_decode($response->getContent(), true);
+        $this->assertSame('TypeVehicules/Index', $page['component']);
+        $this->assertArrayHasKey('props', $page);
+        $this->assertArrayHasKey('version', $page);
     }
 
     public function test_default_cache_control_is_the_strict_no_store_variant(): void
