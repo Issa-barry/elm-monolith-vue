@@ -182,6 +182,55 @@ export async function fillLoginIdentifier(
     }
 }
 
+/**
+ * Connexion dédiée à l'organisation "Eau La Maman V2 Demo" (seule
+ * organisation du projet avec le moteur de commissions V2 activé — cf.
+ * ElmV2DemoSeeder). Volontairement distincte de `login()` : celle-ci
+ * court-circuite si une session valide est déjà chargée (storageState par
+ * défaut = admin "elm", Legacy), ce qui empêcherait jamais de basculer vers
+ * ce second compte. N'écrit/ne lit aucun storageState partagé : à appeler à
+ * chaque test qui a besoin du contexte V2 (pas de globalSetup dédié, pour ne
+ * jamais risquer d'affecter les specs Legacy existantes).
+ */
+export async function loginAsElmV2Demo(page: Page): Promise<void> {
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+            // Le storageState par défaut (.auth/user.json, écrit par global-setup.ts)
+            // authentifie déjà le contexte comme admin "elm" — /login est une route
+            // `guest` (routes/web.php) qui redirige un utilisateur déjà connecté vers
+            // le dashboard sans jamais rendre le formulaire, cf. le même pattern dans
+            // smoke.spec.ts ("avec storageState actif, /login redirigerait vers le
+            // dashboard"). Sans ce clearCookies(), le password input n'apparaît jamais.
+            await page.context().clearCookies();
+            await page.goto('/login');
+            await page.waitForSelector('input[name="password"]', {
+                timeout: 20_000,
+            });
+            await fillLoginIdentifier(page, { phone: '+224600000201' });
+            await page.locator('input[name="password"]').fill('ElmV2Demo@2025');
+
+            const submitButton = page
+                .getByRole('button', { name: /se connecter/i })
+                .first();
+            await expect(submitButton).toBeEnabled({ timeout: 10_000 });
+            await submitButton.click();
+            await expect(page).not.toHaveURL(/\/login(?:\?.*)?$/, {
+                timeout: 15_000,
+            });
+            return;
+        } catch (error) {
+            lastError = error;
+            await page.waitForTimeout(500 * attempt);
+        }
+    }
+
+    throw lastError instanceof Error
+        ? new Error(`loginAsElmV2Demo failed after retries.\nCause: ${lastError.message}`)
+        : new Error('loginAsElmV2Demo failed after retries.');
+}
+
 export async function login(page: Page): Promise<void> {
     // Verify whether storageState already loaded a valid session.
     await page.goto('/backoffice/dashboard');
@@ -284,8 +333,18 @@ export async function applyDrawerFilterOption(
     await page.getByTestId('filters-apply').click();
 }
 
-export function getVisibleSearchInput(page: Page): Locator {
-    return page
+/**
+ * Trouve le champ de recherche/texte visible de la page courante.
+ *
+ * Standard UI (AGENTS.md §2) : les pages de liste migrées vers
+ * `DataFilters trigger-only` n'affichent plus leurs champs en barre — ils
+ * vivent dans le drawer Filtres. Sur ces pages, aucun input ne matche tant
+ * que le drawer n'est pas ouvert : on ouvre alors le bouton Filtres de
+ * l'en-tête avant de chercher le champ, pour que ce helper continue de
+ * fonctionner à l'identique pour tous ses appelants (pages migrées ou non).
+ */
+export async function getVisibleSearchInput(page: Page): Promise<Locator> {
+    const direct = page
         .locator(
             // Le testid `filter-inline-*` est aussi posé sur le wrapper <div> des filtres
             // select/multi-select (cf. DataFilters.vue) — restreint à `input` pour ne jamais
@@ -295,6 +354,49 @@ export function getVisibleSearchInput(page: Page): Locator {
             '[data-testid="search-input"]:visible, input[data-testid^="filter-inline-"]:visible, input[placeholder*="rechercher" i]:not([data-testid="global-search"]):visible, input[placeholder*="recherche" i]:not([data-testid="global-search"]):visible',
         )
         .first();
+
+    // `waitFor` (contrairement à `isVisible({ timeout })`, un contrôle
+    // ~immédiat) attend activement que l'élément apparaisse — nécessaire ici
+    // car cette fonction est souvent appelée juste après une navigation
+    // Inertia, pendant que Vue est encore en train de monter l'en-tête ; un
+    // simple contrôle instantané renverrait `false` par excès de prudence et
+    // figerait ce helper sur un sélecteur mort en permanence pour l'appel.
+    const directVisible = await direct
+        .waitFor({ state: 'visible', timeout: 8_000 })
+        .then(() => true)
+        .catch(() => false);
+    if (directVisible) {
+        return direct;
+    }
+
+    const filtresBtn = page.getByRole('button', { name: /^filtres/i }).first();
+    const filtresVisible = await filtresBtn
+        .waitFor({ state: 'visible', timeout: 8_000 })
+        .then(() => true)
+        .catch(() => false);
+    if (filtresVisible) {
+        await filtresBtn.click();
+        // Restreint aux vrais champs texte (type: 'text' de DataFilters, cf.
+        // `filter-field-<key>` posé sur ce champ précis) et exclut
+        // explicitement les inputs internes PrimeVue (`[data-pc-section]`,
+        // ex: le hidden input readonly du MultiSelect Agence/Statut) — sans
+        // ça `.first()` peut résoudre vers un input non éditable et bloquer
+        // indéfiniment un `.fill()`.
+        const inDrawer = page
+            .locator(
+                '[data-testid="filters-drawer"] [data-testid^="filter-field-"] input[type="text"]:visible:not([data-pc-section]), [data-testid="filters-drawer"] [data-testid^="filter-field-"] input[type="search"]:visible:not([data-pc-section])',
+            )
+            .first();
+        const inDrawerVisible = await inDrawer
+            .waitFor({ state: 'visible', timeout: 5_000 })
+            .then(() => true)
+            .catch(() => false);
+        if (inDrawerVisible) {
+            return inDrawer;
+        }
+    }
+
+    return direct;
 }
 
 export async function openRowActions(row: Locator): Promise<void> {
@@ -558,7 +660,7 @@ export async function findUserInList(
     query: string,
 ): Promise<Locator> {
     await page.goto('/backoffice/users');
-    const search = getVisibleSearchInput(page);
+    const search = await getVisibleSearchInput(page);
     await search.fill(query);
     await search.press('Enter');
     const row = page
@@ -574,7 +676,7 @@ export async function findRowByName(
     page: Page,
     name: string,
 ): Promise<Locator> {
-    const search = getVisibleSearchInput(page);
+    const search = await getVisibleSearchInput(page);
     await search.fill(name);
     await search.press('Enter');
     await page.waitForLoadState('networkidle');
@@ -607,7 +709,7 @@ export async function cleanupRowsByPrefix(
     await login(page);
     await page.goto(route);
 
-    const searchInput = getVisibleSearchInput(page);
+    const searchInput = await getVisibleSearchInput(page);
     await searchInput.fill(prefix);
     await searchInput.press('Enter');
     await page.waitForLoadState('networkidle');

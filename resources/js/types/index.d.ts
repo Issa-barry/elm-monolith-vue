@@ -24,14 +24,21 @@ export type Resource =
     | 'depenses'
     | 'users'
     | 'parametres'
-    | 'logistique';
+    | 'logistique'
+    | 'comptabilite'
+    | 'rh-employes'
+    | 'rh-contrats'
+    | 'rh-paie'
+    | 'propositions';
 export type CrudAction = 'create' | 'read' | 'update' | 'delete';
 export type StandalonePermission =
     | 'logistique.commission.verser'
     | 'ventes.qte.update'
     | 'ventes.prix.update'
     | 'imports-flotte.create'
-    | 'imports-flotte.read';
+    | 'imports-flotte.read'
+    | 'imports-produits.create'
+    | 'imports-produits.read';
 export type PermissionKey = `${Resource}.${CrudAction}` | StandalonePermission;
 export type PermissionsMap = Partial<Record<PermissionKey, boolean>>;
 export type AppRole =
@@ -60,7 +67,7 @@ export interface Auth {
 
 export interface BreadcrumbItem {
     title: string;
-    href: string;
+    href?: string;
 }
 
 export interface NavItem {

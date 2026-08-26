@@ -19,29 +19,35 @@ use App\Http\Controllers\CommandeVenteStatutController;
 use App\Http\Controllers\CommissionLogistiqueController;
 use App\Http\Controllers\CommissionPaymentController;
 use App\Http\Controllers\CommissionVehiculeController;
-use App\Http\Controllers\CommissionVenteController;
-use App\Http\Controllers\Comptabilite\BesoinTresorerieController;
 use App\Http\Controllers\Comptabilite\CommissionAjustementController;
+use App\Http\Controllers\Comptabilite\CommissionConsultantController;
 use App\Http\Controllers\Comptabilite\CommissionLogistiqueController as ComptabiliteCommissionLogistiqueController;
 use App\Http\Controllers\Comptabilite\CommissionProprietaireController;
+use App\Http\Controllers\Comptabilite\CommissionSiteController;
 use App\Http\Controllers\Comptabilite\CommissionVenteController as ComptabiliteCommissionVenteController;
-use App\Http\Controllers\Comptabilite\ComptabiliteDashboardController;
+use App\Http\Controllers\Comptabilite\CompteTresorerieController;
+use App\Http\Controllers\Comptabilite\FinancementAgenceController;
 use App\Http\Controllers\Comptabilite\HistoriqueActionsController;
-use App\Http\Controllers\Comptabilite\JournalTresorerieController;
+use App\Http\Controllers\Comptabilite\JournalFinancierController;
+use App\Http\Controllers\Comptabilite\MouvementFondsController;
 use App\Http\Controllers\Comptabilite\PaiementFicheController;
 use App\Http\Controllers\Comptabilite\PaiementFichePaiementController;
 use App\Http\Controllers\Comptabilite\PaiementPeriodeController;
 use App\Http\Controllers\Comptabilite\SalaireController;
+use App\Http\Controllers\Comptabilite\SoldeOuvertureTresorerieController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\ContratController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DepenseController;
+use App\Http\Controllers\DepenseTypeController;
+use App\Http\Controllers\DepenseTypeImportController;
 use App\Http\Controllers\EmployeController;
 use App\Http\Controllers\EncaissementVenteController;
 use App\Http\Controllers\EquipeLivraisonController;
 use App\Http\Controllers\FactureVenteController;
+use App\Http\Controllers\FonctionRhController;
 use App\Http\Controllers\FournisseurController;
-use App\Http\Controllers\FraisCommissionPartController;
+use App\Http\Controllers\ImportProduitsController;
 use App\Http\Controllers\InstallWizardController;
 use App\Http\Controllers\LivreurController;
 use App\Http\Controllers\MediaController;
@@ -49,7 +55,6 @@ use App\Http\Controllers\OnboardingSiteController;
 use App\Http\Controllers\OptionCatalogueController;
 use App\Http\Controllers\PackingController;
 use App\Http\Controllers\PaieController;
-use App\Http\Controllers\PaiementCommissionVenteController;
 use App\Http\Controllers\PaiePaiementController;
 use App\Http\Controllers\PaieVariableController;
 use App\Http\Controllers\PdvController;
@@ -66,13 +71,13 @@ use App\Http\Controllers\ScanUserController;
 use App\Http\Controllers\SiteController;
 use App\Http\Controllers\SiteImportController;
 use App\Http\Controllers\SitemapController;
+use App\Http\Controllers\StockController;
 use App\Http\Controllers\TransfertLogistiqueController;
 use App\Http\Controllers\TransfertStatutController;
 use App\Http\Controllers\TypeVehiculeController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UserInvitationController;
 use App\Http\Controllers\VehiculeController;
-use App\Http\Controllers\VersementCommissionController;
 use App\Http\Controllers\VersementCommissionLogistiqueController;
 use App\Http\Controllers\VersementController;
 use App\Support\AuthRedirects;
@@ -172,10 +177,10 @@ Route::middleware(['auth', 'account.active'])->prefix('onboarding')->name('onboa
 // ── Espace staff (back-office) ──────────────────────────────────────────────
 Route::prefix('backoffice')->group(function () {
     Route::get('dashboard', [DashboardController::class, 'index'])
-        ->middleware(['auth', 'account.active', 'password.not-expired', 'verified', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'org.site.required', 'require.site'])
+        ->middleware(['auth', 'account.active', 'password.not-expired', 'verified', 'staff', 'org.site.required', 'require.site'])
         ->name('dashboard');
 
-    Route::middleware(['auth', 'account.active', 'password.not-expired', 'role:super_admin|admin_entreprise|manager|commerciale|comptable', 'org.site.required', 'require.site'])->group(function () {
+    Route::middleware(['auth', 'account.active', 'password.not-expired', 'staff', 'org.site.required', 'require.site'])->group(function () {
 
         // Messages de contact
         Route::get('contact-messages/unread-count', [ContactController::class, 'unreadCount'])->name('contact-messages.unread-count');
@@ -207,22 +212,8 @@ Route::prefix('backoffice')->group(function () {
             Route::patch('ventes/{commande_vente}/annuler', [CommandeVenteController::class, 'annuler'])->name('ventes.annuler');
             Route::post('ventes/{commande_vente}/statut/avancer', [CommandeVenteStatutController::class, 'avancer'])->name('ventes.statut.avancer');
             Route::post('ventes/{commande_vente}/statut/annuler', [CommandeVenteStatutController::class, 'annuler'])->name('ventes.statut.annuler');
+            Route::post('ventes/{commande_vente}/commissions/relancer', [CommandeVenteController::class, 'relancerCommissions'])->name('ventes.commissions.relancer');
             Route::get('factures', [FactureVenteController::class, 'index'])->name('factures.index');
-
-            // Commissions
-            Route::get('commissions', [CommissionVenteController::class, 'index'])->name('commissions.index');
-            Route::get('commissions/beneficiaires/{type}/{beneficiaireId}', [CommissionVenteController::class, 'showBeneficiaire'])->name('commissions.beneficiaires.show');
-            Route::get('commissions/{commission_vente}', [CommissionVenteController::class, 'show'])->name('commissions.show');
-
-            // Paiement groupé bénéficiaire (nouveau workflow)
-            Route::post('commissions/beneficiaires/{type}/{beneficiaireId}/paiements', [PaiementCommissionVenteController::class, 'store'])->name('commissions.beneficiaires.paiements.store');
-
-            // Frais par part (livreur)
-            Route::patch('commissions/parts/{part}/frais', [FraisCommissionPartController::class, 'update'])->name('commissions.parts.frais.update');
-
-            // Versements par part (ancien système — conservé pour compatibilité)
-            Route::post('commissions/{commission}/parts/{part}/versements', [VersementCommissionController::class, 'store'])->name('commissions.parts.versements.store');
-            Route::delete('versements-commissions/{versement_commission}', [VersementCommissionController::class, 'destroy'])->name('commissions.versements.destroy');
 
             // Encaissements factures
             Route::post('factures/{facture_vente}/encaissements', [EncaissementVenteController::class, 'store'])->name('encaissements.store');
@@ -268,7 +259,7 @@ Route::prefix('backoffice')->group(function () {
 
             Route::resource('type-vehicules', TypeVehiculeController::class)->except(['show']);
             Route::resource('vehicules', VehiculeController::class);
-            Route::patch('vehicules/{vehicule}/toggle-derogation', [VehiculeController::class, 'toggleDerogation'])->name('vehicules.toggle-derogation');
+            Route::patch('vehicules/{vehicule}/derogation-impayes', [VehiculeController::class, 'updateDerogation'])->name('vehicules.derogation-impayes.update');
             Route::post('vehicules/{vehicule}/frais', [VehiculeController::class, 'storeFrais'])->name('vehicules.frais.store');
             Route::patch('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'updateFrais'])->name('vehicules.frais.update');
             Route::delete('vehicules/{vehicule}/frais/{frais}', [VehiculeController::class, 'destroyFrais'])->name('vehicules.frais.destroy');
@@ -303,6 +294,8 @@ Route::prefix('backoffice')->group(function () {
 
         // ── Module : Produits ─────────────────────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::PRODUITS)->group(function () {
+            Route::get('produits/stock', [StockController::class, 'index'])->name('produits.stock.index');
+
             // Déclarées avant produits/{produit} par lisibilité (ULID ne collisionne jamais
             // avec le littéral "categories", mais garde l'ordre explicite).
             Route::get('produits/categories', [CategorieController::class, 'index'])->name('produits.categories.index');
@@ -335,6 +328,17 @@ Route::prefix('backoffice')->group(function () {
             // FournisseurSelect.vue. Le CRUD complet reste sous le module Achats (route
             // fournisseurs.* ci-dessus).
             Route::post('produits/fournisseurs', [FournisseurController::class, 'storeRapide'])->name('produits.fournisseurs.store');
+
+            // Import Excel en masse (création + mise à jour), déclarées avant produits/{produit}
+            // par lisibilité — même raison que categories/options/types ci-dessus.
+            Route::get('produits/imports', [ImportProduitsController::class, 'index'])->name('produits.imports.index');
+            Route::get('produits/imports/nouveau', [ImportProduitsController::class, 'create'])->name('produits.imports.create');
+            Route::post('produits/imports', [ImportProduitsController::class, 'store'])->name('produits.imports.store');
+            Route::get('produits/imports/modele', [ImportProduitsController::class, 'template'])->name('produits.imports.modele');
+            Route::get('produits/imports/{importProduits}', [ImportProduitsController::class, 'show'])->name('produits.imports.show');
+            Route::post('produits/imports/{importProduits}/confirmer', [ImportProduitsController::class, 'confirm'])->name('produits.imports.confirm');
+            Route::post('produits/imports/{importProduits}/reessayer', [ImportProduitsController::class, 'retry'])->name('produits.imports.retry');
+            Route::get('produits/imports/{importProduits}/reprise', [ImportProduitsController::class, 'reprise'])->name('produits.imports.reprise');
 
             Route::resource('produits', ProduitController::class);
             Route::post('produits/{produit}/ajuster-stock', [ProduitController::class, 'ajusterStock'])
@@ -412,6 +416,22 @@ Route::prefix('backoffice')->group(function () {
             Route::get('depenses/suggestions', [DepenseController::class, 'suggestions'])->name('depenses.suggestions');
             Route::get('depenses/concerne-detail', [DepenseController::class, 'concereneDetail'])->name('depenses.concerne-detail');
             Route::get('depenses/vehicule-detail', [DepenseController::class, 'vehiculeDetail'])->name('depenses.vehicule-detail');
+
+            // ── Types de dépense — sous-page du module Dépenses (déménagée des
+            // Paramètres, cf. routes/settings.php pour la redirection de l'ancienne
+            // URL). Déclarée avant Route::resource('depenses', ...) ci-dessous pour
+            // ne jamais être capturée par son wildcard {depense}.
+            Route::get('depenses/types', [DepenseTypeController::class, 'index'])->name('depenses.types.index');
+            Route::post('depenses/types', [DepenseTypeController::class, 'store'])->name('depenses.types.store');
+            Route::put('depenses/types/{depense_type}', [DepenseTypeController::class, 'update'])->name('depenses.types.update');
+            Route::patch('depenses/types/{depense_type}/toggle', [DepenseTypeController::class, 'toggle'])->name('depenses.types.toggle');
+            Route::delete('depenses/types/{depense_type}', [DepenseTypeController::class, 'destroy'])->name('depenses.types.destroy');
+            Route::get('depenses/types/export/excel', [DepenseTypeController::class, 'exportExcel'])->name('depenses.types.export.excel');
+            Route::get('depenses/types/export/pdf', [DepenseTypeController::class, 'exportPdf'])->name('depenses.types.export.pdf');
+            Route::get('depenses/types/import/modele', [DepenseTypeImportController::class, 'modele'])->name('depenses.types.import.modele');
+            Route::post('depenses/types/import/analyser', [DepenseTypeImportController::class, 'analyser'])->name('depenses.types.import.analyser');
+            Route::post('depenses/types/import/confirmer', [DepenseTypeImportController::class, 'confirmer'])->name('depenses.types.import.confirmer');
+
             Route::resource('depenses', DepenseController::class);
             Route::patch('depenses/{depense}/soumettre', [DepenseController::class, 'soumettre'])->name('depenses.soumettre');
             Route::patch('depenses/{depense}/valider', [DepenseController::class, 'valider'])->name('depenses.valider');
@@ -422,6 +442,21 @@ Route::prefix('backoffice')->group(function () {
         // ── Module : RH (Ressources humaines) ────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::RH)->group(function () {
             Route::resource('employes', EmployeController::class);
+            Route::patch('employes/{employe}/transferer-site', [EmployeController::class, 'transfererSite'])
+                ->name('employes.transferer-site');
+            // Pas de create()/edit() : la création/modification se fait exclusivement en popup
+            // (écran Fonctions RH ou sélecteur embarqué Employé/validation de compte), mirroring
+            // CategorieController — jamais de navigation vers une page dédiée.
+            // ->parameters(...) : Laravel générerait {fonctions_rh} (pluriel) par défaut pour ce
+            // nom de ressource composé — ne correspond pas au paramètre {fonction_rh} (singulier)
+            // attendu par FonctionRhController (et déjà utilisé par la route toggle ci-dessous),
+            // ce qui ferait échouer silencieusement le binding implicite (modèle vide injecté,
+            // jamais une 404/500 franche) sur update().
+            Route::resource('fonctions-rh', FonctionRhController::class)
+                ->parameters(['fonctions-rh' => 'fonction_rh'])
+                ->only(['index', 'store', 'update']);
+            Route::patch('fonctions-rh/{fonction_rh}/toggle', [FonctionRhController::class, 'toggle'])
+                ->name('fonctions-rh.toggle');
             Route::resource('contrats', ContratController::class)->except(['show']);
 
             // Paie (legacy — lecture seule, gestion déplacée dans Comptabilité > Salaires)
@@ -440,11 +475,30 @@ Route::prefix('backoffice')->group(function () {
 
         // ── Module : Comptabilité ─────────────────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::COMPTABILITE)->prefix('comptabilite')->name('comptabilite.')->group(function () {
-            Route::get('/', [ComptabiliteDashboardController::class, 'index'])->name('dashboard');
 
-            // ── Besoin de trésorerie (prévision, par agence) ────────────────────────
-            Route::get('tresorerie', [BesoinTresorerieController::class, 'index'])->name('tresorerie.index');
-            Route::get('tresorerie/{site}', [BesoinTresorerieController::class, 'show'])->name('tresorerie.show');
+            // ── Trésorerie : Financement des agences + Mouvements de fonds ──────────
+            // Remplace l'ancien "Besoin de trésorerie" (BesoinTresorerieController) —
+            // cf. compte-rendu du chantier Financement des agences (2026-08-22).
+            Route::prefix('tresorerie')->name('tresorerie.')->group(function () {
+                Route::get('financement', [FinancementAgenceController::class, 'index'])->name('financement.index');
+                Route::get('financement/{site}', [FinancementAgenceController::class, 'show'])->name('financement.show');
+
+                Route::get('mouvements', [MouvementFondsController::class, 'index'])->name('mouvements.index');
+                Route::get('mouvements/create', [MouvementFondsController::class, 'create'])->name('mouvements.create');
+                Route::post('mouvements', [MouvementFondsController::class, 'store'])->name('mouvements.store');
+                Route::post('mouvements/{mouvement}/envoyer', [MouvementFondsController::class, 'envoyer'])->name('mouvements.envoyer');
+                Route::post('mouvements/{mouvement}/recevoir', [MouvementFondsController::class, 'recevoir'])->name('mouvements.recevoir');
+                Route::post('mouvements/{mouvement}/annuler', [MouvementFondsController::class, 'annuler'])->name('mouvements.annuler');
+                Route::post('mouvements/{mouvement}/contester', [MouvementFondsController::class, 'contester'])->name('mouvements.contester');
+                Route::post('mouvements/{mouvement}/confirmer-retour', [MouvementFondsController::class, 'confirmerRetour'])->name('mouvements.confirmer-retour');
+
+                Route::get('supports', [CompteTresorerieController::class, 'index'])->name('supports.index');
+                Route::post('supports', [CompteTresorerieController::class, 'store'])->name('supports.store');
+                Route::put('supports/{compteTresorerie}', [CompteTresorerieController::class, 'update'])->name('supports.update');
+
+                Route::post('soldes-ouverture', [SoldeOuvertureTresorerieController::class, 'store'])->name('soldes-ouverture.store');
+                Route::post('soldes-ouverture/{soldeOuverture}/valider', [SoldeOuvertureTresorerieController::class, 'valider'])->name('soldes-ouverture.valider');
+            });
 
             Route::get('fiches/livreurs', [PaiementFicheController::class, 'indexLivreurs'])->name('fiches.livreurs');
             Route::get('fiches/proprietaires', [PaiementFicheController::class, 'indexProprietaires'])->name('fiches.proprietaires');
@@ -456,7 +510,7 @@ Route::prefix('backoffice')->group(function () {
             Route::post('fiches/{fiche}/paiements', [PaiementFichePaiementController::class, 'store'])->name('fiches.paiements.store');
             Route::delete('fiches-paiements/{paiement}', [PaiementFichePaiementController::class, 'destroy'])->name('fiches.paiements.destroy');
 
-            Route::get('journal', [JournalTresorerieController::class, 'index'])->name('journal');
+            Route::get('journal', [JournalFinancierController::class, 'index'])->name('journal');
 
             // ── Commission livreurs logistique ────────────────────────────────────
             Route::get('commissions/logistique', [ComptabiliteCommissionLogistiqueController::class, 'index'])
@@ -479,8 +533,16 @@ Route::prefix('backoffice')->group(function () {
                 ->name('commissions.vente.pdf');
             Route::get('commissions/vente/livreurs/{livreurId}', [ComptabiliteCommissionVenteController::class, 'showLivreur'])
                 ->name('commissions.vente.livreur');
-            Route::post('commissions/vente/livreurs/{livreurId}/paiements', [ComptabiliteCommissionVenteController::class, 'payerLivreur'])
-                ->name('commissions.vente.livreur.paiements');
+
+            // ── Commission sites ────────────────────────────────────────────────────
+            Route::get('commissions/sites', [CommissionSiteController::class, 'index'])
+                ->name('commissions.sites.index');
+            Route::get('commissions/sites/{siteId}', [CommissionSiteController::class, 'show'])
+                ->name('commissions.sites.show');
+            Route::get('commissions/sites/export/excel', [CommissionSiteController::class, 'exportExcel'])
+                ->name('commissions.sites.excel');
+            Route::get('commissions/sites/export/pdf', [CommissionSiteController::class, 'exportPdf'])
+                ->name('commissions.sites.pdf');
 
             // ── Commission propriétaires ───────────────────────────────────────────
             Route::get('commissions/proprietaires', [CommissionProprietaireController::class, 'index'])
@@ -491,8 +553,16 @@ Route::prefix('backoffice')->group(function () {
                 ->name('commissions.proprietaires.pdf');
             Route::get('commissions/proprietaires/{proprietaireId}', [CommissionProprietaireController::class, 'show'])
                 ->name('commissions.proprietaires.show');
-            Route::post('commissions/proprietaires/{proprietaireId}/paiements', [CommissionProprietaireController::class, 'payer'])
-                ->name('commissions.proprietaires.paiements');
+
+            // ── Commission consultants ──────────────────────────────────────────────
+            Route::get('commissions/consultants', [CommissionConsultantController::class, 'index'])
+                ->name('commissions.consultants.index');
+            Route::get('commissions/consultants/{consultantId}', [CommissionConsultantController::class, 'show'])
+                ->name('commissions.consultants.show');
+            Route::get('commissions/consultants/export/excel', [CommissionConsultantController::class, 'exportExcel'])
+                ->name('commissions.consultants.excel');
+            Route::get('commissions/consultants/export/pdf', [CommissionConsultantController::class, 'exportPdf'])
+                ->name('commissions.consultants.pdf');
 
             // ── Périodes de paiement (générées automatiquement, jamais créées à la main) ──
             Route::get('periodes', [PaiementPeriodeController::class, 'index'])->name('periodes.index');

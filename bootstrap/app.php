@@ -1,10 +1,12 @@
 <?php
 
 use App\Http\Middleware\EnsureAccountIsActive;
+use App\Http\Middleware\EnsureIsStaffAccount;
 use App\Http\Middleware\EnsureOrganizationHasSite;
 use App\Http\Middleware\EnsurePasswordIsNotExpired;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\PreventCachingOfDynamicResponses;
 use App\Http\Middleware\RequireActiveLivreur;
 use App\Http\Middleware\RequireModuleEnabled;
 use App\Http\Middleware\RequireSiteAssigned;
@@ -65,6 +67,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => RoleMiddleware::class,
             'module' => RequireModuleEnabled::class,
             'require.site' => RequireSiteAssigned::class,
+            'staff' => EnsureIsStaffAccount::class,
             'org.site.required' => EnsureOrganizationHasSite::class,
             'active.livreur' => RequireActiveLivreur::class,
             'account.active' => EnsureAccountIsActive::class,
@@ -82,6 +85,7 @@ return Application::configure(basePath: dirname(__DIR__))
             HandleAppearance::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
+            PreventCachingOfDynamicResponses::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

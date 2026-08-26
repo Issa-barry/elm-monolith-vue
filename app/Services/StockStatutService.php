@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\ProduitStatut;
 use App\Enums\StockStatut;
 use App\Models\Parametre;
 use App\Models\Produit;
@@ -37,7 +38,11 @@ class StockStatutService
 
     public function statutPour(int $qte, int $seuil, bool $alerteActive): StockStatut
     {
-        if ($qte <= 0) {
+        if ($qte < 0) {
+            return StockStatut::STOCK_NEGATIF;
+        }
+
+        if ($qte === 0) {
             return StockStatut::RUPTURE;
         }
 
@@ -54,7 +59,12 @@ class StockStatutService
             return StockStatut::DISPONIBLE;
         }
 
-        return $this->statutPour($varianteStock->qte_stock, $this->seuilEffectif($produit), (bool) $produit->alerte_stock_active);
+        // Disponible = physique − engagé (StockReservationService, 25/08/2026) : un stock
+        // physique positif mais entièrement engagé par des commandes confirmées n'est plus
+        // vendable, jamais affiché "Disponible" (même règle que StockController::stockQuery()).
+        $disponible = $varianteStock->qte_stock - $varianteStock->qte_reservee;
+
+        return $this->statutPour($disponible, $this->seuilEffectif($produit), (bool) $produit->alerte_stock_active);
     }
 
     /**
@@ -63,7 +73,7 @@ class StockStatutService
      * précisément le problème (cf. décision : jamais masquer une alerte locale derrière un
      * total agrégé).
      *
-     * @return Collection<int, array{variante_id: string, variante_libelle: string, site_id: string, qte_stock: int, statut: string, statut_label: string}>
+     * @return Collection<int, array{variante_id: string, variante_libelle: string, site_id: string, qte_stock: int, qte_reservee: int, qte_disponible: int, statut: string, statut_label: string}>
      */
     public function detailParVarianteEtSite(Produit $produit): Collection
     {
@@ -73,13 +83,19 @@ class StockStatutService
 
         return $produit->variantes->flatMap(
             fn ($variante) => $variante->stocks->map(function (VarianteStock $vs) use ($variante, $seuil, $alerteActive, $gereStock) {
-                $statut = $gereStock ? $this->statutPour($vs->qte_stock, $seuil, $alerteActive) : StockStatut::DISPONIBLE;
+                // Disponible = physique − engagé (cf. statutPourVarianteStock()) : l'État se
+                // base toujours sur cette quantité, jamais le physique brut qte_stock (conservé
+                // ci-dessous pour l'affichage détaillé, mais plus pour le calcul de l'état).
+                $disponible = $vs->qte_stock - $vs->qte_reservee;
+                $statut = $gereStock ? $this->statutPour($disponible, $seuil, $alerteActive) : StockStatut::DISPONIBLE;
 
                 return [
                     'variante_id' => $variante->id,
                     'variante_libelle' => $variante->libelle,
                     'site_id' => $vs->site_id,
                     'qte_stock' => $vs->qte_stock,
+                    'qte_reservee' => $vs->qte_reservee,
+                    'qte_disponible' => $disponible,
                     'statut' => $statut->value,
                     'statut_label' => $statut->label(),
                 ];
@@ -121,23 +137,74 @@ class StockStatutService
             ->where('pt.gere_stock', true)
             ->whereNull('p.deleted_at')
             ->whereNull('pv.deleted_at')
-            ->select('vs.qte_stock', 'p.seuil_alerte_stock', 'p.alerte_stock_active')
+            ->select('p.seuil_alerte_stock', 'p.alerte_stock_active')
+            ->selectRaw('(vs.qte_stock - COALESCE(vs.qte_reservee, 0)) as qte_disponible')
             ->get();
 
         $ruptures = 0;
         $faibles = 0;
         foreach ($rows as $row) {
-            if ($row->qte_stock <= 0) {
+            // Disponible = physique − engagé (StockReservationService, 25/08/2026) : le badge
+            // sidebar comptait auparavant uniquement le physique brut, masquant les ruptures
+            // réelles d'un stock entièrement engagé par des commandes confirmées.
+            if ($row->qte_disponible <= 0) {
                 $ruptures++;
 
                 continue;
             }
             $seuil = $row->seuil_alerte_stock ?? $seuilOrg;
-            if ($row->alerte_stock_active && $seuil > 0 && $row->qte_stock <= $seuil) {
+            if ($row->alerte_stock_active && $seuil > 0 && $row->qte_disponible <= $seuil) {
                 $faibles++;
             }
         }
 
         return ['ruptures' => $ruptures, 'faibles' => $faibles, 'total' => $ruptures + $faibles];
+    }
+
+    /**
+     * Le site a-t-il au moins UN produit réellement vendable, maintenant — utilisé UNIQUEMENT
+     * pour décider si la création d'une nouvelle commande vente doit être bloquée quand la
+     * politique globale interdit la vente sans stock (cf. Parametre::
+     * isVentesAutoriseesSansStock(), CommandeVenteService::siteAutoriseNouvelleCommande()).
+     * Volontairement une EXISTENCE, jamais une somme de quantités (remplace l'ancienne
+     * stockTotalVendableSite() : un produit à +5 et un autre à -5 sur le même site donnerait une
+     * somme nulle alors qu'un produit est bel et bien vendable — une quantité négative isolée ne
+     * doit, à l'inverse, jamais suffire à elle seule à autoriser une création). C'est un signal
+     * volontairement grossier ("ce site a-t-il quelque chose à vendre ?"), pas une garantie que
+     * chaque variante précise sera disponible — le contrôle fin reste fait ligne par ligne au
+     * moment réel de la vente (PDV, création/modification de commande, chargement).
+     *
+     * Vrai si :
+     *  (a) au moins une variante d'un produit ACTIF, vendable, géré en stock, a un DISPONIBLE
+     *      (physique − engagé, cf. StockReservationService) STRICTEMENT positif sur ce site ; ou
+     *  (b) au moins un produit ACTIF, vendable, qui NE gère PAS de stock (type "service")
+     *      existe dans l'organisation — vendable indépendamment de tout stock physique sur ce
+     *      site, même convention que verifierDisponibiliteLignes()/produitsActifs(), qui
+     *      ignorent déjà ces lignes dans le contrôle de disponibilité.
+     */
+    public function sitePossedeStockVendable(string $organizationId, string $siteId): bool
+    {
+        $existeServiceVendableSansStock = Produit::where('organization_id', $organizationId)
+            ->where('statut', ProduitStatut::ACTIF)
+            ->whereHas('produitType', fn ($q) => $q->where('vendable', true)->where('gere_stock', false))
+            ->exists();
+
+        if ($existeServiceVendableSansStock) {
+            return true;
+        }
+
+        return DB::table('variante_stocks as vs')
+            ->join('produit_variantes as pv', 'pv.id', '=', 'vs.produit_variante_id')
+            ->join('produits as p', 'p.id', '=', 'pv.produit_id')
+            ->join('produit_types as pt', 'pt.id', '=', 'p.produit_type_id')
+            ->where('p.organization_id', $organizationId)
+            ->where('vs.site_id', $siteId)
+            ->where('p.statut', ProduitStatut::ACTIF->value)
+            ->where('pt.gere_stock', true)
+            ->where('pt.vendable', true)
+            ->whereRaw('(vs.qte_stock - COALESCE(vs.qte_reservee, 0)) > 0')
+            ->whereNull('p.deleted_at')
+            ->whereNull('pv.deleted_at')
+            ->exists();
     }
 }

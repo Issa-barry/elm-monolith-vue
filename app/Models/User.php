@@ -286,6 +286,7 @@ class User extends Authenticatable
             'logistique.valider_chargement', 'logistique.valider_reception', 'logistique.cloturer',
             'pieces-identite.download', 'pieces-identite.valider', 'pieces-identite.rejeter',
             'imports-flotte.create', 'imports-flotte.read',
+            'imports-produits.create', 'imports-produits.read',
         ];
         foreach ($standalone as $perm) {
             $map[$perm] = $this->isSuperAdmin() || $this->can($perm);

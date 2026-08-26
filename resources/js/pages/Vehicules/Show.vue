@@ -24,7 +24,7 @@ import {
 } from 'lucide-vue-next';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 interface EquipeMembre {
     livreur_nom: string | null;
@@ -55,6 +55,12 @@ interface MembreEquipeDetail {
     ordre: number;
 }
 
+/** V2 uniquement — partage Livreur déjà enregistré, groupé par catégorie (montants GNF fixes). */
+interface PartageCategorieDetail {
+    categorie_id: string;
+    parts: Array<{ livreur_id: string; montant_unitaire: number }>;
+}
+
 interface EquipeData {
     id: string;
     is_active: boolean;
@@ -64,6 +70,7 @@ interface EquipeData {
     proprietaire_id: string | null;
     proprietaire_nom: string | null;
     membres: MembreEquipeDetail[];
+    partages_categorie: PartageCategorieDetail[];
 }
 
 interface ProprietaireOption {
@@ -101,7 +108,19 @@ interface VehiculeData {
     photo_url: string | null;
     is_active: boolean;
     derogation_impayes_autorisee: boolean;
-    type_seuil_derogation_impayes: number | null;
+    seuil_derogation_impayes: number | null;
+}
+
+/** V2 uniquement — barème Propriétaire ET Livraison résolus par catégorie
+ * (cf. décision AMOA post-Phase 2 : ni un montant Propriétaire unique ni un
+ * partage Livraison unique ne sont valables pour tout le véhicule, chaque
+ * catégorie ayant son propre barème sur chaque cible). Seule source de
+ * vérité utilisée à la fois par cette fiche et par la popup équipe. */
+interface BaremeCommissionCategorie {
+    categorie_id: string;
+    categorie_nom: string;
+    montant_proprietaire: number;
+    montant_livraison: number;
 }
 
 const props = defineProps<{
@@ -111,6 +130,7 @@ const props = defineProps<{
     proprietaires: ProprietaireOption[];
     default_proprietaire_id: string | null;
     seuil_global_impayes: number;
+    baremes_commission_categories: BaremeCommissionCategorie[];
 }>();
 
 const { can } = usePermissions();
@@ -160,62 +180,119 @@ const totalApprouve = computed(() =>
         .reduce((s, d) => s + d.montant, 0),
 );
 
-const totalLivreurs = computed(() =>
-    props.vehicule.equipe_membres.reduce((s, m) => s + m.montant_par_pack, 0),
-);
-
-const tauxLivreurs = computed(() =>
-    parseFloat(
-        props.vehicule.equipe_membres
-            .reduce((s, m) => s + m.taux_commission, 0)
-            .toFixed(2),
-    ),
-);
-
 function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
 }
 
 /**
- * Même règle que SolvabiliteService::seuilApplicableVehicule() (côté affichage uniquement,
- * jamais utilisée pour bloquer une opération) : dérogation active ET type configuré → seuil du
- * type, sinon seuil standard des paramètres de vente.
+ * État local nécessaire ici (contrairement à l'ancien toggle "tout ou rien" sans montant) : le
+ * Switch doit révéler le champ plafond dès qu'on l'active SANS persister immédiatement — seul le
+ * clic sur "Enregistrer" envoie la requête, avec activation et plafond dans le même appel
+ * (cf. VehiculeController::updateDerogation()). Resynchronisé sur les props à chaque
+ * succès/erreur ci-dessous, jamais laissé diverger durablement de l'état serveur.
  */
-const derogationEffective = computed(
-    () =>
-        props.vehicule.derogation_impayes_autorisee &&
-        props.vehicule.type_seuil_derogation_impayes !== null,
+const derogationActive = ref(props.vehicule.derogation_impayes_autorisee);
+const derogationMontant = ref<number | null>(
+    props.vehicule.seuil_derogation_impayes,
 );
-
-const seuilImpayesApplicable = computed(() =>
-    derogationEffective.value
-        ? (props.vehicule.type_seuil_derogation_impayes as number)
-        : props.seuil_global_impayes,
-);
-
-/**
- * Bascule la dérogation directement depuis la fiche (VehiculeController::toggleDerogation()) —
- * pas de mise à jour optimiste : le Switch reste piloté par `vehicule.derogation_impayes_autorisee`
- * (jamais par un état local), donc un succès l'actualise via le rechargement Inertia consécutif à
- * la redirection back(), et un échec le laisse inchangé sans rien à "annuler" manuellement.
- */
 const derogationProcessing = ref(false);
+const derogationMontantError = ref<string | null>(null);
 
-function toggleDerogation() {
+watch(
+    () => props.vehicule.derogation_impayes_autorisee,
+    (v) => {
+        derogationActive.value = v;
+    },
+);
+watch(
+    () => props.vehicule.seuil_derogation_impayes,
+    (v) => {
+        derogationMontant.value = v;
+    },
+);
+
+// Formatage "2 000 000" pendant la saisie — même pattern que #seuil-impayes-input
+// (settings/Ventes.vue) : un input texte simple plutôt que PrimeVue InputNumber, dont le reste
+// du projet n'active jamais le groupement de milliers (cf. CapacitesEditor.vue, TypeVehicules).
+function formatMontant(val: number | null): string {
+    return val !== null && val > 0
+        ? new Intl.NumberFormat('fr-FR').format(val)
+        : '';
+}
+
+const derogationMontantDisplay = ref(formatMontant(derogationMontant.value));
+
+watch(derogationMontant, (val) => {
+    if (document.activeElement?.id !== 'seuil_derogation_impayes') {
+        derogationMontantDisplay.value = formatMontant(val);
+    }
+});
+
+function onMontantInput(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const raw = input.value.replace(/\D/g, '');
+    derogationMontant.value = raw ? parseInt(raw, 10) : null;
+    derogationMontantDisplay.value = formatMontant(derogationMontant.value);
+    input.value = derogationMontantDisplay.value;
+    derogationMontantError.value = null;
+}
+
+function onMontantFocus() {
+    derogationMontantDisplay.value = formatMontant(derogationMontant.value);
+}
+
+function onMontantBlur() {
+    derogationMontantDisplay.value = formatMontant(derogationMontant.value);
+}
+
+function saveDerogation(active: boolean) {
     if (derogationProcessing.value) return;
+
+    if (
+        active &&
+        (derogationMontant.value === null || derogationMontant.value <= 0)
+    ) {
+        derogationMontantError.value =
+            "Renseignez un plafond d'impayés autorisé pour activer la dérogation.";
+        return;
+    }
+    derogationMontantError.value = null;
     derogationProcessing.value = true;
 
     router.patch(
-        `/backoffice/vehicules/${props.vehicule.id}/toggle-derogation`,
-        {},
+        `/backoffice/vehicules/${props.vehicule.id}/derogation-impayes`,
+        {
+            derogation_impayes_autorisee: active,
+            seuil_derogation_impayes: derogationMontant.value,
+        },
         {
             preserveScroll: true,
+            onSuccess: () => {
+                toast.add({
+                    severity: 'success',
+                    summary: 'Dérogation impayés',
+                    detail: active
+                        ? 'Dérogation activée.'
+                        : 'Dérogation désactivée.',
+                    life: 4000,
+                    group: 'top',
+                });
+            },
             onError: (errors) => {
+                // Revert : l'état serveur (props.vehicule) n'a pas changé, le Switch/champ
+                // local ne doivent pas rester sur une valeur jamais persistée.
+                derogationActive.value =
+                    props.vehicule.derogation_impayes_autorisee;
+                derogationMontant.value =
+                    props.vehicule.seuil_derogation_impayes;
+                derogationMontantError.value =
+                    errors.seuil_derogation_impayes ?? null;
                 toast.add({
                     severity: 'error',
                     summary: 'Dérogation impayés',
                     detail:
                         errors.derogation_impayes_autorisee ??
+                        errors.seuil_derogation_impayes ??
                         'Impossible de mettre à jour la dérogation.',
                     life: 5000,
                     group: 'top',
@@ -226,6 +303,16 @@ function toggleDerogation() {
             },
         },
     );
+}
+
+function onToggleDerogation(checked: boolean) {
+    derogationActive.value = checked;
+    derogationMontantError.value = null;
+    // Désactivation : action autonome, sans plafond à confirmer — persistée tout de suite.
+    // Activation : reste en attente d'un plafond saisi, confirmé via "Enregistrer".
+    if (!checked) {
+        saveDerogation(false);
+    }
 }
 </script>
 
@@ -572,24 +659,85 @@ function toggleDerogation() {
                                     </p>
                                     <Switch
                                         aria-label="Dérogation impayés"
-                                        :model-value="
-                                            vehicule.derogation_impayes_autorisee
-                                        "
+                                        :model-value="derogationActive"
                                         :disabled="
                                             derogationProcessing ||
                                             !can('vehicules.update')
                                         "
-                                        @update:model-value="toggleDerogation()"
+                                        @update:model-value="
+                                            onToggleDerogation($event)
+                                        "
                                     />
                                 </div>
-                                <p class="mt-1.5 text-xs text-muted-foreground">
-                                    {{
-                                        derogationEffective
-                                            ? 'Plafond autorisé'
-                                            : 'Seuil applicable'
-                                    }}
-                                    : {{ formatGNF(seuilImpayesApplicable) }}
-                                </p>
+
+                                <template v-if="!derogationActive">
+                                    <p
+                                        class="mt-1.5 text-xs text-muted-foreground"
+                                    >
+                                        Seuil standard appliqué :
+                                        {{ formatGNF(seuil_global_impayes) }}
+                                    </p>
+                                </template>
+                                <template v-else>
+                                    <div class="mt-3 space-y-1.5">
+                                        <label
+                                            for="seuil_derogation_impayes"
+                                            class="text-xs font-medium text-muted-foreground"
+                                        >
+                                            Montant maximum (GNF)
+                                        </label>
+                                        <div class="flex items-center gap-2">
+                                            <input
+                                                id="seuil_derogation_impayes"
+                                                type="text"
+                                                inputmode="numeric"
+                                                :value="
+                                                    derogationMontantDisplay
+                                                "
+                                                placeholder="Ex: 500 000"
+                                                class="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm"
+                                                :class="{
+                                                    'border-destructive':
+                                                        derogationMontantError,
+                                                }"
+                                                :disabled="
+                                                    derogationProcessing ||
+                                                    !can('vehicules.update')
+                                                "
+                                                @input="onMontantInput"
+                                                @focus="onMontantFocus"
+                                                @blur="onMontantBlur"
+                                            />
+                                            <Button
+                                                size="sm"
+                                                :disabled="
+                                                    derogationProcessing ||
+                                                    !can('vehicules.update')
+                                                "
+                                                @click="saveDerogation(true)"
+                                            >
+                                                {{
+                                                    derogationProcessing
+                                                        ? 'Enregistrement…'
+                                                        : 'Enregistrer'
+                                                }}
+                                            </Button>
+                                        </div>
+                                        <p
+                                            v-if="derogationMontantError"
+                                            class="text-xs text-destructive"
+                                        >
+                                            {{ derogationMontantError }}
+                                        </p>
+                                        <p
+                                            v-else
+                                            class="text-xs font-medium text-muted-foreground"
+                                        >
+                                            Maximum d'impayés autorisé pour ce
+                                            véhicule.
+                                        </p>
+                                    </div>
+                                </template>
                             </div>
                         </div>
                     </div>
@@ -651,11 +799,9 @@ function toggleDerogation() {
                         <div v-else class="overflow-x-auto rounded-lg border">
                             <table class="w-full table-fixed text-sm">
                                 <colgroup>
-                                    <col class="w-1/5" />
-                                    <col class="w-1/5" />
-                                    <col class="w-1/5" />
-                                    <col class="w-1/5" />
-                                    <col class="w-1/5" />
+                                    <col class="w-1/3" />
+                                    <col class="w-1/3" />
+                                    <col class="w-1/3" />
                                 </colgroup>
                                 <thead
                                     class="bg-muted/30 text-left text-muted-foreground"
@@ -669,14 +815,6 @@ function toggleDerogation() {
                                         </th>
                                         <th class="px-4 py-3 font-medium">
                                             Rôle
-                                        </th>
-                                        <th class="px-4 py-3 font-medium">
-                                            Montant / pack
-                                        </th>
-                                        <th
-                                            class="px-4 py-3 text-right font-medium"
-                                        >
-                                            Commission
                                         </th>
                                     </tr>
                                 </thead>
@@ -714,84 +852,66 @@ function toggleDerogation() {
                                                 >{{ m.role }}</span
                                             >
                                         </td>
-                                        <td class="px-4 py-3 font-mono text-sm">
-                                            {{
-                                                m.montant_par_pack.toLocaleString(
-                                                    'fr-FR',
-                                                )
-                                            }}
-                                            GNF
-                                        </td>
-                                        <td
-                                            class="px-4 py-3 text-right text-muted-foreground"
-                                        >
-                                            {{ m.taux_commission }}%
-                                        </td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
 
-                        <!-- Récap répartition -->
+                        <!-- Barèmes de commission — un montant Propriétaire et un
+                             montant Livraison PAR CATÉGORIE, jamais un total blended :
+                             les barèmes peuvent différer d'une catégorie à l'autre
+                             (ex. Sachet = 300 GNF, Bouteille = 1000 GNF Livraison).
+                             Même source que la popup équipe (baremes_commission_categories). -->
                         <div
                             v-if="equipe && vehicule.equipe_membres.length > 0"
-                            class="mt-2 rounded-lg border bg-muted/30 p-4"
+                            class="mt-2 space-y-2"
                         >
                             <p
-                                class="mb-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                                class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
                             >
-                                Répartition par pack
+                                Barèmes de commission
                             </p>
-                            <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                                <div>
-                                    <p class="text-xs text-muted-foreground">
-                                        Commission totale
-                                    </p>
-                                    <p
-                                        class="mt-0.5 font-mono text-sm font-semibold tabular-nums"
-                                    >
-                                        {{
-                                            formatGNF(
-                                                equipe.commission_unitaire_par_pack,
-                                            )
-                                        }}
-                                    </p>
-                                    <p class="text-xs text-muted-foreground">
-                                        100%
-                                    </p>
-                                </div>
-                                <div
-                                    v-if="equipe.montant_par_pack_proprietaire"
+                            <div
+                                v-if="
+                                    baremes_commission_categories.length === 0
+                                "
+                                class="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground"
+                            >
+                                Aucun barème de commission actif pour ce
+                                véhicule.
+                            </div>
+                            <div
+                                v-for="cat in baremes_commission_categories"
+                                :key="cat.categorie_id"
+                                class="rounded-lg border bg-muted/30 p-3"
+                            >
+                                <p
+                                    class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
                                 >
-                                    <p class="text-xs text-muted-foreground">
-                                        Part propriétaire
-                                    </p>
-                                    <p
-                                        class="mt-0.5 font-mono text-sm font-semibold tabular-nums"
-                                    >
-                                        {{
-                                            formatGNF(
-                                                equipe.montant_par_pack_proprietaire,
-                                            )
-                                        }}
-                                    </p>
-                                    <p class="text-xs text-muted-foreground">
-                                        {{
-                                            equipe.taux_commission_proprietaire
-                                        }}%
-                                    </p>
-                                </div>
-                                <div>
-                                    <p class="text-xs text-muted-foreground">
-                                        Part livreurs
-                                    </p>
-                                    <p
-                                        class="mt-0.5 font-mono text-sm font-semibold tabular-nums"
-                                    >
-                                        {{ formatGNF(totalLivreurs) }}
+                                    {{ cat.categorie_nom }}
+                                </p>
+                                <div
+                                    class="mt-1 flex flex-wrap gap-x-6 gap-y-1"
+                                >
+                                    <p class="text-xs text-primary">
+                                        Propriétaire :
+                                        <span class="font-mono font-semibold">
+                                            {{
+                                                formatGNF(
+                                                    cat.montant_proprietaire,
+                                                )
+                                            }} </span
+                                        >/ unité
                                     </p>
                                     <p class="text-xs text-muted-foreground">
-                                        {{ tauxLivreurs }}%
+                                        Livraison :
+                                        <span
+                                            class="font-mono font-semibold text-foreground"
+                                        >
+                                            {{
+                                                formatGNF(cat.montant_livraison)
+                                            }} </span
+                                        >/ unité
                                     </p>
                                 </div>
                             </div>
@@ -903,5 +1023,6 @@ function toggleDerogation() {
         }"
         :equipe="equipe"
         :proprietaires="proprietaires"
+        :baremes-commission-categories="baremes_commission_categories"
     />
 </template>

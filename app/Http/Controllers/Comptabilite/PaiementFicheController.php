@@ -6,8 +6,8 @@ use App\Enums\ModePaiement;
 use App\Enums\StatutFichePaiement;
 use App\Enums\StatutValidationEquipe;
 use App\Http\Controllers\Controller;
+use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionLogistiquePart;
-use App\Models\CommissionPart;
 use App\Models\Depense;
 use App\Models\Organization;
 use App\Models\PaiementFiche;
@@ -66,7 +66,7 @@ class PaiementFicheController extends Controller
         if ($type !== 'salarie') {
             $periodesUniques = $fiches->getCollection()->pluck('periode')->filter()->unique('id');
             foreach ($periodesUniques as $p) {
-                $teamStatusParPeriode[$p->id] = CommissionAdjustmentService::statutValidationParBeneficiaire($p);
+                $teamStatusParPeriode[$p->id] = CommissionAdjustmentService::statutValidationCombineParBeneficiaire($p);
             }
         }
 
@@ -120,7 +120,7 @@ class PaiementFicheController extends Controller
 
         $teamStatusParPeriode = collect();
         if ($fiche->beneficiaire_type !== 'salarie' && $fiche->periode !== null) {
-            $teamStatusParPeriode[$fiche->periode->id] = CommissionAdjustmentService::statutValidationParBeneficiaire($fiche->periode);
+            $teamStatusParPeriode[$fiche->periode->id] = CommissionAdjustmentService::statutValidationCombineParBeneficiaire($fiche->periode);
         }
 
         return Inertia::render('Comptabilite/Fiches/Show', [
@@ -301,7 +301,7 @@ class PaiementFicheController extends Controller
     /**
      * Callback d'eager load pour PaiementFicheLigne::source() (morphTo) — ne
      * charge la relation véhicule que pour les types de source qui en portent
-     * une (CommissionPart/CommissionLogistiquePart via leur commission,
+     * une (CommissionLogistiquePart/CommissionEnveloppePart via leur commission,
      * Depense imputée à un véhicule). Partagé entre show() et renderIndex()
      * pour garder les deux vues cohérentes (cf. audit UX bénéficiaire/véhicule).
      */
@@ -309,8 +309,8 @@ class PaiementFicheController extends Controller
     {
         return function (MorphTo $morphTo) {
             $morphTo->morphWith([
-                CommissionPart::class => ['commission.vehicule'],
                 CommissionLogistiquePart::class => ['commission.vehicule'],
+                CommissionEnveloppePart::class => ['enveloppe.source.vehicule'],
                 Depense::class => ['vehiculeBeneficiaire'],
             ]);
         };
@@ -322,7 +322,8 @@ class PaiementFicheController extends Controller
         $source = $ligne->source;
 
         $vehicule = match (true) {
-            $source instanceof CommissionPart, $source instanceof CommissionLogistiquePart => $source->commission?->vehicule,
+            $source instanceof CommissionLogistiquePart => $source->commission?->vehicule,
+            $source instanceof CommissionEnveloppePart => $source->enveloppe?->source?->vehicule,
             $source instanceof Depense && $source->beneficiaire_type === 'vehicule' => $source->vehiculeBeneficiaire,
             default => null,
         };

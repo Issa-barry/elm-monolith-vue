@@ -2,9 +2,7 @@
 
 namespace App\Http\Controllers\Settings;
 
-use App\Enums\CategorieDepense;
 use App\Http\Controllers\Controller;
-use App\Models\DepenseType;
 use App\Models\DroitCreationDepense;
 use App\Models\Site;
 use Illuminate\Http\RedirectResponse;
@@ -14,6 +12,12 @@ use Inertia\Inertia;
 use Inertia\Response;
 use Spatie\Permission\Models\Role;
 
+/**
+ * Validation des dépenses — droits de validation par rôle uniquement. La
+ * classification des types de dépense a déménagé dans le module Dépenses
+ * (cf. App\Http\Controllers\DepenseTypeController), cette page ne garde que
+ * les règles/droits de validation (décision produit 2026-08-24).
+ */
 class DepenseParametrageController extends Controller
 {
     public function edit(): Response
@@ -21,23 +25,6 @@ class DepenseParametrageController extends Controller
         abort_unless(auth()->user()->can('parametres.update'), 403);
 
         $orgId = auth()->user()->organization_id;
-
-        // Types de dépense
-        $types = DepenseType::where('organization_id', $orgId)
-            ->ordered()
-            ->get()
-            ->map(fn (DepenseType $t) => [
-                'id' => $t->id,
-                'libelle' => $t->libelle,
-                'description' => $t->description,
-                'categorie' => $t->categorie->value,
-                'categorie_label' => $t->categorie->label(),
-                'commentaire_obligatoire' => $t->commentaire_obligatoire,
-                'justificatif_obligatoire' => $t->justificatif_obligatoire,
-                'type_paie' => $t->type_paie,
-                'is_active' => $t->is_active,
-                'depenses_count' => $t->depenses()->count(),
-            ]);
 
         $roles = Role::orderBy('name')->get(['id', 'name']);
         $sites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom', 'code']);
@@ -54,8 +41,6 @@ class DepenseParametrageController extends Controller
         ]);
 
         return Inertia::render('settings/DepenseParametrage', [
-            'types' => $types,
-            'categories' => CategorieDepense::options(),
             'config' => $config,
             'sites' => $sites,
         ]);

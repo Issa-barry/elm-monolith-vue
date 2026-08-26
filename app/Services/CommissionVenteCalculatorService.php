@@ -55,7 +55,7 @@ class CommissionVenteCalculatorService
 
     /**
      * @param  float  $totalAPayer  somme des montants réellement dus par part (montant_actuel s'il a été
-     *                              ajusté, sinon montant_net) — voir CommissionPart::getMontantAPayerAttribute().
+     *                              ajusté, sinon montant_net) — voir CommissionEnveloppePart::getMontantAPayerAttribute().
      *                              C'est cette valeur, et non le brut théorique, qui détermine le net à payer :
      *                              un ajustement validé doit se refléter immédiatement dans les listes/exports.
      * @return array{brut: float, frais_parts: float, frais_depenses: float, frais: float, net: float, verse: float, reste: float, statut: string}

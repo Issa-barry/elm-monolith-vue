@@ -21,6 +21,8 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     reception: 'bg-emerald-500',
     termine: 'bg-emerald-500',
     disponible: 'bg-emerald-500',
+    couvert: 'bg-emerald-500',
+    recu: 'bg-emerald-500',
 
     // Bleu — en cours
     en_cours: 'bg-blue-500',
@@ -28,16 +30,19 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     chargement_en_cours: 'bg-blue-500',
     livraison_en_cours: 'bg-blue-500',
     transit: 'bg-blue-500',
+    fonds_en_transit: 'bg-blue-500',
+    envoye: 'bg-blue-500',
     calculee: 'bg-blue-500',
     repartition_validee: 'bg-blue-500',
 
-    // Gris — brouillon / créé / pas commencé
+    // Gris — brouillon / créé / pas commencé / neutralisé
     brouillon: 'bg-zinc-400 dark:bg-zinc-500',
     creee: 'bg-zinc-400 dark:bg-zinc-500',
     a_charger: 'bg-zinc-400 dark:bg-zinc-500',
     a_verifier: 'bg-zinc-400 dark:bg-zinc-500',
     inactif: 'bg-zinc-400 dark:bg-zinc-500',
     inactive: 'bg-zinc-400 dark:bg-zinc-500',
+    contrepassee: 'bg-zinc-400 dark:bg-zinc-500',
 
     // Rouge — impayé / rejeté / annulé
     impaye: 'bg-red-500',
@@ -47,12 +52,15 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     rejetee: 'bg-red-500',
     annule: 'bg-red-500',
     annulee: 'bg-red-500',
+    retourne: 'bg-red-500',
     ko: 'bg-red-500',
     expiree: 'bg-red-500',
     echoue: 'bg-red-500',
+    erreur: 'bg-red-500',
     rupture: 'bg-red-500',
 
     // Orange — partiel / en attente / soumis
+    conteste: 'bg-orange-500',
     partiel: 'bg-orange-500',
     partielle: 'bg-orange-500',
     partiellement_paye: 'bg-orange-500',
@@ -63,6 +71,9 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     expire_bientot: 'bg-amber-500',
     analyse: 'bg-orange-500',
     stock_faible: 'bg-amber-500',
+    a_financer: 'bg-orange-500',
+    donnees_incompletes: 'bg-amber-500',
+    stock_negatif: 'bg-orange-500',
 };
 
 const DEFAULT_DOT_CLASS = 'bg-zinc-400 dark:bg-zinc-500';

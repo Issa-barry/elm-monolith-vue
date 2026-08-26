@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import DataFilters, {
+    type FilterField,
+} from '@/components/filters/DataFilters.vue';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -21,6 +24,15 @@ import {
     Trash2,
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
+
+interface SiteStock {
+    site_id: string;
+    site_code: string | null;
+    site_nom: string | null;
+    qte_stock: number;
+    statut: 'disponible' | 'stock_faible' | 'rupture';
+    updated_at: string | null;
+}
 
 // Reprend exactement la forme de l'interface Produit de Index.vue (même objets passés tels
 // quels, cf. :produits="props.produits") — les deux interfaces doivent rester structurellement
@@ -53,13 +65,19 @@ interface Produit {
     has_variantes: boolean;
     last_mouvement_type: 'entree' | 'sortie' | null;
     last_mouvement_quantite: number | null;
-    stocks_par_site: unknown[];
+    stocks_par_site: SiteStock[];
 }
 
 const props = defineProps<{
     produits: Produit[];
     onDelete: (produit: Produit) => void;
     onArchive: (produit: Produit) => void;
+    // Filtres serveur (statut/type), partagés avec la barre desktop — la
+    // recherche mobile reste un filtre texte local, cf. `search` ci-dessous.
+    filterUrl: string;
+    filterValues: Record<string, unknown>;
+    filterFields: FilterField[];
+    resultCount: number;
 }>();
 
 const { can } = usePermissions();
@@ -114,8 +132,8 @@ const filteredProduits = computed(() => {
                 </Link>
             </div>
 
-            <div class="px-4 pb-3">
-                <div class="relative flex items-center">
+            <div class="flex items-center gap-2 px-4 pb-3">
+                <div class="relative flex flex-1 items-center">
                     <Search
                         class="pointer-events-none absolute left-3 h-4 w-4 text-muted-foreground"
                     />
@@ -126,6 +144,13 @@ const filteredProduits = computed(() => {
                         class="w-full rounded-xl border-0 bg-muted py-2.5 pr-4 pl-9 text-sm placeholder:text-muted-foreground/60 focus:ring-2 focus:ring-primary/30 focus:outline-none"
                     />
                 </div>
+                <DataFilters
+                    trigger-only
+                    :url="filterUrl"
+                    :values="filterValues"
+                    :fields="filterFields"
+                    :result-count="resultCount"
+                />
             </div>
         </div>
 

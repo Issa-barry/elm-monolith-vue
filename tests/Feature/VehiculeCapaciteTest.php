@@ -46,6 +46,11 @@ class VehiculeCapaciteTest extends TestCase
             'logistique.read', 'logistique.create', 'logistique.update',
         ]);
 
+        // Ce fichier ne teste pas la disponibilité du stock — évite que le nouveau contrôle de
+        // CommandeVenteController::store() (23/08/2026, cf. CommandeVenteService::
+        // siteAutoriseNouvelleCommande()) ne bloque des commandes de test sans rapport avec le stock.
+        Parametre::setVentesAutoriserStockNegatif($this->org->id, true);
+
         // initOrgAndUser() a déjà créé et rattaché un site par défaut (is_default: true) —
         // en recréer un second ici marquerait deux sites "par défaut" pour le même
         // utilisateur, ambigu pour la résolution de site du PDV (wherePivot('is_default', true)

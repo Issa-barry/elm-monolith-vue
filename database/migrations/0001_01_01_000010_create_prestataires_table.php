@@ -12,17 +12,12 @@ return new class extends Migration
             $table->ulid('id')->primary();
             $table->foreignUlid('organization_id')->constrained()->cascadeOnDelete();
             $table->string('reference', 10)->nullable()->unique();
-            $table->string('nom', 100)->nullable();
-            $table->string('prenom', 100)->nullable();
-            $table->string('raison_sociale', 200)->nullable();
-            $table->string('email')->nullable();
-            $table->string('phone', 30)->nullable();
-            $table->string('code_phone_pays', 10)->default('+224');
-            $table->string('code_pays', 2)->default('GN');
-            $table->string('pays', 100)->default('Guinée');
-            $table->string('ville', 100)->nullable();
-            $table->text('adresse')->nullable();
-            $table->string('type', 30)->default('fournisseur')->index();
+            // Identité (physique ou morale) jamais dupliquée ici — portée par Personne ou
+            // EntrepriseTierce, cf. ..._z_create_personnes_table.php et
+            // ..._create_entreprises_tierces_table.php. Exactement l'une des deux est renseignée.
+            $table->foreignUlid('personne_id')->nullable()->constrained('personnes')->nullOnDelete();
+            $table->foreignUlid('entreprise_tierce_id')->nullable()->constrained('entreprises_tierces')->nullOnDelete();
+            $table->string('type', 30)->index();
             $table->text('notes')->nullable();
             $table->boolean('is_active')->default(true)->index();
             $table->timestamps();

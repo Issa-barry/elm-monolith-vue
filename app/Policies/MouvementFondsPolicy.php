@@ -1,0 +1,86 @@
+<?php
+
+namespace App\Policies;
+
+use App\Models\MouvementFonds;
+use App\Models\User;
+
+/**
+ * Séparation création/réception (règle #11 de la spec) : le site d'origine
+ * initie/envoie et confirme un retour, le site de destination confirme la
+ * réception ou conteste — jamais la même personne des deux côtés d'affilée
+ * sauf si admin (autorité globale sur l'organisation, comme
+ * TransfertLogistiquePolicy).
+ */
+class MouvementFondsPolicy
+{
+    public function viewAny(User $user): bool
+    {
+        return $user->can('tresorerie.read');
+    }
+
+    public function view(User $user, MouvementFonds $mouvement): bool
+    {
+        return $user->can('tresorerie.read') && $this->sameOrganization($user, $mouvement);
+    }
+
+    public function create(User $user): bool
+    {
+        return $user->can('tresorerie.create');
+    }
+
+    public function envoyer(User $user, MouvementFonds $mouvement): bool
+    {
+        if (! $user->can('tresorerie.envoyer') || ! $this->sameOrganization($user, $mouvement) || ! $mouvement->isBrouillon()) {
+            return false;
+        }
+
+        return $user->isAdmin() || $user->isAssignedToSite($mouvement->site_origine_id);
+    }
+
+    public function recevoir(User $user, MouvementFonds $mouvement): bool
+    {
+        if (! $user->can('tresorerie.recevoir') || ! $this->sameOrganization($user, $mouvement)) {
+            return false;
+        }
+        if (! $mouvement->isEnvoye() && ! $mouvement->isConteste()) {
+            return false;
+        }
+
+        return $user->isAdmin() || $user->isAssignedToSite($mouvement->site_destination_id);
+    }
+
+    public function annuler(User $user, MouvementFonds $mouvement): bool
+    {
+        if (! $user->can('tresorerie.annuler') || ! $this->sameOrganization($user, $mouvement) || ! $mouvement->isBrouillon()) {
+            return false;
+        }
+
+        return $user->isAdmin() || $user->isAssignedToSite($mouvement->site_origine_id);
+    }
+
+    /** Contestation — côté destinataire : "je n'ai rien reçu". */
+    public function contester(User $user, MouvementFonds $mouvement): bool
+    {
+        if (! $user->can('tresorerie.rejeter') || ! $this->sameOrganization($user, $mouvement) || ! $mouvement->isEnvoye()) {
+            return false;
+        }
+
+        return $user->isAdmin() || $user->isAssignedToSite($mouvement->site_destination_id);
+    }
+
+    /** Retour confirmé — côté origine : l'argent est physiquement revenu. */
+    public function confirmerRetour(User $user, MouvementFonds $mouvement): bool
+    {
+        if (! $user->can('tresorerie.confirmer_retour') || ! $this->sameOrganization($user, $mouvement) || ! $mouvement->isConteste()) {
+            return false;
+        }
+
+        return $user->isAdmin() || $user->isAssignedToSite($mouvement->site_origine_id);
+    }
+
+    private function sameOrganization(User $user, MouvementFonds $mouvement): bool
+    {
+        return $user->organization_id === $mouvement->organization_id;
+    }
+}

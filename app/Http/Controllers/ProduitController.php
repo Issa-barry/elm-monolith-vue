@@ -20,6 +20,7 @@ use App\Models\VarianteStock;
 use App\Services\AuditLogService;
 use App\Services\DroitAjustementStockService;
 use App\Services\MediaService;
+use App\Services\MouvementStockMotifService;
 use App\Services\MouvementStockService;
 use App\Services\ProduitService;
 use App\Services\StockStatutService;
@@ -396,11 +397,16 @@ class ProduitController extends Controller
             })
             ->values();
 
-        $mouvements = MouvementStock::whereIn('produit_variante_id', $varianteIds)
+        $mouvementsBaseQuery = MouvementStock::whereIn('produit_variante_id', $varianteIds);
+        $motifsDisponibles = MouvementStockMotifService::optionsDisponibles(clone $mouvementsBaseQuery);
+
+        $mouvementsCollection = (clone $mouvementsBaseQuery)
             ->with(['createur:id,personne_id', 'createur.personne', 'site:id,nom,code', 'variante:id,combo_hash'])
             ->orderByDesc('created_at')
             ->take(100)
-            ->get()
+            ->get();
+
+        $mouvements = MouvementStockMotifService::annoter($mouvementsCollection)
             ->map(fn (MouvementStock $m) => [
                 'id' => $m->id,
                 'type' => $m->type,
@@ -408,6 +414,8 @@ class ProduitController extends Controller
                 'stock_avant' => $m->stock_avant,
                 'stock_apres' => $m->stock_apres,
                 'notes' => $m->notes,
+                'motif_type' => $m->motif_type,
+                'motif_label' => $m->motif_label,
                 'site_nom' => $m->site?->nom,
                 'site_code' => $m->site?->code,
                 'created_at' => $m->created_at?->toISOString(),
@@ -431,12 +439,15 @@ class ProduitController extends Controller
                 'stock_avant' => 0,
                 'stock_apres' => (int) $creation->new_values['qte_stock'],
                 'notes' => 'Stock initial — création du produit',
+                'motif_type' => 'stock_initial',
+                'motif_label' => 'Stock initial',
                 'site_nom' => null,
                 'site_code' => null,
                 'created_at' => $creation->created_at?->toISOString(),
                 'createur_nom' => $creation->actor_name_snapshot,
                 'is_initial' => true,
             ];
+            $motifsDisponibles[] = ['value' => 'stock_initial', 'label' => 'Stock initial'];
         }
 
         $variantePrincipale = $produit->variantes->firstWhere('is_default', true) ?? $produit->variantes->first();
@@ -522,6 +533,7 @@ class ProduitController extends Controller
                 ]),
             ],
             'mouvements' => collect($mouvements),
+            'motifs_disponibles' => $motifsDisponibles,
             'historiques' => $this->loadModifications($produit),
             'can_ajuster_stock' => $canAjuster,
             'can_augmenter_stock' => $canAugmenter,
@@ -532,17 +544,46 @@ class ProduitController extends Controller
         ]);
     }
 
-    public function historique(Produit $produit): JsonResponse
+    public function historique(Request $request, Produit $produit): JsonResponse
     {
         $this->authorize('view', $produit);
 
         $varianteIds = $produit->variantes()->pluck('id');
+        $varianteId = $request->string('variante_id')->trim()->toString();
+        if ($varianteId !== '') {
+            abort_unless($varianteIds->contains($varianteId), 404);
+            $varianteIds = collect([$varianteId]);
+        }
 
-        $ajustements = MouvementStock::whereIn('produit_variante_id', $varianteIds)
+        $user = $request->user();
+        $sitesConsultables = $user->isAdmin()
+            ? Site::where('organization_id', $produit->organization_id)->pluck('id')
+            : $user->sites()->where('sites.organization_id', $produit->organization_id)->pluck('sites.id');
+        $siteId = $request->string('site_id')->trim()->toString();
+        if ($siteId !== '') {
+            abort_unless($sitesConsultables->contains($siteId), 404);
+            $sitesConsultables = collect([$siteId]);
+        }
+
+        $baseQuery = MouvementStock::whereIn('produit_variante_id', $varianteIds)
+            ->where('organization_id', $produit->organization_id)
+            ->whereIn('site_id', $sitesConsultables);
+
+        $motifsDisponibles = MouvementStockMotifService::optionsDisponibles(clone $baseQuery);
+
+        $motif = $request->string('motif')->trim()->toString();
+        $query = clone $baseQuery;
+        if ($motif !== '') {
+            $query = MouvementStockMotifService::appliquerFiltre($query, $motif);
+        }
+
+        $mouvements = $query
             ->with(['createur:id,personne_id', 'createur.personne', 'site:id,nom,code'])
             ->orderByDesc('created_at')
             ->take(200)
-            ->get()
+            ->get();
+
+        $ajustements = MouvementStockMotifService::annoter($mouvements)
             ->map(fn (MouvementStock $m) => [
                 'id' => $m->id,
                 'type' => $m->type,
@@ -550,6 +591,8 @@ class ProduitController extends Controller
                 'stock_avant' => $m->stock_avant,
                 'stock_apres' => $m->stock_apres,
                 'notes' => $m->notes,
+                'motif_type' => $m->motif_type,
+                'motif_label' => $m->motif_label,
                 'site_nom' => $m->site?->nom,
                 'site_code' => $m->site?->code,
                 'createur_nom' => $m->createur
@@ -561,6 +604,7 @@ class ProduitController extends Controller
         return response()->json([
             'ajustements' => $ajustements,
             'modifications' => $this->loadModifications($produit),
+            'motifs_disponibles' => $motifsDisponibles,
         ]);
     }
 
@@ -933,11 +977,14 @@ class ProduitController extends Controller
      */
     private function fournisseursOptions(string $orgId): Collection
     {
+        // raison_sociale/nom ne sont pas des colonnes de fournisseurs (déléguées à
+        // Personne/EntrepriseTierce, cf. Fournisseur::getNomCompletAttribute()) — le tri
+        // se fait donc en PHP sur l'accesseur, pas via orderBy() côté SQL.
         return Fournisseur::where('organization_id', $orgId)
             ->where('is_active', true)
-            ->orderBy('raison_sociale')
-            ->orderBy('nom')
+            ->with(['personne', 'entrepriseTierce'])
             ->get()
+            ->sortBy('nom_complet')
             ->map(fn (Fournisseur $f) => [
                 'id' => $f->id,
                 'nom_complet' => $f->nom_complet,

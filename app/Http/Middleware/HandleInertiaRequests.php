@@ -185,6 +185,46 @@ class HandleInertiaRequests extends Middleware
             ->toArray();
     }
 
+    /**
+     * Contrat frontend explicite pour `auth.user` (cf. resources/js/types/index.d.ts,
+     * interface User) — jamais le modèle Eloquent brut. `$request->user()` porte
+     * potentiellement, selon ce qui a été chargé ailleurs dans la requête (policies,
+     * gates, middlewares), les relations `organization`, `personne`, `authIdentities`
+     * (avec `verification_token`/`verification_expires_at`), `roles` (avec pivot),
+     * `permissions` — une sérialisation directe du modèle les expose TOUTES au
+     * navigateur, quelle que soit leur sensibilité (incident 2026-08-25 : payload JSON
+     * affiché brut sur /backoffice/achats/{id}, révélant ces relations en clair).
+     * `$hidden` sur User ne protège que ses propres colonnes, jamais les relations
+     * chargées — d'où cette liste blanche explicite, seule protection fiable.
+     */
+    private function authUserPayload(Request $request): ?array
+    {
+        $user = $request->user();
+        if (! $user) {
+            return null;
+        }
+
+        $organization = $user->organization;
+
+        return [
+            'id' => $user->id,
+            'prenom' => $user->prenom,
+            'nom' => $user->nom,
+            'name' => $user->name,
+            'email' => $user->email,
+            'telephone' => $user->telephone,
+            'email_verified_at' => $user->email_verified_at?->toISOString(),
+            'created_at' => $user->created_at?->toISOString(),
+            'updated_at' => $user->updated_at?->toISOString(),
+            'organization' => $organization ? [
+                'id' => $organization->id,
+                'name' => $organization->name,
+                'slug' => $organization->slug,
+                'logo_url' => $organization->logo_url,
+            ] : null,
+        ];
+    }
+
     private function defaultSite(Request $request): ?array
     {
         $user = $request->user();
@@ -233,7 +273,7 @@ class HandleInertiaRequests extends Middleware
             'appVersionLabel' => AppVersion::label(),
             'quote' => ['message' => trim($message), 'author' => trim($author)],
             'auth' => [
-                'user' => $request->user()?->loadMissing('organization'),
+                'user' => $this->authUserPayload($request),
                 'permissions' => $request->user()?->permissionsMap() ?? [],
                 'roles' => $request->user()?->getRoleNames() ?? [],
                 'default_site' => $this->defaultSite($request),
@@ -257,6 +297,7 @@ class HandleInertiaRequests extends Middleware
                 'created_option_catalogue_id' => $request->session()->get('created_option_catalogue_id'),
                 'created_option_catalogue_valeur_id' => $request->session()->get('created_option_catalogue_valeur_id'),
                 'created_fournisseur_id' => $request->session()->get('created_fournisseur_id'),
+                'created_fonction_rh_id' => $request->session()->get('created_fonction_rh_id'),
             ],
         ];
     }

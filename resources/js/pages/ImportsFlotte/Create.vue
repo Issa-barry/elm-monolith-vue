@@ -175,65 +175,22 @@ function submit() {
 
                 <template v-if="typeImport === 'livreurs'">
                     <p class="mt-2 text-sm text-muted-foreground">
-                        Le modèle contient une seule feuille
-                        <strong>livreurs</strong> : une ligne par livreur,
-                        reliée au véhicule par
-                        <strong>vehicule_immatriculation</strong>. Chaque
-                        immatriculation doit déjà correspondre à un véhicule
-                        existant — aucun véhicule ni propriétaire n'est créé
-                        dans ce mode.
-                    </p>
-                    <p class="mt-2 text-sm text-muted-foreground">
-                        Le nom d'un livreur est facultatif (seul le téléphone
-                        est obligatoire) et peut être renseigné soit en un seul
-                        champ (<strong>livreur_nom_complet</strong>), soit en
-                        deux champs séparés (<strong>livreur_nom</strong> +
-                        <strong>livreur_prenom</strong>).
+                        Feuille <strong>livreurs</strong> : un livreur par
+                        ligne, lié à un véhicule existant par son
+                        immatriculation. Le téléphone est obligatoire ; indiquez
+                        le nom complet ou nom + prénom.
                     </p>
                 </template>
                 <template v-else>
                     <p class="mt-2 text-sm text-muted-foreground">
-                        Le modèle contient deux feuilles :
-                        <strong>vehicules</strong>
-                        (une ligne par véhicule + son propriétaire) et
-                        <strong>livreurs</strong> (une ligne par livreur, reliée
-                        au véhicule par l'immatriculation). Pas besoin de
-                        répéter les infos du véhicule pour chaque livreur —
-                        seule l'immatriculation est à reporter sur chaque ligne
-                        de la feuille livreurs. La commission et la répartition
-                        par livreur se configurent après coup dans Équipes de
-                        livraison.
+                        Deux feuilles : <strong>vehicules</strong> (véhicules et
+                        propriétaires) et <strong>livreurs</strong> (liés au
+                        véhicule par l'immatriculation).
                     </p>
                     <p class="mt-2 text-sm text-muted-foreground">
-                        Le nom d'un livreur est facultatif (seul le téléphone
-                        est obligatoire) et peut être renseigné soit en un seul
-                        champ (<strong>livreur_nom_complet</strong>), soit en
-                        deux champs séparés (<strong>livreur_nom</strong> +
-                        <strong>livreur_prenom</strong>) — utilisez celui qui
-                        vous convient, sans dupliquer l'information.
-                    </p>
-                    <p class="mt-2 text-sm text-muted-foreground">
-                        Une colonne
-                        <strong>capacite__&lt;RÉFÉRENCE&gt;</strong>
-                        par catégorie de produit à plafonner (ex:
-                        <strong>capacite__BOUTEILLE_EAU</strong>) — la référence
-                        de chaque catégorie est visible sur la page Produits >
-                        Catégories. Le modèle téléchargeable ci-dessous génère
-                        automatiquement une colonne par catégorie existante.
-                        Toutes facultatives : laissée vide, une colonne ne
-                        plafonne pas le véhicule pour cette catégorie (aucune
-                        capacité par défaut n'est héritée du type de véhicule).
-                    </p>
-                    <p class="mt-2 text-sm text-muted-foreground">
-                        <strong>vehicule_livraison_vente</strong>
-                        (sélectionnable pour une vente/PDV) et
-                        <strong>vehicule_livraison_logistique</strong>
-                        (sélectionnable pour un transfert) sont deux colonnes
-                        indépendantes — un véhicule peut être l'un, l'autre, ou
-                        les deux. Toutes deux facultatives : si omises, le
-                        véhicule importé est éligible à la vente par défaut, pas
-                        à la logistique. Au moins l'une des deux doit être
-                        "oui".
+                        Les capacités et l'usage vente/logistique sont
+                        facultatifs. Sans choix, le véhicule est disponible pour
+                        la vente uniquement.
                     </p>
                 </template>
                 <a
@@ -293,11 +250,7 @@ function submit() {
             </div>
         </div>
 
-        <Toast
-            :group="UPLOAD_TOAST_GROUP"
-            position="bottom-right"
-            class="w-auto!"
-        >
+        <Toast :group="UPLOAD_TOAST_GROUP" position="top-right" class="w-auto!">
             <template #container="{ message, closeCallback }">
                 <div
                     class="flex w-80 flex-col gap-3 rounded-xl border bg-card p-4 shadow-lg"

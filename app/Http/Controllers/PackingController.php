@@ -59,10 +59,20 @@ class PackingController extends Controller
     {
         $this->authorize('create', Packing::class);
 
+        // nom/nom_complet ne sont pas des colonnes de prestataires (déléguées à
+        // Personne/EntrepriseTierce, cf. Prestataire::getNomCompletAttribute()) — le tri
+        // se fait donc en PHP sur l'accesseur, pas via orderBy() côté SQL.
         $prestataires = Prestataire::where('organization_id', auth()->user()->organization_id)
             ->where('is_active', true)
-            ->orderBy('nom')
+            ->with(['personne', 'entrepriseTierce'])
             ->get()
+            ->sortBy('nom')
+            // sortBy() conserve les clés d'origine (pas de réindexation) : sans values(),
+            // une Collection dont les clés ne sont plus 0..n-1 séquentielles se sérialise
+            // en objet JSON ({"1":...,"0":...}) au lieu d'un tableau — le composant
+            // Dropdown du front (qui fait `this.options || []` sans vérifier le type)
+            // plante silencieusement sur un objet (visibleOptions.findIndex n'existe pas).
+            ->values()
             ->map(fn (Prestataire $p) => [
                 'value' => $p->id,
                 'label' => $p->nom_complet ?? $p->reference,
@@ -141,10 +151,20 @@ class PackingController extends Controller
 
         $packing->loadSum('versements', 'montant');
 
+        // nom/nom_complet ne sont pas des colonnes de prestataires (déléguées à
+        // Personne/EntrepriseTierce, cf. Prestataire::getNomCompletAttribute()) — le tri
+        // se fait donc en PHP sur l'accesseur, pas via orderBy() côté SQL.
         $prestataires = Prestataire::where('organization_id', auth()->user()->organization_id)
             ->where('is_active', true)
-            ->orderBy('nom')
+            ->with(['personne', 'entrepriseTierce'])
             ->get()
+            ->sortBy('nom')
+            // sortBy() conserve les clés d'origine (pas de réindexation) : sans values(),
+            // une Collection dont les clés ne sont plus 0..n-1 séquentielles se sérialise
+            // en objet JSON ({"1":...,"0":...}) au lieu d'un tableau — le composant
+            // Dropdown du front (qui fait `this.options || []` sans vérifier le type)
+            // plante silencieusement sur un objet (visibleOptions.findIndex n'existe pas).
+            ->values()
             ->map(fn (Prestataire $p) => [
                 'value' => $p->id,
                 'label' => $p->nom_complet ?? $p->reference,

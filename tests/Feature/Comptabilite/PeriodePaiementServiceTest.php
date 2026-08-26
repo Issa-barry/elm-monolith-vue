@@ -76,13 +76,13 @@ class PeriodePaiementServiceTest extends TestCase
         $this->assertDatabaseCount('paiement_periodes', 0);
     }
 
-    public function test_generate_periods_for_year_cree_72_periodes(): void
+    public function test_generate_periods_for_year_cree_120_periodes(): void
     {
         $periodes = $this->service->generatePeriodsForYear($this->org->id, 2026);
 
-        // 3 types × 12 mois × 2 quinzaines
-        $this->assertCount(72, $periodes);
-        $this->assertDatabaseCount('paiement_periodes', 72);
+        // 5 types (livreur, propriétaire, salarié, site, consultant) × 12 mois × 2 quinzaines
+        $this->assertCount(120, $periodes);
+        $this->assertDatabaseCount('paiement_periodes', 120);
     }
 
     public function test_generate_periods_for_year_est_idempotent(): void
@@ -90,7 +90,7 @@ class PeriodePaiementServiceTest extends TestCase
         $this->service->generatePeriodsForYear($this->org->id, 2026);
         $this->service->generatePeriodsForYear($this->org->id, 2026);
 
-        $this->assertDatabaseCount('paiement_periodes', 72);
+        $this->assertDatabaseCount('paiement_periodes', 120);
     }
 
     public function test_ne_casse_pas_les_periodes_existantes_avec_lancien_format(): void

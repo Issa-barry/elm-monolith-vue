@@ -9,6 +9,7 @@ use App\Enums\StatutCommandeVente;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
 use App\Models\FactureVente;
+use App\Models\Parametre;
 use App\Models\Produit;
 use App\Models\ProduitVariante;
 use App\Models\User;
@@ -37,18 +38,28 @@ class PdvCheckoutService
             $this->validateCapacite($data);
         }
 
-        // Même règle de solvabilité que le back-office (CommandeVenteController::store()), sur
-        // le même service — le PDV créait auparavant sa facture sans AUCUN contrôle d'impayés,
-        // quel que soit le paramétrage de l'organisation (trou identifié le 18/08/2026).
-        $this->solvabiliteService->enforcerOuEchouer(
-            $user->organization_id,
-            $data['vehicule_id'] ?? null,
-            $data['client_id'] ?? null,
-        );
-
         return DB::transaction(function () use ($data, $user, $siteId) {
+            // Verrou de ligne sur le véhicule le temps de la transaction : sans cela, deux
+            // requêtes concurrentes pour le même véhicule passeraient toutes les deux le
+            // contrôle de solvabilité (aucune facture bloquante encore visible pour l'une comme
+            // pour l'autre) puis créeraient chacune une commande — exactement le doublon que ce
+            // contrôle doit empêcher (cf. section « concurrence » de la règle métier).
+            if (! empty($data['vehicule_id'])) {
+                Vehicule::whereKey($data['vehicule_id'])->lockForUpdate()->first();
+            }
+
+            // Même règle de solvabilité que le back-office (CommandeVenteController::store()),
+            // sur le même service — le PDV créait auparavant sa facture sans AUCUN contrôle
+            // d'impayés, quel que soit le paramétrage de l'organisation (trou identifié le
+            // 18/08/2026). Exécuté sous le verrou ci-dessus pour rester fiable en concurrence.
+            $this->solvabiliteService->enforcerOuEchouer(
+                $user->organization_id,
+                $data['vehicule_id'] ?? null,
+                $data['client_id'] ?? null,
+            );
+
             $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null);
-            [$lignesData, $total, $stockTrackedVarianteIds] = $this->buildLignes($data['lignes'], $user->organization_id, (string) $siteId, $context->modeTarification, $context->categorieTarifaireVehicule);
+            [$lignesData, $total, $stockTrackedVarianteIds, $autoriseVenteStockNegatif] = $this->buildLignes($data['lignes'], $user->organization_id, (string) $siteId, $context->modeTarification, $context->categorieTarifaireVehicule);
 
             $commande = CommandeVente::create([
                 'organization_id' => $user->organization_id,
@@ -80,6 +91,7 @@ class PdvCheckoutService
                     sourceType: CommandeVenteLigne::class,
                     sourceId: $ligneModel->id,
                     userId: $user->id,
+                    allowNegative: $autoriseVenteStockNegatif,
                 );
             }
 
@@ -200,6 +212,11 @@ class PdvCheckoutService
             ->get()
             ->keyBy('produit_variante_id');
 
+        // Politique globale d'organisation (Paramètres > Paramètres produits, DSI 23/08/2026) —
+        // jamais un réglage par produit : soit toutes les ventes de l'organisation peuvent
+        // dépasser le disponible, soit aucune. Lue une seule fois, jamais par ligne.
+        $autoriseVenteStockNegatif = Parametre::isVentesAutoriseesSansStock($orgId);
+
         $lignesData = [];
         $stockTrackedVarianteIds = [];
         $total = 0;
@@ -214,9 +231,19 @@ class PdvCheckoutService
                 // Aucune ligne VarianteStock pour cette variante sur ce site : 0 disponible,
                 // jamais de repli sur l'agrégat legacy du produit parent (qui ne renseigne
                 // sur aucune agence en particulier) — cf. MouvementStockService::quantiteDisponible().
-                $disponible = (int) ($stocksSite->get($variante->id)?->qte_stock ?? 0);
+                // Disponible = physique moins réservé (commandes vente confirmées, pas encore
+                // chargées, cf. StockReservationService, 24/08/2026) : le PDV ne doit jamais
+                // pouvoir vendre un stock déjà promis à une commande vente en attente de
+                // chargement — même règle que verifierDisponibiliteLignes(), calculée ici plutôt
+                // que via ce service pour rester dans le même verrou lockForUpdate() groupé
+                // (cf. commentaire de buildLignes() ci-dessous).
+                $stockSite = $stocksSite->get($variante->id);
+                $disponible = (int) ($stockSite?->qte_stock ?? 0) - (int) ($stockSite?->qte_reservee ?? 0);
 
-                if ($disponible < $qte) {
+                // La vente continue même sous le disponible si la politique globale l'autorise —
+                // le stock devient négatif au lieu d'être refusé, jamais de clamp silencieux
+                // (cf. MouvementStockService::appliquer()).
+                if (! $autoriseVenteStockNegatif && $disponible < $qte) {
                     throw ValidationException::withMessages([
                         'lignes' => "Stock insuffisant pour « {$produit->nom} » sur ce site (disponible : {$disponible}, demandé : {$qte}).",
                     ]);
@@ -239,6 +266,6 @@ class PdvCheckoutService
             $total += $totalLigne;
         }
 
-        return [$lignesData, $total, $stockTrackedVarianteIds];
+        return [$lignesData, $total, $stockTrackedVarianteIds, $autoriseVenteStockNegatif];
     }
 }

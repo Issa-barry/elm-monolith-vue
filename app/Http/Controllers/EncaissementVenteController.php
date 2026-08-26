@@ -61,53 +61,67 @@ class EncaissementVenteController extends Controller
         // cascade (auto-clôture, cashback) doivent réussir ou échouer ensemble : un
         // échec en cours de route ne doit jamais laisser une commission générée pour un
         // encaissement finalement non persisté.
-        DB::transaction(function () use ($facture_vente, $commande, $data) {
-            $facture_vente->encaissements()->create([
-                'montant' => $data['montant'],
-                'date_encaissement' => $data['date_encaissement'],
-                'mode_paiement' => $data['mode_paiement'],
-                'note' => $data['note'] ?? null,
-                'created_by' => auth()->id(),
-            ]);
+        try {
+            DB::transaction(function () use ($facture_vente, $commande, $data) {
+                $etaitPayee = $facture_vente->isPayee();
 
-            // Audit: log on the parent commande
-            if ($commande) {
-                $this->auditService->record(
-                    $commande,
-                    AuditEvent::ENCAISSEMENT_ADDED,
-                    auth()->user(),
-                    null,
-                    [
-                        'montant' => (float) $data['montant'],
-                        'mode_paiement' => $data['mode_paiement'],
-                        'date_encaissement' => $data['date_encaissement'],
-                    ],
-                );
-            }
+                // Auto-transition LIVRAISON_EN_COURS → LIVREE AVANT l'encaissement :
+                // EncaissementVente::created (seul point désormais responsable de
+                // recalculStatut()/cloturerSiComplete(), cf. commentaire plus bas) doit
+                // trouver la commande déjà en LIVREE pour pouvoir la clôturer dans la
+                // foulée si tout est complet.
+                if ($commande?->isLivraisonEnCours()) {
+                    CommandeVenteService::passerEnLivree($commande);
+                    CommandeVenteActiviteService::log($commande, 'livree');
+                }
 
-            $etaitPayee = $facture_vente->isPayee();
-            $facture_vente->recalculStatut();
-            $estPayeeMaintenant = $facture_vente->isPayee();
+                $facture_vente->encaissements()->create([
+                    'montant' => $data['montant'],
+                    'date_encaissement' => $data['date_encaissement'],
+                    'mode_paiement' => $data['mode_paiement'],
+                    'note' => $data['note'] ?? null,
+                    'created_by' => auth()->id(),
+                ]);
 
-            // Auto-transition LIVRAISON_EN_COURS → LIVREE au premier encaissement.
-            if ($commande?->isLivraisonEnCours()) {
-                CommandeVenteService::passerEnLivree($commande);
-                CommandeVenteActiviteService::log($commande, 'livree');
-            }
+                // Audit: log on the parent commande
+                if ($commande) {
+                    $this->auditService->record(
+                        $commande,
+                        AuditEvent::ENCAISSEMENT_ADDED,
+                        auth()->user(),
+                        null,
+                        [
+                            'montant' => (float) $data['montant'],
+                            'mode_paiement' => $data['mode_paiement'],
+                            'date_encaissement' => $data['date_encaissement'],
+                        ],
+                    );
+                }
 
-            // Auto-clôture si LIVREE + facture payée + commissions versées.
-            $commande?->cloturerSiComplete();
+                // recalculStatut()/cloturerSiComplete() ne sont PAS rappelés ici : le hook
+                // EncaissementVente::created (app/Models/EncaissementVente.php) vient de les
+                // exécuter, pour TOUTE création d'encaissement quel que soit l'appelant (ce
+                // contrôleur, un import, l'API...). Un second appel ici, sur l'instance
+                // $facture_vente propre à ce contrôleur (non synchronisée avec celle chargée
+                // par le hook), déclenchait deux tentatives de génération de commission pour
+                // le même paiement — cf. incident CMD-230826-004 (2 tentatives à 1s d'écart).
+                // On se contente de rafraîchir l'état pour lire le résultat du hook.
+                $facture_vente->refresh();
+                $estPayeeMaintenant = $facture_vente->isPayee();
 
-            // Cashback: declenche uniquement quand la facture passe a "payee".
-            if (! $etaitPayee && $estPayeeMaintenant) {
-                if ($commande && $commande->organization_id && $commande->client_id) {
-                    $org = Organization::find($commande->organization_id);
-                    if ($org && Feature::for($org)->active(ModuleFeature::CASHBACK)) {
-                        app(CashbackService::class)->processVente($commande);
+                // Cashback: declenche uniquement quand la facture passe a "payee".
+                if (! $etaitPayee && $estPayeeMaintenant) {
+                    if ($commande && $commande->organization_id && $commande->client_id) {
+                        $org = Organization::find($commande->organization_id);
+                        if ($org && Feature::for($org)->active(ModuleFeature::CASHBACK)) {
+                            app(CashbackService::class)->processVente($commande);
+                        }
                     }
                 }
-            }
-        });
+            });
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['comptabilisation' => "Encaissement non enregistré : {$e->getMessage()}"]);
+        }
 
         return redirect()->back()->with('success', 'Encaissement enregistre.');
     }
@@ -139,8 +153,11 @@ class EncaissementVenteController extends Controller
             );
         }
 
+        // recalculStatut()/cloturerSiComplete() ne sont pas rappelés ici : le hook
+        // EncaissementVente::deleted (app/Models/EncaissementVente.php) les exécute déjà
+        // pour toute suppression, quel que soit l'appelant — même raison que store()
+        // ci-dessus (éviter un double déclenchement de la génération de commission).
         $encaissement_vente->delete();
-        $facture->recalculStatut();
 
         return redirect()->back()->with('success', 'Encaissement supprime.');
     }

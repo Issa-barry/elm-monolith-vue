@@ -2,6 +2,7 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import ListPageActions from '@/components/ListPageActions.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -21,6 +22,7 @@ import {
     Archive,
     ArrowDown,
     ArrowUp,
+    ChevronDown,
     Download,
     Eye,
     History,
@@ -30,6 +32,7 @@ import {
     Plus,
     Sliders,
     Trash2,
+    Upload,
     X,
 } from 'lucide-vue-next';
 import Column from 'primevue/column';
@@ -37,7 +40,6 @@ import DataTable from 'primevue/datatable';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import AjusterStockModal from './partials/AjusterStockModal.vue';
 import HistoriqueModal from './partials/HistoriqueModal.vue';
 import ProduitsMobile from './partials/ProduitsMobile.vue';
 
@@ -121,9 +123,6 @@ const props = defineProps<{
     statuts: FilterOption[];
     filters: Filters;
     can_ajuster_stock: boolean;
-    can_augmenter_stock: boolean;
-    can_diminuer_stock: boolean;
-    sites_autorises: Site[];
 }>();
 
 const { can } = usePermissions();
@@ -173,6 +172,15 @@ const currentSiteLabel = computed(() => {
 
 const filterFields = computed<FilterField[]>(() => [
     {
+        key: 'statut',
+        type: 'select',
+        label: 'Statut',
+        options: [
+            { value: '', label: 'Tous les statuts' },
+            ...props.statuts.map((s) => ({ value: s.value, label: s.label })),
+        ],
+    },
+    {
         key: 'search',
         type: 'text',
         label: 'Rechercher',
@@ -186,15 +194,6 @@ const filterFields = computed<FilterField[]>(() => [
         options: [
             { value: '', label: 'Tous les types' },
             ...props.types.map((t) => ({ value: t.value, label: t.label })),
-        ],
-    },
-    {
-        key: 'statut',
-        type: 'select',
-        label: 'Statut',
-        options: [
-            { value: '', label: 'Tous les statuts' },
-            ...props.statuts.map((s) => ({ value: s.value, label: s.label })),
         ],
     },
 ]);
@@ -368,16 +367,6 @@ function exportExcel(): void {
     });
 }
 
-// ── Modal ajustement stock ────────────────────────────────────────────────────
-
-const stockAjustementProduit = ref<Produit | null>(null);
-const showStockModal = ref(false);
-
-function openStockModal(produit: Produit) {
-    stockAjustementProduit.value = produit;
-    showStockModal.value = true;
-}
-
 // ── Modal historique ──────────────────────────────────────────────────────────
 
 interface StockMouvement {
@@ -387,6 +376,8 @@ interface StockMouvement {
     stock_avant: number | null;
     stock_apres: number | null;
     notes: string | null;
+    motif_type: string;
+    motif_label: string;
     site_nom: string | null;
     site_code: string | null;
     createur_nom: string | null;
@@ -559,40 +550,104 @@ function confirmArchive(produit: Produit) {
                         dans le catalogue
                     </p>
                 </div>
-                <div class="flex items-center gap-2">
-                    <Button
-                        type="button"
-                        variant="outline"
-                        @click="exportExcel"
-                    >
-                        <Download class="mr-2 h-4 w-4" />
-                        Exporter Excel
-                    </Button>
-                    <Link
-                        v-if="can('produits.create')"
-                        href="/backoffice/produits/create"
-                    >
-                        <Button>
-                            <Plus class="mr-2 h-4 w-4" />
-                            Nouveau produit
+                <ListPageActions>
+                    <template #export>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            @click="exportExcel"
+                        >
+                            <Download class="mr-2 h-4 w-4" />
+                            Exporter Excel
                         </Button>
-                    </Link>
-                </div>
+                    </template>
+                    <template
+                        v-if="
+                            can('imports-produits.create') ||
+                            can('imports-produits.read')
+                        "
+                        #import
+                    >
+                        <DropdownMenu>
+                            <DropdownMenuTrigger as-child>
+                                <Button type="button" variant="outline">
+                                    <Upload class="mr-2 h-4 w-4" />
+                                    Importer
+                                    <ChevronDown class="ml-2 h-3.5 w-3.5" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" class="w-56">
+                                <DropdownMenuItem
+                                    v-if="can('imports-produits.create')"
+                                    as-child
+                                >
+                                    <Link
+                                        href="/backoffice/produits/imports/nouveau"
+                                        class="flex w-full items-center gap-2"
+                                    >
+                                        <Upload class="h-4 w-4" />
+                                        Importer des produits
+                                    </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    v-if="can('imports-produits.create')"
+                                    as-child
+                                >
+                                    <a
+                                        href="/backoffice/produits/imports/modele"
+                                        class="flex w-full items-center gap-2"
+                                    >
+                                        <Download class="h-4 w-4" />
+                                        Télécharger le modèle
+                                    </a>
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator
+                                    v-if="
+                                        can('imports-produits.create') &&
+                                        can('imports-produits.read')
+                                    "
+                                />
+                                <DropdownMenuItem
+                                    v-if="can('imports-produits.read')"
+                                    as-child
+                                >
+                                    <Link
+                                        href="/backoffice/produits/imports"
+                                        class="flex w-full items-center gap-2"
+                                    >
+                                        <History class="h-4 w-4" />
+                                        Historique des imports
+                                    </Link>
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </template>
+                    <template #filters>
+                        <DataFilters
+                            trigger-only
+                            url="/backoffice/produits"
+                            :values="{
+                                search: filters.search ?? '',
+                                produit_type_id: filters.produit_type_id ?? '',
+                                statut: filters.statut ?? '',
+                                site_ids: filters.site_ids ?? [],
+                            }"
+                            :fields="filterFields"
+                            :result-count="filteredProduits.length"
+                            @reset="clearFilters"
+                        />
+                    </template>
+                    <template v-if="can('produits.create')" #primary>
+                        <Link href="/backoffice/produits/create">
+                            <Button>
+                                <Plus class="mr-2 h-4 w-4" />
+                                Nouveau produit
+                            </Button>
+                        </Link>
+                    </template>
+                </ListPageActions>
             </div>
 
-            <!-- Barre de filtres -->
-            <DataFilters
-                url="/backoffice/produits"
-                :values="{
-                    search: filters.search ?? '',
-                    produit_type_id: filters.produit_type_id ?? '',
-                    statut: filters.statut ?? '',
-                    site_ids: filters.site_ids ?? [],
-                }"
-                :fields="filterFields"
-                :result-count="filteredProduits.length"
-                @reset="clearFilters"
-            />
             <div v-if="hasActiveFilters" class="flex items-center gap-2">
                 <button
                     type="button"
@@ -876,22 +931,28 @@ function confirmArchive(produit: Produit) {
                                             <History class="h-4 w-4" />
                                             Historique
                                         </DropdownMenuItem>
+                                        <!-- « Voir le stock » remplace l'ancien « Ajuster le stock » direct
+                                        (modale) sur cette liste — redondant avec la page Stock, qui identifie
+                                        clairement site et variante. L'ajustement lui-même reste disponible
+                                        UNIQUEMENT depuis Produits/Stock/Index.vue (site+variante identifiés)
+                                        et, pour les produits à variantes, depuis la fiche détail ci-dessous. -->
                                         <DropdownMenuItem
-                                            v-if="
-                                                can_ajuster_stock &&
-                                                data.has_stock &&
-                                                !data.has_variantes
-                                            "
+                                            v-if="data.has_stock"
                                             class="cursor-pointer"
-                                            @click="openStockModal(data)"
+                                            as-child
                                         >
-                                            <Sliders class="h-4 w-4" />
-                                            Ajuster le stock
+                                            <Link
+                                                :href="`/backoffice/produits/stock?search=${encodeURIComponent(data.nom)}`"
+                                                class="flex items-center gap-2"
+                                            >
+                                                <Package class="h-4 w-4" />
+                                                Voir le stock
+                                            </Link>
                                         </DropdownMenuItem>
                                         <!-- Produit à variantes : l'ajustement se fait depuis sa fiche,
                                         où le choix de la variante est possible (cf. Show.vue). -->
                                         <DropdownMenuItem
-                                            v-else-if="
+                                            v-if="
                                                 can_ajuster_stock &&
                                                 data.has_stock &&
                                                 data.has_variantes
@@ -1014,18 +1075,17 @@ function confirmArchive(produit: Produit) {
                 :produits="props.produits"
                 :on-delete="confirmDelete"
                 :on-archive="confirmArchive"
+                filter-url="/backoffice/produits"
+                :filter-values="{
+                    search: filters.search ?? '',
+                    produit_type_id: filters.produit_type_id ?? '',
+                    statut: filters.statut ?? '',
+                    site_ids: filters.site_ids ?? [],
+                }"
+                :filter-fields="filterFields"
+                :result-count="filteredProduits.length"
             />
         </div>
-
-        <!-- Modal ajustement stock -->
-        <AjusterStockModal
-            v-if="stockAjustementProduit"
-            v-model:visible="showStockModal"
-            :produit="stockAjustementProduit"
-            :sites-autorises="sites_autorises"
-            :can-augmenter="can_augmenter_stock"
-            :can-diminuer="can_diminuer_stock"
-        />
 
         <!-- Modal historique -->
         <HistoriqueModal

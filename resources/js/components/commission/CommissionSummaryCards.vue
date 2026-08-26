@@ -14,13 +14,27 @@ const props = withDefaults(
 </script>
 
 <template>
-    <div class="grid grid-cols-2 gap-3 sm:grid-cols-5">
+    <div
+        data-testid="commission-detail-summary"
+        class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
+    >
         <div class="rounded-lg border bg-card p-4 text-center">
             <p class="text-base font-bold tabular-nums">
-                {{ formatGNF(props.summary.brut_cumule) }}
+                {{
+                    formatGNF(
+                        props.summary.total_genere ?? props.summary.brut_cumule,
+                    )
+                }}
             </p>
-            <p class="mt-1 text-xs text-muted-foreground">Brut cumulé</p>
+            <p class="mt-1 text-xs text-muted-foreground">
+                {{
+                    props.summary.total_genere !== null
+                        ? 'Commissions générées'
+                        : 'Brut cumulé'
+                }}
+            </p>
         </div>
+
         <div class="rounded-lg border bg-card p-4 text-center">
             <p
                 class="text-base font-bold text-red-600 tabular-nums dark:text-red-400"
@@ -35,20 +49,20 @@ const props = withDefaults(
                 {{ props.fraisLabel }}
             </p>
         </div>
+
         <div class="rounded-lg border bg-card p-4 text-center">
             <p class="text-base font-bold tabular-nums">
                 {{ formatGNF(props.summary.net_a_payer) }}
             </p>
-            <p class="mt-1 text-xs text-muted-foreground">Net à payer</p>
-        </div>
-        <div class="rounded-lg border bg-card p-4 text-center">
-            <p
-                class="text-base font-bold text-emerald-600 tabular-nums dark:text-emerald-400"
-            >
-                {{ formatGNF(props.summary.deja_paye) }}
+            <p class="mt-1 text-xs text-muted-foreground">
+                {{
+                    props.summary.total_genere !== null
+                        ? 'Net validé'
+                        : 'Net à payer'
+                }}
             </p>
-            <p class="mt-1 text-xs text-muted-foreground">Déjà payé</p>
         </div>
+
         <div
             class="rounded-lg border bg-card p-4 text-center"
             :class="
@@ -68,6 +82,10 @@ const props = withDefaults(
                 {{ formatGNF(props.summary.reste_a_payer) }}
             </p>
             <p class="mt-1 text-xs text-muted-foreground">Reste à payer</p>
+            <p class="mt-1 text-xs text-muted-foreground tabular-nums">
+                <span>Déjà payé</span>
+                <span> : {{ formatGNF(props.summary.deja_paye) }}</span>
+            </p>
         </div>
     </div>
 </template>

@@ -3,8 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Enums\CategorieVehicule;
+use App\Enums\CommissionScopeType;
+use App\Enums\CommissionUniteCalcul;
 use App\Models\Categorie;
+use App\Models\CommissionCibleType;
+use App\Models\CommissionProcessus;
+use App\Models\CommissionRegle;
 use App\Models\Depense;
+use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\EquipeLivreur;
 use App\Models\Parametre;
 use App\Models\Proprietaire;
@@ -95,12 +101,10 @@ class VehiculeController extends Controller
             'usage_label' => $v->usage_label,
             'photo_url' => $v->photo_url,
             'is_active' => $v->is_active,
-            // Dérogation de contrôle des impayés : le véhicule ne fait que décider s'il a le
-            // droit d'utiliser le plafond de son type — le montant est porté par
-            // TypeVehicule::seuil_derogation_impayes, jamais par le véhicule (cf.
-            // SolvabiliteService::seuilApplicableVehicule()).
+            // Dérogation de contrôle des impayés : plafond individuel, propre à CE véhicule
+            // (cf. SolvabiliteService::seuilApplicableVehicule()) — jamais hérité de son type.
             'derogation_impayes_autorisee' => $v->derogation_impayes_autorisee,
-            'type_seuil_derogation_impayes' => $v->relationLoaded('typeVehicule') ? $v->typeVehicule?->seuil_derogation_impayes : null,
+            'seuil_derogation_impayes' => $v->seuil_derogation_impayes,
         ];
     }
 
@@ -301,6 +305,9 @@ class VehiculeController extends Controller
                 'proprietaire_id' => $equipe->proprietaire_id,
                 'proprietaire_nom' => $equipe->proprietaire ? trim("{$equipe->proprietaire->prenom} {$equipe->proprietaire->nom}") : null,
                 'membres' => $membres,
+                // Partage Livraison PAR CATÉGORIE existant (V2) — clé par livreur_id,
+                // la popup résout elle-même l'index membre correspondant côté client.
+                'partages_categorie' => $this->partagesCategorieExistants($equipe->id),
             ];
         }
 
@@ -311,6 +318,11 @@ class VehiculeController extends Controller
             'proprietaires' => $this->proprietairesOptions(),
             'default_proprietaire_id' => Proprietaire::interneParDefautId($vehicule->organization_id),
             'seuil_global_impayes' => Parametre::getVentesSeuilImpayesMax($vehicule->organization_id),
+            // Barème Propriétaire + Livraison PAR CATÉGORIE (V2) — seule source de
+            // vérité utilisée à la fois par la popup équipe et par la fiche véhicule
+            // (cf. décision AMOA post-Phase 2 : plus de montant global blended, un
+            // barème par cible peut différer d'une catégorie à l'autre).
+            'baremes_commission_categories' => $this->baremesCommissionParCategorie($vehicule->organization_id, $vehicule->type_vehicule_id),
         ]);
     }
 
@@ -495,26 +507,38 @@ class VehiculeController extends Controller
     }
 
     /**
-     * Bascule ON/OFF la dérogation directement depuis la fiche véhicule (Vehicules/Show.vue) —
-     * seul champ concerné, pas de payload complet ni de redirection vers Edit, contrairement à
-     * update(). Réutilise ensureDerogationCoherente() tel quel (même règle, jamais dupliquée) :
-     * impossible d'activer la dérogation si le type de véhicule n'a pas de plafond configuré.
-     * Même schéma que CategorieController::toggle().
+     * Active/désactive la dérogation ET son plafond, atomiquement, directement depuis la fiche
+     * véhicule (Vehicules/Show.vue) — seuls champs concernés, pas de payload complet ni de
+     * redirection vers Edit, contrairement à update(). `seuil_derogation_impayes` est facultatif
+     * dans la requête : omis, le plafond déjà enregistré en base est conservé tel quel (ex:
+     * réactiver une dérogation précédemment désactivée sans ressaisir son montant) — fourni, il
+     * remplace la valeur actuelle. Réutilise ensureDerogationCoherente() tel quel (même règle,
+     * jamais dupliquée). Même schéma que CategorieController::toggle().
      */
-    public function toggleDerogation(Vehicule $vehicule): RedirectResponse
+    public function updateDerogation(Request $request, Vehicule $vehicule): RedirectResponse
     {
         $this->authorize('update', $vehicule);
 
-        $nouvelEtat = ! $vehicule->derogation_impayes_autorisee;
+        $data = $request->validate([
+            'derogation_impayes_autorisee' => 'required|boolean',
+            'seuil_derogation_impayes' => 'nullable|integer|min:0|max:999999999',
+        ]);
+
+        $seuil = array_key_exists('seuil_derogation_impayes', $data) && $request->filled('seuil_derogation_impayes')
+            ? $data['seuil_derogation_impayes']
+            : $vehicule->seuil_derogation_impayes;
 
         $this->ensureDerogationCoherente([
-            'derogation_impayes_autorisee' => $nouvelEtat,
-            'type_vehicule_id' => $vehicule->type_vehicule_id,
+            'derogation_impayes_autorisee' => $data['derogation_impayes_autorisee'],
+            'seuil_derogation_impayes' => $seuil,
         ], $vehicule->organization_id);
 
-        $vehicule->update(['derogation_impayes_autorisee' => $nouvelEtat]);
+        $vehicule->update([
+            'derogation_impayes_autorisee' => $data['derogation_impayes_autorisee'],
+            'seuil_derogation_impayes' => $seuil,
+        ]);
 
-        $label = $nouvelEtat ? 'activée' : 'désactivée';
+        $label = $data['derogation_impayes_autorisee'] ? 'activée' : 'désactivée';
 
         return back()->with('success', "Dérogation impayés {$label}.");
     }
@@ -548,11 +572,129 @@ class VehiculeController extends Controller
             ->map(fn (TypeVehicule $t) => [
                 'value' => $t->id,
                 'label' => $t->nom,
-                // Permet au formulaire véhicule de savoir si la dérogation peut être activée
-                // pour le type sélectionné, sans requête supplémentaire — cf. VehiculeForm.vue.
-                'seuil_derogation_impayes' => $t->seuil_derogation_impayes,
             ])
             ->toArray();
+    }
+
+    /**
+     * Barème Propriétaire ET Livraison résolus PAR CATÉGORIE (V2) — seule
+     * source de vérité utilisée à la fois par la fiche véhicule et par la
+     * popup équipe (remplace l'ancien baremeCommissionActuel(), qui ne lisait
+     * que le scope GLOBAL et affichait "0 GNF" dès qu'un barème n'existait
+     * qu'au niveau catégorie — cf. incident : Bouteille d'eau = 500 GNF
+     * Propriétaire configuré par catégorie, popup affichait pourtant "0 GNF").
+     * Catégorie exacte prioritaire sur la règle globale (même waterfall que
+     * CommissionRegleResolver, restreint au scope catégorie/global puisque la
+     * popup équipe ne connaît jamais de variante/produit précis à l'avance).
+     *
+     * Catégorie incluse dès qu'AU MOINS UN des deux montants résolus est
+     * strictement positif — les deux cibles sont indépendantes : Propriétaire
+     * peut être positif pendant que Livraison vaut 0 pour la même catégorie
+     * (et inversement), 0 GNF restant une valeur métier valide ("configuré,
+     * mais rien à distribuer sur cette cible"). Catégorie exclue seulement si
+     * les DEUX valent 0 : rien à afficher pour elle nulle part.
+     *
+     * $typeVehiculeId (nullable) : depuis l'introduction des exceptions par type
+     * de véhicule (2026-08-25), plusieurs règles actives peuvent partager le même
+     * scope_id (une standard, une ou plusieurs par type de véhicule) — jamais
+     * plus une seule ligne par catégorie. Résolution identique à
+     * CommissionRegleResolver (type de véhicule exact prioritaire sur le
+     * standard, à chaque niveau de portée), restreinte au scope catégorie/global
+     * puisque la popup équipe ne connaît jamais de variante/produit précis à
+     * l'avance. Incident 2026-08-25 : un simple keyBy('scope_id') gardait une
+     * ligne arbitraire (ordre d'insertion) dès qu'une exception existait — la
+     * fiche véhicule d'un Tricycle affichait le barème Livreur standard (300)
+     * au lieu de son exception (250), menant à un partage équipe incohérent.
+     */
+    private function baremesCommissionParCategorie(string $orgId, ?string $typeVehiculeId = null): array
+    {
+        $processus = CommissionProcessus::where('organization_id', $orgId)
+            ->where('code', CommissionProcessus::CODE_VENTE)
+            ->first();
+
+        if (! $processus) {
+            return [];
+        }
+
+        $reglesActives = CommissionRegle::where('organization_id', $orgId)
+            ->where('processus_id', $processus->id)
+            ->whereIn('cible_type', [CommissionCibleType::CODE_PROPRIETAIRE, CommissionCibleType::CODE_EQUIPE_LIVRAISON])
+            ->where('unite_calcul', CommissionUniteCalcul::PAR_UNITE_VENDUE->value)
+            ->where('statut', 'active')
+            ->get();
+
+        $chercher = function (Collection $regles, CommissionScopeType $scopeType, ?string $scopeId) use ($typeVehiculeId): ?float {
+            $candidats = $regles->filter(
+                fn (CommissionRegle $r) => $r->scope_type === $scopeType && $r->scope_id === $scopeId
+            );
+
+            if ($typeVehiculeId !== null) {
+                $exact = $candidats->first(fn (CommissionRegle $r) => $r->type_vehicule_id === $typeVehiculeId);
+                if ($exact) {
+                    return (float) $exact->montant;
+                }
+            }
+
+            $standard = $candidats->first(fn (CommissionRegle $r) => $r->type_vehicule_id === null);
+
+            return $standard ? (float) $standard->montant : null;
+        };
+
+        $resoudre = function (string $cibleType, string $categorieId) use ($reglesActives, $chercher): float {
+            $regles = $reglesActives->where('cible_type', $cibleType);
+
+            return $chercher($regles, CommissionScopeType::CATEGORIE, $categorieId)
+                ?? $chercher($regles, CommissionScopeType::GLOBAL, null)
+                ?? 0.0;
+        };
+
+        return Categorie::where('organization_id', $orgId)
+            ->where('statut', 'actif')
+            ->orderBy('position')
+            ->orderBy('nom')
+            ->get()
+            ->map(function (Categorie $c) use ($resoudre) {
+                $montantProprietaire = $resoudre(CommissionCibleType::CODE_PROPRIETAIRE, $c->id);
+                $montantLivraison = $resoudre(CommissionCibleType::CODE_EQUIPE_LIVRAISON, $c->id);
+
+                if ($montantProprietaire <= 0 && $montantLivraison <= 0) {
+                    return null;
+                }
+
+                return [
+                    'categorie_id' => $c->id,
+                    'categorie_nom' => $c->nom,
+                    'montant_proprietaire' => $montantProprietaire,
+                    'montant_livraison' => $montantLivraison,
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Partage Livraison PAR CATÉGORIE déjà enregistré pour cette équipe —
+     * groupé par catégorie, chaque part identifiée par livreur_id (la popup
+     * résout elle-même l'index membre correspondant côté client, jamais par
+     * membre_ordre ici puisque l'ordre peut légitimement différer d'un
+     * chargement à l'autre).
+     */
+    private function partagesCategorieExistants(string $equipeId): array
+    {
+        return EquipeLivraisonPartageCategorie::where('equipe_id', $equipeId)
+            ->whereNull('effective_to')
+            ->get()
+            ->groupBy('categorie_id')
+            ->map(fn (Collection $parts, string $categorieId) => [
+                'categorie_id' => $categorieId,
+                'parts' => $parts->map(fn (EquipeLivraisonPartageCategorie $p) => [
+                    'livreur_id' => $p->livreur_id,
+                    'montant_unitaire' => (int) $p->montant_unitaire,
+                ])->values()->all(),
+            ])
+            ->values()
+            ->all();
     }
 
     private function proprietairesOptions(): array
@@ -661,10 +803,13 @@ class VehiculeController extends Controller
             'livraison_logistique' => 'required|boolean',
             'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
             'is_active' => 'boolean',
-            // Le véhicule ne fait que demander à bénéficier du plafond dérogatoire de son type
-            // (cf. ensureDerogationCoherente()) — aucun montant saisi ici, porté par
-            // TypeVehicule::seuil_derogation_impayes.
+            // Dérogation impayés : gérée exclusivement depuis la fiche véhicule
+            // (updateDerogation(), cf. Vehicules/Show.vue), jamais depuis ce formulaire — ces
+            // deux champs ne font que transiter tels quels (round-trip, comme le fait déjà
+            // derogation_impayes_autorisee), pour ne jamais les écraser lors d'une simple
+            // modification d'un autre champ du véhicule (cf. ensureDerogationCoherente()).
             'derogation_impayes_autorisee' => 'boolean',
+            'seuil_derogation_impayes' => 'nullable|integer|min:0|max:999999999',
             'capacites' => 'array',
             'capacites.*.categorie_id' => [
                 'required', 'string',
@@ -726,11 +871,14 @@ class VehiculeController extends Controller
     }
 
     /**
-     * Un véhicule ne peut activer la dérogation que si son type de véhicule a un seuil
-     * dérogatoire configuré — sinon le toggle serait un chèque en blanc sans plafond réel
+     * Un véhicule ne peut activer la dérogation que si un plafond individuel, valide, est
+     * renseigné — sinon le toggle serait un chèque en blanc sans plafond réel
      * (SolvabiliteService::seuilApplicableVehicule() retombe alors sur le seuil global en
      * filet de sécurité, mais l'UI ne doit jamais laisser croire à une dérogation active qui
-     * n'en est pas une, cf. cadrage du 19/08/2026).
+     * n'en est pas une). Un plafond n'a de sens que s'il augmente réellement la marge par
+     * rapport au seuil standard de l'organisation — sinon la dérogation ne dérogerait à rien
+     * (même règle que l'ancienne TypeVehiculeController::seuilDerogationRules(), désormais
+     * appliquée ici — cf. décision produit du 22/08/2026).
      */
     private function ensureDerogationCoherente(array $data, string $orgId): void
     {
@@ -738,13 +886,19 @@ class VehiculeController extends Controller
             return;
         }
 
-        $type = TypeVehicule::where('organization_id', $orgId)
-            ->whereKey($data['type_vehicule_id'])
-            ->first();
+        $seuil = $data['seuil_derogation_impayes'] ?? null;
 
-        if ($type?->seuil_derogation_impayes === null) {
+        if ($seuil === null || $seuil <= 0) {
             throw ValidationException::withMessages([
-                'derogation_impayes_autorisee' => "Impossible d'activer la dérogation : aucun seuil de dérogation n'est configuré pour le type de véhicule « {$type?->nom} ».",
+                'derogation_impayes_autorisee' => 'Impossible d\'activer la dérogation : renseignez un plafond d\'impayés autorisé pour ce véhicule.',
+            ]);
+        }
+
+        $seuilStandard = Parametre::getVentesSeuilImpayesMax($orgId);
+        if ($seuil < $seuilStandard) {
+            throw ValidationException::withMessages([
+                'derogation_impayes_autorisee' => 'Le plafond doit être supérieur ou égal au seuil standard actuel ('
+                    .number_format($seuilStandard, 0, ',', ' ').' GNF).',
             ]);
         }
     }

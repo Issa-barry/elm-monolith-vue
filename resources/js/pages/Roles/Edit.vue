@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
+import type { FormDataConvertible } from '@inertiajs/core';
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
@@ -174,7 +175,7 @@ function save() {
     saving.value = true;
     identityErrors.value = {};
 
-    const payload: Record<string, unknown> = {
+    const payload: Record<string, FormDataConvertible> = {
         permissions: [...activePermissions.value],
     };
     // Rôle protégé (super_admin) : ni libellé ni trinôme envoyés — le backend les rejette de
@@ -211,7 +212,7 @@ function save() {
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dashboard', href: '/backoffice/dashboard' },
     { title: 'Rôles & Permissions', href: '/backoffice/roles' },
-    { title: role.label, href: '#' },
+    { title: props.role.label, href: '#' },
 ];
 </script>
 

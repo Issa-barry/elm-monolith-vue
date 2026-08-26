@@ -45,6 +45,8 @@ class CommissionPaymentController extends Controller
             );
         } catch (\InvalidArgumentException $e) {
             return back()->withErrors(['montant' => $e->getMessage()]);
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['comptabilisation' => "Paiement non enregistré : {$e->getMessage()}"]);
         }
 
         return back()->with('success', 'Paiement enregistré avec succès.');
@@ -90,6 +92,8 @@ class CommissionPaymentController extends Controller
             );
         } catch (\InvalidArgumentException $e) {
             return back()->withErrors(['montant' => $e->getMessage()]);
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['comptabilisation' => "Paiement non enregistré : {$e->getMessage()}"]);
         }
 
         return back()->with('success', 'Paiement enregistré avec succès.');

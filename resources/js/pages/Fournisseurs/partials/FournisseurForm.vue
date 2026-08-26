@@ -15,7 +15,7 @@ function flagUrl(code: string) {
     return `https://flagcdn.com/20x15/${code.toLowerCase()}.png`;
 }
 
-interface FormData {
+export interface FormData {
     nom: string | null;
     prenom: string | null;
     raison_sociale: string | null;

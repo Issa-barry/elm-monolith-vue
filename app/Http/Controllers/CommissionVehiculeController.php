@@ -93,7 +93,7 @@ class CommissionVehiculeController extends Controller
         );
 
         $teamStatusParPeriode = $periodesParDate->mapWithKeys(
-            fn ($periode) => [$periode->id => CommissionAdjustmentService::statutValidationParBeneficiaire($periode)]
+            fn ($periode) => [$periode->id => CommissionAdjustmentService::statutValidationLogistiqueParBeneficiaire($periode)]
         );
 
         // Build complete list with all searchable fields
@@ -206,7 +206,7 @@ class CommissionVehiculeController extends Controller
         }
 
         $teamStatus = $periodeResolue
-            ? (CommissionAdjustmentService::statutValidationParBeneficiaire($periodeResolue)["livreur:{$livreurId}"] ?? null)
+            ? (CommissionAdjustmentService::statutValidationLogistiqueParBeneficiaire($periodeResolue)["livreur:{$livreurId}"] ?? null)
             : null;
 
         $paymentValue = $totalImpaye > 0.009 ? StatutCommission::IMPAYE->value : StatutCommission::PAYE->value;

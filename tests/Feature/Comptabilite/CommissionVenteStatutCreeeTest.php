@@ -4,25 +4,26 @@ namespace Tests\Feature\Comptabilite;
 
 use App\Enums\StatutCommission;
 use App\Models\CommandeVente;
-use App\Models\CommissionPart;
-use App\Models\CommissionVente;
+use App\Models\CommissionEnveloppe;
+use App\Models\CommissionEnveloppePart;
+use App\Models\CommissionProcessus;
 use App\Models\Livreur;
 use App\Models\Personne;
 use App\Models\Site;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
-// ── Régression : une CommissionPart au statut "creee" (période de paiement
-// pas encore validée — cf. CommissionAdjustmentService::activerCommissionsCreees())
-// n'est PAS payable (CommissionVentePaiementService::partsDisponibles() l'exclut
-// explicitement).
-// L'index/le détail ne doivent donc pas la compter dans le "reste à payer",
-// sous peine de promettre à l'écran un solde que le paiement va ensuite
-// rejeter ("solde disponible : 0.00 GNF"). ────────────────────────────────────
+// ── Une CommissionEnveloppePart au statut "creee" (période de paiement pas
+// encore validée — cf. CommissionAdjustmentService::activerCommissionsCreees())
+// reste VISIBLE (décision produit du 20/08/2026 — « visible ne veut pas dire
+// payable ») mais n'entre jamais dans le montant réellement exigible tant que
+// sa période n'est pas validée : elle apparaît dans le compartiment
+// en_attente_periode, jamais dans net_a_payer/reste_a_payer/payable. ─────────
 
 class CommissionVenteStatutCreeeTest extends TestCase
 {
@@ -92,25 +93,34 @@ class CommissionVenteStatutCreeeTest extends TestCase
             'total_commande' => 500000,
         ]);
 
-        $commission = CommissionVente::create([
+        $processus = CommissionProcessus::firstOrCreate(
+            ['organization_id' => $this->org->id, 'code' => CommissionProcessus::CODE_VENTE],
+            [
+                'libelle' => 'Vente',
+                'declencheur' => 'chargement_valide',
+                'strategie_ancrage_site' => 'operation',
+                'statut' => 'actif',
+            ],
+        );
+
+        $commission = CommissionEnveloppe::create([
             'organization_id' => $this->org->id,
-            'commande_vente_id' => $commande->id,
-            'vehicule_id' => $vehicule->id,
-            'montant_commande' => 500000,
-            'montant_commission_totale' => 45000,
-            'montant_verse' => 0,
+            'source_type' => CommandeVente::class,
+            'source_id' => $commande->id,
+            'processus_id' => $processus->id,
+            'cible_type' => 'equipe_livraison',
+            'cible_id' => (string) Str::ulid(),
+            'montant_total' => 45000,
+            'earned_at' => now(),
             'statut' => StatutCommission::CREEE->value,
         ]);
 
-        CommissionPart::create([
-            'commission_vente_id' => $commission->id,
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => trim("{$livreur->prenom} {$livreur->nom}"),
-            'role' => 'chauffeur',
-            'taux_commission' => 100,
+        CommissionEnveloppePart::create([
+            'enveloppe_id' => $commission->id,
+            'beneficiaire_type' => CommissionEnveloppePart::TYPE_LIVREUR,
+            'beneficiaire_id' => $livreur->id,
+            'taux_repartition_snapshot' => 100,
             'montant_brut' => 45000,
-            'frais_supplementaires' => 0,
             'montant_net' => 45000,
             'montant_verse' => 0,
             'statut' => StatutCommission::CREEE->value,
@@ -119,7 +129,7 @@ class CommissionVenteStatutCreeeTest extends TestCase
         return $livreur;
     }
 
-    public function test_index_ne_compte_pas_les_parts_creee_dans_le_reste_a_payer(): void
+    public function test_index_compte_les_parts_creee_en_attente_periode_pas_dans_le_reste_a_payer(): void
     {
         $livreur = $this->setupLivreurAvecPartCreee();
 
@@ -130,10 +140,15 @@ class CommissionVenteStatutCreeeTest extends TestCase
         $beneficiaire = collect($response->viewData('page')['props']['beneficiaires'])
             ->firstWhere('beneficiaire_id', $livreur->id);
 
-        $this->assertNull($beneficiaire, 'Un livreur dont la seule commission est "creee" ne doit pas apparaître dans la liste.');
+        $this->assertNotNull($beneficiaire, 'Un livreur dont la seule commission est "creee" doit rester visible dans la liste.');
+        $this->assertEquals('creee', $beneficiaire['statut_global']);
+        $this->assertEquals(45000, (float) $beneficiaire['total_genere']);
+        $this->assertEquals(45000, (float) $beneficiaire['en_attente_periode']);
+        $this->assertEquals(0.0, (float) $beneficiaire['payable']);
+        $this->assertEquals(0.0, (float) $beneficiaire['solde_restant']);
     }
 
-    public function test_show_affiche_un_resume_a_zero_pour_une_commission_creee(): void
+    public function test_show_affiche_la_part_creee_visible_mais_hors_montant_exigible(): void
     {
         $livreur = $this->setupLivreurAvecPartCreee();
 
@@ -144,26 +159,10 @@ class CommissionVenteStatutCreeeTest extends TestCase
                 ->component('Comptabilite/CommissionVente/Livreur/Show')
                 ->where('commission_summary.net_a_payer', 0)
                 ->where('commission_summary.reste_a_payer', 0)
-                ->has('commission_details', 0)
+                ->where('commission_summary.en_attente_periode', 45000)
+                ->where('commission_summary.payable', 0)
+                ->has('commission_details', 1)
+                ->where('commission_details.0.statut', 'Créée')
             );
-    }
-
-    public function test_paiement_refuse_tant_que_la_commission_est_creee(): void
-    {
-        $livreur = $this->setupLivreurAvecPartCreee();
-
-        $response = $this->actingAs($this->user)
-            ->post(route('comptabilite.commissions.vente.livreur.paiements', $livreur->id), [
-                'montant' => 1,
-                'mode_paiement' => 'especes',
-            ])
-            ->assertSessionHasErrors('montant');
-
-        // Le message doit expliquer la cause (période de paiement pas encore
-        // validée), pas juste afficher "solde disponible : 0.00 GNF".
-        $this->assertStringContainsString(
-            'période',
-            mb_strtolower($response->getSession()->get('errors')->get('montant')[0])
-        );
     }
 }

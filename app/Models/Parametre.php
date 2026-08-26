@@ -71,6 +71,19 @@ class Parametre extends Model
     public const CLE_VENTES_SEUIL_IMPAYES_MAX = 'ventes_seuil_impayes_max';
 
     /**
+     * Politique globale d'organisation (DSI, 23/08/2026) : autoriser ou non le PDV et les
+     * commandes vente à continuer quand le stock disponible est insuffisant ou nul — jamais un
+     * réglage par produit (rejeté explicitement : "tous les produits vendables de
+     * l'organisation suivent la même politique"), et jamais appliqué aux transferts ni aux
+     * ajustements manuels (cf. TransfertLogistiqueService::checkDisponibiliteStockSource(),
+     * toujours strict). Éditée depuis Paramètres > Paramètres produits (cf.
+     * StockAjustementController), pas depuis l'écran générique ParametreController (groupe
+     * GROUPE_VENTES exclu de cet écran) — le groupe ne détermine que la catégorisation, pas
+     * l'écran d'édition.
+     */
+    public const CLE_VENTES_AUTORISER_STOCK_NEGATIF = 'ventes_autoriser_stock_negatif';
+
+    /**
      * Déclencheurs de génération des commissions — cf. DeclencheurCommissionVente /
      * DeclencheurCommissionLogistique et CommissionTriggerService. Choisissent
      * uniquement QUAND la commission naît, jamais dans quel statut : elle naît
@@ -168,6 +181,7 @@ class Parametre extends Model
             self::CLE_VENTES_AUTORISER_SAISIE_DESSOUS_QTE_MAX,
             self::CLE_VENTES_CONTROLE_IMPAYES_ACTIF,
             self::CLE_VENTES_SEUIL_IMPAYES_MAX,
+            self::CLE_VENTES_AUTORISER_STOCK_NEGATIF,
             self::CLE_DECLENCHEUR_COMMISSION_VENTE,
             self::CLE_DECLENCHEUR_COMMISSION_LOGISTIQUE,
             self::CLE_MAX_PHOTOS_PRODUIT,
@@ -282,6 +296,31 @@ class Parametre extends Model
             ],
         );
         Cache::forget(self::cacheKey($orgId, self::CLE_VENTES_SEUIL_IMPAYES_MAX));
+    }
+
+    /**
+     * Défaut NON (false) : une organisation qui n'a jamais explicitement activé cette politique
+     * garde le comportement strict — aucune vente n'est acceptée au-delà du stock disponible
+     * tant qu'un admin ne l'a pas explicitement décidé (cf. décision produit du 23/08/2026).
+     */
+    public static function isVentesAutoriseesSansStock(string $orgId): bool
+    {
+        return (bool) self::get($orgId, self::CLE_VENTES_AUTORISER_STOCK_NEGATIF, false);
+    }
+
+    public static function setVentesAutoriserStockNegatif(string $orgId, bool $valeur): void
+    {
+        static::updateOrCreate(
+            ['organization_id' => $orgId, 'cle' => self::CLE_VENTES_AUTORISER_STOCK_NEGATIF],
+            [
+                'valeur' => $valeur ? '1' : '0',
+                'type' => self::TYPE_BOOLEAN,
+                'groupe' => self::GROUPE_VENTES,
+                'description' => 'Autoriser le PDV et les commandes vente a continuer quand le stock disponible est insuffisant ou nul (le stock peut alors devenir negatif)',
+            ],
+        );
+
+        Cache::forget(self::cacheKey($orgId, self::CLE_VENTES_AUTORISER_STOCK_NEGATIF));
     }
 
     // ── Déclencheurs de génération des commissions ──────────────────────────────

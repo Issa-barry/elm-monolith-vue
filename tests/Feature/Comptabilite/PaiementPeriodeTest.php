@@ -2,14 +2,19 @@
 
 namespace Tests\Feature\Comptabilite;
 
+use App\Enums\CommissionActivationStatut;
+use App\Enums\CommissionStrategieAncrageSite;
+use App\Enums\StatutCommission;
 use App\Enums\StatutDepense;
 use App\Enums\StatutPeriodePaiement;
 use App\Enums\TypePeriodePaiement;
 use App\Features\ModuleFeature;
 use App\Models\Client;
 use App\Models\CommandeVente;
-use App\Models\CommissionPart;
-use App\Models\CommissionVente;
+use App\Models\CommissionCibleType;
+use App\Models\CommissionEnveloppe;
+use App\Models\CommissionEnveloppePart;
+use App\Models\CommissionProcessus;
 use App\Models\Depense;
 use App\Models\DepenseType;
 use App\Models\Livreur;
@@ -18,9 +23,9 @@ use App\Models\PaiementPeriode;
 use App\Models\Personne;
 use App\Models\Site;
 use App\Models\User;
-use App\Models\Vehicule;
 use App\Services\PeriodeCalculatorService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Pennant\Feature;
 use Spatie\Permission\Models\Role;
@@ -31,6 +36,8 @@ use Tests\TestCase;
 class PaiementPeriodeTest extends TestCase
 {
     use HasAdminSetup, HasOrgAndUser, RefreshDatabase;
+
+    private ?CommissionProcessus $processusVente = null;
 
     protected function setUp(): void
     {
@@ -55,6 +62,46 @@ class PaiementPeriodeTest extends TestCase
             'statut' => StatutPeriodePaiement::BROUILLON->value,
             'created_by' => $this->user->id,
         ], $override));
+    }
+
+    /** Commission vente livreur (une seule cible, sans équipe réelle) : enveloppe + part IMPAYE. */
+    private function makeEnveloppeAvecPart(float $montantNet, ?string $vehiculeId, Livreur $livreur): CommissionEnveloppePart
+    {
+        $commande = $this->makeCommande();
+        if ($vehiculeId) {
+            $commande->update(['vehicule_id' => $vehiculeId]);
+        }
+
+        $this->processusVente ??= CommissionProcessus::create([
+            'organization_id' => $this->org->id,
+            'code' => CommissionProcessus::CODE_VENTE,
+            'libelle' => 'Vente',
+            'declencheur' => 'chargement_valide',
+            'strategie_ancrage_site' => CommissionStrategieAncrageSite::OPERATION->value,
+            'statut' => CommissionActivationStatut::ACTIF->value,
+        ]);
+
+        $enveloppe = CommissionEnveloppe::create([
+            'organization_id' => $this->org->id,
+            'source_type' => CommandeVente::class,
+            'source_id' => $commande->id,
+            'processus_id' => $this->processusVente->id,
+            'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+            'cible_id' => (string) Str::ulid(),
+            'montant_total' => $montantNet,
+            'earned_at' => now(),
+            'statut' => StatutCommission::IMPAYE->value,
+        ]);
+
+        return CommissionEnveloppePart::create([
+            'enveloppe_id' => $enveloppe->id,
+            'beneficiaire_type' => CommissionEnveloppePart::TYPE_LIVREUR,
+            'beneficiaire_id' => $livreur->id,
+            'montant_brut' => $montantNet,
+            'montant_net' => $montantNet,
+            'montant_verse' => 0,
+            'statut' => StatutCommission::IMPAYE->value,
+        ]);
     }
 
     // ── index ─────────────────────────────────────────────────────────────────
@@ -83,7 +130,7 @@ class PaiementPeriodeTest extends TestCase
 
         $response->assertInertia(fn (Assert $page) => $page
             ->where('cycle.periode_courante_label', 'Juillet 2026 - P1')
-            ->has('cycle.par_type', 3)
+            ->has('cycle.par_type', 5) // livreur + propriétaire + salarié + site + consultant
         );
 
         $this->assertDatabaseHas('paiement_periodes', [
@@ -159,28 +206,7 @@ class PaiementPeriodeTest extends TestCase
             'is_active' => true,
         ]);
 
-        $commVente = CommissionVente::create([
-            'organization_id' => $this->org->id,
-            'commande_vente_id' => $this->makeCommande()->id,
-            'vehicule_id' => null,
-            'montant_commande' => 1000000,
-            'montant_commission_totale' => 300000,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
-
-        CommissionPart::create([
-            'commission_vente_id' => $commVente->id,
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => $livreur->nom_complet,
-            'taux_commission' => 100,
-            'montant_brut' => 300000,
-            'frais_supplementaires' => 0,
-            'montant_net' => 300000,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
+        $this->makeEnveloppeAvecPart(300000, null, $livreur);
 
         $periode = $this->makePeriode();
 
@@ -220,28 +246,7 @@ class PaiementPeriodeTest extends TestCase
             'is_active' => true,
         ]);
 
-        $commVente = CommissionVente::create([
-            'organization_id' => $this->org->id,
-            'commande_vente_id' => $this->makeCommande()->id,
-            'vehicule_id' => null,
-            'montant_commande' => 1000000,
-            'montant_commission_totale' => 300000,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
-
-        CommissionPart::create([
-            'commission_vente_id' => $commVente->id,
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => $livreur->nom_complet,
-            'taux_commission' => 100,
-            'montant_brut' => 300000,
-            'frais_supplementaires' => 0,
-            'montant_net' => 300000,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
+        $this->makeEnveloppeAvecPart(300000, null, $livreur);
 
         $periode = $this->makePeriode();
 
@@ -280,28 +285,7 @@ class PaiementPeriodeTest extends TestCase
             'is_active' => true,
         ]);
 
-        $commVente = CommissionVente::create([
-            'organization_id' => $this->org->id,
-            'commande_vente_id' => $this->makeCommande()->id,
-            'vehicule_id' => null,
-            'montant_commande' => 500000,
-            'montant_commission_totale' => 100000,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
-
-        CommissionPart::create([
-            'commission_vente_id' => $commVente->id,
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => $livreur->nom_complet,
-            'taux_commission' => 100,
-            'montant_brut' => 100000,
-            'frais_supplementaires' => 0,
-            'montant_net' => 100000,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
+        $this->makeEnveloppeAvecPart(100000, null, $livreur);
 
         $depType = DepenseType::create([
             'organization_id' => $this->org->id,
@@ -370,28 +354,7 @@ class PaiementPeriodeTest extends TestCase
             'is_active' => true,
         ]);
 
-        $commVente = CommissionVente::create([
-            'organization_id' => $this->org->id,
-            'commande_vente_id' => $this->makeCommande()->id,
-            'vehicule_id' => null,
-            'montant_commande' => 1000000,
-            'montant_commission_totale' => 300000,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
-
-        CommissionPart::create([
-            'commission_vente_id' => $commVente->id,
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => $livreur->nom_complet,
-            'taux_commission' => 100,
-            'montant_brut' => 300000,
-            'frais_supplementaires' => 0,
-            'montant_net' => 300000,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
+        $this->makeEnveloppeAvecPart(300000, null, $livreur);
 
         $periode = $this->makePeriode();
         $this->assertSame(0, PaiementFiche::where('periode_id', $periode->id)->count());
@@ -437,28 +400,7 @@ class PaiementPeriodeTest extends TestCase
             'is_active' => true,
         ]);
 
-        $commVente = CommissionVente::create([
-            'organization_id' => $this->org->id,
-            'commande_vente_id' => $this->makeCommande()->id,
-            'vehicule_id' => null,
-            'montant_commande' => 1000000,
-            'montant_commission_totale' => 300000,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
-
-        CommissionPart::create([
-            'commission_vente_id' => $commVente->id,
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => $livreur->nom_complet,
-            'taux_commission' => 100,
-            'montant_brut' => 300000,
-            'frais_supplementaires' => 0,
-            'montant_net' => 300000,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
+        $this->makeEnveloppeAvecPart(300000, null, $livreur);
 
         $periode = $this->makePeriode();
 
@@ -492,28 +434,7 @@ class PaiementPeriodeTest extends TestCase
             'is_active' => true,
         ]);
 
-        $commVente = CommissionVente::create([
-            'organization_id' => $this->org->id,
-            'commande_vente_id' => $this->makeCommande()->id,
-            'vehicule_id' => null,
-            'montant_commande' => 1000000,
-            'montant_commission_totale' => 300000,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
-
-        $part = CommissionPart::create([
-            'commission_vente_id' => $commVente->id,
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => $livreur->nom_complet,
-            'taux_commission' => 100,
-            'montant_brut' => 300000,
-            'frais_supplementaires' => 0,
-            'montant_net' => 300000,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
+        $part = $this->makeEnveloppeAvecPart(300000, null, $livreur);
 
         $periode = $this->makePeriode();
 
@@ -557,28 +478,7 @@ class PaiementPeriodeTest extends TestCase
             'is_active' => true,
         ]);
 
-        $commVente = CommissionVente::create([
-            'organization_id' => $this->org->id,
-            'commande_vente_id' => $this->makeCommande()->id,
-            'vehicule_id' => null,
-            'montant_commande' => 1000000,
-            'montant_commission_totale' => 300000,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
-
-        CommissionPart::create([
-            'commission_vente_id' => $commVente->id,
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => $livreur->nom_complet,
-            'taux_commission' => 100,
-            'montant_brut' => 300000,
-            'frais_supplementaires' => 0,
-            'montant_net' => 300000,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
+        $this->makeEnveloppeAvecPart(300000, null, $livreur);
 
         $periode = $this->makePeriode([
             'statut' => StatutPeriodePaiement::CLOTUREE->value,
@@ -627,189 +527,8 @@ class PaiementPeriodeTest extends TestCase
     }
 
     // ── show : la page est centrée véhicule (pas bénéficiaire) ──────────────────
-
-    public function test_show_liste_les_commissions_par_vehicule(): void
-    {
-        $this->travelTo('2026-06-10 12:00:00');
-
-        $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id]);
-        $personne = Personne::create([
-            'organization_id' => $this->org->id,
-            'nom' => 'Diallo',
-            'prenom' => 'Mamadou',
-            'telephone' => '+224'.fake()->unique()->numerify('#########'),
-        ]);
-
-        $livreur = Livreur::create([
-            'organization_id' => $this->org->id,
-            'personne_id' => $personne->id,
-            'nom_complet' => 'Mamadou Diallo',
-            'is_active' => true,
-        ]);
-
-        $commVente = CommissionVente::create([
-            'organization_id' => $this->org->id,
-            'commande_vente_id' => $this->makeCommande()->id,
-            'vehicule_id' => $vehicule->id,
-            'montant_commande' => 1000000,
-            'montant_commission_totale' => 300000,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
-
-        CommissionPart::create([
-            'commission_vente_id' => $commVente->id,
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => $livreur->nom_complet,
-            'taux_commission' => 100,
-            'montant_brut' => 300000,
-            'frais_supplementaires' => 0,
-            'montant_net' => 300000,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
-
-        $periode = $this->makePeriode();
-        $this->actingAs($this->user)->post(route('comptabilite.periodes.calculer', $periode));
-
-        $response = $this->actingAs($this->user)->get(route('comptabilite.periodes.show', $periode));
-
-        $response->assertInertia(fn (Assert $page) => $page
-            ->component('Comptabilite/Periodes/Show')
-            ->has('vehicules', 1)
-            ->where('vehicules.0.vehicule_id', $vehicule->id)
-            ->where('vehicules.0.vehicule_nom', $vehicule->nom_vehicule)
-            ->where('vehicules.0.nb_membres', 1)
-            ->where('vehicules.0.nb_commandes', 1)
-            ->where('vehicules.0.theorique', 300000)
-            ->where('vehicules.0.equilibre', true)
-            ->missing('fiches')
-            ->missing('repartition_agences')
-        );
-    }
-
-    public function test_show_marque_le_vehicule_a_ajuster_si_ecart_non_nul(): void
-    {
-        $this->travelTo('2026-06-10 12:00:00');
-
-        $vehicule = Vehicule::factory()->create(['organization_id' => $this->org->id]);
-        $personne = Personne::create([
-            'organization_id' => $this->org->id,
-            'nom' => 'Diallo',
-            'prenom' => 'Mamadou',
-            'telephone' => '+224'.fake()->unique()->numerify('#########'),
-        ]);
-
-        $livreur = Livreur::create([
-            'organization_id' => $this->org->id,
-            'personne_id' => $personne->id,
-            'nom_complet' => 'Mamadou Diallo',
-            'is_active' => true,
-        ]);
-
-        $commVente = CommissionVente::create([
-            'organization_id' => $this->org->id,
-            'commande_vente_id' => $this->makeCommande()->id,
-            'vehicule_id' => $vehicule->id,
-            'montant_commande' => 1000000,
-            'montant_commission_totale' => 300000,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
-
-        $part = CommissionPart::create([
-            'commission_vente_id' => $commVente->id,
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => $livreur->nom_complet,
-            'taux_commission' => 100,
-            'montant_brut' => 300000,
-            'frais_supplementaires' => 0,
-            'montant_net' => 300000,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
-
-        $periode = $this->makePeriode();
-        $this->actingAs($this->user)->post(route('comptabilite.periodes.calculer', $periode));
-
-        $this->actingAs($this->user)->patch(
-            route('comptabilite.ajustements.ajuster', ['type' => 'vente', 'partId' => $part->id]),
-            ['montant' => 200000, 'motif' => 'correction']
-        );
-
-        $response = $this->actingAs($this->user)->get(route('comptabilite.periodes.show', $periode));
-
-        $response->assertInertia(fn (Assert $page) => $page
-            ->where('vehicules.0.equilibre', false)
-            ->where('vehicules.0.ecart', -100000)
-        );
-    }
-
-    public function test_show_filtre_les_vehicules_par_nom_et_par_livreur(): void
-    {
-        $this->travelTo('2026-06-10 12:00:00');
-
-        $vehiculeA = Vehicule::factory()->create(['organization_id' => $this->org->id]);
-        $vehiculeB = Vehicule::factory()->create(['organization_id' => $this->org->id]);
-
-        foreach (['Diallo' => $vehiculeA, 'Barry' => $vehiculeB] as $nom => $vehicule) {
-            $personne = Personne::create([
-                'organization_id' => $this->org->id,
-                'nom' => $nom,
-                'prenom' => 'Test',
-                'telephone' => '+224'.fake()->unique()->numerify('#########'),
-            ]);
-
-            $livreur = Livreur::create([
-                'organization_id' => $this->org->id,
-                'personne_id' => $personne->id,
-                'nom_complet' => "Test {$nom}",
-                'is_active' => true,
-            ]);
-
-            $commVente = CommissionVente::create([
-                'organization_id' => $this->org->id,
-                'commande_vente_id' => $this->makeCommande()->id,
-                'vehicule_id' => $vehicule->id,
-                'montant_commande' => 500000,
-                'montant_commission_totale' => 100000,
-                'montant_verse' => 0,
-                'statut' => 'impaye',
-            ]);
-
-            CommissionPart::create([
-                'commission_vente_id' => $commVente->id,
-                'type_beneficiaire' => 'livreur',
-                'livreur_id' => $livreur->id,
-                'beneficiaire_nom' => $livreur->nom_complet,
-                'taux_commission' => 100,
-                'montant_brut' => 100000,
-                'frais_supplementaires' => 0,
-                'montant_net' => 100000,
-                'montant_verse' => 0,
-                'statut' => 'impaye',
-            ]);
-        }
-
-        $periode = $this->makePeriode();
-        $this->actingAs($this->user)->post(route('comptabilite.periodes.calculer', $periode));
-
-        $parVehicule = $this->actingAs($this->user)
-            ->get(route('comptabilite.periodes.show', $periode).'?vehicule='.$vehiculeA->nom_vehicule);
-        $parVehicule->assertInertia(fn (Assert $page) => $page
-            ->has('vehicules', 1)
-            ->where('vehicules.0.vehicule_id', $vehiculeA->id)
-        );
-
-        $parLivreur = $this->actingAs($this->user)
-            ->get(route('comptabilite.periodes.show', $periode).'?livreur=Barry');
-        $parLivreur->assertInertia(fn (Assert $page) => $page
-            ->has('vehicules', 1)
-            ->where('vehicules.0.vehicule_id', $vehiculeB->id)
-        );
-    }
+    // Couverture détaillée (liste par véhicule, marquage écart, filtre nom/livreur)
+    // déjà portée dans CommissionAjustementVenteTest.php — pas dupliquée ici.
 
     // ── clôturer ──────────────────────────────────────────────────────────────
 
@@ -831,28 +550,7 @@ class PaiementPeriodeTest extends TestCase
             'is_active' => true,
         ]);
 
-        $commVente = CommissionVente::create([
-            'organization_id' => $this->org->id,
-            'commande_vente_id' => $this->makeCommande()->id,
-            'vehicule_id' => null,
-            'montant_commande' => 1000000,
-            'montant_commission_totale' => 300000,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
-
-        CommissionPart::create([
-            'commission_vente_id' => $commVente->id,
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => $livreur->nom_complet,
-            'taux_commission' => 100,
-            'montant_brut' => 300000,
-            'frais_supplementaires' => 0,
-            'montant_net' => 300000,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
+        $this->makeEnveloppeAvecPart(300000, null, $livreur);
 
         $periode = $this->makePeriode();
         $this->actingAs($this->user)->post(route('comptabilite.periodes.calculer', $periode));
@@ -887,28 +585,7 @@ class PaiementPeriodeTest extends TestCase
             'is_active' => true,
         ]);
 
-        $commVente = CommissionVente::create([
-            'organization_id' => $this->org->id,
-            'commande_vente_id' => $this->makeCommande()->id,
-            'vehicule_id' => null,
-            'montant_commande' => 1000000,
-            'montant_commission_totale' => 300000,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
-
-        CommissionPart::create([
-            'commission_vente_id' => $commVente->id,
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => $livreur->nom_complet,
-            'taux_commission' => 100,
-            'montant_brut' => 300000,
-            'frais_supplementaires' => 0,
-            'montant_net' => 300000,
-            'montant_verse' => 0,
-            'statut' => 'impaye',
-        ]);
+        $this->makeEnveloppeAvecPart(300000, null, $livreur);
 
         $periode = $this->makePeriode();
         $this->actingAs($this->user)->post(route('comptabilite.periodes.calculer', $periode));

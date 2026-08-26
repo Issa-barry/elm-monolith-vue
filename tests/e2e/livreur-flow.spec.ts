@@ -158,7 +158,7 @@ test('delete livreur via API -> removed from list', async ({ page }) => {
     await deleteLivreurViaApi(page, livreurId);
 
     await page.goto('/backoffice/livreurs');
-    const search = getVisibleSearchInput(page);
+    const search = await getVisibleSearchInput(page);
     await search.fill(nomComplet);
     await search.press('Enter');
     await page.waitForLoadState('networkidle');

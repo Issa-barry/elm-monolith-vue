@@ -3,8 +3,10 @@
 namespace Tests\Feature;
 
 use App\Features\ModuleFeature;
+use App\Models\EntrepriseTierce;
 use App\Models\Fournisseur;
 use App\Models\Organization;
+use App\Models\Personne;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Pennant\Feature;
 use Tests\Feature\Concerns\HasAdminSetup;
@@ -24,9 +26,31 @@ class FournisseurTest extends TestCase
 
     private function makeFournisseur(Organization $org, array $overrides = []): Fournisseur
     {
+        if (! empty($overrides['raison_sociale'])) {
+            $entreprise = EntrepriseTierce::create([
+                'organization_id' => $org->id,
+                'raison_sociale' => $overrides['raison_sociale'],
+                'telephone' => $overrides['phone'] ?? null,
+                'telephone_normalise' => isset($overrides['phone']) ? Personne::normaliserTelephone($overrides['phone']) : null,
+            ]);
+            unset($overrides['raison_sociale'], $overrides['phone'], $overrides['code_phone_pays'], $overrides['code_pays']);
+
+            return Fournisseur::create(array_merge([
+                'organization_id' => $org->id,
+                'entreprise_tierce_id' => $entreprise->id,
+                'is_active' => true,
+            ], $overrides));
+        }
+
+        $personne = Personne::create([
+            'organization_id' => $org->id,
+            'nom' => $overrides['nom'] ?? 'FOURNISSEUR TEST',
+        ]);
+        unset($overrides['nom']);
+
         return Fournisseur::create(array_merge([
             'organization_id' => $org->id,
-            'nom' => 'FOURNISSEUR TEST',
+            'personne_id' => $personne->id,
             'is_active' => true,
         ], $overrides));
     }
@@ -105,10 +129,13 @@ class FournisseurTest extends TestCase
             ->post(route('fournisseurs.store'), $this->validPayload())
             ->assertRedirect(route('fournisseurs.index'));
 
-        $this->assertDatabaseHas('fournisseurs', [
+        $this->assertDatabaseHas('personnes', [
             'organization_id' => $this->org->id,
             'nom' => 'DIALLO',
         ]);
+        $fournisseur = Fournisseur::where('organization_id', $this->org->id)->firstOrFail();
+        $this->assertNotNull($fournisseur->personne_id);
+        $this->assertNull($fournisseur->entreprise_tierce_id);
     }
 
     public function test_store_creates_fournisseur_with_raison_sociale_only(): void
@@ -121,9 +148,9 @@ class FournisseurTest extends TestCase
             ]))
             ->assertRedirect(route('fournisseurs.index'));
 
-        $this->assertDatabaseHas('fournisseurs', [
-            'organization_id' => $this->org->id,
-        ]);
+        $fournisseur = Fournisseur::where('organization_id', $this->org->id)->firstOrFail();
+        $this->assertNull($fournisseur->personne_id);
+        $this->assertNotNull($fournisseur->entreprise_tierce_id);
     }
 
     public function test_store_fails_without_nom_and_raison_sociale(): void
@@ -189,8 +216,8 @@ class FournisseurTest extends TestCase
             ]))
             ->assertRedirect(route('fournisseurs.edit', $fournisseur));
 
-        $this->assertDatabaseHas('fournisseurs', [
-            'id' => $fournisseur->id,
+        $this->assertDatabaseHas('personnes', [
+            'id' => $fournisseur->personne_id,
             'nom' => 'BARRY',
         ]);
     }
@@ -245,8 +272,8 @@ class FournisseurTest extends TestCase
 
         $response->assertSessionHas('created_fournisseur_id');
 
-        $fournisseur = Fournisseur::where('raison_sociale', 'Soguidep')->firstOrFail();
-        $this->assertSame($response->getSession()->get('created_fournisseur_id'), $fournisseur->id);
+        $fournisseur = Fournisseur::findOrFail($response->getSession()->get('created_fournisseur_id'));
+        $this->assertSame('Soguidep', $fournisseur->raison_sociale);
     }
 
     public function test_store_rapide_normalise_le_telephone(): void
@@ -254,9 +281,10 @@ class FournisseurTest extends TestCase
         $this->actingAs($this->user)
             ->post(route('produits.fournisseurs.store'), $this->rapidePayload(['phone' => '0622000099']));
 
-        $this->assertDatabaseHas('fournisseurs', [
+        $this->assertDatabaseHas('entreprises_tierces', [
+            'organization_id' => $this->org->id,
             'raison_sociale' => 'Soguidep',
-            'phone' => '+224622000099',
+            'telephone' => '+224622000099',
         ]);
     }
 
@@ -266,7 +294,7 @@ class FournisseurTest extends TestCase
             ->post(route('produits.fournisseurs.store'), $this->rapidePayload())
             ->assertSessionDoesntHaveErrors();
 
-        $this->assertDatabaseHas('fournisseurs', [
+        $this->assertDatabaseHas('entreprises_tierces', [
             'raison_sociale' => 'Soguidep',
             'ville' => null,
             'adresse' => null,
@@ -292,8 +320,6 @@ class FournisseurTest extends TestCase
         $this->makeFournisseur($this->org, [
             'raison_sociale' => 'Existant',
             'phone' => '+224622000099',
-            'code_phone_pays' => '+224',
-            'code_pays' => 'GN',
         ]);
 
         $this->actingAs($this->user)
@@ -307,8 +333,6 @@ class FournisseurTest extends TestCase
         $this->makeFournisseur($autreOrg, [
             'raison_sociale' => 'Existant ailleurs',
             'phone' => '+224622000099',
-            'code_phone_pays' => '+224',
-            'code_pays' => 'GN',
         ]);
 
         // Même téléphone, mais autre organisation : pas de conflit.

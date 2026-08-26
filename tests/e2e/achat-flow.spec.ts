@@ -60,7 +60,7 @@ test('create achat -> annuler -> supprimer depuis la liste', async ({
     await page.goto('/backoffice/achats');
     await expect(page).toHaveURL(/\/achats$/, { timeout: 15_000 });
 
-    const search = getVisibleSearchInput(page);
+    const search = await getVisibleSearchInput(page);
     await search.fill(note);
     await search.press('Enter');
     await page.waitForLoadState('networkidle');

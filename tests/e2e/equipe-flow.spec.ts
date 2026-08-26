@@ -205,45 +205,37 @@ test('créer une équipe depuis la fiche véhicule avec stepper', async ({
         'Mamadou Diallo',
     );
 
-    // Passer à l'étape 2
+    // Passer à l'étape 2 (Partage) : le véhicule de test n'a aucun barème de
+    // commission configuré (organisation "elm", partagée avec de nombreuses
+    // autres specs — aucun CommissionRegle n'y est seedé par défaut, cf.
+    // baremesCommissionCategories vide côté VehiculeController). L'étape
+    // affiche donc l'état vide, sans aucune catégorie à répartir — le partage
+    // reste "valide" par construction (rien à répartir), Suivant reste actif.
+    // La démonstration de l'auto-complétion du reliquat (CommissionShareEditor
+    // ::recomputeAutoFill) est couverte séparément par
+    // commission-v2-full-chain.spec.ts, sur l'organisation dédiée "Eau La
+    // Maman V2 Demo" qui configure elle-même son propre barème — jamais sur
+    // "elm", pour ne pas polluer l'état partagé par toutes les autres specs.
     await dialog.getByRole('button', { name: /suivant/i }).click();
-    await expect(dialog.getByText(/partage/i).first()).toBeVisible({
-        timeout: 5_000,
-    });
+    await expect(dialog.getByText(/répartition livreurs/i).first()).toBeVisible(
+        {
+            timeout: 5_000,
+        },
+    );
+    await expect(
+        dialog.getByText(/aucun barème de commission actif/i),
+    ).toBeVisible({ timeout: 5_000 });
 
-    // Saisir commission
-    const commissionInput = dialog.locator('input#step-commission');
-    await commissionInput.click();
-    await page.keyboard.press('Control+a');
-    await page.keyboard.type('200');
-    await page.keyboard.press('Tab');
-
-    // Saisir le montant du membre dans le tableau de partage — ciblé par son libellé
-    // (contient "Mamadou"), pas par position : une ligne "Propriétaire" peut désormais
-    // précéder la ligne membre dès que le véhicule a un propriétaire assigné (cf.
-    // EquipeStepperModal::hasProprietaire, plus jamais conditionné à la catégorie).
-    const membreMontantInput = dialog
-        .locator('tbody tr')
-        .filter({ hasText: /Mamadou/i })
-        .locator('td')
-        .nth(1)
-        .locator('input');
-    await membreMontantInput.click();
-    await page.keyboard.press('Control+a');
-    await page.keyboard.type('200');
-    await page.keyboard.press('Tab');
-
-    await expect(dialog.getByText('✓ 100 %')).toBeVisible({ timeout: 5_000 });
-
-    // Passer à l'étape 3
+    // Passer à l'étape 3 — récapitulatif sans détail par catégorie (aucun
+    // barème configuré, cf. ci-dessus) : seuls véhicule et nombre de
+    // catégories (0) sont affichés.
     await dialog.getByRole('button', { name: /suivant/i }).click();
     await expect(dialog.getByText(/récapitulatif/i).first()).toBeVisible({
         timeout: 5_000,
     });
-
-    // Vérifier le récap
-    await expect(dialog.getByText(/Mamadou/i).first()).toBeVisible();
-    await expect(dialog.getByText(/200 GNF/i).first()).toBeVisible();
+    await expect(
+        dialog.getByText(new RegExp(escapeRegExp(E2E_VH_PREFIX), 'i')).first(),
+    ).toBeVisible();
 
     // Enregistrer
     await dialog.getByRole('button', { name: /enregistrer l'équipe/i }).click();
@@ -262,79 +254,15 @@ test('créer une équipe depuis la fiche véhicule avec stepper', async ({
     });
 });
 
-test('étape 2 partage : saisir un montant complète automatiquement l\'unique bénéficiaire restant', async ({
-    page,
-}) => {
-    await openStepperModal(page);
-    const dialog = page
-        .locator('[role="dialog"]')
-        .filter({ hasText: /équipe/i });
-
-    // Ligne 0 auto-ajoutée : un seul chauffeur, pour maximiser les chances d'avoir
-    // exactement 2 bénéficiaires au total à l'étape Partage (chauffeur + propriétaire
-    // si le véhicule en a un, sinon chauffeur seul).
-    await selectOptionFromCombobox(
-        page,
-        page.getByTestId('role-dropdown-0'),
-        /chauffeur/i,
-    );
-    await page.getByTestId('nom-complet-0').fill('Auto Complete');
-    const phone0 = page.getByTestId('telephone-0');
-    await phone0.click();
-    await phone0.fill('620333444');
-
-    await dialog.getByRole('button', { name: /suivant/i }).click();
-    await expect(dialog.getByText(/partage/i).first()).toBeVisible({
-        timeout: 5_000,
-    });
-
-    const commissionInput = dialog.locator('input#step-commission');
-    await commissionInput.click();
-    await page.keyboard.press('Control+a');
-    await page.keyboard.type('950');
-    await page.keyboard.press('Tab');
-
-    const rows = dialog.locator('tbody tr');
-    const rowCount = await rows.count();
-
-    if (rowCount === 2) {
-        // Exactement 2 bénéficiaires (propriétaire + chauffeur, ou chauffeur seul en 2
-        // lignes le cas échéant) : saisir le montant de la ligne "Auto Complete" doit
-        // compléter automatiquement l'autre ligne avec le reliquat (950 - saisi).
-        const chauffeurMontant = rows
-            .filter({ hasText: /Auto Complete/i })
-            .locator('td')
-            .nth(1)
-            .locator('input');
-        await chauffeurMontant.click();
-        await page.keyboard.press('Control+a');
-        await page.keyboard.type('650');
-        await page.keyboard.press('Tab');
-
-        const autreMontant = rows
-            .filter({ hasNotText: /Auto Complete/i })
-            .locator('td')
-            .nth(1)
-            .locator('input');
-        await expect(autreMontant).toHaveValue('300', { timeout: 5_000 });
-        await expect(dialog.getByText('✓ 100 %')).toBeVisible({
-            timeout: 5_000,
-        });
-    } else {
-        // 3+ bénéficiaires : aucune complétion automatique tant que 2+ lignes restent
-        // non saisies (répartition ambiguë) — cf. EquipeStepperModal::recomputeAutoFill.
-        const chauffeurMontant = rows
-            .filter({ hasText: /Auto Complete/i })
-            .locator('td')
-            .nth(1)
-            .locator('input');
-        await chauffeurMontant.click();
-        await page.keyboard.press('Control+a');
-        await page.keyboard.type('650');
-        await page.keyboard.press('Tab');
-        await expect(dialog.getByText('✓ 100 %')).not.toBeVisible();
-    }
-});
+// La répartition en montants fixes entre plusieurs bénéficiaires
+// (CommissionMontantFixeEditor, "Reste à attribuer") exigerait de configurer
+// un barème de commission — mais l'organisation "elm" utilisée ici est
+// partagée avec de nombreuses autres
+// specs (achats, packing, produits…) et n'a délibérément aucun CommissionRegle
+// seedé par défaut ; y configurer un barème depuis ce test pollueriait l'état
+// partagé pour toutes les autres. Ce scénario est couvert sur l'organisation
+// dédiée "Eau La Maman V2 Demo" (cf. commission-v2-full-chain.spec.ts), qui
+// configure son propre barème isolé.
 
 test('equipe index ne propose pas de bouton création directe', async ({
     page,

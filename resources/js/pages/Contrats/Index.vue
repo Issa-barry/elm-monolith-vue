@@ -39,11 +39,11 @@ interface Option {
     value: string;
     label: string;
 }
-interface Filters {
+type Filters = {
     statut_contrat?: string;
     type_contrat?: string;
     search?: string;
-}
+};
 
 const props = defineProps<{
     contrats: Contrat[];

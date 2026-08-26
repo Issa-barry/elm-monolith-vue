@@ -8,8 +8,6 @@ use App\Enums\StatutPeriodePaiement;
 use App\Enums\TypePeriodePaiement;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
-use App\Models\CommissionPart;
-use App\Models\CommissionVente;
 use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\PaiementPeriode;
@@ -135,36 +133,6 @@ class PeriodePayabilityCheckerTest extends TestCase
     {
         ['org' => $org, 'part' => $part] = $this->makeCommissionLogistiqueScenario();
         $this->validerPeriode($org, TypePeriodePaiement::LIVREUR, $part->earned_at, StatutPeriodePaiement::VALIDEE);
-
-        $this->assertNull(PeriodePayabilityChecker::reasonPartNotPayable($part));
-    }
-
-    // ── periodeForCommissionPart() : CommissionPart (vente) ────────────────────
-
-    public function test_reason_part_not_payable_fonctionne_pour_commission_part_vente(): void
-    {
-        $org = Organization::factory()->create();
-        $commission = CommissionVente::factory()->create([
-            'organization_id' => $org->id,
-            'montant_commission_totale' => 3000,
-            'montant_verse' => 0,
-            'statut' => StatutCommission::IMPAYE,
-        ]);
-        $part = $commission->parts()->create([
-            'type_beneficiaire' => 'proprietaire',
-            'beneficiaire_nom' => 'Camara Ibrahim',
-            'taux_commission' => 40,
-            'montant_brut' => 3000,
-            'frais_supplementaires' => 0,
-            'montant_net' => 3000,
-            'montant_verse' => 0,
-            'statut' => StatutCommission::IMPAYE,
-        ]);
-
-        // Pas de période créée : refusé faute de calcul.
-        $this->assertNotNull(PeriodePayabilityChecker::reasonPartNotPayable($part));
-
-        $this->validerPeriode($org, TypePeriodePaiement::PROPRIETAIRE, $commission->created_at, StatutPeriodePaiement::VALIDEE);
 
         $this->assertNull(PeriodePayabilityChecker::reasonPartNotPayable($part));
     }

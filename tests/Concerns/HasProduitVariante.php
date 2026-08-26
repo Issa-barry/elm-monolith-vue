@@ -6,6 +6,8 @@ use App\Models\Organization;
 use App\Models\Produit;
 use App\Models\ProduitType;
 use App\Models\ProduitVariante;
+use App\Models\Site;
+use App\Models\VarianteStock;
 use Database\Seeders\ProduitTypeDefaultSeeder;
 
 /**
@@ -65,5 +67,23 @@ trait HasProduitVariante
             'prix_achat' => 1500,
             'cout' => 1000,
         ], $overrides));
+    }
+
+    /**
+     * Seed un stock largement suffisant pour une variante sur un site — depuis le correctif du
+     * 23/08/2026 (suppression du clamp silencieux dans MouvementStockService::appliquer()), tout
+     * test qui fait progresser une CommandeVente jusqu'à validerChargement() ou un
+     * TransfertLogistique jusqu'à TRANSIT, pour un produit gere_stock=true, DOIT disposer d'un
+     * stock suffisant sur le site concerné — sinon la sortie est désormais refusée
+     * (ValidationException) au lieu d'être clampée à 0 comme avant. updateOrCreate() : idempotent
+     * vis-à-vis de la contrainte unique (produit_variante_id, site_id), rejouable sans conflit si
+     * un test a déjà créé la ligne avec une autre quantité.
+     */
+    private function seedVarianteStockSuffisant(ProduitVariante $variante, Site $site, int $qte = 100000): VarianteStock
+    {
+        return VarianteStock::updateOrCreate(
+            ['produit_variante_id' => $variante->id, 'site_id' => $site->id],
+            ['organization_id' => $variante->organization_id, 'qte_stock' => $qte],
+        );
     }
 }

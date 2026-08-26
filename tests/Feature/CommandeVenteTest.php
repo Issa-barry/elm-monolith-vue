@@ -33,6 +33,11 @@ class CommandeVenteTest extends TestCase
         parent::setUp();
         $this->initOrgAndUser(['ventes.read', 'ventes.create', 'ventes.update', 'ventes.delete']);
 
+        // Ce fichier ne teste pas la disponibilité du stock — évite que le nouveau contrôle de
+        // CommandeVenteController::store() (23/08/2026, cf. CommandeVenteService::
+        // siteAutoriseNouvelleCommande()) ne bloque des commandes de test sans rapport avec le stock.
+        Parametre::setVentesAutoriserStockNegatif($this->org->id, true);
+
         // Attacher un site par défaut pour passer le middleware RequireSiteAssigned
         $this->defaultSite = Site::create([
             'organization_id' => $this->org->id,
@@ -232,6 +237,10 @@ class CommandeVenteTest extends TestCase
 
     public function test_cloture_automatique_commande_directe_sur_paiement_complet(): void
     {
+        // Non éligible aux commissions : une commande directe sans véhicule ne peut de
+        // toute façon jamais générer de commission équipe_livraison (cf.
+        // cloturerSiComplete(), qui ne clôture plus silencieusement une commande
+        // éligible en échec de génération — incident CMD-230826-004).
         ['client' => $client] = $this->makeContext($this->org);
 
         $commande = CommandeVente::factory()->create([
@@ -240,6 +249,7 @@ class CommandeVenteTest extends TestCase
             'client_id' => $client->id,
             'statut' => StatutCommandeVente::FACTURATION,
             'total_commande' => 3000,
+            'commission_eligible_snapshot' => false,
         ]);
 
         $facture = FactureVente::create([
@@ -1101,11 +1111,17 @@ class CommandeVenteTest extends TestCase
 
     public function test_auto_cloture_when_facture_fully_paid_and_no_commissions(): void
     {
+        // Non éligible aux commissions (aucun véhicule lié) : ce test porte sur la
+        // clôture elle-même quand il n'y a explicitement rien à générer — jamais un
+        // scénario où la génération échouerait (cf. cloturerSiComplete(), qui ne
+        // clôture plus silencieusement une commande éligible en échec de génération,
+        // incident CMD-230826-004).
         $commande = CommandeVente::factory()->create([
             'organization_id' => $this->org->id,
             'site_id' => $this->defaultSite->id,
             'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
             'total_commande' => 5000,
+            'commission_eligible_snapshot' => false,
         ]);
 
         $facture = FactureVente::create([
@@ -1152,15 +1168,20 @@ class CommandeVenteTest extends TestCase
 
     public function test_references_incrementales_dans_le_mois(): void
     {
-        ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
+        ['produit' => $produit, 'vehicule' => $vehicule, 'client' => $client] = $this->makeContext($this->org);
 
-        $payload = [
+        // Deuxième commande sur le client (vente directe), pas sur le même véhicule : depuis le
+        // verrou « première régularisation » (cf. SolvabiliteService), la première commande
+        // laisse une facture non encaissée sur ce véhicule qui bloquerait une deuxième commande
+        // véhicule immédiate — hors sujet ici, ce test ne vise que la numérotation séquentielle.
+        $this->actingAs($this->user)->post(route('ventes.store'), [
             'vehicule_id' => $vehicule->id,
             'lignes' => [['produit_id' => $produit->id, 'qte' => 2, 'prix_vente' => 2000]],
-        ];
-
-        $this->actingAs($this->user)->post(route('ventes.store'), $payload);
-        $this->actingAs($this->user)->post(route('ventes.store'), $payload);
+        ]);
+        $this->actingAs($this->user)->post(route('ventes.store'), [
+            'client_id' => $client->id,
+            'lignes' => [['produit_id' => $produit->id, 'qte' => 2, 'prix_vente' => 2000]],
+        ]);
 
         $commandes = CommandeVente::where('organization_id', $this->org->id)
             ->orderBy('numero')

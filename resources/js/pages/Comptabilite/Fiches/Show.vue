@@ -89,7 +89,7 @@ const typeRoute = {
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
-    { title: 'Comptabilité', href: '/backoffice/comptabilite' },
+    { title: 'Comptabilité' },
     {
         title:
             typeLabel[
@@ -98,7 +98,7 @@ const breadcrumbs: BreadcrumbItem[] = [
         href:
             typeRoute[
                 props.fiche.beneficiaire_type as keyof typeof typeRoute
-            ] ?? '/backoffice/comptabilite',
+            ] ?? '/backoffice/comptabilite/periodes',
     },
     {
         title: props.fiche.reference,

@@ -2,6 +2,7 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import ListPageActions from '@/components/ListPageActions.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,7 +16,7 @@ import { useClickableTableRow } from '@/composables/useClickableTableRow';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     CheckCircle,
@@ -36,9 +37,12 @@ import Dialog from 'primevue/dialog';
 import InputNumber from 'primevue/inputnumber';
 import Select from 'primevue/select';
 import Textarea from 'primevue/textarea';
+import Tooltip from 'primevue/tooltip';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
+
+const vTooltip = Tooltip;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Commande {
@@ -109,12 +113,25 @@ const props = defineProps<{
     statuts_actifs: string[];
     sites: SiteOption[];
     is_admin: boolean;
+    can_creer_commande: boolean;
+    raison_blocage_commande: string | null;
     filters: Filters;
 }>();
 
 const { can } = usePermissions();
 const confirm = useConfirm();
 const toast = useToast();
+
+// Accès direct à /backoffice/ventes/create bloqué (aucun stock disponible pour ce site) :
+// CommandeVenteController::create()/store() ne renvoient jamais une page 403, ils redirigent
+// ici avec un flash 'error' (partagé globalement par HandleInertiaRequests) — affiché en toast
+// top-right plutôt qu'en page d'erreur, cf. règle projet <Toast position="top-right">.
+onMounted(() => {
+    const flash = (usePage().props as { flash?: { error?: string } }).flash;
+    if (flash?.error) {
+        toast.add({ severity: 'error', summary: flash.error, life: 6000 });
+    }
+});
 
 const { onRowClick, bodyRowPt } = useClickableTableRow<Commande>(
     (commande) => `/backoffice/ventes/${commande.id}`,
@@ -283,7 +300,7 @@ const MOTIFS_ANNULATION = [
     { value: 'doublon', label: 'Doublon' },
     { value: 'rupture_stock', label: 'Rupture de stock' },
     { value: 'autre', label: 'Autre' },
-] as const;
+];
 
 const annulerForm = useForm({
     motif_annulation_code: '' as string,
@@ -416,7 +433,7 @@ function confirmDelete(c: Commande) {
                 </Link>
                 <span class="text-base font-semibold">Ventes</span>
                 <Link
-                    v-if="can('ventes.create')"
+                    v-if="can('ventes.create') && can_creer_commande"
                     href="/backoffice/ventes/create"
                 >
                     <Button size="sm" class="h-8 px-3 text-xs">
@@ -424,6 +441,16 @@ function confirmDelete(c: Commande) {
                         Nouveau
                     </Button>
                 </Link>
+                <Button
+                    v-else-if="can('ventes.create')"
+                    size="sm"
+                    class="h-8 px-3 text-xs"
+                    disabled
+                    v-tooltip.bottom="raison_blocage_commande"
+                >
+                    <Plus class="mr-1 h-3.5 w-3.5" />
+                    Nouveau
+                </Button>
                 <div v-else class="w-8" />
             </div>
 
@@ -456,9 +483,9 @@ function confirmDelete(c: Commande) {
                 </div>
             </div>
 
-            <!-- Search -->
-            <div class="border-t border-b px-4 py-2">
-                <div class="relative">
+            <!-- Search + Filtres -->
+            <div class="flex items-center gap-2 border-t border-b px-4 py-2">
+                <div class="relative flex-1">
                     <Search
                         class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                     />
@@ -469,6 +496,15 @@ function confirmDelete(c: Commande) {
                         class="h-9 w-full rounded-md border border-input bg-background pr-3 pl-8 text-sm placeholder:text-muted-foreground focus:ring-1 focus:ring-ring focus:outline-none"
                     />
                 </div>
+                <DataFilters
+                    trigger-only
+                    url="/backoffice/ventes"
+                    :base-params="{ periode: 'all' }"
+                    :values="filterValues"
+                    :sites="sites"
+                    :result-count="commandesFiltrees.length"
+                    :fields="filterFields"
+                />
             </div>
 
             <!-- Card list -->
@@ -527,7 +563,7 @@ function confirmDelete(c: Commande) {
                 <ShoppingCart class="h-10 w-10 opacity-30" />
                 <p class="text-sm">Aucune commande trouvée.</p>
                 <Link
-                    v-if="can('ventes.create')"
+                    v-if="can('ventes.create') && can_creer_commande"
                     href="/backoffice/ventes/create"
                 >
                     <Button variant="outline" size="sm">
@@ -535,6 +571,16 @@ function confirmDelete(c: Commande) {
                         Créer la première commande
                     </Button>
                 </Link>
+                <Button
+                    v-else-if="can('ventes.create')"
+                    variant="outline"
+                    size="sm"
+                    disabled
+                    v-tooltip.top="raison_blocage_commande"
+                >
+                    <Plus class="mr-2 h-4 w-4" />
+                    Créer la première commande
+                </Button>
             </div>
         </div>
 
@@ -550,15 +596,38 @@ function confirmDelete(c: Commande) {
                         Suivi et encaissement des commandes.
                     </p>
                 </div>
-                <Link
-                    v-if="can('ventes.create')"
-                    href="/backoffice/ventes/create"
-                >
-                    <Button>
-                        <Plus class="mr-2 h-4 w-4" />
-                        Nouvelle commande
-                    </Button>
-                </Link>
+                <ListPageActions>
+                    <template #filters>
+                        <DataFilters
+                            trigger-only
+                            url="/backoffice/ventes"
+                            :base-params="{ periode: 'all' }"
+                            :values="filterValues"
+                            :sites="sites"
+                            :result-count="commandesFiltrees.length"
+                            :fields="filterFields"
+                        />
+                    </template>
+                    <template #primary>
+                        <Link
+                            v-if="can('ventes.create') && can_creer_commande"
+                            href="/backoffice/ventes/create"
+                        >
+                            <Button>
+                                <Plus class="mr-2 h-4 w-4" />
+                                Nouvelle commande
+                            </Button>
+                        </Link>
+                        <Button
+                            v-else-if="can('ventes.create')"
+                            disabled
+                            v-tooltip.left="raison_blocage_commande"
+                        >
+                            <Plus class="mr-2 h-4 w-4" />
+                            Nouvelle commande
+                        </Button>
+                    </template>
+                </ListPageActions>
             </div>
 
             <!-- KPI cards -->
@@ -589,16 +658,6 @@ function confirmDelete(c: Commande) {
                     </p>
                 </div>
             </div>
-
-            <!-- Filtres -->
-            <DataFilters
-                url="/backoffice/ventes"
-                :base-params="{ periode: 'all' }"
-                :values="filterValues"
-                :sites="sites"
-                :result-count="commandesFiltrees.length"
-                :fields="filterFields"
-            />
 
             <!-- Tableau -->
             <div class="overflow-x-auto rounded-xl border bg-card">
@@ -870,7 +929,9 @@ function confirmDelete(c: Commande) {
                             <ShoppingCart class="h-12 w-12 opacity-30" />
                             <p class="text-sm">Aucune commande trouvée.</p>
                             <Link
-                                v-if="can('ventes.create')"
+                                v-if="
+                                    can('ventes.create') && can_creer_commande
+                                "
                                 href="/backoffice/ventes/create"
                             >
                                 <Button variant="outline" size="sm">
@@ -878,6 +939,16 @@ function confirmDelete(c: Commande) {
                                     Créer la première commande
                                 </Button>
                             </Link>
+                            <Button
+                                v-else-if="can('ventes.create')"
+                                variant="outline"
+                                size="sm"
+                                disabled
+                                v-tooltip.top="raison_blocage_commande"
+                            >
+                                <Plus class="mr-2 h-4 w-4" />
+                                Créer la première commande
+                            </Button>
                         </div>
                     </template>
                 </DataTable>

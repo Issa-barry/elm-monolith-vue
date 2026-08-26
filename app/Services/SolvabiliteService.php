@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Enums\StatutFactureVente;
 use App\Models\FactureVente;
 use App\Models\Parametre;
-use App\Models\TypeVehicule;
 use App\Models\Vehicule;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
@@ -22,10 +21,12 @@ use Illuminate\Validation\ValidationException;
  * - un `vehiculeId` renseigné → dette = somme des FactureVente.montant_restant rattachées à CE
  *   véhicule (colonne `factures_ventes.vehicule_id`, indépendante du propriétaire — deux
  *   véhicules d'un même propriétaire ont des dettes totalement indépendantes, cf. analyse du
- *   18/08/2026) ; seuil = TypeVehicule::seuil_derogation_impayes du type de CE véhicule si
- *   Vehicule::derogation_impayes_autorisee est actif ET que son type a un seuil configuré,
- *   sinon le seuil global (cf. seuilApplicableVehicule() — décision produit du 19/08/2026, en
- *   correction de la version du 18/08/2026 qui portait le montant directement sur le véhicule) ;
+ *   18/08/2026) ; seuil = Vehicule::seuil_derogation_impayes de CE véhicule si
+ *   Vehicule::derogation_impayes_autorisee est actif ET qu'un plafond y est configuré, sinon le
+ *   seuil global (cf. seuilApplicableVehicule() — décision produit du 22/08/2026, en correction
+ *   de la version du 19/08/2026 qui portait le plafond sur le TYPE de véhicule : deux véhicules
+ *   du même type peuvent avoir des performances de paiement différentes, donc des plafonds
+ *   différents — jamais un plafond partagé par tout un type) ;
  * - sinon, un `clientId` renseigné → dette = factures des commandes de ce client, seuil global
  *   uniquement (pas de dérogation client) ;
  * - ni l'un ni l'autre → aucune dette (rien à contrôler).
@@ -34,10 +35,33 @@ use Illuminate\Validation\ValidationException;
  * client n'est jamais consulté — Ventes/Create.vue doit refléter exactement cette priorité,
  * jamais bloquer indépendamment sur les deux.
  *
- * Factures prises en compte : statut IMPAYEE ou PARTIEL uniquement (CREEE/PAYEE/ANNULEE
- * n'entrent jamais dans le calcul). Le montant compté est `montant_restant`
- * (montant_net - montant_encaisse, cf. FactureVente) : une facture partiellement encaissée ne
- * compte que pour son reste à payer, jamais son montant brut.
+ * Factures prises en compte pour le calcul de la DETTE (seuil/dérogation) : statut IMPAYEE ou
+ * PARTIEL uniquement (CREEE/PAYEE/ANNULEE n'entrent jamais dans ce calcul). Le montant compté
+ * est `montant_restant` (montant_net - montant_encaisse, cf. FactureVente) : une facture
+ * partiellement encaissée ne compte que pour son reste à payer, jamais son montant brut.
+ *
+ * Le plafond (standard OU dérogatoire) ne compare JAMAIS que cette dette DÉJÀ existante — jamais
+ * le montant de la vente en cours de création. Un véhicule sans la moindre facture impayée peut
+ * donc toujours créer sa première vente, quel que soit son montant, dès lors qu'aucune facture
+ * existante n'est en souffrance : le plafond borne l'encours d'impayés toléré dans le temps, ce
+ * n'est pas un plafond sur la taille d'une transaction (décision produit du 22/08/2026, EN
+ * CORRECTION d'une tentative d'« exposition projetée » — dette existante + montant de la
+ * nouvelle vente — testée le même jour puis abandonnée après avoir été surprise en usage réel :
+ * elle bloquait à tort la toute première vente d'un véhicule parfaitement sain, sans la moindre
+ * dette, dès que son montant dépassait le plafond dérogatoire — cf. cas ABDOULAYE, 0 GNF de
+ * dette, plafond 500 000 GNF, vente de 10 800 000 GNF refusée à tort).
+ *
+ * Verrou absolu « première régularisation » (décision produit du 20/08/2026) — indépendant du
+ * calcul de dette ci-dessus et du paramètre « contrôle des impayés » : un véhicule possédant
+ * déjà une facture n'ayant reçu STRICTEMENT AUCUN encaissement (montant_encaisse <= 0 ET
+ * montant_restant > 0, jamais un test sur le libellé du statut — un statut CREEE compte autant
+ * qu'un statut IMPAYEE, cf. premiereFactureNonEncaisseeVehicule()) ne peut recevoir aucune
+ * nouvelle commande tant que cette facture n'a pas reçu au moins un encaissement, quel que soit
+ * le paramétrage du contrôle de seuil — AUCUN plafond dérogatoire, même très élevé, ne permet de
+ * le contourner. Dès qu'un encaissement — même partiel — existe sur TOUTES les factures non
+ * soldées du véhicule, ce verrou n'a plus prise et seul le contrôle de seuil habituel
+ * (ci-dessous) s'applique. Ne concerne que la cible 'vehicule' : un client seul (repli, sans
+ * véhicule) n'est jamais soumis à ce verrou, uniquement au contrôle de seuil.
  */
 class SolvabiliteService
 {
@@ -53,27 +77,35 @@ class SolvabiliteService
      *     last_invoice_date: ?string,
      *     controle_actif: bool,
      *     seuil_impayes: int,
+     *     seuil_origine: 'standard'|'derogation',
      *     montant_disponible: int,
      *     blocked: bool,
      *     depassement: int,
+     *     blocage_premiere_facture: bool,
+     *     facture_bloquante_reference: ?string,
+     *     facture_bloquante_commande_id: ?string,
      *     factures: array<int, array{commande_id: string, reference: ?string, date: ?string, montant: int, encaisse: int, restant: int, statut: string, statut_label: string}>,
      * }
      */
     public function evaluer(string $orgId, ?string $vehiculeId, ?string $clientId): array
     {
         $controleActif = Parametre::isVentesControleImpayesActif($orgId);
+        $factureBloquante = null;
 
         if ($vehiculeId) {
             $cible = 'vehicule';
-            $seuil = $this->seuilApplicableVehicule($orgId, $vehiculeId);
+            [$seuil, $seuilOrigine] = $this->resoudrePlafondVehicule($orgId, $vehiculeId);
             $factures = $this->facturesImpayeesVehicule($orgId, $vehiculeId);
+            $factureBloquante = $this->premiereFactureNonEncaisseeVehicule($orgId, $vehiculeId);
         } elseif ($clientId) {
             $cible = 'client';
             $seuil = Parametre::getVentesSeuilImpayesMax($orgId);
+            $seuilOrigine = 'standard';
             $factures = $this->facturesImpayeesClient($orgId, $clientId);
         } else {
             $cible = 'aucun';
             $seuil = Parametre::getVentesSeuilImpayesMax($orgId);
+            $seuilOrigine = 'standard';
             $factures = collect();
         }
 
@@ -82,9 +114,13 @@ class SolvabiliteService
         $hasImpayee = $factures->contains(fn (FactureVente $f) => $f->statut_facture === StatutFactureVente::IMPAYEE);
         $derniere = $factures->first();
 
-        // Strict : bloqué seulement si la dette DÉPASSE le seuil, jamais à l'égalité (cf. cas
-        // "seuil=0, dette=0 → autorisé" et "seuil=2000000, dette=2000000 → autorisé").
-        $blocked = $controleActif && $totalRemaining > $seuil;
+        // Strict : bloqué seulement si la dette DÉJÀ EXISTANTE dépasse le seuil, jamais à
+        // l'égalité (cf. cas "seuil=0, dette=0 → autorisé" et "seuil=2000000, dette=2000000 →
+        // autorisé") — et JAMAIS en y ajoutant le montant de la vente en cours de création,
+        // même pour un plafond dérogatoire (cf. docblock de classe, décision produit du
+        // 22/08/2026).
+        $blockedSeuil = $controleActif && $totalRemaining > $seuil;
+        $blockedPremiereFacture = $factureBloquante !== null;
 
         return [
             'cible' => $cible,
@@ -97,9 +133,13 @@ class SolvabiliteService
             'last_invoice_date' => $derniere?->created_at?->format('Y-m-d'),
             'controle_actif' => $controleActif,
             'seuil_impayes' => $seuil,
+            'seuil_origine' => $seuilOrigine,
             'montant_disponible' => max(0, $seuil - $totalRemaining),
-            'blocked' => $blocked,
-            'depassement' => $blocked ? $totalRemaining - $seuil : 0,
+            'blocked' => $blockedPremiereFacture || $blockedSeuil,
+            'depassement' => $blockedSeuil ? $totalRemaining - $seuil : 0,
+            'blocage_premiere_facture' => $blockedPremiereFacture,
+            'facture_bloquante_reference' => $factureBloquante?->reference,
+            'facture_bloquante_commande_id' => $factureBloquante?->commande_vente_id,
             'factures' => $factures->map(fn (FactureVente $f) => [
                 'commande_id' => $f->commande_vente_id,
                 'reference' => $f->reference,
@@ -119,11 +159,25 @@ class SolvabiliteService
      * checkSolvabilite() (aperçu) utilise evaluer() directement : il ne doit jamais lever, juste
      * refléter l'état pour l'utilisateur avant qu'il ne soumette.
      *
+     * Le verrou « première régularisation » est vérifié en priorité — message dédié, distinct de
+     * celui du seuil, pour ne jamais laisser croire à l'utilisateur qu'un simple encaissement
+     * partiel suffirait à lever un blocage qui exige en réalité un premier encaissement complet.
+     *
      * @return array (même forme que evaluer())
      */
     public function enforcerOuEchouer(string $orgId, ?string $vehiculeId, ?string $clientId): array
     {
         $resultat = $this->evaluer($orgId, $vehiculeId, $clientId);
+
+        if ($resultat['blocage_premiere_facture']) {
+            $reference = $resultat['facture_bloquante_reference'];
+
+            throw ValidationException::withMessages([
+                'impayes' => 'Ce véhicule possède déjà une commande'
+                    .($reference ? " ({$reference})" : '')
+                    .' dont la facture n\'a encore reçu aucun paiement. Enregistrez d\'abord un encaissement avant de créer une nouvelle commande.',
+            ]);
+        }
 
         if ($resultat['blocked']) {
             throw ValidationException::withMessages([
@@ -139,34 +193,58 @@ class SolvabiliteService
     }
 
     /**
-     * Seuil global sauf si Vehicule::derogation_impayes_autorisee est actif ET que le type de
-     * CE véhicule a un TypeVehicule::seuil_derogation_impayes configuré (cf. migrations
-     * 2026_08_19_000001/000002 — décision produit du 19/08/2026, en correction de la version du
-     * 18/08/2026 qui portait un montant directement sur le véhicule). Un véhicule dérogatoire
-     * dont le type n'a PAS de seuil configuré retombe sur le seuil global (filet de sécurité :
-     * jamais interprété comme illimité) — ce cas ne devrait normalement jamais survenir en
-     * pratique, VehiculeController empêchant d'activer la dérogation tant que le type n'a pas
-     * de seuil configuré, mais le seuil du type peut toujours être retiré après coup.
+     * Seuil global sauf si Vehicule::derogation_impayes_autorisee est actif ET qu'un
+     * Vehicule::seuil_derogation_impayes est configuré sur CE véhicule (décision produit du
+     * 22/08/2026, en correction de la version du 19/08/2026 qui portait le plafond sur le type
+     * de véhicule). Un véhicule dérogatoire sans plafond propre configuré retombe sur le seuil
+     * global (filet de sécurité : jamais interprété comme illimité) — ce cas ne devrait
+     * normalement jamais survenir en pratique, VehiculeController empêchant d'activer la
+     * dérogation sans plafond valide, mais reste possible si le plafond est retiré après coup.
      *
-     * Public : également appelée par VehiculeController pour afficher le seuil applicable sur
-     * la fiche véhicule, sans dupliquer cette règle côté frontend.
+     * @return array{0: int, 1: 'standard'|'derogation'}
      */
-    public function seuilApplicableVehicule(string $orgId, string $vehiculeId): int
+    private function resoudrePlafondVehicule(string $orgId, string $vehiculeId): array
     {
         $vehicule = Vehicule::where('organization_id', $orgId)
             ->whereKey($vehiculeId)
-            ->select('id', 'type_vehicule_id', 'derogation_impayes_autorisee')
+            ->select('id', 'derogation_impayes_autorisee', 'seuil_derogation_impayes')
             ->first();
 
-        if (! $vehicule || ! $vehicule->derogation_impayes_autorisee) {
-            return Parametre::getVentesSeuilImpayesMax($orgId);
+        if ($vehicule && $vehicule->derogation_impayes_autorisee && $vehicule->seuil_derogation_impayes !== null) {
+            return [(int) $vehicule->seuil_derogation_impayes, 'derogation'];
         }
 
-        $seuilType = TypeVehicule::where('organization_id', $orgId)
-            ->whereKey($vehicule->type_vehicule_id)
-            ->value('seuil_derogation_impayes');
+        return [Parametre::getVentesSeuilImpayesMax($orgId), 'standard'];
+    }
 
-        return $seuilType !== null ? (int) $seuilType : Parametre::getVentesSeuilImpayesMax($orgId);
+    /**
+     * Seuil applicable à ce véhicule, sans le détail de son origine — utilisé par
+     * VehiculeController pour afficher le seuil sur la fiche véhicule, sans dupliquer la règle
+     * de résolution côté frontend.
+     */
+    public function seuilApplicableVehicule(string $orgId, string $vehiculeId): int
+    {
+        return $this->resoudrePlafondVehicule($orgId, $vehiculeId)[0];
+    }
+
+    /**
+     * Première facture (par ordre de création) rattachée à ce véhicule n'ayant reçu STRICTEMENT
+     * AUCUN encaissement alors qu'elle porte encore un solde — cf. docblock de classe. Volontai-
+     * rement basé sur le calcul montant_encaisse/montant_restant plutôt que sur `statut_facture`
+     * (CREEE et IMPAYEE comptent tous les deux ici) : le blocage doit rester correct même si de
+     * nouveaux statuts intermédiaires apparaissent plus tard. Une facture ANNULEE n'engendre plus
+     * de créance réelle et n'est jamais bloquante (cf. CommandeVenteService::annuler(), qui
+     * annule désormais systématiquement la facture d'une commande annulée non encaissée).
+     */
+    public function premiereFactureNonEncaisseeVehicule(string $orgId, string $vehiculeId): ?FactureVente
+    {
+        return FactureVente::where('organization_id', $orgId)
+            ->where('vehicule_id', $vehiculeId)
+            ->where('statut_facture', '!=', StatutFactureVente::ANNULEE->value)
+            ->with('encaissements')
+            ->orderBy('created_at')
+            ->get()
+            ->first(fn (FactureVente $f) => (float) $f->montant_encaisse <= 0.0 && (float) $f->montant_restant > 0.0);
     }
 
     /** @return Collection<int, FactureVente> */

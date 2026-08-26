@@ -3,14 +3,24 @@
 namespace Tests\Feature;
 
 use App\Enums\CategorieVehicule;
+use App\Enums\CommissionActivationStatut;
+use App\Enums\CommissionMode;
+use App\Enums\CommissionScopeType;
+use App\Enums\CommissionStrategieAncrageSite;
+use App\Enums\CommissionUniteCalcul;
 use App\Enums\DeclencheurCommissionVente;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutCommission;
+use App\Models\Categorie;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
-use App\Models\CommissionPart;
-use App\Models\CommissionVente;
+use App\Models\CommissionCibleType;
+use App\Models\CommissionEnveloppe;
+use App\Models\CommissionEnveloppePart;
+use App\Models\CommissionProcessus;
+use App\Models\CommissionRegle;
 use App\Models\EquipeLivraison;
+use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\EquipeLivreur;
 use App\Models\Livreur;
 use App\Models\Organization;
@@ -20,9 +30,8 @@ use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
-use App\Services\CommissionGenerator;
+use App\Services\Commission\CommissionEnveloppeGenerator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -71,9 +80,66 @@ class CommissionTriggerVenteTest extends TestCase
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private function makeVehiculeAvecEquipe(?Organization $org = null, float $tauxProprietaire = 70, float $tauxChauffeur = 20, float $tauxConvoyeur = 10): Vehicule
+    /** @return array{processus: CommissionProcessus, categorie: Categorie} */
+    private function ensureBareme(Organization $org, float $montantEquipe = 300, float $montantProprietaire = 350): array
+    {
+        $processus = CommissionProcessus::firstOrCreate(
+            ['organization_id' => $org->id, 'code' => CommissionProcessus::CODE_VENTE],
+            [
+                'libelle' => 'Vente',
+                'declencheur' => 'chargement_valide',
+                'strategie_ancrage_site' => CommissionStrategieAncrageSite::OPERATION->value,
+                'statut' => CommissionActivationStatut::ACTIF->value,
+            ],
+        );
+
+        $categorie = Categorie::firstOrCreate(
+            ['organization_id' => $org->id, 'nom' => 'Défaut'],
+            ['statut' => 'actif'],
+        );
+
+        CommissionRegle::firstOrCreate(
+            [
+                'organization_id' => $org->id,
+                'processus_id' => $processus->id,
+                'cible_type' => CommissionCibleType::CODE_EQUIPE_LIVRAISON,
+                'scope_type' => CommissionScopeType::GLOBAL->value,
+            ],
+            [
+                'libelle' => 'Livraison — Global',
+                'mode' => CommissionMode::A_REPARTIR->value,
+                'unite_calcul' => CommissionUniteCalcul::PAR_UNITE_VENDUE->value,
+                'montant' => $montantEquipe,
+                'effective_from' => now()->subDay()->toDateString(),
+                'statut' => 'active',
+            ],
+        );
+        CommissionRegle::firstOrCreate(
+            [
+                'organization_id' => $org->id,
+                'processus_id' => $processus->id,
+                'cible_type' => CommissionCibleType::CODE_PROPRIETAIRE,
+                'scope_type' => CommissionScopeType::GLOBAL->value,
+            ],
+            [
+                'libelle' => 'Propriétaire — Global',
+                'mode' => CommissionMode::DIRECT->value,
+                'unite_calcul' => CommissionUniteCalcul::PAR_UNITE_VENDUE->value,
+                'montant' => $montantProprietaire,
+                'effective_from' => now()->subDay()->toDateString(),
+                'statut' => 'active',
+            ],
+        );
+
+        return ['processus' => $processus, 'categorie' => $categorie];
+    }
+
+    /** $montantChauffeur/$montantConvoyeur : montants GNF fixes, doivent sommer au barème équipe (300 par défaut, cf. ensureBareme()). */
+    private function makeVehiculeAvecEquipe(?Organization $org = null, int $montantChauffeur = 200, int $montantConvoyeur = 100): Vehicule
     {
         $org ??= $this->org;
+        ['categorie' => $categorie] = $this->ensureBareme($org);
+
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id]);
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $org->id,
@@ -89,22 +155,26 @@ class CommissionTriggerVenteTest extends TestCase
             'vehicule_id' => $vehicule->id,
             'nom' => 'Équipe Test',
             'is_active' => true,
-            'taux_commission_proprietaire' => $tauxProprietaire,
         ]);
-        EquipeLivreur::create([
-            'equipe_id' => $equipe->id,
-            'livreur_id' => $chauffeur->id,
-            'taux_commission' => $tauxChauffeur,
-            'role' => 'chauffeur',
-            'ordre' => 0,
-        ]);
-        EquipeLivreur::create([
-            'equipe_id' => $equipe->id,
-            'livreur_id' => $convoyeur->id,
-            'taux_commission' => $tauxConvoyeur,
-            'role' => 'convoyeur',
-            'ordre' => 1,
-        ]);
+        EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $chauffeur->id, 'role' => 'chauffeur', 'ordre' => 0]);
+        EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $convoyeur->id, 'role' => 'convoyeur', 'ordre' => 1]);
+
+        if ($montantChauffeur > 0) {
+            EquipeLivraisonPartageCategorie::create([
+                'equipe_id' => $equipe->id, 'categorie_id' => $categorie->id,
+                'livreur_id' => $chauffeur->id, 'part_pourcentage' => 0,
+                'montant_unitaire' => $montantChauffeur,
+                'effective_from' => now()->subDay(),
+            ]);
+        }
+        if ($montantConvoyeur > 0) {
+            EquipeLivraisonPartageCategorie::create([
+                'equipe_id' => $equipe->id, 'categorie_id' => $categorie->id,
+                'livreur_id' => $convoyeur->id, 'part_pourcentage' => 0,
+                'montant_unitaire' => $montantConvoyeur,
+                'effective_from' => now()->subDay(),
+            ]);
+        }
 
         return $vehicule->fresh();
     }
@@ -112,12 +182,15 @@ class CommissionTriggerVenteTest extends TestCase
     /**
      * Véhicule "interne", propriété du propriétaire interne configuré sur l'organisation (cf.
      * Organization::proprietaireInterne()) — le fait qu'un véhicule soit interne ne doit jamais
-     * neutraliser sa commission propriétaire : elle suit le même moteur (CommissionCalculator)
-     * qu'un véhicule "partenaire", pour le même propriétaire économique de l'entreprise.
+     * neutraliser sa commission propriétaire : elle suit le même moteur
+     * (CommissionEnveloppeGenerator) qu'un véhicule "partenaire", pour le même propriétaire
+     * économique de l'entreprise.
      */
-    private function makeVehiculeInterneAvecEquipe(?Organization $org = null, float $tauxProprietaire = 70, float $tauxChauffeur = 30): Vehicule
+    private function makeVehiculeInterneAvecEquipe(?Organization $org = null): Vehicule
     {
         $org ??= $this->org;
+        ['categorie' => $categorie] = $this->ensureBareme($org);
+
         $proprietaireInterne = Proprietaire::factory()->create(['organization_id' => $org->id]);
         $org->forceFill(['proprietaire_interne_id' => $proprietaireInterne->id])->save();
 
@@ -135,14 +208,13 @@ class CommissionTriggerVenteTest extends TestCase
             'vehicule_id' => $vehicule->id,
             'nom' => 'Équipe Interne Test',
             'is_active' => true,
-            'taux_commission_proprietaire' => $tauxProprietaire,
         ]);
-        EquipeLivreur::create([
-            'equipe_id' => $equipe->id,
-            'livreur_id' => $chauffeur->id,
-            'taux_commission' => $tauxChauffeur,
-            'role' => 'chauffeur',
-            'ordre' => 0,
+        EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $chauffeur->id, 'role' => 'chauffeur', 'ordre' => 0]);
+        EquipeLivraisonPartageCategorie::create([
+            'equipe_id' => $equipe->id, 'categorie_id' => $categorie->id,
+            'livreur_id' => $chauffeur->id, 'part_pourcentage' => 0,
+            'montant_unitaire' => 300,
+            'effective_from' => now()->subDay(),
         ]);
 
         return $vehicule->fresh();
@@ -150,9 +222,12 @@ class CommissionTriggerVenteTest extends TestCase
 
     private function makeProduit(?Organization $org = null): Produit
     {
+        $org ??= $this->org;
+        ['categorie' => $categorie] = $this->ensureBareme($org);
+
         return $this->makeProduitAvecVariante(
-            $org ?? $this->org,
-            ['nom' => 'Produit Test'],
+            $org,
+            ['nom' => 'Produit Test', 'categorie_id' => $categorie->id],
             ['prix_vente' => 2000, 'prix_usine' => 1500],
         );
     }
@@ -175,6 +250,8 @@ class CommissionTriggerVenteTest extends TestCase
             'prix_vente_snapshot' => 2000.0,
             'total_ligne' => 4000.0,
         ]);
+
+        $this->seedVarianteStockSuffisant($produit->variantePrincipale()->first(), $site ?? $this->defaultSite);
 
         return compact('commande', 'ligne');
     }
@@ -226,7 +303,7 @@ class CommissionTriggerVenteTest extends TestCase
 
         $this->amenerAChargementEnCours($commande);
 
-        $this->assertDatabaseMissing('commissions_ventes', ['commande_vente_id' => $commande->id]);
+        $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commande->id]);
     }
 
     public function test_validation_du_chargement_cree_la_commission_en_statut_creee(): void
@@ -237,11 +314,11 @@ class CommissionTriggerVenteTest extends TestCase
 
         $commande = $this->validerChargementComplet($commande, $ligne);
 
-        $commission = CommissionVente::where('commande_vente_id', $commande->id)->first();
-        $this->assertNotNull($commission);
+        $enveloppes = CommissionEnveloppe::where('source_id', $commande->id)->get();
+        $this->assertNotEmpty($enveloppes);
         // CREEE, pas IMPAYE : ne devient payable qu'à la validation de la période
         // de paiement (cf. CommissionAdjustmentService::activerCommissionsCreees()).
-        $this->assertEquals(StatutCommission::CREEE, $commission->statut);
+        $this->assertTrue($enveloppes->every(fn (CommissionEnveloppe $e) => $e->statut === StatutCommission::CREEE));
     }
 
     public function test_commission_calculee_sur_la_quantite_reellement_chargee_pas_la_demandee(): void
@@ -253,10 +330,10 @@ class CommissionTriggerVenteTest extends TestCase
         // 2 packs demandés, seulement 1 chargé.
         $commande = $this->validerChargementComplet($commande, $ligne, quantiteChargee: 1);
 
-        $commission = CommissionVente::where('commande_vente_id', $commande->id)->first();
-        $this->assertNotNull($commission);
-        // Marge sur 1 pack = (2000 - 1500) × 1 = 500, jamais 1000 (base 2 packs demandés).
-        $this->assertEquals(500.0, (float) $commission->montant_commission_totale);
+        $total = (float) CommissionEnveloppe::where('source_id', $commande->id)->sum('montant_total');
+        $this->assertGreaterThan(0, $total);
+        // Barème (300 équipe + 350 propriétaire) × 1 pack = 650, jamais × 2 (base demandée).
+        $this->assertEquals(650.0, $total);
     }
 
     public function test_double_validation_ne_duplique_pas_la_commission(): void
@@ -266,12 +343,13 @@ class CommissionTriggerVenteTest extends TestCase
         ['commande' => $commande, 'ligne' => $ligne] = $this->creerCommandeAvecLigne($vehicule, $produit);
 
         $commande = $this->validerChargementComplet($commande, $ligne);
+        $count = CommissionEnveloppe::where('source_id', $commande->id)->count();
 
         // Rejoue la génération directement (ex: retry technique) : idempotente,
-        // protégée par la contrainte unique commande_vente_id.
-        CommissionGenerator::generateForCommandeIfMissing($commande->fresh());
+        // protégée par l'existence déjà vérifiée dans executerAvecTentative().
+        CommissionEnveloppeGenerator::genererPourCommandeVente($commande->fresh());
 
-        $this->assertEquals(1, CommissionVente::where('commande_vente_id', $commande->id)->count());
+        $this->assertEquals($count, CommissionEnveloppe::where('source_id', $commande->id)->count());
     }
 
     // ── Véhicule interne : commission propriétaire non neutralisée ──────────
@@ -284,21 +362,24 @@ class CommissionTriggerVenteTest extends TestCase
      */
     public function test_vehicule_interne_genere_une_commission_pour_le_proprietaire_interne(): void
     {
-        $vehicule = $this->makeVehiculeInterneAvecEquipe(tauxProprietaire: 70, tauxChauffeur: 30);
+        $vehicule = $this->makeVehiculeInterneAvecEquipe();
         $produit = $this->makeProduit();
         ['commande' => $commande, 'ligne' => $ligne] = $this->creerCommandeAvecLigne($vehicule, $produit);
 
         $commande = $this->validerChargementComplet($commande, $ligne);
 
-        $commission = CommissionVente::where('commande_vente_id', $commande->id)->firstOrFail();
-        $partProprietaire = CommissionPart::where('commission_vente_id', $commission->id)
-            ->where('type_beneficiaire', 'proprietaire')
+        $enveloppeProprietaire = CommissionEnveloppe::where('source_id', $commande->id)
+            ->where('cible_type', CommissionCibleType::CODE_PROPRIETAIRE)
+            ->firstOrFail();
+        $partProprietaire = CommissionEnveloppePart::where('enveloppe_id', $enveloppeProprietaire->id)
+            ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PROPRIETAIRE)
             ->first();
 
         $this->assertNotNull($partProprietaire);
-        $this->assertSame($vehicule->proprietaire_id, $partProprietaire->proprietaire_id);
-        $this->assertSame($this->org->proprietaire_interne_id, $partProprietaire->proprietaire_id);
-        // Marge totale = (2000 - 1500) × 2 packs = 1000 ; part propriétaire à 70 % = 700.
+        $this->assertSame($vehicule->proprietaire_id, $partProprietaire->beneficiaire_id);
+        $this->assertSame($this->org->proprietaire_interne_id, $partProprietaire->beneficiaire_id);
+        // Barème propriétaire (350/pack) × 2 packs = 700, un véhicule interne n'est
+        // jamais neutralisé par rapport à un véhicule partenaire.
         $this->assertEqualsWithDelta(700.0, (float) $partProprietaire->montant_brut, 0.01);
     }
 
@@ -315,11 +396,12 @@ class CommissionTriggerVenteTest extends TestCase
         $commande = $this->validerChargementComplet($commande, $ligne);
 
         $this->assertEquals(StatutCommandeVente::LIVRAISON_EN_COURS, $commande->statut);
-        $this->assertDatabaseMissing('commissions_ventes', ['commande_vente_id' => $commande->id]);
+        $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commande->id]);
     }
 
     public function test_vehicule_sans_equipe_ne_genere_aucune_commission_et_ne_bloque_pas(): void
     {
+        $this->ensureBareme($this->org);
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
@@ -332,33 +414,57 @@ class CommissionTriggerVenteTest extends TestCase
         $commande = $this->validerChargementComplet($commande, $ligne);
 
         $this->assertEquals(StatutCommandeVente::LIVRAISON_EN_COURS, $commande->statut);
-        $this->assertDatabaseMissing('commissions_ventes', ['commande_vente_id' => $commande->id]);
+        // Tout-ou-rien sur l'ensemble des cibles de la commande (cf.
+        // CommissionEnveloppeGenerator::genererParReglesDansTransaction()) : la cible
+        // équipe_livraison échoue faute d'équipe, donc même la cible propriétaire
+        // (pourtant valide) n'est pas créée.
+        $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commande->id]);
     }
 
-    // ── Blocage si répartition d'équipe invalide ────────────────────────────
+    // ── Répartition d'équipe invalide : jamais bloquant pour l'opération commerciale ──
 
-    public function test_validation_bloquee_si_repartition_equipe_ne_totalise_pas_100_pourcent(): void
+    /**
+     * Contrairement à l'ancien moteur (qui bloquait la validation du chargement via une
+     * exception si taux_commission_proprietaire + taux_commission ne totalisaient pas 100 %),
+     * une répartition manquante ou invalide ne bloque JAMAIS l'opération commerciale : la
+     * validation du chargement réussit toujours, seule la génération de la commission pour
+     * la cible équipe_livraison échoue silencieusement (tracée dans
+     * commission_generation_attempts) — cf. décision AMOA, CommissionEnveloppeGenerator.
+     */
+    public function test_partage_categorie_manquant_ne_bloque_pas_la_validation_du_chargement(): void
     {
-        // 70 (proprio) + 20 (chauffeur) + 5 (convoyeur) = 95 % ≠ 100 %.
-        $vehicule = $this->makeVehiculeAvecEquipe(tauxProprietaire: 70, tauxChauffeur: 20, tauxConvoyeur: 5);
+        ['categorie' => $categorie] = $this->ensureBareme($this->org);
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'proprietaire_id' => Proprietaire::factory()->create(['organization_id' => $this->org->id])->id,
+            'capacite_packs' => 10,
+        ]);
+        $equipe = EquipeLivraison::create([
+            'organization_id' => $this->org->id,
+            'vehicule_id' => $vehicule->id,
+            'nom' => 'Équipe Sans Partage',
+            'is_active' => true,
+        ]);
+        EquipeLivreur::create([
+            'equipe_id' => $equipe->id,
+            'livreur_id' => Livreur::factory()->create(['organization_id' => $this->org->id])->id,
+            'role' => 'chauffeur',
+            'ordre' => 0,
+        ]);
+        // Aucun EquipeLivraisonPartageCategorie créé pour cette équipe/catégorie.
+
         $produit = $this->makeProduit();
-        ['commande' => $commande, 'ligne' => $ligne] = $this->creerCommandeAvecLigne($vehicule, $produit);
+        ['commande' => $commande, 'ligne' => $ligne] = $this->creerCommandeAvecLigne($vehicule->fresh(), $produit);
 
-        $this->amenerAChargementEnCours($commande);
+        $commande = $this->validerChargementComplet($commande, $ligne);
 
-        $this->expectException(HttpException::class);
-
-        try {
-            CommandeVenteService::validerChargement($commande, [[
-                'id' => $ligne->id,
-                'quantite_chargee' => $ligne->quantite_demandee,
-                'type_ecart' => 'conforme',
-            ]]);
-        } finally {
-            // Le chargement ne doit pas être validé : rollback complet de la transaction.
-            $this->assertEquals(StatutCommandeVente::CHARGEMENT_EN_COURS, $commande->fresh()->statut);
-            $this->assertDatabaseMissing('commissions_ventes', ['commande_vente_id' => $commande->id]);
-        }
+        $this->assertEquals(StatutCommandeVente::LIVRAISON_EN_COURS, $commande->statut);
+        // Tout-ou-rien : la cible propriétaire (valide) n'est pas non plus créée.
+        $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commande->id]);
+        $this->assertDatabaseHas('commission_generation_attempts', [
+            'source_id' => $commande->id,
+            'statut' => 'erreur',
+        ]);
     }
 
     // ── Déclencheur FACTURE_ENCAISSEE ────────────────────────────────────────
@@ -373,7 +479,7 @@ class CommissionTriggerVenteTest extends TestCase
 
         $this->validerChargementComplet($commande, $ligne);
 
-        $this->assertDatabaseMissing('commissions_ventes', ['commande_vente_id' => $commande->id]);
+        $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commande->id]);
     }
 
     public function test_facture_encaissee_encaissement_genere_une_commission_en_statut_creee(): void
@@ -385,15 +491,15 @@ class CommissionTriggerVenteTest extends TestCase
         ['commande' => $commande, 'ligne' => $ligne] = $this->creerCommandeAvecLigne($vehicule, $produit);
 
         $commande = $this->validerChargementComplet($commande, $ligne);
-        $this->assertDatabaseMissing('commissions_ventes', ['commande_vente_id' => $commande->id]);
+        $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commande->id]);
 
         $this->encaisserIntegralement($commande);
 
-        $commission = CommissionVente::where('commande_vente_id', $commande->id)->first();
-        $this->assertNotNull($commission);
+        $enveloppes = CommissionEnveloppe::where('source_id', $commande->id)->get();
+        $this->assertNotEmpty($enveloppes);
         // CREEE même à l'encaissement : jamais IMPAYE direct, quel que soit le
         // déclencheur — seule la validation de période sort de CREEE.
-        $this->assertEquals(StatutCommission::CREEE, $commission->statut);
+        $this->assertTrue($enveloppes->every(fn (CommissionEnveloppe $e) => $e->statut === StatutCommission::CREEE));
     }
 
     public function test_facture_encaissee_encaissement_partiel_ne_genere_pas_de_commission(): void
@@ -414,10 +520,10 @@ class CommissionTriggerVenteTest extends TestCase
             ])
             ->assertRedirect();
 
-        $this->assertDatabaseMissing('commissions_ventes', ['commande_vente_id' => $commande->id]);
+        $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commande->id]);
     }
 
-    /** Double POST d'encaissement (retry) → une seule commission malgré 2 transitions vers PAYEE observées. */
+    /** Double POST d'encaissement (retry) → pas de doublon malgré 2 transitions vers PAYEE observées. */
     public function test_facture_encaissee_idempotence_sur_retry(): void
     {
         Parametre::setDeclencheurCommissionVente($this->org->id, DeclencheurCommissionVente::FACTURE_ENCAISSEE);
@@ -429,11 +535,12 @@ class CommissionTriggerVenteTest extends TestCase
         $commande = $this->validerChargementComplet($commande, $ligne);
 
         $this->encaisserIntegralement($commande);
+        $count = CommissionEnveloppe::where('source_id', $commande->id)->count();
         // Rejoue le recalcul de statut (ex: event modèle rejoué / job relancé) alors
         // que la facture est déjà PAYEE : ne doit pas re-générer.
         $commande->fresh('facture')->facture->recalculStatut();
 
-        $this->assertEquals(1, CommissionVente::where('commande_vente_id', $commande->id)->count());
+        $this->assertEquals($count, CommissionEnveloppe::where('source_id', $commande->id)->count());
     }
 
     // ── Multi-tenant ─────────────────────────────────────────────────────────
@@ -451,7 +558,7 @@ class CommissionTriggerVenteTest extends TestCase
         ['commande' => $commandeA, 'ligne' => $ligneA] = $this->creerCommandeAvecLigne($vehiculeA, $produitA);
         $this->validerChargementComplet($commandeA, $ligneA);
 
-        $this->assertDatabaseMissing('commissions_ventes', ['commande_vente_id' => $commandeA->id]);
+        $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commandeA->id]);
         $this->assertEquals(
             DeclencheurCommissionVente::CHARGEMENT_VALIDE,
             Parametre::getDeclencheurCommissionVente($orgB->id),

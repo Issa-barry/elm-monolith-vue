@@ -39,5 +39,8 @@ useScanInterceptor();
         </AppContent>
     </AppShell>
     <ConfirmDialog />
-    <Toast position="bottom-right" />
+    <Toast position="top-right" />
+    <!-- Groupe dédié aux parcours fonctions RH / profils d'accès / sites (validation de
+         compte, transfert de site...). Tous les toasts restent en haut à droite. -->
+    <Toast group="top" position="top-right" />
 </template>

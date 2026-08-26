@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Enums\AuditEvent;
 use App\Enums\CategorieTarifaireVehicule;
 use App\Enums\ClientType;
+use App\Enums\CommissionGenerationDeclenchePar;
+use App\Enums\CommissionGenerationStatut;
 use App\Enums\ModeTarification;
 use App\Enums\MotifAnnulation;
 use App\Enums\ProduitStatut;
@@ -14,14 +16,18 @@ use App\Jobs\NotifierLivreursCommandeVenteJob;
 use App\Models\AuditLog;
 use App\Models\Client;
 use App\Models\CommandeVente;
+use App\Models\CommissionGenerationAttempt;
+use App\Models\CommissionProcessus;
 use App\Models\Parametre;
 use App\Models\Produit;
 use App\Models\ProduitVariante;
 use App\Models\Site;
+use App\Models\VarianteStock;
 use App\Models\Vehicule;
 use App\Services\AuditLogService;
 use App\Services\CommandeVenteActiviteService;
 use App\Services\CommandeVenteService;
+use App\Services\Commission\CommissionEnveloppeGenerator;
 use App\Services\PrixUsineResolver;
 use App\Services\SolvabiliteService;
 use App\Services\VehiculeCapaciteService;
@@ -31,6 +37,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -43,6 +50,15 @@ class CommandeVenteController extends Controller
     private const LIGNES_REQUIRED_MESSAGE = 'Au moins une ligne de commande est requise.';
 
     private const UNIT_PRICE_UPDATE_PERMISSION = 'ventes.prix.update';
+
+    // Message court, affiché près du bouton « Nouvelle commande » / au survol quand il est
+    // désactivé (cf. Ventes/Index.vue, prop raison_blocage_commande).
+    private const MESSAGE_BLOCAGE_TOOLTIP = 'Aucun stock disponible pour ce site.';
+
+    // Message affiché en toast (top-right) quand un accès direct à la création est bloqué —
+    // jamais une page 403 : redirection vers la liste des ventes + flash 'error' (cf. create()/
+    // store() et Ventes/Index.vue, qui l'affiche via useToast() au montage).
+    private const MESSAGE_BLOCAGE_TOAST = 'Impossible de créer une commande : aucun stock disponible pour ce site.';
 
     public function __construct(
         private readonly AuditLogService $auditService,
@@ -253,6 +269,21 @@ class CommandeVenteController extends Controller
                 ->map(fn ($s) => ['id' => $s->id, 'nom' => $s->nom])->values()
             : [];
 
+        // Bouton « Nouvelle commande » : bloqué uniquement quand la politique globale interdit
+        // la vente sans stock ET que le site personnel de l'utilisateur (celui qui sera
+        // effectivement utilisé par create()/store(), cf. getUserSiteModel()) n'a absolument
+        // rien à vendre. Un utilisateur sans aucun site attaché (cas déjà géré par
+        // getUserSiteModel(), qui abort() dès l'accès à create()) n'est jamais bloqué ICI —
+        // cette page reste consultable, le vrai gate se déclenche à create()/store().
+        $canCreerCommande = true;
+        $raisonBlocageCommande = null;
+        if ($userSiteId = $this->getUserSiteIdOrNull()) {
+            $canCreerCommande = CommandeVenteService::siteAutoriseNouvelleCommande($orgId, $userSiteId);
+            if (! $canCreerCommande) {
+                $raisonBlocageCommande = self::MESSAGE_BLOCAGE_TOOLTIP;
+            }
+        }
+
         return Inertia::render('Ventes/Index', [
             'commandes' => $mapped->values(),
             'totaux' => $totaux,
@@ -261,6 +292,8 @@ class CommandeVenteController extends Controller
             'statuts' => StatutCommandeVente::options(),
             'sites' => $sites,
             'is_admin' => $user->isAdmin(),
+            'can_creer_commande' => $canCreerCommande,
+            'raison_blocage_commande' => $raisonBlocageCommande,
             'filters' => [
                 'site_ids' => $siteIds,
                 'date_debut' => $dateDebut,
@@ -278,14 +311,18 @@ class CommandeVenteController extends Controller
 
     // ── Create ────────────────────────────────────────────────────────────────
 
-    public function create(): Response
+    public function create(): Response|RedirectResponse
     {
         $this->authorize('create', CommandeVente::class);
 
         $orgId = auth()->user()->organization_id;
+        $userSite = $this->getUserSiteModel();
+        if ($redirect = $this->redirectSiCreationBloquee($orgId, $userSite->id)) {
+            return $redirect;
+        }
 
         return Inertia::render('Ventes/Create', [
-            'produits' => $this->produitsActifs($orgId),
+            'produits' => $this->produitsActifs($orgId, $userSite->id),
             'vehicules' => $this->vehiculesActifs($orgId),
             'clients' => $this->clientsActifs($orgId),
             'user_site' => $this->getUserSite(),
@@ -304,48 +341,75 @@ class CommandeVenteController extends Controller
         abort_if(! $orgId, 403, "Votre compte n'est associé à aucune organisation.");
 
         $userSite = $this->getUserSiteModel();
+        // Défense en profondeur : le bouton « Nouvelle commande » est déjà désactivé côté
+        // Ventes/Index et create() refuse déjà l'accès direct à la page — ce contrôle empêche
+        // en plus un POST direct (contournement de l'UI) de créer une commande sur un site sans
+        // aucun stock vendable, quand la politique globale l'interdit. Même traitement que
+        // create() : jamais un 403, une redirection + toast (cf. redirectSiCreationBloquee()).
+        if ($redirect = $this->redirectSiCreationBloquee($orgId, $userSite->id)) {
+            return $redirect;
+        }
 
         $data = $request->validate($this->commandeValidationRules(), $this->commandeValidationMessages());
 
         $this->ensureVehiculeOrClientSelected($data);
-        $this->enforceImpayesBlocking($data, $orgId);
         $this->ensureQuantiteMatchesVehiculeCapacity($data);
         $this->enforcePrixVentePolicy($data, null);
 
-        $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null);
-        [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $context->modeTarification, $context->categorieTarifaireVehicule);
+        $commande = DB::transaction(function () use ($data, $orgId, $userSite) {
+            // Verrou de ligne sur le véhicule le temps de la transaction : sans cela, deux
+            // requêtes concurrentes pour le même véhicule (double clic, deux utilisateurs)
+            // passeraient toutes les deux enforceImpayesBlocking() avant qu'aucune des deux
+            // commandes ne soit créée, puis créeraient chacune une commande — exactement le
+            // doublon que ce contrôle doit empêcher (cf. section « concurrence » de la règle
+            // métier). Le verrou est acquis AVANT le contrôle pour que la seconde requête,
+            // bloquée par MySQL/Postgres jusqu'au commit de la première, revoie bien la facture
+            // fraîchement créée par celle-ci une fois débloquée.
+            if (! empty($data['vehicule_id'])) {
+                Vehicule::whereKey($data['vehicule_id'])->lockForUpdate()->first();
+            }
 
-        $commande = CommandeVente::create([
-            'organization_id' => $orgId,
-            'site_id' => $userSite->id,
-            'vehicule_id' => $data['vehicule_id'] ?? null,
-            'client_id' => $data['client_id'] ?? null,
-            'client_vehicule_id' => $data['client_vehicule_id'] ?? null,
-            'total_commande' => $totalCommande,
-            'mode_tarification_snapshot' => $context->modeTarification->value,
-            'commission_eligible_snapshot' => $context->commissionEligible,
-            'created_by' => auth()->id(),
-        ]);
+            $this->enforceImpayesBlocking($data, $orgId);
 
-        foreach ($lignesData as $ligneDatum) {
-            $commande->lignes()->create($ligneDatum);
-        }
+            $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null);
+            [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $context->modeTarification, $context->categorieTarifaireVehicule);
 
-        $commande->load(['lignes.variante.produit', 'vehicule', 'client']);
-        $this->auditService->record($commande, AuditEvent::CREATED, auth()->user(), null, $this->commandeSnapshot($commande));
+            $this->assertStockDisponiblePourLignes($orgId, $userSite->id, $lignesData);
 
-        if ($commande->vehicule_id && $commande->lignes->isNotEmpty()) {
-            CommandeVenteService::confirmer($commande);
-            CommandeVenteActiviteService::log($commande, 'creation_confirmee');
+            $commande = CommandeVente::create([
+                'organization_id' => $orgId,
+                'site_id' => $userSite->id,
+                'vehicule_id' => $data['vehicule_id'] ?? null,
+                'client_id' => $data['client_id'] ?? null,
+                'client_vehicule_id' => $data['client_vehicule_id'] ?? null,
+                'total_commande' => $totalCommande,
+                'mode_tarification_snapshot' => $context->modeTarification->value,
+                'commission_eligible_snapshot' => $context->commissionEligible,
+                'created_by' => auth()->id(),
+            ]);
 
-            return redirect()->route('ventes.show', $commande)->with('success', 'Commande créée et confirmée. En attente de chargement.');
-        }
+            foreach ($lignesData as $ligneDatum) {
+                $commande->lignes()->create($ligneDatum);
+            }
 
-        // Vente directe client — passe en FACTURATION + crée la facture
-        CommandeVenteService::creerFactureDirecte($commande);
-        CommandeVenteActiviteService::log($commande, 'creation_directe');
+            $commande->load(['lignes.variante.produit', 'vehicule', 'client']);
+            $this->auditService->record($commande, AuditEvent::CREATED, auth()->user(), null, $this->commandeSnapshot($commande));
 
-        return redirect()->route('ventes.show', $commande)->with('success', 'Commande créée. Facture générée — en attente d\'encaissement.');
+            if ($commande->vehicule_id && $commande->lignes->isNotEmpty()) {
+                CommandeVenteService::confirmer($commande);
+                CommandeVenteActiviteService::log($commande, 'creation_confirmee');
+            } else {
+                // Vente directe client — passe en FACTURATION + crée la facture
+                CommandeVenteService::creerFactureDirecte($commande);
+                CommandeVenteActiviteService::log($commande, 'creation_directe');
+            }
+
+            return $commande;
+        });
+
+        return $commande->isFacturation()
+            ? redirect()->route('ventes.show', $commande)->with('success', 'Commande créée. Facture générée — en attente d\'encaissement.')
+            : redirect()->route('ventes.show', $commande)->with('success', 'Commande créée et confirmée. En attente de chargement.');
     }
 
     // ── Show ──────────────────────────────────────────────────────────────────
@@ -509,6 +573,7 @@ class CommandeVenteController extends Controller
                 ])->values(),
             ] : null,
             'commission_statut' => $this->getCommissionStatutGlobal($commande),
+            'commission_generation_statut' => $this->getCommissionGenerationStatut($commande),
         ]);
     }
 
@@ -565,6 +630,11 @@ class CommandeVenteController extends Controller
 
         $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null);
         [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $context->modeTarification, $context->categorieTarifaireVehicule);
+
+        // Le site ne change jamais lors d'une modification de brouillon (pas de champ site_id
+        // dans commandeValidationRules()) : on contrôle donc contre le site déjà porté par la
+        // commande, jamais celui de l'utilisateur qui modifie (qui pourrait être différent).
+        $this->assertStockDisponiblePourLignes($vente->organization_id, $vente->site_id, $lignesData);
 
         $vente->update([
             'vehicule_id' => $data['vehicule_id'] ?? null,
@@ -720,6 +790,75 @@ class CommandeVenteController extends Controller
         }
 
         return ['value' => 'impaye', 'label' => 'Impayée'];
+    }
+
+    /**
+     * Statut de la DERNIÈRE tentative de génération de commission (distinct de
+     * commission_statut, qui ne reflète que le paiement de commissions déjà
+     * générées avec succès) — retourne null tant que rien n'est en anomalie :
+     * pas éligible, aucune tentative encore, ou dernière tentative réussie.
+     * Ne remonte que le cas ERREUR ("à régulariser"), seul cas nécessitant une
+     * alerte visible (cf. incident CMD-230826-004, où cet état n'était visible
+     * nulle part dans l'UI faute d'être exposé ici).
+     */
+    private function getCommissionGenerationStatut(CommandeVente $commande): ?array
+    {
+        if (! $commande->commission_eligible_snapshot) {
+            return null;
+        }
+
+        $processusId = CommissionProcessus::where('organization_id', $commande->organization_id)
+            ->where('code', CommissionProcessus::CODE_VENTE)
+            ->value('id');
+
+        if (! $processusId) {
+            return null;
+        }
+
+        $derniere = CommissionGenerationAttempt::where('source_type', CommandeVente::class)
+            ->where('source_id', $commande->id)
+            ->where('processus_id', $processusId)
+            ->latest('created_at')
+            ->first();
+
+        if (! $derniere || $derniere->statut !== CommissionGenerationStatut::ERREUR) {
+            return null;
+        }
+
+        return [
+            'value' => 'erreur',
+            'label' => $derniere->statut->label(),
+            'motif' => $derniere->motif_erreur,
+        ];
+    }
+
+    /**
+     * Relance manuelle après un échec de génération de commission ("à
+     * régulariser") — rejoue le mécanisme officiel (CommissionEnveloppeGenerator),
+     * jamais un recalcul ad hoc. Idempotent par construction : si une enveloppe
+     * existe déjà (généré entre-temps), l'appel est un no-op silencieux.
+     */
+    public function relancerCommissions(CommandeVente $commande_vente): RedirectResponse
+    {
+        $this->authorize('update', $commande_vente);
+
+        CommissionEnveloppeGenerator::genererPourCommandeVente(
+            $commande_vente,
+            CommissionGenerationDeclenchePar::UTILISATEUR,
+            auth()->id(),
+        );
+
+        $statut = $this->getCommissionGenerationStatut($commande_vente);
+
+        $commande_vente->cloturerSiComplete();
+
+        if ($statut !== null && $statut['value'] === 'erreur') {
+            return redirect()->route('ventes.show', $commande_vente)->withErrors([
+                'commissions' => "La génération a de nouveau échoué : {$statut['motif']}",
+            ]);
+        }
+
+        return redirect()->route('ventes.show', $commande_vente)->with('success', 'Commissions générées avec succès.');
     }
 
     private function mapCommandeForIndex(CommandeVente $c, mixed $user): array
@@ -984,20 +1123,111 @@ class CommandeVenteController extends Controller
         return $site;
     }
 
-    private function produitsActifs(string $orgId): Collection
+    /**
+     * Variante non-bloquante de getUserSiteModel(), pour index() : cette page reste
+     * consultable même par un utilisateur sans aucun site attaché (contrairement à
+     * create()/store(), qui abortent) — null désactive simplement le calcul du blocage du
+     * bouton « Nouvelle commande » plutôt que de faire 403 toute la liste des commandes.
+     */
+    private function getUserSiteIdOrNull(): ?string
     {
-        // Le formulaire Ventes ne propose pour l'instant qu'un sélecteur de produit (pas de
-        // sélecteur de variante — Phase 3) : on affiche le prix de la variante par défaut
-        // (ou la première) comme prix représentatif. Pour un produit à déclinaisons multiples,
-        // resolveVariante() exigera un variante_id explicite au moment de la vente.
-        return Produit::where('organization_id', $orgId)
+        $user = auth()->user();
+
+        return $user->sites()->wherePivot('is_default', true)->value('sites.id')
+            ?? $user->sites()->value('sites.id');
+    }
+
+    /**
+     * Bloque la création d'une nouvelle commande vente quand la politique globale interdit la
+     * vente sans stock ET que le site personnel de l'utilisateur n'a absolument aucun stock
+     * vendable (cf. CommandeVenteService::siteAutoriseNouvelleCommande()). Appelé par create()
+     * (accès direct à la page) et store() (POST direct) — même contrôle, jamais dupliqué en
+     * logique, pour que désactiver le bouton côté Ventes/Index ne soit jamais la seule
+     * protection. Ne renvoie jamais une page 403 : un accès direct malgré le blocage redirige
+     * vers la liste des ventes avec un flash 'error', affiché en toast top-right côté
+     * Ventes/Index.vue (règle projet : jamais de switch de position pour ce Toast).
+     */
+    private function redirectSiCreationBloquee(string $orgId, string $siteId): ?RedirectResponse
+    {
+        if (CommandeVenteService::siteAutoriseNouvelleCommande($orgId, $siteId)) {
+            return null;
+        }
+
+        return redirect()->route('ventes.index')->with('error', self::MESSAGE_BLOCAGE_TOAST);
+    }
+
+    /**
+     * Contrôle de disponibilité au moment de CRÉER ou MODIFIER une commande (24/08/2026) —
+     * avant ce correctif, une commande pouvait être créée avec une quantité supérieure au
+     * stock, le seul contrôle existant intervenait au chargement (cf. CommandeVenteService::
+     * checkDisponibiliteStock()). Délègue entièrement à CommandeVenteService::
+     * verifierDisponibiliteLignes() — jamais de logique dupliquée ici, ce contrôleur ne fait
+     * que traduire le résultat en ValidationException affichée dans le formulaire. $lignesData
+     * est le format déjà produit par buildLignesDataAndTotal() (variante_id résolu +
+     * quantite_demandee), jamais recalculé.
+     *
+     * @param  array<int, array{variante_id: string, quantite_demandee: int}>  $lignesData
+     *
+     * @throws ValidationException si au moins une ligne dépasse le disponible
+     */
+    private function assertStockDisponiblePourLignes(string $orgId, string $siteId, array $lignesData): void
+    {
+        $errors = [];
+
+        CommandeVenteService::verifierDisponibiliteLignes(
+            $orgId,
+            $siteId,
+            array_map(fn (array $l) => ['variante_id' => $l['variante_id'], 'quantite' => $l['quantite_demandee']], $lignesData),
+            $errors,
+        );
+
+        if (! empty($errors)) {
+            throw ValidationException::withMessages(['lignes' => $errors]);
+        }
+    }
+
+    /**
+     * $siteId : quand fourni ET que la politique globale interdit la vente sans stock
+     * (Parametre::isVentesAutoriseesSansStock() = false), un produit géré en stock est exclu
+     * de la liste si sa variante par défaut n'a AUCUN stock disponible sur CE site précis —
+     * jamais sur l'agrégat global du produit (décision produit du 24/08/2026 : un stock
+     * ailleurs ne doit jamais rendre visible un produit indisponible ici). $siteId omis
+     * (edit() d'un brouillon existant) = aucun filtrage par stock, pour ne jamais faire
+     * disparaître de la liste une ligne déjà existante dont le stock serait depuis tombé à 0.
+     * Le formulaire ne propose pour l'instant qu'un sélecteur de produit (pas de sélecteur de
+     * variante — Phase 3) : on filtre/affiche donc sur la variante par défaut (ou la première).
+     */
+    private function produitsActifs(string $orgId, ?string $siteId = null): Collection
+    {
+        $autoriseVenteStockNegatif = Parametre::isVentesAutoriseesSansStock($orgId);
+
+        $produits = Produit::where('organization_id', $orgId)
             ->where('statut', ProduitStatut::ACTIF)
             ->whereHas('produitType', fn ($q) => $q->where('vendable', true))
-            ->with('variantes')
+            ->with(['variantes', 'produitType'])
             ->orderBy('nom')
-            ->get()
-            ->map(function (Produit $p) {
+            ->get();
+
+        $varianteIds = $produits->flatMap(fn (Produit $p) => $p->variantes->pluck('id'))->all();
+        // Disponible = physique − engagé (StockReservationService, 25/08/2026) : un produit
+        // entièrement engagé par des commandes vente confirmées ne doit plus apparaître comme
+        // sélectionnable ici, même si son stock physique brut reste positif.
+        $stocksParVariante = $siteId
+            ? VarianteStock::where('site_id', $siteId)->whereIn('produit_variante_id', $varianteIds)->get(['produit_variante_id', 'qte_stock', 'qte_reservee'])->keyBy('produit_variante_id')
+            : collect();
+
+        return $produits
+            ->map(function (Produit $p) use ($stocksParVariante, $autoriseVenteStockNegatif, $siteId) {
                 $variante = $p->variantes->firstWhere('is_default', true) ?? $p->variantes->first();
+                $gereStock = (bool) $p->produitType?->gere_stock;
+
+                if ($siteId && $gereStock && ! $autoriseVenteStockNegatif) {
+                    $stock = $stocksParVariante[$variante?->id] ?? null;
+                    $disponible = $stock ? ((int) $stock->qte_stock - (int) $stock->qte_reservee) : 0;
+                    if ($disponible <= 0) {
+                        return null;
+                    }
+                }
 
                 return [
                     'id' => $p->id,
@@ -1006,7 +1236,9 @@ class CommandeVenteController extends Controller
                     'prix_vente' => (int) ($variante?->prix_vente ?? 0),
                     'prix_usine' => (int) ($variante?->prix_usine ?? 0),
                 ];
-            });
+            })
+            ->filter()
+            ->values();
     }
 
     private function vehiculesActifs(string $orgId): Collection

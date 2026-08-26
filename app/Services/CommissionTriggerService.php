@@ -10,6 +10,7 @@ use App\Models\CommissionLogistique;
 use App\Models\FactureVente;
 use App\Models\Parametre;
 use App\Models\TransfertLogistique;
+use App\Services\Commission\CommissionEnveloppeGenerator;
 
 /**
  * Point d'entrée unique reliant les événements métier réels (chargement validé,
@@ -19,15 +20,15 @@ use App\Models\TransfertLogistique;
  *
  * Le déclencheur ne choisit QUE le moment de naissance de la commission,
  * jamais son statut initial : dans tous les cas elle naît CREEE (cf.
- * CommissionGenerator / CommissionLogistiqueService) et ne devient IMPAYE(E)
- * qu'à la validation de la période de paiement qui la couvre (cf.
+ * CommissionEnveloppeGenerator / CommissionLogistiqueService) et ne devient
+ * IMPAYE(E) qu'à la validation de la période de paiement qui la couvre (cf.
  * CommissionAdjustmentService::activerCommissionsCreees()).
  *
  * Ne recalcule jamais rien elle-même : délègue systématiquement à
- * CommissionGenerator / CommissionLogistiqueService, seules sources de vérité du
- * calcul (CommissionCalculator, barèmes, parts). Chaque méthode est idempotente
- * par construction, via l'idempotence déjà portée par ces générateurs (existence
- * check + contrainte unique BDD sur commande_vente_id / transfert_logistique_id).
+ * CommissionEnveloppeGenerator / CommissionLogistiqueService, seules sources de
+ * vérité du calcul (barèmes, parts). Chaque méthode est idempotente par
+ * construction, via l'idempotence déjà portée par ces générateurs (existence
+ * check + contrainte unique BDD sur source_id / transfert_logistique_id).
  *
  * Changer le paramètre d'une organisation n'affecte jamais les commissions déjà
  * générées : chaque méthode n'agit que sur l'événement en cours, jamais
@@ -55,7 +56,7 @@ class CommissionTriggerService
             return;
         }
 
-        CommissionGenerator::generateForCommandeIfMissing($commande);
+        self::genererCommissionVente($commande);
     }
 
     /**
@@ -83,7 +84,34 @@ class CommissionTriggerService
             return;
         }
 
-        CommissionGenerator::generateForCommandeIfMissing($commande);
+        self::genererCommissionVente($commande);
+    }
+
+    /**
+     * Moteur unique de génération de commission de vente.
+     *
+     * CommissionEnveloppeGenerator::genererPourCommandeVente() ouvre sa PROPRE
+     * transaction isolée et n'échoue jamais de façon à faire annuler l'appelant
+     * (elle catch et trace toute erreur dans commission_generation_attempts sans
+     * jamais relancer) — un appel imbriqué dans la transaction de
+     * chargement/encaissement est donc sans risque pour celle-ci, y compris sous
+     * les tests (RefreshDatabase ne permet pas d'observer un DB::afterCommit()
+     * dans le même test, seule une exécution synchrone imbriquée reste
+     * testable). Toujours invoqué en tout dernier, une fois toutes les écritures
+     * métier de l'opération déclenchante faites.
+     *
+     * auth()->id() capture l'utilisateur réellement à l'origine de l'événement
+     * métier (chargement validé / facture encaissée) — jamais transmis avant
+     * 2026-08-25, ce qui laissait `commission_generation_attempts.created_by`
+     * systématiquement NULL et rendait impossible d'alerter "la personne qui a
+     * encaissé" en cas de commission manquante (cf. CommissionManquanteNotification).
+     */
+    private static function genererCommissionVente(CommandeVente $commande): void
+    {
+        CommissionEnveloppeGenerator::genererPourCommandeVente(
+            $commande,
+            declencheurUserId: auth()->id(),
+        );
     }
 
     // ── Logistique ────────────────────────────────────────────────────────────

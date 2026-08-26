@@ -2,6 +2,7 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import { type FonctionRhOption } from '@/components/rh/FonctionRhSelect.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,6 +12,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import ValidateAccountModal from '@/components/users/ValidateAccountModal.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
@@ -62,9 +64,20 @@ interface PendingUser {
     created_at: string | null;
 }
 
+interface Option {
+    value: string | number;
+    label: string;
+}
+
 const props = defineProps<{
     users: StaffUser[];
     pending_registrations: PendingUser[];
+    validation_role_options: Option[];
+    validation_site_options: Option[];
+    validation_fonction_options: FonctionRhOption[];
+    type_employe_options: Option[];
+    statut_employe_options: Option[];
+    role_labels: Record<string, string>;
 }>();
 
 const { can } = usePermissions();
@@ -98,7 +111,7 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 function roleLabel(role: string) {
-    return ROLE_LABELS[role] ?? role;
+    return props.role_labels[role] ?? ROLE_LABELS[role] ?? role;
 }
 
 function roleColor(role: string) {
@@ -228,29 +241,15 @@ function confirmDelete(u: StaffUser) {
     });
 }
 
-function confirmValidate(u: StaffUser) {
-    confirm.require({
-        message: `Valider le compte de ${u.nom_complet} ? Il pourra alors se connecter.`,
-        header: 'Confirmer la validation',
-        icon: 'pi pi-check-circle',
-        rejectLabel: 'Annuler',
-        acceptLabel: 'Valider',
-        accept: () => {
-            router.patch(
-                `/backoffice/users/${u.id}/validate`,
-                {},
-                {
-                    onSuccess: () =>
-                        toast.add({
-                            severity: 'success',
-                            summary: 'Compte validé',
-                            detail: `${u.nom_complet} peut désormais se connecter.`,
-                            life: 3000,
-                        }),
-                },
-            );
-        },
-    });
+// La validation ouvre désormais ValidateAccountModal.vue (choix du profil d'accès, du site,
+// et — pour un membre du personnel — de la fonction RH) plutôt qu'un simple confirm() suivi
+// d'un PATCH sans corps : cf. AccountValidationService.
+const validateModalOpen = ref(false);
+const validateTarget = ref<StaffUser | null>(null);
+
+function openValidateModal(u: StaffUser) {
+    validateTarget.value = u;
+    validateModalOpen.value = true;
 }
 
 function confirmReject(u: StaffUser) {
@@ -527,7 +526,7 @@ function confirmReject(u: StaffUser) {
                                         >
                                             <DropdownMenuItem
                                                 class="cursor-pointer text-emerald-600 focus:text-emerald-600"
-                                                @click="confirmValidate(data)"
+                                                @click="openValidateModal(data)"
                                             >
                                                 <CheckCircle class="h-4 w-4" />
                                                 Valider
@@ -730,5 +729,16 @@ function confirmReject(u: StaffUser) {
                 </DataTable>
             </div>
         </div>
+
+        <ValidateAccountModal
+            v-model:open="validateModalOpen"
+            :user-id="validateTarget?.id ?? null"
+            :user-name="validateTarget?.nom_complet ?? ''"
+            :role-options="validation_role_options"
+            :site-options="validation_site_options"
+            :fonction-options="validation_fonction_options"
+            :type-employe-options="type_employe_options"
+            :statut-options="statut_employe_options"
+        />
     </AppLayout>
 </template>

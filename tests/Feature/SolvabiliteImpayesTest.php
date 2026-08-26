@@ -6,6 +6,7 @@ use App\Enums\StatutFactureVente;
 use App\Models\Categorie;
 use App\Models\Client;
 use App\Models\CommandeVente;
+use App\Models\EncaissementVente;
 use App\Models\FactureVente;
 use App\Models\Parametre;
 use App\Models\Proprietaire;
@@ -36,6 +37,12 @@ class SolvabiliteImpayesTest extends TestCase
     {
         parent::setUp();
         $this->initOrgAndUser(['ventes.read', 'ventes.create']);
+
+        // Ce fichier ne teste pas la disponibilité du stock — évite que le nouveau contrôle de
+        // CommandeVenteController::store() (23/08/2026, cf. CommandeVenteService::
+        // siteAutoriseNouvelleCommande()) ne bloque des commandes de test sans rapport avec le stock.
+        Parametre::setVentesAutoriserStockNegatif($this->org->id, true);
+
         $this->categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Défaut']);
     }
 
@@ -81,6 +88,26 @@ class SolvabiliteImpayesTest extends TestCase
             'montant_net' => $montant,
             'statut_facture' => StatutFactureVente::IMPAYEE->value,
         ]);
+    }
+
+    /**
+     * Dette PARTIELLEMENT réglée (au moins un encaissement) — à utiliser pour tester le contrôle
+     * de SEUIL en isolation du nouveau verrou « première régularisation » (cf.
+     * SolvabiliteService), qui bloquerait sinon inconditionnellement toute facture à 0 encaissé.
+     */
+    private function makeDettePartielle(int $montant, int $encaisse, ?string $vehiculeId = null, ?string $clientId = null): FactureVente
+    {
+        $facture = $this->makeDette($montant, $vehiculeId, $clientId);
+        $facture->update(['statut_facture' => StatutFactureVente::PARTIEL->value]);
+
+        EncaissementVente::create([
+            'facture_vente_id' => $facture->id,
+            'montant' => $encaisse,
+            'date_encaissement' => now()->toDateString(),
+            'mode_paiement' => 'especes',
+        ]);
+
+        return $facture;
     }
 
     // ── Défaut d'une organisation neuve (aucun Parametre enregistré) ────────────
@@ -133,7 +160,10 @@ class SolvabiliteImpayesTest extends TestCase
     {
         Parametre::setVentesControleImpayes($this->org->id, true, 100_000);
         $vehicule = $this->makeVehicule();
-        $this->makeDette(50_000, $vehicule->id);
+        // Dette PARTIELLEMENT réglée : isole le contrôle de seuil du nouveau verrou « première
+        // régularisation » (testé séparément, cf. VehiculePremiereRegularisationTest), qui
+        // bloquerait sinon inconditionnellement une facture à 0 encaissé.
+        $this->makeDettePartielle(50_000, 10_000, $vehicule->id);
         $produit = $this->makeProduitAvecVariante($this->org, ['categorie_id' => $this->categorie->id], ['prix_vente' => 5000]);
 
         $this->actingAs($this->user)
@@ -148,15 +178,20 @@ class SolvabiliteImpayesTest extends TestCase
     }
 
     /**
-     * La dérogation via le type de véhicule doit réellement s'appliquer à la création réelle,
-     * pas seulement à l'aperçu — cf. TypeVehicule::seuil_derogation_impayes.
+     * Régression ABDOULAYE (22/08/2026) : le montant de la nouvelle vente ne doit JAMAIS être
+     * ajouté à la dette existante pour décider du blocage, même pour un véhicule en dérogation —
+     * une tentative d'« exposition projetée » (dette + nouvelle vente) a été testée le jour même
+     * puis abandonnée après avoir bloqué à tort la première vente d'un véhicule parfaitement
+     * sain. Le plafond borne l'encours d'impayés déjà accumulé, jamais la taille d'une
+     * transaction (cf. SolvabiliteService).
      */
-    public function test_commande_autorisee_grace_a_la_derogation_du_type_de_vehicule(): void
+    public function test_commande_autorisee_meme_quand_son_montant_depasse_le_plafond_derogatoire_si_la_dette_existante_reste_sous_le_plafond(): void
     {
         Parametre::setVentesControleImpayes($this->org->id, true, 0);
-        $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'seuil_derogation_impayes' => 2_000_000]);
-        $vehicule = $this->makeVehicule(['type_vehicule_id' => $type->id, 'derogation_impayes_autorisee' => true]);
-        $this->makeDette(1_500_000, $vehicule->id);
+        $vehicule = $this->makeVehicule(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 6_000]);
+        // Reste à payer 2 000, sous le plafond de 6 000 — la nouvelle vente (1 x 5000 GNF) ne
+        // doit jamais y être ajoutée, même si 2 000 + 5 000 dépasserait 6 000.
+        $this->makeDettePartielle(2_010, 10, $vehicule->id);
         $produit = $this->makeProduitAvecVariante($this->org, ['categorie_id' => $this->categorie->id], ['prix_vente' => 5000]);
 
         $this->actingAs($this->user)
@@ -169,17 +204,89 @@ class SolvabiliteImpayesTest extends TestCase
         $this->assertSame(2, CommandeVente::where('vehicule_id', $vehicule->id)->count());
     }
 
-    public function test_commande_bloquee_au_dela_du_seuil_derogatoire_du_type_de_vehicule(): void
+    /**
+     * Régression ABDOULAYE, cas exact reproduit : véhicule EN DÉROGATION sans la moindre dette
+     * existante, plafond nettement inférieur au montant de sa toute première vente → autorisée.
+     */
+    public function test_commande_autorisee_pour_un_vehicule_en_derogation_sans_dette_meme_si_son_montant_depasse_largement_le_plafond(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 0);
+        $vehicule = $this->makeVehicule(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 500_000]);
+        $produit = $this->makeProduitAvecVariante($this->org, ['categorie_id' => $this->categorie->id], ['prix_vente' => 10_800_000]);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 10_800_000]],
+            ])
+            ->assertSessionDoesntHaveErrors('impayes');
+
+        $this->assertSame(1, CommandeVente::where('vehicule_id', $vehicule->id)->count());
+    }
+
+    /**
+     * La dérogation individuelle du véhicule doit réellement s'appliquer à la création réelle,
+     * pas seulement à l'aperçu — cf. Vehicule::seuil_derogation_impayes.
+     */
+    public function test_commande_autorisee_grace_a_la_derogation_du_vehicule(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 0);
+        $vehicule = $this->makeVehicule(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 2_000_000]);
+        // Dette PARTIELLEMENT réglée : isole le contrôle de seuil dérogatoire du verrou
+        // « première régularisation », qui bloquerait sinon inconditionnellement (cf. plus haut).
+        $this->makeDettePartielle(1_500_000, 10_000, $vehicule->id);
+        $produit = $this->makeProduitAvecVariante($this->org, ['categorie_id' => $this->categorie->id], ['prix_vente' => 5000]);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 5000]],
+            ])
+            ->assertSessionDoesntHaveErrors('impayes');
+
+        $this->assertSame(2, CommandeVente::where('vehicule_id', $vehicule->id)->count());
+    }
+
+    public function test_commande_bloquee_au_dela_du_plafond_derogatoire_du_vehicule(): void
     {
         Parametre::setVentesControleImpayes($this->org->id, true, 10_000_000);
-        $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'seuil_derogation_impayes' => 2_000_000]);
-        $vehicule = $this->makeVehicule(['type_vehicule_id' => $type->id, 'derogation_impayes_autorisee' => true]);
+        $vehicule = $this->makeVehicule(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 2_000_000]);
         $this->makeDette(2_500_000, $vehicule->id);
         $produit = $this->makeProduitAvecVariante($this->org, ['categorie_id' => $this->categorie->id], ['prix_vente' => 5000]);
 
         $this->actingAs($this->user)
             ->post(route('ventes.store'), [
                 'vehicule_id' => $vehicule->id,
+                'lignes' => [['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 5000]],
+            ])
+            ->assertSessionHasErrors('impayes');
+    }
+
+    /**
+     * Deux véhicules du MÊME type de véhicule, avec des plafonds dérogatoires différents,
+     * doivent réellement se comporter différemment à la création réelle — la dérogation ne
+     * dépend jamais du type (cf. décision produit du 22/08/2026).
+     */
+    public function test_deux_vehicules_du_meme_type_ont_des_comportements_de_blocage_independants(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 0);
+        $type = TypeVehicule::factory()->create(['organization_id' => $this->org->id]);
+        $vehiculeLarge = $this->makeVehicule(['type_vehicule_id' => $type->id, 'derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 2_000_000]);
+        $vehiculeEtroit = $this->makeVehicule(['type_vehicule_id' => $type->id, 'derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 100_000]);
+        $this->makeDettePartielle(1_500_000, 10_000, $vehiculeLarge->id);
+        $this->makeDettePartielle(1_500_000, 10_000, $vehiculeEtroit->id);
+        $produit = $this->makeProduitAvecVariante($this->org, ['categorie_id' => $this->categorie->id], ['prix_vente' => 5000]);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehiculeLarge->id,
+                'lignes' => [['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 5000]],
+            ])
+            ->assertSessionDoesntHaveErrors('impayes');
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehiculeEtroit->id,
                 'lignes' => [['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 5000]],
             ])
             ->assertSessionHasErrors('impayes');
@@ -284,6 +391,50 @@ class SolvabiliteImpayesTest extends TestCase
             ->assertSessionDoesntHaveErrors('impayes');
     }
 
+    // ── Régression ABDOULAYE (22/08/2026) : l'aperçu (check-solvabilite) ne bloque jamais un
+    // véhicule sans dette existante, même en dérogation avec un plafond très inférieur au
+    // montant de la vente en cours de saisie — même décision que la création réelle ───────────
+
+    public function test_check_solvabilite_nannonce_jamais_de_blocage_pour_un_vehicule_en_derogation_sans_dette(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 0);
+        $vehicule = $this->makeVehicule(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 500_000]);
+        $produit = $this->makeProduitAvecVariante($this->org, ['categorie_id' => $this->categorie->id], ['prix_vente' => 10_800_000]);
+
+        $apercu = $this->actingAs($this->user)
+            ->get('/backoffice/ventes/check-solvabilite?vehicule_id='.$vehicule->id)
+            ->assertOk()
+            ->json();
+
+        $this->assertFalse($apercu['blocked']);
+        $this->assertSame('derogation', $apercu['seuil_origine']);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'lignes' => [['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 10_800_000]],
+            ])
+            ->assertSessionDoesntHaveErrors('impayes');
+    }
+
+    /**
+     * `montant_prevu` n'existe plus dans l'API check-solvabilite (retiré avec l'exposition
+     * projetée) : un ancien client (cache navigateur, extension, requête forgée) qui
+     * continuerait à l'envoyer ne doit avoir AUCUN effet — le paramètre est simplement ignoré.
+     */
+    public function test_check_solvabilite_ignore_un_parametre_montant_prevu_residuel(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 0);
+        $vehicule = $this->makeVehicule(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 500_000]);
+
+        $apercu = $this->actingAs($this->user)
+            ->get('/backoffice/ventes/check-solvabilite?vehicule_id='.$vehicule->id.'&montant_prevu=999999999')
+            ->assertOk()
+            ->json();
+
+        $this->assertFalse($apercu['blocked']);
+    }
+
     // ── Organisations existantes : valeur explicitement enregistrée respectée ──
 
     /**
@@ -295,7 +446,10 @@ class SolvabiliteImpayesTest extends TestCase
     {
         Parametre::setVentesControleImpayes($this->org->id, false, 0);
         $vehicule = $this->makeVehicule();
-        $this->makeDette(50_000_000, $vehicule->id);
+        // Dette énorme mais PARTIELLEMENT réglée : isole le contrôle de seuil (désactivé ici) du
+        // verrou « première régularisation », indépendant de ce paramètre et qui bloquerait sinon
+        // inconditionnellement une facture à 0 encaissé (cf. VehiculePremiereRegularisationTest).
+        $this->makeDettePartielle(50_000_000, 1, $vehicule->id);
         $produit = $this->makeProduitAvecVariante($this->org, ['categorie_id' => $this->categorie->id], ['prix_vente' => 5000]);
 
         $this->actingAs($this->user)

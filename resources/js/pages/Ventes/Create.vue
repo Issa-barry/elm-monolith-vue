@@ -56,6 +56,12 @@ interface SolvabiliteResult {
     montant_disponible: number;
     blocked: boolean;
     depassement: number;
+    // Verrou « première régularisation » (cf. SolvabiliteService) : distinct du contrôle de
+    // seuil ci-dessus — se déclenche dès qu'une facture n'a reçu AUCUN encaissement, quel que
+    // soit le seuil ou le paramètre de contrôle des impayés. Ne concerne que la cible véhicule.
+    blocage_premiere_facture: boolean;
+    facture_bloquante_reference: string | null;
+    facture_bloquante_commande_id: string | null;
     factures: FactureDetail[];
 }
 
@@ -157,21 +163,44 @@ function searchVehicule(event: { query: string }) {
         : [...props.vehicules];
 }
 
+/**
+ * Requêtes de solvabilité centralisées ici (véhicule/client) — évite de dupliquer le même
+ * fetch/try/finally à chaque appelant. Le montant de la vente en cours n'y est volontairement
+ * jamais transmis : le plafond (standard ou dérogatoire) ne compare jamais que la dette DÉJÀ
+ * existante, jamais la vente en cours de création (cf. SolvabiliteService, décision produit du
+ * 22/08/2026) — inutile de rafraîchir cet aperçu quand seules les lignes changent.
+ */
+async function fetchVehiculeSolvabilite(vehiculeId: number) {
+    vehiculeSolvabiliteLoading.value = true;
+    try {
+        const res = await fetch(
+            `/backoffice/ventes/check-solvabilite?vehicule_id=${vehiculeId}`,
+        );
+        vehiculeSolvabilite.value = await res.json();
+    } finally {
+        vehiculeSolvabiliteLoading.value = false;
+    }
+}
+
+async function fetchClientSolvabilite(clientId: number) {
+    clientSolvabiliteLoading.value = true;
+    try {
+        const res = await fetch(
+            `/backoffice/ventes/check-solvabilite?client_id=${clientId}`,
+        );
+        clientSolvabilite.value = await res.json();
+    } finally {
+        clientSolvabiliteLoading.value = false;
+    }
+}
+
 async function onVehiculeSelect(v: VehiculeOption | null) {
     form.vehicule_id = v?.id ?? null;
     applyVehiculeCapacityOnSingleLine(v);
     recomputeAllTotals();
     if (v) {
-        vehiculeSolvabiliteLoading.value = true;
         vehiculeSolvabilite.value = null;
-        try {
-            const res = await fetch(
-                `/backoffice/ventes/check-solvabilite?vehicule_id=${v.id}`,
-            );
-            vehiculeSolvabilite.value = await res.json();
-        } finally {
-            vehiculeSolvabiliteLoading.value = false;
-        }
+        await fetchVehiculeSolvabilite(v.id);
     }
 }
 
@@ -299,16 +328,8 @@ async function onClientSelect(c: ClientOption | null) {
     // que le prix unitaire affiché, lui, se met à jour immédiatement.
     recomputeAllTotals();
     if (c) {
-        clientSolvabiliteLoading.value = true;
         clientSolvabilite.value = null;
-        try {
-            const res = await fetch(
-                `/backoffice/ventes/check-solvabilite?client_id=${c.id}`,
-            );
-            clientSolvabilite.value = await res.json();
-        } finally {
-            clientSolvabiliteLoading.value = false;
-        }
+        await fetchClientSolvabilite(c.id);
     }
 }
 
@@ -565,7 +586,14 @@ function submit() {
 }
 
 function confirmerEtCreer() {
-    form.post('/backoffice/ventes');
+    // Sans onError, un refus (ex: stock insuffisant) laissait la modale de confirmation
+    // ouverte indéfiniment, masquant le message d'erreur déjà affiché sur le formulaire
+    // sous-jacent (form.errors.lignes ci-dessous) — 24/08/2026.
+    form.post('/backoffice/ventes', {
+        onError: () => {
+            showConfirmDialog.value = false;
+        },
+    });
 }
 </script>
 
@@ -731,6 +759,77 @@ function confirmerEtCreer() {
                                 Vérification en cours…
                             </div>
 
+                            <!-- 🚫 Commande bloquée — verrou « première régularisation » : une facture
+                                 précédente n'a reçu AUCUN encaissement, indépendamment du seuil
+                                 d'impayés et de has_debt/blocked ci-dessous (cf. SolvabiliteService —
+                                 une facture encore CREEE n'entre pas dans has_debt mais déclenche
+                                 quand même ce verrou). Vérifié en priorité, avant tout le reste de
+                                 la chaîne, pour ne jamais laisser passer « ✓ Véhicule à jour ». -->
+                            <div
+                                v-else-if="
+                                    vehiculeSolvabilite?.blocage_premiere_facture
+                                "
+                                class="mt-3 rounded-xl border border-red-300 bg-red-100 p-3 dark:border-red-700 dark:bg-red-950/50"
+                            >
+                                <div
+                                    class="mb-2 flex items-center justify-between gap-3"
+                                >
+                                    <p
+                                        class="text-xs font-bold tracking-wide text-red-800 uppercase dark:text-red-300"
+                                    >
+                                        Commande bloquée — première facture non
+                                        réglée
+                                    </p>
+                                    <button
+                                        type="button"
+                                        class="shrink-0 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-100 dark:border-red-700 dark:bg-red-950/60 dark:text-red-300 dark:hover:bg-red-900/60"
+                                        @click="
+                                            ouvrirDialogFactures(
+                                                vehiculeSolvabilite,
+                                                {
+                                                    type: 'vehicule',
+                                                    titre: vehiculeSelected
+                                                        ? vehiculeLabel(
+                                                              vehiculeSelected,
+                                                          )
+                                                        : 'Véhicule',
+                                                    chauffeur:
+                                                        vehiculeSelected?.livreur_nom
+                                                            ? vehiculeSelected.livreur_nom +
+                                                              (vehiculeSelected.livreur_telephone
+                                                                  ? ' — ' +
+                                                                    formatPhoneDisplay(
+                                                                        vehiculeSelected.livreur_telephone,
+                                                                    )
+                                                                  : '')
+                                                            : undefined,
+                                                },
+                                            )
+                                        "
+                                    >
+                                        Voir les factures
+                                    </button>
+                                </div>
+                                <p
+                                    class="text-sm text-red-900 dark:text-red-200"
+                                >
+                                    Ce véhicule possède déjà une
+                                    commande<template
+                                        v-if="
+                                            vehiculeSolvabilite.facture_bloquante_reference
+                                        "
+                                    >
+                                        ({{
+                                            vehiculeSolvabilite.facture_bloquante_reference
+                                        }})</template
+                                    >
+                                    dont la facture n'a encore reçu aucun
+                                    paiement. Enregistrez d'abord un
+                                    encaissement avant de créer une nouvelle
+                                    commande.
+                                </p>
+                            </div>
+
                             <!-- ✅ Aucun impayé -->
                             <p
                                 v-else-if="
@@ -891,7 +990,7 @@ function confirmerEtCreer() {
                                 </div>
                             </div>
 
-                            <!-- 🚫 Commande bloquée -->
+                            <!-- 🚫 Commande bloquée — seuil d'impayés dépassé -->
                             <div
                                 v-else-if="vehiculeSolvabilite?.blocked"
                                 class="mt-3 rounded-xl border border-red-300 bg-red-100 p-3 dark:border-red-700 dark:bg-red-950/50"
@@ -902,9 +1001,19 @@ function confirmerEtCreer() {
                                     <p
                                         class="text-xs font-bold tracking-wide text-red-800 uppercase dark:text-red-300"
                                     >
-                                        Commande bloquée — facture impayée
+                                        Commande bloquée —
+                                        {{
+                                            vehiculeSolvabilite.total_remaining >
+                                            0
+                                                ? 'plafond dépassé'
+                                                : 'cette vente dépasse le plafond'
+                                        }}
                                     </p>
                                     <button
+                                        v-if="
+                                            vehiculeSolvabilite.unpaid_invoices_count >
+                                            0
+                                        "
                                         type="button"
                                         class="shrink-0 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-100 dark:border-red-700 dark:bg-red-950/60 dark:text-red-300 dark:hover:bg-red-900/60"
                                         @click="

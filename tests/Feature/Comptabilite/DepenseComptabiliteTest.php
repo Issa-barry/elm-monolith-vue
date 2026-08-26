@@ -5,29 +5,34 @@ namespace Tests\Feature\Comptabilite;
 use App\Enums\StatutDepense;
 use App\Enums\StatutLignePaie;
 use App\Enums\StatutPeriodePaie;
+use App\Enums\StatutPieceComptable;
 use App\Enums\TypeVariablePaie;
 use App\Features\ModuleFeature;
 use App\Models\CommandeVente;
+use App\Models\CommissionEnveloppe;
+use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
-use App\Models\CommissionVente;
+use App\Models\CommissionProcessus;
 use App\Models\Contrat;
 use App\Models\Depense;
 use App\Models\DepenseType;
 use App\Models\Employe;
-use App\Models\JournalTresorerie;
 use App\Models\Livreur;
 use App\Models\PaieLigne;
 use App\Models\PaiePeriode;
 use App\Models\PaieVariable;
 use App\Models\Personne;
+use App\Models\PieceComptable;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
 use App\Models\TypeVehicule;
 use App\Models\Vehicule;
+use App\Services\Comptabilite\DepenseComptabilisationService;
 use App\Services\PaieCalculService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Pennant\Feature;
 use Tests\Feature\Concerns\HasAdminSetup;
@@ -49,6 +54,31 @@ class DepenseComptabiliteTest extends TestCase
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private function makeEnveloppe(CommandeVente $commande, string $cibleType): CommissionEnveloppe
+    {
+        $processus = CommissionProcessus::firstOrCreate(
+            ['organization_id' => $this->org->id, 'code' => CommissionProcessus::CODE_VENTE],
+            [
+                'libelle' => 'Vente',
+                'declencheur' => 'chargement_valide',
+                'strategie_ancrage_site' => 'operation',
+                'statut' => 'actif',
+            ],
+        );
+
+        return CommissionEnveloppe::create([
+            'organization_id' => $this->org->id,
+            'source_type' => CommandeVente::class,
+            'source_id' => $commande->id,
+            'processus_id' => $processus->id,
+            'cible_type' => $cibleType,
+            'cible_id' => (string) Str::ulid(),
+            'montant_total' => 0,
+            'earned_at' => now(),
+            'statut' => 'impaye',
+        ]);
+    }
 
     private function makeEmployeAvecContrat(float $salaire = 1_000_000): array
     {
@@ -379,7 +409,12 @@ class DepenseComptabiliteTest extends TestCase
         $this->assertEquals(2_000_000, (float) $ligne->fresh()->net);
     }
 
-    public function test_observer_cree_entree_journal_quand_depense_interne_validee(): void
+    /**
+     * Remplace l'ancienne assertion sur journal_tresorerie (registre parallèle
+     * supprimé le 2026-08-22) : une dépense interne validée doit désormais
+     * produire une vraie pièce comptable équilibrée sur le grand livre.
+     */
+    public function test_observer_comptabilise_la_depense_interne_validee(): void
     {
         $type = DepenseType::factory()->interne()->create([
             'organization_id' => $this->org->id,
@@ -396,27 +431,41 @@ class DepenseComptabiliteTest extends TestCase
             'date_depense' => '2026-06-10',
         ]);
 
-        $this->assertDatabaseMissing('journal_tresorerie', ['source_id' => $depense->id]);
+        $this->assertDatabaseMissing('compta_pieces', [
+            'source_type' => Depense::class,
+            'source_id' => $depense->id,
+        ]);
 
         $depense->update(['statut' => StatutDepense::VALIDE->value]);
 
-        $this->assertDatabaseHas('journal_tresorerie', [
-            'organization_id' => $this->org->id,
-            'source_type' => Depense::class,
-            'source_id' => $depense->id,
-            'montant' => '75000.00',
-            'sens' => 'sortie',
-            'categorie' => 'depense_interne',
-        ]);
+        $piece = PieceComptable::where('organization_id', $this->org->id)
+            ->where('source_type', Depense::class)
+            ->where('source_id', $depense->id)
+            ->where('type_evenement', 'depense_interne_validee')
+            ->first();
+
+        $this->assertNotNull($piece);
+        $this->assertTrue($piece->isValidee());
+        $this->assertEquals(75_000.0, $piece->totalDebit());
+        $this->assertEquals(75_000.0, $piece->totalCredit());
     }
 
-    public function test_observer_supprime_entree_journal_quand_depense_interne_rejetee(): void
+    /**
+     * Remplace l'ancienne assertion sur journal_tresorerie : une dépense
+     * interne rejetée après avoir été validée doit contrepasser sa pièce
+     * comptable — jamais la supprimer (règle #29 de la spec).
+     */
+    public function test_observer_contrepasse_la_piece_quand_depense_interne_rejetee(): void
     {
         $type = DepenseType::factory()->interne()->create([
             'organization_id' => $this->org->id,
             'libelle' => 'Carburant',
         ]);
 
+        // Créée directement au statut VALIDE (factory ->create(), pas ->update()) :
+        // DepenseObserver::updated() ne réagit qu'à une vraie transition de statut,
+        // donc la pièce n'existe pas encore ici — on la crée nous-mêmes pour isoler
+        // le comportement testé (la contrepassation à la dévalidation).
         $depense = Depense::factory()->valide()->create([
             'organization_id' => $this->org->id,
             'user_id' => $this->user->id,
@@ -427,24 +476,19 @@ class DepenseComptabiliteTest extends TestCase
             'date_depense' => '2026-06-12',
         ]);
 
-        JournalTresorerie::create([
-            'organization_id' => $this->org->id,
-            'site_id' => null,
-            'date_operation' => '2026-06-12',
-            'sens' => 'sortie',
-            'categorie' => 'depense_interne',
-            'libelle' => 'Carburant',
-            'montant' => 40_000,
-            'source_type' => Depense::class,
-            'source_id' => $depense->id,
-            'created_by' => $this->user->id,
-        ]);
-
-        $this->assertDatabaseHas('journal_tresorerie', ['source_id' => $depense->id]);
+        $piece = app(DepenseComptabilisationService::class)->comptabiliserDepenseValidee($depense);
+        $this->assertNotNull($piece);
+        $this->assertTrue($piece->isValidee());
 
         $depense->update(['statut' => StatutDepense::REJETE->value]);
 
-        $this->assertDatabaseMissing('journal_tresorerie', ['source_id' => $depense->id]);
+        $piece->refresh();
+        $this->assertSame(StatutPieceComptable::CONTREPASSEE, $piece->statut);
+
+        $contrepassation = PieceComptable::where('piece_origine_id', $piece->id)->first();
+        $this->assertNotNull($contrepassation);
+        $this->assertEquals(40_000.0, $contrepassation->totalDebit());
+        $this->assertEquals(40_000.0, $contrepassation->totalCredit());
     }
 
     // ── SalaireController — auto-génération ──────────────────────────────────
@@ -596,21 +640,13 @@ class DepenseComptabiliteTest extends TestCase
             'proprietaire_id' => $proprietaire->id,
         ]);
 
-        $commandeVente = CommandeVente::factory()->create(['organization_id' => $this->org->id]);
-        $commissionVente = CommissionVente::factory()->create([
-            'organization_id' => $this->org->id,
-            'vehicule_id' => $vehicule->id,
-            'commande_vente_id' => $commandeVente->id,
-        ]);
+        $commandeVente = CommandeVente::factory()->create(['organization_id' => $this->org->id, 'vehicule_id' => $vehicule->id]);
+        $enveloppe = $this->makeEnveloppe($commandeVente, 'equipe_livraison');
 
-        $commissionVente->parts()->create([
-            'type_beneficiaire' => 'livreur',
-            'livreur_id' => $livreur->id,
-            'beneficiaire_nom' => 'Livreur Test',
-            'role' => 'chauffeur',
-            'taux_commission' => 20,
+        $enveloppe->parts()->create([
+            'beneficiaire_type' => CommissionEnveloppePart::TYPE_LIVREUR,
+            'beneficiaire_id' => $livreur->id,
             'montant_brut' => 150_000,
-            'frais_supplementaires' => 0,
             'montant_net' => 150_000,
             'montant_verse' => 0,
             'statut' => 'impaye',
@@ -650,21 +686,13 @@ class DepenseComptabiliteTest extends TestCase
             'proprietaire_id' => $proprietaire->id,
         ]);
 
-        $commandeVenteP = CommandeVente::factory()->create(['organization_id' => $this->org->id]);
-        $commissionVente = CommissionVente::factory()->create([
-            'organization_id' => $this->org->id,
-            'vehicule_id' => $vehicule->id,
-            'commande_vente_id' => $commandeVenteP->id,
-        ]);
+        $commandeVenteP = CommandeVente::factory()->create(['organization_id' => $this->org->id, 'vehicule_id' => $vehicule->id]);
+        $enveloppe = $this->makeEnveloppe($commandeVenteP, 'proprietaire');
 
-        $commissionVente->parts()->create([
-            'type_beneficiaire' => 'proprietaire',
-            'proprietaire_id' => $proprietaire->id,
-            'beneficiaire_nom' => 'Propriétaire Test',
-            'role' => 'proprietaire',
-            'taux_commission' => 30,
+        $enveloppe->parts()->create([
+            'beneficiaire_type' => CommissionEnveloppePart::TYPE_PROPRIETAIRE,
+            'beneficiaire_id' => $proprietaire->id,
             'montant_brut' => 300_000,
-            'frais_supplementaires' => 0,
             'montant_net' => 300_000,
             'montant_verse' => 0,
             'statut' => 'impaye',
@@ -707,21 +735,13 @@ class DepenseComptabiliteTest extends TestCase
             'proprietaire_id' => $proprietaire->id,
         ]);
 
-        $commandeVenteP = CommandeVente::factory()->create(['organization_id' => $this->org->id]);
-        $commissionVente = CommissionVente::factory()->create([
-            'organization_id' => $this->org->id,
-            'vehicule_id' => $vehicule->id,
-            'commande_vente_id' => $commandeVenteP->id,
-        ]);
+        $commandeVenteP = CommandeVente::factory()->create(['organization_id' => $this->org->id, 'vehicule_id' => $vehicule->id]);
+        $enveloppe = $this->makeEnveloppe($commandeVenteP, 'proprietaire');
 
-        $commissionVente->parts()->create([
-            'type_beneficiaire' => 'proprietaire',
-            'proprietaire_id' => $proprietaire->id,
-            'beneficiaire_nom' => 'Propriétaire Test',
-            'role' => 'proprietaire',
-            'taux_commission' => 30,
+        $enveloppe->parts()->create([
+            'beneficiaire_type' => CommissionEnveloppePart::TYPE_PROPRIETAIRE,
+            'beneficiaire_id' => $proprietaire->id,
             'montant_brut' => 300_000,
-            'frais_supplementaires' => 0,
             'montant_net' => 300_000,
             'montant_verse' => 0,
             'statut' => 'impaye',

@@ -7,6 +7,7 @@ use App\Models\EquipeLivraison;
 use App\Models\ImportFlotte;
 use App\Models\Livreur;
 use App\Models\Organization;
+use App\Models\Parametre;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TypeVehicule;
@@ -58,6 +59,12 @@ class ImportFlotteTest extends TestCase
         Storage::fake('local');
 
         $this->org = Organization::factory()->create();
+
+        // Ce fichier ne teste pas la disponibilité du stock — évite que le nouveau contrôle de
+        // CommandeVenteController::store() (23/08/2026, cf. CommandeVenteService::
+        // siteAutoriseNouvelleCommande()) ne bloque des commandes de test sans rapport avec le stock.
+        Parametre::setVentesAutoriserStockNegatif($this->org->id, true);
+
         $this->site = Site::create(['organization_id' => $this->org->id, 'nom' => 'Matoto', 'type' => 'depot']);
         $this->type = TypeVehicule::factory()->create(['organization_id' => $this->org->id, 'nom' => 'Tricycle']);
         $this->user = $this->makeUser(['imports-flotte.create', 'imports-flotte.read']);

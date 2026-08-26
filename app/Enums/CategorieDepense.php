@@ -9,6 +9,10 @@ enum CategorieDepense: string
     case LIVREUR = 'livreur';
     case EMPLOYE = 'employe';
     case INTERNE = 'interne';
+    // Valeur alignée sur CommissionEnveloppePart::TYPE_PRESTATAIRE — jamais une chaîne
+    // nouvelle/incohérente, cf. décision produit "commission consultant" 2026-08-22. Couvre
+    // tout Prestataire (consultant, machiniste, mécanicien...), pas seulement les consultants.
+    case PRESTATAIRE = 'prestataire';
 
     public function label(): string
     {
@@ -18,6 +22,7 @@ enum CategorieDepense: string
             self::LIVREUR => 'Livreur',
             self::EMPLOYE => 'Salarié',
             self::INTERNE => 'Interne',
+            self::PRESTATAIRE => 'Prestataire',
         };
     }
 
@@ -29,6 +34,7 @@ enum CategorieDepense: string
             self::LIVREUR => 'Livreur',
             self::EMPLOYE => 'Salarié',
             self::INTERNE => 'Dépense interne',
+            self::PRESTATAIRE => 'Prestataire',
         };
     }
 
@@ -40,6 +46,7 @@ enum CategorieDepense: string
             self::LIVREUR => 'Cette dépense sera déduite de la commission quinzaine du livreur sélectionné.',
             self::EMPLOYE => 'Cette dépense sera déduite du salaire mensuel du salarié sélectionné.',
             self::INTERNE => 'Aucune retenue ne sera générée. Cette dépense est interne à l\'agence.',
+            self::PRESTATAIRE => 'Cette dépense sera déduite de la commission du prestataire sélectionné, si applicable.',
         };
     }
 
@@ -56,6 +63,7 @@ enum CategorieDepense: string
             self::LIVREUR => 'livreurs',
             self::PROPRIETAIRE => 'proprietaires',
             self::VEHICULE => 'vehicules',
+            self::PRESTATAIRE => 'prestataires',
         };
     }
 
@@ -67,6 +75,7 @@ enum CategorieDepense: string
             self::LIVREUR => 'commission_livreur',
             self::PROPRIETAIRE => 'commission_proprietaire',
             self::VEHICULE => 'commission_proprietaire',
+            self::PRESTATAIRE => 'commission_prestataire',
         };
     }
 

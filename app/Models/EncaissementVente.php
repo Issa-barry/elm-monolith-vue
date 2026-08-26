@@ -2,15 +2,15 @@
 
 namespace App\Models;
 
+use App\Enums\EvenementComptable;
 use App\Enums\ModePaiement;
+use App\Services\Comptabilite\EcritureComptableService;
 use App\Services\Comptabilite\VenteComptabilisationService;
-use App\Services\JournalTresorerieService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
 
 class EncaissementVente extends Model
 {
@@ -50,18 +50,15 @@ class EncaissementVente extends Model
                 $facture->recalculStatut();
                 $facture->commande->cloturerSiComplete();
             }
-            JournalTresorerieService::enregistrerEncaissement($e);
 
-            // Comptabilité générale, en aval — ne doit jamais empêcher un encaissement
-            // métier d'être enregistré (mode shadow, même principe que DepenseObserver).
-            try {
-                app(VenteComptabilisationService::class)->comptabiliserEncaissementVente($e);
-            } catch (\Throwable $ex) {
-                Log::error('Comptabilisation encaissement vente échouée', [
-                    'encaissement_id' => $e->id,
-                    'error' => $ex->getMessage(),
-                ]);
-            }
+            // Comptabilité générale : un encaissement fait entrer de la trésorerie
+            // réelle — bloquant depuis la revue Codex du 2026-08-22 (même raison que
+            // PaiementFichePaiement/PaiePaiement/Depense). EncaissementVenteController::
+            // store() englobe déjà cette création dans une transaction couvrant aussi
+            // la transition de statut de la facture et le déclenchement cashback — un
+            // échec ici annule l'ensemble, cohérent avec le commentaire déjà présent
+            // sur cette transaction ("doivent réussir ou échouer ensemble").
+            app(VenteComptabilisationService::class)->comptabiliserEncaissementVente($e);
         });
 
         static::deleted(function (EncaissementVente $e) {
@@ -70,9 +67,18 @@ class EncaissementVente extends Model
                 $facture->recalculStatut();
                 $facture->commande->cloturerSiComplete();
             }
-            JournalTresorerie::where('source_type', EncaissementVente::class)
-                ->where('source_id', $e->id)
-                ->delete();
+
+            // Jamais de suppression destructive d'écriture validée (règle #29) : on
+            // contrepasse la pièce d'encaissement si elle existe, on ne la supprime
+            // jamais. EncaissementVenteController::destroy() englobe déjà cette
+            // suppression dans une transaction.
+            if ($facture) {
+                $ecritures = app(EcritureComptableService::class);
+                $piece = $ecritures->pieceExistantePour($facture->organization_id, $e, EvenementComptable::ENCAISSEMENT_VENTE_RECU);
+                if ($piece && $piece->isValidee()) {
+                    $ecritures->contrepasser($piece, 'Encaissement supprimé');
+                }
+            }
         });
     }
 

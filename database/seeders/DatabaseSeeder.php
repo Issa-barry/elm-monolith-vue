@@ -17,7 +17,7 @@ class DatabaseSeeder extends Seeder
             // ── Référentiels ──────────────────────────────────────────────────
             ClientSeeder::class,                // Comptes clients (utilisateurs)
             ClientsInscriptionSeeder::class,    // 2 clients sans compte (lookup inscription)
-            PrestatairesSeeder::class,          // Prestataires de service
+            PrestatairesSeeder::class,          // Prestataires de service (démo "elm")
             FournisseursSeeder::class,          // Fournisseurs (entité séparée, cf. FournisseurController)
             SitesSeeder::class,                 // Sites (siège, usine, agences, dépôts)
             UserSitesSeeder::class,             // Rattachement utilisateurs → sites

@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/sidebar';
 import { usePermissions } from '@/composables/usePermissions';
 import { dashboard, home } from '@/routes';
-import { type NavItem } from '@/types';
+import { type NavItem, type PermissionKey } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
 import {
     Briefcase,
@@ -52,7 +52,7 @@ const transfertsAReceptionner = computed(
 );
 
 /** Guard combiné permission + module actif */
-const canSee = (permission: string, module: string): boolean =>
+const canSee = (permission: PermissionKey, module: string): boolean =>
     can(permission) && moduleActive(module);
 
 const rhItems = computed((): NavItem[] => {
@@ -180,12 +180,18 @@ const mainNavItems = computed((): NavItem[] => {
 
     if (canSee('produits.read', 'produits')) {
         const produitsSousItems = [];
-        if (can('categories.read') || can('options.read')) {
-            produitsSousItems.push({
-                title: 'Tous les produits',
-                href: '/backoffice/produits',
-            });
-        }
+        produitsSousItems.push({
+            title: 'Tous les produits',
+            href: '/backoffice/produits',
+        });
+        produitsSousItems.push({
+            title: 'Stock',
+            href: '/backoffice/produits/stock',
+            badge:
+                stockAlertes.value.total > 0
+                    ? stockAlertes.value.total
+                    : undefined,
+        });
         if (can('categories.read')) {
             produitsSousItems.push({
                 title: 'Catégories',
@@ -239,12 +245,23 @@ const mainNavItems = computed((): NavItem[] => {
         });
     }
 
-    if (canSee('depenses.read', 'depenses'))
+    if (canSee('depenses.read', 'depenses')) {
+        const depensesSousItems: NavItem[] = [
+            { title: 'Liste des dépenses', href: '/backoffice/depenses' },
+        ];
+        if (can('parametres.read')) {
+            depensesSousItems.push({
+                title: 'Types de dépense',
+                href: '/backoffice/depenses/types',
+            });
+        }
         items.push({
             title: 'Dépenses',
             href: '/backoffice/depenses',
             icon: Receipt,
+            items: depensesSousItems.length > 1 ? depensesSousItems : undefined,
         });
+    }
 
     if (rhItems.value.length > 0) {
         items.push({
@@ -258,25 +275,52 @@ const mainNavItems = computed((): NavItem[] => {
     if (canSee('comptabilite.read', 'comptabilite')) {
         items.push({
             title: 'Comptabilité',
-            href: '/backoffice/comptabilite',
+            href: '/backoffice/comptabilite/tresorerie/financement',
             icon: Calculator,
             items: [
-                { title: 'Tableau de bord', href: '/backoffice/comptabilite' },
                 {
-                    title: 'Besoin de trésorerie',
-                    href: '/backoffice/comptabilite/tresorerie',
+                    title: 'Trésorerie',
+                    href: '/backoffice/comptabilite/tresorerie/financement',
+                    items: [
+                        {
+                            title: 'Financement des agences',
+                            href: '/backoffice/comptabilite/tresorerie/financement',
+                        },
+                        {
+                            title: 'Mouvements de fonds',
+                            href: '/backoffice/comptabilite/tresorerie/mouvements',
+                        },
+                        {
+                            title: 'Supports de trésorerie',
+                            href: '/backoffice/comptabilite/tresorerie/supports',
+                        },
+                    ],
                 },
                 {
-                    title: 'Commission logistique',
-                    href: '/backoffice/comptabilite/commissions/logistique',
-                },
-                {
-                    title: 'Commission vente',
+                    title: 'Commissions',
                     href: '/backoffice/comptabilite/commissions/vente',
-                },
-                {
-                    title: 'Commission propriétaire',
-                    href: '/backoffice/comptabilite/commissions/proprietaires',
+                    items: [
+                        {
+                            title: 'Ventes',
+                            href: '/backoffice/comptabilite/commissions/vente',
+                        },
+                        {
+                            title: 'Logistique',
+                            href: '/backoffice/comptabilite/commissions/logistique',
+                        },
+                        {
+                            title: 'Propriétaires',
+                            href: '/backoffice/comptabilite/commissions/proprietaires',
+                        },
+                        {
+                            title: 'Sites',
+                            href: '/backoffice/comptabilite/commissions/sites',
+                        },
+                        {
+                            title: 'Consultants',
+                            href: '/backoffice/comptabilite/commissions/consultants',
+                        },
+                    ],
                 },
                 {
                     title: 'Périodes',
