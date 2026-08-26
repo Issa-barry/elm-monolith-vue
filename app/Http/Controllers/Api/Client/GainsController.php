@@ -5,31 +5,24 @@ namespace App\Http\Controllers\Api\Client;
 use App\Http\Controllers\Controller;
 use App\Models\CommandeVente;
 use App\Models\CommissionEnveloppePart;
-use App\Models\Livreur;
-use App\Models\Proprietaire;
 use App\Models\User;
+use App\Services\Client\ClientIdentityResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class GainsController extends Controller
 {
-    public function __invoke(Request $request): JsonResponse
+    public function __invoke(Request $request, ClientIdentityResolver $identityResolver): JsonResponse
     {
         /** @var User $user */
         $user = $request->user();
 
-        $proprietaire = Proprietaire::query()
-            ->when($user->organization_id, fn ($q) => $q->where('organization_id', $user->organization_id))
-            ->where(fn ($q) => $q->where('user_id', $user->id)
-                ->when($user->telephone, fn ($q2) => $q2->orWhereHas('personne', fn ($p) => $p->where('telephone', $user->telephone))))
-            ->first();
+        $identity = $identityResolver->resolve($user);
+        $proprietaire = $identity->proprietaire;
+        $livreur = $identity->livreur;
 
-        $livreur = Livreur::query()
-            ->when($user->organization_id, fn ($q) => $q->where('organization_id', $user->organization_id))
-            ->where(fn ($q) => $q->where('user_id', $user->id)
-                ->when($user->telephone, fn ($q2) => $q2->orWhereHas('personne', fn ($p) => $p->where('telephone', $user->telephone))))
-            ->first();
-
+        // Ne filtre que par bénéficiaire proprietaire/livreur ci-dessous : un profil
+        // "client" seul (sans proprietaire/livreur) n'a pas de gains à afficher ici.
         if ($proprietaire === null && $livreur === null) {
             return response()->json($this->emptyResponse());
         }
@@ -41,7 +34,7 @@ class GainsController extends Controller
                     ->where('ce.source_type', '=', CommandeVente::class);
             })
             ->join('vehicules', 'vehicules.id', '=', 'cv.vehicule_id')
-            ->when($user->organization_id, fn ($q) => $q->where('ce.organization_id', $user->organization_id))
+            ->when($identity->organizationId, fn ($q) => $q->where('ce.organization_id', $identity->organizationId))
             ->where(function ($q) use ($proprietaire, $livreur) {
                 if ($proprietaire !== null) {
                     $q->orWhere(fn ($sq) => $sq

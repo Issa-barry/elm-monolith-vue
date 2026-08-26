@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\Auth\BackofficeLoginController;
 use App\Http\Controllers\Api\Auth\CheckPhoneController;
 use App\Http\Controllers\Api\Auth\EmailVerificationController;
 use App\Http\Controllers\Api\Auth\LoginController;
+use App\Http\Controllers\Api\Auth\LogoutAllController;
 use App\Http\Controllers\Api\Auth\LogoutController;
 use App\Http\Controllers\Api\Auth\MeController;
 use App\Http\Controllers\Api\Auth\PasswordReset\LookupController as PasswordLookupController;
@@ -78,6 +79,10 @@ Route::prefix('auth')->name('api.auth.')->group(function () {
     // Routes protégées (token requis)
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('logout', LogoutController::class)->name('logout');
+        // Révoque tous les tokens de l'utilisateur (tous appareils/clients), à la
+        // différence de `logout` qui ne révoque que le token courant — cf. section
+        // "Politique de tokens" de docs/api-auth-contract.md.
+        Route::post('logout-all', LogoutAllController::class)->name('logout-all');
         Route::get('me', MeController::class)->name('me');
     });
 });
@@ -167,12 +172,20 @@ Route::middleware('auth:sanctum')->prefix('v1/backoffice')->name('api.backoffice
 // ── Routes mobile ─────────────────────────────────────────────────────────────
 Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('v1/mobile')->group(function () {
-        Route::get('vehicules/mine', VehiculesController::class)
-            ->name('client.vehicules.mine');
-        Route::get('vehicules/{vehiculeId}/commissions', VehiculeCommissionsController::class)
-            ->name('client.vehicules.commissions');
-        Route::get('vehicules/{vehiculeId}/frais', VehiculeFraisController::class)
-            ->name('client.vehicules.frais');
+        // Autorisation explicite en plus de auth:sanctum : ces 3 routes exposent des
+        // données financières/véhicule scopées par profil métier (proprietaire/livreur)
+        // — un token valide seul ne doit pas suffire (ex: un compte staff n'a ni
+        // proprietaire ni livreur associé et recevrait une réponse vide, mais la
+        // sécurité ne doit pas reposer sur cet effet de bord). Cf. audit backend du
+        // 26/08/2026, section 13.
+        Route::middleware('role:client|proprietaire|livreur')->group(function () {
+            Route::get('vehicules/mine', VehiculesController::class)
+                ->name('client.vehicules.mine');
+            Route::get('vehicules/{vehiculeId}/commissions', VehiculeCommissionsController::class)
+                ->name('client.vehicules.commissions');
+            Route::get('vehicules/{vehiculeId}/frais', VehiculeFraisController::class)
+                ->name('client.vehicules.frais');
+        });
         Route::post('push-token', PushTokenController::class)
             ->name('client.push-token');
         Route::post('auth/change-password', ChangePasswordController::class)
@@ -201,10 +214,12 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('{id}/read', [NotificationsController::class, 'markRead'])->name('mark-read');
         });
     });
-    Route::get('gains/mine', GainsController::class)
-        ->name('client.gains.mine');
-    Route::get('livraisons/en-cours', LivraisonsEnCoursController::class)
-        ->name('client.livraisons.en-cours');
+    Route::middleware('role:client|proprietaire|livreur')->group(function () {
+        Route::get('gains/mine', GainsController::class)
+            ->name('client.gains.mine');
+        Route::get('livraisons/en-cours', LivraisonsEnCoursController::class)
+            ->name('client.livraisons.en-cours');
+    });
 });
 
 // ── Recherche globale (web + mobile, un seul endpoint pour tous les profils) ──

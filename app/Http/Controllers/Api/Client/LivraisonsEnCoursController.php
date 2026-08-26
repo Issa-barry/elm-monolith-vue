@@ -11,6 +11,7 @@ use App\Models\Proprietaire;
 use App\Models\TransfertLogistique;
 use App\Models\User;
 use App\Models\Vehicule;
+use App\Services\Client\ClientIdentityResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,13 +19,14 @@ use Illuminate\Support\Collection;
 
 class LivraisonsEnCoursController extends Controller
 {
-    public function __invoke(Request $request): JsonResponse
+    public function __invoke(Request $request, ClientIdentityResolver $identityResolver): JsonResponse
     {
         /** @var User $user */
         $user = $request->user();
 
-        $proprietaire = $this->findProprietaire($user);
-        $livreur = $this->findLivreur($user);
+        $identity = $identityResolver->resolve($user);
+        $proprietaire = $identity->proprietaire;
+        $livreur = $identity->livreur;
 
         if ($proprietaire === null && $livreur === null) {
             return response()->json([]);
@@ -40,6 +42,8 @@ class LivraisonsEnCoursController extends Controller
             return response()->json([]);
         }
 
+        $organizationId = $identity->organizationId;
+
         $transferts = TransfertLogistique::query()
             ->with([
                 'siteSource:id,nom',
@@ -50,7 +54,7 @@ class LivraisonsEnCoursController extends Controller
                 'lignes',
             ])
             ->where('statut', StatutTransfert::TRANSIT->value)
-            ->when($user->organization_id, fn (Builder $q) => $q->where('organization_id', $user->organization_id))
+            ->when($organizationId, fn (Builder $q) => $q->where('organization_id', $organizationId))
             ->where(fn (Builder $q) => $q
                 ->when($vehiculeIds->isNotEmpty(), fn (Builder $q2) => $q2->orWhereIn('vehicule_id', $vehiculeIds))
                 ->when($equipeIds->isNotEmpty(), fn (Builder $q2) => $q2->orWhereIn('equipe_livraison_id', $equipeIds))
@@ -64,7 +68,7 @@ class LivraisonsEnCoursController extends Controller
             $commandes = CommandeVente::query()
                 ->with(['site:id,nom', 'vehicule:id,nom_vehicule,immatriculation', 'vehicule.equipe:id,vehicule_id', 'client:id,nom,prenom', 'lignes:id,commande_vente_id,quantite_demandee'])
                 ->where('statut', StatutCommandeVente::LIVRAISON_EN_COURS->value)
-                ->when($user->organization_id, fn (Builder $q) => $q->where('organization_id', $user->organization_id))
+                ->when($organizationId, fn (Builder $q) => $q->where('organization_id', $organizationId))
                 ->whereIn('vehicule_id', $tousVehiculeIds)
                 ->orderByDesc('validated_at')
                 ->get()
@@ -75,24 +79,6 @@ class LivraisonsEnCoursController extends Controller
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
-
-    private function findProprietaire(User $user): ?Proprietaire
-    {
-        return Proprietaire::query()
-            ->when($user->organization_id, fn (Builder $q) => $q->where('organization_id', $user->organization_id))
-            ->where(fn (Builder $q) => $q->where('user_id', $user->id)
-                ->when($user->telephone, fn (Builder $q2) => $q2->orWhereHas('personne', fn (Builder $p) => $p->where('telephone', $user->telephone))))
-            ->first();
-    }
-
-    private function findLivreur(User $user): ?Livreur
-    {
-        return Livreur::query()
-            ->when($user->organization_id, fn (Builder $q) => $q->where('organization_id', $user->organization_id))
-            ->where(fn (Builder $q) => $q->where('user_id', $user->id)
-                ->when($user->telephone, fn (Builder $q2) => $q2->orWhereHas('personne', fn (Builder $p) => $p->where('telephone', $user->telephone))))
-            ->first();
-    }
 
     private function vehiculeIdsDuProprietaire(?Proprietaire $proprietaire): Collection
     {

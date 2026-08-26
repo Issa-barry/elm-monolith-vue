@@ -502,6 +502,58 @@ class CommissionTriggerVenteTest extends TestCase
         $this->assertTrue($enveloppes->every(fn (CommissionEnveloppe $e) => $e->statut === StatutCommission::CREEE));
     }
 
+    /**
+     * RÉGRESSION CONFIRMÉE (audit du 2026-08-26) — pas un bug de ce test : le comportement
+     * métier CORRECT est asserté ci-dessous, et il échoue contre le code actuel. Preuve :
+     * EncaissementVenteController::destroy() autorise la suppression tant que la facture
+     * n'est pas ANNULEE, sans vérifier qu'une commission a déjà été générée ;
+     * FactureVente::recalculStatut() ne déclenche CommissionTriggerService que sur la
+     * transition ENTRANTE vers PAYEE, jamais sur la sortie ; EncaissementVente::deleted()
+     * contre-passe l'écriture comptable mais ne touche jamais CommissionEnveloppe/Part.
+     * Ne pas assouplir cette assertion pour la faire passer : corriger le moteur, ou
+     * documenter explicitement la dette si le produit décide de l'assumer.
+     */
+    public function test_facture_encaissee_suppression_de_lencaissement_declencheur_devrait_invalider_la_commission(): void
+    {
+        Parametre::setDeclencheurCommissionVente($this->org->id, DeclencheurCommissionVente::FACTURE_ENCAISSEE);
+
+        $vehicule = $this->makeVehiculeAvecEquipe();
+        $produit = $this->makeProduit();
+        ['commande' => $commande, 'ligne' => $ligne] = $this->creerCommandeAvecLigne($vehicule, $produit);
+
+        $commande = $this->validerChargementComplet($commande, $ligne);
+        $this->encaisserIntegralement($commande);
+
+        $facture = $commande->fresh('facture')->facture;
+        $this->assertSame('payee', $facture->statut->value, 'précondition : facture payée');
+        $enveloppesAvant = CommissionEnveloppe::where('source_id', $commande->id)->get();
+        $this->assertNotEmpty($enveloppesAvant, 'précondition : commission générée');
+
+        $encaissement = $facture->encaissements()->sole();
+        $this->actingAs($this->user)
+            ->delete(route('encaissements.destroy', $encaissement))
+            ->assertRedirect();
+
+        $facture->refresh();
+        $this->assertNotSame(
+            'payee',
+            $facture->statut->value,
+            'la facture doit redescendre sous PAYEE une fois son seul encaissement supprimé',
+        );
+
+        // Comportement CORRECT attendu : plus de fait générateur (facture non payée) = plus
+        // de commission active/payable. Échoue aujourd'hui contre le code réel : les
+        // enveloppes restent CREEE, intactes, comme si l'encaissement existait toujours.
+        $enveloppesApres = CommissionEnveloppe::where('source_id', $commande->id)
+            ->where('statut', '!=', StatutCommission::ANNULEE->value)
+            ->get();
+        $this->assertEmpty(
+            $enveloppesApres,
+            'RÉGRESSION CONFIRMÉE : la commission reste active malgré la suppression de son fait générateur (facture repassée non-payée). '.
+            'Trouvé '.$enveloppesApres->count().' enveloppe(s) toujours non-annulée(s).',
+        );
+    }
+
     public function test_facture_encaissee_encaissement_partiel_ne_genere_pas_de_commission(): void
     {
         Parametre::setDeclencheurCommissionVente($this->org->id, DeclencheurCommissionVente::FACTURE_ENCAISSEE);

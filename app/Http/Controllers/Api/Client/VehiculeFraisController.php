@@ -4,8 +4,11 @@ namespace App\Http\Controllers\Api\Client;
 
 use App\Http\Controllers\Controller;
 use App\Models\Depense;
+use App\Models\Livreur;
+use App\Models\Proprietaire;
 use App\Models\User;
 use App\Models\Vehicule;
+use App\Services\Client\ClientIdentityResolver;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,13 +21,19 @@ class VehiculeFraisController extends Controller
         9 => 'Septembre', 10 => 'Octobre', 11 => 'Novembre', 12 => 'Décembre',
     ];
 
-    public function __invoke(Request $request, string $vehiculeId): JsonResponse
+    public function __invoke(Request $request, string $vehiculeId, ClientIdentityResolver $identityResolver): JsonResponse
     {
         /** @var User $user */
         $user = $request->user();
 
-        $vehicule = Vehicule::find($vehiculeId);
-        if (! $vehicule) {
+        $identity = $identityResolver->resolve($user);
+
+        // Avant ce correctif, seule l'organisation était vérifiée : n'importe quel
+        // utilisateur client/proprietaire/livreur de la même organisation pouvait lire
+        // les dépenses d'un véhicule qui n'était pas le sien en devinant son ID (cf.
+        // audit backend du 26/08/2026). On vérifie désormais que le véhicule appartient
+        // bien au proprietaire résolu, ou est assigné à l'équipe du livreur résolu.
+        if (! $this->vehiculeAppartientAuProfil($vehiculeId, $identity->organizationId, $identity->proprietaire, $identity->livreur)) {
             return response()->json([], 404);
         }
 
@@ -32,7 +41,7 @@ class VehiculeFraisController extends Controller
             ->with('depenseType:id,libelle,code')
             ->where('beneficiaire_type', 'vehicule')
             ->where('beneficiaire_id', $vehiculeId)
-            ->when($user->organization_id, fn ($q) => $q->where('organization_id', $user->organization_id))
+            ->where('organization_id', $identity->organizationId)
             ->orderByDesc('date_depense')
             ->get()
             ->map(fn (Depense $d) => [
@@ -47,6 +56,30 @@ class VehiculeFraisController extends Controller
             ]);
 
         return response()->json($depenses->values());
+    }
+
+    private function vehiculeAppartientAuProfil(
+        string $vehiculeId,
+        ?string $organizationId,
+        ?Proprietaire $proprietaire,
+        ?Livreur $livreur,
+    ): bool {
+        if ($organizationId === null || ($proprietaire === null && $livreur === null)) {
+            return false;
+        }
+
+        return Vehicule::query()
+            ->where('id', $vehiculeId)
+            ->where('organization_id', $organizationId)
+            ->where(function ($query) use ($proprietaire, $livreur) {
+                if ($proprietaire !== null) {
+                    $query->orWhere('proprietaire_id', $proprietaire->id);
+                }
+                if ($livreur !== null) {
+                    $query->orWhereHas('equipe.membres', fn ($sq) => $sq->where('livreur_id', $livreur->id));
+                }
+            })
+            ->exists();
     }
 
     private function normalizeCode(?string $code, ?string $libelle): string

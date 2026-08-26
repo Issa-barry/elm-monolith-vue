@@ -4,24 +4,27 @@ namespace App\Http\Controllers\Api\Client;
 
 use App\Enums\StatutTransfert;
 use App\Http\Controllers\Controller;
-use App\Models\Client;
 use App\Models\Livreur;
 use App\Models\Proprietaire;
 use App\Models\TransfertLogistique;
 use App\Models\User;
 use App\Models\Vehicule;
+use App\Services\Client\ClientIdentityResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 
 class VehiculesController extends Controller
 {
-    public function __invoke(Request $request): JsonResponse
+    public function __invoke(Request $request, ClientIdentityResolver $identityResolver): JsonResponse
     {
         /** @var User $user */
         $user = $request->user();
 
-        [$organizationId, $proprietaire, $livreur] = $this->resolveContext($user);
+        $identity = $identityResolver->resolve($user);
+        $organizationId = $identity->organizationId;
+        $proprietaire = $identity->proprietaire;
+        $livreur = $identity->livreur;
 
         $vehicules = $this->vehiculesPartenaires($organizationId, $proprietaire, $livreur);
 
@@ -53,45 +56,6 @@ class VehiculesController extends Controller
                                     : 'livreur',
             ])->values()
         );
-    }
-
-    /** @return array{0:?string,1:?Proprietaire,2:?Livreur} */
-    private function resolveContext(User $user): array
-    {
-        $orgId = $user->organization_id;
-        $telephone = $user->telephone;
-
-        $client = Client::query()
-            ->when($orgId, fn ($q) => $q->where('organization_id', $orgId))
-            ->where(fn ($q) => $q->where('user_id', $user->id)
-                ->when($telephone, fn ($q2) => $q2->orWhere('telephone', $telephone)))
-            ->first();
-
-        if ($orgId === null && $client) {
-            $orgId = $client->organization_id;
-        }
-
-        $proprietaire = Proprietaire::query()
-            ->when($orgId, fn ($q) => $q->where('organization_id', $orgId))
-            ->where(fn ($q) => $q->where('user_id', $user->id)
-                ->when($telephone, fn ($q2) => $q2->orWhereHas('personne', fn ($p) => $p->where('telephone', $telephone))))
-            ->first();
-
-        if ($orgId === null && $proprietaire) {
-            $orgId = $proprietaire->organization_id;
-        }
-
-        $livreur = Livreur::query()
-            ->when($orgId, fn ($q) => $q->where('organization_id', $orgId))
-            ->where(fn ($q) => $q->where('user_id', $user->id)
-                ->when($telephone, fn ($q2) => $q2->orWhereHas('personne', fn ($p) => $p->where('telephone', $telephone))))
-            ->first();
-
-        if ($orgId === null && $livreur) {
-            $orgId = $livreur->organization_id;
-        }
-
-        return [$orgId, $proprietaire, $livreur];
     }
 
     /** @return Collection<int, Vehicule> */

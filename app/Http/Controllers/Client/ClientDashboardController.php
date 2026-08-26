@@ -17,6 +17,7 @@ use App\Models\Proprietaire;
 use App\Models\TypeVehicule;
 use App\Models\User;
 use App\Models\Vehicule;
+use App\Services\Client\ClientIdentityResolver;
 use App\Services\ImageService;
 use BaconQrCode\Renderer\Image\SvgImageBackEnd;
 use BaconQrCode\Renderer\ImageRenderer;
@@ -33,6 +34,8 @@ use Inertia\Response;
 
 class ClientDashboardController extends Controller
 {
+    public function __construct(private readonly ClientIdentityResolver $identityResolver) {}
+
     protected function resolveQrPayload(User $user): string
     {
         [, , $proprietaire, $livreur] = $this->resolveActorContext($user);
@@ -402,71 +405,13 @@ class ClientDashboardController extends Controller
     }
 
     /**
-     * @return array{0:?int,1:?Client,2:?Proprietaire,3:?Livreur}
+     * @return array{0:?string,1:?Client,2:?Proprietaire,3:?Livreur}
      */
     private function resolveActorContext(User $user): array
     {
-        $organizationId = $user->organization_id;
-        $telephone = $user->telephone;
+        $identity = $this->identityResolver->resolve($user);
 
-        $client = Client::query()
-            ->when($organizationId !== null, fn ($query) => $query->where('organization_id', $organizationId))
-            ->where(function ($query) use ($user, $telephone) {
-                $query->where('user_id', $user->id);
-                if ($telephone) {
-                    $query->orWhere('telephone', $telephone);
-                }
-            })
-            ->orderByRaw('CASE WHEN user_id = ? THEN 0 ELSE 1 END', [$user->id])
-            ->first();
-
-        if ($organizationId === null && $client !== null) {
-            $organizationId = $client->organization_id;
-        }
-
-        $proprietaire = Proprietaire::query()
-            ->when($organizationId !== null, fn ($query) => $query->where('organization_id', $organizationId))
-            ->where(function ($query) use ($user, $telephone) {
-                $query->where('user_id', $user->id);
-                if ($telephone) {
-                    $query->orWhereHas('personne', fn ($p) => $p->where('telephone', $telephone));
-                }
-            })
-            ->orderByRaw('CASE WHEN user_id = ? THEN 0 ELSE 1 END', [$user->id])
-            ->first();
-
-        if ($organizationId === null && $proprietaire !== null) {
-            $organizationId = $proprietaire->organization_id;
-        }
-
-        $livreur = Livreur::query()
-            ->when($organizationId !== null, fn ($query) => $query->where('organization_id', $organizationId))
-            ->where(function ($query) use ($user, $telephone) {
-                $query->where('user_id', $user->id);
-                if ($telephone) {
-                    $query->orWhereHas('personne', fn ($p) => $p->where('telephone', $telephone));
-                }
-            })
-            ->orderByRaw('CASE WHEN user_id = ? THEN 0 ELSE 1 END', [$user->id])
-            ->first();
-
-        if ($organizationId === null && $livreur !== null) {
-            $organizationId = $livreur->organization_id;
-        }
-
-        if ($organizationId !== null) {
-            if ($client && $client->organization_id !== $organizationId) {
-                $client = null;
-            }
-            if ($proprietaire && $proprietaire->organization_id !== $organizationId) {
-                $proprietaire = null;
-            }
-            if ($livreur && $livreur->organization_id !== $organizationId) {
-                $livreur = null;
-            }
-        }
-
-        return [$organizationId, $client, $proprietaire, $livreur];
+        return [$identity->organizationId, $identity->client, $identity->proprietaire, $identity->livreur];
     }
 
     /** @return array<int, array{categorie_nom: string, capacite_max: int}> */

@@ -9,6 +9,8 @@ use App\Models\Proprietaire;
 use App\Models\User;
 use App\Models\UserAuthIdentity;
 use App\Services\PhoneNormalizer;
+use App\Support\Auth\AccountEligibility;
+use App\Support\Auth\AccountStatus;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -40,17 +42,12 @@ class LoginController extends Controller
             ]);
         }
 
-        if (! $user->hasVerifiedEmail() && ! $user->isSuperAdmin()) {
-            return response()->json([
-                'message' => 'Veuillez vérifier votre adresse email pour activer votre compte. Consultez votre boîte de réception.',
-                'code' => 'email_not_verified',
-            ], 403);
-        }
+        $status = AccountEligibility::status($user);
 
-        if (! $user->is_active && ! $user->isSuperAdmin()) {
+        if ($status !== AccountStatus::Ok) {
             return response()->json([
-                'message' => 'Votre compte a été bloqué. Veuillez contacter notre service client pour plus d\'informations.',
-                'code' => 'account_blocked',
+                'message' => AccountEligibility::message($status),
+                'code' => $status->value,
             ], 403);
         }
 
