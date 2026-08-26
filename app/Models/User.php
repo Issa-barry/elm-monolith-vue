@@ -42,6 +42,18 @@ class User extends Authenticatable
         'matricule',
         'expo_push_token',
         'must_change_password',
+        'notification_preferences',
+    ];
+
+    /**
+     * Clés de préférence de notification reconnues — liste blanche fermée
+     * (toute clé absente d'ici est rejetée par UpdateNotificationPreferencesRequest,
+     * jamais stockée telle quelle). Ajouter une catégorie future = ajouter une
+     * entrée ici, sans migration : cf. migration
+     * add_notification_preferences_to_users_table pour le choix JSON vs table dédiée.
+     */
+    public const NOTIFICATION_PREFERENCE_DEFAULTS = [
+        'activite' => true,
     ];
 
     // Ces accesseurs (proxy vers Personne/UserAuthIdentity, cf. plus bas) ne sont pas de vraies
@@ -68,7 +80,21 @@ class User extends Authenticatable
             'two_factor_confirmed_at' => 'datetime',
             'is_active' => 'boolean',
             'must_change_password' => 'boolean',
+            'notification_preferences' => 'array',
         ];
+    }
+
+    /**
+     * Préférences de notification effectives — les valeurs stockées surchargent
+     * les défauts, une catégorie jamais explicitement réglée par l'utilisateur
+     * reste activée par défaut (comportement historique avant l'introduction de
+     * ce réglage : personne n'a jamais été désabonné implicitement).
+     *
+     * @return array<string, bool>
+     */
+    public function notificationPreferences(): array
+    {
+        return array_merge(self::NOTIFICATION_PREFERENCE_DEFAULTS, $this->notification_preferences ?? []);
     }
 
     public function getNameAttribute(): string

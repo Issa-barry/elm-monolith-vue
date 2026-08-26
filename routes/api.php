@@ -22,6 +22,9 @@ use App\Http\Controllers\Api\Backoffice\Logistique\ValiderReceptionController;
 use App\Http\Controllers\Api\Backoffice\StatsController;
 use App\Http\Controllers\Api\Client\GainsController;
 use App\Http\Controllers\Api\Client\LivraisonsEnCoursController;
+use App\Http\Controllers\Api\Client\ProfileController;
+use App\Http\Controllers\Api\Client\UpdateNotificationPreferencesController;
+use App\Http\Controllers\Api\Client\UpdateProfileController;
 use App\Http\Controllers\Api\Client\VehiculeCommissionsController;
 use App\Http\Controllers\Api\Client\VehiculeFraisController;
 use App\Http\Controllers\Api\Client\VehiculesController;
@@ -185,6 +188,12 @@ Route::middleware('auth:sanctum')->group(function () {
                 ->name('client.vehicules.commissions');
             Route::get('vehicules/{vehiculeId}/frais', VehiculeFraisController::class)
                 ->name('client.vehicules.frais');
+            Route::get('profile', ProfileController::class)
+                ->name('client.profile');
+            Route::patch('profile', UpdateProfileController::class)
+                ->name('client.profile.update');
+            Route::patch('profile/notification-preferences', UpdateNotificationPreferencesController::class)
+                ->name('client.profile.notification-preferences');
         });
         Route::post('push-token', PushTokenController::class)
             ->name('client.push-token');

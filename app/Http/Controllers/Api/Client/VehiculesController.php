@@ -47,6 +47,9 @@ class VehiculesController extends Controller
                 // mobile conservé tel quel (nombre unique), sans repli sur le type.
                 'capacite' => $v->capacite_packs,
                 'is_active' => (bool) $v->is_active,
+                // Pas de notion de statut "entretien"/maintenance dans le modèle ELM — seul
+                // is_active existe. Un statut plus fin (ex: "En panne") nécessiterait une
+                // colonne dédiée, volontairement pas ajoutée ici sans besoin métier confirmé.
                 'photo_url' => $v->photo_path
                                     ? request()->getSchemeAndHttpHost().'/api/vehicules/'.$v->id.'/photo'
                                     : null,
@@ -54,8 +57,21 @@ class VehiculesController extends Controller
                 'role' => $proprietaire && $v->proprietaire_id === $proprietaire->id
                                     ? 'proprietaire'
                                     : 'livreur',
+                'conducteur' => $this->conducteurNom($v),
             ])->values()
         );
+    }
+
+    /**
+     * Nom du chauffeur assigné à l'équipe du véhicule, si une équipe existe et
+     * qu'un membre y tient le rôle "chauffeur" — jamais un simple premier membre
+     * pris au hasard (une équipe peut n'avoir que des convoyeurs).
+     */
+    private function conducteurNom(Vehicule $v): ?string
+    {
+        $chauffeur = $v->equipe?->membres->firstWhere('role', 'chauffeur');
+
+        return $chauffeur?->livreur?->libelleAffichage();
     }
 
     /** @return Collection<int, Vehicule> */
@@ -69,7 +85,7 @@ class VehiculesController extends Controller
         }
 
         return Vehicule::query()
-            ->with('typeVehicule')
+            ->with(['typeVehicule', 'equipe.membres.livreur.personne'])
             ->where('organization_id', $organizationId)
             ->where(function ($query) use ($proprietaire, $livreur) {
                 if ($proprietaire !== null) {

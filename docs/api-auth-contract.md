@@ -43,6 +43,95 @@ par ce document.
 partir d'un paramètre envoyé par le client, toujours depuis l'utilisateur
 authentifié. N'expose ni permissions détaillées, ni attributs Eloquent bruts.
 
+### `GET /v1/mobile/profile` (auth:sanctum + rôle `client|proprietaire|livreur`)
+
+Fiche complète du profil métier (adresse/pays/ville comprises) — distinct de
+`/me` qui reste volontairement minimal. Le profil retourné dépend du profil
+réellement rattaché au compte via `ClientIdentityResolver` (priorité
+`proprietaire` > `client` > `livreur` si le compte en cumule plusieurs) —
+jamais un paramètre choisi par le client :
+
+```json
+// Propriétaire personne physique
+{
+  "user": { "id": "...", "telephone": "+224622602693", "email": "..." },
+  "profile": {
+    "type": "proprietaire",
+    "identite": { "prenom": "Moussa", "nom": "SIDIBÉ", "surnom": null, "nom_affichage": "Moussa SIDIBÉ" },
+    "entreprise": null,
+    "contact": { "telephone": "+224622602693", "email": "..." },
+    "localisation": { "pays": "Guinée", "code_pays": "GN", "code_phone_pays": "+224", "ville": "Conakry", "adresse": "Matoto, Carrefour" },
+    "actif": true,
+    "notifications": { "activite": true }
+  }
+}
+```
+
+Pour un propriétaire entreprise : `entreprise: { "raison_sociale": "..." }`
+(jamais un objet vide — `null` sinon). Pour un client/livreur : `profile.type`
+vaut `"client"`/`"livreur"`, mêmes clés. `profile` vaut `null` si le compte
+porte le rôle mais n'a en réalité aucune fiche Client/Proprietaire/Livreur
+rattachée (cas limite, ne devrait pas arriver en usage normal).
+
+**Pas de champ `siret`/identifiant légal** : notion absente du modèle ELM,
+jamais exposée — ne pas en ajouter côté frontend sans un vrai champ backend
+correspondant.
+
+**Aucun champ "quartier" distinct en base** — seuls `pays`, `ville`, `adresse`
+existent (sur `Personne` pour proprietaire/livreur, sur `Client` directement) ;
+un quartier doit être saisi dans `adresse` en texte libre, ou une migration
+serait nécessaire pour l'isoler.
+
+### `PATCH /v1/mobile/profile` (auth:sanctum + rôle `client|proprietaire|livreur`)
+
+Met à jour uniquement la **localisation** du profil rattaché au compte connecté :
+
+```json
+// Requête (tous les champs optionnels, seuls les envoyés sont modifiés)
+{ "pays": "Guinée", "code_pays": "GN", "ville": "Kindia", "adresse": "Quartier Manquépas" }
+```
+
+Réponse : identique à `GET /v1/mobile/profile`. `404` si aucun profil n'est
+rattaché au compte.
+
+**Volontairement non modifiables par ce endpoint** : `nom`/`prenom`/`surnom`
+(identité civile), `telephone`/`email` (identifiants de connexion, unicité par
+organisation à revalider), `raison_sociale`/`type` (identité légale), `actif`
+(jamais en self-service) — tout champ envoyé en plus de `pays`/`code_pays`/
+`ville`/`adresse` est silencieusement ignoré par la validation. Ces champs
+restent réservés au backoffice (`ProprietaireController`, `ClientController`).
+
+### `PATCH /v1/mobile/profile/notification-preferences` (auth:sanctum + rôle `client|proprietaire|livreur`)
+
+```json
+// Requête
+{ "preferences": { "activite": false } }
+// Réponse
+{ "notifications": { "activite": false } }
+```
+
+Persisté en base (`users.notification_preferences`, JSON) — jamais dans un
+`localStorage` local à l'appareil : commun à Nuxt/PWA/mobile. Une catégorie
+jamais réglée explicitement reste activée par défaut
+(`User::NOTIFICATION_PREFERENCE_DEFAULTS`). Toute clé hors de cette liste est
+silencieusement ignorée (liste blanche fermée — ajouter une catégorie future =
+ajouter une entrée à la constante, sans migration).
+
+Distinct de la permission système du navigateur/téléphone pour les push
+(`Notification.requestPermission()`, gérée exclusivement côté frontend) et du
+jeton technique `expo_push_token` (déjà existant, sert à *router* le push, pas
+à décider si l'utilisateur en veut).
+
+### `GET /v1/mobile/vehicules/mine` (auth:sanctum + rôle `client|proprietaire|livreur`)
+
+Champ `conducteur` (string|null) ajouté le 26/08/2026 : nom du membre de
+l'équipe ayant le rôle `chauffeur` sur ce véhicule (`null` si aucune équipe ou
+aucun chauffeur assigné — jamais le premier membre pris au hasard, une équipe
+peut n'avoir que des convoyeurs). **Aucun statut "en entretien"/maintenance
+n'existe dans le modèle ELM** — seul `is_active` (booléen) existe ; un
+frontend affichant un statut de ce type affiche une donnée fictive tant
+qu'aucune colonne dédiée n'est ajoutée.
+
 ### `POST /api/auth/logout` (auth:sanctum)
 
 Révoque uniquement le token courant (`currentAccessToken()->delete()`) — les

@@ -2,6 +2,9 @@
 
 namespace Tests\Feature\Api\Client;
 
+use App\Models\EquipeLivraison;
+use App\Models\EquipeLivreur;
+use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\User;
 use App\Models\Vehicule;
@@ -56,6 +59,48 @@ class ClientEndpointsAccessTest extends TestCase
         $ids = collect($response->json())->pluck('id')->all();
 
         $this->assertSame([$vehiculeA->id], $ids);
+    }
+
+    public function test_vehicules_mine_exposes_the_assigned_chauffeur_name(): void
+    {
+        $org = Organization::factory()->create();
+        $proprietaire = $this->makeProprietaireUser($org);
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $org->id,
+            'proprietaire_id' => $proprietaire->proprietaire->id,
+        ]);
+
+        $chauffeur = Livreur::factory()->create(['organization_id' => $org->id, 'nom_complet' => 'Issa M.']);
+        $convoyeur = Livreur::factory()->create(['organization_id' => $org->id, 'nom_complet' => 'Amara K.']);
+        $equipe = EquipeLivraison::create([
+            'organization_id' => $org->id,
+            'vehicule_id' => $vehicule->id,
+            'is_active' => true,
+        ]);
+        EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $chauffeur->id, 'role' => 'chauffeur', 'ordre' => 0]);
+        EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $convoyeur->id, 'role' => 'convoyeur', 'ordre' => 1]);
+
+        Sanctum::actingAs($proprietaire, ['*']);
+
+        $this->getJson(route('client.vehicules.mine'))
+            ->assertOk()
+            ->assertJsonFragment(['id' => $vehicule->id, 'conducteur' => 'Issa M.']);
+    }
+
+    public function test_vehicules_mine_conducteur_is_null_without_a_chauffeur(): void
+    {
+        $org = Organization::factory()->create();
+        $proprietaire = $this->makeProprietaireUser($org);
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $org->id,
+            'proprietaire_id' => $proprietaire->proprietaire->id,
+        ]);
+
+        Sanctum::actingAs($proprietaire, ['*']);
+
+        $this->getJson(route('client.vehicules.mine'))
+            ->assertOk()
+            ->assertJsonFragment(['id' => $vehicule->id, 'conducteur' => null]);
     }
 
     /**

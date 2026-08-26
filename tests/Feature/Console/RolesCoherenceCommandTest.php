@@ -7,10 +7,21 @@ use App\Models\Organization;
 use App\Models\Proprietaire;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
 
+/**
+ * Depuis l'introduction de BusinessProfileRoleObserver (26/08/2026), poser
+ * user_id via Eloquent (create()/update() sur une instance) attribue TOUJOURS le
+ * rôle correspondant — il n'est donc plus possible de reproduire un écart via le
+ * chemin normal de l'application. Les tests ci-dessous simulent volontairement
+ * une divergence par un update() SQL brut (DB::table(...)), qui contourne les
+ * events Eloquent : exactement le genre d'intervention manuelle/migration de
+ * données que cette commande doit encore pouvoir détecter et rattraper malgré
+ * l'observer.
+ */
 class RolesCoherenceCommandTest extends TestCase
 {
     use RefreshDatabase;
@@ -19,6 +30,27 @@ class RolesCoherenceCommandTest extends TestCase
     {
         parent::setUp();
         app(PermissionRegistrar::class)->forgetCachedPermissions();
+    }
+
+    /** Simule un rattachement qui a contourné Eloquent (donc l'observer) — ex: migration de données, correctif SQL manuel. */
+    private function linkBypassingObserver(string $table, string $id, string $userId): void
+    {
+        DB::table($table)->where('id', $id)->update(['user_id' => $userId]);
+    }
+
+    public function test_eloquent_update_keeps_role_in_sync_via_the_observer(): void
+    {
+        $org = Organization::factory()->create();
+        $user = User::factory()->create(['organization_id' => $org->id]);
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id, 'user_id' => null]);
+
+        $proprietaire->update(['user_id' => $user->id]);
+
+        $this->assertTrue($user->fresh()->hasRole('proprietaire'));
+
+        $this->artisan('roles:verifier-coherence-metier')
+            ->expectsOutputToContain('Aucun écart détecté')
+            ->assertExitCode(0);
     }
 
     public function test_reports_no_gap_when_everything_is_in_sync(): void
@@ -40,7 +72,8 @@ class RolesCoherenceCommandTest extends TestCase
         $user = User::factory()->create(['organization_id' => $org->id]);
         Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
         $user->assignRole('super_admin');
-        Proprietaire::factory()->create(['organization_id' => $org->id, 'user_id' => $user->id]);
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id, 'user_id' => null]);
+        $this->linkBypassingObserver('proprietaires', $proprietaire->id, $user->id);
 
         $this->artisan('roles:verifier-coherence-metier')
             ->expectsOutputToContain('1 écart(s) détecté')
@@ -51,7 +84,8 @@ class RolesCoherenceCommandTest extends TestCase
     {
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
-        Livreur::factory()->create(['organization_id' => $org->id, 'user_id' => $user->id]);
+        $livreur = Livreur::factory()->create(['organization_id' => $org->id, 'user_id' => null]);
+        $this->linkBypassingObserver('livreurs', $livreur->id, $user->id);
 
         $this->artisan('roles:verifier-coherence-metier')
             ->expectsOutputToContain('1 écart(s) détecté')
@@ -64,7 +98,8 @@ class RolesCoherenceCommandTest extends TestCase
         $user = User::factory()->create(['organization_id' => $org->id]);
         Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
         $user->assignRole('super_admin');
-        $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id, 'user_id' => $user->id]);
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id, 'user_id' => null]);
+        $this->linkBypassingObserver('proprietaires', $proprietaire->id, $user->id);
 
         $this->artisan('roles:verifier-coherence-metier', ['--fix' => true])
             ->expectsOutputToContain('1 écart(s) corrigé')
@@ -81,7 +116,8 @@ class RolesCoherenceCommandTest extends TestCase
     {
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
-        Proprietaire::factory()->create(['organization_id' => $org->id, 'user_id' => $user->id]);
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id, 'user_id' => null]);
+        $this->linkBypassingObserver('proprietaires', $proprietaire->id, $user->id);
 
         $this->artisan('roles:verifier-coherence-metier', ['--fix' => true])->assertExitCode(0);
 
@@ -94,7 +130,8 @@ class RolesCoherenceCommandTest extends TestCase
     {
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);
-        Proprietaire::factory()->create(['organization_id' => $org->id, 'user_id' => $user->id]);
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $org->id, 'user_id' => null]);
+        $this->linkBypassingObserver('proprietaires', $proprietaire->id, $user->id);
 
         $this->artisan('roles:verifier-coherence-metier')->assertExitCode(1);
 
@@ -107,7 +144,8 @@ class RolesCoherenceCommandTest extends TestCase
         $orgB = Organization::factory()->create();
 
         $userA = User::factory()->create(['organization_id' => $orgA->id]);
-        Proprietaire::factory()->create(['organization_id' => $orgA->id, 'user_id' => $userA->id]);
+        $proprietaireA = Proprietaire::factory()->create(['organization_id' => $orgA->id, 'user_id' => null]);
+        $this->linkBypassingObserver('proprietaires', $proprietaireA->id, $userA->id);
 
         $userB = User::factory()->create(['organization_id' => $orgB->id]);
         Role::firstOrCreate(['name' => 'proprietaire', 'guard_name' => 'web']);
