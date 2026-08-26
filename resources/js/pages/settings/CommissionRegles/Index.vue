@@ -430,9 +430,11 @@ function validateDialog(): boolean {
 
     checkedCibles.value.forEach((cible) => {
         const raw = dialogDraft.value.montants[cible.code]?.trim() ?? '';
-        if (!/^\d+$/.test(raw) || Number(raw) < 1) {
+        // 0 est valide : un bénéficiaire coché peut n'avoir droit à rien par
+        // défaut et n'être réintroduit que via une exception véhicule positive.
+        if (!/^\d+$/.test(raw)) {
             errors[`montant_${cible.code}`] =
-                'Montant entier requis (supérieur à 0).';
+                'Montant entier requis (0 ou plus).';
         } else if (Number(raw) > 99_999_999) {
             errors[`montant_${cible.code}`] = 'Montant trop élevé.';
         }
@@ -445,9 +447,9 @@ function validateDialog(): boolean {
     dialogDraft.value.exceptions.forEach((tarif, index) => {
         checkedCibles.value.forEach((cible) => {
             const raw = tarif.overrides[cible.code]?.montant.trim() ?? '';
-            if (!/^\d+$/.test(raw) || Number(raw) < 1) {
+            if (!/^\d+$/.test(raw)) {
                 errors[`exception_${index}_${cible.code}`] =
-                    'Montant entier requis (supérieur à 0).';
+                    'Montant entier requis (0 ou plus).';
             } else if (Number(raw) > 99_999_999) {
                 errors[`exception_${index}_${cible.code}`] =
                     'Montant trop élevé.';

@@ -8,7 +8,10 @@ use App\Enums\StatutDepense;
 use App\Models\Depense;
 use App\Models\DepenseType;
 use App\Models\Employe;
+use App\Models\EquipeLivraison;
+use App\Models\EquipeLivreur;
 use App\Models\Livreur;
+use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -1175,6 +1178,71 @@ class DepenseTest extends TestCase
     {
         $this->getJson('/backoffice/depenses/concerne-detail?type=employe&id=unknown')
             ->assertNotFound();
+    }
+
+    /**
+     * Non-régression (25/08/2026) : EquipeLivraison::nom est un accesseur PHP calculé
+     * (vehicule?->nom_vehicule), jamais une colonne réelle de equipes_livraison — sélectionner
+     * `equipes:id,nom` via with() levait une QueryException ("Unknown column"), jamais couvert
+     * par un test avant ce correctif (seul le cas employe l'était).
+     */
+    public function test_concerne_detail_endpoint_returns_livreur_info_avec_equipe(): void
+    {
+        $livreur = Livreur::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Camara',
+            'prenom' => 'Ibrahima',
+            'telephone' => '+224611000000',
+        ]);
+
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'proprietaire_id' => $proprietaire->id,
+            'nom_vehicule' => 'ABARRY',
+        ]);
+        $equipe = EquipeLivraison::create([
+            'organization_id' => $this->org->id,
+            'vehicule_id' => $vehicule->id,
+            'proprietaire_id' => $proprietaire->id,
+            'is_active' => true,
+        ]);
+        EquipeLivreur::create([
+            'equipe_id' => $equipe->id,
+            'livreur_id' => $livreur->id,
+            'role' => 'chauffeur',
+            'ordre' => 0,
+        ]);
+
+        $response = $this->getJson("/backoffice/depenses/concerne-detail?type=livreur&id={$livreur->id}");
+
+        $response->assertOk()
+            ->assertJson([
+                'type' => 'livreur',
+                'nom' => 'Ibrahima Camara',
+                'telephone' => '+224611000000',
+                'equipe' => 'ABARRY',
+            ]);
+    }
+
+    public function test_concerne_detail_endpoint_returns_livreur_info_sans_equipe(): void
+    {
+        $livreur = Livreur::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Bah',
+            'prenom' => 'Fatoumata',
+            'telephone' => '+224622000000',
+        ]);
+
+        $response = $this->getJson("/backoffice/depenses/concerne-detail?type=livreur&id={$livreur->id}");
+
+        $response->assertOk()
+            ->assertJson([
+                'type' => 'livreur',
+                'nom' => 'Fatoumata Bah',
+                'telephone' => '+224622000000',
+                'equipe' => '—',
+            ]);
     }
 
     public function test_vehicule_detail_endpoint_returns_vehicule_info(): void

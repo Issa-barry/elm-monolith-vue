@@ -322,7 +322,7 @@ class VehiculeController extends Controller
             // vérité utilisée à la fois par la popup équipe et par la fiche véhicule
             // (cf. décision AMOA post-Phase 2 : plus de montant global blended, un
             // barème par cible peut différer d'une catégorie à l'autre).
-            'baremes_commission_categories' => $this->baremesCommissionParCategorie($vehicule->organization_id),
+            'baremes_commission_categories' => $this->baremesCommissionParCategorie($vehicule->organization_id, $vehicule->type_vehicule_id),
         ]);
     }
 
@@ -593,8 +593,20 @@ class VehiculeController extends Controller
      * (et inversement), 0 GNF restant une valeur métier valide ("configuré,
      * mais rien à distribuer sur cette cible"). Catégorie exclue seulement si
      * les DEUX valent 0 : rien à afficher pour elle nulle part.
+     *
+     * $typeVehiculeId (nullable) : depuis l'introduction des exceptions par type
+     * de véhicule (2026-08-25), plusieurs règles actives peuvent partager le même
+     * scope_id (une standard, une ou plusieurs par type de véhicule) — jamais
+     * plus une seule ligne par catégorie. Résolution identique à
+     * CommissionRegleResolver (type de véhicule exact prioritaire sur le
+     * standard, à chaque niveau de portée), restreinte au scope catégorie/global
+     * puisque la popup équipe ne connaît jamais de variante/produit précis à
+     * l'avance. Incident 2026-08-25 : un simple keyBy('scope_id') gardait une
+     * ligne arbitraire (ordre d'insertion) dès qu'une exception existait — la
+     * fiche véhicule d'un Tricycle affichait le barème Livreur standard (300)
+     * au lieu de son exception (250), menant à un partage équipe incohérent.
      */
-    private function baremesCommissionParCategorie(string $orgId): array
+    private function baremesCommissionParCategorie(string $orgId, ?string $typeVehiculeId = null): array
     {
         $processus = CommissionProcessus::where('organization_id', $orgId)
             ->where('code', CommissionProcessus::CODE_VENTE)
@@ -611,30 +623,39 @@ class VehiculeController extends Controller
             ->where('statut', 'active')
             ->get();
 
-        $resoudre = function (string $cibleType) use ($reglesActives): array {
-            $regles = $reglesActives->where('cible_type', $cibleType);
+        $chercher = function (Collection $regles, CommissionScopeType $scopeType, ?string $scopeId) use ($typeVehiculeId): ?float {
+            $candidats = $regles->filter(
+                fn (CommissionRegle $r) => $r->scope_type === $scopeType && $r->scope_id === $scopeId
+            );
 
-            $global = $regles->first(fn (CommissionRegle $r) => $r->scope_type === CommissionScopeType::GLOBAL && $r->scope_id === null)?->montant;
+            if ($typeVehiculeId !== null) {
+                $exact = $candidats->first(fn (CommissionRegle $r) => $r->type_vehicule_id === $typeVehiculeId);
+                if ($exact) {
+                    return (float) $exact->montant;
+                }
+            }
 
-            $parCategorie = $regles
-                ->filter(fn (CommissionRegle $r) => $r->scope_type === CommissionScopeType::CATEGORIE)
-                ->keyBy('scope_id')
-                ->map(fn (CommissionRegle $r) => (float) $r->montant);
+            $standard = $candidats->first(fn (CommissionRegle $r) => $r->type_vehicule_id === null);
 
-            return [$global !== null ? (float) $global : null, $parCategorie];
+            return $standard ? (float) $standard->montant : null;
         };
 
-        [$proprietaireGlobal, $proprietaireParCategorie] = $resoudre(CommissionCibleType::CODE_PROPRIETAIRE);
-        [$livraisonGlobal, $livraisonParCategorie] = $resoudre(CommissionCibleType::CODE_EQUIPE_LIVRAISON);
+        $resoudre = function (string $cibleType, string $categorieId) use ($reglesActives, $chercher): float {
+            $regles = $reglesActives->where('cible_type', $cibleType);
+
+            return $chercher($regles, CommissionScopeType::CATEGORIE, $categorieId)
+                ?? $chercher($regles, CommissionScopeType::GLOBAL, null)
+                ?? 0.0;
+        };
 
         return Categorie::where('organization_id', $orgId)
             ->where('statut', 'actif')
             ->orderBy('position')
             ->orderBy('nom')
             ->get()
-            ->map(function (Categorie $c) use ($proprietaireParCategorie, $proprietaireGlobal, $livraisonParCategorie, $livraisonGlobal) {
-                $montantProprietaire = $proprietaireParCategorie->get($c->id) ?? $proprietaireGlobal ?? 0.0;
-                $montantLivraison = $livraisonParCategorie->get($c->id) ?? $livraisonGlobal ?? 0.0;
+            ->map(function (Categorie $c) use ($resoudre) {
+                $montantProprietaire = $resoudre(CommissionCibleType::CODE_PROPRIETAIRE, $c->id);
+                $montantLivraison = $resoudre(CommissionCibleType::CODE_EQUIPE_LIVRAISON, $c->id);
 
                 if ($montantProprietaire <= 0 && $montantLivraison <= 0) {
                     return null;
@@ -643,8 +664,8 @@ class VehiculeController extends Controller
                 return [
                     'categorie_id' => $c->id,
                     'categorie_nom' => $c->nom,
-                    'montant_proprietaire' => (float) $montantProprietaire,
-                    'montant_livraison' => (float) $montantLivraison,
+                    'montant_proprietaire' => $montantProprietaire,
+                    'montant_livraison' => $montantLivraison,
                 ];
             })
             ->filter()

@@ -13,8 +13,10 @@ const props = withDefaults(
         fieldName: string;
         placeholder?: string;
         disabled?: boolean;
+        /** Barre inline (défaut) : largeur fixe 180px. Drawer trigger-only : pleine largeur. */
+        fullWidth?: boolean;
     }>(),
-    { placeholder: '', disabled: false },
+    { placeholder: '', disabled: false, fullWidth: false },
 );
 
 const emit = defineEmits<{
@@ -78,11 +80,15 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <div ref="rootRef" class="relative flex shrink-0 flex-col gap-1">
+    <div
+        ref="rootRef"
+        class="relative flex flex-col gap-1"
+        :class="fullWidth ? 'w-full' : 'shrink-0'"
+    >
         <span class="text-xs font-medium text-muted-foreground">{{
             label
         }}</span>
-        <div class="relative w-[180px]">
+        <div class="relative" :class="fullWidth ? 'w-full' : 'w-[180px]'">
             <input
                 v-model="model"
                 type="text"

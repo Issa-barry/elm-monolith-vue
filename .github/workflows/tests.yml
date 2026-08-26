@@ -64,10 +64,12 @@ jobs:
   e2e:
     name: E2E
     runs-on: ubuntu-latest
-    # Smoke uniquement pour l'instant (cf. step "Run smoke E2E tests" plus bas) — quelques
-    # tests, largement sous la barre des 20 min ; le budget large reste une marge de
-    # sécurité (setup PHP/Node/Playwright + build), pas un dimensionnement pour la suite
-    # complète (historique de cette dernière dans git blame si besoin de la restaurer).
+    # Re-repassé en smoke-only le 26/08/2026 : la suite complète (173 tests, 43 fichiers)
+    # dépasse maintenant systématiquement le timeout même remonté à 90 min (job tué par le
+    # timeout à ~1h30, jamais un vrai flake — cf. run annulé PR #411). workers=1 empêche
+    # de paralléliser pour compenser (session cookie partagée, cf. step "Run full E2E
+    # tests" dans git blame). Fix réel (sharding en jobs parallèles isolés, ou nettoyage
+    # de la suite pendant la refonte gérant/prestataire) remis à plus tard volontairement.
     timeout-minutes: 20
     # .env.e2e (chargé par `php artisan serve --env=e2e`, cf. playwright.config.ts) pointe
     # sur une vraie base MySQL isolée (elm_monolithe_e2e), pas sqlite — sans ce service le
@@ -160,13 +162,10 @@ jobs:
           VITE_SHOW_ENTITY_STATS_CARDS: 'true'
         run: npm run e2e:build
 
-      # Suite complète désactivée temporairement (2026-08-21) : grosse refonte gérant/
-      # prestataire en cours, et le module packing va être supprimé pour être reconstruit
-      # de zéro sous le nom "production" — la suite actuelle (packing-flow, equipe-flow,
-      # commission-v2-full-chain...) sera en grande partie réécrite de toute façon, la
-      # laisser tourner ne fait que ralentir chaque PR sans valeur ajoutée durable. Smoke
-      # uniquement le temps de la refonte, quelle que soit la branche cible ; remettre le
-      # step "Run full E2E tests" (voir historique git) une fois la refonte stabilisée.
+      # Smoke uniquement pour l'instant (cf. step "Run smoke E2E tests" plus bas) — quelques
+      # tests, largement sous la barre des 20 min ; le budget large reste une marge de
+      # sécurité (setup PHP/Node/Playwright + build), pas un dimensionnement pour la suite
+      # complète (historique de cette dernière dans git blame si besoin de la restaurer).
       - name: Run smoke E2E tests
         env:
           E2E_BASE_URL: http://127.0.0.1:8080

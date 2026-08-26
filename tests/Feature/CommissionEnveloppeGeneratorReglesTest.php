@@ -26,9 +26,11 @@ use App\Models\Produit;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\Vehicule;
+use App\Notifications\CommissionManquanteNotification;
 use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionEnveloppeGenerator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -480,5 +482,89 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
         $tentative = CommissionGenerationAttempt::where('source_id', $commande->id)->firstOrFail();
         $this->assertEquals(CommissionGenerationStatut::ERREUR, $tentative->statut);
         $this->assertStringContainsString('partage non configuré', $tentative->motif_erreur);
+    }
+
+    // ── Alerte commission manquante (incident 2026-08-25) ───────────────────
+    // Une facture encaissée sans aucune commission générée — succès silencieux
+    // (aucun barème configuré) ou échec technique — ne doit jamais passer
+    // inaperçue : App\Notifications\CommissionManquanteNotification doit
+    // atteindre les administrateurs de l'organisation.
+
+    /** @test */
+    public function alerte_les_administrateurs_quand_aucun_bareme_nest_configure_pour_la_categorie(): void
+    {
+        Notification::fake();
+
+        // makeAdminUser() crée son propre user admin_entreprise (rôle déjà assigné) sur
+        // une organisation dédiée : on le rattache à $this->org, seule organisation
+        // que la requête de résolution des destinataires (User::where('organization_id', ...))
+        // doit retrouver.
+        $admin = $this->makeAdminUser();
+        $admin->organization_id = $this->org->id;
+        $admin->save();
+
+        // Aucune règle créée pour aucune cible : chaque cible résout à "aucune
+        // règle", donc "succès" sans la moindre enveloppe (décision AMOA #4).
+        $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachets', 'statut' => 'actif']);
+        ['vehicule' => $vehicule] = $this->makeVehiculeAvecEquipe(1);
+
+        $produit = $this->makeProduit($categorie->id);
+        $commande = $this->creerCommandeAvecLignes($vehicule, [[$produit, 5]]);
+
+        CommissionEnveloppeGenerator::genererPourCommandeVente($commande);
+
+        $this->assertDatabaseMissing('commission_enveloppes', ['source_id' => $commande->id]);
+        $tentative = CommissionGenerationAttempt::where('source_id', $commande->id)->firstOrFail();
+        $this->assertEquals(CommissionGenerationStatut::SUCCES, $tentative->statut);
+
+        Notification::assertSentTo(
+            $admin,
+            CommissionManquanteNotification::class,
+            fn ($notification) => $notification->toArray($admin)['commande_id'] === $commande->id,
+        );
+    }
+
+    /** @test */
+    public function alerte_les_administrateurs_et_le_declencheur_quand_la_generation_echoue(): void
+    {
+        Notification::fake();
+
+        // makeAdminUser() crée son propre user admin_entreprise (rôle déjà assigné) sur
+        // une organisation dédiée : on le rattache à $this->org, seule organisation
+        // que la requête de résolution des destinataires (User::where('organization_id', ...))
+        // doit retrouver.
+        $admin = $this->makeAdminUser();
+        $admin->organization_id = $this->org->id;
+        $admin->save();
+
+        $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachets', 'statut' => 'actif']);
+        $this->creerRegle(CommissionCibleType::CODE_PROPRIETAIRE, 600);
+        $this->creerRegle(CommissionCibleType::CODE_EQUIPE_LIVRAISON, 300);
+
+        // Équipe existante, mais jamais de partage défini pour cette catégorie
+        // → erreur technique (cf. test ci-dessus pour le même scénario sans alerte).
+        ['vehicule' => $vehicule] = $this->makeVehiculeAvecEquipe(2);
+
+        $produit = $this->makeProduit($categorie->id);
+        $commande = $this->creerCommandeAvecLignes($vehicule, [[$produit, 5]]);
+
+        CommissionEnveloppeGenerator::genererPourCommandeVente(
+            $commande,
+            declencheurUserId: $this->user->id,
+        );
+
+        $tentative = CommissionGenerationAttempt::where('source_id', $commande->id)->firstOrFail();
+        $this->assertEquals(CommissionGenerationStatut::ERREUR, $tentative->statut);
+        $this->assertSame($this->user->id, $tentative->created_by);
+
+        Notification::assertSentTo(
+            $admin,
+            CommissionManquanteNotification::class,
+        );
+        Notification::assertSentTo(
+            $this->user,
+            CommissionManquanteNotification::class,
+            fn ($notification) => str_contains($notification->toArray($this->user)['raison'], 'partage non configuré'),
+        );
     }
 }
