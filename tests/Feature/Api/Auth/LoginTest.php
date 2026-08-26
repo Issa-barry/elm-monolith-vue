@@ -2,9 +2,12 @@
 
 namespace Tests\Feature\Api\Auth;
 
+use App\Models\Organization;
+use App\Models\Proprietaire;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class LoginTest extends TestCase
@@ -131,5 +134,38 @@ class LoginTest extends TestCase
         }
 
         $this->login(['password' => 'wrong'])->assertStatus(429);
+    }
+
+    /**
+     * Reproduit le cas réel constaté le 26/08/2026 : un compte staff déjà existant
+     * (ex: super_admin) dont le téléphone correspond à un Proprietaire créé APRÈS
+     * coup par un admin (profil "non réclamé", user_id encore null). Avant ce
+     * correctif, lierCompteParTelephone() posait bien user_id mais n'attribuait
+     * jamais le rôle Spatie 'proprietaire' — le compte restait donc bloqué hors de
+     * l'espace client malgré un profil métier valide.
+     */
+    public function test_login_assigns_proprietaire_role_when_linking_an_unclaimed_profile(): void
+    {
+        $org = Organization::factory()->create();
+        $user = User::factory()->create([
+            'organization_id' => $org->id,
+            'telephone' => '+224620000100',
+            'password' => 'Password@123',
+        ]);
+        Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        $user->assignRole('super_admin');
+
+        $proprietaire = Proprietaire::factory()->create([
+            'organization_id' => $org->id,
+            'user_id' => null,
+            'telephone' => '+224620000100',
+        ]);
+
+        $response = $this->login()->assertOk();
+
+        $this->assertEqualsCanonicalizing(['super_admin', 'proprietaire'], $response->json('user.roles'));
+        $this->assertTrue($proprietaire->fresh()->user_id === $user->id);
+        $this->assertTrue($user->fresh()->hasRole('proprietaire'));
+        $this->assertTrue($user->fresh()->hasRole('super_admin'), 'le rôle staff existant doit être conservé');
     }
 }

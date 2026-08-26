@@ -15,6 +15,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
+use Spatie\Permission\Models\Role;
 
 class LoginController extends Controller
 {
@@ -63,7 +64,14 @@ class LoginController extends Controller
 
     /**
      * Si le téléphone de l'utilisateur correspond à un livreur ou propriétaire
-     * sans user_id, on établit le lien automatiquement.
+     * sans user_id, on établit le lien automatiquement — et on attribue le rôle
+     * Spatie correspondant, exactement comme le font déjà les flux d'inscription
+     * (RegistrationService::linkPersonRecords(), CreateNewUser::linkOrCreateClient()).
+     * Avant ce correctif, ce rattachement au LOGIN (staff dont le profil métier est
+     * créé après coup par un admin) ne posait que `user_id`, jamais le rôle : le
+     * compte restait bloqué hors de l'espace client malgré un profil valide (cf.
+     * audit du 26/08/2026 — cas réel constaté sur un compte super_admin devenu
+     * propriétaire de 36 véhicules sans jamais recevoir le rôle `proprietaire`).
      */
     private function lierCompteParTelephone(User $user): void
     {
@@ -76,13 +84,23 @@ class LoginController extends Controller
         // RegisterLookupController/UserInvitationService).
         $normalise = Personne::normaliserTelephone($user->telephone);
 
-        Livreur::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
+        $livreurLie = Livreur::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
             ->whereNull('user_id')
             ->update(['user_id' => $user->id]);
 
-        Proprietaire::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
+        if ($livreurLie > 0) {
+            Role::firstOrCreate(['name' => 'livreur', 'guard_name' => 'web']);
+            $user->assignRole('livreur');
+        }
+
+        $proprietaireLie = Proprietaire::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
             ->whereNull('user_id')
             ->update(['user_id' => $user->id]);
+
+        if ($proprietaireLie > 0) {
+            Role::firstOrCreate(['name' => 'proprietaire', 'guard_name' => 'web']);
+            $user->assignRole('proprietaire');
+        }
     }
 
     private function userResource(User $user): array

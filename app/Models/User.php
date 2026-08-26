@@ -251,10 +251,12 @@ class User extends Authenticatable
     /**
      * Les 3 rôles strictement externes : le portail client (espace client, API
      * mobile/Nuxt). Source de vérité unique pour la distinction backoffice/espace
-     * client — réutilisée par EnsureIsStaffAccount (garde d'accès backoffice) et
-     * AuthRedirects (redirection post-connexion). Ne pas la dupliquer ailleurs.
+     * client — réutilisée par EnsureIsStaffAccount (garde d'accès backoffice),
+     * AuthRedirects (redirection post-connexion) et UserController (préserve un
+     * rôle externe cumulé lors de l'édition du rôle staff). Ne pas la dupliquer
+     * ailleurs — public pour rester consultable depuis ces points d'usage externes.
      */
-    private const EXTERNAL_ROLES = ['client', 'proprietaire', 'livreur'];
+    public const EXTERNAL_ROLES = ['client', 'proprietaire', 'livreur'];
 
     /**
      * Un compte a accès au backoffice s'il porte au moins un rôle qui n'est PAS

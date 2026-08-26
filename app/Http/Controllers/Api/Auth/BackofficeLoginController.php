@@ -13,6 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
+use Spatie\Permission\Models\Role;
 
 class BackofficeLoginController extends Controller
 {
@@ -75,6 +76,11 @@ class BackofficeLoginController extends Controller
         ]);
     }
 
+    /**
+     * Même correctif que LoginController::lierCompteParTelephone() (cf. sa docblock) :
+     * le rattachement doit aussi attribuer le rôle Spatie correspondant, pas
+     * seulement poser `user_id`.
+     */
     private function lierCompteParTelephone(User $user): void
     {
         if (! $user->telephone) {
@@ -86,13 +92,23 @@ class BackofficeLoginController extends Controller
         // RegisterLookupController/UserInvitationService).
         $normalise = Personne::normaliserTelephone($user->telephone);
 
-        Livreur::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
+        $livreurLie = Livreur::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
             ->whereNull('user_id')
             ->update(['user_id' => $user->id]);
 
-        Proprietaire::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
+        if ($livreurLie > 0) {
+            Role::firstOrCreate(['name' => 'livreur', 'guard_name' => 'web']);
+            $user->assignRole('livreur');
+        }
+
+        $proprietaireLie = Proprietaire::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
             ->whereNull('user_id')
             ->update(['user_id' => $user->id]);
+
+        if ($proprietaireLie > 0) {
+            Role::firstOrCreate(['name' => 'proprietaire', 'guard_name' => 'web']);
+            $user->assignRole('proprietaire');
+        }
     }
 
     private function userResource(User $user): array
