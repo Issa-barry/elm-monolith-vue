@@ -249,6 +249,40 @@ class User extends Authenticatable
     }
 
     /**
+     * Les 3 rôles strictement externes : le portail client (espace client, API
+     * mobile/Nuxt). Source de vérité unique pour la distinction backoffice/espace
+     * client — réutilisée par EnsureIsStaffAccount (garde d'accès backoffice) et
+     * AuthRedirects (redirection post-connexion). Ne pas la dupliquer ailleurs.
+     */
+    private const EXTERNAL_ROLES = ['client', 'proprietaire', 'livreur'];
+
+    /**
+     * Un compte a accès au backoffice s'il porte au moins un rôle qui n'est PAS
+     * strictement externe — qu'il s'agisse d'un rôle système historique
+     * (super_admin, admin_entreprise, manager, commerciale, comptable) ou d'un
+     * rôle personnalisé d'organisation créé via RoleController. Le cumul avec un
+     * rôle externe est autorisé : un compte qui a AUSSI un rôle client/
+     * proprietaire/livreur garde son accès backoffice tant qu'il conserve au moins
+     * un rôle non-externe (ex: un admin qui possède lui-même un véhicule, ou
+     * commande dans une boutique comme un client normal — décision du 26/08/2026).
+     * Un compte n'ayant QUE des rôles externes (ou aucun rôle du tout) est refusé.
+     */
+    public function hasBackofficeAccess(): bool
+    {
+        return $this->getRoleNames()->diff(self::EXTERNAL_ROLES)->isNotEmpty();
+    }
+
+    /**
+     * Un compte a accès à l'espace client s'il porte au moins un des 3 rôles
+     * strictement externes — indépendamment d'un éventuel cumul avec un rôle
+     * staff (cf. hasBackofficeAccess()). Les deux accès ne s'excluent jamais.
+     */
+    public function hasClientAccess(): bool
+    {
+        return $this->getRoleNames()->intersect(self::EXTERNAL_ROLES)->isNotEmpty();
+    }
+
+    /**
      * Map de toutes les permissions CRUD pour Inertia/Vue.
      * Ex: ['clients.read' => true, 'clients.create' => false, ...]
      */

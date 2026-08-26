@@ -47,7 +47,9 @@ export type AppRole =
     | 'manager'
     | 'commerciale'
     | 'comptable'
-    | 'client';
+    | 'client'
+    | 'proprietaire'
+    | 'livreur';
 
 export interface AuthSite {
     id: number;

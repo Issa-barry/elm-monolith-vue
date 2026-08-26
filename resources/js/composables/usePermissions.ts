@@ -24,6 +24,11 @@ export function usePermissions() {
         return (roles.value as string[]).includes(role);
     }
 
+    /** Vérifie si l'utilisateur a au moins un des rôles donnés */
+    function hasAnyRole(candidateRoles: AppRole[]): boolean {
+        return candidateRoles.some(hasRole);
+    }
+
     /** Vérifie si au moins une des permissions est accordée */
     function canAny(...perms: PermissionKey[]): boolean {
         return perms.some(can);
@@ -39,5 +44,14 @@ export function usePermissions() {
         return can(`${resource}.${action}`);
     }
 
-    return { can, hasRole, canAny, canAll, canOnResource, permissions, roles };
+    return {
+        can,
+        hasRole,
+        hasAnyRole,
+        canAny,
+        canAll,
+        canOnResource,
+        permissions,
+        roles,
+    };
 }
