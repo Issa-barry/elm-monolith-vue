@@ -175,9 +175,8 @@ const telephoneField: PickerField<PersonneOption> = {
 const employeSelected = ref<PersonneOption | null>(
     props.depense.beneficiaire_type === 'employe' &&
         props.depense.beneficiaire_id
-        ? (props.employes.find(
-              (e) => e.id === props.depense.beneficiaire_id,
-          ) ?? null)
+        ? (props.employes.find((e) => e.id === props.depense.beneficiaire_id) ??
+              null)
         : null,
 );
 const showEmployePicker = ref(false);
@@ -200,9 +199,8 @@ function clearEmploye() {
 const livreurSelected = ref<PersonneOption | null>(
     props.depense.beneficiaire_type === 'livreur' &&
         props.depense.beneficiaire_id
-        ? (props.livreurs.find(
-              (l) => l.id === props.depense.beneficiaire_id,
-          ) ?? null)
+        ? (props.livreurs.find((l) => l.id === props.depense.beneficiaire_id) ??
+              null)
         : null,
 );
 const showLivreurPicker = ref(false);
@@ -267,7 +265,7 @@ const prestataireSelected = ref<PersonneOption | null>(
 );
 const showPrestatairePicker = ref(false);
 const prestataireFields: PickerField<PersonneOption>[] = [
-    { key: 'nom', label: "Nom / Entreprise", value: (p) => p.nom_complet },
+    { key: 'nom', label: 'Nom / Entreprise', value: (p) => p.nom_complet },
     telephoneField,
 ];
 
@@ -773,7 +771,8 @@ function submitAs(statut: 'brouillon' | 'soumis') {
                                                     option.vehicule_immatriculations
                                                 "
                                                 class="font-mono"
-                                                >— {{
+                                                >—
+                                                {{
                                                     option.vehicule_immatriculations
                                                 }}</span
                                             >
@@ -866,7 +865,8 @@ function submitAs(statut: 'brouillon' | 'soumis') {
                                                     option.vehicule_immatriculations
                                                 "
                                                 class="font-mono"
-                                                >— {{
+                                                >—
+                                                {{
                                                     option.vehicule_immatriculations
                                                 }}</span
                                             >

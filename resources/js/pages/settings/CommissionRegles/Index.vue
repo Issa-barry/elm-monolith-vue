@@ -433,7 +433,8 @@ function validateDialog(): boolean {
         // 0 est valide : un bénéficiaire coché peut n'avoir droit à rien par
         // défaut et n'être réintroduit que via une exception véhicule positive.
         if (!/^\d+$/.test(raw)) {
-            errors[`montant_${cible.code}`] = 'Montant entier requis (0 ou plus).';
+            errors[`montant_${cible.code}`] =
+                'Montant entier requis (0 ou plus).';
         } else if (Number(raw) > 99_999_999) {
             errors[`montant_${cible.code}`] = 'Montant trop élevé.';
         }

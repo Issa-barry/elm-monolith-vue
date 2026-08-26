@@ -214,7 +214,7 @@ function clearProprietaire() {
 const prestataireSelected = ref<PersonneOption | null>(null);
 const showPrestatairePicker = ref(false);
 const prestataireFields: PickerField<PersonneOption>[] = [
-    { key: 'nom', label: "Nom / Entreprise", value: (p) => p.nom_complet },
+    { key: 'nom', label: 'Nom / Entreprise', value: (p) => p.nom_complet },
     telephoneField,
 ];
 
@@ -723,7 +723,8 @@ function submitBrouillon() {
                                                 option.vehicule_immatriculations
                                             "
                                             class="font-mono"
-                                            >— {{
+                                            >—
+                                            {{
                                                 option.vehicule_immatriculations
                                             }}</span
                                         >
@@ -816,7 +817,8 @@ function submitBrouillon() {
                                                 option.vehicule_immatriculations
                                             "
                                             class="font-mono"
-                                            >— {{
+                                            >—
+                                            {{
                                                 option.vehicule_immatriculations
                                             }}</span
                                         >

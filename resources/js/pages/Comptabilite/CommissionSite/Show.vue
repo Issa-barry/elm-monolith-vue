@@ -23,7 +23,12 @@ import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
 
 const props = defineProps<{
-    site: { id: string; nom: string; code: string | null; telephone: string | null };
+    site: {
+        id: string;
+        nom: string;
+        code: string | null;
+        telephone: string | null;
+    };
     commission_summary: CommissionSummary;
     commission_details: CommissionDetailRow[];
     payments: CommissionPaymentRow[];
