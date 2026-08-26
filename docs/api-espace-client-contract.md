@@ -127,7 +127,7 @@ Révoque tous les **autres** tokens à la réussite (garde le token courant acti
 
 ## 2. Garde de rôle sur les routes métier
 
-Les routes ci-dessous (§3 à §6, sauf mention contraire) exigent, **en plus**
+Les routes ci-dessous (§3 à §7, sauf mention contraire) exigent, **en plus**
 de `auth:sanctum`, le rôle Spatie `client`, `proprietaire` ou `livreur`
 (`role:client|proprietaire|livreur`). Un compte purement staff (ex: `["super_admin"]`
 sans profil métier lié) reçoit **403** sur ces routes, même avec un token valide.
@@ -264,14 +264,132 @@ Dépenses validées pour ce véhicule précis (`404` si non rattaché à l'appel
 ]
 ```
 
-⚠️ **Pas d'endpoint "mes dépenses" consolidé** (tous véhicules) — seulement par
-véhicule. Pour une page "Mes dépenses" globale, il faut soit appeler cet
-endpoint pour chaque véhicule (N+1), soit demander la construction d'un
-endpoint consolidé côté backend (pas encore fait).
+### `GET /v1/mobile/depenses/mine`
+
+Version **consolidée** (tous véhicules accessibles, une seule requête, pas de
+N+1) de l'endpoint ci-dessus — à utiliser pour une page "Mes dépenses" globale.
+Accessible au proprietaire **et** au livreur (même périmètre que
+`/vehicules/{id}/frais`, dont c'est la généralisation) — volontairement plus
+large que le calcul de solde du dashboard (`GET /v1/mobile/dashboard`, §5) qui,
+lui, ignore les dépenses côté livreur.
+
+Query params (tous optionnels) :
+
+| Param | Effet |
+|---|---|
+| `vehicule_id` | Restreint à un seul véhicule (parmi ceux accessibles — sinon liste vide) |
+| `depense_type_id` | Filtre par type de dépense (catégorie) |
+| `statut` | Valeur de `StatutDepense` : `brouillon`, `soumis`, `valide`, `rejete`, `annule` — **aucun filtre par défaut**, contrairement au calcul du dashboard qui ne compte que `valide` |
+| `date_debut`, `date_fin` | Filtre par `date_depense` — **aucune période par défaut** (liste complète si non fourni) |
+| `per_page` | 1 à 100, défaut 20 |
+
+```json
+{
+  "data": [
+    {
+      "id": "...", "date": "2026-08-22", "montant": 68400,
+      "type_code": "carburant", "type_label": "Carburant",
+      "statut": "valide", "statut_label": "Validé",
+      "commentaire": null,
+      "vehicule": { "id": "...", "nom_vehicule": "ABARRY", "immatriculation": "OU3859" }
+    }
+  ],
+  "links": { "first": "...", "last": "...", "prev": null, "next": null },
+  "meta": { "current_page": 1, "last_page": 3, "per_page": 20, "total": 42 },
+  "filters": { "vehicule_id": null, "depense_type_id": null, "statut": null, "date_debut": null, "date_fin": null }
+}
+```
+
+Pagination Laravel standard (`links`/`meta`) — `filters` reflète les filtres
+réellement appliqués (utile pour resynchroniser l'UI après un rechargement).
+
+### `GET /v1/mobile/propositions-vehicules` et `POST /v1/mobile/propositions-vehicules`
+
+Proposer un véhicule partenaire (formulaire "Proposer un véhicule") — **même
+moteur** que la page Inertia (`VehicleProposalService`, extrait le 26/08/2026
+de `ClientDashboardController::storeVehicleProposal()`) : même règle
+anti-doublon, même normalisation d'immatriculation, même traitement image.
+Noms de route volontairement `propositions-vehicules.*` et non
+`propositions.*` : `routes/web.php` a déjà `client.propositions.index`/
+`client.propositions.store` pour les pages Inertia (même piège de collision
+que `client.dashboard`/`client.profile`, cf. §5).
+
+```
+POST /v1/mobile/propositions-vehicules
+Content-Type: multipart/form-data
+```
+
+| Champ | Requis | Note |
+|---|---|---|
+| `immatriculation` | oui | Normalisée en MAJUSCULES côté backend |
+| `type_vehicule` | oui | — |
+| `photo` | oui | Image, 5 Mo max, convertie en WebP |
+| `nom_vehicule`, `marque`, `modele`, `commentaire` | non | — |
+
+`201` avec la proposition créée (`{"data": {...}}`, wrapping standard d'une
+ressource unique) ; `422` si une proposition **en attente** existe déjà pour
+cette immatriculation (message sur le champ `immatriculation`, même règle que
+l'Inertia — pas un simple message générique) ; `422` standard Laravel pour tout
+champ manquant/invalide.
+
+`GET /v1/mobile/propositions-vehicules` liste les propositions du compte
+connecté (tous statuts, 20 dernières) — pas de pagination pour l'instant
+(volume attendu faible par compte, contrairement aux dépenses/commandes).
 
 ---
 
 ## 5. Gains et livraisons
+
+### `GET /v1/mobile/dashboard`
+
+Dashboard financier consolidé (vente + logistique + dépenses + solde) — **même
+moteur** que l'espace client Inertia (`App\Services\Client\ClientEarningsService`,
+extrait le 26/08/2026 de `ClientDashboardController`) : backoffice web et cette
+route renvoient garanti les mêmes montants pour les mêmes filtres (couvert par
+des tests de parité, `tests/Feature/Api/Client/DashboardControllerTest.php`).
+C'est l'endpoint à utiliser pour un tableau de bord propriétaire/livreur — pas
+`/gains/mine` (voir avertissement plus bas).
+
+Query params (tous optionnels) :
+
+| Param | Valeurs | Défaut | Effet |
+|---|---|---|---|
+| `period` | `7j`, `30j`, `ce_mois`, `mois_passe`, `custom` | `ce_mois` | Raccourci de période ; `custom` utilise `date_debut`/`date_fin` tels quels |
+| `date_debut`, `date_fin` | date ISO | — | Utilisés seulement si `period=custom` |
+| `vehicule_id` | ULID d'un véhicule accessible | — | Restreint le **calcul** des montants à ce véhicule (voir note ci-dessous) |
+| `statut` | valeur de `StatutCommission` (`impaye`, `partiel`, `paye`...) | — | Filtre les commissions par statut |
+
+```json
+{
+  "filters": { "period": "ce_mois", "date_debut": "2026-08-01", "date_fin": "2026-08-26", "vehicule_id": null, "statut": null },
+  "summary": {
+    "total_earned": 23000, "total_paid": 11000,
+    "frais_depenses_total": 4000, "balance": 8000,
+    "operations_count": 2
+  },
+  "par_vehicule": [
+    { "vehicule_id": "...", "nom_vehicule": "ABARRY", "immatriculation": "OU3859",
+      "frais_depenses": 4000, "total_earned": 23000, "total_paid": 11000, "balance": 8000 }
+  ],
+  "vehicules": [
+    { "id": "...", "nom_vehicule": "ABARRY", "immatriculation": "OU3859" }
+  ]
+}
+```
+
+- `summary` : totaux agrégés, mêmes clés que l'espace client Inertia
+  (`earnings`) — noms de champs du moteur réel, pas une reformulation.
+  `balance` ne descend jamais sous 0 (un solde négatif n'est jamais affiché
+  comme dette du propriétaire, comportement du moteur, pas de cet endpoint).
+- `par_vehicule` : **liste toujours l'intégralité du parc accessible**, même
+  quand `vehicule_id` est fourni — seul le **calcul** des montants est
+  restreint au véhicule filtré (les autres véhicules apparaissent avec des
+  montants à 0). Même comportement que le dashboard Inertia ; ne pas
+  interpréter l'absence de filtrage de la liste comme un bug.
+- `vehicules` : parc accessible complet (identité seulement, pour peupler un
+  sélecteur de véhicule côté frontend).
+- Rôle requis : `client|proprietaire|livreur` (comme le reste de cette
+  section). Un compte staff pur reçoit `403`.
 
 ### `GET /gains/mine`
 
@@ -289,14 +407,16 @@ Résumé des commissions **de vente** (véhicule) :
 }
 ```
 
-⚠️ **N'inclut PAS les commissions logistiques** (`CommissionLogistiquePart`) —
-uniquement les commissions de vente (`CommissionEnveloppePart`). L'espace
-client Inertia existant (`ClientDashboardController::calculateEarnings()`)
-combine déjà les deux + les dépenses en un seul "solde" (`total_earned,
-total_paid, frais_depenses_total, balance`) — ce moteur de calcul est
-**prouvé et testé**, mais n'est pas encore exposé via cette API. Un futur
-`GET /api/client/dashboard` devrait le réutiliser (jamais dupliquer la
-logique financière), pas encore construit.
+⚠️ **Endpoint historique, déconseillé pour tout nouvel écran** — préférer
+`GET /v1/mobile/dashboard` ci-dessus. `/gains/mine` **n'inclut PAS les
+commissions logistiques** (`CommissionLogistiquePart`), uniquement les
+commissions de vente (`CommissionEnveloppePart`), et **n'inclut pas les
+dépenses** — un livreur/proprietaire dont les gains viennent uniquement de
+logistique verra `0` ici alors que `/v1/mobile/dashboard` affiche le bon
+montant. Moteur de calcul entièrement distinct (requête SQL propre à ce
+contrôleur, jamais partagée avec `ClientEarningsService`) — conservé tel quel
+pour ne pas casser un contrat mobile existant, pas de plan de suppression
+pour l'instant.
 
 ### `GET /livraisons/en-cours`
 
@@ -344,6 +464,59 @@ téléphone en repli comme l'ancien code déjà corrigé ailleurs (pas encore
 migré vers `ClientIdentityResolver`) — à surveiller si un jour un livreur signale
 un souci d'accès similaire à celui déjà rencontré côté proprietaire.
 
+### `GET /v1/mobile/activite`
+
+Historique complet (**tous statuts**, pas seulement "en cours") des commandes
+de vente **et** transferts logistiques d'un propriétaire — comble exactement
+le manque ci-dessus : contrairement à `/v1/mobile/livraisons-transferts`, cet
+endpoint résout aussi **par véhicule** (pas seulement par équipe de livreur),
+donc fonctionne pour un **proprietaire pur sans équipe**. Un livreur reste
+accueilli (même résolution véhicule/équipe que `/livraisons/en-cours`), mais
+ce n'est pas son usage principal — pour un livreur, préférer
+`/v1/mobile/livraisons-transferts?tab=historique`.
+
+Query params (tous optionnels) :
+
+| Param | Effet |
+|---|---|
+| `type` | `vente` ou `logistique` — omis = les deux mélangés, triés par date décroissante |
+| `statut` | **Exige `type`** (422 sinon, avec message explicite) — les deux modèles ont des vocabulaires de statut différents (`StatutCommandeVente` vs `StatutTransfert`), aucune correspondance n'est inventée entre les deux |
+| `vehicule_id` | Restreint à un seul véhicule (parmi ceux accessibles) |
+| `date_debut`, `date_fin` | Filtre sur `validated_at` (vente) ou `date_depart_reelle` (logistique) |
+| `per_page` | 1 à 100, défaut 20 |
+
+```json
+{
+  "data": [
+    {
+      "id": "...", "type": "vente", "reference": "CMD-2847",
+      "statut": "livraison_en_cours", "statut_label": "Livraison en cours",
+      "site_source": "Siège de Matoto", "site_destination": "Client X",
+      "vehicule": { "id": "...", "nom_vehicule": "ABARRY", "immatriculation": "OU3859" },
+      "date": "2026-08-20", "nb_packs": 12
+    },
+    {
+      "id": "...", "type": "logistique", "reference": "TR-00042-XYZ",
+      "statut": "cloture", "statut_label": "Clôturé",
+      "site_source": "Siège de Matoto", "site_destination": "Dépôt Kindia",
+      "vehicule": { "id": "...", "nom_vehicule": "ABARRY", "immatriculation": "OU3859" },
+      "date": "2026-08-18", "nb_packs": 40
+    }
+  ],
+  "links": { "first": "...", "last": "...", "prev": null, "next": null },
+  "meta": { "current_page": 1, "last_page": 2, "per_page": 20, "total": 27 },
+  "filters": { "type": null, "statut": null, "vehicule_id": null, "date_debut": null, "date_fin": null }
+}
+```
+
+⚠️ **Pagination calculée côté backend en mémoire**, pas par une requête SQL
+unique : les deux modèles (`CommandeVente`, `TransfertLogistique`) sont
+interrogés séparément (chacun filtré et borné à 200 lignes), fusionnés puis
+triés par date avant découpage en pages. Le volume réel reste borné à
+l'activité d'un seul propriétaire — jamais un souci de performance en usage
+normal, mais à garder en tête si un jour un compte cumule plusieurs milliers
+d'opérations sur une seule période demandée.
+
 ### `GET /v1/mobile/livraisons/scan/{reference}`
 
 Résout une référence scannée (QR) — préfixe `CMD-` = commande de vente, `TR-` =
@@ -353,7 +526,62 @@ uniquement de l'existence de la référence, pas d'un filtre par propriétaire.
 
 ---
 
-## 6. Notifications
+## 6. Commandes (rôle `client`)
+
+Premier endpoint API dédié au rôle `client` (achats) — jusqu'ici tous les
+endpoints `Client\*` étaient orientés proprietaire/livreur (gap documenté
+en §9). Résolution exclusivement via `ClientIdentityResolver` → `identity->client`
+— **jamais** un `client_id` fourni par l'appelant.
+
+### `GET /v1/mobile/commandes/mine`
+
+```json
+{
+  "data": [
+    {
+      "id": "...", "reference": "CMD-2847", "statut": "livree", "statut_label": "Livrée",
+      "date": "2026-08-20", "total_commande": 45000,
+      "vehicule": { "id": "...", "nom_vehicule": "ABARRY", "immatriculation": "OU3859" }
+    }
+  ],
+  "links": { "first": "...", "last": "...", "prev": null, "next": null },
+  "meta": { "current_page": 1, "last_page": 1, "per_page": 20, "total": 1 },
+  "filters": { "statut": null, "date_debut": null, "date_fin": null }
+}
+```
+
+Query params optionnels : `statut` (`StatutCommandeVente`), `date_debut`/
+`date_fin` (sur `validated_at`), `per_page` (1-100, défaut 20). Un compte sans
+profil Client (proprietaire/livreur purs) reçoit une liste **vide** — cohérent
+avec le reste de l'API (un profil non applicable renvoie du vide, pas une
+erreur) — mais un multi-rôle staff+client voit normalement ses commandes.
+
+### `GET /v1/mobile/commandes/{commandeId}`
+
+Détail avec lignes (`{"data": {..., "lignes": [...]}}`, wrapping standard
+Laravel pour une ressource unique — différent de la liste ci-dessus qui n'est
+PAS wrappée dans une clé `data` supplémentaire au-delà de la pagination).
+`404` si la commande n'appartient pas au client résolu — jamais un 403 qui
+confirmerait son existence pour un autre compte (cf. §1.3). Les lignes
+utilisent les **snapshots** enregistrés à la commande (`libelle_snapshot`,
+`prix_vente_snapshot`), jamais une re-jointure vers le catalogue produit
+actuel (un prix modifié depuis ne doit jamais réécrire l'historique).
+
+```json
+{
+  "data": {
+    "id": "...", "reference": "CMD-2847", "statut": "livree", "statut_label": "Livrée",
+    "date": "2026-08-20", "total_commande": 45000,
+    "vehicule": { "id": "...", "nom_vehicule": "ABARRY", "immatriculation": "OU3859" },
+    "lignes": [
+      { "id": "...", "libelle": "Pack Eau 1.5L", "quantite_demandee": 10, "quantite_livree": 10,
+        "prix_vente_snapshot": 5000, "total_ligne": 50000 }
+    ]
+  }
+}
+```
+
+## 7. Notifications
 
 ### `GET /v1/mobile/notifications`
 
@@ -392,9 +620,44 @@ pour ce compte).
 Enregistre le jeton technique Expo pour le push — distinct de la préférence
 métier `notification_preferences` (§3). Écrit sur `users.expo_push_token`.
 
+### 7.1 Audit de fiabilité — `notification_preferences` est-il vraiment respecté ?
+
+Audit du 26/08/2026 : **une seule** catégorie de préférence existe
+(`activite`, cf. `User::NOTIFICATION_PREFERENCE_DEFAULTS`) et **un seul**
+job envoie réellement ce type de notification —
+`App\Jobs\NotifierLivreursCommandeVenteJob` (dispatché depuis
+`CommandeVenteController` à la validation d'une commande), qui notifie le
+livreur affecté ET le propriétaire du véhicule, à la fois en base
+(`CommandeValideeNotification`, canal `database`) et par push Expo.
+
+**Avant ce correctif**, ce job ignorait totalement la préférence : désactiver
+"activite" via `PATCH /v1/mobile/profile/notification-preferences` n'avait
+**aucun effet réel**, ni sur la notification en base ni sur le push — un
+réglage qui semblait fonctionner côté API/UI mais ne changeait rien côté
+envoi. **Corrigé** : le job vérifie désormais `notificationPreferences()['activite']`
+individuellement pour le livreur et pour le propriétaire avant d'appeler
+`notify()` et avant d'inclure leur token dans l'envoi Expo — chacun peut
+être filtré indépendamment de l'autre (cf. tests
+`tests/Feature/Jobs/NotifierLivreursCommandeVenteJobTest.php`).
+
+**Ce qui n'a volontairement PAS changé** :
+- `GET /v1/mobile/notifications` (lecture) continue de renvoyer **tout**
+  l'historique déjà généré — une préférence désactivée ne purge jamais
+  rétroactivement les notifications déjà créées, elle n'empêche que les
+  **futures** générations.
+- Deux autres classes `Notification` existent mais sont **hors périmètre**
+  de `activite` (staff, pas espace client) : `CommissionManquanteNotification`
+  (alerte interne mail+database, jamais concernée par les préférences client)
+  et `CommissionPayeeNotification` (canal `database` seul) — cette dernière
+  n'est en réalité **dispatchée nulle part dans le code actuel** (classe
+  définie mais jamais appelée), constat factuel distinct du sujet préférences,
+  signalé ici pour mémoire.
+- Aucune donnée de notification existante n'a été supprimée ou modifiée par
+  cet audit — uniquement le comportement de génération future.
+
 ---
 
-## 7. Divers
+## 8. Divers
 
 ### `POST /v1/mobile/contact`
 
@@ -434,15 +697,15 @@ aucune vérification de propriété).
 
 ---
 
-## 8. Ce qui n'existe PAS (gaps confirmés, pas de suppositions)
+## 9. Ce qui n'existe PAS (gaps confirmés, pas de suppositions)
 
 | Besoin | État |
 |---|---|
-| "Mes commandes" pour un rôle `client` pur (achats, historique) | **Inexistant** — tous les endpoints `Client\*` sont orientés proprietaire/livreur |
-| Dépenses consolidées (tous véhicules) | **Inexistant** — seulement par véhicule (§4) |
-| Historique complet livraisons pour un proprietaire | **Inexistant** — `/livraisons/en-cours` ne couvre que l'en-cours |
-| Dashboard financier API (net à payer, reste à payer...) | **Inexistant** — moteur de calcul déjà prouvé côté Inertia, pas encore exposé en API |
-| Propositions de véhicule (créer/lister) | **Inexistant côté API** — existe seulement en Inertia (`ClientDashboardController::storeVehicleProposal`) |
+| "Mes commandes" pour un rôle `client` pur (achats, historique) | **Fait** (26/08/2026) — `GET /v1/mobile/commandes/mine` + `/commandes/{id}`, §6 |
+| Dépenses consolidées (tous véhicules) | **Fait** (26/08/2026) — `GET /v1/mobile/depenses/mine`, §4 |
+| Historique complet livraisons pour un proprietaire | **Fait** (26/08/2026) — `GET /v1/mobile/activite`, §5 |
+| Dashboard financier API (net à payer, reste à payer...) | **Fait** (26/08/2026) — `GET /v1/mobile/dashboard`, §5 |
+| Propositions de véhicule (créer/lister) | **Fait** (26/08/2026) — `POST`/`GET /v1/mobile/propositions-vehicules`, §4 |
 | Écriture sur le profil au-delà de la localisation | **Inexistant** — nom/téléphone/email/raison sociale restent backoffice-only |
 | Champ "quartier" séparé d'`adresse` | **Inexistant** en base |
 | Statut véhicule "Entretien"/maintenance | **Inexistant** en base — seul `is_active` |
@@ -450,7 +713,7 @@ aucune vérification de propriété).
 
 ---
 
-## 9. Incohérence de nommage assumée
+## 10. Incohérence de nommage assumée
 
 Les routes mélangent volontairement plusieurs styles historiques :
 `/api/auth/*`, `/v1/mobile/*`, `/gains/mine`, `/livraisons/en-cours` (sans

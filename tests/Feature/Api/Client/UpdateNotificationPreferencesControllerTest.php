@@ -20,7 +20,7 @@ class UpdateNotificationPreferencesControllerTest extends TestCase
 
         Sanctum::actingAs($user, ['*']);
 
-        $this->getJson(route('client.profile'))
+        $this->getJson(route('client.profile.mine'))
             ->assertOk()
             ->assertJsonPath('profile.notifications.activite', true);
     }
@@ -52,7 +52,7 @@ class UpdateNotificationPreferencesControllerTest extends TestCase
             'preferences' => ['activite' => false],
         ])->assertOk();
 
-        $this->getJson(route('client.profile'))
+        $this->getJson(route('client.profile.mine'))
             ->assertOk()
             ->assertJsonPath('profile.notifications.activite', false);
     }

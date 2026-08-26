@@ -19,9 +19,9 @@ class ProfileControllerTest extends TestCase
     {
         $org = Organization::factory()->create();
         $user = $this->makeProprietaireUser($org, [], [
-            'nom' => 'SIDIBÉ',
+            'nom' => 'SIDIBÃ‰',
             'prenom' => 'Moussa',
-            'pays' => 'Guinée',
+            'pays' => 'GuinÃ©e',
             'code_pays' => 'GN',
             'ville' => 'Conakry',
             'adresse' => 'Matoto, Carrefour',
@@ -29,14 +29,14 @@ class ProfileControllerTest extends TestCase
 
         Sanctum::actingAs($user, ['*']);
 
-        $this->getJson(route('client.profile'))
+        $this->getJson(route('client.profile.mine'))
             ->assertOk()
             ->assertJsonPath('profile.type', 'proprietaire')
             ->assertJsonPath('profile.entreprise', null)
-            ->assertJsonPath('profile.identite.nom', 'SIDIBÉ')
+            ->assertJsonPath('profile.identite.nom', 'SIDIBÃ‰')
             ->assertJsonPath('profile.identite.prenom', 'Moussa')
             ->assertJsonPath('profile.localisation.ville', 'Conakry')
-            ->assertJsonPath('profile.localisation.pays', 'Guinée')
+            ->assertJsonPath('profile.localisation.pays', 'GuinÃ©e')
             ->assertJsonPath('profile.localisation.adresse', 'Matoto, Carrefour')
             ->assertJsonPath('profile.notifications.activite', true);
     }
@@ -54,7 +54,7 @@ class ProfileControllerTest extends TestCase
 
         Sanctum::actingAs($user, ['*']);
 
-        $this->getJson(route('client.profile'))
+        $this->getJson(route('client.profile.mine'))
             ->assertOk()
             ->assertJsonPath('profile.entreprise.raison_sociale', 'Eau La Maman SARL');
     }
@@ -69,16 +69,16 @@ class ProfileControllerTest extends TestCase
             'organization_id' => $org->id,
             'user_id' => $user->id,
             'ville' => 'Kindia',
-            'adresse' => 'Quartier Manquépas',
+            'adresse' => 'Quartier ManquÃ©pas',
         ]);
 
         Sanctum::actingAs($user, ['*']);
 
-        $this->getJson(route('client.profile'))
+        $this->getJson(route('client.profile.mine'))
             ->assertOk()
             ->assertJsonPath('profile.type', 'client')
             ->assertJsonPath('profile.localisation.ville', 'Kindia')
-            ->assertJsonPath('profile.localisation.adresse', 'Quartier Manquépas');
+            ->assertJsonPath('profile.localisation.adresse', 'Quartier ManquÃ©pas');
     }
 
     public function test_returns_the_sheet_for_a_livreur(): void
@@ -90,7 +90,7 @@ class ProfileControllerTest extends TestCase
 
         Sanctum::actingAs($user, ['*']);
 
-        $this->getJson(route('client.profile'))
+        $this->getJson(route('client.profile.mine'))
             ->assertOk()
             ->assertJsonPath('profile.type', 'livreur')
             ->assertJsonPath('profile.identite.nom_affichage', 'Baba Ousou');
@@ -106,7 +106,7 @@ class ProfileControllerTest extends TestCase
 
         Sanctum::actingAs($user, ['*']);
 
-        $this->getJson(route('client.profile'))
+        $this->getJson(route('client.profile.mine'))
             ->assertOk()
             ->assertJsonPath('profile.type', 'proprietaire');
     }
@@ -120,7 +120,7 @@ class ProfileControllerTest extends TestCase
 
         Sanctum::actingAs($user, ['*']);
 
-        $this->getJson(route('client.profile'))
+        $this->getJson(route('client.profile.mine'))
             ->assertOk()
             ->assertJsonPath('profile', null);
     }
@@ -135,6 +135,6 @@ class ProfileControllerTest extends TestCase
 
         Sanctum::actingAs($user, ['*']);
 
-        $this->getJson(route('client.profile'))->assertStatus(403);
+        $this->getJson(route('client.profile.mine'))->assertStatus(403);
     }
 }

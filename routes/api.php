@@ -20,9 +20,14 @@ use App\Http\Controllers\Api\Backoffice\Logistique\TransfertsController;
 use App\Http\Controllers\Api\Backoffice\Logistique\ValidationAdminController;
 use App\Http\Controllers\Api\Backoffice\Logistique\ValiderReceptionController;
 use App\Http\Controllers\Api\Backoffice\StatsController;
+use App\Http\Controllers\Api\Client\ActiviteController;
+use App\Http\Controllers\Api\Client\CommandesController;
+use App\Http\Controllers\Api\Client\DashboardController;
+use App\Http\Controllers\Api\Client\DepensesController;
 use App\Http\Controllers\Api\Client\GainsController;
 use App\Http\Controllers\Api\Client\LivraisonsEnCoursController;
 use App\Http\Controllers\Api\Client\ProfileController;
+use App\Http\Controllers\Api\Client\PropositionsVehiculeController;
 use App\Http\Controllers\Api\Client\UpdateNotificationPreferencesController;
 use App\Http\Controllers\Api\Client\UpdateProfileController;
 use App\Http\Controllers\Api\Client\VehiculeCommissionsController;
@@ -182,14 +187,39 @@ Route::middleware('auth:sanctum')->group(function () {
         // sécurité ne doit pas reposer sur cet effet de bord). Cf. audit backend du
         // 26/08/2026, section 13.
         Route::middleware('role:client|proprietaire|livreur')->group(function () {
+            // Nom volontairement distinct de 'client.dashboard' (page Inertia,
+            // routes/web.php) : même nom sur deux routes différentes rend
+            // route('client.dashboard') ambigu pour l'helper de nommage Laravel.
+            Route::get('dashboard', DashboardController::class)
+                ->name('client.dashboard.mine');
+            Route::get('depenses/mine', DepensesController::class)
+                ->name('client.depenses.mine');
+            Route::get('activite', ActiviteController::class)
+                ->name('client.activite.mine');
+            Route::get('commandes/mine', [CommandesController::class, 'index'])
+                ->name('client.commandes.mine');
+            Route::get('commandes/{commandeId}', [CommandesController::class, 'show'])
+                ->name('client.commandes.show');
+            // Noms 'propositions-vehicules.*' (pas 'propositions.*') : routes/web.php a déjà
+            // 'client.propositions.index'/'client.propositions.store' pour les pages Inertia —
+            // même piège de collision que 'client.dashboard'/'client.profile' plus haut.
+            Route::get('propositions-vehicules', [PropositionsVehiculeController::class, 'index'])
+                ->name('client.propositions-vehicules.index');
+            Route::post('propositions-vehicules', [PropositionsVehiculeController::class, 'store'])
+                ->name('client.propositions-vehicules.store');
             Route::get('vehicules/mine', VehiculesController::class)
                 ->name('client.vehicules.mine');
             Route::get('vehicules/{vehiculeId}/commissions', VehiculeCommissionsController::class)
                 ->name('client.vehicules.commissions');
             Route::get('vehicules/{vehiculeId}/frais', VehiculeFraisController::class)
                 ->name('client.vehicules.frais');
+            // Nom volontairement distinct de 'client.profile' (page Inertia,
+            // routes/web.php) : même collision que 'client.dashboard' plus haut —
+            // route('client.profile') résolvait vers cette route API (dernière
+            // enregistrée), jamais vers la page Inertia, un piège pour tout futur
+            // lien Ziggy côté frontend.
             Route::get('profile', ProfileController::class)
-                ->name('client.profile');
+                ->name('client.profile.mine');
             Route::patch('profile', UpdateProfileController::class)
                 ->name('client.profile.update');
             Route::patch('profile/notification-preferences', UpdateNotificationPreferencesController::class)

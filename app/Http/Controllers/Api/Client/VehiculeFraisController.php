@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Client;
 
 use App\Http\Controllers\Controller;
 use App\Models\Depense;
+use App\Models\DepenseType;
 use App\Models\Livreur;
 use App\Models\Proprietaire;
 use App\Models\User;
@@ -48,7 +49,7 @@ class VehiculeFraisController extends Controller
                 'id' => $d->id,
                 'date' => $d->date_depense?->toDateString(),
                 'montant' => (float) $d->montant,
-                'type_code' => $this->normalizeCode($d->depenseType?->code, $d->depenseType?->libelle),
+                'type_code' => DepenseType::normalizedCode($d->depenseType?->code, $d->depenseType?->libelle),
                 'type_label' => $d->depenseType?->libelle ?? 'Autre',
                 'statut' => $d->statut ?? 'en_attente',
                 'commentaire' => $d->commentaire,
@@ -80,15 +81,6 @@ class VehiculeFraisController extends Controller
                 }
             })
             ->exists();
-    }
-
-    private function normalizeCode(?string $code, ?string $libelle): string
-    {
-        $raw = $code ?? $libelle ?? 'autre';
-
-        return strtolower(
-            str_replace(['é', 'è', 'ê', 'à', 'â', 'î', 'ô', 'û', ' '], ['e', 'e', 'e', 'a', 'a', 'i', 'o', 'u', '_'], $raw)
-        );
     }
 
     private function labelMois(Carbon $date): string

@@ -51,6 +51,21 @@ class DepenseType extends Model
         return $query->orderBy('libelle');
     }
 
+    /**
+     * Code d'affichage stable pour un frontend (ex: filtre par icône) même
+     * quand `code` n'est pas renseigné — replié sur `libelle` normalisé.
+     * Partagé entre VehiculeFraisController et DepensesController (API) pour
+     * ne pas dupliquer cette normalisation à chaque nouvel endpoint dépenses.
+     */
+    public static function normalizedCode(?string $code, ?string $libelle): string
+    {
+        $raw = $code ?? $libelle ?? 'autre';
+
+        return strtolower(
+            str_replace(['é', 'è', 'ê', 'à', 'â', 'î', 'ô', 'û', ' '], ['e', 'e', 'e', 'a', 'a', 'i', 'o', 'u', '_'], $raw)
+        );
+    }
+
     // ── Relations ─────────────────────────────────────────────────────────────
 
     public function organization(): BelongsTo
