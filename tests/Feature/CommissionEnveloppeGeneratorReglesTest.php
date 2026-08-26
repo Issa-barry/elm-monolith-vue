@@ -26,9 +26,11 @@ use App\Models\Produit;
 use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\Vehicule;
+use App\Notifications\CommissionManquanteNotification;
 use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionEnveloppeGenerator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -491,7 +493,7 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
     /** @test */
     public function alerte_les_administrateurs_quand_aucun_bareme_nest_configure_pour_la_categorie(): void
     {
-        \Illuminate\Support\Facades\Notification::fake();
+        Notification::fake();
 
         // makeAdminUser() crée son propre user admin_entreprise (rôle déjà assigné) sur
         // une organisation dédiée : on le rattache à $this->org, seule organisation
@@ -515,9 +517,9 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
         $tentative = CommissionGenerationAttempt::where('source_id', $commande->id)->firstOrFail();
         $this->assertEquals(CommissionGenerationStatut::SUCCES, $tentative->statut);
 
-        \Illuminate\Support\Facades\Notification::assertSentTo(
+        Notification::assertSentTo(
             $admin,
-            \App\Notifications\CommissionManquanteNotification::class,
+            CommissionManquanteNotification::class,
             fn ($notification) => $notification->toArray($admin)['commande_id'] === $commande->id,
         );
     }
@@ -525,7 +527,7 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
     /** @test */
     public function alerte_les_administrateurs_et_le_declencheur_quand_la_generation_echoue(): void
     {
-        \Illuminate\Support\Facades\Notification::fake();
+        Notification::fake();
 
         // makeAdminUser() crée son propre user admin_entreprise (rôle déjà assigné) sur
         // une organisation dédiée : on le rattache à $this->org, seule organisation
@@ -555,13 +557,13 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
         $this->assertEquals(CommissionGenerationStatut::ERREUR, $tentative->statut);
         $this->assertSame($this->user->id, $tentative->created_by);
 
-        \Illuminate\Support\Facades\Notification::assertSentTo(
+        Notification::assertSentTo(
             $admin,
-            \App\Notifications\CommissionManquanteNotification::class,
+            CommissionManquanteNotification::class,
         );
-        \Illuminate\Support\Facades\Notification::assertSentTo(
+        Notification::assertSentTo(
             $this->user,
-            \App\Notifications\CommissionManquanteNotification::class,
+            CommissionManquanteNotification::class,
             fn ($notification) => str_contains($notification->toArray($this->user)['raison'], 'partage non configuré'),
         );
     }

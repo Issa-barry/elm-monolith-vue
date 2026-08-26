@@ -30,7 +30,7 @@ class CommissionManquanteNotification extends Notification
     private function raison(): string
     {
         return $this->motifErreur
-            ?? "Aucun barème de commission actif ne couvre cette vente (catégorie non configurée dans Paramètres > Commissions).";
+            ?? 'Aucun barème de commission actif ne couvre cette vente (catégorie non configurée dans Paramètres > Commissions).';
     }
 
     public function toArray(object $notifiable): array
