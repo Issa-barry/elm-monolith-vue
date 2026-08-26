@@ -12,6 +12,7 @@ use App\Models\ProduitVariante;
 use App\Models\Site;
 use App\Models\User;
 use App\Services\DroitAjustementStockService;
+use App\Services\MouvementStockMotifService;
 use App\Services\StockStatutService;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
@@ -74,7 +75,15 @@ class StockController extends Controller
 
     private function stockQuery(string $orgId, array $siteIds, int $seuilOrganisation, array $filters): Builder
     {
-        $quantite = 'COALESCE(vs.qte_stock, 0)';
+        $physique = 'COALESCE(vs.qte_stock, 0)';
+        $reserve = 'COALESCE(vs.qte_reservee, 0)';
+        // « Disponible » = ce qui reste réellement vendable — physique moins réservé (commandes
+        // vente confirmées, pas encore chargées, cf. StockReservationService). L'État affiché
+        // ci-dessous se base sur CETTE quantité, jamais le physique brut : un stock physique
+        // positif mais entièrement réservé doit apparaître en Rupture, pas Disponible (24/08/2026,
+        // même bug que la page Commande CMD-* : deux commandes pouvaient toutes deux promettre le
+        // même stock tant que rien n'était retenu entre la confirmation et le chargement).
+        $quantite = "({$physique} - {$reserve})";
         $seuil = 'COALESCE(p.seuil_alerte_stock, ?)';
 
         $query = DB::table('produit_variantes as pv')
@@ -113,7 +122,9 @@ class StockController extends Controller
                 's.nom as site_nom',
                 's.code as site_code',
             ])
-            ->selectRaw("{$quantite} as qte_stock")
+            ->selectRaw("{$quantite} as qte_disponible")
+            ->selectRaw("{$physique} as qte_physique")
+            ->selectRaw("{$reserve} as qte_reservee")
             ->selectRaw("{$seuil} as seuil_effectif", [$seuilOrganisation]);
 
         if ($filters['search'] !== '') {
@@ -165,14 +176,24 @@ class StockController extends Controller
             ->whereIn('produit_variante_id', $varianteIds)
             ->whereIn('site_id', $siteIds)
             ->orderByDesc('created_at')
-            ->get(['id', 'produit_variante_id', 'site_id', 'type', 'quantite', 'created_at'])
+            ->get(['id', 'produit_variante_id', 'site_id', 'type', 'quantite', 'source_type', 'source_id', 'notes', 'created_at'])
             ->unique(fn (MouvementStock $mouvement) => $mouvement->produit_variante_id.'|'.$mouvement->site_id)
             ->keyBy(fn (MouvementStock $mouvement) => $mouvement->produit_variante_id.'|'.$mouvement->site_id);
 
+        // Motif + source (« Vente CMD-… », « Transfert TR-… », ou le motif saisi pour un
+        // ajustement manuel) — jamais déduit du seul signe/montant du mouvement, cf. AGENTS.md
+        // §6. Réutilise MouvementStockMotifService::annoter(), déjà utilisé par la modale
+        // Historique, plutôt que de dupliquer cette résolution ici.
+        MouvementStockMotifService::annoter($derniersMouvements);
+
         $stocks->setCollection($rows->map(function ($row) use ($variantes, $derniersMouvements, $sitesAjustablesIds) {
             $variante = $variantes->get($row->variante_id);
+            // L'état (Rupture / Stock faible / Disponible) se base sur le DISPONIBLE — jamais le
+            // physique brut : un stock physique positif mais entièrement réservé par des
+            // commandes confirmées n'est plus vendable, il ne doit donc jamais afficher
+            // « Disponible » (cf. commentaire de stockQuery()).
             $statut = $this->stockStatutService->statutPour(
-                (int) $row->qte_stock,
+                (int) $row->qte_disponible,
                 (int) $row->seuil_effectif,
                 (bool) $row->alerte_stock_active,
             );
@@ -190,13 +211,21 @@ class StockController extends Controller
                 'site_id' => $row->site_id,
                 'site_nom' => $row->site_nom,
                 'site_code' => $row->site_code,
-                'qte_stock' => (int) $row->qte_stock,
+                'qte_disponible' => (int) $row->qte_disponible,
+                'qte_physique' => (int) $row->qte_physique,
+                'qte_engagee' => (int) $row->qte_reservee,
+                // Bloqué et Entrant ne sont pas encore calculés côté backend (Lot 3 / Lot 2) —
+                // explicitement null, jamais 0 : un 0 laisserait croire à un contrôle déjà fait
+                // (cf. audit stock du 25/08/2026, « ne jamais afficher de fausse valeur »).
+                'qte_bloquee' => null,
+                'qte_entrante' => null,
                 'seuil_effectif' => (int) $row->seuil_effectif,
                 'statut' => $statut->value,
                 'statut_label' => $statut->label(),
                 'dernier_mouvement' => $dernierMouvement ? [
                     'type' => $dernierMouvement->type,
                     'quantite' => (int) $dernierMouvement->quantite,
+                    'motif_label' => $dernierMouvement->motif_label,
                     'created_at' => $dernierMouvement->created_at?->format('d/m/Y H:i'),
                 ] : null,
                 'can_ajuster' => $sitesAjustablesIds->contains((string) $row->site_id),

@@ -76,6 +76,8 @@ class CommandeVenteService
         self::validerPreconditions($commande, StatutCommandeVente::A_CHARGER);
 
         DB::transaction(function () use ($commande) {
+            self::reserverLignes($commande);
+
             $commande->update([
                 'statut' => StatutCommandeVente::A_CHARGER,
                 'a_charger_at' => now(),
@@ -83,6 +85,58 @@ class CommandeVenteService
 
             self::creerFactureInitiale($commande);
         });
+    }
+
+    /**
+     * A_CHARGER : réserve la quantité demandée de chaque ligne — le disponible baisse dès la
+     * confirmation, jamais seulement au chargement (cf. StockReservationService, correctif du
+     * 24/08/2026 : avant cela, deux commandes concurrentes pouvaient toutes deux être confirmées
+     * en promettant le même stock physique, le conflit n'étant détecté qu'au chargement de
+     * l'une des deux — trop tard pour l'autre). Ignore les lignes dont le produit ne gère pas de
+     * stock (type service) — même convention que decrementerStock(). Le contrôle de
+     * disponibilité proprement dit a déjà eu lieu juste avant, dans validerPreconditions() →
+     * checkDisponibiliteStock() ; StockReservationService::reserver() le REFAIT sous verrou (seul
+     * endroit réellement protégé contre la concurrence), ce contrôle-ci n'est qu'un pré-filtre
+     * offrant un message d'erreur groupé.
+     */
+    private static function reserverLignes(CommandeVente $commande): void
+    {
+        $commande->load('lignes.variante.produit.produitType');
+        $userId = Auth::id();
+        $autoriseVenteStockNegatif = Parametre::isVentesAutoriseesSansStock($commande->organization_id);
+
+        foreach ($commande->lignes as $ligne) {
+            $produit = $ligne->variante?->produit;
+            if (! $produit?->produitType?->gere_stock) {
+                continue;
+            }
+
+            StockReservationService::reserver(
+                varianteId: $ligne->variante_id,
+                siteId: $commande->site_id,
+                orgId: $commande->organization_id,
+                quantite: $ligne->quantite_demandee,
+                sourceType: CommandeVenteLigne::class,
+                sourceId: $ligne->id,
+                userId: $userId,
+                allowNegative: $autoriseVenteStockNegatif,
+            );
+        }
+    }
+
+    /**
+     * Libère les réservations actives de chaque ligne (annulation avant chargement) — no-op pour
+     * une ligne jamais réservée (annulation depuis BROUILLON) ou déjà consommée (n'arrive jamais
+     * ici : annuler() n'est permis que depuis BROUILLON/A_CHARGER/FACTURATION, cf.
+     * StatutCommandeVente::isAnnulable()).
+     */
+    private static function libererLignesReservees(CommandeVente $commande): void
+    {
+        $commande->loadMissing('lignes');
+
+        foreach ($commande->lignes as $ligne) {
+            StockReservationService::liberer(CommandeVenteLigne::class, $ligne->id, $commande->site_id, $commande->organization_id);
+        }
     }
 
     /**
@@ -324,6 +378,15 @@ class CommandeVenteService
 
             $quantite = $ligne->quantite_chargee ?? $ligne->quantite_demandee;
 
+            // Consomme la réservation (créée à la confirmation) AVANT le décrément physique :
+            // sinon le garde-fou "le stock physique ne descend jamais sous le réservé" de
+            // MouvementStockService::appliquer() rejetterait à tort la propre consommation de
+            // cette réservation. Libère intégralement la réservation quelle que soit la quantité
+            // réellement chargée — un écart négatif (moins chargé que demandé) rend
+            // automatiquement le surplus non chargé disponible pour d'autres commandes (cf.
+            // StockReservationService::consommer()).
+            StockReservationService::consommer(CommandeVenteLigne::class, $ligne->id, $commande->site_id, $commande->organization_id);
+
             MouvementStockService::sortirStock(
                 varianteId: $ligne->variante_id,
                 siteId: $commande->site_id,
@@ -384,6 +447,8 @@ class CommandeVenteService
                 'annulee_at' => now(),
                 'annulee_par' => Auth::id(),
             ]);
+
+            self::libererLignesReservees($commande);
 
             $commande->loadMissing('facture');
             if ($commande->facture && ! $commande->facture->isAnnulee() && ! $commande->facture->isPayee()) {
@@ -450,7 +515,11 @@ class CommandeVenteService
     /**
      * BROUILLON → A_CHARGER : au moins une ligne requise. Le véhicule n'est obligatoire que
      * hors commande externe — un client EXTERNE charge sa propre commande sans véhicule
-     * de flotte (facturée à prix usine, cf. VehiculeCommandeContextResolver).
+     * de flotte (facturée à prix usine, cf. VehiculeCommandeContextResolver). Recontrôle aussi
+     * la disponibilité (24/08/2026, cf. reserverLignes()) : le stock a pu changer depuis la
+     * création du brouillon (une autre commande confirmée entre-temps a pu le réserver) — jamais
+     * suffisant de ne compter que sur le contrôle fait à la création (CommandeVenteController::
+     * store()/update()).
      */
     private static function checkConfirmer(CommandeVente $commande, array &$errors): void
     {
@@ -463,6 +532,8 @@ class CommandeVenteService
         if (! $commande->vehicule_id && $commande->client?->type !== ClientType::EXTERNE) {
             $errors[] = 'Un véhicule doit être assigné avant de confirmer la commande.';
         }
+
+        self::checkDisponibiliteStock($commande, $errors);
     }
 
     /**
@@ -489,16 +560,22 @@ class CommandeVenteService
      * Vérifie, ligne par ligne et sur le site de la commande, que la quantité chargée ne
      * dépasse pas le stock disponible — cf. verifierDisponibiliteLignes() ci-dessous, point
      * d'entrée unique réutilisé par CommandeVenteController::store()/update() (création et
-     * modification, 24/08/2026) ET par ce contrôle au chargement. Le stock a pu changer entre
-     * la création d'une commande et son chargement (autre vente entre-temps, ajustement...) :
-     * ce second contrôle reste donc indispensable même si le premier a déjà validé la commande
-     * à sa création.
+     * modification, 24/08/2026), checkConfirmer() (confirmation — réservation) ET ce contrôle au
+     * chargement. Le stock a pu changer entre chaque étape (autre vente entre-temps,
+     * ajustement...) : chaque contrôle reste indispensable même si le précédent a déjà validé la
+     * commande à son étape.
+     *
+     * 'ligne_id' est transmis à chaque appel (BROUILLON compris) : verifierDisponibiliteLignes()
+     * l'utilise pour rendre à la ligne sa PROPRE réservation active — sans effet tant qu'aucune
+     * réservation n'existe encore (BROUILLON, avant confirmer()), indispensable dès A_CHARGER
+     * pour ne jamais bloquer une commande sur SA propre réservation.
      */
     private static function checkDisponibiliteStock(CommandeVente $commande, array &$errors): void
     {
         $commande->loadMissing('lignes');
 
         $lignes = $commande->lignes->map(fn (CommandeVenteLigne $l) => [
+            'ligne_id' => $l->id,
             'variante_id' => $l->variante_id,
             'quantite' => $l->quantite_chargee ?? $l->quantite_demandee,
         ])->all();
@@ -523,7 +600,15 @@ class CommandeVenteService
      *    quantiteDisponible()), seulement en mécanique d'appel.
      * Ignore les lignes dont le produit ne gère pas de stock (type service).
      *
-     * @param  array<int, array{variante_id: string, quantite: int}>  $lignes
+     * MouvementStockService::quantiteDisponible() nette désormais le réservé de TOUTES les
+     * sources (StockReservationService, 24/08/2026) — y compris la propre réservation de la
+     * ligne en cours de recontrôle. Quand 'ligne_id' est fourni, sa réservation active est
+     * rajoutée au disponible avant comparaison : une commande ne doit jamais être bloquée par SA
+     * PROPRE réservation (ex : recontrôle au chargement, la ligne détient déjà sa réservation
+     * depuis confirmer()). Absent (création/modification d'un brouillon, où aucune réservation
+     * n'existe encore) : aucun effet, la propre réservation vaut 0.
+     *
+     * @param  array<int, array{ligne_id?: string, variante_id: string, quantite: int}>  $lignes
      * @param  array<int, string>  $errors  Passé par référence, une entrée par ligne en anomalie.
      */
     public static function verifierDisponibiliteLignes(string $orgId, string $siteId, array $lignes, array &$errors): void
@@ -546,6 +631,10 @@ class CommandeVenteService
             }
 
             $disponible = MouvementStockService::quantiteDisponible($ligne['variante_id'], $siteId);
+
+            if (! empty($ligne['ligne_id'])) {
+                $disponible += StockReservationService::quantiteReserveeActivePourSource(CommandeVenteLigne::class, $ligne['ligne_id'], $siteId, $orgId);
+            }
 
             if ($ligne['quantite'] > $disponible) {
                 $errors[] = "Stock insuffisant pour « {$produit->nom} » : {$ligne['quantite']} demandés, {$disponible} disponibles.";

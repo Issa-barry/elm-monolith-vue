@@ -96,11 +96,11 @@ class StockIndexTest extends TestCase
                 ->has('stocks.data', 4)
                 ->where('stocks.data.0.produit_nom', 'Bidon premium')
                 ->where('stocks.data.0.site_nom', 'Agence Alpha')
-                ->where('stocks.data.0.qte_stock', 3)
+                ->where('stocks.data.0.qte_disponible', 3)
                 ->where('stocks.data.0.statut', 'stock_faible')
                 ->where('stocks.data.0.seuil_effectif', 5)
                 ->where('stocks.data.1.site_nom', 'Agence Beta')
-                ->where('stocks.data.1.qte_stock', 0)
+                ->where('stocks.data.1.qte_disponible', 0)
                 ->where('stocks.data.1.statut', 'rupture')
             );
     }
@@ -159,7 +159,7 @@ class StockIndexTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->has('stocks.data', 1)
                 ->where('stocks.data.0.site_id', $this->siteA->id)
-                ->where('stocks.data.0.qte_stock', 7)
+                ->where('stocks.data.0.qte_disponible', 7)
                 ->where('filters.site_ids.0', $this->siteA->id)
             );
     }

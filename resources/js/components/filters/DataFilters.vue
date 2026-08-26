@@ -590,8 +590,33 @@ const hasActiveFilters = computed(
                             />
                         </div>
 
+                        <!-- autocomplete -->
+                        <div
+                            v-else-if="
+                                field.type === 'autocomplete' &&
+                                field.suggestionsUrl
+                            "
+                            :data-testid="`filter-field-${field.key}`"
+                        >
+                            <FilterAutocomplete
+                                v-model="localValues[field.key] as string"
+                                :label="field.label"
+                                :suggestions-url="field.suggestionsUrl"
+                                :field-name="
+                                    field.suggestionsField ?? field.key
+                                "
+                                :placeholder="field.placeholder ?? ''"
+                                :disabled="field.disabled ?? false"
+                                full-width
+                            />
+                        </div>
+
                         <!-- text -->
-                        <div v-else class="space-y-1.5">
+                        <div
+                            v-else
+                            :data-testid="`filter-field-${field.key}`"
+                            class="space-y-1.5"
+                        >
                             <Label>{{ field.label }}</Label>
                             <Input
                                 v-model="
@@ -603,6 +628,10 @@ const hasActiveFilters = computed(
                                 type="text"
                                 :placeholder="field.placeholder ?? ''"
                                 class="h-9"
+                                @keydown.enter="
+                                    applyFilters();
+                                    filterDrawerOpen = false;
+                                "
                             />
                         </div>
                     </template>

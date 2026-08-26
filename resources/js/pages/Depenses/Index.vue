@@ -5,6 +5,7 @@ import VehiculeDetailDialog from '@/components/Depenses/VehiculeDetailDialog.vue
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import ListPageActions from '@/components/ListPageActions.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -30,11 +31,13 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     Check,
+    ChevronDown,
     ChevronLeft,
     ChevronRight,
     Download,
     ExternalLink,
     Eye,
+    FileSpreadsheet,
     History,
     MoreHorizontal,
     Pencil,
@@ -159,19 +162,16 @@ const filterValues = computed(() => ({
 }));
 
 const filterFields = computed<FilterField[]>(() => [
-    // ── Inline : visibles directement dans la barre ──────────────────────────
     {
         key: 'search',
         label: 'Rechercher',
         type: 'text',
-        inline: true,
         placeholder: 'Rechercher...',
     },
     {
         key: 'statut',
         label: 'Statut',
         type: 'select',
-        inline: true,
         options: [
             { value: '', label: 'Tous les statuts' },
             ...props.statuts.map((s) => ({ value: s.value, label: s.label })),
@@ -181,7 +181,6 @@ const filterFields = computed<FilterField[]>(() => [
         key: 'concerne',
         label: 'Concerné',
         type: 'autocomplete',
-        inline: true,
         placeholder: 'Nom ou prénom…',
         suggestionsUrl: '/backoffice/depenses/suggestions',
         suggestionsField: 'concerne',
@@ -190,7 +189,6 @@ const filterFields = computed<FilterField[]>(() => [
         key: 'telephone_concerne',
         label: 'Téléphone',
         type: 'autocomplete',
-        inline: true,
         placeholder: 'Ex: 622…',
         suggestionsUrl: '/backoffice/depenses/suggestions',
         suggestionsField: 'telephone_concerne',
@@ -199,12 +197,10 @@ const filterFields = computed<FilterField[]>(() => [
         key: 'vehicule',
         label: 'Véhicule',
         type: 'autocomplete',
-        inline: true,
         placeholder: 'Nom ou immatriculation…',
         suggestionsUrl: '/backoffice/depenses/suggestions',
         suggestionsField: 'vehicule',
     },
-    // ── Drawer : filtres avancés ─────────────────────────────────────────────
     {
         key: 'type',
         label: 'Type de dépense',
@@ -458,7 +454,7 @@ const categorieColors: Record<string, string> = {
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
         <div class="flex flex-col gap-6 p-4 sm:p-6">
             <!-- En-tête -->
-            <div class="flex items-center justify-between gap-4">
+            <div class="flex flex-wrap items-start justify-between gap-4">
                 <div>
                     <h1 class="text-2xl font-semibold tracking-tight">
                         Dépenses
@@ -469,25 +465,59 @@ const categorieColors: Record<string, string> = {
                         }}
                     </p>
                 </div>
-                <div class="flex items-center gap-2">
-                    <Button variant="outline" size="sm" @click="exportExcel">
-                        <Download class="mr-1.5 h-3.5 w-3.5" />
-                        Excel
-                    </Button>
-                    <Button variant="outline" size="sm" @click="imprimer">
-                        <Printer class="mr-1.5 h-3.5 w-3.5" />
-                        Imprimer
-                    </Button>
-                    <Link
-                        v-if="props.can_create"
-                        href="/backoffice/depenses/create"
-                    >
-                        <Button>
-                            <Plus class="mr-2 h-4 w-4" />
-                            Nouvelle dépense
-                        </Button>
-                    </Link>
-                </div>
+                <ListPageActions>
+                    <template #export>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger as-child>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    data-testid="depenses-export-trigger"
+                                >
+                                    <Download class="mr-1.5 h-3.5 w-3.5" />
+                                    Exporter
+                                    <ChevronDown class="ml-1.5 h-3.5 w-3.5" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" class="w-48">
+                                <DropdownMenuItem
+                                    class="cursor-pointer"
+                                    data-testid="depenses-export-excel"
+                                    @click="exportExcel"
+                                >
+                                    <FileSpreadsheet class="h-4 w-4" />
+                                    Excel
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    class="cursor-pointer"
+                                    data-testid="depenses-export-imprimer"
+                                    @click="imprimer"
+                                >
+                                    <Printer class="h-4 w-4" />
+                                    Imprimer
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </template>
+                    <template #filters>
+                        <DataFilters
+                            trigger-only
+                            url="/backoffice/depenses"
+                            :values="filterValues"
+                            :sites="sites"
+                            :result-count="depenses.total"
+                            :fields="filterFields"
+                        />
+                    </template>
+                    <template v-if="props.can_create" #primary>
+                        <Link href="/backoffice/depenses/create">
+                            <Button>
+                                <Plus class="mr-2 h-4 w-4" />
+                                Nouvelle dépense
+                            </Button>
+                        </Link>
+                    </template>
+                </ListPageActions>
             </div>
 
             <!-- Stats -->
@@ -517,15 +547,6 @@ const categorieColors: Record<string, string> = {
                     </p>
                 </div>
             </div>
-
-            <!-- Filtres -->
-            <DataFilters
-                url="/backoffice/depenses"
-                :values="filterValues"
-                :sites="sites"
-                :result-count="depenses.total"
-                :fields="filterFields"
-            />
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">

@@ -242,7 +242,7 @@ test('stat cards reflect active filters', async ({ page }) => {
     const totalBefore = parseInt((await totalCard.textContent()) ?? '0', 10);
     expect(totalBefore).toBeGreaterThan(0);
 
-    const searchInput = getVisibleSearchInput(page);
+    const searchInput = await getVisibleSearchInput(page);
     await searchInput.fill('ZZZZNO_MATCH_9999');
     await searchInput.press('Enter');
     await page.waitForLoadState('networkidle');
@@ -261,8 +261,12 @@ test('stat cards reflect active filters', async ({ page }) => {
         .first();
     await expect(valideesCard).toHaveText('0');
 
-    await searchInput.fill('');
-    await searchInput.press('Enter');
+    // Filtres en mode trigger-only (AGENTS.md §2) : le drawer se referme après le premier
+    // Appliquer (touche Entrée) — le champ recherche n'est donc plus dans le DOM, il faut
+    // rouvrir "Filtres" (via un nouvel appel, pas réutiliser le Locator devenu obsolète).
+    const searchInputAgain = await getVisibleSearchInput(page);
+    await searchInputAgain.fill('');
+    await searchInputAgain.press('Enter');
     await page.waitForLoadState('networkidle');
 
     await expect(totalCard).not.toHaveText('0', { timeout: 10_000 });
@@ -411,10 +415,15 @@ test('filtre agence (site_ids) persiste après Appliquer — chip, case cochée 
     await page.goto('/backoffice/depenses');
     await expect(page).toHaveURL(/\/depenses$/, { timeout: 15_000 });
 
-    // Le sélecteur "agence" générique vit dans la barre d'outils (pas dans
-    // le drawer) — Dépenses n'a pas de filtre site dédié, il réutilise le
-    // même composant que Ventes / Produits / Logistique.
-    const agenceMultiselect = page
+    // Filtres en mode trigger-only (AGENTS.md §2) : le sélecteur "agence" générique vit
+    // désormais dans le drawer (bouton "Filtres"), plus dans une barre visible directement —
+    // Dépenses n'a pas de filtre site dédié, il réutilise le même composant que
+    // Ventes / Produits / Logistique.
+    await page.getByRole('button', { name: /^filtres/i }).click();
+    const drawer = page.getByTestId('filters-drawer');
+    await expect(drawer).toBeVisible();
+
+    const agenceMultiselect = drawer
         .getByTestId('agency-filter')
         .locator('[data-pc-name="multiselect"]')
         .first();
@@ -452,12 +461,17 @@ test('filtre agence (site_ids) persiste après Appliquer — chip, case cochée 
     );
     await expect(chips.first()).toBeVisible({ timeout: 3_000 });
 
-    await page.getByTestId('filters-search').first().click();
+    // Bouton "Appliquer les filtres" du drawer (FilterDrawer.vue) — pas l'ancien bouton
+    // "filters-search" de la barre inline, qui ne rend plus rien en mode trigger-only.
+    await drawer.getByTestId('filters-apply').click();
     await expect(page).toHaveURL(/site_ids/, { timeout: 10_000 });
     await page.waitForLoadState('networkidle');
+    await expect(drawer).toBeHidden();
 
-    // Régression : après le round-trip serveur (rechargement Inertia avec
-    // les nouveaux props), le chip ne doit plus être effacé.
+    // Régression : après le round-trip serveur (rechargement Inertia avec les nouveaux
+    // props) ET la fermeture du drawer par Appliquer, l'état doit persister à la réouverture.
+    await page.getByRole('button', { name: /^filtres/i }).click();
+    await expect(drawer).toBeVisible();
     await expect(chips.first()).toBeVisible({ timeout: 5_000 });
     if (optionLabel) {
         await expect(agenceMultiselect).toContainText(optionLabel, {

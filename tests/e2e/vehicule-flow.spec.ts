@@ -66,7 +66,7 @@ test('login + create vehicule via site + verify in site tab + verify global list
     await page.goto('/backoffice/vehicules');
     await expect(page).toHaveURL(/\/vehicules$/);
 
-    const searchInput = getVisibleSearchInput(page);
+    const searchInput = await getVisibleSearchInput(page);
     await searchInput.fill(immatriculation);
     await searchInput.press('Enter');
     await page.waitForLoadState('networkidle');
@@ -95,7 +95,7 @@ test('login + create vehicule via site + verify in site tab + verify global list
 
     // Step 8: Verify the modification is visible in the global list
     await page.goto('/backoffice/vehicules');
-    const searchInput2 = getVisibleSearchInput(page);
+    const searchInput2 = await getVisibleSearchInput(page);
     await searchInput2.fill(immatriculation);
     await searchInput2.press('Enter');
     await page.waitForLoadState('networkidle');

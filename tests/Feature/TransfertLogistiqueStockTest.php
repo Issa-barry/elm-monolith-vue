@@ -186,7 +186,18 @@ class TransfertLogistiqueStockTest extends TestCase
 
         // L'entrée de 30 est réversée : destination revient à son état d'avant réception.
         $this->assertEquals(20, VarianteStock::where('produit_variante_id', $variante->id)->where('site_id', $this->siteDestination->id)->value('qte_stock'));
-        $this->assertEquals(0, MouvementStock::where('type', 'entree')->where('site_id', $this->siteDestination->id)->count());
+        // Depuis le correctif du 25/08/2026 (contre-mouvement, jamais de suppression) : le
+        // mouvement d'entrée original reste en base, marqué annulé, ET un contre-mouvement de
+        // sortie trace l'annulation — jamais un delete() qui effacerait la preuve.
+        $entree = MouvementStock::where('type', 'entree')->where('site_id', $this->siteDestination->id)->first();
+        $this->assertNotNull($entree);
+        $this->assertTrue($entree->isAnnule());
+        $this->assertDatabaseHas('mouvements_stock', [
+            'site_id' => $this->siteDestination->id,
+            'type' => 'sortie',
+            'quantite' => 30,
+            'annule_par_id' => null,
+        ]);
         // Le site source, lui, n'est jamais touché par une invalidation de réception.
         $this->assertEquals(70, VarianteStock::where('produit_variante_id', $variante->id)->where('site_id', $this->siteSource->id)->value('qte_stock'));
     }

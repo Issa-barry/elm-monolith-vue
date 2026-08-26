@@ -10,7 +10,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function openFilterDrawer(page: any) {
-    const btn = page.getByRole('button', { name: /filtres/i }).first();
+    const btn = page.getByRole('button', { name: /^filtres/i }).first();
     await expect(btn).toBeVisible({ timeout: 10_000 });
     await btn.click();
     await expect(page.getByText('Statut facture')).toBeVisible({
@@ -18,13 +18,14 @@ async function openFilterDrawer(page: any) {
     });
 }
 
-// Le filtre "Statut commande" est affiché inline dans la barre d'outils
-// (pas dans le drawer). Locator stable (data-testid), indépendant du texte
-// affiché — qui change dès qu'une option est sélectionnée (placeholder ->
-// chip), ce qui invalide tout locator basé sur .filter({ hasText: ... }).
+// Standard UI (AGENTS.md §2) : DataFilters en mode trigger-only — tous les
+// champs, y compris "Statut commande" et Agence, sont dans le drawer. Locator
+// stable (data-testid), indépendant du texte affiché — qui change dès qu'une
+// option est sélectionnée (placeholder -> chip), ce qui invalide tout locator
+// basé sur .filter({ hasText: ... }).
 function statutMultiselect(page: any) {
     return page
-        .getByTestId('filter-inline-statuts')
+        .getByTestId('filter-field-statuts')
         .locator('[data-pc-name="multiselect"]')
         .first();
 }
@@ -50,14 +51,31 @@ async function selectMultiSelectOption(page: any, optionLabel: string) {
     await option.click();
 }
 
-test.describe('Ventes — filtre multi-statut', () => {
-    test('le filtre statut commande est affiché inline et propose le MultiSelect statut', async ({
+test.describe('Ventes — standard de liste (Filtres en en-tête)', () => {
+    test('un seul bouton Filtres est visible dans l’en-tête, sans grande barre de champs au-dessus du tableau', async ({
         page,
     }) => {
         await login(page);
         await page.goto('/backoffice/ventes');
         await expect(page).toHaveURL(/\/ventes/, { timeout: 15_000 });
 
+        const filtresBtn = page.getByRole('button', { name: /^filtres/i }).first();
+        await expect(filtresBtn).toBeVisible({ timeout: 10_000 });
+
+        // Aucun champ de filtre n'est visible tant que le drawer n'est pas ouvert.
+        await expect(page.getByTestId('filter-field-statuts')).toHaveCount(0);
+    });
+});
+
+test.describe('Ventes — filtre multi-statut (drawer)', () => {
+    test('le filtre statut commande propose le MultiSelect statut dans le drawer', async ({
+        page,
+    }) => {
+        await login(page);
+        await page.goto('/backoffice/ventes');
+        await expect(page).toHaveURL(/\/ventes/, { timeout: 15_000 });
+
+        await openFilterDrawer(page);
         const multiselect = statutMultiselect(page);
         await expect(multiselect).toBeVisible({ timeout: 5_000 });
         await expect(multiselect).toContainText(/tous les statuts/i);
@@ -70,7 +88,9 @@ test.describe('Ventes — filtre multi-statut', () => {
         await page.goto('/backoffice/ventes');
         await expect(page).toHaveURL(/\/ventes/, { timeout: 15_000 });
 
-        // Ouvrir le MultiSelect statut (inline dans la barre d'outils)
+        await openFilterDrawer(page);
+
+        // Ouvrir le MultiSelect statut (dans le drawer)
         const multiselect = statutMultiselect(page);
         await multiselect.click();
 
@@ -81,10 +101,7 @@ test.describe('Ventes — filtre multi-statut', () => {
         await page.keyboard.press('Escape');
 
         // Appliquer
-        await page
-            .getByRole('button', { name: /appliquer/i })
-            .first()
-            .click();
+        await page.getByTestId('filters-apply').click();
 
         // URL doit contenir statuts[]=brouillon
         await expect(page).toHaveURL(/statuts/, { timeout: 10_000 });
@@ -94,6 +111,8 @@ test.describe('Ventes — filtre multi-statut', () => {
         await login(page);
         await page.goto('/backoffice/ventes');
         await expect(page).toHaveURL(/\/ventes/, { timeout: 15_000 });
+
+        await openFilterDrawer(page);
 
         const multiselect = statutMultiselect(page);
         await multiselect.click();
@@ -111,10 +130,7 @@ test.describe('Ventes — filtre multi-statut', () => {
         );
         await expect(chips).toHaveCount(2, { timeout: 5_000 });
 
-        await page
-            .getByRole('button', { name: /appliquer/i })
-            .first()
-            .click();
+        await page.getByTestId('filters-apply').click();
         await expect(page).toHaveURL(/statuts/, { timeout: 10_000 });
     });
 
@@ -134,19 +150,19 @@ test.describe('Ventes — filtre multi-statut', () => {
         await expect(page).not.toHaveURL(/statuts/, { timeout: 10_000 });
     });
 
-    test('le filtre agence est aussi un MultiSelect (admin)', async ({
+    test('le filtre agence est aussi un MultiSelect (admin), affiché dans le drawer', async ({
         page,
     }) => {
         await login(page);
         await page.goto('/backoffice/ventes');
         await expect(page).toHaveURL(/\/ventes/, { timeout: 15_000 });
 
-        // Le sélecteur agence est affiché inline dans la barre d'outils (pas
-        // dans le drawer de filtres) : ne pas ouvrir le drawer ici, sinon son
-        // overlay intercepte les clics sur ce sélecteur.
-        // Locator stable (data-testid), sans .filter({ hasText }) : le texte
-        // affiché passe de "Toutes les agences" à la puce sélectionnée dès le
-        // clic sur une option, ce qui invaliderait un locator filtré par texte.
+        // En mode trigger-only, le sélecteur agence est désormais dans le
+        // drawer (comme tous les autres champs) : il faut l'ouvrir avant d'y
+        // accéder. Locator stable (data-testid), sans .filter({ hasText })
+        // car le texte affiché passe de "Toutes les agences" à la puce
+        // sélectionnée dès le clic sur une option.
+        await openFilterDrawer(page);
         const agenceMultiselect = page
             .getByTestId('agency-filter')
             .locator('[data-pc-name="multiselect"]')

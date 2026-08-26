@@ -2,6 +2,7 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import ListPageActions from '@/components/ListPageActions.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -74,21 +75,19 @@ const selectedStatut = ref('');
 
 const filterFields = computed((): FilterField[] => [
     {
-        key: 'categorie',
-        label: 'Concerné',
-        type: 'select',
-        inline: true,
-        options: props.categories,
-    },
-    {
         key: 'statut',
         label: 'Statut',
         type: 'select',
-        inline: true,
         options: [
             { value: 'actif', label: 'Actif' },
             { value: 'inactif', label: 'Inactif' },
         ],
+    },
+    {
+        key: 'categorie',
+        label: 'Concerné',
+        type: 'select',
+        options: props.categories,
     },
 ]);
 
@@ -272,95 +271,96 @@ const categorieColors: Record<string, string> = {
                         livreur, salarié, propriétaire ou interne.
                     </p>
                 </div>
-                <div class="flex items-center gap-2">
-                    <DropdownMenu>
-                        <DropdownMenuTrigger as-child>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                data-testid="depense-types-export-trigger"
-                            >
-                                <Download class="mr-1.5 h-3.5 w-3.5" />
-                                Exporter
-                                <ChevronDown class="ml-1.5 h-3.5 w-3.5" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" class="w-48">
-                            <DropdownMenuItem
-                                class="cursor-pointer"
-                                data-testid="depense-types-export-excel"
-                                @click="exportExcel"
-                            >
-                                <FileSpreadsheet class="h-4 w-4" />
-                                Excel
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                                class="cursor-pointer"
-                                data-testid="depense-types-export-pdf"
-                                @click="exportPdf"
-                            >
-                                <FileText class="h-4 w-4" />
-                                PDF
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-
-                    <DropdownMenu v-if="can('parametres.update')">
-                        <DropdownMenuTrigger as-child>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                data-testid="depense-types-import-trigger"
-                            >
-                                <Upload class="mr-1.5 h-3.5 w-3.5" />
-                                Importer
-                                <ChevronDown class="ml-1.5 h-3.5 w-3.5" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" class="w-56">
-                            <DropdownMenuItem
-                                class="cursor-pointer"
-                                data-testid="depense-types-import-open"
-                                @click="importDialogVisible = true"
-                            >
-                                <Upload class="h-4 w-4" />
-                                Importer des types
-                            </DropdownMenuItem>
-                            <DropdownMenuItem as-child>
-                                <a
-                                    href="/backoffice/depenses/types/import/modele"
-                                    class="flex w-full items-center gap-2"
+                <ListPageActions>
+                    <template #export>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger as-child>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    data-testid="depense-types-export-trigger"
                                 >
-                                    <Download class="h-4 w-4" />
-                                    Télécharger le modèle
-                                </a>
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-
-                    <Button
-                        v-if="can('parametres.update')"
-                        size="sm"
-                        @click="openCreate"
-                    >
-                        <Plus class="mr-1.5 h-3.5 w-3.5" />
-                        Nouveau type
-                    </Button>
-                </div>
+                                    <Download class="mr-1.5 h-3.5 w-3.5" />
+                                    Exporter
+                                    <ChevronDown class="ml-1.5 h-3.5 w-3.5" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" class="w-48">
+                                <DropdownMenuItem
+                                    class="cursor-pointer"
+                                    data-testid="depense-types-export-excel"
+                                    @click="exportExcel"
+                                >
+                                    <FileSpreadsheet class="h-4 w-4" />
+                                    Excel
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    class="cursor-pointer"
+                                    data-testid="depense-types-export-pdf"
+                                    @click="exportPdf"
+                                >
+                                    <FileText class="h-4 w-4" />
+                                    PDF
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </template>
+                    <template v-if="can('parametres.update')" #import>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger as-child>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    data-testid="depense-types-import-trigger"
+                                >
+                                    <Upload class="mr-1.5 h-3.5 w-3.5" />
+                                    Importer
+                                    <ChevronDown class="ml-1.5 h-3.5 w-3.5" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" class="w-56">
+                                <DropdownMenuItem
+                                    class="cursor-pointer"
+                                    data-testid="depense-types-import-open"
+                                    @click="importDialogVisible = true"
+                                >
+                                    <Upload class="h-4 w-4" />
+                                    Importer des types
+                                </DropdownMenuItem>
+                                <DropdownMenuItem as-child>
+                                    <a
+                                        href="/backoffice/depenses/types/import/modele"
+                                        class="flex w-full items-center gap-2"
+                                    >
+                                        <Download class="h-4 w-4" />
+                                        Télécharger le modèle
+                                    </a>
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </template>
+                    <template #filters>
+                        <DataFilters
+                            trigger-only
+                            :fields="filterFields"
+                            :values="{
+                                categorie: selectedCategorie,
+                                statut: selectedStatut,
+                            }"
+                            :result-count="filtered.length"
+                            :hide-agence-selector="true"
+                            @apply="handleApply"
+                            @reset="resetFilters"
+                        />
+                    </template>
+                    <template v-if="can('parametres.update')" #primary>
+                        <Button size="sm" @click="openCreate">
+                            <Plus class="mr-1.5 h-3.5 w-3.5" />
+                            Nouveau type
+                        </Button>
+                    </template>
+                </ListPageActions>
             </div>
-
-            <!-- Filtres -->
-            <DataFilters
-                :fields="filterFields"
-                :values="{
-                    categorie: selectedCategorie,
-                    statut: selectedStatut,
-                }"
-                :result-count="filtered.length"
-                :hide-agence-selector="true"
-                @apply="handleApply"
-                @reset="resetFilters"
-            />
 
             <!-- DataTable -->
             <div class="overflow-hidden rounded-xl border bg-card">

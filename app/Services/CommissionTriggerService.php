@@ -99,10 +99,19 @@ class CommissionTriggerService
      * dans le même test, seule une exécution synchrone imbriquée reste
      * testable). Toujours invoqué en tout dernier, une fois toutes les écritures
      * métier de l'opération déclenchante faites.
+     *
+     * auth()->id() capture l'utilisateur réellement à l'origine de l'événement
+     * métier (chargement validé / facture encaissée) — jamais transmis avant
+     * 2026-08-25, ce qui laissait `commission_generation_attempts.created_by`
+     * systématiquement NULL et rendait impossible d'alerter "la personne qui a
+     * encaissé" en cas de commission manquante (cf. CommissionManquanteNotification).
      */
     private static function genererCommissionVente(CommandeVente $commande): void
     {
-        CommissionEnveloppeGenerator::genererPourCommandeVente($commande);
+        CommissionEnveloppeGenerator::genererPourCommandeVente(
+            $commande,
+            declencheurUserId: auth()->id(),
+        );
     }
 
     // ── Logistique ────────────────────────────────────────────────────────────

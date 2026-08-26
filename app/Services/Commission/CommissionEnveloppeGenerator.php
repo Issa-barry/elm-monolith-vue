@@ -23,10 +23,13 @@ use App\Models\CommissionRegle;
 use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\Parametre;
 use App\Models\Prestataire;
+use App\Models\User;
+use App\Notifications\CommissionManquanteNotification;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
+use Throwable;
 
 /**
  * Moteur unique de génération d'enveloppes de commission vente. Chaque méthode
@@ -128,6 +131,22 @@ class CommissionEnveloppeGenerator
                     'declenchee_par' => $declenchePar->value,
                     'created_by' => $declencheurUserId,
                 ]);
+
+                // "Succès" ne veut pas dire "une commission a réellement été créée" :
+                // l'absence de barème actif pour une catégorie résout silencieusement à
+                // 0 (décision AMOA #4, jamais une erreur) — correct pour le calcul, mais
+                // une facture encaissée sans AUCUNE enveloppe créée doit être signalée,
+                // sinon ça passe totalement inaperçu (incident 2026-08-25 : CMD-250826-007
+                // facturée et payée, catégorie jamais configurée dans Paramètres >
+                // Commissions, aucune alerte).
+                $auMoinsUneEnveloppe = CommissionEnveloppe::query()
+                    ->where('source_type', CommandeVente::class)
+                    ->where('source_id', $commande->id)
+                    ->exists();
+
+                if (! $auMoinsUneEnveloppe) {
+                    self::alerterCommissionManquante($commande, $declencheurUserId, null);
+                }
             } catch (InvalidArgumentException $e) {
                 Log::warning('Génération commission v2 en erreur : '.$e->getMessage(), [
                     'commande_id' => $commande->id,
@@ -145,11 +164,62 @@ class CommissionEnveloppeGenerator
                     'created_by' => $declencheurUserId,
                 ]);
 
+                self::alerterCommissionManquante($commande, $declencheurUserId, $e->getMessage());
+
                 // Volontairement pas de rethrow : un échec de génération n'est jamais
                 // une erreur de l'opération commerciale qui l'a déclenchée. L'opération
                 // reste "à régulariser", jamais rollbackée.
             }
         });
+    }
+
+    /**
+     * Alerte l'organisation (administrateurs + utilisateur à l'origine de
+     * l'événement déclencheur, ex: la personne qui a encaissé) qu'une vente
+     * n'a produit AUCUNE commission — échec technique (motif renseigné) ou
+     * succès silencieux (aucun barème actif, cf. ci-dessus). Ne doit JAMAIS
+     * interrompre la génération ni l'opération métier appelante : toute
+     * erreur d'envoi (mail indisponible, etc.) est avalée et journalisée,
+     * jamais relancée — même garantie que le reste de cette classe.
+     */
+    private static function alerterCommissionManquante(
+        CommandeVente $commande,
+        ?string $declencheurUserId,
+        ?string $motifErreur,
+    ): void {
+        try {
+            $notification = new CommissionManquanteNotification(
+                $commande->id,
+                $commande->reference,
+                (float) $commande->total_commande,
+                $motifErreur,
+            );
+
+            // whereHas(...) plutôt que le scope role() de Spatie : ce dernier lève
+            // RoleDoesNotExist dès qu'UN SEUL des noms fournis n'existe pas encore pour
+            // le guard (constaté : "super_admin" absent sur une organisation fraîche en
+            // test) — un simple whereIn SQL reste robuste même si un rôle n'existe pas.
+            $destinataires = User::where('organization_id', $commande->organization_id)
+                ->whereHas('roles', fn ($q) => $q->whereIn('name', ['super_admin', 'admin_entreprise']))
+                ->get()
+                ->keyBy('id');
+
+            if ($declencheurUserId) {
+                $declencheur = User::find($declencheurUserId);
+                if ($declencheur) {
+                    $destinataires->put($declencheur->id, $declencheur);
+                }
+            }
+
+            foreach ($destinataires as $destinataire) {
+                $destinataire->notify($notification);
+            }
+        } catch (Throwable $e) {
+            Log::error('CommissionManquanteNotification : envoi échoué', [
+                'commande_id' => $commande->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     // ── Voie réelle Phase 2+ : barèmes fixes PAR_UNITE_VENDUE ────────────────
@@ -200,6 +270,7 @@ class CommissionEnveloppeGenerator
                     $produit?->id,
                     $categorie?->id,
                     $earnedAt,
+                    $vehicule->type_vehicule_id,
                 );
 
                 // Absence de règle = 0 pour cette cible sur cette ligne, jamais une
@@ -299,6 +370,7 @@ class CommissionEnveloppeGenerator
                         null,
                         $categorieId,
                         $earnedAt,
+                        $vehicule->type_vehicule_id,
                     );
 
                     $enveloppeUnitaire = (int) round((float) ($regleCategorie?->montant ?? 0));

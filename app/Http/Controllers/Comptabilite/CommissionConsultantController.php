@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Comptabilite;
 
+use App\Enums\ModePaiement;
 use App\Enums\StatutCommission;
 use App\Enums\StatutDepense;
 use App\Http\Controllers\Controller;
@@ -9,10 +10,13 @@ use App\Models\CommissionCibleType;
 use App\Models\CommissionEnveloppePart;
 use App\Models\Depense;
 use App\Models\Organization;
+use App\Models\PaiementFichePaiement;
 use App\Models\Prestataire;
 use App\Services\CommissionVenteCalculatorService;
 use App\Services\PeriodeComptableService;
+use App\Support\Commission\CommissionDetailFilters;
 use App\Support\Commission\CommissionKpiBuckets;
+use App\Support\Commission\CommissionSummaryFormatter;
 use App\Support\PhoneFormatter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -41,6 +45,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class CommissionConsultantController extends Controller
 {
+    private const DATE_FORMAT = 'd/m/Y';
+
     private function scalarInput(Request $request, string $key): string
     {
         $value = $request->input($key, '');
@@ -80,6 +86,178 @@ class CommissionConsultantController extends Controller
             'selected_periode' => $meta['filtre_periode'],
             'periodes_disponibles' => $periodesDisponibles,
             'consultants_options' => $meta['consultants_options'],
+            'can_payer' => false,
+        ]);
+    }
+
+    /**
+     * Page détail d'un consultant — mêmes conventions que CommissionProprietaireController::
+     * show() (synthèse, détail par commande, dépenses, paiements, historique), mais sans les
+     * notions propres aux bénéficiaires liés à un véhicule : ni filtre véhicule/agence, ni
+     * PeriodeStatusBanner/CommissionPaymentDialog (aucun workflow de validation de période ni
+     * de paiement direct pour un consultant, cf. docblock de classe — can_payer reste false ici
+     * comme sur l'index).
+     */
+    public function show(Request $request, string $consultantId): Response
+    {
+        abort_unless(auth()->user()->can('comptabilite.read'), 403);
+
+        $orgId = auth()->user()->organization_id;
+
+        $prestataire = Prestataire::with(['personne', 'entrepriseTierce'])->find($consultantId);
+        $nom = $prestataire?->nom_complet ?? '—';
+
+        $allParts = CommissionEnveloppePart::with(['enveloppe.source'])
+            ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PRESTATAIRE)
+            ->where('beneficiaire_id', $consultantId)
+            ->whereHas('enveloppe', fn ($q) => $q->where('organization_id', $orgId)
+                ->where('cible_type', CommissionCibleType::CODE_CONSULTANT))
+            ->orderByDesc('enveloppe_id')
+            ->get();
+
+        $filters = CommissionDetailFilters::fromRequest($request);
+        $periodeFilter = $filters['periode'];
+        if ($periodeFilter !== '' && ! preg_match('/^\d{4}-\d{2}-(P1|P2|M)$/', $periodeFilter)) {
+            $periodeFilter = '';
+        }
+
+        $fraisDepensesQuery = Depense::with(['depenseType:id,libelle', 'user', 'validateur'])
+            ->where('organization_id', $orgId)
+            ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PRESTATAIRE)
+            ->where('beneficiaire_id', $consultantId)
+            ->where('statut', StatutDepense::VALIDE->value);
+
+        if ($periodeFilter !== '') {
+            [$debutDep, $finDep] = PeriodeComptableService::dateRangeForCode($periodeFilter);
+            $fraisDepensesQuery->whereBetween('date_depense', [$debutDep->toDateString(), $finDep->toDateString().' 23:59:59']);
+        }
+
+        $fraisDepensesAffichees = $fraisDepensesQuery->orderByDesc('date_depense')->get();
+        $totalFraisDepenses = (float) $fraisDepensesAffichees->sum('montant');
+
+        $earliestCommission = $allParts
+            ->filter(fn (CommissionEnveloppePart $p) => $p->enveloppe?->earned_at !== null)
+            ->sortBy(fn (CommissionEnveloppePart $p) => $p->enveloppe->earned_at)
+            ->first();
+        $earliestDate = $earliestCommission?->enveloppe?->earned_at ?? now();
+        $periodesDisponibles = PeriodeComptableService::periodesDisponibles(Carbon::parse($earliestDate));
+
+        $filteredParts = $allParts->filter(function (CommissionEnveloppePart $p) use ($periodeFilter) {
+            if ($periodeFilter === '') {
+                return true;
+            }
+            $earnedAt = $p->enveloppe?->earned_at;
+
+            return $earnedAt && PeriodeComptableService::codeFor('consultant', Carbon::parse($earnedAt)) === $periodeFilter;
+        });
+
+        // net/verse/reste restent calculés exclusivement sur les parts déjà actives (jamais
+        // CREEE) — jamais mélangées à une commission pas encore éligible au paiement, même
+        // logique que CommissionProprietaireController::show() (décision produit du 20/08/2026).
+        $activeParts = $filteredParts->filter(fn (CommissionEnveloppePart $p) => $p->statut !== StatutCommission::CREEE);
+        $resume = CommissionVenteCalculatorService::calculerResume(
+            (float) $activeParts->sum('montant_brut'),
+            0.0,
+            (float) $activeParts->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer),
+            $totalFraisDepenses,
+            (float) $activeParts->sum('montant_verse'),
+        );
+        $buckets = CommissionKpiBuckets::calculer($filteredParts);
+
+        $historiqueCommandes = $filteredParts
+            ->groupBy('enveloppe_id')
+            ->map(function (Collection $partsGroup) {
+                $first = $partsGroup->first();
+                $enveloppe = $first->enveloppe;
+                $source = $enveloppe?->source;
+                $periodeCode = $enveloppe?->earned_at
+                    ? PeriodeComptableService::codeFor('consultant', Carbon::parse($enveloppe->earned_at))
+                    : null;
+
+                $montantAPayer = (float) $partsGroup->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer);
+                $montantVerse = (float) $partsGroup->sum('montant_verse');
+
+                return [
+                    'commission_id' => $enveloppe?->id,
+                    'reference' => $source?->reference,
+                    'date' => $enveloppe?->earned_at ? Carbon::parse($enveloppe->earned_at)->format(self::DATE_FORMAT) : null,
+                    'montant_brut' => (float) $partsGroup->sum('montant_brut'),
+                    'montant' => $montantAPayer,
+                    'paye' => $montantVerse,
+                    'reste' => max(0.0, $montantAPayer - $montantVerse),
+                    'statut' => $first->statut?->label(),
+                    'statut_dot_class' => $first->statut instanceof StatutCommission ? $first->statut->dotClass() : 'bg-zinc-400 dark:bg-zinc-500',
+                    'periode' => $periodeCode,
+                    'periode_label' => $periodeCode ? PeriodeComptableService::labelForCode($periodeCode) : null,
+                ];
+            })
+            ->values();
+
+        $historiquePaiementsQuery = PaiementFichePaiement::with('createur')
+            ->whereHas('fiche', fn ($q) => $q->where('organization_id', $orgId)
+                ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PRESTATAIRE)
+                ->where('beneficiaire_id', $consultantId))
+            ->orderByDesc('date_paiement');
+
+        if ($periodeFilter !== '') {
+            [$debutPaiement, $finPaiement] = PeriodeComptableService::dateRangeForCode($periodeFilter);
+            $historiquePaiementsQuery->whereBetween('date_paiement', [$debutPaiement->toDateString(), $finPaiement->toDateString().' 23:59:59']);
+        }
+
+        $historiquePaiements = $historiquePaiementsQuery
+            ->get()
+            ->map(fn ($p) => [
+                'id' => $p->id,
+                'paid_at' => $p->date_paiement?->format(self::DATE_FORMAT),
+                'montant' => (float) $p->montant,
+                'mode_paiement' => $p->mode_paiement instanceof ModePaiement
+                    ? $p->mode_paiement->label()
+                    : (string) $p->mode_paiement,
+                'note' => $p->note,
+                'created_by' => $p->createur?->name,
+            ]);
+
+        $periodeRange = ['debut' => null, 'fin' => null];
+        if ($periodeFilter !== '') {
+            [$debutRange, $finRange] = PeriodeComptableService::dateRangeForCode($periodeFilter);
+            $periodeRange = ['debut' => $debutRange->toDateString(), 'fin' => $finRange->toDateString()];
+        }
+
+        return Inertia::render('Comptabilite/CommissionConsultant/Show', [
+            'consultant' => [
+                'id' => $consultantId,
+                'nom' => $nom,
+                'reference' => $prestataire?->reference,
+                'telephone' => $prestataire?->phone,
+            ],
+            'commission_summary' => CommissionSummaryFormatter::format(
+                $resume['brut'],
+                $totalFraisDepenses,
+                $resume['net'],
+                $resume['verse'],
+                $resume['reste'],
+                $buckets,
+            ),
+            'expenses' => $fraisDepensesAffichees->map(fn ($d) => [
+                'id' => $d->id,
+                'date' => $d->date_depense->format(self::DATE_FORMAT),
+                'type' => $d->depenseType?->libelle ?? '—',
+                'commentaire' => $d->commentaire,
+                'saisi_par' => $d->user?->name,
+                'validateur' => $d->validateur?->name,
+                'montant' => (float) $d->montant,
+            ])->values(),
+            'commission_details' => $historiqueCommandes,
+            'payments' => $historiquePaiements,
+            'modes_paiement' => ModePaiement::options(),
+            'selected_periode' => $periodeFilter,
+            'periodes_disponibles' => $periodesDisponibles,
+            'filters' => [
+                'periode' => $periodeFilter,
+                'vehicule_ids' => [],
+                'site_ids' => [],
+                'periode_range' => $periodeRange,
+            ],
             'can_payer' => false,
         ]);
     }

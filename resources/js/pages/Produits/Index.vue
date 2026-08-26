@@ -2,6 +2,7 @@
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
+import ListPageActions from '@/components/ListPageActions.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -171,6 +172,15 @@ const currentSiteLabel = computed(() => {
 
 const filterFields = computed<FilterField[]>(() => [
     {
+        key: 'statut',
+        type: 'select',
+        label: 'Statut',
+        options: [
+            { value: '', label: 'Tous les statuts' },
+            ...props.statuts.map((s) => ({ value: s.value, label: s.label })),
+        ],
+    },
+    {
         key: 'search',
         type: 'text',
         label: 'Rechercher',
@@ -184,15 +194,6 @@ const filterFields = computed<FilterField[]>(() => [
         options: [
             { value: '', label: 'Tous les types' },
             ...props.types.map((t) => ({ value: t.value, label: t.label })),
-        ],
-    },
-    {
-        key: 'statut',
-        type: 'select',
-        label: 'Statut',
-        options: [
-            { value: '', label: 'Tous les statuts' },
-            ...props.statuts.map((s) => ({ value: s.value, label: s.label })),
         ],
     },
 ]);
@@ -549,98 +550,104 @@ function confirmArchive(produit: Produit) {
                         dans le catalogue
                     </p>
                 </div>
-                <div class="flex items-center gap-2">
-                    <Button
-                        type="button"
-                        variant="outline"
-                        @click="exportExcel"
-                    >
-                        <Download class="mr-2 h-4 w-4" />
-                        Exporter Excel
-                    </Button>
-                    <DropdownMenu
+                <ListPageActions>
+                    <template #export>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            @click="exportExcel"
+                        >
+                            <Download class="mr-2 h-4 w-4" />
+                            Exporter Excel
+                        </Button>
+                    </template>
+                    <template
                         v-if="
                             can('imports-produits.create') ||
                             can('imports-produits.read')
                         "
+                        #import
                     >
-                        <DropdownMenuTrigger as-child>
-                            <Button type="button" variant="outline">
-                                <Upload class="mr-2 h-4 w-4" />
-                                Importer
-                                <ChevronDown class="ml-2 h-3.5 w-3.5" />
+                        <DropdownMenu>
+                            <DropdownMenuTrigger as-child>
+                                <Button type="button" variant="outline">
+                                    <Upload class="mr-2 h-4 w-4" />
+                                    Importer
+                                    <ChevronDown class="ml-2 h-3.5 w-3.5" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" class="w-56">
+                                <DropdownMenuItem
+                                    v-if="can('imports-produits.create')"
+                                    as-child
+                                >
+                                    <Link
+                                        href="/backoffice/produits/imports/nouveau"
+                                        class="flex w-full items-center gap-2"
+                                    >
+                                        <Upload class="h-4 w-4" />
+                                        Importer des produits
+                                    </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    v-if="can('imports-produits.create')"
+                                    as-child
+                                >
+                                    <a
+                                        href="/backoffice/produits/imports/modele"
+                                        class="flex w-full items-center gap-2"
+                                    >
+                                        <Download class="h-4 w-4" />
+                                        Télécharger le modèle
+                                    </a>
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator
+                                    v-if="
+                                        can('imports-produits.create') &&
+                                        can('imports-produits.read')
+                                    "
+                                />
+                                <DropdownMenuItem
+                                    v-if="can('imports-produits.read')"
+                                    as-child
+                                >
+                                    <Link
+                                        href="/backoffice/produits/imports"
+                                        class="flex w-full items-center gap-2"
+                                    >
+                                        <History class="h-4 w-4" />
+                                        Historique des imports
+                                    </Link>
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </template>
+                    <template #filters>
+                        <DataFilters
+                            trigger-only
+                            url="/backoffice/produits"
+                            :values="{
+                                search: filters.search ?? '',
+                                produit_type_id: filters.produit_type_id ?? '',
+                                statut: filters.statut ?? '',
+                                site_ids: filters.site_ids ?? [],
+                            }"
+                            :fields="filterFields"
+                            :result-count="filteredProduits.length"
+                            @reset="clearFilters"
+                        />
+                    </template>
+                    <template v-if="can('produits.create')" #primary>
+                        <Link href="/backoffice/produits/create">
+                            <Button>
+                                <Plus class="mr-2 h-4 w-4" />
+                                Nouveau produit
                             </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" class="w-56">
-                            <DropdownMenuItem
-                                v-if="can('imports-produits.create')"
-                                as-child
-                            >
-                                <Link
-                                    href="/backoffice/produits/imports/nouveau"
-                                    class="flex w-full items-center gap-2"
-                                >
-                                    <Upload class="h-4 w-4" />
-                                    Importer des produits
-                                </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                                v-if="can('imports-produits.create')"
-                                as-child
-                            >
-                                <a
-                                    href="/backoffice/produits/imports/modele"
-                                    class="flex w-full items-center gap-2"
-                                >
-                                    <Download class="h-4 w-4" />
-                                    Télécharger le modèle
-                                </a>
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator
-                                v-if="
-                                    can('imports-produits.create') &&
-                                    can('imports-produits.read')
-                                "
-                            />
-                            <DropdownMenuItem
-                                v-if="can('imports-produits.read')"
-                                as-child
-                            >
-                                <Link
-                                    href="/backoffice/produits/imports"
-                                    class="flex w-full items-center gap-2"
-                                >
-                                    <History class="h-4 w-4" />
-                                    Historique des imports
-                                </Link>
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                    <Link
-                        v-if="can('produits.create')"
-                        href="/backoffice/produits/create"
-                    >
-                        <Button>
-                            <Plus class="mr-2 h-4 w-4" />
-                            Nouveau produit
-                        </Button>
-                    </Link>
-                </div>
+                        </Link>
+                    </template>
+                </ListPageActions>
             </div>
 
-            <!-- Barre de filtres -->
-            <DataFilters
-                url="/backoffice/produits"
-                :values="{
-                    search: filters.search ?? '',
-                    produit_type_id: filters.produit_type_id ?? '',
-                    statut: filters.statut ?? '',
-                    site_ids: filters.site_ids ?? [],
-                }"
-                :fields="filterFields"
-                :result-count="filteredProduits.length"
-                @reset="clearFilters"
-            />
             <div v-if="hasActiveFilters" class="flex items-center gap-2">
                 <button
                     type="button"
@@ -1068,6 +1075,15 @@ function confirmArchive(produit: Produit) {
                 :produits="props.produits"
                 :on-delete="confirmDelete"
                 :on-archive="confirmArchive"
+                filter-url="/backoffice/produits"
+                :filter-values="{
+                    search: filters.search ?? '',
+                    produit_type_id: filters.produit_type_id ?? '',
+                    statut: filters.statut ?? '',
+                    site_ids: filters.site_ids ?? [],
+                }"
+                :filter-fields="filterFields"
+                :result-count="filteredProduits.length"
             />
         </div>
 

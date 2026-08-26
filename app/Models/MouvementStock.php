@@ -25,6 +25,7 @@ class MouvementStock extends Model
         'source_id',
         'notes',
         'created_by',
+        'annule_par_id',
     ];
 
     protected function casts(): array
@@ -63,6 +64,12 @@ class MouvementStock extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    /** Le contre-mouvement qui a annulé celui-ci — null tant qu'il est actif. */
+    public function annulePar(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'annule_par_id');
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     public function isEntree(): bool
@@ -73,5 +80,10 @@ class MouvementStock extends Model
     public function isSortie(): bool
     {
         return $this->type === 'sortie';
+    }
+
+    public function isAnnule(): bool
+    {
+        return $this->annule_par_id !== null;
     }
 }

@@ -231,7 +231,14 @@ class PdvCheckoutService
                 // Aucune ligne VarianteStock pour cette variante sur ce site : 0 disponible,
                 // jamais de repli sur l'agrégat legacy du produit parent (qui ne renseigne
                 // sur aucune agence en particulier) — cf. MouvementStockService::quantiteDisponible().
-                $disponible = (int) ($stocksSite->get($variante->id)?->qte_stock ?? 0);
+                // Disponible = physique moins réservé (commandes vente confirmées, pas encore
+                // chargées, cf. StockReservationService, 24/08/2026) : le PDV ne doit jamais
+                // pouvoir vendre un stock déjà promis à une commande vente en attente de
+                // chargement — même règle que verifierDisponibiliteLignes(), calculée ici plutôt
+                // que via ce service pour rester dans le même verrou lockForUpdate() groupé
+                // (cf. commentaire de buildLignes() ci-dessous).
+                $stockSite = $stocksSite->get($variante->id);
+                $disponible = (int) ($stockSite?->qte_stock ?? 0) - (int) ($stockSite?->qte_reservee ?? 0);
 
                 // La vente continue même sous le disponible si la politique globale l'autorise —
                 // le stock devient négatif au lieu d'être refusé, jamais de clamp silencieux

@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 import {
+    applyDrawerFilterOption,
+    closeFilterDrawerIfOpen,
     findRowByName,
     login,
     openRowActions,
@@ -179,4 +181,30 @@ test('create proprietaire without required fields → stays on create page', asy
         .click();
 
     await expect(page).toHaveURL(/\/proprietaires\/create$/);
+});
+
+// ─── Standard de liste : Filtres en en-tête ────────────────────────────────────
+
+test('en-tête standard : un seul bouton Filtres, drawer avec Statut, application', async ({
+    page,
+}) => {
+    await login(page);
+    await page.goto('/backoffice/proprietaires');
+    await closeFilterDrawerIfOpen(page);
+
+    // Pas de grande barre de filtres au-dessus du tableau.
+    await expect(page.getByTestId('filter-field-statut')).toHaveCount(0);
+
+    const filtresBtn = page.getByRole('button', { name: /^filtres/i }).first();
+    await expect(filtresBtn).toBeVisible({ timeout: 10_000 });
+
+    await applyDrawerFilterOption(page, 'statut', 'Actifs');
+
+    // Le drawer se ferme et le badge de comptage de filtres actifs apparaît.
+    await expect(page.getByTestId('filters-drawer')).toBeHidden({
+        timeout: 5_000,
+    });
+    await expect(
+        filtresBtn.locator('span', { hasText: '1' }).first(),
+    ).toBeVisible({ timeout: 5_000 });
 });

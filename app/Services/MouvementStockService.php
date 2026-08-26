@@ -59,31 +59,29 @@ class MouvementStockService
         ?string $notes = null,
         bool $allowNegative = false,
     ): MouvementStock {
-        $varianteStock = VarianteStock::where('produit_variante_id', $varianteId)
-            ->where('site_id', $siteId)
-            ->lockForUpdate()
-            ->first();
+        // VarianteStock::lockOuCreer() (24-25/08/2026) : récupère la ligne sous verrou, ou la
+        // matérialise à 0 si c'est le tout premier mouvement pour cette variante × site — de
+        // façon protégée contre la concurrence (cf. docblock de la méthode). Conséquence
+        // assumée : un refus juste après (sortie insuffisante) peut laisser une ligne à 0 en
+        // base là où rien n'existait avant — observationnellement IDENTIQUE à "aucune ligne"
+        // pour tout le reste de l'application (quantiteDisponible(), affichages, filtres
+        // COALESCE(...,0)) : la priorité va à l'absence de course, pas à l'absence de ligne.
+        $varianteStock = VarianteStock::lockOuCreer($varianteId, $siteId, $orgId);
 
-        $stockAvant = $varianteStock?->qte_stock ?? 0;
+        $stockAvant = $varianteStock->qte_stock;
+        $qteReservee = $varianteStock->qte_reservee;
         $delta = $type === 'entree' ? $quantite : -$quantite;
         $stockApres = $stockAvant + $delta;
 
-        // Contrôle AVANT toute écriture : un refus ne doit laisser AUCUNE trace, pas même une
-        // ligne VarianteStock nouvellement matérialisée à 0 pour une variante/site qui n'en
-        // avait encore aucune — sinon un refus aurait le même effet de bord qu'un succès partiel
-        // (transforme silencieusement "non initialisé" en "0 explicite"), pour rien.
-        if ($type === 'sortie' && $stockApres < 0 && ! $allowNegative) {
+        // Le plancher est qte_reservee (jamais juste 0) depuis l'introduction de
+        // StockReservationService (24/08/2026) : une sortie ne doit jamais faire passer le stock
+        // physique sous ce qui est activement promis à d'autres commandes confirmées — sauf
+        // quand cette sortie EST la consommation de cette réservation, auquel cas l'appelant a
+        // déjà libéré la réservation concernée avant d'appeler appliquer() (cf.
+        // StockReservationService::consommer(), CommandeVenteService::decrementerStock()).
+        if ($type === 'sortie' && $stockApres < $qteReservee && ! $allowNegative) {
             throw ValidationException::withMessages([
-                'stock' => "Stock insuffisant : {$quantite} demandés, {$stockAvant} disponibles.",
-            ]);
-        }
-
-        if (! $varianteStock) {
-            $varianteStock = VarianteStock::create([
-                'organization_id' => $orgId,
-                'produit_variante_id' => $varianteId,
-                'site_id' => $siteId,
-                'qte_stock' => 0,
+                'stock' => "Stock insuffisant : {$quantite} demandés, ".($stockAvant - $qteReservee).' disponibles.',
             ]);
         }
 
@@ -107,25 +105,48 @@ class MouvementStockService
     }
 
     /**
-     * Annule un mouvement précédemment appliqué via appliquer() : inverse le delta
-     * sur VarianteStock (jamais en dessous de 0), resynchronise l'agrégat produit,
-     * puis supprime la trace. Utilisé quand une opération source est invalidée
-     * après coup (ex : réception de transfert renvoyée en TRANSIT).
+     * Annule un mouvement précédemment appliqué via appliquer() : inverse le delta sur
+     * VarianteStock (jamais en dessous de 0), resynchronise l'agrégat produit, puis trace un
+     * CONTRE-MOUVEMENT (type inversé, même quantité) — jamais une suppression (correctif du
+     * 25/08/2026 : un delete() effaçait la trace du mouvement original, en contradiction avec le
+     * principe d'immuabilité de ce journal). Le mouvement original reste inchangé et
+     * consultable ; son annule_par_id pointe vers le contre-mouvement qui l'a neutralisé.
+     * Idempotent : un mouvement déjà annulé est un no-op.
+     *
+     * Utilisé quand une opération source est invalidée après coup (ex : réception de transfert
+     * renvoyée en TRANSIT via supprimerEntreeDestination()).
      */
     private static function annulerMouvement(MouvementStock $mouvement): void
     {
-        $varianteStock = VarianteStock::where('produit_variante_id', $mouvement->produit_variante_id)
-            ->where('site_id', $mouvement->site_id)
-            ->lockForUpdate()
-            ->first();
-
-        if ($varianteStock) {
-            $delta = $mouvement->type === 'entree' ? -$mouvement->quantite : $mouvement->quantite;
-            $varianteStock->update(['qte_stock' => max(0, $varianteStock->qte_stock + $delta)]);
-            ProduitVariante::find($mouvement->produit_variante_id)?->produit?->resynchroniserQteStock();
+        if ($mouvement->annule_par_id) {
+            return;
         }
 
-        $mouvement->delete();
+        $varianteStock = VarianteStock::lockOuCreer($mouvement->produit_variante_id, $mouvement->site_id, $mouvement->organization_id);
+
+        $typeContraire = $mouvement->type === 'entree' ? 'sortie' : 'entree';
+        $delta = $typeContraire === 'entree' ? $mouvement->quantite : -$mouvement->quantite;
+        $stockAvant = $varianteStock->qte_stock;
+        $stockApres = max(0, $stockAvant + $delta);
+
+        $varianteStock->update(['qte_stock' => $stockApres]);
+        ProduitVariante::find($mouvement->produit_variante_id)?->produit?->resynchroniserQteStock();
+
+        $contreMouvement = MouvementStock::create([
+            'organization_id' => $mouvement->organization_id,
+            'site_id' => $mouvement->site_id,
+            'produit_variante_id' => $mouvement->produit_variante_id,
+            'type' => $typeContraire,
+            'quantite' => $mouvement->quantite,
+            'stock_avant' => $stockAvant,
+            'stock_apres' => $stockApres,
+            'source_type' => $mouvement->source_type,
+            'source_id' => $mouvement->source_id,
+            'notes' => "Contre-mouvement — annule le mouvement {$mouvement->id}",
+            'created_by' => Auth::id(),
+        ]);
+
+        $mouvement->update(['annule_par_id' => $contreMouvement->id]);
     }
 
     /**
@@ -280,14 +301,23 @@ class MouvementStockService
     }
 
     /**
-     * Quantité disponible pour une variante sur un site donné. Un site sans ligne
-     * VarianteStock a strictement 0 de disponible — jamais de repli sur l'agrégat
-     * legacy Produit::qte_stock, qui ne renseigne sur aucune agence en particulier.
+     * Quantité disponible pour une variante sur un site donné = stock physique moins réservé
+     * (StockReservationService — commandes vente confirmées, pas encore chargées). Un site sans
+     * ligne VarianteStock a strictement 0 de disponible — jamais de repli sur l'agrégat legacy
+     * Produit::qte_stock, qui ne renseigne sur aucune agence en particulier. Point d'entrée
+     * UNIQUE de ce calcul, réutilisé par toute la chaîne de vente (CommandeVenteService::
+     * verifierDisponibiliteLignes(), ProduitController::ajusterStock(),
+     * TransfertLogistiqueService::checkDisponibiliteStockSource()) — jamais dupliqué en logique.
+     * PdvCheckoutService::buildLignes() reste une exception : verrouillage groupé de plusieurs
+     * lignes en une seule requête (concurrence PDV), mais applique le même calcul physique
+     * moins réservé.
      */
     public static function quantiteDisponible(string $varianteId, string $siteId): int
     {
-        return (int) (VarianteStock::where('produit_variante_id', $varianteId)
+        $stock = VarianteStock::where('produit_variante_id', $varianteId)
             ->where('site_id', $siteId)
-            ->value('qte_stock') ?? 0);
+            ->first(['qte_stock', 'qte_reservee']);
+
+        return (int) ($stock->qte_stock ?? 0) - (int) ($stock->qte_reservee ?? 0);
     }
 }

@@ -1,13 +1,14 @@
 <script setup lang="ts">
+import BeneficiairePickerDialog from '@/components/Depenses/BeneficiairePickerDialog.vue';
 import DepenseConfirmDialog from '@/components/Depenses/DepenseConfirmDialog.vue';
+import type { PickerField } from '@/components/Depenses/pickerTypes';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/vue3';
-import { Lock } from 'lucide-vue-next';
-import AutoComplete from 'primevue/autocomplete';
+import { Lock, Search, X } from 'lucide-vue-next';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref, watch } from 'vue';
 
@@ -34,6 +35,10 @@ interface PersonneOption {
     id: string;
     nom_complet: string;
     matricule?: string | null;
+    telephone?: string | null;
+    site_nom?: string | null;
+    vehicule_noms?: string | null;
+    vehicule_immatriculations?: string | null;
 }
 interface SiteOption {
     id: string;
@@ -65,6 +70,10 @@ watch(concerneSelectionne, () => {
     form.depense_type_id = '';
     form.beneficiaire_id = '';
     vehiculeSelected.value = null;
+    employeSelected.value = null;
+    livreurSelected.value = null;
+    proprietaireSelected.value = null;
+    prestataireSelected.value = null;
 });
 
 const typesFiltres = computed<TypeOption[]>(() =>
@@ -93,26 +102,130 @@ watch(
     () => {
         form.beneficiaire_id = '';
         vehiculeSelected.value = null;
+        employeSelected.value = null;
+        livreurSelected.value = null;
+        proprietaireSelected.value = null;
+        prestataireSelected.value = null;
     },
 );
 
-// ── Véhicule AutoComplete ─────────────────────────────────────────────────────
+// ── Véhicule — recherche via modale ──────────────────────────────────────────
 const vehiculeSelected = ref<Vehicule | null>(null);
-const vehiculeSuggests = ref<Vehicule[]>([]);
+const showVehiculePicker = ref(false);
 
-function searchVehicule(event: { query: string }) {
-    const q = event.query.toLowerCase().trim();
-    vehiculeSuggests.value = q
-        ? props.vehicules.filter(
-              (v) =>
-                  v.nom_vehicule.toLowerCase().includes(q) ||
-                  v.immatriculation.toLowerCase().includes(q),
-          )
-        : [...props.vehicules];
+const vehiculeFields: PickerField<Vehicule>[] = [
+    { key: 'nom', label: 'Nom du véhicule', value: (v) => v.nom_vehicule },
+    {
+        key: 'immatriculation',
+        label: 'Immatriculation',
+        value: (v) => v.immatriculation,
+    },
+];
+
+function onVehiculeSelect(v: Vehicule) {
+    vehiculeSelected.value = v;
+    form.beneficiaire_id = v.id;
 }
 
-function onVehiculeSelect(v: Vehicule | null) {
-    form.beneficiaire_id = v ? v.id : '';
+function clearVehicule() {
+    vehiculeSelected.value = null;
+    form.beneficiaire_id = '';
+}
+
+// ── Employé / Livreur / Propriétaire / Prestataire — recherche via modale ───
+// Un champ par critère (nom/prénom, téléphone, et — selon le type — site ou
+// véhicule/immatriculation) plutôt qu'une recherche combinée.
+const nomField: PickerField<PersonneOption> = {
+    key: 'nom',
+    label: 'Nom / Prénom',
+    value: (p) => `${p.nom_complet} ${p.matricule ?? ''}`.trim(),
+};
+const telephoneField: PickerField<PersonneOption> = {
+    key: 'telephone',
+    label: 'Téléphone',
+    value: (p) => p.telephone,
+    phone: true,
+};
+
+const employeSelected = ref<PersonneOption | null>(null);
+const showEmployePicker = ref(false);
+const employeFields: PickerField<PersonneOption>[] = [
+    nomField,
+    telephoneField,
+    { key: 'site', label: 'Site', value: (p) => p.site_nom },
+];
+
+function onEmployeSelect(e: PersonneOption) {
+    employeSelected.value = e;
+    form.beneficiaire_id = e.id;
+}
+
+function clearEmploye() {
+    employeSelected.value = null;
+    form.beneficiaire_id = '';
+}
+
+const livreurSelected = ref<PersonneOption | null>(null);
+const showLivreurPicker = ref(false);
+const livreurFields: PickerField<PersonneOption>[] = [
+    nomField,
+    telephoneField,
+    { key: 'vehicule', label: 'Véhicule', value: (p) => p.vehicule_noms },
+    {
+        key: 'immatriculation',
+        label: 'Immatriculation',
+        value: (p) => p.vehicule_immatriculations,
+    },
+];
+
+function onLivreurSelect(l: PersonneOption) {
+    livreurSelected.value = l;
+    form.beneficiaire_id = l.id;
+}
+
+function clearLivreur() {
+    livreurSelected.value = null;
+    form.beneficiaire_id = '';
+}
+
+const proprietaireSelected = ref<PersonneOption | null>(null);
+const showProprietairePicker = ref(false);
+const proprietaireFields: PickerField<PersonneOption>[] = [
+    nomField,
+    telephoneField,
+    { key: 'vehicule', label: 'Véhicule', value: (p) => p.vehicule_noms },
+    {
+        key: 'immatriculation',
+        label: 'Immatriculation',
+        value: (p) => p.vehicule_immatriculations,
+    },
+];
+
+function onProprietaireSelect(p: PersonneOption) {
+    proprietaireSelected.value = p;
+    form.beneficiaire_id = p.id;
+}
+
+function clearProprietaire() {
+    proprietaireSelected.value = null;
+    form.beneficiaire_id = '';
+}
+
+const prestataireSelected = ref<PersonneOption | null>(null);
+const showPrestatairePicker = ref(false);
+const prestataireFields: PickerField<PersonneOption>[] = [
+    { key: 'nom', label: 'Nom / Entreprise', value: (p) => p.nom_complet },
+    telephoneField,
+];
+
+function onPrestataireSelect(p: PersonneOption) {
+    prestataireSelected.value = p;
+    form.beneficiaire_id = p.id;
+}
+
+function clearPrestataire() {
+    prestataireSelected.value = null;
+    form.beneficiaire_id = '';
 }
 
 const categorie = computed(
@@ -356,77 +469,91 @@ function submitBrouillon() {
                                 Véhicule
                                 <span class="text-destructive">*</span>
                             </Label>
-                            <AutoComplete
-                                v-model="vehiculeSelected"
-                                input-id="dep-vehicule"
-                                :suggestions="vehiculeSuggests"
-                                option-label="nom_vehicule"
-                                placeholder="Rechercher un véhicule…"
-                                class="w-full"
-                                input-class="w-full"
-                                :class="{
-                                    'p-invalid': form.errors.beneficiaire_id,
-                                }"
-                                dropdown
-                                force-selection
-                                @complete="searchVehicule"
-                                @item-select="
-                                    onVehiculeSelect(vehiculeSelected)
-                                "
-                                @clear="
-                                    () => {
-                                        vehiculeSelected = null;
-                                        form.beneficiaire_id = '';
-                                    }
-                                "
-                            >
-                                <template #option="{ option }">
-                                    <div class="py-0.5">
-                                        <div class="leading-tight font-medium">
-                                            {{ option.nom_vehicule }}
-                                        </div>
-                                        <div
-                                            class="mt-0.5 font-mono text-xs text-muted-foreground"
-                                        >
-                                            {{ option.immatriculation }}
-                                        </div>
-                                        <div
-                                            v-if="
-                                                option.categorie === 'interne'
-                                            "
-                                            class="mt-0.5 text-xs text-blue-600"
-                                        >
-                                            ELM —
-                                            {{ option.site_nom ?? 'interne' }}
-                                        </div>
-                                        <div
-                                            v-else-if="option.has_proprietaire"
-                                            class="mt-0.5 text-xs text-emerald-600"
-                                        >
-                                            ✓ {{ option.proprietaire_nom }}
-                                        </div>
-                                        <div
-                                            v-else
-                                            class="mt-0.5 text-xs text-amber-600"
-                                        >
-                                            ⚠ Aucun propriétaire rattaché
-                                        </div>
-                                    </div>
-                                </template>
-                                <template #empty>
-                                    <div
-                                        class="px-1 py-0.5 text-sm text-muted-foreground"
+                            <div class="relative">
+                                <button
+                                    id="dep-vehicule"
+                                    type="button"
+                                    class="flex h-9 w-full items-center rounded-md border border-input bg-background px-3 text-sm shadow-sm transition-colors hover:bg-muted/40"
+                                    :class="[
+                                        form.errors.beneficiaire_id
+                                            ? 'border-destructive'
+                                            : '',
+                                        vehiculeSelected ? 'pr-8' : '',
+                                    ]"
+                                    @click="showVehiculePicker = true"
+                                >
+                                    <Search
+                                        class="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                                    />
+                                    <span
+                                        class="truncate text-left"
+                                        :class="
+                                            vehiculeSelected
+                                                ? ''
+                                                : 'text-muted-foreground'
+                                        "
                                     >
-                                        Aucun véhicule trouvé
-                                    </div>
-                                </template>
-                            </AutoComplete>
+                                        {{
+                                            vehiculeSelected?.nom_vehicule ??
+                                            'Rechercher un véhicule…'
+                                        }}
+                                    </span>
+                                </button>
+                                <button
+                                    v-if="vehiculeSelected"
+                                    type="button"
+                                    class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                    aria-label="Effacer la sélection"
+                                    @click.stop="clearVehicule"
+                                >
+                                    <X class="h-3.5 w-3.5" />
+                                </button>
+                            </div>
                             <p
                                 v-if="form.errors.beneficiaire_id"
                                 class="mt-1 text-xs text-destructive"
                             >
                                 {{ form.errors.beneficiaire_id }}
                             </p>
+
+                            <BeneficiairePickerDialog
+                                v-model:visible="showVehiculePicker"
+                                title="Sélectionner un véhicule"
+                                :options="vehicules"
+                                :fields="vehiculeFields"
+                                empty-label="Aucun véhicule trouvé"
+                                @select="onVehiculeSelect"
+                            >
+                                <template #option="{ option }">
+                                    <div class="leading-tight font-medium">
+                                        {{ option.nom_vehicule }}
+                                    </div>
+                                    <div
+                                        class="mt-0.5 font-mono text-xs text-muted-foreground"
+                                    >
+                                        {{ option.immatriculation }}
+                                    </div>
+                                    <div
+                                        v-if="option.categorie === 'interne'"
+                                        class="mt-0.5 text-xs text-blue-600"
+                                    >
+                                        ELM —
+                                        {{ option.site_nom ?? 'interne' }}
+                                    </div>
+                                    <div
+                                        v-else-if="option.has_proprietaire"
+                                        class="mt-0.5 text-xs text-emerald-600"
+                                    >
+                                        ✓ {{ option.proprietaire_nom }}
+                                    </div>
+                                    <div
+                                        v-else
+                                        class="mt-0.5 text-xs text-amber-600"
+                                    >
+                                        ⚠ Aucun propriétaire rattaché
+                                    </div>
+                                </template>
+                            </BeneficiairePickerDialog>
                         </div>
 
                         <!-- Salarié -->
@@ -438,35 +565,84 @@ function submitBrouillon() {
                                 Salarié
                                 <span class="text-destructive">*</span>
                             </Label>
-                            <select
-                                id="dep-employe"
-                                v-model="form.beneficiaire_id"
-                                class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
-                                :class="{
-                                    'border-destructive':
-                                        form.errors.beneficiaire_id,
-                                }"
-                            >
-                                <option value="">
-                                    — Sélectionner un salarié —
-                                </option>
-                                <option
-                                    v-for="e in employes"
-                                    :key="e.id"
-                                    :value="e.id"
+                            <div class="relative">
+                                <button
+                                    id="dep-employe"
+                                    type="button"
+                                    class="flex h-9 w-full items-center rounded-md border border-input bg-background px-3 text-sm shadow-sm transition-colors hover:bg-muted/40"
+                                    :class="[
+                                        form.errors.beneficiaire_id
+                                            ? 'border-destructive'
+                                            : '',
+                                        employeSelected ? 'pr-8' : '',
+                                    ]"
+                                    @click="showEmployePicker = true"
                                 >
-                                    {{ e.nom_complet
-                                    }}{{
-                                        e.matricule ? ` — ${e.matricule}` : ''
-                                    }}
-                                </option>
-                            </select>
+                                    <Search
+                                        class="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                                    />
+                                    <span
+                                        class="truncate text-left"
+                                        :class="
+                                            employeSelected
+                                                ? ''
+                                                : 'text-muted-foreground'
+                                        "
+                                    >
+                                        {{
+                                            employeSelected?.nom_complet ??
+                                            'Rechercher un salarié…'
+                                        }}
+                                    </span>
+                                </button>
+                                <button
+                                    v-if="employeSelected"
+                                    type="button"
+                                    class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                    aria-label="Effacer la sélection"
+                                    @click.stop="clearEmploye"
+                                >
+                                    <X class="h-3.5 w-3.5" />
+                                </button>
+                            </div>
                             <p
                                 v-if="form.errors.beneficiaire_id"
                                 class="mt-1 text-xs text-destructive"
                             >
                                 {{ form.errors.beneficiaire_id }}
                             </p>
+
+                            <BeneficiairePickerDialog
+                                v-model:visible="showEmployePicker"
+                                title="Sélectionner un salarié"
+                                :options="employes"
+                                :fields="employeFields"
+                                empty-label="Aucun salarié trouvé"
+                                @select="onEmployeSelect"
+                            >
+                                <template #option="{ option }">
+                                    <div class="leading-tight font-medium">
+                                        {{ option.nom_complet
+                                        }}{{
+                                            option.matricule
+                                                ? ` — ${option.matricule}`
+                                                : ''
+                                        }}
+                                    </div>
+                                    <div
+                                        v-if="
+                                            option.site_nom || option.telephone
+                                        "
+                                        class="mt-0.5 text-xs text-muted-foreground"
+                                    >
+                                        {{
+                                            [option.site_nom, option.telephone]
+                                                .filter(Boolean)
+                                                .join(' · ')
+                                        }}
+                                    </div>
+                                </template>
+                            </BeneficiairePickerDialog>
                         </div>
 
                         <!-- Livreur -->
@@ -478,32 +654,89 @@ function submitBrouillon() {
                                 Livreur
                                 <span class="text-destructive">*</span>
                             </Label>
-                            <select
-                                id="dep-livreur"
-                                v-model="form.beneficiaire_id"
-                                class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
-                                :class="{
-                                    'border-destructive':
-                                        form.errors.beneficiaire_id,
-                                }"
-                            >
-                                <option value="">
-                                    — Sélectionner un livreur —
-                                </option>
-                                <option
-                                    v-for="l in livreurs"
-                                    :key="l.id"
-                                    :value="l.id"
+                            <div class="relative">
+                                <button
+                                    id="dep-livreur"
+                                    type="button"
+                                    class="flex h-9 w-full items-center rounded-md border border-input bg-background px-3 text-sm shadow-sm transition-colors hover:bg-muted/40"
+                                    :class="[
+                                        form.errors.beneficiaire_id
+                                            ? 'border-destructive'
+                                            : '',
+                                        livreurSelected ? 'pr-8' : '',
+                                    ]"
+                                    @click="showLivreurPicker = true"
                                 >
-                                    {{ l.nom_complet }}
-                                </option>
-                            </select>
+                                    <Search
+                                        class="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                                    />
+                                    <span
+                                        class="truncate text-left"
+                                        :class="
+                                            livreurSelected
+                                                ? ''
+                                                : 'text-muted-foreground'
+                                        "
+                                    >
+                                        {{
+                                            livreurSelected?.nom_complet ??
+                                            'Rechercher un livreur…'
+                                        }}
+                                    </span>
+                                </button>
+                                <button
+                                    v-if="livreurSelected"
+                                    type="button"
+                                    class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                    aria-label="Effacer la sélection"
+                                    @click.stop="clearLivreur"
+                                >
+                                    <X class="h-3.5 w-3.5" />
+                                </button>
+                            </div>
                             <p
                                 v-if="form.errors.beneficiaire_id"
                                 class="mt-1 text-xs text-destructive"
                             >
                                 {{ form.errors.beneficiaire_id }}
                             </p>
+
+                            <BeneficiairePickerDialog
+                                v-model:visible="showLivreurPicker"
+                                title="Sélectionner un livreur"
+                                :options="livreurs"
+                                :fields="livreurFields"
+                                empty-label="Aucun livreur trouvé"
+                                @select="onLivreurSelect"
+                            >
+                                <template #option="{ option }">
+                                    <div class="leading-tight font-medium">
+                                        {{ option.nom_complet }}
+                                    </div>
+                                    <div
+                                        v-if="option.vehicule_noms"
+                                        class="mt-0.5 text-xs text-muted-foreground"
+                                    >
+                                        🚚 {{ option.vehicule_noms }}
+                                        <span
+                                            v-if="
+                                                option.vehicule_immatriculations
+                                            "
+                                            class="font-mono"
+                                            >—
+                                            {{
+                                                option.vehicule_immatriculations
+                                            }}</span
+                                        >
+                                    </div>
+                                    <div
+                                        v-if="option.telephone"
+                                        class="mt-0.5 text-xs text-muted-foreground"
+                                    >
+                                        ☎ {{ option.telephone }}
+                                    </div>
+                                </template>
+                            </BeneficiairePickerDialog>
                         </div>
 
                         <!-- Propriétaire -->
@@ -515,32 +748,89 @@ function submitBrouillon() {
                                 Propriétaire
                                 <span class="text-destructive">*</span>
                             </Label>
-                            <select
-                                id="dep-proprio"
-                                v-model="form.beneficiaire_id"
-                                class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
-                                :class="{
-                                    'border-destructive':
-                                        form.errors.beneficiaire_id,
-                                }"
-                            >
-                                <option value="">
-                                    — Sélectionner un propriétaire —
-                                </option>
-                                <option
-                                    v-for="p in proprietaires"
-                                    :key="p.id"
-                                    :value="p.id"
+                            <div class="relative">
+                                <button
+                                    id="dep-proprio"
+                                    type="button"
+                                    class="flex h-9 w-full items-center rounded-md border border-input bg-background px-3 text-sm shadow-sm transition-colors hover:bg-muted/40"
+                                    :class="[
+                                        form.errors.beneficiaire_id
+                                            ? 'border-destructive'
+                                            : '',
+                                        proprietaireSelected ? 'pr-8' : '',
+                                    ]"
+                                    @click="showProprietairePicker = true"
                                 >
-                                    {{ p.nom_complet }}
-                                </option>
-                            </select>
+                                    <Search
+                                        class="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                                    />
+                                    <span
+                                        class="truncate text-left"
+                                        :class="
+                                            proprietaireSelected
+                                                ? ''
+                                                : 'text-muted-foreground'
+                                        "
+                                    >
+                                        {{
+                                            proprietaireSelected?.nom_complet ??
+                                            'Rechercher un propriétaire…'
+                                        }}
+                                    </span>
+                                </button>
+                                <button
+                                    v-if="proprietaireSelected"
+                                    type="button"
+                                    class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                    aria-label="Effacer la sélection"
+                                    @click.stop="clearProprietaire"
+                                >
+                                    <X class="h-3.5 w-3.5" />
+                                </button>
+                            </div>
                             <p
                                 v-if="form.errors.beneficiaire_id"
                                 class="mt-1 text-xs text-destructive"
                             >
                                 {{ form.errors.beneficiaire_id }}
                             </p>
+
+                            <BeneficiairePickerDialog
+                                v-model:visible="showProprietairePicker"
+                                title="Sélectionner un propriétaire"
+                                :options="proprietaires"
+                                :fields="proprietaireFields"
+                                empty-label="Aucun propriétaire trouvé"
+                                @select="onProprietaireSelect"
+                            >
+                                <template #option="{ option }">
+                                    <div class="leading-tight font-medium">
+                                        {{ option.nom_complet }}
+                                    </div>
+                                    <div
+                                        v-if="option.vehicule_noms"
+                                        class="mt-0.5 text-xs text-muted-foreground"
+                                    >
+                                        🚚 {{ option.vehicule_noms }}
+                                        <span
+                                            v-if="
+                                                option.vehicule_immatriculations
+                                            "
+                                            class="font-mono"
+                                            >—
+                                            {{
+                                                option.vehicule_immatriculations
+                                            }}</span
+                                        >
+                                    </div>
+                                    <div
+                                        v-if="option.telephone"
+                                        class="mt-0.5 text-xs text-muted-foreground"
+                                    >
+                                        ☎ {{ option.telephone }}
+                                    </div>
+                                </template>
+                            </BeneficiairePickerDialog>
                         </div>
 
                         <!-- Prestataire -->
@@ -552,32 +842,73 @@ function submitBrouillon() {
                                 Prestataire
                                 <span class="text-destructive">*</span>
                             </Label>
-                            <select
-                                id="dep-prestataire"
-                                v-model="form.beneficiaire_id"
-                                class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
-                                :class="{
-                                    'border-destructive':
-                                        form.errors.beneficiaire_id,
-                                }"
-                            >
-                                <option value="">
-                                    — Sélectionner un prestataire —
-                                </option>
-                                <option
-                                    v-for="pr in prestataires"
-                                    :key="pr.id"
-                                    :value="pr.id"
+                            <div class="relative">
+                                <button
+                                    id="dep-prestataire"
+                                    type="button"
+                                    class="flex h-9 w-full items-center rounded-md border border-input bg-background px-3 text-sm shadow-sm transition-colors hover:bg-muted/40"
+                                    :class="[
+                                        form.errors.beneficiaire_id
+                                            ? 'border-destructive'
+                                            : '',
+                                        prestataireSelected ? 'pr-8' : '',
+                                    ]"
+                                    @click="showPrestatairePicker = true"
                                 >
-                                    {{ pr.nom_complet }}
-                                </option>
-                            </select>
+                                    <Search
+                                        class="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                                    />
+                                    <span
+                                        class="truncate text-left"
+                                        :class="
+                                            prestataireSelected
+                                                ? ''
+                                                : 'text-muted-foreground'
+                                        "
+                                    >
+                                        {{
+                                            prestataireSelected?.nom_complet ??
+                                            'Rechercher un prestataire…'
+                                        }}
+                                    </span>
+                                </button>
+                                <button
+                                    v-if="prestataireSelected"
+                                    type="button"
+                                    class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                    aria-label="Effacer la sélection"
+                                    @click.stop="clearPrestataire"
+                                >
+                                    <X class="h-3.5 w-3.5" />
+                                </button>
+                            </div>
                             <p
                                 v-if="form.errors.beneficiaire_id"
                                 class="mt-1 text-xs text-destructive"
                             >
                                 {{ form.errors.beneficiaire_id }}
                             </p>
+
+                            <BeneficiairePickerDialog
+                                v-model:visible="showPrestatairePicker"
+                                title="Sélectionner un prestataire"
+                                :options="prestataires"
+                                :fields="prestataireFields"
+                                empty-label="Aucun prestataire trouvé"
+                                @select="onPrestataireSelect"
+                            >
+                                <template #option="{ option }">
+                                    <div class="leading-tight font-medium">
+                                        {{ option.nom_complet }}
+                                    </div>
+                                    <div
+                                        v-if="option.telephone"
+                                        class="mt-0.5 text-xs text-muted-foreground"
+                                    >
+                                        ☎ {{ option.telephone }}
+                                    </div>
+                                </template>
+                            </BeneficiairePickerDialog>
                         </div>
                     </div>
 

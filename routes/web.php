@@ -537,6 +537,8 @@ Route::prefix('backoffice')->group(function () {
             // ── Commission sites ────────────────────────────────────────────────────
             Route::get('commissions/sites', [CommissionSiteController::class, 'index'])
                 ->name('commissions.sites.index');
+            Route::get('commissions/sites/{siteId}', [CommissionSiteController::class, 'show'])
+                ->name('commissions.sites.show');
             Route::get('commissions/sites/export/excel', [CommissionSiteController::class, 'exportExcel'])
                 ->name('commissions.sites.excel');
             Route::get('commissions/sites/export/pdf', [CommissionSiteController::class, 'exportPdf'])
@@ -555,6 +557,8 @@ Route::prefix('backoffice')->group(function () {
             // ── Commission consultants ──────────────────────────────────────────────
             Route::get('commissions/consultants', [CommissionConsultantController::class, 'index'])
                 ->name('commissions.consultants.index');
+            Route::get('commissions/consultants/{consultantId}', [CommissionConsultantController::class, 'show'])
+                ->name('commissions.consultants.show');
             Route::get('commissions/consultants/export/excel', [CommissionConsultantController::class, 'exportExcel'])
                 ->name('commissions.consultants.excel');
             Route::get('commissions/consultants/export/pdf', [CommissionConsultantController::class, 'exportPdf'])
