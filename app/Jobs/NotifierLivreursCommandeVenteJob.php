@@ -17,6 +17,18 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * Seul point d'envoi réel de la catégorie de préférence `activite`
+ * (`User::NOTIFICATION_PREFERENCE_DEFAULTS`, cf. audit backend du 26/08/2026,
+ * section notifications) : avant ce correctif, `notification_preferences`
+ * était stocké et exposé via l'API profil (GET/PATCH /v1/mobile/profile*)
+ * mais JAMAIS consulté ici — désactiver "activite" dans les préférences
+ * n'avait donc AUCUN effet réel (ni sur la notification en base, ni sur le
+ * push Expo). Corrigé en filtrant les deux par utilisateur avant envoi.
+ * `NotificationsController::index()` (lecture) reste volontairement
+ * inchangé : l'historique déjà généré n'est jamais purgé rétroactivement par
+ * un changement de préférence, seule la génération future est concernée.
+ */
 class NotifierLivreursCommandeVenteJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
@@ -49,7 +61,7 @@ class NotifierLivreursCommandeVenteJob implements ShouldQueue
 
         foreach ($livreurs as $livreur) {
             $user = $this->userForLivreur($livreur);
-            if ($user) {
+            if ($user && $this->veutNotificationsActivite($user)) {
                 $user->notify($notif);
                 if ($user->expo_push_token) {
                     $pushTokens[] = $user->expo_push_token;
@@ -61,9 +73,11 @@ class NotifierLivreursCommandeVenteJob implements ShouldQueue
         $proprietaire = $commande->vehicule->proprietaire;
         if ($proprietaire) {
             $user = $this->userForProprietaire($proprietaire);
-            $user?->notify($notif);
-            if ($user?->expo_push_token) {
-                $pushTokens[] = $user->expo_push_token;
+            if ($user && $this->veutNotificationsActivite($user)) {
+                $user->notify($notif);
+                if ($user->expo_push_token) {
+                    $pushTokens[] = $user->expo_push_token;
+                }
             }
         }
 
@@ -94,6 +108,11 @@ class NotifierLivreursCommandeVenteJob implements ShouldQueue
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private function veutNotificationsActivite(User $user): bool
+    {
+        return $user->notificationPreferences()['activite'] ?? true;
+    }
 
     private function userForLivreur(Livreur $livreur): ?User
     {

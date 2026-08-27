@@ -10,11 +10,13 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAppearance } from '@/composables/useAppearance';
+import { usePermissions } from '@/composables/usePermissions';
 import { useScanInterceptor } from '@/composables/useScanInterceptor';
-import { home, logout } from '@/routes';
+import { dashboard as backofficeDashboard, home, logout } from '@/routes';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import {
     Bell,
+    Building2,
     ChevronDown,
     LogOut,
     Menu,
@@ -52,9 +54,22 @@ const userDisplayName = computed(() => {
     return user.value?.name ?? 'Mon compte';
 });
 
-const roles = computed<string[]>(() => (page.props as any).auth.roles ?? []);
-const isProprietaire = computed(() => roles.value.includes('proprietaire'));
-const isLivreur = computed(() => roles.value.includes('livreur'));
+const { hasRole, hasAnyRole } = usePermissions();
+const isProprietaire = computed(() => hasRole('proprietaire'));
+const isLivreur = computed(() => hasRole('livreur'));
+
+// Un compte proprietaire/livreur peut aussi être staff (ex: un admin qui possède
+// lui-même un véhicule) — cf. EnsureIsStaffAccount côté backend, qui autorise ce
+// cumul sur un seul compte plutôt que de forcer un second compte séparé.
+const canAccessBackoffice = computed(() =>
+    hasAnyRole([
+        'super_admin',
+        'admin_entreprise',
+        'manager',
+        'commerciale',
+        'comptable',
+    ]),
+);
 
 type NavItem = {
     id: string;
@@ -118,6 +133,11 @@ function openProfile() {
     router.visit('/client/profile');
 }
 
+function openBackoffice() {
+    router.flushAll();
+    router.visit(backofficeDashboard().url);
+}
+
 function handleLogout() {
     router.flushAll();
     router.post(logout().url);
@@ -134,6 +154,11 @@ function toggleMobileMenu() {
 function openProfileFromMobile() {
     closeMobileMenu();
     openProfile();
+}
+
+function openBackofficeFromMobile() {
+    closeMobileMenu();
+    openBackoffice();
 }
 
 function handleLogoutFromMobile() {
@@ -275,6 +300,14 @@ watch(currentUrl, () => {
                                     Profil
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
+                                    v-if="canAccessBackoffice"
+                                    class="cursor-pointer"
+                                    @click="openBackoffice"
+                                >
+                                    <Building2 class="mr-2 h-4 w-4" />
+                                    Backoffice
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
                                     class="cursor-pointer"
                                     @click="handleLogout"
                                 >
@@ -332,6 +365,15 @@ watch(currentUrl, () => {
                             >
                                 <User class="h-4 w-4" />
                                 Profil
+                            </Button>
+                            <Button
+                                v-if="canAccessBackoffice"
+                                variant="ghost"
+                                class="justify-start gap-2 px-3"
+                                @click="openBackofficeFromMobile"
+                            >
+                                <Building2 class="h-4 w-4" />
+                                Backoffice
                             </Button>
                             <Button
                                 variant="ghost"

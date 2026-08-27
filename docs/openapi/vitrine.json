@@ -1,0 +1,426 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "Eau La Maman API",
+        "version": "1.0.0",
+        "description": "Endpoints server-to-server consomm\u00e9s exclusivement par l'app vitrine (eau-la-maman.com), jamais par un navigateur visiteur ni par Nuxt/mobile. Authentification par cl\u00e9 partag\u00e9e `X-Vitrine-Key`, pas par token utilisateur."
+    },
+    "servers": [
+        {
+            "url": "http://127.0.0.1:8080/api",
+            "description": "Local"
+        },
+        {
+            "url": "https://formation.eau-la-maman.com/api",
+            "description": "Pr\u00e9prod"
+        },
+        {
+            "url": "https://fello.eau-la-maman.com/api",
+            "description": "Production"
+        }
+    ],
+    "security": [
+        {
+            "apiKey": []
+        }
+    ],
+    "paths": {
+        "/public/contact": {
+            "post": {
+                "operationId": "public.contact",
+                "tags": [
+                    "Vitrine (server-to-server)"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "maxLength": 255
+                                    },
+                                    "email": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "format": "email",
+                                        "maxLength": 255
+                                    },
+                                    "phone": {
+                                        "type": "string",
+                                        "maxLength": 50
+                                    },
+                                    "message": {
+                                        "type": "string",
+                                        "maxLength": 5000
+                                    }
+                                },
+                                "required": [
+                                    "phone",
+                                    "message"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "const": "Votre message a \u00e9t\u00e9 envoy\u00e9. Nous vous r\u00e9pondrons rapidement."
+                                        }
+                                    },
+                                    "required": [
+                                        "message"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/public/register/lookup": {
+            "post": {
+                "operationId": "public.register.lookup",
+                "tags": [
+                    "Vitrine (server-to-server)"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "telephone": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "telephone"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "anyOf": [
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "status": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "prefill_available",
+                                                        "not_found"
+                                                    ]
+                                                },
+                                                "prefill": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "prenom": {
+                                                            "type": "string"
+                                                        },
+                                                        "nom": {
+                                                            "type": "string"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "prenom",
+                                                        "nom"
+                                                    ]
+                                                }
+                                            },
+                                            "required": [
+                                                "status",
+                                                "prefill"
+                                            ]
+                                        },
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "status": {
+                                                    "type": "string",
+                                                    "const": "user_exists"
+                                                }
+                                            },
+                                            "required": [
+                                                "status"
+                                            ]
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "string",
+                                            "const": "Trop de demandes de code. Veuillez r\u00e9essayer plus tard."
+                                        }
+                                    },
+                                    "required": [
+                                        "error"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/public/register/otp/verify": {
+            "post": {
+                "operationId": "public.register.otp.verify",
+                "tags": [
+                    "Vitrine (server-to-server)"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "telephone": {
+                                        "type": "string"
+                                    },
+                                    "code": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "telephone",
+                                    "code"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "verified": {
+                                            "type": "boolean"
+                                        }
+                                    },
+                                    "required": [
+                                        "verified"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "string",
+                                            "const": "Trop de tentatives. Demandez un nouveau code."
+                                        }
+                                    },
+                                    "required": [
+                                        "error"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/public/register/livreur": {
+            "post": {
+                "operationId": "public.register.livreur",
+                "tags": [
+                    "Vitrine (server-to-server)"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "prenom": {
+                                        "type": "string",
+                                        "minLength": 2,
+                                        "maxLength": 100
+                                    },
+                                    "nom": {
+                                        "type": "string",
+                                        "minLength": 2,
+                                        "maxLength": 100
+                                    },
+                                    "telephone": {
+                                        "type": "string"
+                                    },
+                                    "telephone_country": {
+                                        "type": "string"
+                                    },
+                                    "telephone_local": {
+                                        "type": "string",
+                                        "pattern": "^\\d+$"
+                                    },
+                                    "password": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "prenom",
+                                    "nom",
+                                    "telephone",
+                                    "telephone_country",
+                                    "telephone_local",
+                                    "password"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "const": "pending_validation"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "const": "Votre compte a \u00e9t\u00e9 cr\u00e9\u00e9 et est en attente de validation par notre \u00e9quipe."
+                                        }
+                                    },
+                                    "required": [
+                                        "status",
+                                        "message"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/public/modules": {
+            "get": {
+                "operationId": "public.modules",
+                "tags": [
+                    "Vitrine (server-to-server)"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "can_register": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "can_register"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "securitySchemes": {
+            "apiKey": {
+                "type": "apiKey",
+                "description": "Cl\u00e9 partag\u00e9e server-to-server (env `VITRINE_SERVICE_TOKEN` c\u00f4t\u00e9 backend) \u2014 jamais un token utilisateur, jamais expos\u00e9e ici. Voir `App\\Http\\Middleware\\VerifyVitrineServiceToken`.",
+                "in": "header",
+                "name": "X-Vitrine-Key"
+            }
+        },
+        "responses": {
+            "ValidationException": {
+                "description": "Validation error",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "message": {
+                                    "type": "string",
+                                    "description": "Errors overview."
+                                },
+                                "errors": {
+                                    "type": "object",
+                                    "description": "A detailed description of each field that failed validation.",
+                                    "additionalProperties": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            },
+                            "required": [
+                                "message",
+                                "errors"
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

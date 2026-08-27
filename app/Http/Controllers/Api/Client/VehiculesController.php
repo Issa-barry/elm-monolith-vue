@@ -4,24 +4,38 @@ namespace App\Http\Controllers\Api\Client;
 
 use App\Enums\StatutTransfert;
 use App\Http\Controllers\Controller;
-use App\Models\Client;
 use App\Models\Livreur;
 use App\Models\Proprietaire;
 use App\Models\TransfertLogistique;
 use App\Models\User;
 use App\Models\Vehicule;
+use App\Services\Client\ClientIdentityResolver;
+use Dedoc\Scramble\Attributes\Endpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 
 class VehiculesController extends Controller
 {
-    public function __invoke(Request $request): JsonResponse
+    #[Endpoint(
+        description: 'Liste des véhicules du proprietaire (les siens) ou du livreur (ceux de son '
+            .'équipe) — jamais toute la flotte de l\'organisation. **Aucun statut "Entretien"/'
+            .'maintenance n\'existe dans le modèle ELM** — seul `is_active` (booléen) existe ; '
+            .'n\'affichez pas un statut de ce type sans colonne backend dédiée (elle n\'existe pas). '
+            .'`capacite` est un champ hérité (nombre unique, packs) — la capacité réelle '
+            .'multi-catégorie n\'est pas exposée ici. `conducteur` : nom du membre d\'équipe au rôle '
+            .'`chauffeur`, `null` si aucune équipe ou aucun chauffeur assigné (jamais le premier '
+            .'membre pris au hasard).',
+    )]
+    public function __invoke(Request $request, ClientIdentityResolver $identityResolver): JsonResponse
     {
         /** @var User $user */
         $user = $request->user();
 
-        [$organizationId, $proprietaire, $livreur] = $this->resolveContext($user);
+        $identity = $identityResolver->resolve($user);
+        $organizationId = $identity->organizationId;
+        $proprietaire = $identity->proprietaire;
+        $livreur = $identity->livreur;
 
         $vehicules = $this->vehiculesPartenaires($organizationId, $proprietaire, $livreur);
 
@@ -44,6 +58,9 @@ class VehiculesController extends Controller
                 // mobile conservé tel quel (nombre unique), sans repli sur le type.
                 'capacite' => $v->capacite_packs,
                 'is_active' => (bool) $v->is_active,
+                // Pas de notion de statut "entretien"/maintenance dans le modèle ELM — seul
+                // is_active existe. Un statut plus fin (ex: "En panne") nécessiterait une
+                // colonne dédiée, volontairement pas ajoutée ici sans besoin métier confirmé.
                 'photo_url' => $v->photo_path
                                     ? request()->getSchemeAndHttpHost().'/api/vehicules/'.$v->id.'/photo'
                                     : null,
@@ -51,47 +68,21 @@ class VehiculesController extends Controller
                 'role' => $proprietaire && $v->proprietaire_id === $proprietaire->id
                                     ? 'proprietaire'
                                     : 'livreur',
+                'conducteur' => $this->conducteurNom($v),
             ])->values()
         );
     }
 
-    /** @return array{0:?string,1:?Proprietaire,2:?Livreur} */
-    private function resolveContext(User $user): array
+    /**
+     * Nom du chauffeur assigné à l'équipe du véhicule, si une équipe existe et
+     * qu'un membre y tient le rôle "chauffeur" — jamais un simple premier membre
+     * pris au hasard (une équipe peut n'avoir que des convoyeurs).
+     */
+    private function conducteurNom(Vehicule $v): ?string
     {
-        $orgId = $user->organization_id;
-        $telephone = $user->telephone;
+        $chauffeur = $v->equipe?->membres->firstWhere('role', 'chauffeur');
 
-        $client = Client::query()
-            ->when($orgId, fn ($q) => $q->where('organization_id', $orgId))
-            ->where(fn ($q) => $q->where('user_id', $user->id)
-                ->when($telephone, fn ($q2) => $q2->orWhere('telephone', $telephone)))
-            ->first();
-
-        if ($orgId === null && $client) {
-            $orgId = $client->organization_id;
-        }
-
-        $proprietaire = Proprietaire::query()
-            ->when($orgId, fn ($q) => $q->where('organization_id', $orgId))
-            ->where(fn ($q) => $q->where('user_id', $user->id)
-                ->when($telephone, fn ($q2) => $q2->orWhereHas('personne', fn ($p) => $p->where('telephone', $telephone))))
-            ->first();
-
-        if ($orgId === null && $proprietaire) {
-            $orgId = $proprietaire->organization_id;
-        }
-
-        $livreur = Livreur::query()
-            ->when($orgId, fn ($q) => $q->where('organization_id', $orgId))
-            ->where(fn ($q) => $q->where('user_id', $user->id)
-                ->when($telephone, fn ($q2) => $q2->orWhereHas('personne', fn ($p) => $p->where('telephone', $telephone))))
-            ->first();
-
-        if ($orgId === null && $livreur) {
-            $orgId = $livreur->organization_id;
-        }
-
-        return [$orgId, $proprietaire, $livreur];
+        return $chauffeur?->livreur?->libelleAffichage();
     }
 
     /** @return Collection<int, Vehicule> */
@@ -105,7 +96,7 @@ class VehiculesController extends Controller
         }
 
         return Vehicule::query()
-            ->with('typeVehicule')
+            ->with(['typeVehicule', 'equipe.membres.livreur.personne'])
             ->where('organization_id', $organizationId)
             ->where(function ($query) use ($proprietaire, $livreur) {
                 if ($proprietaire !== null) {

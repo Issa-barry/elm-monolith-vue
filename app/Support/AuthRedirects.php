@@ -8,10 +8,6 @@ use Illuminate\Http\Request;
 
 class AuthRedirects
 {
-    private const CLIENT_ROLES = ['client', 'proprietaire', 'livreur'];
-
-    private const STAFF_ROLES = ['super_admin', 'admin_entreprise', 'manager', 'commerciale', 'comptable'];
-
     /**
      * Point de calcul unique de "où doit atterrir cet utilisateur" — utilisé après connexion
      * (LoginResponse/RegisterResponse via resolvePostAuthRedirect ci-dessous), après changement
@@ -19,18 +15,25 @@ class AuthRedirects
      * middleware EnsureOrganizationHasSite (alias org.site.required) qui protège aussi les accès
      * ultérieurs au back-office (session reprise, lien profond) — cf. needsOnboarding() ci-dessous,
      * seule source de vérité pour "cette organisation a-t-elle besoin de l'onboarding ?".
+     *
+     * Un compte qui cumule un rôle staff ET un rôle client/proprietaire/livreur
+     * atterrit sur le backoffice par défaut (ce point d'entrée n'est utilisé que
+     * par le flux de connexion web/backoffice — le login API/Nuxt ne redirige
+     * jamais ici) ; il garde un lien explicite vers l'espace client dans
+     * l'interface plutôt qu'une redirection automatique — cf. User::
+     * hasBackofficeAccess()/hasClientAccess(), UserMenuContent.vue.
      */
     public static function defaultPathForUser(?User $user): string
     {
-        if ($user?->hasAnyRole(self::CLIENT_ROLES)) {
+        if ($user?->hasBackofficeAccess()) {
+            return route(self::needsOnboarding($user) ? 'onboarding.site.show' : 'dashboard');
+        }
+
+        if ($user?->hasClientAccess()) {
             return route('client.dashboard');
         }
 
-        if (! $user?->hasAnyRole(self::STAFF_ROLES)) {
-            return route('home');
-        }
-
-        return route(self::needsOnboarding($user) ? 'onboarding.site.show' : 'dashboard');
+        return route('home');
     }
 
     /**
@@ -58,9 +61,12 @@ class AuthRedirects
         // rôle de l'utilisateur pouvait faire atterrir une organisation fraîche directement sur
         // le back-office sans site. Cf. rapport de bug "Aucun site affecté" (comportement
         // intermittent selon qu'une intended URL était ou non présente en session).
-        // Ne s'applique qu'au staff : les routes /client/* ne sont jamais gardées par
-        // EnsureOrganizationHasSite (cf. routes/web.php), donc un client n'a rien à onboarder.
-        if (! $user?->hasAnyRole(self::CLIENT_ROLES) && self::needsOnboarding($user)) {
+        // Ne s'applique qu'à un compte qui va effectivement sur le backoffice : les
+        // routes /client/* ne sont jamais gardées par EnsureOrganizationHasSite (cf.
+        // routes/web.php), donc un compte purement client n'a rien à onboarder. Un
+        // compte qui cumule staff+client passe bien par cette priorité (il va sur le
+        // backoffice par défaut, cf. defaultPathForUser ci-dessus).
+        if ($user?->hasBackofficeAccess() && self::needsOnboarding($user)) {
             $request->session()->forget('url.intended');
 
             return $default;
@@ -77,6 +83,11 @@ class AuthRedirects
         return $intendedUrl;
     }
 
+    /**
+     * Un compte qui cumule staff+client peut légitimement être renvoyé vers l'une
+     * OU l'autre zone (deep link) — les deux accès ne s'excluent jamais, cf.
+     * User::hasBackofficeAccess()/hasClientAccess().
+     */
     private static function isIntendedAllowedForUser(string $intendedUrl, ?User $user): bool
     {
         $path = parse_url($intendedUrl, PHP_URL_PATH);
@@ -87,12 +98,12 @@ class AuthRedirects
 
         $normalizedPath = '/'.ltrim($path, '/');
 
-        if ($user?->hasAnyRole(self::CLIENT_ROLES)) {
-            return str_starts_with($normalizedPath, '/client');
+        if (str_starts_with($normalizedPath, '/client')) {
+            return (bool) $user?->hasClientAccess();
         }
 
-        if ($user?->hasAnyRole(self::STAFF_ROLES)) {
-            return ! str_starts_with($normalizedPath, '/client');
+        if ($user?->hasBackofficeAccess()) {
+            return true;
         }
 
         // /contact et /help n'existent plus côté back-office (portées par
@@ -102,6 +113,6 @@ class AuthRedirects
 
     public static function hasKnownRole(?User $user): bool
     {
-        return (bool) $user?->hasAnyRole([...self::CLIENT_ROLES, ...self::STAFF_ROLES]);
+        return (bool) ($user?->hasBackofficeAccess() || $user?->hasClientAccess());
     }
 }

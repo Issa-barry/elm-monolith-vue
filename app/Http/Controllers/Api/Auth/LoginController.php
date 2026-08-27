@@ -9,6 +9,8 @@ use App\Models\Proprietaire;
 use App\Models\User;
 use App\Models\UserAuthIdentity;
 use App\Services\PhoneNormalizer;
+use App\Support\Auth\AccountEligibility;
+use App\Support\Auth\AccountStatus;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -40,17 +42,12 @@ class LoginController extends Controller
             ]);
         }
 
-        if (! $user->hasVerifiedEmail() && ! $user->isSuperAdmin()) {
-            return response()->json([
-                'message' => 'Veuillez vérifier votre adresse email pour activer votre compte. Consultez votre boîte de réception.',
-                'code' => 'email_not_verified',
-            ], 403);
-        }
+        $status = AccountEligibility::status($user);
 
-        if (! $user->is_active && ! $user->isSuperAdmin()) {
+        if ($status !== AccountStatus::Ok) {
             return response()->json([
-                'message' => 'Votre compte a été bloqué. Veuillez contacter notre service client pour plus d\'informations.',
-                'code' => 'account_blocked',
+                'message' => AccountEligibility::message($status),
+                'code' => $status->value,
             ], 403);
         }
 
@@ -66,7 +63,15 @@ class LoginController extends Controller
 
     /**
      * Si le téléphone de l'utilisateur correspond à un livreur ou propriétaire
-     * sans user_id, on établit le lien automatiquement.
+     * sans user_id, on établit le lien automatiquement. L'attribution du rôle
+     * Spatie correspondant est déléguée à BusinessProfileRoleObserver — d'où le
+     * `->get()->each(->update())` plutôt qu'un update() de masse : seul un
+     * update() par INSTANCE déclenche les events Eloquent que l'observer écoute
+     * (cf. sa docblock). Avant le 26/08/2026, ce rattachement au LOGIN (staff dont
+     * le profil métier est créé après coup par un admin) posait `user_id` sans
+     * jamais attribuer le rôle : le compte restait bloqué hors de l'espace client
+     * malgré un profil valide (cas réel constaté sur un compte super_admin devenu
+     * propriétaire de 36 véhicules sans jamais recevoir le rôle `proprietaire`).
      */
     private function lierCompteParTelephone(User $user): void
     {
@@ -81,11 +86,13 @@ class LoginController extends Controller
 
         Livreur::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
             ->whereNull('user_id')
-            ->update(['user_id' => $user->id]);
+            ->get()
+            ->each(fn (Livreur $livreur) => $livreur->update(['user_id' => $user->id]));
 
         Proprietaire::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
             ->whereNull('user_id')
-            ->update(['user_id' => $user->id]);
+            ->get()
+            ->each(fn (Proprietaire $proprietaire) => $proprietaire->update(['user_id' => $user->id]));
     }
 
     private function userResource(User $user): array
@@ -96,7 +103,11 @@ class LoginController extends Controller
             'nom' => $user->nom,
             'telephone' => $user->telephone,
             'email' => $user->email,
-            'roles' => $user->getRoleNames(),
+            // ->map(fn (string $r): string => $r) explicite (pas juste ->all()) : sans
+            // ce recast typé, Scramble trace getRoleNames() jusqu'à la relation Eloquent
+            // `roles` et documente `roles[]` comme une collection de modèles Role au lieu
+            // du tableau de noms qu'il est vraiment (cf. audit OpenAPI du 27/08/2026).
+            'roles' => $user->getRoleNames()->map(fn (string $r): string => $r)->values()->all(),
         ];
     }
 }

@@ -11,6 +11,9 @@ use App\Models\Proprietaire;
 use App\Models\TransfertLogistique;
 use App\Models\User;
 use App\Models\Vehicule;
+use App\Services\Client\ClientIdentityResolver;
+use App\Services\Client\Data\LivraisonEnCoursRow;
+use App\Services\Client\Data\LivraisonEnCoursVehicule;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,13 +21,14 @@ use Illuminate\Support\Collection;
 
 class LivraisonsEnCoursController extends Controller
 {
-    public function __invoke(Request $request): JsonResponse
+    public function __invoke(Request $request, ClientIdentityResolver $identityResolver): JsonResponse
     {
         /** @var User $user */
         $user = $request->user();
 
-        $proprietaire = $this->findProprietaire($user);
-        $livreur = $this->findLivreur($user);
+        $identity = $identityResolver->resolve($user);
+        $proprietaire = $identity->proprietaire;
+        $livreur = $identity->livreur;
 
         if ($proprietaire === null && $livreur === null) {
             return response()->json([]);
@@ -40,6 +44,8 @@ class LivraisonsEnCoursController extends Controller
             return response()->json([]);
         }
 
+        $organizationId = $identity->organizationId;
+
         $transferts = TransfertLogistique::query()
             ->with([
                 'siteSource:id,nom',
@@ -50,7 +56,7 @@ class LivraisonsEnCoursController extends Controller
                 'lignes',
             ])
             ->where('statut', StatutTransfert::TRANSIT->value)
-            ->when($user->organization_id, fn (Builder $q) => $q->where('organization_id', $user->organization_id))
+            ->when($organizationId, fn (Builder $q) => $q->where('organization_id', $organizationId))
             ->where(fn (Builder $q) => $q
                 ->when($vehiculeIds->isNotEmpty(), fn (Builder $q2) => $q2->orWhereIn('vehicule_id', $vehiculeIds))
                 ->when($equipeIds->isNotEmpty(), fn (Builder $q2) => $q2->orWhereIn('equipe_livraison_id', $equipeIds))
@@ -64,7 +70,7 @@ class LivraisonsEnCoursController extends Controller
             $commandes = CommandeVente::query()
                 ->with(['site:id,nom', 'vehicule:id,nom_vehicule,immatriculation', 'vehicule.equipe:id,vehicule_id', 'client:id,nom,prenom', 'lignes:id,commande_vente_id,quantite_demandee'])
                 ->where('statut', StatutCommandeVente::LIVRAISON_EN_COURS->value)
-                ->when($user->organization_id, fn (Builder $q) => $q->where('organization_id', $user->organization_id))
+                ->when($organizationId, fn (Builder $q) => $q->where('organization_id', $organizationId))
                 ->whereIn('vehicule_id', $tousVehiculeIds)
                 ->orderByDesc('validated_at')
                 ->get()
@@ -75,24 +81,6 @@ class LivraisonsEnCoursController extends Controller
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
-
-    private function findProprietaire(User $user): ?Proprietaire
-    {
-        return Proprietaire::query()
-            ->when($user->organization_id, fn (Builder $q) => $q->where('organization_id', $user->organization_id))
-            ->where(fn (Builder $q) => $q->where('user_id', $user->id)
-                ->when($user->telephone, fn (Builder $q2) => $q2->orWhereHas('personne', fn (Builder $p) => $p->where('telephone', $user->telephone))))
-            ->first();
-    }
-
-    private function findLivreur(User $user): ?Livreur
-    {
-        return Livreur::query()
-            ->when($user->organization_id, fn (Builder $q) => $q->where('organization_id', $user->organization_id))
-            ->where(fn (Builder $q) => $q->where('user_id', $user->id)
-                ->when($user->telephone, fn (Builder $q2) => $q2->orWhereHas('personne', fn (Builder $p) => $p->where('telephone', $user->telephone))))
-            ->first();
-    }
 
     private function vehiculeIdsDuProprietaire(?Proprietaire $proprietaire): Collection
     {
@@ -123,46 +111,46 @@ class LivraisonsEnCoursController extends Controller
         return $livreur->equipes()->pluck('equipes_livraison.id');
     }
 
-    private function formatCommande(CommandeVente $c): array
+    private function formatCommande(CommandeVente $c): LivraisonEnCoursRow
     {
         $client = $c->client;
         $clientNom = $client?->nom_complet ?? 'Vente directe';
 
-        return [
-            'id' => $c->id,
-            'reference' => $c->reference ?? '—',
-            'statut' => 'commande',
-            'statut_label' => 'Commande en cours',
-            'site_source' => $c->site?->nom ?? '—',
-            'site_destination' => $clientNom,
-            'vehicule' => $c->vehicule ? [
-                'nom' => $c->vehicule->nom_vehicule,
-                'immatriculation' => $c->vehicule->immatriculation,
-            ] : null,
-            'equipe_nom' => $c->vehicule?->nom_vehicule ?? '—',
-            'date_depart' => $c->validated_at?->toDateString(),
-            'date_arrivee_prevue' => null,
-            'nb_packs' => (int) $c->lignes->sum('quantite_demandee'),
-        ];
+        return new LivraisonEnCoursRow(
+            id: $c->id,
+            reference: $c->reference ?? '—',
+            statut: 'commande',
+            statutLabel: 'Commande en cours',
+            siteSource: $c->site?->nom ?? '—',
+            siteDestination: $clientNom,
+            vehicule: $c->vehicule ? new LivraisonEnCoursVehicule(
+                nom: $c->vehicule->nom_vehicule,
+                immatriculation: $c->vehicule->immatriculation,
+            ) : null,
+            equipeNom: $c->vehicule?->nom_vehicule ?? '—',
+            dateDepart: $c->validated_at?->toDateString(),
+            dateArriveePrevue: null,
+            nbPacks: (int) $c->lignes->sum('quantite_demandee'),
+        );
     }
 
-    private function formatTransfert(TransfertLogistique $t): array
+    private function formatTransfert(TransfertLogistique $t): LivraisonEnCoursRow
     {
-        return [
-            'id' => $t->id,
-            'reference' => $t->reference,
-            'statut' => $t->statut instanceof \BackedEnum ? $t->statut->value : $t->statut,
-            'statut_label' => 'Livraison en cours',
-            'site_source' => $t->siteSource?->nom ?? '—',
-            'site_destination' => $t->siteDestination?->nom ?? '—',
-            'vehicule' => $t->vehicule ? [
-                'nom' => $t->vehicule->nom_vehicule,
-                'immatriculation' => $t->vehicule->immatriculation,
-            ] : null,
-            'equipe_nom' => $t->equipeLivraison?->nom ?? '—',
-            'date_depart' => $t->date_depart_reelle?->toDateString(),
-            'date_arrivee_prevue' => $t->date_arrivee_prevue?->toDateString(),
-            'nb_packs' => (int) $t->lignes->sum('quantite_chargee'),
-        ];
+        return new LivraisonEnCoursRow(
+            id: $t->id,
+            reference: $t->reference,
+            statut: $t->statut instanceof \BackedEnum ? $t->statut->value : $t->statut,
+            statutLabel: 'Livraison en cours',
+            siteSource: $t->siteSource?->nom ?? '—',
+            siteDestination: $t->siteDestination?->nom ?? '—',
+            vehicule: $t->vehicule ? new LivraisonEnCoursVehicule(
+                nom: $t->vehicule->nom_vehicule,
+                immatriculation: $t->vehicule->immatriculation,
+            ) : null,
+            equipeNom: $t->equipeLivraison?->nom ?? '—',
+            dateDepart: $t->date_depart_reelle?->toDateString(),
+            dateArriveePrevue: $t->date_arrivee_prevue?->toDateString(),
+            nbPacks: (int) $t->lignes->sum('quantite_chargee'),
+        );
     }
 }

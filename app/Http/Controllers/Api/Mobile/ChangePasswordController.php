@@ -30,6 +30,16 @@ class ChangePasswordController extends Controller
 
         $user->update(['password' => Hash::make($request->string('password'))]);
 
+        // Le token courant (cet appareil) reste valide, mais tous les AUTRES tokens
+        // sont révoqués : si un token avait été compromis, ce changement volontaire de
+        // mot de passe depuis un appareil légitime le déconnecte. Symétrique de
+        // ResetController (mot de passe oublié), qui révoque TOUS les tokens — cf.
+        // docs/api-auth-contract.md.
+        $currentTokenId = $user->currentAccessToken()?->id;
+        $user->tokens()
+            ->when($currentTokenId, fn ($q) => $q->where('id', '!=', $currentTokenId))
+            ->delete();
+
         return response()->json(['message' => 'Mot de passe mis à jour.']);
     }
 }

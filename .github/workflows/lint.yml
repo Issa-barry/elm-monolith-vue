@@ -33,11 +33,17 @@ jobs:
         run: composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
 
       # --no-scripts ci-dessus saute le post-autoload-dump qui copie .env.example → .env,
-      # requis pour que `php artisan` puisse booter (APP_KEY).
+      # requis pour que `php artisan` puisse booter (APP_KEY). touch + migrate (sans --seed,
+      # scramble:analyze n'a besoin que du schéma, jamais de données) : requis depuis l'ajout
+      # du step "Check OpenAPI documentation" ci-dessous, qui exécute de vraies requêtes SQL
+      # pendant l'inférence de type (ex: vérifier l'existence de user_auth_identities) — même
+      # config sqlite que le job `tests` (.github/workflows/tests.yml), qui le fait déjà.
       - name: Prepare Laravel environment
         run: |
           cp .env.example .env
           php artisan key:generate
+          touch database/database.sqlite
+          php artisan migrate --force
 
       # `resources/js/routes` et `resources/js/actions` sont gitignorés (générés par le
       # plugin Vite `wayfinder`, cf. vite.config.ts) — vue-tsc les résout par import mais
@@ -57,6 +63,22 @@ jobs:
 
       - name: Check PHP code style (Pint)
         run: vendor/bin/pint --test
+
+      # `scramble:analyze` échoue (code retour non-zéro) si la génération OpenAPI
+      # lève une erreur — attrape une régression du même type que les warnings
+      # JR001 corrigés le 27/08/2026 (résource sans mixin, type inféré incorrect).
+      # Le `git diff --exit-code` détecte en plus la dérive silencieuse
+      # documentée dans le rapport OpenAPI : une génération qui "réussit" peut
+      # quand même diverger du fichier docs/openapi/*.json committé (celui que
+      # Nuxt utilise pour générer ses types TS) si personne ne l'a régénéré après
+      # un changement de contrat.
+      - name: Check OpenAPI documentation generates and matches the committed spec
+        run: |
+          php artisan scramble:analyze
+          php artisan scramble:analyze --api=vitrine
+          php artisan scramble:export --api=default
+          php artisan scramble:export --api=vitrine
+          git diff --exit-code -- docs/openapi/ || (echo "::error::docs/openapi/*.json is out of date — run 'php artisan scramble:export --api=default' and '--api=vitrine' locally and commit the result." && exit 1)
 
       - name: Check frontend formatting (Prettier)
         run: npm run format:check

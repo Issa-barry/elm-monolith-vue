@@ -3,13 +3,9 @@
 namespace App\Http\Controllers\Client;
 
 use App\Enums\StatutCommission;
-use App\Enums\StatutDepense;
-use App\Enums\StatutPropositionVehicule;
+use App\Exceptions\Client\DuplicateVehicleProposalException;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
-use App\Models\CommissionEnveloppePart;
-use App\Models\CommissionLogistiquePart;
-use App\Models\Depense;
 use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\PropositionVehicule;
@@ -17,22 +13,29 @@ use App\Models\Proprietaire;
 use App\Models\TypeVehicule;
 use App\Models\User;
 use App\Models\Vehicule;
-use App\Services\ImageService;
+use App\Services\Client\ClientEarningsService;
+use App\Services\Client\ClientIdentityResolver;
+use App\Services\Client\Data\VehiculeEarningsRow;
+use App\Services\Client\VehicleProposalService;
 use BaconQrCode\Renderer\Image\SvgImageBackEnd;
 use BaconQrCode\Renderer\ImageRenderer;
 use BaconQrCode\Renderer\RendererStyle\RendererStyle;
 use BaconQrCode\Writer as QrWriter;
-use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Collection;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class ClientDashboardController extends Controller
 {
+    public function __construct(
+        private readonly ClientIdentityResolver $identityResolver,
+        private readonly ClientEarningsService $earningsService,
+        private readonly VehicleProposalService $proposalService,
+    ) {}
+
     protected function resolveQrPayload(User $user): string
     {
         [, , $proprietaire, $livreur] = $this->resolveActorContext($user);
@@ -121,18 +124,18 @@ class ClientDashboardController extends Controller
         }
 
         $summary = collect($payload['earnings_by_vehicule'])
-            ->first(fn (array $item) => (string) $item['vehicule_id'] === $vehiculeId);
+            ->first(fn (VehiculeEarningsRow $item) => $item->vehiculeId === $vehiculeId);
 
         if ($summary === null) {
-            $summary = [
-                'vehicule_id' => $vehicule['id'],
-                'nom_vehicule' => $vehicule['nom_vehicule'],
-                'immatriculation' => $vehicule['immatriculation'],
-                'frais_depenses' => 0.0,
-                'total_earned' => 0.0,
-                'total_paid' => 0.0,
-                'balance' => 0.0,
-            ];
+            $summary = new VehiculeEarningsRow(
+                vehiculeId: $vehicule['id'],
+                nomVehicule: $vehicule['nom_vehicule'],
+                immatriculation: $vehicule['immatriculation'],
+                fraisDepenses: 0.0,
+                totalEarned: 0.0,
+                totalPaid: 0.0,
+                balance: 0.0,
+            );
         }
 
         return Inertia::render('client/VehicleBalanceDetail', [
@@ -189,60 +192,28 @@ class ClientDashboardController extends Controller
         $user = $request->user();
         [$organizationId, $client, $proprietaire, $livreur] = $this->resolveActorContext($user);
 
-        $validated = $request->validate([
-            'nom_vehicule' => ['nullable', 'string', 'max:100'],
-            'marque' => ['nullable', 'string', 'max:100'],
-            'modele' => ['nullable', 'string', 'max:100'],
-            'immatriculation' => ['required', 'string', 'max:30'],
-            'type_vehicule' => ['required', 'string', 'max:30'],
-            'commentaire' => ['nullable', 'string', 'max:500'],
-            'photo' => ['required', 'image', 'max:5120'],
-        ], [
-            'immatriculation.required' => "L'immatriculation est obligatoire.",
-            'type_vehicule.required' => 'Le type de vehicule est obligatoire.',
-            'photo.required' => 'La photo du vehicule est obligatoire.',
-            'photo.image' => 'Le fichier doit etre une image.',
-            'photo.max' => 'La photo ne doit pas depasser 5 Mo.',
-        ]);
+        $validated = $request->validate(
+            VehicleProposalService::validationRules(),
+            VehicleProposalService::validationMessages()
+        );
 
-        $immatriculation = mb_strtoupper(trim((string) $validated['immatriculation']), 'UTF-8');
-        $photoPath = (new ImageService)->storeAsWebp($request->file('photo'), 'propositions-vehicules');
-
-        $duplicate = PropositionVehicule::query()
-            ->where('immatriculation', $immatriculation)
-            ->where('statut', StatutPropositionVehicule::PENDING->value)
-            ->when(
-                $organizationId !== null,
-                fn ($query) => $query->where('organization_id', $organizationId),
-                fn ($query) => $query->whereNull('organization_id')
-            )
-            ->exists();
-
-        if ($duplicate) {
+        try {
+            $this->proposalService->store(
+                $user,
+                $organizationId,
+                $client,
+                $proprietaire,
+                $livreur,
+                $validated,
+                $request->file('photo')
+            );
+        } catch (DuplicateVehicleProposalException) {
             return back()
                 ->withErrors([
                     'immatriculation' => 'Une proposition en attente existe deja pour cette immatriculation.',
                 ])
                 ->withInput();
         }
-
-        PropositionVehicule::create([
-            'organization_id' => $organizationId,
-            'user_id' => $user->id,
-            'client_id' => $client?->id,
-            'proprietaire_id' => $proprietaire?->id,
-            'livreur_id' => $livreur?->id,
-            'nom_contact' => $user->name,
-            'telephone_contact' => $user->telephone,
-            'nom_vehicule' => $this->nullableTrim($validated['nom_vehicule'] ?? null),
-            'marque' => $this->nullableTrim($validated['marque'] ?? null),
-            'modele' => $this->nullableTrim($validated['modele'] ?? null),
-            'immatriculation' => $immatriculation,
-            'type_vehicule' => $validated['type_vehicule'],
-            'commentaire' => $this->nullableTrim($validated['commentaire'] ?? null),
-            'photo_path' => $photoPath,
-            'statut' => StatutPropositionVehicule::PENDING->value,
-        ]);
 
         return redirect()->route('client.propositions.index')->with('success', 'Votre proposition de vehicule a ete envoyee.');
     }
@@ -267,7 +238,8 @@ class ClientDashboardController extends Controller
         }
 
         $ownerVehicules = $this->vehiculesDuProprietaire($organizationId, $proprietaire);
-        $partsVentes = $this->partsVentes(
+        $earnings = $this->earningsService->summary(
+            $vehicules,
             $organizationId,
             $proprietaire,
             $livreur,
@@ -276,23 +248,6 @@ class ClientDashboardController extends Controller
             $statut,
             $vehiculeIdsContrainte
         );
-        $partsLogistiques = $this->partsLogistiques(
-            $organizationId,
-            $proprietaire,
-            $livreur,
-            $dateDebut,
-            $dateFin,
-            $statut,
-            $vehiculeIdsContrainte
-        );
-        $fraisParVehicule = $this->fraisDepensesParVehicule(
-            $organizationId,
-            $proprietaire,
-            $dateDebut,
-            $dateFin,
-            $vehiculeIdsContrainte
-        );
-        $fraisTotal = (float) array_sum($fraisParVehicule);
 
         $profileLabels = collect();
         if ($client !== null) {
@@ -354,25 +309,16 @@ class ClientDashboardController extends Controller
                 ->all(),
             'vehicules' => $mappedVehicules,
             'owner_vehicules' => $mappedOwnerVehicules,
-            'earnings' => $this->calculateEarnings($partsVentes, $partsLogistiques, $fraisTotal),
-            'earnings_by_vehicule' => $this->earningsByVehicule($vehicules, $partsVentes, $partsLogistiques, $fraisParVehicule),
-            'statement' => $this->releve($partsVentes, $partsLogistiques),
+            'earnings' => $earnings['totals'],
+            'earnings_by_vehicule' => $earnings['by_vehicule'],
+            'statement' => $earnings['statement'],
             'vehicle_proposals' => $this->userProposals($user->id, $organizationId),
         ];
     }
 
     private function userProposals(string $userId, ?string $organizationId): array
     {
-        return PropositionVehicule::query()
-            ->where('user_id', $userId)
-            ->when(
-                $organizationId !== null,
-                fn ($query) => $query->where('organization_id', $organizationId),
-                fn ($query) => $query->whereNull('organization_id')
-            )
-            ->latest()
-            ->limit(20)
-            ->get()
+        return $this->proposalService->mine($userId, $organizationId)
             ->map(fn (PropositionVehicule $p) => [
                 'id' => $p->id,
                 'nom_vehicule' => $p->nom_vehicule,
@@ -391,82 +337,14 @@ class ClientDashboardController extends Controller
             ->all();
     }
 
-    private function nullableTrim(?string $value): ?string
-    {
-        if ($value === null) {
-            return null;
-        }
-        $trimmed = trim($value);
-
-        return $trimmed === '' ? null : $trimmed;
-    }
-
     /**
-     * @return array{0:?int,1:?Client,2:?Proprietaire,3:?Livreur}
+     * @return array{0:?string,1:?Client,2:?Proprietaire,3:?Livreur}
      */
     private function resolveActorContext(User $user): array
     {
-        $organizationId = $user->organization_id;
-        $telephone = $user->telephone;
+        $identity = $this->identityResolver->resolve($user);
 
-        $client = Client::query()
-            ->when($organizationId !== null, fn ($query) => $query->where('organization_id', $organizationId))
-            ->where(function ($query) use ($user, $telephone) {
-                $query->where('user_id', $user->id);
-                if ($telephone) {
-                    $query->orWhere('telephone', $telephone);
-                }
-            })
-            ->orderByRaw('CASE WHEN user_id = ? THEN 0 ELSE 1 END', [$user->id])
-            ->first();
-
-        if ($organizationId === null && $client !== null) {
-            $organizationId = $client->organization_id;
-        }
-
-        $proprietaire = Proprietaire::query()
-            ->when($organizationId !== null, fn ($query) => $query->where('organization_id', $organizationId))
-            ->where(function ($query) use ($user, $telephone) {
-                $query->where('user_id', $user->id);
-                if ($telephone) {
-                    $query->orWhereHas('personne', fn ($p) => $p->where('telephone', $telephone));
-                }
-            })
-            ->orderByRaw('CASE WHEN user_id = ? THEN 0 ELSE 1 END', [$user->id])
-            ->first();
-
-        if ($organizationId === null && $proprietaire !== null) {
-            $organizationId = $proprietaire->organization_id;
-        }
-
-        $livreur = Livreur::query()
-            ->when($organizationId !== null, fn ($query) => $query->where('organization_id', $organizationId))
-            ->where(function ($query) use ($user, $telephone) {
-                $query->where('user_id', $user->id);
-                if ($telephone) {
-                    $query->orWhereHas('personne', fn ($p) => $p->where('telephone', $telephone));
-                }
-            })
-            ->orderByRaw('CASE WHEN user_id = ? THEN 0 ELSE 1 END', [$user->id])
-            ->first();
-
-        if ($organizationId === null && $livreur !== null) {
-            $organizationId = $livreur->organization_id;
-        }
-
-        if ($organizationId !== null) {
-            if ($client && $client->organization_id !== $organizationId) {
-                $client = null;
-            }
-            if ($proprietaire && $proprietaire->organization_id !== $organizationId) {
-                $proprietaire = null;
-            }
-            if ($livreur && $livreur->organization_id !== $organizationId) {
-                $livreur = null;
-            }
-        }
-
-        return [$organizationId, $client, $proprietaire, $livreur];
+        return [$identity->organizationId, $identity->client, $identity->proprietaire, $identity->livreur];
     }
 
     /** @return array<int, array{categorie_nom: string, capacite_max: int}> */
@@ -486,27 +364,12 @@ class ClientDashboardController extends Controller
      */
     private function vehiculesPartenaires(?string $organizationId, ?Proprietaire $proprietaire, ?Livreur $livreur): Collection
     {
-        if ($organizationId === null) {
-            return collect();
-        }
-
-        if ($proprietaire === null && $livreur === null) {
-            return collect();
-        }
-
-        return Vehicule::query()
-            ->with(['typeVehicule', 'capacites.categorie'])
-            ->where('organization_id', $organizationId)
-            ->where(function ($query) use ($proprietaire, $livreur) {
-                if ($proprietaire !== null) {
-                    $query->orWhere('proprietaire_id', $proprietaire->id);
-                }
-                if ($livreur !== null) {
-                    $query->orWhereHas('equipe.membres', fn ($sq) => $sq->where('livreur_id', $livreur->id));
-                }
-            })
-            ->orderBy('nom_vehicule')
-            ->get();
+        return $this->earningsService->vehiculesAccessibles(
+            $organizationId,
+            $proprietaire,
+            $livreur,
+            ['typeVehicule', 'capacites.categorie']
+        );
     }
 
     /**
@@ -526,359 +389,8 @@ class ClientDashboardController extends Controller
             ->get();
     }
 
-    /**
-     * @return Collection<int, CommissionEnveloppePart>
-     */
-    private function partsVentes(
-        ?string $organizationId,
-        ?Proprietaire $proprietaire,
-        ?Livreur $livreur,
-        ?string $dateDebut = null,
-        ?string $dateFin = null,
-        ?string $statut = null,
-        ?array $vehiculeIds = null
-    ): Collection {
-        if ($organizationId === null || ($proprietaire === null && $livreur === null)) {
-            return collect();
-        }
-
-        return CommissionEnveloppePart::query()
-            ->with([
-                'enveloppe.source:id,reference,validated_at,created_at',
-                'enveloppe.source.vehicule:id,nom_vehicule,immatriculation',
-            ])
-            ->whereHas('enveloppe', fn ($query) => $query->where('organization_id', $organizationId))
-            // tous les statuts sont actifs (creee/impaye/partiel/paye)
-            ->when($dateDebut, fn ($q) => $q->whereHas('enveloppe', fn ($sq) => $sq->whereDate('earned_at', '>=', $dateDebut)))
-            ->when($dateFin, fn ($q) => $q->whereHas('enveloppe', fn ($sq) => $sq->whereDate('earned_at', '<=', $dateFin)))
-            ->when($statut, fn ($q) => $q->where('statut', $statut))
-            ->when($vehiculeIds !== null, function ($q) use ($vehiculeIds) {
-                if ($vehiculeIds === []) {
-                    $q->whereRaw('1 = 0');
-
-                    return;
-                }
-                $q->whereHas('enveloppe.source', fn ($sq) => $sq->whereIn('vehicule_id', $vehiculeIds));
-            })
-            ->where(function ($query) use ($proprietaire, $livreur) {
-                if ($proprietaire !== null) {
-                    $query->orWhere(function ($sq) use ($proprietaire) {
-                        $sq->where('beneficiaire_type', 'proprietaire')
-                            ->where('beneficiaire_id', $proprietaire->id);
-                    });
-                }
-
-                if ($livreur !== null) {
-                    $query->orWhere(function ($sq) use ($livreur) {
-                        $sq->where('beneficiaire_type', 'livreur')
-                            ->where('beneficiaire_id', $livreur->id);
-                    });
-                }
-            })
-            ->latest('id')
-            ->get();
-    }
-
-    /**
-     * @return Collection<int, CommissionLogistiquePart>
-     */
-    private function partsLogistiques(
-        ?string $organizationId,
-        ?Proprietaire $proprietaire,
-        ?Livreur $livreur,
-        ?string $dateDebut = null,
-        ?string $dateFin = null,
-        ?string $statut = null,
-        ?array $vehiculeIds = null
-    ): Collection {
-        if ($organizationId === null || ($proprietaire === null && $livreur === null)) {
-            return collect();
-        }
-
-        return CommissionLogistiquePart::query()
-            ->with([
-                'commission.transfert:id,reference,date_arrivee_reelle,created_at',
-                'commission.vehicule:id,nom_vehicule,immatriculation',
-            ])
-            ->whereHas('commission', fn ($query) => $query->where('organization_id', $organizationId))
-            // tous les statuts sont actifs (impaye/partiel/paye)
-            ->when($dateDebut, fn ($q) => $q->whereDate('created_at', '>=', $dateDebut))
-            ->when($dateFin, fn ($q) => $q->whereDate('created_at', '<=', $dateFin))
-            ->when($statut, fn ($q) => $q->where('statut', $statut))
-            ->when($vehiculeIds !== null, function ($q) use ($vehiculeIds) {
-                if ($vehiculeIds === []) {
-                    $q->whereRaw('1 = 0');
-
-                    return;
-                }
-                $q->whereHas('commission', fn ($sq) => $sq->whereIn('vehicule_id', $vehiculeIds));
-            })
-            ->where(function ($query) use ($proprietaire, $livreur) {
-                if ($proprietaire !== null) {
-                    $query->orWhere(function ($sq) use ($proprietaire) {
-                        $sq->where('type_beneficiaire', 'proprietaire')
-                            ->where('proprietaire_id', $proprietaire->id);
-                    });
-                }
-
-                if ($livreur !== null) {
-                    $query->orWhere(function ($sq) use ($livreur) {
-                        $sq->where('type_beneficiaire', 'livreur')
-                            ->where('livreur_id', $livreur->id);
-                    });
-                }
-            })
-            ->latest('id')
-            ->get();
-    }
-
-    private function calculateEarnings(Collection $partsVentes, Collection $partsLogistiques, float $fraisDepensesTotal = 0.0): array
-    {
-        $totalEarned = round(
-            (float) $partsVentes->sum('montant_a_payer') + (float) $partsLogistiques->sum('montant_a_payer'),
-            2
-        );
-        $totalPaid = round(
-            (float) $partsVentes->sum('montant_verse') + (float) $partsLogistiques->sum('montant_verse'),
-            2
-        );
-        $frais = round($fraisDepensesTotal, 2);
-
-        return [
-            'total_earned' => $totalEarned,
-            'total_paid' => $totalPaid,
-            'frais_depenses_total' => $frais,
-            'balance' => max(0, round($totalEarned - $frais - $totalPaid, 2)),
-            'operations_count' => $partsVentes->count() + $partsLogistiques->count(),
-        ];
-    }
-
-    private function earningsByVehicule(Collection $vehicules, Collection $partsVentes, Collection $partsLogistiques, array $fraisParVehicule = []): array
-    {
-        $stats = [];
-
-        foreach ($vehicules as $vehicule) {
-            $stats[$vehicule->id] = [
-                'vehicule_id' => $vehicule->id,
-                'nom_vehicule' => $vehicule->nom_vehicule,
-                'immatriculation' => $vehicule->immatriculation,
-                'frais_depenses' => (float) ($fraisParVehicule[$vehicule->id] ?? 0.0),
-                'total_earned' => 0.0,
-                'total_paid' => 0.0,
-                'balance' => 0.0,
-            ];
-        }
-
-        foreach ($partsVentes as $part) {
-            $vehicule = $part->commission?->vehicule;
-            if ($vehicule === null) {
-                continue;
-            }
-            if (! isset($stats[$vehicule->id])) {
-                $stats[$vehicule->id] = [
-                    'vehicule_id' => $vehicule->id,
-                    'nom_vehicule' => $vehicule->nom_vehicule,
-                    'immatriculation' => $vehicule->immatriculation,
-                    'frais_depenses' => (float) ($fraisParVehicule[$vehicule->id] ?? 0.0),
-                    'total_earned' => 0.0,
-                    'total_paid' => 0.0,
-                    'balance' => 0.0,
-                ];
-            }
-            $stats[$vehicule->id]['total_earned'] += $part->montant_a_payer;
-            $stats[$vehicule->id]['total_paid'] += (float) $part->montant_verse;
-        }
-
-        foreach ($partsLogistiques as $part) {
-            $vehicule = $part->commission?->vehicule;
-            if ($vehicule === null) {
-                continue;
-            }
-            if (! isset($stats[$vehicule->id])) {
-                $stats[$vehicule->id] = [
-                    'vehicule_id' => $vehicule->id,
-                    'nom_vehicule' => $vehicule->nom_vehicule,
-                    'immatriculation' => $vehicule->immatriculation,
-                    'frais_depenses' => (float) ($fraisParVehicule[$vehicule->id] ?? 0.0),
-                    'total_earned' => 0.0,
-                    'total_paid' => 0.0,
-                    'balance' => 0.0,
-                ];
-            }
-            $stats[$vehicule->id]['total_earned'] += $part->montant_a_payer;
-            $stats[$vehicule->id]['total_paid'] += (float) $part->montant_verse;
-        }
-
-        return collect($stats)
-            ->map(function (array $row) {
-                $row['total_earned'] = round((float) $row['total_earned'], 2);
-                $row['total_paid'] = round((float) $row['total_paid'], 2);
-                $row['frais_depenses'] = round((float) $row['frais_depenses'], 2);
-                $row['balance'] = max(0, round($row['total_earned'] - $row['frais_depenses'] - $row['total_paid'], 2));
-
-                return $row;
-            })
-            ->sortByDesc('total_earned')
-            ->values()
-            ->all();
-    }
-
-    /**
-     * @return array<string, float> vehicule_id => frais total approuvé
-     */
-    private function fraisDepensesParVehicule(
-        ?string $organizationId,
-        ?Proprietaire $proprietaire,
-        ?string $dateDebut = null,
-        ?string $dateFin = null,
-        ?array $vehiculeIds = null
-    ): array {
-        if ($organizationId === null || $proprietaire === null) {
-            return [];
-        }
-
-        $vehiculeIdsOwner = Vehicule::where('proprietaire_id', $proprietaire->id)
-            ->where('organization_id', $organizationId)
-            ->pluck('id')
-            ->map(fn ($id) => (string) $id)
-            ->values();
-        $vehiculeIdsCibles = $vehiculeIdsOwner;
-
-        if ($vehiculeIds !== null) {
-            $vehiculeIdsCibles = $vehiculeIdsOwner->intersect($vehiculeIds)->values();
-        }
-
-        if ($vehiculeIdsCibles->isEmpty()) {
-            return [];
-        }
-
-        return Depense::where('beneficiaire_type', 'vehicule')
-            ->whereIn('beneficiaire_id', $vehiculeIdsCibles->all())
-            ->where('statut', StatutDepense::VALIDE->value)
-            ->where('organization_id', $organizationId)
-            ->when($dateDebut, fn ($q) => $q->whereDate('date_depense', '>=', $dateDebut))
-            ->when($dateFin, fn ($q) => $q->whereDate('date_depense', '<=', $dateFin))
-            ->selectRaw('beneficiaire_id, SUM(montant) as total')
-            ->groupBy('beneficiaire_id')
-            ->pluck('total', 'beneficiaire_id')
-            ->map(fn ($v) => (float) $v)
-            ->toArray();
-    }
-
     private function resolveDashboardFilters(Request $request): array
     {
-        $validated = $request->validate([
-            'period' => ['nullable', Rule::in(['7j', '30j', 'ce_mois', 'mois_passe', 'custom'])],
-            'date_debut' => ['nullable', 'date'],
-            'date_fin' => ['nullable', 'date', 'after_or_equal:date_debut'],
-            'vehicule_id' => ['nullable', 'string'],
-            'statut' => ['nullable', Rule::in(array_map(fn (StatutCommission $s) => $s->value, StatutCommission::cases()))],
-        ]);
-
-        $period = $validated['period'] ?? 'ce_mois';
-        $dateDebut = $validated['date_debut'] ?? null;
-        $dateFin = $validated['date_fin'] ?? null;
-
-        if ($period !== 'custom') {
-            [$dateDebut, $dateFin] = $this->periodToDates($period);
-        }
-
-        return [
-            'period' => $period,
-            'date_debut' => $dateDebut,
-            'date_fin' => $dateFin,
-            'vehicule_id' => $validated['vehicule_id'] ?? null,
-            'statut' => $validated['statut'] ?? null,
-        ];
-    }
-
-    /**
-     * @return array{0:string,1:string}
-     */
-    private function periodToDates(string $period): array
-    {
-        $today = Carbon::today();
-
-        return match ($period) {
-            '7j' => [
-                $today->copy()->subDays(6)->toDateString(),
-                $today->toDateString(),
-            ],
-            'ce_mois' => [
-                $today->copy()->startOfMonth()->toDateString(),
-                $today->toDateString(),
-            ],
-            'mois_passe' => [
-                $today->copy()->subMonthNoOverflow()->startOfMonth()->toDateString(),
-                $today->copy()->subMonthNoOverflow()->endOfMonth()->toDateString(),
-            ],
-            default => [
-                $today->copy()->subDays(29)->toDateString(),
-                $today->toDateString(),
-            ],
-        };
-    }
-
-    private function releve(Collection $partsVentes, Collection $partsLogistiques): array
-    {
-        $lignesVentes = $partsVentes->map(function (CommissionEnveloppePart $part) {
-            $commande = $part->enveloppe?->source;
-            $vehicule = $commande?->vehicule;
-            $date = $commande?->validated_at ?? $commande?->created_at ?? $part->created_at;
-
-            return [
-                'id' => 'vente-'.$part->id,
-                'source' => 'Vente',
-                'reference' => $commande?->reference ?? '-',
-                'vehicule_id' => $vehicule?->id,
-                'vehicule_nom' => $vehicule?->nom_vehicule ?? '-',
-                'immatriculation' => $vehicule?->immatriculation,
-                'date_label' => $date?->format('d/m/Y'),
-                'date_sort' => $date?->timestamp ?? 0,
-                'frais' => 0.0,
-                'montant_net' => (float) $part->montant_net,
-                'montant_a_payer' => $part->montant_a_payer,
-                'montant_verse' => (float) $part->montant_verse,
-                'montant_restant' => $part->montant_restant,
-                'statut' => $part->statut?->value ?? (string) $part->getRawOriginal('statut'),
-                'statut_label' => $part->statut?->label(),
-            ];
-        });
-
-        $lignesLogistiques = $partsLogistiques->map(function (CommissionLogistiquePart $part) {
-            $transfert = $part->commission?->transfert;
-            $vehicule = $part->commission?->vehicule;
-            $date = $part->earned_at ?? $transfert?->date_arrivee_reelle ?? $transfert?->created_at ?? $part->created_at;
-
-            return [
-                'id' => 'log-'.$part->id,
-                'source' => 'Logistique',
-                'reference' => $transfert?->reference ?? '-',
-                'vehicule_id' => $vehicule?->id,
-                'vehicule_nom' => $vehicule?->nom_vehicule ?? '-',
-                'immatriculation' => $vehicule?->immatriculation,
-                'date_label' => $date?->format('d/m/Y'),
-                'date_sort' => $date?->timestamp ?? 0,
-                'frais' => (float) $part->frais_supplementaires,
-                'montant_net' => (float) $part->montant_net,
-                'montant_a_payer' => $part->montant_a_payer,
-                'montant_verse' => (float) $part->montant_verse,
-                'montant_restant' => (float) $part->montant_restant,
-                'statut' => $part->statut?->value ?? (string) $part->getRawOriginal('statut'),
-                'statut_label' => $part->statut_label,
-            ];
-        });
-
-        return $lignesVentes
-            ->concat($lignesLogistiques)
-            ->sortByDesc('date_sort')
-            ->values()
-            ->take(100)
-            ->map(function (array $row) {
-                unset($row['date_sort']);
-
-                return $row;
-            })
-            ->all();
+        return $this->earningsService->resolveFilters($request);
     }
 }

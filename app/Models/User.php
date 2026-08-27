@@ -42,6 +42,18 @@ class User extends Authenticatable
         'matricule',
         'expo_push_token',
         'must_change_password',
+        'notification_preferences',
+    ];
+
+    /**
+     * Clés de préférence de notification reconnues — liste blanche fermée
+     * (toute clé absente d'ici est rejetée par UpdateNotificationPreferencesRequest,
+     * jamais stockée telle quelle). Ajouter une catégorie future = ajouter une
+     * entrée ici, sans migration : cf. migration
+     * add_notification_preferences_to_users_table pour le choix JSON vs table dédiée.
+     */
+    public const NOTIFICATION_PREFERENCE_DEFAULTS = [
+        'activite' => true,
     ];
 
     // Ces accesseurs (proxy vers Personne/UserAuthIdentity, cf. plus bas) ne sont pas de vraies
@@ -68,7 +80,21 @@ class User extends Authenticatable
             'two_factor_confirmed_at' => 'datetime',
             'is_active' => 'boolean',
             'must_change_password' => 'boolean',
+            'notification_preferences' => 'array',
         ];
+    }
+
+    /**
+     * Préférences de notification effectives — les valeurs stockées surchargent
+     * les défauts, une catégorie jamais explicitement réglée par l'utilisateur
+     * reste activée par défaut (comportement historique avant l'introduction de
+     * ce réglage : personne n'a jamais été désabonné implicitement).
+     *
+     * @return array<string, bool>
+     */
+    public function notificationPreferences(): array
+    {
+        return array_merge(self::NOTIFICATION_PREFERENCE_DEFAULTS, $this->notification_preferences ?? []);
     }
 
     public function getNameAttribute(): string
@@ -246,6 +272,42 @@ class User extends Authenticatable
     public function isPendingValidation(): bool
     {
         return $this->status === self::STATUS_PENDING_VALIDATION;
+    }
+
+    /**
+     * Les 3 rôles strictement externes : le portail client (espace client, API
+     * mobile/Nuxt). Source de vérité unique pour la distinction backoffice/espace
+     * client — réutilisée par EnsureIsStaffAccount (garde d'accès backoffice),
+     * AuthRedirects (redirection post-connexion) et UserController (préserve un
+     * rôle externe cumulé lors de l'édition du rôle staff). Ne pas la dupliquer
+     * ailleurs — public pour rester consultable depuis ces points d'usage externes.
+     */
+    public const EXTERNAL_ROLES = ['client', 'proprietaire', 'livreur'];
+
+    /**
+     * Un compte a accès au backoffice s'il porte au moins un rôle qui n'est PAS
+     * strictement externe — qu'il s'agisse d'un rôle système historique
+     * (super_admin, admin_entreprise, manager, commerciale, comptable) ou d'un
+     * rôle personnalisé d'organisation créé via RoleController. Le cumul avec un
+     * rôle externe est autorisé : un compte qui a AUSSI un rôle client/
+     * proprietaire/livreur garde son accès backoffice tant qu'il conserve au moins
+     * un rôle non-externe (ex: un admin qui possède lui-même un véhicule, ou
+     * commande dans une boutique comme un client normal — décision du 26/08/2026).
+     * Un compte n'ayant QUE des rôles externes (ou aucun rôle du tout) est refusé.
+     */
+    public function hasBackofficeAccess(): bool
+    {
+        return $this->getRoleNames()->diff(self::EXTERNAL_ROLES)->isNotEmpty();
+    }
+
+    /**
+     * Un compte a accès à l'espace client s'il porte au moins un des 3 rôles
+     * strictement externes — indépendamment d'un éventuel cumul avec un rôle
+     * staff (cf. hasBackofficeAccess()). Les deux accès ne s'excluent jamais.
+     */
+    public function hasClientAccess(): bool
+    {
+        return $this->getRoleNames()->intersect(self::EXTERNAL_ROLES)->isNotEmpty();
     }
 
     /**

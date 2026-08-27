@@ -434,7 +434,15 @@ class UserController extends Controller
             $userUpdate['password'] = $data['password'];
         }
         $user->update($userUpdate);
-        $user->syncRoles([$data['role']]);
+
+        // syncRoles() remplace TOUS les rôles — un compte qui cumule ce rôle staff
+        // avec un rôle client/proprietaire/livreur (ex: un admin qui possède aussi
+        // un véhicule, cf. décision du 26/08/2026) perdrait silencieusement ce rôle
+        // externe si on ne le préservait pas explicitement ici. Ce formulaire ne
+        // gère que le rôle staff — jamais le rôle externe, qui vient exclusivement
+        // du rattachement à un profil Client/Proprietaire/Livreur.
+        $externalRoles = $user->getRoleNames()->intersect(User::EXTERNAL_ROLES)->all();
+        $user->syncRoles([$data['role'], ...$externalRoles]);
 
         if ($previousRole !== $data['role']) {
             $auditLog->record($user, AuditEvent::UPDATED, auth()->user(), ['role' => $previousRole], ['role' => $data['role']]);

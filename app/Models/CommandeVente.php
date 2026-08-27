@@ -40,6 +40,7 @@ class CommandeVente extends Model
         'chargement_demarre_at',
         'chargement_valide_at',
         'livree_at',
+        'validated_at',
         'closed_at',
         'created_by',
         'updated_by',
@@ -60,6 +61,7 @@ class CommandeVente extends Model
             'chargement_demarre_at' => 'datetime',
             'chargement_valide_at' => 'datetime',
             'livree_at' => 'datetime',
+            'validated_at' => 'datetime',
             'closed_at' => 'datetime',
         ];
     }

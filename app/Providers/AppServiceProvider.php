@@ -3,11 +3,14 @@
 namespace App\Providers;
 
 use App\Features\ModuleFeature;
+use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\Depense;
+use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\Personne;
 use App\Models\Proprietaire;
+use App\Observers\BusinessProfileRoleObserver;
 use App\Observers\DepenseObserver;
 use App\Observers\VenteObserver;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -70,6 +73,13 @@ class AppServiceProvider extends ServiceProvider
         // Observers
         CommandeVente::observe(VenteObserver::class);
         Depense::observe(DepenseObserver::class);
+
+        // Garantit que Client/Proprietaire/Livreur.user_id et le rôle Spatie
+        // correspondant ne divergent jamais, quel que soit le code qui pose ce
+        // rattachement (cf. docblock de BusinessProfileRoleObserver).
+        Client::observe(BusinessProfileRoleObserver::class);
+        Proprietaire::observe(BusinessProfileRoleObserver::class);
+        Livreur::observe(BusinessProfileRoleObserver::class);
 
         // Morph map des relations polymorphiques — alias stables en base plutôt que
         // des noms de classe complets (indépendant des renommages de namespace).
