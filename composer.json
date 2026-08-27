@@ -84,7 +84,7 @@
         ],
         "openapi:export": [
             "@php artisan scramble:export --api=default",
-            "@php artisan scramble:export --api=public"
+            "@php artisan scramble:export --api=vitrine"
         ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",

@@ -31,7 +31,9 @@ class MeController extends Controller
             'nom' => $user->nom,
             'telephone' => $user->telephone,
             'email' => $user->email,
-            'roles' => $user->getRoleNames(),
+            // Recast typé requis pour que Scramble documente roles[] comme un tableau de
+            // noms — cf. commentaire identique dans LoginController::userResource().
+            'roles' => $user->getRoleNames()->map(fn (string $r): string => $r)->values()->all(),
             'is_active' => $user->is_active,
             'qr_payload' => $this->resolveQrPayload($identity),
             'context' => [

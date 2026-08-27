@@ -44,6 +44,7 @@ use App\Http\Controllers\Api\Public\RegisterLookupController as PublicRegisterLo
 use App\Http\Controllers\Api\Public\RegisterOtpController as PublicRegisterOtpController;
 use App\Http\Controllers\Api\Search\GlobalSearchController;
 use App\Models\User;
+use App\Support\OpenApi\SpatieRoleAuthorizationExtension;
 use Dedoc\Scramble\Scramble;
 use Dedoc\Scramble\SecurityDocumentation\MiddlewareAuthSecurityStrategy;
 use Dedoc\Scramble\Support\Generator\OpenApi;
@@ -63,9 +64,12 @@ use Illuminate\Support\Str;
  * - `default` (/docs/api) : Nuxt + mobile, Bearer Sanctum — routes `api/*`
  *   sauf `api/v1/backoffice/*` (API mobile staff, hors périmètre du premier
  *   jet de doc, cf. config/scramble.php) et `api/public/*` (ci-dessous).
- * - `public` (/docs/public) : app vitrine server-to-server, clé partagée
+ * - `vitrine` (/docs/vitrine) : app vitrine server-to-server, clé partagée
  *   `X-Vitrine-Key` (jamais un token utilisateur) — routes `api/public/*`
- *   uniquement.
+ *   uniquement. Seul l'identifiant de DOCUMENTATION est renommé `public` →
+ *   `vitrine` (URLs Scramble, export JSON) ; le préfixe de route Laravel réel
+ *   `api/public/*` n'est volontairement PAS touché pour ne rien casser côté
+ *   intégration vitrine déjà en prod.
  *
  * Le mapping contrôleur → tag ci-dessous groupe les endpoints dans l'UI sans
  * toucher aux ~30 contrôleurs eux-mêmes (pas d'attribut `#[Group]` à ajouter
@@ -133,7 +137,7 @@ class OpenApiServiceProvider extends ServiceProvider
         MobileContactController::class => 'Divers',
         GlobalSearchController::class => 'Divers',
 
-        // Public (document "public" séparé, cf. registerPublicApi() ci-dessous)
+        // Public (document "vitrine" séparé, cf. registerPublicApi() ci-dessous)
         PublicContactController::class => 'Vitrine (server-to-server)',
         PublicRegisterLookupController::class => 'Vitrine (server-to-server)',
         PublicRegisterOtpController::class => 'Vitrine (server-to-server)',
@@ -146,6 +150,7 @@ class OpenApiServiceProvider extends ServiceProvider
         $this->registerDocsAccessGate();
         $this->registerTagResolver();
         $this->registerDefaultApiSecurity();
+        $this->registerSpatieRoleAuthorizationResponses();
         $this->registerPublicApi();
     }
 
@@ -209,15 +214,37 @@ class OpenApiServiceProvider extends ServiceProvider
     }
 
     /**
+     * `role:client|proprietaire|livreur` (Spatie) n'est pas détecté par le
+     * mécanisme natif de Scramble (qui ne reconnaît que `can:`/`Authorize::class`)
+     * — cf. docblock de `SpatieRoleAuthorizationExtension`. Enregistré ici
+     * (pas via `Scramble::registerExtension()`, sensible à l'ordre de boot des
+     * providers) pour garantir l'application sur le document par défaut avant
+     * que `registerPublicApi()` ne le clone.
+     */
+    private function registerSpatieRoleAuthorizationResponses(): void
+    {
+        Scramble::configure()->withOperationTransformers(SpatieRoleAuthorizationExtension::class);
+    }
+
+    /**
      * Document séparé pour `api/public/*` (app vitrine, jamais un navigateur ni
      * un utilisateur authentifié) — sécurisé par la clé partagée `X-Vitrine-Key`
      * (`VerifyVitrineServiceToken`), pas par un token Sanctum. Toujours vide dans
      * la doc — la vraie valeur vit uniquement dans `VITRINE_SERVICE_TOKEN` côté
      * serveur, jamais commitée ni affichée ici.
+     *
+     * Nommé "vitrine" ici (identifiant Scramble, URLs `/docs/vitrine*`, export
+     * `docs/openapi/vitrine.json`) — "public" prêtait à confusion (ces routes
+     * exigent une clé, elles ne sont pas "publiques" au sens ouvert du terme).
+     * Seul CE nom de documentation change : le préfixe réel des routes Laravel
+     * reste `api/public/*` (cf. `VerifyVitrineServiceToken`, `routes/api.php`)
+     * — renommer les vraies routes server-to-server déjà utilisées par la
+     * vitrine sortirait du périmètre "documentation" pour casser un contrat
+     * d'intégration existant, ce que ce chantier s'interdit explicitement.
      */
     private function registerPublicApi(): void
     {
-        Scramble::registerApi('public', [
+        Scramble::registerApi('vitrine', [
             // `info` remplace ENTIÈREMENT celui de config('scramble') (fusion non
             // profonde dans GeneratorConfigCollection::register()) — `version` doit
             // donc être répété ici, sinon silencieusement perdu (retombe sur le
@@ -228,12 +255,12 @@ class OpenApiServiceProvider extends ServiceProvider
                     .'(eau-la-maman.com), jamais par un navigateur visiteur ni par Nuxt/mobile. '
                     .'Authentification par clé partagée `X-Vitrine-Key`, pas par token utilisateur.',
             ],
-            'export_path' => 'docs/openapi/public.json',
+            'export_path' => 'docs/openapi/vitrine.json',
         ])
             ->routes(fn (Route $route) => Str::startsWith($route->uri(), 'api/public'))
             ->expose(
-                ui: fn (Router $router, $action) => $router->get('docs/public', $action)->name('scramble.docs.public.ui'),
-                document: fn (Router $router, $action) => $router->get('docs/public.json', $action)->name('scramble.docs.public.document'),
+                ui: fn (Router $router, $action) => $router->get('docs/vitrine', $action)->name('scramble.docs.vitrine.ui'),
+                document: fn (Router $router, $action) => $router->get('docs/vitrine.json', $action)->name('scramble.docs.vitrine.document'),
             )
             ->withDocumentTransformers(function (OpenApi $openApi) {
                 $openApi->secure(

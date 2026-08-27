@@ -103,7 +103,11 @@ class LoginController extends Controller
             'nom' => $user->nom,
             'telephone' => $user->telephone,
             'email' => $user->email,
-            'roles' => $user->getRoleNames(),
+            // ->map(fn (string $r): string => $r) explicite (pas juste ->all()) : sans
+            // ce recast typé, Scramble trace getRoleNames() jusqu'à la relation Eloquent
+            // `roles` et documente `roles[]` comme une collection de modèles Role au lieu
+            // du tableau de noms qu'il est vraiment (cf. audit OpenAPI du 27/08/2026).
+            'roles' => $user->getRoleNames()->map(fn (string $r): string => $r)->values()->all(),
         ];
     }
 }

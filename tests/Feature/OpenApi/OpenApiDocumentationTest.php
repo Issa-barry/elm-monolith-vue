@@ -35,9 +35,9 @@ class OpenApiDocumentationTest extends TestCase
         $this->assertNotEmpty($doc['paths']);
     }
 
-    public function test_public_api_generates_a_valid_openapi_document(): void
+    public function test_vitrine_api_generates_a_valid_openapi_document(): void
     {
-        $doc = $this->generate('public');
+        $doc = $this->generate('vitrine');
 
         $this->assertSame('3.1.0', $doc['openapi']);
         $this->assertNotEmpty($doc['paths']);
@@ -54,9 +54,9 @@ class OpenApiDocumentationTest extends TestCase
         $this->assertSame('Sanctum', $bearer['bearerFormat'] ?? null);
     }
 
-    public function test_public_api_declares_api_key_security_scheme_only(): void
+    public function test_vitrine_api_declares_api_key_security_scheme_only(): void
     {
-        $doc = $this->generate('public');
+        $doc = $this->generate('vitrine');
 
         $schemes = $doc['components']['securitySchemes'] ?? [];
 
@@ -98,9 +98,9 @@ class OpenApiDocumentationTest extends TestCase
      * Périmètre initial (cf. rapport) : seules les routes Nuxt/mobile client sont
      * documentées — pas l'API mobile staff (v1/backoffice), jamais les pages
      * Inertia (client/*, backoffice/*), jamais les routes de la vitrine (elles
-     * vivent dans le document "public" séparé, testé plus bas).
+     * vivent dans le document "vitrine" séparé, testé plus bas).
      */
-    public function test_default_api_excludes_backoffice_and_public_and_web_routes(): void
+    public function test_default_api_excludes_backoffice_and_vitrine_and_web_routes(): void
     {
         $doc = $this->generate('default');
 
@@ -110,12 +110,12 @@ class OpenApiDocumentationTest extends TestCase
         }
     }
 
-    public function test_public_api_only_contains_vitrine_routes(): void
+    public function test_vitrine_api_only_contains_vitrine_routes(): void
     {
-        $doc = $this->generate('public');
+        $doc = $this->generate('vitrine');
 
         foreach (array_keys($doc['paths']) as $path) {
-            $this->assertStringStartsWith('/public/', $path, "Unexpected path in the public API: $path");
+            $this->assertStringStartsWith('/public/', $path, "Unexpected path in the vitrine API: $path");
         }
 
         $this->assertArrayHasKey('/public/contact', $doc['paths']);
@@ -159,7 +159,7 @@ class OpenApiDocumentationTest extends TestCase
 
     public function test_no_real_secret_appears_in_either_document(): void
     {
-        foreach (['default', 'public'] as $api) {
+        foreach (['default', 'vitrine'] as $api) {
             $json = json_encode($this->generate($api));
 
             $this->assertStringNotContainsString((string) config('services.vitrine.token'), $json ?: '');
@@ -175,7 +175,7 @@ class OpenApiDocumentationTest extends TestCase
         $this->assertNotSame('local', app()->environment());
 
         $this->get('/docs/api')->assertForbidden();
-        $this->get('/docs/public')->assertForbidden();
+        $this->get('/docs/vitrine')->assertForbidden();
     }
 
     public function test_docs_ui_is_accessible_to_an_authenticated_staff_member_outside_local(): void
@@ -186,6 +186,28 @@ class OpenApiDocumentationTest extends TestCase
         $user->assignRole('admin_entreprise');
 
         $this->actingAs($user)->get('/docs/api')->assertOk();
+    }
+
+    /**
+     * `API_DOCS_ENABLED=false` (App\Http\Middleware\EnsureApiDocsEnabled) est un
+     * coupe-circuit global, prioritaire sur le Gate `viewApiDocs` — un staff par
+     * ailleurs autorisé doit quand même être bloqué (404, pas 403 : la doc "n'existe
+     * pas" plutôt que "vous n'y avez pas droit"). Existe car préprod et prod
+     * partagent APP_ENV=production : l'environnement seul ne permet pas de fermer
+     * la doc sur l'un sans la fermer sur l'autre (cf. rapport OpenAPI 27/08/2026).
+     */
+    public function test_docs_are_fully_disabled_when_api_docs_enabled_is_false(): void
+    {
+        config(['scramble.docs_enabled' => false]);
+
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        $org = Organization::factory()->create();
+        $user = User::factory()->create(['organization_id' => $org->id]);
+        $user->assignRole('admin_entreprise');
+
+        $this->actingAs($user)->get('/docs/api')->assertNotFound();
+        $this->actingAs($user)->get('/docs/vitrine')->assertNotFound();
+        $this->actingAs($user)->getJson('/docs/api.json')->assertNotFound();
     }
 
     public function test_docs_ui_rejects_a_pure_client_account_outside_local(): void

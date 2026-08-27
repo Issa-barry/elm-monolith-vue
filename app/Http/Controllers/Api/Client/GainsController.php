@@ -7,9 +7,18 @@ use App\Models\CommandeVente;
 use App\Models\CommissionEnveloppePart;
 use App\Models\User;
 use App\Services\Client\ClientIdentityResolver;
+use App\Services\Client\Data\GainsVehiculeRow;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
+/**
+ * Endpoint historique, déconseillé pour tout nouvel écran — préférer
+ * `GET /v1/mobile/dashboard` (Api\Client\DashboardController), même moteur que
+ * l'espace client Inertia. Celui-ci n'inclut PAS les commissions logistiques
+ * (uniquement `CommissionEnveloppePart`, vente) et n'inclut pas les dépenses —
+ * conservé tel quel pour ne pas casser un contrat mobile existant (cf.
+ * docs/api-espace-client-contract.md §5).
+ */
 class GainsController extends Controller
 {
     public function __invoke(Request $request, ClientIdentityResolver $identityResolver): JsonResponse
@@ -64,26 +73,26 @@ class GainsController extends Controller
             ->groupBy('vehicules.id', 'vehicules.nom_vehicule', 'vehicules.immatriculation')
             ->orderBy('vehicules.nom_vehicule')
             ->get()
-            ->map(fn ($row) => [
-                'vehicule_id' => $row->vehicule_id,
-                'nom' => $row->nom,
-                'immatriculation' => $row->immatriculation,
-                'total_brut' => (float) $row->total_brut,
-                'total_net' => (float) $row->total_net,
-                'total_a_payer' => (float) $row->total_a_payer,
-                'total_verse' => (float) $row->total_verse,
-                'total_restant' => max(0.0, (float) $row->total_a_payer - (float) $row->total_verse),
-                'nb_commandes' => (int) $row->nb_commandes,
-            ])
+            ->map(fn ($row) => new GainsVehiculeRow(
+                vehiculeId: $row->vehicule_id,
+                nom: $row->nom,
+                immatriculation: $row->immatriculation,
+                totalBrut: (float) $row->total_brut,
+                totalNet: (float) $row->total_net,
+                totalAPayer: (float) $row->total_a_payer,
+                totalVerse: (float) $row->total_verse,
+                totalRestant: (float) max(0.0, (float) $row->total_a_payer - (float) $row->total_verse),
+                nbCommandes: (int) $row->nb_commandes,
+            ))
             ->values();
 
         return response()->json([
-            'total_brut' => (float) $parVehicule->sum('total_brut'),
-            'total_net' => (float) $parVehicule->sum('total_net'),
-            'total_a_payer' => (float) $parVehicule->sum('total_a_payer'),
-            'total_verse' => (float) $parVehicule->sum('total_verse'),
-            'total_restant' => (float) $parVehicule->sum('total_restant'),
-            'nb_commandes' => (int) $parVehicule->sum('nb_commandes'),
+            'total_brut' => (float) $parVehicule->sum('totalBrut'),
+            'total_net' => (float) $parVehicule->sum('totalNet'),
+            'total_a_payer' => (float) $parVehicule->sum('totalAPayer'),
+            'total_verse' => (float) $parVehicule->sum('totalVerse'),
+            'total_restant' => (float) $parVehicule->sum('totalRestant'),
+            'nb_commandes' => (int) $parVehicule->sum('nbCommandes'),
             'par_vehicule' => $parVehicule,
         ]);
     }

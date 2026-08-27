@@ -10,6 +10,8 @@ use App\Models\TransfertLogistique;
 use App\Models\User;
 use App\Services\Client\ClientEarningsService;
 use App\Services\Client\ClientIdentityResolver;
+use App\Services\Client\Data\ActiviteRow;
+use App\Services\Client\Data\VehiculeSummary;
 use Dedoc\Scramble\Attributes\Endpoint;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -87,15 +89,11 @@ class ActiviteController extends Controller
             $items = $items->concat($this->transferts($identity->organizationId, $vehiculeIds, $equipeIds, $filters));
         }
 
-        $items = $items->sortByDesc('date_sort')->values();
+        $items = $items->sortByDesc('dateSort')->values();
 
         $perPage = $request->perPage();
         $page = $request->page();
-        $slice = $items->forPage($page, $perPage)->map(function (array $row) {
-            unset($row['date_sort']);
-
-            return $row;
-        })->values();
+        $slice = $items->forPage($page, $perPage)->values();
 
         $paginator = new LengthAwarePaginator($slice, $items->count(), $perPage, $page, [
             'path' => $request->url(),
@@ -130,7 +128,7 @@ class ActiviteController extends Controller
         ]);
     }
 
-    /** @return Collection<int, array<string, mixed>> */
+    /** @return Collection<int, ActiviteRow> */
     private function ventes(?string $organizationId, Collection $vehiculeIds, array $filters): Collection
     {
         if ($vehiculeIds->isEmpty()) {
@@ -151,27 +149,27 @@ class ActiviteController extends Controller
                 $client = $c->client;
                 $date = $c->validated_at ?? $c->created_at;
 
-                return [
-                    'id' => $c->id,
-                    'type' => 'vente',
-                    'reference' => $c->reference ?? '—',
-                    'statut' => $c->statut?->value,
-                    'statut_label' => $c->statut_label,
-                    'site_source' => $c->site?->nom ?? '—',
-                    'site_destination' => $client?->nom_complet ?? 'Vente directe',
-                    'vehicule' => $c->vehicule ? [
-                        'id' => $c->vehicule->id,
-                        'nom_vehicule' => $c->vehicule->nom_vehicule,
-                        'immatriculation' => $c->vehicule->immatriculation,
-                    ] : null,
-                    'date' => $date?->toDateString(),
-                    'date_sort' => $date?->timestamp ?? 0,
-                    'nb_packs' => (int) $c->lignes->sum('quantite_demandee'),
-                ];
+                return new ActiviteRow(
+                    id: $c->id,
+                    type: 'vente',
+                    reference: $c->reference ?? '—',
+                    statut: $c->statut?->value,
+                    statutLabel: $c->statut_label,
+                    siteSource: $c->site?->nom ?? '—',
+                    siteDestination: $client?->nom_complet ?? 'Vente directe',
+                    vehicule: $c->vehicule ? new VehiculeSummary(
+                        id: $c->vehicule->id,
+                        nomVehicule: $c->vehicule->nom_vehicule,
+                        immatriculation: $c->vehicule->immatriculation,
+                    ) : null,
+                    date: $date?->toDateString(),
+                    dateSort: $date?->timestamp ?? 0,
+                    nbPacks: (int) $c->lignes->sum('quantite_demandee'),
+                );
             });
     }
 
-    /** @return Collection<int, array<string, mixed>> */
+    /** @return Collection<int, ActiviteRow> */
     private function transferts(?string $organizationId, Collection $vehiculeIds, Collection $equipeIds, array $filters): Collection
     {
         if ($vehiculeIds->isEmpty() && $equipeIds->isEmpty()) {
@@ -194,23 +192,23 @@ class ActiviteController extends Controller
             ->map(function (TransfertLogistique $t) {
                 $date = $t->date_depart_reelle ?? $t->created_at;
 
-                return [
-                    'id' => $t->id,
-                    'type' => 'logistique',
-                    'reference' => $t->reference,
-                    'statut' => $t->statut?->value,
-                    'statut_label' => $t->statut_label,
-                    'site_source' => $t->siteSource?->nom ?? '—',
-                    'site_destination' => $t->siteDestination?->nom ?? '—',
-                    'vehicule' => $t->vehicule ? [
-                        'id' => $t->vehicule->id,
-                        'nom_vehicule' => $t->vehicule->nom_vehicule,
-                        'immatriculation' => $t->vehicule->immatriculation,
-                    ] : null,
-                    'date' => $date?->toDateString(),
-                    'date_sort' => $date?->timestamp ?? 0,
-                    'nb_packs' => (int) $t->lignes->sum('quantite_chargee'),
-                ];
+                return new ActiviteRow(
+                    id: $t->id,
+                    type: 'logistique',
+                    reference: $t->reference,
+                    statut: $t->statut?->value,
+                    statutLabel: $t->statut_label,
+                    siteSource: $t->siteSource?->nom ?? '—',
+                    siteDestination: $t->siteDestination?->nom ?? '—',
+                    vehicule: $t->vehicule ? new VehiculeSummary(
+                        id: $t->vehicule->id,
+                        nomVehicule: $t->vehicule->nom_vehicule,
+                        immatriculation: $t->vehicule->immatriculation,
+                    ) : null,
+                    date: $date?->toDateString(),
+                    dateSort: $date?->timestamp ?? 0,
+                    nbPacks: (int) $t->lignes->sum('quantite_chargee'),
+                );
             });
     }
 

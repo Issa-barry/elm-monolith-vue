@@ -291,6 +291,9 @@
                     },
                     "422": {
                         "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -359,25 +362,9 @@
                                                 },
                                                 "roles": {
                                                     "type": "array",
+                                                    "description": "->map(fn (string $r): string => $r) explicite (pas juste ->all()) : sans\nce recast typ\u00e9, Scramble trace getRoleNames() jusqu'\u00e0 la relation Eloquent\n`roles` et documente `roles[]` comme une collection de mod\u00e8les Role au lieu\ndu tableau de noms qu'il est vraiment (cf. audit OpenAPI du 27/08/2026).",
                                                     "items": {
-                                                        "type": "object",
-                                                        "properties": {
-                                                            "relations": {
-                                                                "type": "array",
-                                                                "prefixItems": [
-                                                                    {
-                                                                        "type": "string",
-                                                                        "const": "roles"
-                                                                    }
-                                                                ],
-                                                                "minItems": 1,
-                                                                "maxItems": 1,
-                                                                "additionalItems": false
-                                                            }
-                                                        },
-                                                        "required": [
-                                                            "relations"
-                                                        ]
+                                                        "type": "string"
                                                     }
                                                 }
                                             },
@@ -1122,25 +1109,9 @@
                                         },
                                         "roles": {
                                             "type": "array",
+                                            "description": "Recast typ\u00e9 requis pour que Scramble documente roles[] comme un tableau de\nnoms \u2014 cf. commentaire identique dans LoginController::userResource().",
                                             "items": {
-                                                "type": "object",
-                                                "properties": {
-                                                    "relations": {
-                                                        "type": "array",
-                                                        "prefixItems": [
-                                                            {
-                                                                "type": "string",
-                                                                "const": "roles"
-                                                            }
-                                                        ],
-                                                        "minItems": 1,
-                                                        "maxItems": 1,
-                                                        "additionalItems": false
-                                                    }
-                                                },
-                                                "required": [
-                                                    "relations"
-                                                ]
+                                                "type": "string"
                                             }
                                         },
                                         "is_active": {
@@ -1263,7 +1234,7 @@
         "/v1/mobile/dashboard": {
             "get": {
                 "operationId": "client.dashboard.mine",
-                "description": "Montants en **GNF** (franc guin\u00e9en), sans d\u00e9cimales dans la pratique mais\ntyp\u00e9s nombre (jamais des centimes, jamais un float \u00e0 diviser par 100).\n\nD\u00e9finitions exactes des champs de `summary` (m\u00eames noms, m\u00eames valeurs que\nle dashboard Inertia \u2014 `App\\Services\\Client\\ClientEarningsService`) :\n- `total_earned` : commissions de vente + logistique gagn\u00e9es sur la p\u00e9riode (brut d\u00fb).\n- `total_paid` : d\u00e9j\u00e0 vers\u00e9 sur ces m\u00eames commissions.\n- `frais_depenses_total` : d\u00e9penses v\u00e9hicule valid\u00e9es sur la p\u00e9riode (proprietaire uniquement \u2014 jamais imput\u00e9es \u00e0 un livreur dans ce moteur).\n- `balance` : `total_earned - frais_depenses_total - total_paid`, **jamais n\u00e9gatif** (plancher \u00e0 0 \u2014 un solde n\u00e9gatif n'est jamais affich\u00e9 comme dette du propri\u00e9taire).\n- `operations_count` : nombre de commissions (vente + logistique) entrant dans `total_earned`.\n\n`par_vehicule` : m\u00eame d\u00e9tail que `summary` mais par v\u00e9hicule, **toujours\nla liste compl\u00e8te du parc accessible** m\u00eame si `vehicule_id` filtre le\ncalcul (les v\u00e9hicules hors filtre apparaissent avec des montants \u00e0 0) \u2014\nce n'est pas un bug. Chaque \u00e9l\u00e9ment a la forme\n`{vehicule_id, nom_vehicule, immatriculation, frais_depenses, total_earned, total_paid, balance}`\n(identique aux cl\u00e9s de `vehicules[]` + les m\u00eames montants que `summary`) \u2014\n**limite connue de la g\u00e9n\u00e9ration automatique** : le sch\u00e9ma ci-dessous d\u00e9crit\n`par_vehicule` comme un tableau de cha\u00eenes, la vraie forme est ce qui pr\u00e9c\u00e8de\n(cf. tests de parit\u00e9 `tests/Feature/Api/Client/DashboardControllerTest.php`).\n\n`filters.period` : raccourci appliqu\u00e9 (`custom` = `date_debut`/`date_fin`\npris tels quels, sinon calcul\u00e9s serveur \u2014 jamais un d\u00e9faut invent\u00e9 c\u00f4t\u00e9\nfrontend).",
+                "description": "Montants en **GNF** (franc guin\u00e9en), sans d\u00e9cimales dans la pratique mais\ntyp\u00e9s nombre (jamais des centimes, jamais un float \u00e0 diviser par 100).\n\nD\u00e9finitions exactes des champs de `summary` (m\u00eames noms, m\u00eames valeurs que\nle dashboard Inertia \u2014 `App\\Services\\Client\\ClientEarningsService`) :\n- `total_earned` : commissions de vente + logistique gagn\u00e9es sur la p\u00e9riode (brut d\u00fb).\n- `total_paid` : d\u00e9j\u00e0 vers\u00e9 sur ces m\u00eames commissions.\n- `frais_depenses_total` : d\u00e9penses v\u00e9hicule valid\u00e9es sur la p\u00e9riode (proprietaire uniquement \u2014 jamais imput\u00e9es \u00e0 un livreur dans ce moteur).\n- `balance` : `total_earned - frais_depenses_total - total_paid`, **jamais n\u00e9gatif** (plancher \u00e0 0 \u2014 un solde n\u00e9gatif n'est jamais affich\u00e9 comme dette du propri\u00e9taire).\n- `operations_count` : nombre de commissions (vente + logistique) entrant dans `total_earned`.\n\n`par_vehicule` : m\u00eame d\u00e9tail que `summary` mais par v\u00e9hicule (sch\u00e9ma\n`VehiculeEarningsRow`), **toujours la liste compl\u00e8te du parc accessible**\nm\u00eame si `vehicule_id` filtre le calcul (les v\u00e9hicules hors filtre\napparaissent avec des montants \u00e0 0) \u2014 ce n'est pas un bug.\n\n`filters.period` : raccourci appliqu\u00e9 (`custom` = `date_debut`/`date_fin`\npris tels quels, sinon calcul\u00e9s serveur \u2014 jamais un d\u00e9faut invent\u00e9 c\u00f4t\u00e9\nfrontend).",
                 "summary": "Dashboard financier (r\u00e9sum\u00e9 + d\u00e9tail par v\u00e9hicule)",
                 "tags": [
                     "Dashboard"
@@ -1421,7 +1392,7 @@
                                         "par_vehicule": {
                                             "type": "array",
                                             "items": {
-                                                "type": "string"
+                                                "$ref": "#/components/schemas/VehiculeEarningsRow"
                                             }
                                         },
                                         "vehicules": {
@@ -1462,6 +1433,9 @@
                     },
                     "422": {
                         "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -1503,50 +1477,7 @@
                                                 "par_vehicule": {
                                                     "type": "array",
                                                     "items": {
-                                                        "type": "object",
-                                                        "properties": {
-                                                            "vehicule_id": {
-                                                                "type": "string"
-                                                            },
-                                                            "nom": {
-                                                                "type": "string"
-                                                            },
-                                                            "immatriculation": {
-                                                                "type": "string"
-                                                            },
-                                                            "total_brut": {
-                                                                "type": "number"
-                                                            },
-                                                            "total_net": {
-                                                                "type": "number"
-                                                            },
-                                                            "total_a_payer": {
-                                                                "type": "number"
-                                                            },
-                                                            "total_verse": {
-                                                                "type": "number"
-                                                            },
-                                                            "total_restant": {
-                                                                "type": [
-                                                                    "object",
-                                                                    "null"
-                                                                ]
-                                                            },
-                                                            "nb_commandes": {
-                                                                "type": "integer"
-                                                            }
-                                                        },
-                                                        "required": [
-                                                            "vehicule_id",
-                                                            "nom",
-                                                            "immatriculation",
-                                                            "total_brut",
-                                                            "total_net",
-                                                            "total_a_payer",
-                                                            "total_verse",
-                                                            "total_restant",
-                                                            "nb_commandes"
-                                                        ]
+                                                        "$ref": "#/components/schemas/GainsVehiculeRow"
                                                     }
                                                 }
                                             },
@@ -1608,6 +1539,9 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -2002,6 +1936,9 @@
                     },
                     "422": {
                         "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -2637,169 +2574,7 @@
                                         {
                                             "type": "array",
                                             "items": {
-                                                "anyOf": [
-                                                    {
-                                                        "type": "object",
-                                                        "properties": {
-                                                            "id": {
-                                                                "type": "string"
-                                                            },
-                                                            "reference": {
-                                                                "type": "string"
-                                                            },
-                                                            "statut": {
-                                                                "anyOf": [
-                                                                    {
-                                                                        "type": "string"
-                                                                    },
-                                                                    {
-                                                                        "$ref": "#/components/schemas/StatutTransfert"
-                                                                    }
-                                                                ]
-                                                            },
-                                                            "statut_label": {
-                                                                "type": "string",
-                                                                "const": "Livraison en cours"
-                                                            },
-                                                            "site_source": {
-                                                                "type": "string"
-                                                            },
-                                                            "site_destination": {
-                                                                "type": "string"
-                                                            },
-                                                            "vehicule": {
-                                                                "type": [
-                                                                    "object",
-                                                                    "null"
-                                                                ],
-                                                                "properties": {
-                                                                    "nom": {
-                                                                        "type": "string"
-                                                                    },
-                                                                    "immatriculation": {
-                                                                        "type": "string"
-                                                                    }
-                                                                },
-                                                                "required": [
-                                                                    "nom",
-                                                                    "immatriculation"
-                                                                ]
-                                                            },
-                                                            "equipe_nom": {
-                                                                "anyOf": [
-                                                                    {
-                                                                        "type": "string"
-                                                                    },
-                                                                    {
-                                                                        "type": "string",
-                                                                        "enum": [
-                                                                            "\u2014"
-                                                                        ]
-                                                                    }
-                                                                ]
-                                                            },
-                                                            "date_depart": {
-                                                                "type": [
-                                                                    "string",
-                                                                    "null"
-                                                                ]
-                                                            },
-                                                            "date_arrivee_prevue": {
-                                                                "type": [
-                                                                    "string",
-                                                                    "null"
-                                                                ]
-                                                            },
-                                                            "nb_packs": {
-                                                                "type": "integer"
-                                                            }
-                                                        },
-                                                        "required": [
-                                                            "id",
-                                                            "reference",
-                                                            "statut",
-                                                            "statut_label",
-                                                            "site_source",
-                                                            "site_destination",
-                                                            "vehicule",
-                                                            "equipe_nom",
-                                                            "date_depart",
-                                                            "date_arrivee_prevue",
-                                                            "nb_packs"
-                                                        ]
-                                                    },
-                                                    {
-                                                        "type": "object",
-                                                        "properties": {
-                                                            "id": {
-                                                                "type": "string"
-                                                            },
-                                                            "reference": {
-                                                                "type": "string"
-                                                            },
-                                                            "statut": {
-                                                                "type": "string",
-                                                                "const": "commande"
-                                                            },
-                                                            "statut_label": {
-                                                                "type": "string",
-                                                                "const": "Commande en cours"
-                                                            },
-                                                            "site_source": {
-                                                                "type": "string"
-                                                            },
-                                                            "site_destination": {
-                                                                "type": "string"
-                                                            },
-                                                            "vehicule": {
-                                                                "type": [
-                                                                    "object",
-                                                                    "null"
-                                                                ],
-                                                                "properties": {
-                                                                    "nom": {
-                                                                        "type": "string"
-                                                                    },
-                                                                    "immatriculation": {
-                                                                        "type": "string"
-                                                                    }
-                                                                },
-                                                                "required": [
-                                                                    "nom",
-                                                                    "immatriculation"
-                                                                ]
-                                                            },
-                                                            "equipe_nom": {
-                                                                "type": "string"
-                                                            },
-                                                            "date_depart": {
-                                                                "type": [
-                                                                    "string",
-                                                                    "null"
-                                                                ]
-                                                            },
-                                                            "date_arrivee_prevue": {
-                                                                "type": "null"
-                                                            },
-                                                            "nb_packs": {
-                                                                "type": "integer"
-                                                            }
-                                                        },
-                                                        "required": [
-                                                            "id",
-                                                            "reference",
-                                                            "statut",
-                                                            "statut_label",
-                                                            "site_source",
-                                                            "site_destination",
-                                                            "vehicule",
-                                                            "equipe_nom",
-                                                            "date_depart",
-                                                            "date_arrivee_prevue",
-                                                            "nb_packs"
-                                                        ]
-                                                    }
-                                                ]
+                                                "$ref": "#/components/schemas/LivraisonEnCoursRow"
                                             }
                                         },
                                         {
@@ -2818,6 +2593,9 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -3239,6 +3017,9 @@
                     },
                     "422": {
                         "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -3310,6 +3091,9 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -3335,6 +3119,9 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             },
@@ -3389,6 +3176,9 @@
                     },
                     "422": {
                         "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -3435,6 +3225,9 @@
                     },
                     "422": {
                         "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -3469,6 +3262,9 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             },
@@ -3512,6 +3308,9 @@
                     },
                     "422": {
                         "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -3644,6 +3443,9 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -3674,68 +3476,7 @@
                                         {
                                             "type": "array",
                                             "items": {
-                                                "type": "object",
-                                                "properties": {
-                                                    "id": {
-                                                        "type": "string"
-                                                    },
-                                                    "reference": {
-                                                        "anyOf": [
-                                                            {
-                                                                "type": "string"
-                                                            },
-                                                            {
-                                                                "type": "string",
-                                                                "enum": [
-                                                                    "\u2014"
-                                                                ]
-                                                            }
-                                                        ]
-                                                    },
-                                                    "date": {
-                                                        "type": [
-                                                            "string",
-                                                            "null"
-                                                        ]
-                                                    },
-                                                    "montant_net": {
-                                                        "type": "number"
-                                                    },
-                                                    "montant_a_payer": {
-                                                        "type": "number"
-                                                    },
-                                                    "montant_verse": {
-                                                        "type": "number"
-                                                    },
-                                                    "montant_restant": {
-                                                        "type": [
-                                                            "object",
-                                                            "null"
-                                                        ]
-                                                    },
-                                                    "statut": {
-                                                        "type": "string",
-                                                        "enum": [
-                                                            "paye",
-                                                            "partiel",
-                                                            "en_attente"
-                                                        ]
-                                                    },
-                                                    "mois": {
-                                                        "type": "string"
-                                                    }
-                                                },
-                                                "required": [
-                                                    "id",
-                                                    "reference",
-                                                    "date",
-                                                    "montant_net",
-                                                    "montant_a_payer",
-                                                    "montant_verse",
-                                                    "montant_restant",
-                                                    "statut",
-                                                    "mois"
-                                                ]
+                                                "$ref": "#/components/schemas/VehiculeCommissionRow"
                                             }
                                         },
                                         {
@@ -3773,6 +3514,9 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -3864,6 +3608,9 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
                     }
                 }
             }
@@ -4166,6 +3913,149 @@
                     "vehicule"
                 ],
                 "title": "DepenseResource"
+            },
+            "GainsVehiculeRow": {
+                "type": "object",
+                "properties": {
+                    "vehicule_id": {
+                        "type": "string"
+                    },
+                    "nom": {
+                        "type": "string"
+                    },
+                    "immatriculation": {
+                        "type": "string"
+                    },
+                    "total_brut": {
+                        "type": "number"
+                    },
+                    "total_net": {
+                        "type": "number"
+                    },
+                    "total_a_payer": {
+                        "type": "number"
+                    },
+                    "total_verse": {
+                        "type": "number"
+                    },
+                    "total_restant": {
+                        "type": "number"
+                    },
+                    "nb_commandes": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "vehicule_id",
+                    "nom",
+                    "immatriculation",
+                    "total_brut",
+                    "total_net",
+                    "total_a_payer",
+                    "total_verse",
+                    "total_restant",
+                    "nb_commandes"
+                ],
+                "title": "GainsVehiculeRow"
+            },
+            "LivraisonEnCoursRow": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "reference": {
+                        "type": "string"
+                    },
+                    "statut": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "$ref": "#/components/schemas/StatutTransfert"
+                            }
+                        ]
+                    },
+                    "statut_label": {
+                        "type": "string",
+                        "const": "Livraison en cours"
+                    },
+                    "site_source": {
+                        "type": "string"
+                    },
+                    "site_destination": {
+                        "type": "string"
+                    },
+                    "vehicule": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/LivraisonEnCoursVehicule"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "equipe_nom": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "string",
+                                "enum": [
+                                    "\u2014"
+                                ]
+                            }
+                        ]
+                    },
+                    "date_depart": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "date_arrivee_prevue": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "nb_packs": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "id",
+                    "reference",
+                    "statut",
+                    "statut_label",
+                    "site_source",
+                    "site_destination",
+                    "vehicule",
+                    "equipe_nom",
+                    "date_depart",
+                    "date_arrivee_prevue",
+                    "nb_packs"
+                ],
+                "title": "LivraisonEnCoursRow"
+            },
+            "LivraisonEnCoursVehicule": {
+                "type": "object",
+                "properties": {
+                    "nom": {
+                        "type": "string"
+                    },
+                    "immatriculation": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "nom",
+                    "immatriculation"
+                ],
+                "title": "LivraisonEnCoursVehicule"
             },
             "PropositionVehiculeResource": {
                 "type": "object",
@@ -4877,6 +4767,104 @@
                     "roles"
                 ],
                 "title": "UserResource"
+            },
+            "VehiculeCommissionRow": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "reference": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "string",
+                                "enum": [
+                                    "\u2014"
+                                ]
+                            }
+                        ]
+                    },
+                    "date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "montant_net": {
+                        "type": "number"
+                    },
+                    "montant_a_payer": {
+                        "type": "number"
+                    },
+                    "montant_verse": {
+                        "type": "number"
+                    },
+                    "montant_restant": {
+                        "type": "number"
+                    },
+                    "statut": {
+                        "type": "string",
+                        "enum": [
+                            "paye",
+                            "partiel",
+                            "en_attente"
+                        ]
+                    },
+                    "mois": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "reference",
+                    "date",
+                    "montant_net",
+                    "montant_a_payer",
+                    "montant_verse",
+                    "montant_restant",
+                    "statut",
+                    "mois"
+                ],
+                "title": "VehiculeCommissionRow"
+            },
+            "VehiculeEarningsRow": {
+                "type": "object",
+                "properties": {
+                    "vehicule_id": {
+                        "type": "string"
+                    },
+                    "nom_vehicule": {
+                        "type": "string"
+                    },
+                    "immatriculation": {
+                        "type": "string"
+                    },
+                    "frais_depenses": {
+                        "type": "number"
+                    },
+                    "total_earned": {
+                        "type": "number"
+                    },
+                    "total_paid": {
+                        "type": "number"
+                    },
+                    "balance": {
+                        "type": "number"
+                    }
+                },
+                "required": [
+                    "vehicule_id",
+                    "nom_vehicule",
+                    "immatriculation",
+                    "frais_depenses",
+                    "total_earned",
+                    "total_paid",
+                    "balance"
+                ],
+                "title": "VehiculeEarningsRow"
             }
         },
         "responses": {
@@ -4931,6 +4919,25 @@
             },
             "ModelNotFoundException": {
                 "description": "Not found",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "message": {
+                                    "type": "string",
+                                    "description": "Error overview."
+                                }
+                            },
+                            "required": [
+                                "message"
+                            ]
+                        }
+                    }
+                }
+            },
+            "AuthorizationException": {
+                "description": "Authorization error",
                 "content": {
                     "application/json": {
                         "schema": {

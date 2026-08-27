@@ -75,10 +75,10 @@ jobs:
       - name: Check OpenAPI documentation generates and matches the committed spec
         run: |
           php artisan scramble:analyze
-          php artisan scramble:analyze --api=public
+          php artisan scramble:analyze --api=vitrine
           php artisan scramble:export --api=default
-          php artisan scramble:export --api=public
-          git diff --exit-code -- docs/openapi/ || (echo "::error::docs/openapi/*.json is out of date — run 'php artisan scramble:export --api=default' and '--api=public' locally and commit the result." && exit 1)
+          php artisan scramble:export --api=vitrine
+          git diff --exit-code -- docs/openapi/ || (echo "::error::docs/openapi/*.json is out of date — run 'php artisan scramble:export --api=default' and '--api=vitrine' locally and commit the result." && exit 1)
 
       - name: Check frontend formatting (Prettier)
         run: npm run format:check

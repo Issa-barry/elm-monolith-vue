@@ -46,15 +46,10 @@ class DashboardController extends Controller
             - `balance` : `total_earned - frais_depenses_total - total_paid`, **jamais négatif** (plancher à 0 — un solde négatif n'est jamais affiché comme dette du propriétaire).
             - `operations_count` : nombre de commissions (vente + logistique) entrant dans `total_earned`.
 
-            `par_vehicule` : même détail que `summary` mais par véhicule, **toujours
-            la liste complète du parc accessible** même si `vehicule_id` filtre le
-            calcul (les véhicules hors filtre apparaissent avec des montants à 0) —
-            ce n'est pas un bug. Chaque élément a la forme
-            `{vehicule_id, nom_vehicule, immatriculation, frais_depenses, total_earned, total_paid, balance}`
-            (identique aux clés de `vehicules[]` + les mêmes montants que `summary`) —
-            **limite connue de la génération automatique** : le schéma ci-dessous décrit
-            `par_vehicule` comme un tableau de chaînes, la vraie forme est ce qui précède
-            (cf. tests de parité `tests/Feature/Api/Client/DashboardControllerTest.php`).
+            `par_vehicule` : même détail que `summary` mais par véhicule (schéma
+            `VehiculeEarningsRow`), **toujours la liste complète du parc accessible**
+            même si `vehicule_id` filtre le calcul (les véhicules hors filtre
+            apparaissent avec des montants à 0) — ce n'est pas un bug.
 
             `filters.period` : raccourci appliqué (`custom` = `date_debut`/`date_fin`
             pris tels quels, sinon calculés serveur — jamais un défaut inventé côté

@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Models\Vehicule;
 use App\Services\Client\ClientEarningsService;
 use App\Services\Client\ClientIdentityResolver;
+use App\Services\Client\Data\VehiculeEarningsRow;
 use App\Services\Client\VehicleProposalService;
 use BaconQrCode\Renderer\Image\SvgImageBackEnd;
 use BaconQrCode\Renderer\ImageRenderer;
@@ -123,18 +124,18 @@ class ClientDashboardController extends Controller
         }
 
         $summary = collect($payload['earnings_by_vehicule'])
-            ->first(fn (array $item) => (string) $item['vehicule_id'] === $vehiculeId);
+            ->first(fn (VehiculeEarningsRow $item) => $item->vehiculeId === $vehiculeId);
 
         if ($summary === null) {
-            $summary = [
-                'vehicule_id' => $vehicule['id'],
-                'nom_vehicule' => $vehicule['nom_vehicule'],
-                'immatriculation' => $vehicule['immatriculation'],
-                'frais_depenses' => 0.0,
-                'total_earned' => 0.0,
-                'total_paid' => 0.0,
-                'balance' => 0.0,
-            ];
+            $summary = new VehiculeEarningsRow(
+                vehiculeId: $vehicule['id'],
+                nomVehicule: $vehicule['nom_vehicule'],
+                immatriculation: $vehicule['immatriculation'],
+                fraisDepenses: 0.0,
+                totalEarned: 0.0,
+                totalPaid: 0.0,
+                balance: 0.0,
+            );
         }
 
         return Inertia::render('client/VehicleBalanceDetail', [

@@ -227,8 +227,8 @@ D'après votre environnement local, les URLs sont :
 
 Swagger UI (client/mobile) : http://127.0.0.1:8080/docs/api (ou http://localhost:8000/docs/api selon le port sur lequel tourne votre php artisan serve — j'ai vu les deux dans vos configs)
 JSON brut correspondant : .../docs/api.json
-Swagger UI (vitrine, server-to-server) : .../docs/public
-JSON brut correspondant : .../docs/public.json
+Swagger UI (vitrine, server-to-server) : .../docs/vitrine
+JSON brut correspondant : .../docs/vitrine.json
 En local (APP_ENV=local), l'accès est libre, pas besoin d'être connecté. Si jamais vous testez avec APP_ENV réglé sur autre chose que local, il faudra être connecté en tant que staff (session web) pour que le Gate viewApiDocs laisse passer.
 
 Si votre serveur local n'est pas démarré, lancez php artisan serve (ou composer dev) puis ouvrez l'URL correspondant au port affiché.

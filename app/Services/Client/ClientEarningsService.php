@@ -10,6 +10,7 @@ use App\Models\Depense;
 use App\Models\Livreur;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
+use App\Services\Client\Data\VehiculeEarningsRow;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -247,11 +248,17 @@ class ClientEarningsService
      * Montants en GNF, sans décimales dans la pratique mais typés `float`
      * (arrondis à 2 décimales) — jamais des centimes.
      *
+     * L'accumulation ci-dessous reste un tableau associatif muté en boucle
+     * (`+=`) — inchangé, c'est le calcul métier. Seule la toute dernière étape
+     * (le `map()` final) construit un `VehiculeEarningsRow` par ligne, pour
+     * que le contrat de sortie soit un objet typé plutôt qu'un array libre
+     * (cf. docblock du DTO pour le pourquoi).
+     *
      * @param  Collection<int, Vehicule>  $vehicules
      * @param  Collection<int, CommissionEnveloppePart>  $partsVentes
      * @param  Collection<int, CommissionLogistiquePart>  $partsLogistiques
      * @param  array<string, float>  $fraisParVehicule
-     * @return list<array{vehicule_id: string, nom_vehicule: string, immatriculation: string, frais_depenses: float, total_earned: float, total_paid: float, balance: float}>
+     * @return list<VehiculeEarningsRow>
      */
     public function earningsByVehicule(Collection $vehicules, Collection $partsVentes, Collection $partsLogistiques, array $fraisParVehicule = []): array
     {
@@ -313,14 +320,22 @@ class ClientEarningsService
 
         return collect($stats)
             ->map(function (array $row) {
-                $row['total_earned'] = round((float) $row['total_earned'], 2);
-                $row['total_paid'] = round((float) $row['total_paid'], 2);
-                $row['frais_depenses'] = round((float) $row['frais_depenses'], 2);
-                $row['balance'] = (float) max(0, round($row['total_earned'] - $row['frais_depenses'] - $row['total_paid'], 2));
+                $totalEarned = round((float) $row['total_earned'], 2);
+                $totalPaid = round((float) $row['total_paid'], 2);
+                $fraisDepenses = round((float) $row['frais_depenses'], 2);
+                $balance = (float) max(0, round($totalEarned - $fraisDepenses - $totalPaid, 2));
 
-                return $row;
+                return new VehiculeEarningsRow(
+                    vehiculeId: (string) $row['vehicule_id'],
+                    nomVehicule: (string) $row['nom_vehicule'],
+                    immatriculation: (string) $row['immatriculation'],
+                    fraisDepenses: $fraisDepenses,
+                    totalEarned: $totalEarned,
+                    totalPaid: $totalPaid,
+                    balance: $balance,
+                );
             })
-            ->sortByDesc('total_earned')
+            ->sortByDesc('totalEarned')
             ->values()
             ->all();
     }

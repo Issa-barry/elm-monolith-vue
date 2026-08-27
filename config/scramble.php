@@ -1,8 +1,17 @@
 <?php
 
+use App\Http\Middleware\EnsureApiDocsEnabled;
 use Dedoc\Scramble\Http\Middleware\RestrictedDocsAccess;
 
 return [
+    /*
+     * Coupe-circuit explicite (App\Http\Middleware\EnsureApiDocsEnabled) pour
+     * l'exposition HTTP de /docs/api et /docs/vitrine — indépendant de APP_ENV
+     * car préprod et prod partagent APP_ENV=production. N'affecte JAMAIS
+     * `composer openapi:export` ni `scramble:analyze` (commandes console).
+     */
+    'docs_enabled' => env('API_DOCS_ENABLED', true),
+
     /*
      * Which routes to document. String or array form; use Scramble::routes() for custom selection.
      *
@@ -21,7 +30,7 @@ return [
     // v1/backoffice/* est une API mobile interne au staff (produits, logistique staff),
     // pas encore consommée par Nuxt/le mobile client — hors périmètre de ce premier jet
     // de documentation (cf. rapport OpenAPI du 27/08/2026). api/public/* est exclu ici
-    // aussi : il vit dans sa propre API nommée « public » (App\Providers\OpenApiServiceProvider),
+    // aussi : il vit dans sa propre API nommée « vitrine » (App\Providers\OpenApiServiceProvider),
     // avec son propre security scheme (clé X-Vitrine-Key, pas de token utilisateur).
     'api_path' => [
         'include' => 'api',
@@ -174,6 +183,7 @@ return [
 
     'middleware' => [
         'web',
+        EnsureApiDocsEnabled::class,
         RestrictedDocsAccess::class,
     ],
 

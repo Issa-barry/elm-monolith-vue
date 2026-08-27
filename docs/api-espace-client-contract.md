@@ -14,7 +14,7 @@ pas encore.
 > le code via **OpenAPI/Swagger** (`dedoc/scramble`) : `/docs/api` en local
 > (Nuxt/mobile, Bearer Sanctum), export `docs/openapi/client.json`. Les
 > endpoints server-to-server de la vitrine ont leur propre document séparé
-> (`/docs/public`, clé `X-Vitrine-Key`) — voir le rapport OpenAPI du
+> (`/docs/vitrine`, clé `X-Vitrine-Key`) — voir le rapport OpenAPI du
 > 27/08/2026 pour le détail des choix (périmètre, sécurité, environnements).
 > Ce Markdown n'est jamais resynchronisé automatiquement avec la spec
 > générée — en cas de doute sur un champ précis, la spec générée fait foi.
