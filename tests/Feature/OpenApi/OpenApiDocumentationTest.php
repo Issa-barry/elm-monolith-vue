@@ -168,33 +168,43 @@ class OpenApiDocumentationTest extends TestCase
         }
     }
 
-    public function test_docs_ui_is_open_without_authentication_only_in_local_environment(): void
+    /**
+     * Scénario H (cf. rapport du 27/08/2026) : une installation qui NE DÉFINIT PAS
+     * `API_DOCS_ENABLED` doit avoir la doc fermée. On ne force ici AUCUNE valeur de
+     * config — .env.testing ne définit pas cette variable, donc ce test exerce le
+     * vrai défaut de `config/scramble.php` (`env('API_DOCS_ENABLED', false)`), pas
+     * une valeur simulée.
+     */
+    public function test_docs_are_closed_by_default_without_explicit_configuration(): void
     {
-        // phpunit.xml force APP_ENV=testing (jamais local) — cette requête doit
-        // donc être refusée par le Gate `viewApiDocs`, pas laissée ouverte.
-        $this->assertNotSame('local', app()->environment());
-
-        $this->get('/docs/api')->assertForbidden();
-        $this->get('/docs/vitrine')->assertForbidden();
-    }
-
-    public function test_docs_ui_is_accessible_to_an_authenticated_staff_member_outside_local(): void
-    {
-        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
-        $org = Organization::factory()->create();
-        $user = User::factory()->create(['organization_id' => $org->id]);
-        $user->assignRole('admin_entreprise');
-
-        $this->actingAs($user)->get('/docs/api')->assertOk();
+        $this->get('/docs/api')->assertNotFound();
     }
 
     /**
-     * `API_DOCS_ENABLED=false` (App\Http\Middleware\EnsureApiDocsEnabled) est un
-     * coupe-circuit global, prioritaire sur le Gate `viewApiDocs` — un staff par
-     * ailleurs autorisé doit quand même être bloqué (404, pas 403 : la doc "n'existe
-     * pas" plutôt que "vous n'y avez pas droit"). Existe car préprod et prod
-     * partagent APP_ENV=production : l'environnement seul ne permet pas de fermer
-     * la doc sur l'un sans la fermer sur l'autre (cf. rapport OpenAPI 27/08/2026).
+     * Scénario A : `API_DOCS_ENABLED=false` doit fermer la doc MÊME EN LOCAL, où
+     * `RestrictedDocsAccess` natif de Scramble laisse normalement tout passer sans
+     * authentification. `EnsureApiDocsEnabled` est placé AVANT dans la chaîne de
+     * middleware : il coupe la requête avant que ce comportement natif ne s'applique.
+     */
+    public function test_docs_are_disabled_in_local_environment_when_flag_is_false(): void
+    {
+        config(['scramble.docs_enabled' => false]);
+        $this->app->instance('env', 'local');
+        $this->assertTrue(app()->isLocal());
+
+        $this->get('/docs/api')->assertNotFound();
+        $this->getJson('/docs/api.json')->assertNotFound();
+        $this->get('/docs/vitrine')->assertNotFound();
+        $this->getJson('/docs/vitrine.json')->assertNotFound();
+    }
+
+    /**
+     * Scénarios B/C/D/E : `API_DOCS_ENABLED=false` (App\Http\Middleware\EnsureApiDocsEnabled)
+     * est un coupe-circuit global, prioritaire sur le Gate `viewApiDocs` — un staff par
+     * ailleurs autorisé doit quand même être bloqué sur les 4 URLs (404, pas 403 : la doc
+     * "n'existe pas" plutôt que "vous n'y avez pas droit"). Existe car préprod et prod
+     * partagent APP_ENV=production : l'environnement seul ne permet pas de fermer la doc
+     * sur l'un sans la fermer sur l'autre.
      */
     public function test_docs_are_fully_disabled_when_api_docs_enabled_is_false(): void
     {
@@ -206,12 +216,54 @@ class OpenApiDocumentationTest extends TestCase
         $user->assignRole('admin_entreprise');
 
         $this->actingAs($user)->get('/docs/api')->assertNotFound();
-        $this->actingAs($user)->get('/docs/vitrine')->assertNotFound();
         $this->actingAs($user)->getJson('/docs/api.json')->assertNotFound();
+        $this->actingAs($user)->get('/docs/vitrine')->assertNotFound();
+        $this->actingAs($user)->getJson('/docs/vitrine.json')->assertNotFound();
     }
 
+    /**
+     * Scénario G (partie 1) : flag activé, mais hors environnement local et sans
+     * utilisateur authentifié — le Gate `viewApiDocs` doit refuser, comme avant
+     * l'introduction du flag (403, pas 404 : la doc existe, l'accès est juste refusé).
+     */
+    public function test_docs_ui_is_open_without_authentication_only_in_local_environment(): void
+    {
+        config(['scramble.docs_enabled' => true]);
+
+        // phpunit.xml force APP_ENV=testing (jamais local) — cette requête doit
+        // donc être refusée par le Gate `viewApiDocs`, pas laissée ouverte.
+        $this->assertNotSame('local', app()->environment());
+
+        $this->get('/docs/api')->assertForbidden();
+        $this->get('/docs/vitrine')->assertForbidden();
+    }
+
+    /**
+     * Scénario F : flag activé + staff autorisé hors local → doc accessible. Le flag
+     * n'est qu'une première barrière ; le Gate `viewApiDocs` reste la seconde,
+     * inchangée.
+     */
+    public function test_docs_ui_is_accessible_to_an_authenticated_staff_member_outside_local(): void
+    {
+        config(['scramble.docs_enabled' => true]);
+
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        $org = Organization::factory()->create();
+        $user = User::factory()->create(['organization_id' => $org->id]);
+        $user->assignRole('admin_entreprise');
+
+        $this->actingAs($user)->get('/docs/api')->assertOk();
+    }
+
+    /**
+     * Scénario G (partie 2) : flag activé + utilisateur authentifié mais non-staff
+     * (rôle client pur) → toujours refusé par le Gate `viewApiDocs`, le flag ne
+     * remplace pas cette autorisation applicative.
+     */
     public function test_docs_ui_rejects_a_pure_client_account_outside_local(): void
     {
+        config(['scramble.docs_enabled' => true]);
+
         Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
         $org = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $org->id]);

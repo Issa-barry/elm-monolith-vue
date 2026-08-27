@@ -9,8 +9,17 @@ return [
      * l'exposition HTTP de /docs/api et /docs/vitrine — indépendant de APP_ENV
      * car préprod et prod partagent APP_ENV=production. N'affecte JAMAIS
      * `composer openapi:export` ni `scramble:analyze` (commandes console).
+     *
+     * Fermé par défaut (`false`) : une installation qui ne définit pas
+     * explicitement API_DOCS_ENABLED dans son .env n'expose pas cette surface
+     * technique. Chaque environnement doit l'activer volontairement
+     * (API_DOCS_ENABLED=true en local/préprod) plutôt que de compter sur un
+     * défaut ouvert — la prod, elle, reste fermée (API_DOCS_ENABLED=false ou
+     * absent). Une fois le flag à `true`, le Gate `viewApiDocs` / le
+     * comportement natif Scramble (RestrictedDocsAccess) s'appliquent
+     * normalement en seconde barrière.
      */
-    'docs_enabled' => env('API_DOCS_ENABLED', true),
+    'docs_enabled' => env('API_DOCS_ENABLED', false),
 
     /*
      * Which routes to document. String or array form; use Scramble::routes() for custom selection.
