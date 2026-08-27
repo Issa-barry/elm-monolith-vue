@@ -145,11 +145,19 @@ return [
      * ],
      * ```
      */
-    // 'Local' résout via `url()` (l'environnement courant, quel qu'il soit) — Préprod/Prod
-    // sont des hôtes fixes et distincts (pas de simple sous-domaine dérivable), cf. mémoire
-    // hosting_environments : fello.eau-la-maman.com = prod, formation.eau-la-maman.com = preprod.
+    // 'Local' est une URL ABSOLUE fixe, volontairement PAS dérivée de `url()`/APP_URL
+    // (Scramble::Generator passe chaque valeur à `url()`, qui renvoie une URL déjà
+    // absolue telle quelle, sans la recalculer depuis l'environnement courant — cf.
+    // vendor/dedoc/scramble/src/Generator.php:makeOpenApi()). Avant ce correctif,
+    // 'api' était résolu contre l'APP_URL de la machine qui lance `scramble:export`,
+    // donc `docs/openapi/*.json` changeait de "Local" selon qui régénère (poste local
+    // vs CI) — le check CI `git diff --exit-code -- docs/openapi/` (lint.yml) échouait
+    // alors même quand rien de fonctionnel n'avait changé (constaté 28/08/2026,
+    // localhost:8000 committé vs 127.0.0.1:8080 recalculé par le runner CI). Préprod/Prod
+    // sont déjà des hôtes fixes et distincts (pas de simple sous-domaine dérivable), cf.
+    // mémoire hosting_environments : fello.eau-la-maman.com = prod, formation.eau-la-maman.com = preprod.
     'servers' => [
-        'Local' => 'api',
+        'Local' => 'http://localhost:8000/api',
         'Préprod' => 'https://formation.eau-la-maman.com/api',
         'Production' => 'https://fello.eau-la-maman.com/api',
     ],

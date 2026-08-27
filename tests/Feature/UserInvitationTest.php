@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\OtpPurpose;
 use App\Models\Organization;
 use App\Models\Site;
 use App\Models\User;
@@ -475,7 +476,9 @@ class UserInvitationTest extends TestCase
             ->assertJson(['status' => 'not_found']);
 
         $context = $invitation->id.'|'.$invitation->email;
-        $this->assertTrue(Cache::has('otp:'.md5('+224620000099|'.$context)));
+        // Purpose INVITATION fait partie de la clé depuis le chantier OTP agnostique
+        // du canal (27/08/2026) — cf. OtpService::challengeCacheKey().
+        $this->assertTrue(Cache::has('otp:'.md5('+224620000099|'.OtpPurpose::INVITATION->value.'|'.$context)));
     }
 
     // ── AcceptInvitationController::verifyOtp ─────────────────────────────────
@@ -605,7 +608,7 @@ class UserInvitationTest extends TestCase
                 'code' => '000000',
             ]);
         }
-        $this->assertSame(3, Cache::get('otp:attempts:'.md5($phone.'|'.$context)));
+        $this->assertSame(3, Cache::get('otp:attempts:'.md5($phone.'|'.OtpPurpose::INVITATION->value.'|'.$context)));
 
         // Le cooldown de 30s bloque un renvoi immédiat.
         $this->travelTo(now()->addSeconds(31));
@@ -616,7 +619,7 @@ class UserInvitationTest extends TestCase
             ->assertJson(['resent' => true, 'cooldown_seconds' => 30]);
 
         // Tentatives réinitialisées, et le nouveau (même) code fixe fonctionne.
-        $this->assertNull(Cache::get('otp:attempts:'.md5($phone.'|'.$context)));
+        $this->assertNull(Cache::get('otp:attempts:'.md5($phone.'|'.OtpPurpose::INVITATION->value.'|'.$context)));
 
         $this->postJson(route('invitations.accept.otp', $token), [
             'telephone' => $phone,

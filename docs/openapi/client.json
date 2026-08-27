@@ -1269,6 +1269,10 @@
                                         "channel": {
                                             "type": "string"
                                         },
+                                        "destination_masked": {
+                                            "type": "string",
+                                            "description": "Ajout\u00e9 le 27/08/2026 (demande front) : la coordonn\u00e9e R\u00c9ELLEMENT\nutilis\u00e9e pour ce canal, d\u00e9j\u00e0 masqu\u00e9e c\u00f4t\u00e9 serveur (cf.\nOtpDestinationMasker) \u2014 jamais l'adresse/le num\u00e9ro complet,\njamais reconstruite c\u00f4t\u00e9 client \u00e0 partir d'une autre source."
+                                        },
                                         "cooldown_seconds": {
                                             "type": "integer",
                                             "const": 30
@@ -1277,6 +1281,7 @@
                                     "required": [
                                         "sent",
                                         "channel",
+                                        "destination_masked",
                                         "cooldown_seconds"
                                     ]
                                 }

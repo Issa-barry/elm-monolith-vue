@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers\Api\Auth\PasswordReset;
 
+use App\Enums\OtpChannel;
 use App\Enums\OtpPurpose;
 use App\Http\Controllers\Controller;
 use App\Mail\OtpPasswordResetMail;
 use App\Models\Personne;
 use App\Models\UserAuthIdentity;
+use App\Services\Otp\OtpDestinationMasker;
 use App\Services\OtpService;
 use App\Services\PhoneNormalizer;
 use Illuminate\Http\JsonResponse;
@@ -15,7 +17,7 @@ use Illuminate\Support\Facades\Mail;
 
 class LookupController extends Controller
 {
-    public function __invoke(Request $request, OtpService $otp): JsonResponse
+    public function __invoke(Request $request, OtpService $otp, OtpDestinationMasker $masker): JsonResponse
     {
         $request->validate([
             'telephone' => ['required', 'string'],
@@ -43,17 +45,7 @@ class LookupController extends Controller
 
         return response()->json([
             'message' => 'Un code de vérification a été envoyé à votre adresse email.',
-            'masked_email' => $this->maskEmail($user->email),
+            'masked_email' => $masker->mask(OtpChannel::EMAIL, $user->email),
         ]);
-    }
-
-    private function maskEmail(string $email): string
-    {
-        [$local, $domain] = explode('@', $email, 2);
-
-        $visible = substr($local, 0, 1);
-        $masked = $visible.str_repeat('*', max(1, strlen($local) - 1));
-
-        return $masked.'@'.$domain;
     }
 }

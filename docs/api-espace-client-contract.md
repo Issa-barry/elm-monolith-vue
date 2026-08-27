@@ -122,7 +122,7 @@ unique plutôt qu'un mot de passe — **deux appels**, jamais un seul.
 
 ```json
 // 200
-{ "sent": true, "channel": "email", "cooldown_seconds": 30 }
+{ "sent": true, "channel": "email", "destination_masked": "j***@gmail.com", "cooldown_seconds": 30 }
 ```
 
 - `channel` indique **par où** le code vient réellement d'être envoyé — utilisez-le
@@ -133,6 +133,15 @@ unique plutôt qu'un mot de passe — **deux appels**, jamais un seul.
   renverra `"whatsapp"` ou `"sms"` **sans aucun changement de contrat** — ne
   codez jamais en dur `channel === 'email'` comme condition d'affichage,
   traitez `channel` comme une valeur parmi `"email" | "sms" | "whatsapp"`.
+- `destination_masked` (ajouté le 27/08/2026, demande front) : la coordonnée
+  **réellement utilisée** pour ce canal, **déjà masquée côté serveur**
+  (`App\Services\Otp\OtpDestinationMasker`) — un email donne `"j*******@example.com"`
+  (premier caractère local visible, reste masqué, domaine intact) ; un futur
+  SMS/WhatsApp donnerait `"+224 ••• •• 26 93"` (indicatif + 2 derniers chiffres
+  visibles). N'inventez jamais cette valeur côté frontend (pas de
+  reconstruction depuis une autre source, pas d'email deviné) — c'est
+  précisément pour éviter ça que ce champ existe : le backend seul connaît
+  la vraie coordonnée.
 - `404` : `{ "error": "Aucun compte trouvé pour ce numéro de téléphone." }` —
   aucun compte n'est lié à ce numéro (proposez l'inscription, pas un nouvel essai).
 - `429` : `{ "error": "...", "retry_after_seconds": N }` — anti-spam

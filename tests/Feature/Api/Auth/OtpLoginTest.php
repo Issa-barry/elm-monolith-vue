@@ -46,6 +46,21 @@ class OtpLoginTest extends TestCase
         Mail::assertSent(OtpCodeMail::class, fn ($mail) => $mail->purpose === OtpPurpose::LOGIN);
     }
 
+    /**
+     * destination_masked (ajouté le 27/08/2026, demande front) : la
+     * coordonnée réellement utilisée, masquée côté serveur — jamais
+     * l'adresse complète. Voir App\Services\Otp\OtpDestinationMasker.
+     */
+    public function test_request_returns_a_masked_destination(): void
+    {
+        Mail::fake();
+        $this->makeUnverifiedUser('+224620000310', 'j.dupont@example.com');
+
+        $this->postJson(route('api.auth.otp-login.request'), ['telephone' => '+224620000310'])
+            ->assertOk()
+            ->assertJson(['sent' => true, 'channel' => 'email', 'destination_masked' => 'j*******@example.com']);
+    }
+
     public function test_request_returns_404_for_unknown_phone(): void
     {
         $this->postJson(route('api.auth.otp-login.request'), ['telephone' => '+224699999999'])

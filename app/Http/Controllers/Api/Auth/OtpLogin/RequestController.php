@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Personne;
 use App\Models\UserAuthIdentity;
 use App\Services\Otp\OtpChannelResolver;
+use App\Services\Otp\OtpDestinationMasker;
 use App\Services\OtpService;
 use App\Services\PhoneNormalizer;
 use Illuminate\Http\JsonResponse;
@@ -29,7 +30,7 @@ class RequestController extends Controller
 {
     use HasOtpRateLimitResponse;
 
-    public function __invoke(Request $request, OtpService $otp, OtpChannelResolver $channels): JsonResponse
+    public function __invoke(Request $request, OtpService $otp, OtpChannelResolver $channels, OtpDestinationMasker $masker): JsonResponse
     {
         $request->validate([
             'telephone' => ['required', 'string'],
@@ -74,6 +75,11 @@ class RequestController extends Controller
         return response()->json([
             'sent' => true,
             'channel' => $channel->channel()->value,
+            // Ajouté le 27/08/2026 (demande front) : la coordonnée RÉELLEMENT
+            // utilisée pour ce canal, déjà masquée côté serveur (cf.
+            // OtpDestinationMasker) — jamais l'adresse/le numéro complet,
+            // jamais reconstruite côté client à partir d'une autre source.
+            'destination_masked' => $masker->mask($channel->channel(), $destination),
             'cooldown_seconds' => $otp->resendCooldownSeconds(),
         ]);
     }
