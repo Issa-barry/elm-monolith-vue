@@ -2959,9 +2959,23 @@
                 "tags": [
                     "Notifications"
                 ],
+                "parameters": [
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "integer",
+                                "null"
+                            ],
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
-                        "description": "",
+                        "description": "Paginated set of `NotificationResource`",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -2970,38 +2984,124 @@
                                         "data": {
                                             "type": "array",
                                             "items": {
-                                                "type": "object",
-                                                "properties": {
-                                                    "id": {
-                                                        "type": "string"
-                                                    },
-                                                    "type": {},
-                                                    "titre": {},
-                                                    "message": {},
-                                                    "data": {
-                                                        "type": "array",
-                                                        "items": {}
-                                                    },
-                                                    "lu": {
-                                                        "type": "boolean"
-                                                    },
-                                                    "created_at": {
-                                                        "type": [
-                                                            "string",
-                                                            "null"
+                                                "$ref": "#/components/schemas/NotificationResource"
+                                            }
+                                        },
+                                        "links": {
+                                            "type": "object",
+                                            "properties": {
+                                                "first": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "last": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "prev": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                },
+                                                "next": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                }
+                                            },
+                                            "required": [
+                                                "first",
+                                                "last",
+                                                "prev",
+                                                "next"
+                                            ]
+                                        },
+                                        "meta": {
+                                            "type": "object",
+                                            "properties": {
+                                                "current_page": {
+                                                    "type": "integer",
+                                                    "minimum": 1
+                                                },
+                                                "from": {
+                                                    "type": [
+                                                        "integer",
+                                                        "null"
+                                                    ],
+                                                    "minimum": 1
+                                                },
+                                                "last_page": {
+                                                    "type": "integer",
+                                                    "minimum": 1
+                                                },
+                                                "links": {
+                                                    "type": "array",
+                                                    "description": "Generated paginator links.",
+                                                    "items": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "url": {
+                                                                "type": [
+                                                                    "string",
+                                                                    "null"
+                                                                ]
+                                                            },
+                                                            "label": {
+                                                                "type": "string"
+                                                            },
+                                                            "active": {
+                                                                "type": "boolean"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "url",
+                                                            "label",
+                                                            "active"
                                                         ]
                                                     }
                                                 },
-                                                "required": [
-                                                    "id",
-                                                    "type",
-                                                    "titre",
-                                                    "message",
-                                                    "data",
-                                                    "lu",
-                                                    "created_at"
-                                                ]
-                                            }
+                                                "path": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ],
+                                                    "description": "Base path for paginator generated URLs."
+                                                },
+                                                "per_page": {
+                                                    "type": "integer",
+                                                    "description": "Number of items shown per page.",
+                                                    "minimum": 0
+                                                },
+                                                "to": {
+                                                    "type": [
+                                                        "integer",
+                                                        "null"
+                                                    ],
+                                                    "description": "Number of the last item in the slice.",
+                                                    "minimum": 1
+                                                },
+                                                "total": {
+                                                    "type": "integer",
+                                                    "description": "Total number of items being paginated.",
+                                                    "minimum": 0
+                                                }
+                                            },
+                                            "required": [
+                                                "current_page",
+                                                "from",
+                                                "last_page",
+                                                "links",
+                                                "path",
+                                                "per_page",
+                                                "to",
+                                                "total"
+                                            ]
                                         },
                                         "unread_count": {
                                             "type": "integer",
@@ -3010,6 +3110,8 @@
                                     },
                                     "required": [
                                         "data",
+                                        "links",
+                                        "meta",
                                         "unread_count"
                                     ]
                                 }
@@ -3018,6 +3120,9 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
                     }
                 }
             }
@@ -3038,10 +3143,14 @@
                                     "properties": {
                                         "success": {
                                             "type": "boolean"
+                                        },
+                                        "unread_count": {
+                                            "type": "integer"
                                         }
                                     },
                                     "required": [
-                                        "success"
+                                        "success",
+                                        "unread_count"
                                     ]
                                 }
                             }
@@ -3056,6 +3165,7 @@
         "/v1/mobile/notifications/{id}/read": {
             "post": {
                 "operationId": "client.notifications.mark-read",
+                "summary": "404 (jamais 403) si la notification n'appartient pas \u00e0 l'utilisateur \u2014\nm\u00eame convention que le reste de l'API Client (cf.\nCommandesController::show()) : n'expose jamais si l'ID existe pour un\nautre compte. Idempotent : un second appel sur une notification d\u00e9j\u00e0\nlue ne fait rien de plus",
                 "tags": [
                     "Notifications"
                 ],
@@ -3079,10 +3189,19 @@
                                     "properties": {
                                         "success": {
                                             "type": "boolean"
+                                        },
+                                        "data": {
+                                            "$ref": "#/components/schemas/NotificationResource"
+                                        },
+                                        "unread_count": {
+                                            "type": "integer",
+                                            "minimum": 0
                                         }
                                     },
                                     "required": [
-                                        "success"
+                                        "success",
+                                        "data",
+                                        "unread_count"
                                     ]
                                 }
                             }
@@ -4508,6 +4627,80 @@
                     "immatriculation"
                 ],
                 "title": "LivraisonEnCoursVehicule"
+            },
+            "NotificationResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string"
+                    },
+                    "titre": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "message": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "montant": {
+                        "type": [
+                            "number",
+                            "null"
+                        ]
+                    },
+                    "resource": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "type": {
+                                "type": "string"
+                            },
+                            "id": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "type",
+                            "id"
+                        ]
+                    },
+                    "lu": {
+                        "type": "boolean"
+                    },
+                    "read_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "type",
+                    "titre",
+                    "message",
+                    "montant",
+                    "resource",
+                    "lu",
+                    "read_at",
+                    "created_at"
+                ],
+                "title": "NotificationResource"
             },
             "PropositionVehiculeResource": {
                 "type": "object",
