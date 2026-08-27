@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\AuditEvent;
+use App\Enums\OtpChannel;
 use App\Exceptions\InvitationException;
 use App\Http\Controllers\UserController;
 use App\Mail\UserInvitationMail;
@@ -181,21 +182,29 @@ class UserInvitationService
             'is_active' => false,
             'status' => User::STATUS_PENDING_VALIDATION,
         ]);
+        // Le code OTP de cette étape est envoyé à l'EMAIL de l'invitation (cf.
+        // AcceptInvitationController::checkPhone(), OtpInvitationMail) — jamais au
+        // téléphone lui-même. Un email ne prouve jamais la possession d'un
+        // téléphone (cf. rapport du 27/08/2026, règle de sécurité OTP) :
+        // `verified_at` reste donc NULL ici. Corrigé le 27/08/2026 — cette
+        // identité était auparavant marquée vérifiée à tort du seul fait que le
+        // code OTP (livré par email) avait été validé.
         $user->authIdentities()->create([
             'type' => UserAuthIdentity::TYPE_TELEPHONE,
             'value' => $data['telephone'],
             'normalized_value' => Personne::normaliserTelephone($data['telephone']),
-            'verified_at' => now(),
             'is_primary' => true,
         ]);
-        // L'email est considéré vérifié : pour arriver ici, l'utilisateur a dû ouvrir
-        // le lien d'invitation reçu à cette adresse, ce qui en prouve déjà la possession.
-        $user->authIdentities()->create([
+        // L'email, lui, est réellement vérifié : pour arriver ici, l'utilisateur a dû
+        // ouvrir le lien d'invitation reçu à cette adresse, ce qui en prouve la
+        // possession — markVerifiedVia() applique la même règle que ci-dessus, dans
+        // l'autre sens (un canal email prouve un email, jamais un téléphone).
+        $emailIdentity = $user->authIdentities()->create([
             'type' => UserAuthIdentity::TYPE_EMAIL,
             'value' => $invitation->email,
             'normalized_value' => UserAuthIdentity::normaliser(UserAuthIdentity::TYPE_EMAIL, $invitation->email),
-            'verified_at' => now(),
         ]);
+        $emailIdentity->markVerifiedVia(OtpChannel::EMAIL);
 
         $user->assignRole($invitation->role);
         $user->sites()->attach($invitation->site_id, [

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\OtpPurpose;
 use App\Models\Livreur;
 use App\Models\Organization;
 use App\Models\User;
@@ -16,8 +17,8 @@ class LivreurRegistrationTest extends TestCase
     private function verifyOtp(string $phone): void
     {
         $otp = app(OtpService::class);
-        $otp->generate($phone);
-        $otp->markVerified($phone);
+        $otp->generate($phone, OtpPurpose::PHONE_VERIFICATION);
+        $otp->markVerified($phone, OtpPurpose::PHONE_VERIFICATION);
     }
 
     private function validPayload(array $overrides = []): array
@@ -52,6 +53,11 @@ class LivreurRegistrationTest extends TestCase
         $this->assertDatabaseHas('personnes', [
             'telephone' => '+224622111001',
         ]);
+
+        // Aucun canal réel ne délivre ce code aujourd'hui (MVP sans fournisseur
+        // SMS/WhatsApp) — le téléphone ne doit jamais être marqué vérifié, même si
+        // l'inscription a réussi (cf. rapport du 27/08/2026).
+        $this->assertFalse($user->telephoneIdentity()->isVerified());
     }
 
     public function test_new_livreur_record_is_created_when_no_preexisting_record(): void
@@ -103,7 +109,7 @@ class LivreurRegistrationTest extends TestCase
     public function test_registration_fails_with_unverified_otp(): void
     {
         Organization::factory()->create();
-        app(OtpService::class)->generate('+224622111001'); // généré mais pas vérifié
+        app(OtpService::class)->generate('+224622111001', OtpPurpose::PHONE_VERIFICATION); // généré mais pas vérifié
 
         $this->post('/register/livreur', $this->validPayload())
             ->assertSessionHasErrors(['telephone']);
@@ -134,7 +140,7 @@ class LivreurRegistrationTest extends TestCase
 
         $this->post('/register/livreur', $this->validPayload());
 
-        $this->assertFalse(app(OtpService::class)->isVerified('+224622111001'));
+        $this->assertFalse(app(OtpService::class)->isVerified('+224622111001', OtpPurpose::PHONE_VERIFICATION));
     }
 
     // ── GET /register/livreur redirige vers la vitrine ────────────────────────

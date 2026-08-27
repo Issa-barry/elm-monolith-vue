@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Enums\DomaineActivite;
+use App\Enums\OtpPurpose;
 use App\Enums\SiteType;
 use App\Mail\InstallEmailVerificationMail;
 use App\Services\InstallationService;
@@ -242,27 +243,27 @@ class InstallApp extends Command
         while (true) {
             $saisie = $this->ask('Code reçu par email (6 chiffres)') ?? '';
 
-            if ($otp->tooManyAttempts($email, InstallationService::EMAIL_OTP_CONTEXT)) {
+            if ($otp->tooManyAttempts($email, OtpPurpose::EMAIL_VERIFICATION, InstallationService::EMAIL_OTP_CONTEXT)) {
                 $this->error('Trop de tentatives — envoi d\'un nouveau code.');
                 $this->sendEmailCode($otp, $email);
 
                 continue;
             }
 
-            if (! $otp->hasActiveCode($email, InstallationService::EMAIL_OTP_CONTEXT)) {
+            if (! $otp->hasActiveCode($email, OtpPurpose::EMAIL_VERIFICATION, InstallationService::EMAIL_OTP_CONTEXT)) {
                 $this->error('Ce code a expiré — envoi d\'un nouveau code.');
                 $this->sendEmailCode($otp, $email);
 
                 continue;
             }
 
-            if (! $otp->verify($email, $saisie, InstallationService::EMAIL_OTP_CONTEXT)) {
+            if (! $otp->verify($email, $saisie, OtpPurpose::EMAIL_VERIFICATION, InstallationService::EMAIL_OTP_CONTEXT)) {
                 $this->error('Code incorrect.');
 
                 continue;
             }
 
-            $otp->markVerified($email, InstallationService::EMAIL_OTP_CONTEXT);
+            $otp->markVerified($email, OtpPurpose::EMAIL_VERIFICATION, InstallationService::EMAIL_OTP_CONTEXT);
             $this->line('✓ Email vérifié');
 
             return $email;
@@ -271,7 +272,7 @@ class InstallApp extends Command
 
     private function sendEmailCode(OtpService $otp, string $email): void
     {
-        $code = $otp->generate($email, InstallationService::EMAIL_OTP_CONTEXT);
+        $code = $otp->generate($email, OtpPurpose::EMAIL_VERIFICATION, InstallationService::EMAIL_OTP_CONTEXT);
         Mail::to($email)->send(new InstallEmailVerificationMail($code));
         $this->line("✓ Un code de vérification a été envoyé à {$email}.");
     }

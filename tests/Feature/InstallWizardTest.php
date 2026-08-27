@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\DomaineActivite;
+use App\Enums\OtpPurpose;
 use App\Enums\SiteType;
 use App\Models\AppInstallation;
 use App\Models\Categorie;
@@ -51,8 +52,8 @@ class InstallWizardTest extends TestCase
 
     private function preVerifyEmail(string $email): void
     {
-        app(OtpService::class)->generate($email, InstallationService::EMAIL_OTP_CONTEXT);
-        app(OtpService::class)->markVerified($email, InstallationService::EMAIL_OTP_CONTEXT);
+        app(OtpService::class)->generate($email, OtpPurpose::EMAIL_VERIFICATION, InstallationService::EMAIL_OTP_CONTEXT);
+        app(OtpService::class)->markVerified($email, OtpPurpose::EMAIL_VERIFICATION, InstallationService::EMAIL_OTP_CONTEXT);
     }
 
     private function payload(array $overrides = []): array
@@ -313,6 +314,12 @@ class InstallWizardTest extends TestCase
         $user = User::whereHas('personne', fn ($q) => $q->where('telephone', '+224622000000'))->firstOrFail();
         $this->assertSame(self::DEFAULT_EMAIL, $user->email);
         $this->assertTrue($user->hasVerifiedEmail());
+        $this->assertSame('email', $user->emailIdentity()->verification_channel);
+
+        // Le téléphone du Super Admin, lui, n'est prouvé par aucun canal pendant
+        // l'installation (cf. rapport du 27/08/2026, correctif InstallationService) —
+        // jamais marqué vérifié du seul fait d'avoir été saisi dans le formulaire.
+        $this->assertFalse($user->telephoneIdentity()->isVerified());
     }
 
     /**

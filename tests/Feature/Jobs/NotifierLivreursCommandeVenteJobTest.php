@@ -11,7 +11,6 @@ use App\Models\Organization;
 use App\Models\Site;
 use App\Models\Vehicule;
 use App\Notifications\CommandeValideeNotification;
-use App\Services\ExpoPushNotificationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
@@ -19,29 +18,25 @@ use Tests\Feature\Concerns\MakesClientProfiles;
 use Tests\TestCase;
 
 /**
- * Régression du 26/08/2026 (audit notifications, LOT 6) : ce job est le SEUL
- * point d'envoi réel de la catégorie de préférence `activite` — avant
- * correctif, `notification_preferences` était stocké/exposé via l'API mais
- * jamais consulté ici, rendant le réglage "désactiver l'activité" totalement
- * sans effet (ni notification en base, ni push Expo).
+ * Phase 1 archi notifications (2026-08-27, cf. rapport) : le propriétaire du
+ * véhicule ne reçoit PLUS cette notification — décision produit explicite
+ * (affectation logistique, pas financière ; cf.
+ * CommissionGenereeNotificationTest pour ce qui le concerne réellement).
+ * Régression du 26/08/2026 conservée : ce job est le point d'envoi réel de la
+ * catégorie de préférence `livraisons` (ex-`activite`).
  */
 class NotifierLivreursCommandeVenteJobTest extends TestCase
 {
     use MakesClientProfiles, RefreshDatabase;
 
-    private function makeCommandeAvecEquipe(Organization $org, ?array $livreurPrefs = null, ?array $proprietairePrefs = null): array
+    private function makeCommandeAvecEquipe(Organization $org, ?array $livreurPrefs = null): array
     {
         $proprietaireUser = $this->makeProprietaireUser($org);
-        if ($proprietairePrefs !== null) {
-            $proprietaireUser->update(['notification_preferences' => $proprietairePrefs]);
-        }
-
         $livreurUser = $this->makeLivreurUser($org);
         if ($livreurPrefs !== null) {
             $livreurUser->update(['notification_preferences' => $livreurPrefs]);
         }
         $livreurUser->forceFill(['expo_push_token' => 'ExponentPushToken[livreur]'])->save();
-        $proprietaireUser->forceFill(['expo_push_token' => 'ExponentPushToken[proprietaire]'])->save();
 
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $org->id,
@@ -76,10 +71,10 @@ class NotifierLivreursCommandeVenteJobTest extends TestCase
             'statut' => StatutCommandeVente::LIVRAISON_EN_COURS->value,
         ]);
 
-        return [$commande, $livreurUser, $proprietaireUser];
+        return [$commande, $livreurUser, $proprietaireUser, $equipe];
     }
 
-    public function test_notifies_and_pushes_both_by_default(): void
+    public function test_notifies_and_pushes_livreur_but_not_proprietaire(): void
     {
         Notification::fake();
         Http::fake(['*' => Http::response(['data' => []], 200)]);
@@ -87,73 +82,40 @@ class NotifierLivreursCommandeVenteJobTest extends TestCase
         $org = Organization::factory()->create();
         [$commande, $livreurUser, $proprietaireUser] = $this->makeCommandeAvecEquipe($org);
 
-        (new NotifierLivreursCommandeVenteJob($commande->id, $commande->reference))
-            ->handle(app(ExpoPushNotificationService::class));
-
-        Notification::assertSentTo($livreurUser, CommandeValideeNotification::class);
-        Notification::assertSentTo($proprietaireUser, CommandeValideeNotification::class);
-        Http::assertSent(fn ($request) => str_contains($request->url(), 'exp.host'));
-    }
-
-    public function test_skips_livreur_who_disabled_activite_preference(): void
-    {
-        Notification::fake();
-        Http::fake(['*' => Http::response(['data' => []], 200)]);
-
-        $org = Organization::factory()->create();
-        [$commande, $livreurUser, $proprietaireUser] = $this->makeCommandeAvecEquipe(
-            $org,
-            livreurPrefs: ['activite' => false]
-        );
-
-        (new NotifierLivreursCommandeVenteJob($commande->id, $commande->reference))
-            ->handle(app(ExpoPushNotificationService::class));
-
-        Notification::assertNotSentTo($livreurUser, CommandeValideeNotification::class);
-        Notification::assertSentTo($proprietaireUser, CommandeValideeNotification::class);
-
-        Http::assertSent(function ($request) {
-            $tokens = collect($request->data())->pluck('to')->all();
-
-            return ! in_array('ExponentPushToken[livreur]', $tokens, true)
-                && in_array('ExponentPushToken[proprietaire]', $tokens, true);
-        });
-    }
-
-    public function test_skips_proprietaire_who_disabled_activite_preference(): void
-    {
-        Notification::fake();
-        Http::fake(['*' => Http::response(['data' => []], 200)]);
-
-        $org = Organization::factory()->create();
-        [$commande, $livreurUser, $proprietaireUser] = $this->makeCommandeAvecEquipe(
-            $org,
-            proprietairePrefs: ['activite' => false]
-        );
-
-        (new NotifierLivreursCommandeVenteJob($commande->id, $commande->reference))
-            ->handle(app(ExpoPushNotificationService::class));
+        (new NotifierLivreursCommandeVenteJob($commande->id, $commande->reference))->handle();
 
         Notification::assertSentTo($livreurUser, CommandeValideeNotification::class);
         Notification::assertNotSentTo($proprietaireUser, CommandeValideeNotification::class);
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'exp.host')
+            && in_array('ExponentPushToken[livreur]', collect($request->data())->pluck('to')->all(), true));
     }
 
-    public function test_sends_no_push_when_both_disabled_activite_preference(): void
+    public function test_skips_livreur_who_disabled_livraisons_preference(): void
     {
         Notification::fake();
         Http::fake(['*' => Http::response(['data' => []], 200)]);
 
         $org = Organization::factory()->create();
-        [$commande] = $this->makeCommandeAvecEquipe(
-            $org,
-            livreurPrefs: ['activite' => false],
-            proprietairePrefs: ['activite' => false]
-        );
+        [$commande, $livreurUser] = $this->makeCommandeAvecEquipe($org, livreurPrefs: ['livraisons' => false]);
 
-        (new NotifierLivreursCommandeVenteJob($commande->id, $commande->reference))
-            ->handle(app(ExpoPushNotificationService::class));
+        (new NotifierLivreursCommandeVenteJob($commande->id, $commande->reference))->handle();
 
+        Notification::assertNotSentTo($livreurUser, CommandeValideeNotification::class);
         Http::assertNothingSent();
+    }
+
+    /** Compatibilité ascendante : ancien réglage activite=false sans clé fine reste respecté. */
+    public function test_skips_livreur_who_disabled_legacy_activite_preference(): void
+    {
+        Notification::fake();
+        Http::fake(['*' => Http::response(['data' => []], 200)]);
+
+        $org = Organization::factory()->create();
+        [$commande, $livreurUser] = $this->makeCommandeAvecEquipe($org, livreurPrefs: ['activite' => false]);
+
+        (new NotifierLivreursCommandeVenteJob($commande->id, $commande->reference))->handle();
+
+        Notification::assertNotSentTo($livreurUser, CommandeValideeNotification::class);
     }
 
     public function test_does_nothing_when_commande_has_no_vehicule(): void
@@ -168,10 +130,14 @@ class NotifierLivreursCommandeVenteJobTest extends TestCase
             'statut' => StatutCommandeVente::BROUILLON->value,
         ]);
 
-        (new NotifierLivreursCommandeVenteJob($commande->id, $commande->reference))
-            ->handle(app(ExpoPushNotificationService::class));
+        (new NotifierLivreursCommandeVenteJob($commande->id, $commande->reference))->handle();
 
         Notification::assertNothingSent();
         Http::assertNothingSent();
     }
+
+    // Note : la déduplication du NotificationDispatcher (même User résolu deux
+    // fois pour un même envoi) est couverte directement et unitairement par
+    // NotificationDispatcherTest — equipe_livreurs a une contrainte UNIQUE sur
+    // livreur_id qui empêche de reproduire un doublon de pivot ici.
 }

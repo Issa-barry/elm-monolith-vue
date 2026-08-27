@@ -664,40 +664,76 @@ pour ce compte).
 Enregistre le jeton technique Expo pour le push — distinct de la préférence
 métier `notification_preferences` (§3). Écrit sur `users.expo_push_token`.
 
-### 7.1 Audit de fiabilité — `notification_preferences` est-il vraiment respecté ?
+### 7.1 Architecture notifications — phase 1 (2026-08-27)
 
-Audit du 26/08/2026 : **une seule** catégorie de préférence existe
-(`activite`, cf. `User::NOTIFICATION_PREFERENCE_DEFAULTS`) et **un seul**
-job envoie réellement ce type de notification —
-`App\Jobs\NotifierLivreursCommandeVenteJob` (dispatché depuis
-`CommandeVenteController` à la validation d'une commande), qui notifie le
-livreur affecté ET le propriétaire du véhicule, à la fois en base
-(`CommandeValideeNotification`, canal `database`) et par push Expo.
+Suite à l'audit du 26/08/2026 (ci-dessous pour mémoire), une architecture
+centralisée a été construite pour les contextes réellement connectés
+aujourd'hui — **client, propriétaire, livreur, staff** — le rôle `prestataire`
+reste explicitement hors périmètre (pas de compte connecté, pas de `user_id`
+sur `Prestataire`, pas de cible commission).
 
-**Avant ce correctif**, ce job ignorait totalement la préférence : désactiver
-"activite" via `PATCH /v1/mobile/profile/notification-preferences` n'avait
-**aucun effet réel**, ni sur la notification en base ni sur le push — un
-réglage qui semblait fonctionner côté API/UI mais ne changeait rien côté
-envoi. **Corrigé** : le job vérifie désormais `notificationPreferences()['activite']`
-individuellement pour le livreur et pour le propriétaire avant d'appeler
-`notify()` et avant d'inclure leur token dans l'envoi Expo — chacun peut
-être filtré indépendamment de l'autre (cf. tests
-`tests/Feature/Jobs/NotifierLivreursCommandeVenteJobTest.php`).
+Deux classes partagées (`app/Services/Notification/`) :
+- `BeneficiaireUserResolver::resolve($type, $id)` — résout un `User` réel à
+  partir du couple `beneficiaire_type`/`beneficiaire_id` (`proprietaire`,
+  `livreur`, avec repli téléphone `UserAuthIdentity::resoudre` si `user_id` est
+  null) — vocabulaire commun à `CommissionEnveloppePart`,
+  `CommissionLogistiquePart`, `PaiementFiche`, `DepenseImputation`. `site` /
+  `salarie` / `prestataire` n'ont aucun compte : renvoie toujours `null`, sans
+  erreur.
+- `NotificationDispatcher::send($notification, $recipients, $category, $pushPayload)`
+  — dédoublonne les destinataires par id, filtre par préférence
+  (`User::wantsNotification()`), notifie, puis pousse en Expo si un payload
+  push est fourni. Remplace la collecte dupliquée qui existait dans chaque
+  Job/Service.
 
-**Ce qui n'a volontairement PAS changé** :
-- `GET /v1/mobile/notifications` (lecture) continue de renvoyer **tout**
-  l'historique déjà généré — une préférence désactivée ne purge jamais
-  rétroactivement les notifications déjà créées, elle n'empêche que les
-  **futures** générations.
-- Deux autres classes `Notification` existent mais sont **hors périmètre**
-  de `activite` (staff, pas espace client) : `CommissionManquanteNotification`
-  (alerte interne mail+database, jamais concernée par les préférences client)
-  et `CommissionPayeeNotification` (canal `database` seul) — cette dernière
-  n'est en réalité **dispatchée nulle part dans le code actuel** (classe
-  définie mais jamais appelée), constat factuel distinct du sujet préférences,
-  signalé ici pour mémoire.
-- Aucune donnée de notification existante n'a été supprimée ou modifiée par
-  cet audit — uniquement le comportement de génération future.
+**Préférences** (`User::NOTIFICATION_PREFERENCE_DEFAULTS`) étendues à
+`livraisons`, `commissions`, `depenses`, en plus de l'ancienne clé unique
+`activite` — conservée comme repli de compatibilité :
+`wantsNotification($categorie)` retourne `$prefs[$categorie] ?? $prefs['activite'] ?? true`.
+Un compte qui n'a jamais réglé que `activite` continue donc de s'appliquer à
+toutes les catégories ; `PATCH /v1/mobile/profile/notification-preferences`
+reste inchangé (seule `activite` y est exposée pour l'instant).
+
+**Événements couverts** (canal `database`, + push Expo pour les 2 premiers) :
+
+| Événement | Destinataire(s) | Catégorie |
+|---|---|---|
+| Commande validée (`CommandeValideeNotification`) | Livreurs de l'équipe **uniquement** — le propriétaire ne le reçoit plus (affectation logistique, pas financière ; décision produit 2026-08-27) | `livraisons` |
+| Transfert créé (`TransfertCreeNotification`, nouveau) | Livreurs de l'équipe | `livraisons` |
+| Transfert réceptionné (`TransfertReceptionneeNotification`, nouveau) | Propriétaire du véhicule (jamais le livreur, qui vient d'effectuer l'action) | `livraisons` |
+| Commission générée (`CommissionGenereeNotification`, nouveau ; vente et logistique) | Propriétaire + livreur(s) réellement connectés — jamais `site`/`consultant` (aucun compte) | `commissions` |
+| Commission payée (`CommissionPayeeNotification`, réactivée) | Bénéficiaire réel, sur les 3 chemins de paiement (direct logistique, versement legacy, paiement de fiche vente/logistique) | `commissions` |
+| Dépense validée (`DepenseValideeNotification`, nouveau) | Propriétaire du véhicule, uniquement si la dépense est imputée à un `proprietaire` (catégorie VEHICULE) | `depenses` |
+| Commission manquante (`CommissionManquanteNotification`) | Staff org + déclencheur — inchangé, hors préférences | — |
+
+**Gaps documentés, volontairement hors phase 1** :
+- `CommandeVente.LIVREE` (déclenché au premier encaissement, pas une action
+  "livraison terminée" isolée) n'alimente aucune notification — "livraison
+  terminée" est portée par la réception de transfert logistique à la place.
+- Dépense imputée à `livreur`/`site`/`salarie`/`prestataire` : aucun envoi
+  (scope limité à `proprietaire`, priorité produit explicite).
+- Tout le contexte `prestataire` (compte connecté, `user_id`, flux
+  commissions/dépenses, préférences) reste un chantier métier séparé.
+
+Tests : `tests/Feature/Jobs/NotifierLivreursCommandeVenteJobTest.php`,
+`tests/Feature/Jobs/NotifierLivreursTransfertJobTest.php`,
+`tests/Feature/Notification/*` (commission générée/payée, dépense validée,
+transfert réceptionné, dédoublonnage/préférences du dispatcher).
+
+### 7.2 Audit de fiabilité initial — `notification_preferences` (26/08/2026)
+
+Avant la phase 1 ci-dessus : **une seule** catégorie de préférence existait
+(`activite`) et **un seul** job envoyait réellement une notification —
+`NotifierLivreursCommandeVenteJob`, qui notifiait le livreur **et** le
+propriétaire. Ce job ignorait alors totalement la préférence : désactiver
+"activite" n'avait aucun effet réel. Corrigé une première fois le 26/08
+(préférence enfin consultée), puis reciblé le 27/08 (propriétaire retiré des
+destinataires, cf. §7.1). `CommissionPayeeNotification` était à l'époque
+définie mais jamais dispatchée — également corrigé en phase 1.
+
+`GET /v1/mobile/notifications` (lecture) continue de renvoyer **tout**
+l'historique déjà généré — une préférence désactivée n'empêche que les
+**futures** générations, jamais une purge rétroactive.
 
 ---
 

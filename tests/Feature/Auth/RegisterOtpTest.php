@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Enums\OtpPurpose;
 use App\Services\OtpService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -14,7 +15,7 @@ class RegisterOtpTest extends TestCase
 
     private function generateOtp(string $phone): void
     {
-        app(OtpService::class)->generate($phone);
+        app(OtpService::class)->generate($phone, OtpPurpose::PHONE_VERIFICATION);
     }
 
     // ─── Validation de base ───────────────────────────────────────────────────
@@ -112,7 +113,7 @@ class RegisterOtpTest extends TestCase
         ]);
 
         $this->assertTrue(
-            app(OtpService::class)->isVerified('+224620000005'),
+            app(OtpService::class)->isVerified('+224620000005', OtpPurpose::PHONE_VERIFICATION),
             'OTP should be marked verified in session after correct code.',
         );
     }
@@ -127,7 +128,7 @@ class RegisterOtpTest extends TestCase
         ]);
 
         $this->assertFalse(
-            app(OtpService::class)->isVerified('+224620000006'),
+            app(OtpService::class)->isVerified('+224620000006', OtpPurpose::PHONE_VERIFICATION),
             'OTP should NOT be marked verified after wrong code.',
         );
     }

@@ -7,7 +7,7 @@
     },
     "servers": [
         {
-            "url": "http://127.0.0.1:8080/api",
+            "url": "http://localhost:8000/api",
             "description": "Local"
         },
         {
@@ -1229,6 +1229,283 @@
                         "$ref": "#/components/responses/AuthenticationException"
                     }
                 }
+            }
+        },
+        "/auth/otp-login/request": {
+            "post": {
+                "operationId": "auth.otp-login.request",
+                "tags": [
+                    "Autres"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "telephone": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "telephone"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "sent": {
+                                            "type": "boolean"
+                                        },
+                                        "channel": {
+                                            "type": "string"
+                                        },
+                                        "cooldown_seconds": {
+                                            "type": "integer",
+                                            "const": 30
+                                        }
+                                    },
+                                    "required": [
+                                        "sent",
+                                        "channel",
+                                        "cooldown_seconds"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "anyOf": [
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "error": {
+                                                    "type": "string",
+                                                    "const": "Impossible d'envoyer un code de connexion \u00e0 ce compte pour le moment."
+                                                }
+                                            },
+                                            "required": [
+                                                "error"
+                                            ]
+                                        },
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "error": {
+                                                    "type": "string",
+                                                    "const": "Aucun canal disponible pour recevoir un code de connexion pour le moment."
+                                                }
+                                            },
+                                            "required": [
+                                                "error"
+                                            ]
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "retry_after_seconds": {
+                                            "type": "integer"
+                                        }
+                                    },
+                                    "required": [
+                                        "error",
+                                        "retry_after_seconds"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "string",
+                                            "const": "Aucun compte trouv\u00e9 pour ce num\u00e9ro de t\u00e9l\u00e9phone."
+                                        }
+                                    },
+                                    "required": [
+                                        "error"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                },
+                "security": []
+            }
+        },
+        "/auth/otp-login/verify": {
+            "post": {
+                "operationId": "auth.otp-login.verify",
+                "tags": [
+                    "Autres"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "telephone": {
+                                        "type": "string"
+                                    },
+                                    "code": {
+                                        "type": "string"
+                                    },
+                                    "device_name": {
+                                        "type": "string",
+                                        "maxLength": 255
+                                    }
+                                },
+                                "required": [
+                                    "telephone",
+                                    "code",
+                                    "device_name"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "token": {
+                                            "type": "string"
+                                        },
+                                        "user": {
+                                            "type": "object",
+                                            "properties": {
+                                                "id": {
+                                                    "type": "string"
+                                                },
+                                                "prenom": {
+                                                    "type": "string"
+                                                },
+                                                "nom": {
+                                                    "type": "string"
+                                                },
+                                                "telephone": {
+                                                    "type": "string"
+                                                },
+                                                "email": {
+                                                    "type": "string"
+                                                },
+                                                "roles": {
+                                                    "type": "array",
+                                                    "description": "->map(fn (string $r): string => $r) explicite (pas juste ->all()) : sans\nce recast typ\u00e9, Scramble trace getRoleNames() jusqu'\u00e0 la relation Eloquent\n`roles` et documente `roles[]` comme une collection de mod\u00e8les Role au lieu\ndu tableau de noms qu'il est vraiment (cf. audit OpenAPI du 27/08/2026).",
+                                                    "items": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            },
+                                            "required": [
+                                                "id",
+                                                "prenom",
+                                                "nom",
+                                                "telephone",
+                                                "email",
+                                                "roles"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "token",
+                                        "user"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "enum": [
+                                                "Votre compte a bien \u00e9t\u00e9 cr\u00e9\u00e9. Il est en attente de validation par un administrateur.",
+                                                "Votre compte a \u00e9t\u00e9 d\u00e9sactiv\u00e9. Veuillez contacter notre service client pour plus d'informations.",
+                                                "Veuillez v\u00e9rifier votre adresse email pour activer votre compte. Consultez votre bo\u00eete de r\u00e9ception.",
+                                                ""
+                                            ]
+                                        },
+                                        "code": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "code"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "error": {
+                                            "type": "string",
+                                            "const": "Trop de tentatives. Demandez un nouveau code."
+                                        }
+                                    },
+                                    "required": [
+                                        "error"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": []
             }
         },
         "/v1/mobile/dashboard": {
@@ -3386,7 +3663,7 @@
         "/v1/mobile/vehicules/mine": {
             "get": {
                 "operationId": "client.vehicules.mine",
-                "description": "Liste des v\u00e9hicules du proprietaire (les siens) ou du livreur (ceux de son \u00e9quipe) \u2014 jamais toute la flotte de l'organisation. **Aucun statut \"Entretien\"/maintenance n'existe dans le mod\u00e8le ELM** \u2014 seul `is_active` (bool\u00e9en) existe ; n'affichez pas un statut de ce type sans colonne backend d\u00e9di\u00e9e (elle n'existe pas). `capacite` est un champ h\u00e9rit\u00e9 (nombre unique, packs) \u2014 la capacit\u00e9 r\u00e9elle multi-cat\u00e9gorie n'est pas expos\u00e9e ici. `conducteur` : nom du membre d'\u00e9quipe au r\u00f4le `chauffeur`, `null` si aucune \u00e9quipe ou aucun chauffeur assign\u00e9 (jamais le premier membre pris au hasard).",
+                "description": "Liste des v\u00e9hicules du proprietaire (les siens) ou du livreur (ceux de son \u00e9quipe) \u2014 jamais toute la flotte de l'organisation. **Aucun statut \"Entretien\"/maintenance n'existe dans le mod\u00e8le ELM** \u2014 seul `is_active` (bool\u00e9en) existe ; n'affichez pas un statut de ce type sans colonne backend d\u00e9di\u00e9e (elle n'existe pas). `capacite`/`conducteur` sont des champs h\u00e9rit\u00e9s conserv\u00e9s pour compatibilit\u00e9 descendante \u2014 la source canonique est d\u00e9sormais `capacites[]` (une entr\u00e9e par cat\u00e9gorie, cf. VehiculeCapacite) et `equipe[]` (tous les membres actifs, avec `role` = valeur r\u00e9elle stock\u00e9e en base : `chauffeur`/`convoyeur`, jamais traduite). `proprietaire` est `null` si le v\u00e9hicule n'a aucun propri\u00e9taire renseign\u00e9.",
                 "tags": [
                     "Vehicles"
                 ],
@@ -3412,12 +3689,19 @@
                                             "type": {
                                                 "type": "string"
                                             },
+                                            "statut": {
+                                                "type": "string",
+                                                "enum": [
+                                                    "actif",
+                                                    "inactif"
+                                                ]
+                                            },
                                             "capacite": {
                                                 "type": [
                                                     "integer",
                                                     "null"
                                                 ],
-                                                "description": "Colonne h\u00e9rit\u00e9e, jamais aliment\u00e9e par les parcours actuels (capacit\u00e9 port\u00e9e\npar vehicule_capacites d\u00e9sormais, cf. VehiculeCapaciteService) \u2014 contrat API\nmobile conserv\u00e9 tel quel (nombre unique), sans repli sur le type."
+                                                "description": "Colonne h\u00e9rit\u00e9e, jamais aliment\u00e9e par les parcours actuels (capacit\u00e9 port\u00e9e\npar vehicule_capacites d\u00e9sormais, cf. VehiculeCapaciteService) \u2014 contrat API\nmobile conserv\u00e9 tel quel (nombre unique), sans repli sur le type. Ne plus lire\ncette valeur c\u00f4t\u00e9 client : cf. `capacites[]`."
                                             },
                                             "is_active": {
                                                 "type": "boolean"
@@ -3443,7 +3727,85 @@
                                                 "type": [
                                                     "string",
                                                     "null"
+                                                ],
+                                                "description": "Conserv\u00e9 pour compatibilit\u00e9 descendante uniquement \u2014 ne refl\u00e8te que le\nchauffeur, jamais les autres membres. Source canonique : `equipe[]`."
+                                            },
+                                            "proprietaire": {
+                                                "type": [
+                                                    "object",
+                                                    "null"
+                                                ],
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "string"
+                                                    },
+                                                    "nom_complet": {
+                                                        "type": "string"
+                                                    },
+                                                    "telephone": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "id",
+                                                    "nom_complet",
+                                                    "telephone"
                                                 ]
+                                            },
+                                            "equipe": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "id": {
+                                                            "type": "string"
+                                                        },
+                                                        "nom_complet": {
+                                                            "type": [
+                                                                "string",
+                                                                "null"
+                                                            ]
+                                                        },
+                                                        "telephone": {
+                                                            "type": "string"
+                                                        },
+                                                        "role": {
+                                                            "type": "string"
+                                                        },
+                                                        "ordre": {
+                                                            "type": "integer"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "id",
+                                                        "nom_complet",
+                                                        "telephone",
+                                                        "role",
+                                                        "ordre"
+                                                    ]
+                                                }
+                                            },
+                                            "capacites": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "categorie_id": {
+                                                            "type": "string"
+                                                        },
+                                                        "categorie": {
+                                                            "type": "string"
+                                                        },
+                                                        "capacite": {
+                                                            "type": "integer"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "categorie_id",
+                                                        "categorie",
+                                                        "capacite"
+                                                    ]
+                                                }
                                             }
                                         },
                                         "required": [
@@ -3451,12 +3813,16 @@
                                             "nom",
                                             "immatriculation",
                                             "type",
+                                            "statut",
                                             "capacite",
                                             "is_active",
                                             "photo_url",
                                             "en_livraison",
                                             "role",
-                                            "conducteur"
+                                            "conducteur",
+                                            "proprietaire",
+                                            "equipe",
+                                            "capacites"
                                         ]
                                     }
                                 }

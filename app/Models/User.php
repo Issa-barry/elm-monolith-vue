@@ -51,9 +51,17 @@ class User extends Authenticatable
      * jamais stockée telle quelle). Ajouter une catégorie future = ajouter une
      * entrée ici, sans migration : cf. migration
      * add_notification_preferences_to_users_table pour le choix JSON vs table dédiée.
+     *
+     * `livraisons`/`commissions`/`depenses` ajoutées phase 1 archi notifications
+     * (2026-08-27) — `activite` reste l'ancienne clé globale unique, conservée
+     * pour compatibilité (cf. wantsNotification()) : un compte qui n'a jamais
+     * réglé que `activite` continue de s'appliquer à toutes les catégories.
      */
     public const NOTIFICATION_PREFERENCE_DEFAULTS = [
         'activite' => true,
+        'livraisons' => true,
+        'commissions' => true,
+        'depenses' => true,
     ];
 
     // Ces accesseurs (proxy vers Personne/UserAuthIdentity, cf. plus bas) ne sont pas de vraies
@@ -95,6 +103,21 @@ class User extends Authenticatable
     public function notificationPreferences(): array
     {
         return array_merge(self::NOTIFICATION_PREFERENCE_DEFAULTS, $this->notification_preferences ?? []);
+    }
+
+    /**
+     * Un utilisateur veut-il être notifié pour cette catégorie ? Repli explicite
+     * sur `activite` (ancienne clé globale unique) si la catégorie fine n'a
+     * jamais été réglée — un compte qui a désactivé `activite` avant
+     * l'introduction des catégories fines (2026-08-27) reste filtré sur toutes
+     * tant qu'il ne règle pas explicitement une clé fine (compatibilité
+     * ascendante, cf. NOTIFICATION_PREFERENCE_DEFAULTS).
+     */
+    public function wantsNotification(string $category): bool
+    {
+        $prefs = $this->notification_preferences ?? [];
+
+        return $prefs[$category] ?? $prefs['activite'] ?? true;
     }
 
     public function getNameAttribute(): string

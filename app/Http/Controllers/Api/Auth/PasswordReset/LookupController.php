@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Auth\PasswordReset;
 
+use App\Enums\OtpPurpose;
 use App\Http\Controllers\Controller;
 use App\Mail\OtpPasswordResetMail;
 use App\Models\Personne;
@@ -36,7 +37,7 @@ class LookupController extends Controller
             return response()->json(['error' => 'Trop de demandes de code. Veuillez réessayer plus tard.'], 429);
         }
 
-        $code = $otp->generate($phone);
+        $code = $otp->generate($phone, OtpPurpose::PASSWORD_RESET);
 
         Mail::to($user->email)->send(new OtpPasswordResetMail($code));
 
