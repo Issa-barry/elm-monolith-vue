@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\BaseCalculLogistique;
 use App\Enums\DeclencheurCommissionLogistique;
 use App\Enums\DeclencheurCommissionVente;
+use App\Enums\StatutCommission;
 use App\Models\CommandeVente;
 use App\Models\CommissionLogistique;
 use App\Models\FactureVente;
@@ -85,6 +86,44 @@ class CommissionTriggerService
         }
 
         self::genererCommissionVente($commande);
+    }
+
+    /**
+     * Appelé à chaque transition réelle de facture DEPUIS PAYEE vers un autre statut
+     * (encaissement supprimé — cf. EncaissementVenteController::destroy(), ou tout autre
+     * chemin traversant FactureVente::recalculStatut()) — symétrique de
+     * onFactureVenteEncaissee().
+     *
+     * Sous FACTURE_ENCAISSEE : le fait générateur de la commission (facture payée) vient
+     * de disparaître — invalide (statut ANNULEE) toutes les parts/enveloppes de cette
+     * commande qui ne sont pas déjà payées. Une part déjà PAYE n'est jamais reprise
+     * (historique de paiement conservé tel quel, même principe que
+     * CommandeVenteService::annulerCommissionsAssociees() pour l'annulation de commande).
+     *
+     * Sous CHARGEMENT_VALIDE : ne fait rien, la commission n'a jamais été liée à
+     * l'encaissement — la retirer serait une régression inverse (perte d'une commission
+     * légitime pour un motif sans rapport).
+     */
+    public static function onFactureVenteEncaissementRetire(FactureVente $facture): void
+    {
+        $commande = $facture->commande;
+        if (! $commande) {
+            return;
+        }
+
+        if (self::declencheurVente($commande->organization_id) !== DeclencheurCommissionVente::FACTURE_ENCAISSEE) {
+            return;
+        }
+
+        foreach ($commande->commissions as $commission) {
+            $commission->parts()
+                ->whereNotIn('statut', [StatutCommission::PAYE->value, StatutCommission::ANNULEE->value])
+                ->update(['statut' => StatutCommission::ANNULEE->value]);
+
+            if ($commission->statut !== StatutCommission::PAYE) {
+                $commission->update(['statut' => StatutCommission::ANNULEE->value]);
+            }
+        }
     }
 
     /**
