@@ -33,11 +33,17 @@ jobs:
         run: composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
 
       # --no-scripts ci-dessus saute le post-autoload-dump qui copie .env.example → .env,
-      # requis pour que `php artisan` puisse booter (APP_KEY).
+      # requis pour que `php artisan` puisse booter (APP_KEY). touch + migrate (sans --seed,
+      # scramble:analyze n'a besoin que du schéma, jamais de données) : requis depuis l'ajout
+      # du step "Check OpenAPI documentation" ci-dessous, qui exécute de vraies requêtes SQL
+      # pendant l'inférence de type (ex: vérifier l'existence de user_auth_identities) — même
+      # config sqlite que le job `tests` (.github/workflows/tests.yml), qui le fait déjà.
       - name: Prepare Laravel environment
         run: |
           cp .env.example .env
           php artisan key:generate
+          touch database/database.sqlite
+          php artisan migrate --force
 
       # `resources/js/routes` et `resources/js/actions` sont gitignorés (générés par le
       # plugin Vite `wayfinder`, cf. vite.config.ts) — vue-tsc les résout par import mais
