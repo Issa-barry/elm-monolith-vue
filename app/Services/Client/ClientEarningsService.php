@@ -10,6 +10,7 @@ use App\Models\Depense;
 use App\Models\Livreur;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
+use App\Services\Client\Data\SummaryEvolution;
 use App\Services\Client\Data\VehiculeEarningsRow;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -242,6 +243,75 @@ class ClientEarningsService
             // change rien au comportement, seulement à la clarté du type pour l'analyse statique.
             'operations_count' => (int) ($partsVentes->count() + $partsLogistiques->count()),
         ];
+    }
+
+    /**
+     * Bornes de la période "immédiatement précédente, de même durée" qu'une
+     * période donnée — règle unique utilisée pour toute comparaison de KPI
+     * (cf. rapport du 27/08/2026) : jamais "le mois précédent" arbitraire
+     * quand la période sélectionnée n'est pas un mois complet, toujours un
+     * nombre de jours identique, qu'il s'agisse d'un raccourci (7j/30j/
+     * ce_mois/mois_passe) ou d'une plage `custom`.
+     *
+     * Exemple : 01/08 → 31/08 (31 jours) donne 01/07 → 31/07 (31 jours).
+     * Exemple : 10/08 → 16/08 (7 jours) donne 03/08 → 09/08 (7 jours).
+     *
+     * @return array{0: string, 1: string} [date_debut, date_fin]
+     */
+    public function previousPeriodBounds(string $dateDebut, string $dateFin): array
+    {
+        $debut = Carbon::parse($dateDebut)->startOfDay();
+        $fin = Carbon::parse($dateFin)->startOfDay();
+        $dureeEnJours = $debut->diffInDays($fin) + 1;
+
+        $finPrecedente = $debut->copy()->subDay();
+        $debutPrecedente = $finPrecedente->copy()->subDays($dureeEnJours - 1);
+
+        return [$debutPrecedente->toDateString(), $finPrecedente->toDateString()];
+    }
+
+    /**
+     * Évolution des 5 KPI de `calculateEarnings()` entre la période
+     * sélectionnée et la période précédente de même durée
+     * (`previousPeriodBounds()`). Réutilise EXACTEMENT les mêmes requêtes que
+     * `summary()` (mêmes filtres organisation/proprietaire/livreur/statut/
+     * véhicules), seulement décalées dans le temps — 3 requêtes SQL
+     * supplémentaires au total (`partsVentes`/`partsLogistiques`/
+     * `fraisDepensesParVehicule`), indépendamment du nombre de véhicules :
+     * aucun N+1, ces requêtes ne sont jamais exécutées par véhicule.
+     *
+     * `$currentTotals` est le résultat déjà calculé de `calculateEarnings()`
+     * pour la période sélectionnée — jamais recalculé ici, pour ne pas
+     * dupliquer ces requêtes une seconde fois.
+     *
+     * @param  array{total_earned: float, total_paid: float, frais_depenses_total: float, balance: float, operations_count: int}  $currentTotals
+     */
+    public function summaryEvolution(
+        array $currentTotals,
+        ?string $organizationId,
+        ?Proprietaire $proprietaire,
+        ?Livreur $livreur,
+        string $dateDebut,
+        string $dateFin,
+        ?string $statut = null,
+        ?array $vehiculeIds = null,
+    ): SummaryEvolution {
+        [$previousDateDebut, $previousDateFin] = $this->previousPeriodBounds($dateDebut, $dateFin);
+
+        $partsVentesPrecedentes = $this->partsVentes($organizationId, $proprietaire, $livreur, $previousDateDebut, $previousDateFin, $statut, $vehiculeIds);
+        $partsLogistiquesPrecedentes = $this->partsLogistiques($organizationId, $proprietaire, $livreur, $previousDateDebut, $previousDateFin, $statut, $vehiculeIds);
+        $fraisParVehiculePrecedent = $this->fraisDepensesParVehicule($organizationId, $proprietaire, $previousDateDebut, $previousDateFin, $vehiculeIds);
+        $fraisTotalPrecedent = (float) array_sum($fraisParVehiculePrecedent);
+
+        $previousTotals = $this->calculateEarnings($partsVentesPrecedentes, $partsLogistiquesPrecedentes, $fraisTotalPrecedent);
+
+        return new SummaryEvolution(
+            totalEarned: KpiEvolutionCalculator::compare((float) $currentTotals['total_earned'], (float) $previousTotals['total_earned']),
+            totalPaid: KpiEvolutionCalculator::compare((float) $currentTotals['total_paid'], (float) $previousTotals['total_paid']),
+            fraisDepensesTotal: KpiEvolutionCalculator::compare((float) $currentTotals['frais_depenses_total'], (float) $previousTotals['frais_depenses_total']),
+            balance: KpiEvolutionCalculator::compare((float) $currentTotals['balance'], (float) $previousTotals['balance']),
+            operationsCount: KpiEvolutionCalculator::compare((float) $currentTotals['operations_count'], (float) $previousTotals['operations_count']),
+        );
     }
 
     /**

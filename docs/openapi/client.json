@@ -1234,7 +1234,7 @@
         "/v1/mobile/dashboard": {
             "get": {
                 "operationId": "client.dashboard.mine",
-                "description": "Montants en **GNF** (franc guin\u00e9en), sans d\u00e9cimales dans la pratique mais\ntyp\u00e9s nombre (jamais des centimes, jamais un float \u00e0 diviser par 100).\n\nD\u00e9finitions exactes des champs de `summary` (m\u00eames noms, m\u00eames valeurs que\nle dashboard Inertia \u2014 `App\\Services\\Client\\ClientEarningsService`) :\n- `total_earned` : commissions de vente + logistique gagn\u00e9es sur la p\u00e9riode (brut d\u00fb).\n- `total_paid` : d\u00e9j\u00e0 vers\u00e9 sur ces m\u00eames commissions.\n- `frais_depenses_total` : d\u00e9penses v\u00e9hicule valid\u00e9es sur la p\u00e9riode (proprietaire uniquement \u2014 jamais imput\u00e9es \u00e0 un livreur dans ce moteur).\n- `balance` : `total_earned - frais_depenses_total - total_paid`, **jamais n\u00e9gatif** (plancher \u00e0 0 \u2014 un solde n\u00e9gatif n'est jamais affich\u00e9 comme dette du propri\u00e9taire).\n- `operations_count` : nombre de commissions (vente + logistique) entrant dans `total_earned`.\n\n`par_vehicule` : m\u00eame d\u00e9tail que `summary` mais par v\u00e9hicule (sch\u00e9ma\n`VehiculeEarningsRow`), **toujours la liste compl\u00e8te du parc accessible**\nm\u00eame si `vehicule_id` filtre le calcul (les v\u00e9hicules hors filtre\napparaissent avec des montants \u00e0 0) \u2014 ce n'est pas un bug.\n\n`filters.period` : raccourci appliqu\u00e9 (`custom` = `date_debut`/`date_fin`\npris tels quels, sinon calcul\u00e9s serveur \u2014 jamais un d\u00e9faut invent\u00e9 c\u00f4t\u00e9\nfrontend).",
+                "description": "Montants en **GNF** (franc guin\u00e9en), sans d\u00e9cimales dans la pratique mais\ntyp\u00e9s nombre (jamais des centimes, jamais un float \u00e0 diviser par 100).\n\nD\u00e9finitions exactes des champs de `summary` (m\u00eames noms, m\u00eames valeurs que\nle dashboard Inertia \u2014 `App\\Services\\Client\\ClientEarningsService`) :\n- `total_earned` : commissions de vente + logistique gagn\u00e9es sur la p\u00e9riode (brut d\u00fb).\n- `total_paid` : d\u00e9j\u00e0 vers\u00e9 sur ces m\u00eames commissions.\n- `frais_depenses_total` : d\u00e9penses v\u00e9hicule valid\u00e9es sur la p\u00e9riode (proprietaire uniquement \u2014 jamais imput\u00e9es \u00e0 un livreur dans ce moteur).\n- `balance` : `total_earned - frais_depenses_total - total_paid`, **jamais n\u00e9gatif** (plancher \u00e0 0 \u2014 un solde n\u00e9gatif n'est jamais affich\u00e9 comme dette du propri\u00e9taire).\n- `operations_count` : nombre de commissions (vente + logistique) entrant dans `total_earned`.\n\n`par_vehicule` : m\u00eame d\u00e9tail que `summary` mais par v\u00e9hicule (sch\u00e9ma\n`VehiculeEarningsRow`), **toujours la liste compl\u00e8te du parc accessible**\nm\u00eame si `vehicule_id` filtre le calcul (les v\u00e9hicules hors filtre\napparaissent avec des montants \u00e0 0) \u2014 ce n'est pas un bug.\n\n`filters.period` : raccourci appliqu\u00e9 (`custom` = `date_debut`/`date_fin`\npris tels quels, sinon calcul\u00e9s serveur \u2014 jamais un d\u00e9faut invent\u00e9 c\u00f4t\u00e9\nfrontend).\n\n`summary_evolution` (champ additif, cf. rapport du 27/08/2026) : \u00e9volution\nde chacun des 5 champs de `summary` entre la p\u00e9riode s\u00e9lectionn\u00e9e et la\np\u00e9riode **imm\u00e9diatement pr\u00e9c\u00e9dente de m\u00eame dur\u00e9e** (ex : 01/08\u219231/08 est\ncompar\u00e9 \u00e0 01/07\u219231/07 ; 10/08\u219216/08 [7 jours] est compar\u00e9 \u00e0 03/08\u219209/08\n[7 jours] \u2014 jamais \"le mois pr\u00e9c\u00e9dent\" arbitraire). `direction` est\n**factuelle** (`up`/`down`/`stable`), jamais un jugement m\u00e9tier : une\nhausse de `frais_depenses_total` vaut `up` exactement comme une hausse de\n`total_earned` \u2014 c'est au frontend de d\u00e9cider, KPI par KPI, si une hausse\ndonn\u00e9e est une bonne ou une mauvaise nouvelle. Quand la p\u00e9riode pr\u00e9c\u00e9dente\nvalait 0 et que la p\u00e9riode actuelle est non nulle, le pourcentage n'est pas\nd\u00e9fini math\u00e9matiquement : `percent` vaut alors `null` et `comparable` vaut\n`false` (jamais `Infinity`/`999999`/`100` en substitut) \u2014 `direction` reste\nrenseign\u00e9e pour permettre d'afficher une fl\u00e8che, typiquement \u00e0 c\u00f4t\u00e9 d'un\ntexte comme \"Nouveau\" plut\u00f4t que d'un pourcentage. `summary_evolution` et\n`comparison_period` sont tous les deux `null` uniquement dans le cas\nd\u00e9g\u00e9n\u00e9r\u00e9 `period=custom` sans `date_debut`/`date_fin` (aucune p\u00e9riode\nr\u00e9solue, donc aucune p\u00e9riode pr\u00e9c\u00e9dente calculable).\n\n`comparison_period` : bornes exactes de la p\u00e9riode pr\u00e9c\u00e9dente utilis\u00e9e par\n`summary_evolution`, pour affichage (ex. \"vs 01/07 - 31/07\").",
                 "summary": "Dashboard financier (r\u00e9sum\u00e9 + d\u00e9tail par v\u00e9hicule)",
                 "tags": [
                     "Dashboard"
@@ -1389,6 +1389,26 @@
                                                 "operations_count"
                                             ]
                                         },
+                                        "summary_evolution": {
+                                            "anyOf": [
+                                                {
+                                                    "$ref": "#/components/schemas/SummaryEvolution"
+                                                },
+                                                {
+                                                    "type": "null"
+                                                }
+                                            ]
+                                        },
+                                        "comparison_period": {
+                                            "anyOf": [
+                                                {
+                                                    "$ref": "#/components/schemas/ComparisonPeriod"
+                                                },
+                                                {
+                                                    "type": "null"
+                                                }
+                                            ]
+                                        },
                                         "par_vehicule": {
                                             "type": "array",
                                             "items": {
@@ -1421,6 +1441,8 @@
                                     "required": [
                                         "filters",
                                         "summary",
+                                        "summary_evolution",
+                                        "comparison_period",
                                         "par_vehicule",
                                         "vehicules"
                                     ]
@@ -3841,6 +3863,33 @@
                 ],
                 "title": "CommissionResource"
             },
+            "ComparisonPeriod": {
+                "type": "object",
+                "properties": {
+                    "date_debut": {
+                        "type": "array",
+                        "prefixItems": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "string"
+                            }
+                        ],
+                        "minItems": 2,
+                        "maxItems": 2,
+                        "additionalItems": false
+                    },
+                    "date_fin": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "date_debut",
+                    "date_fin"
+                ],
+                "title": "ComparisonPeriod"
+            },
             "DepenseResource": {
                 "type": "object",
                 "properties": {
@@ -3957,6 +4006,43 @@
                     "nb_commandes"
                 ],
                 "title": "GainsVehiculeRow"
+            },
+            "KpiEvolution": {
+                "type": "object",
+                "properties": {
+                    "previous_value": {
+                        "type": "number"
+                    },
+                    "percent": {
+                        "type": [
+                            "number",
+                            "null"
+                        ]
+                    },
+                    "direction": {
+                        "$ref": "#/components/schemas/KpiEvolutionDirection"
+                    },
+                    "comparable": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "previous_value",
+                    "percent",
+                    "direction",
+                    "comparable"
+                ],
+                "title": "KpiEvolution"
+            },
+            "KpiEvolutionDirection": {
+                "type": "string",
+                "description": "Direction FACTUELLE d'une \u00e9volution de KPI entre deux p\u00e9riodes (cf. `App\\Services\\Client\\KpiEvolutionCalculator`) \u2014 jamais un jugement m\u00e9tier (\"succ\u00e8s\"/\"danger\"). Une hausse de d\u00e9penses est `up`, exactement comme une hausse de commission : c'est au frontend de d\u00e9cider, KPI par KPI, si une hausse donn\u00e9e est une bonne ou une mauvaise nouvelle.\n",
+                "enum": [
+                    "up",
+                    "down",
+                    "stable"
+                ],
+                "title": "KpiEvolutionDirection"
             },
             "LivraisonEnCoursRow": {
                 "type": "object",
@@ -4280,6 +4366,34 @@
                     "photo"
                 ],
                 "title": "StoreVehicleProposalRequest"
+            },
+            "SummaryEvolution": {
+                "type": "object",
+                "properties": {
+                    "total_earned": {
+                        "$ref": "#/components/schemas/KpiEvolution"
+                    },
+                    "total_paid": {
+                        "$ref": "#/components/schemas/KpiEvolution"
+                    },
+                    "frais_depenses_total": {
+                        "$ref": "#/components/schemas/KpiEvolution"
+                    },
+                    "balance": {
+                        "$ref": "#/components/schemas/KpiEvolution"
+                    },
+                    "operations_count": {
+                        "$ref": "#/components/schemas/KpiEvolution"
+                    }
+                },
+                "required": [
+                    "total_earned",
+                    "total_paid",
+                    "frais_depenses_total",
+                    "balance",
+                    "operations_count"
+                ],
+                "title": "SummaryEvolution"
             },
             "TransfertLigneResource": {
                 "type": "object",

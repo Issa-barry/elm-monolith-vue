@@ -379,6 +379,14 @@ Query params (tous optionnels) :
     "frais_depenses_total": 4000, "balance": 8000,
     "operations_count": 2
   },
+  "summary_evolution": {
+    "total_earned": { "previous_value": 20000, "percent": 15.0, "direction": "up", "comparable": true },
+    "total_paid": { "previous_value": 5000, "percent": 120.0, "direction": "up", "comparable": true },
+    "frais_depenses_total": { "previous_value": 4000, "percent": 0.0, "direction": "stable", "comparable": true },
+    "balance": { "previous_value": 0, "percent": null, "direction": "up", "comparable": false },
+    "operations_count": { "previous_value": 1, "percent": 100.0, "direction": "up", "comparable": true }
+  },
+  "comparison_period": { "date_debut": "2026-07-01", "date_fin": "2026-07-31" },
   "par_vehicule": [
     { "vehicule_id": "...", "nom_vehicule": "ABARRY", "immatriculation": "OU3859",
       "frais_depenses": 4000, "total_earned": 23000, "total_paid": 11000, "balance": 8000 }
@@ -393,11 +401,35 @@ Query params (tous optionnels) :
   (`earnings`) — noms de champs du moteur réel, pas une reformulation.
   `balance` ne descend jamais sous 0 (un solde négatif n'est jamais affiché
   comme dette du propriétaire, comportement du moteur, pas de cet endpoint).
+- `summary_evolution` (ajouté le 27/08/2026, champ **additif** — `summary`
+  lui-même ne change pas) : évolution de chacun des 5 champs de `summary`.
+  **Le pourcentage compare la période sélectionnée à la période
+  immédiatement précédente de même durée** — jamais "le mois précédent"
+  arbitraire. Exemples : `01/08→31/08` (31 jours) est comparé à
+  `01/07→31/07` (31 jours) ; `10/08→16/08` (7 jours) est comparé à
+  `03/08→09/08` (7 jours). `direction` (`up`/`down`/`stable`) est
+  **factuelle**, jamais un jugement métier : une hausse de
+  `frais_depenses_total` vaut `up` exactement comme une hausse de
+  `total_earned` — c'est au frontend de décider, KPI par KPI, si une hausse
+  donnée est bonne ou mauvaise. Quand la période précédente valait 0 et que
+  la période actuelle est non nulle, le pourcentage n'est pas défini
+  mathématiquement : `percent` vaut `null` et `comparable` vaut `false`
+  (jamais `Infinity`/`999999`/`100` en substitut) — `direction` reste
+  renseignée pour afficher une flèche, typiquement à côté d'un texte comme
+  "Nouveau" plutôt que d'un pourcentage. `summary_evolution` et
+  `comparison_period` valent tous les deux `null` uniquement dans le cas
+  dégénéré `period=custom` sans `date_debut`/`date_fin`.
+- `comparison_period` : bornes exactes de la période précédente utilisée par
+  `summary_evolution`, pour affichage (ex. "vs 01/07 - 31/07").
 - `par_vehicule` : **liste toujours l'intégralité du parc accessible**, même
   quand `vehicule_id` est fourni — seul le **calcul** des montants est
   restreint au véhicule filtré (les autres véhicules apparaissent avec des
   montants à 0). Même comportement que le dashboard Inertia ; ne pas
-  interpréter l'absence de filtrage de la liste comme un bug.
+  interpréter l'absence de filtrage de la liste comme un bug. Pas
+  d'évolution par véhicule dans ce lot (cf. rapport du 27/08/2026) : le KPI
+  global était la priorité, une évolution par véhicule nécessiterait de
+  faire évoluer `VehiculeEarningsRow` (constructeur + 2 points d'appel) pour
+  un bénéfice non demandé par l'écran actuel.
 - `vehicules` : parc accessible complet (identité seulement, pour peupler un
   sélecteur de véhicule côté frontend).
 - Rôle requis : `client|proprietaire|livreur` (comme le reste de cette

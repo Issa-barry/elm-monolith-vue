@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Models\Vehicule;
 use App\Services\Client\ClientEarningsService;
 use App\Services\Client\ClientIdentityResolver;
+use App\Services\Client\Data\ComparisonPeriod;
 use Dedoc\Scramble\Attributes\Endpoint;
 use Illuminate\Http\JsonResponse;
 
@@ -54,6 +55,27 @@ class DashboardController extends Controller
             `filters.period` : raccourci appliqué (`custom` = `date_debut`/`date_fin`
             pris tels quels, sinon calculés serveur — jamais un défaut inventé côté
             frontend).
+
+            `summary_evolution` (champ additif, cf. rapport du 27/08/2026) : évolution
+            de chacun des 5 champs de `summary` entre la période sélectionnée et la
+            période **immédiatement précédente de même durée** (ex : 01/08→31/08 est
+            comparé à 01/07→31/07 ; 10/08→16/08 [7 jours] est comparé à 03/08→09/08
+            [7 jours] — jamais "le mois précédent" arbitraire). `direction` est
+            **factuelle** (`up`/`down`/`stable`), jamais un jugement métier : une
+            hausse de `frais_depenses_total` vaut `up` exactement comme une hausse de
+            `total_earned` — c'est au frontend de décider, KPI par KPI, si une hausse
+            donnée est une bonne ou une mauvaise nouvelle. Quand la période précédente
+            valait 0 et que la période actuelle est non nulle, le pourcentage n'est pas
+            défini mathématiquement : `percent` vaut alors `null` et `comparable` vaut
+            `false` (jamais `Infinity`/`999999`/`100` en substitut) — `direction` reste
+            renseignée pour permettre d'afficher une flèche, typiquement à côté d'un
+            texte comme "Nouveau" plutôt que d'un pourcentage. `summary_evolution` et
+            `comparison_period` sont tous les deux `null` uniquement dans le cas
+            dégénéré `period=custom` sans `date_debut`/`date_fin` (aucune période
+            résolue, donc aucune période précédente calculable).
+
+            `comparison_period` : bornes exactes de la période précédente utilisée par
+            `summary_evolution`, pour affichage (ex. "vs 01/07 - 31/07").
             MD,
     )]
     public function __invoke(DashboardMineRequest $request): JsonResponse
@@ -87,9 +109,42 @@ class DashboardController extends Controller
             $vehiculeIdsContrainte
         );
 
+        // `period=custom` sans date_debut/date_fin (cf. filterValidationRules() : les
+        // deux sont `nullable`, aucun `required_if:period,custom`) reste un cas
+        // dégénéré préexistant traité comme "sans filtre de date" par summary() —
+        // aucune période précédente n'est alors calculable, summary_evolution et
+        // comparison_period restent `null` plutôt que de planter ou d'inventer une
+        // borne arbitraire. Une SEULE affectation par variable (ternaire), pas un
+        // `if` avec deux instructions séparées : Scramble n'unifie pas correctement
+        // le type `null` d'un branchement avec le type concret d'un autre quand ce
+        // sont deux `$var = ...` distincts sur des chemins différents (vérifié
+        // empiriquement le 27/08/2026 sur ce même contrat — cf. le même correctif
+        // appliqué à `KpiEvolutionCalculator::compare()`) ; un ternaire, en
+        // revanche, est bien inféré comme une union des deux branches.
+        $hasResolvedPeriod = $filters['date_debut'] !== null && $filters['date_fin'] !== null;
+
+        $comparisonPeriod = $hasResolvedPeriod
+            ? new ComparisonPeriod(...$this->earningsService->previousPeriodBounds($filters['date_debut'], $filters['date_fin']))
+            : null;
+
+        $summaryEvolution = $hasResolvedPeriod
+            ? $this->earningsService->summaryEvolution(
+                $earnings['totals'],
+                $organizationId,
+                $proprietaire,
+                $livreur,
+                $filters['date_debut'],
+                $filters['date_fin'],
+                $filters['statut'],
+                $vehiculeIdsContrainte
+            )
+            : null;
+
         return response()->json([
             'filters' => $filters,
             'summary' => $earnings['totals'],
+            'summary_evolution' => $summaryEvolution,
+            'comparison_period' => $comparisonPeriod,
             'par_vehicule' => $earnings['by_vehicule'],
             'vehicules' => $vehicules->map(fn (Vehicule $v) => [
                 'id' => $v->id,

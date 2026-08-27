@@ -478,4 +478,210 @@ class DashboardControllerTest extends TestCase
 
         $this->assertEquals(0.0, $api['summary']['total_earned']);
     }
+
+    // ── Évolution des KPI (summary_evolution / comparison_period) ───────────────
+    // Périodes fixées à juillet/août 2020 (jamais relatives à `now()`) : la règle
+    // "période précédente de même durée" ne dépend jamais de la date du jour,
+    // autant fixer des bornes lisibles et 100% déterministes dans ces tests.
+
+    public function test_summary_evolution_compares_current_period_to_previous_period_of_same_duration(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->makeProprietaireUser($org);
+        $proprietaire = $user->proprietaire;
+        $vehicule = $this->makeVehicule($org, $proprietaire);
+
+        // Période précédente (juillet 2020) : 10 000 gagnés.
+        $this->makeVenteCommission($org, $vehicule, $proprietaire, 10000, 0, '2020-07-15');
+        // Période actuelle (août 2020) : 15 000 gagnés → +50 %.
+        $this->makeVenteCommission($org, $vehicule, $proprietaire, 15000, 0, '2020-08-15');
+
+        $api = $this->apiJson($user, [
+            'period' => 'custom',
+            'date_debut' => '2020-08-01',
+            'date_fin' => '2020-08-31',
+        ]);
+
+        $this->assertEquals(15000.0, $api['summary']['total_earned']);
+        $this->assertEquals(10000.0, $api['summary_evolution']['total_earned']['previous_value']);
+        $this->assertEquals(50.0, $api['summary_evolution']['total_earned']['percent']);
+        $this->assertSame('up', $api['summary_evolution']['total_earned']['direction']);
+        $this->assertTrue($api['summary_evolution']['total_earned']['comparable']);
+        $this->assertSame('2020-07-01', $api['comparison_period']['date_debut']);
+        $this->assertSame('2020-07-31', $api['comparison_period']['date_fin']);
+    }
+
+    public function test_expenses_evolution_uses_the_same_period_bounds(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->makeProprietaireUser($org);
+        $proprietaire = $user->proprietaire;
+        $vehicule = $this->makeVehicule($org, $proprietaire);
+
+        Depense::factory()->valide()->create([
+            'organization_id' => $org->id,
+            'beneficiaire_type' => 'vehicule',
+            'beneficiaire_id' => $vehicule->id,
+            'montant' => 4000,
+            'date_depense' => '2020-07-15',
+        ]);
+        Depense::factory()->valide()->create([
+            'organization_id' => $org->id,
+            'beneficiaire_type' => 'vehicule',
+            'beneficiaire_id' => $vehicule->id,
+            'montant' => 6000,
+            'date_depense' => '2020-08-15',
+        ]);
+
+        $api = $this->apiJson($user, [
+            'period' => 'custom',
+            'date_debut' => '2020-08-01',
+            'date_fin' => '2020-08-31',
+        ]);
+
+        $this->assertEquals(6000.0, $api['summary']['frais_depenses_total']);
+        $this->assertEquals(4000.0, $api['summary_evolution']['frais_depenses_total']['previous_value']);
+        $this->assertEquals(50.0, $api['summary_evolution']['frais_depenses_total']['percent']);
+        $this->assertSame('up', $api['summary_evolution']['frais_depenses_total']['direction']);
+    }
+
+    public function test_operations_count_evolution_counts_commissions_per_period(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->makeProprietaireUser($org);
+        $proprietaire = $user->proprietaire;
+        $vehicule = $this->makeVehicule($org, $proprietaire);
+
+        // Période précédente : 1 commission. Période actuelle : 2 commissions.
+        $this->makeVenteCommission($org, $vehicule, $proprietaire, 5000, 0, '2020-07-15');
+        $this->makeVenteCommission($org, $vehicule, $proprietaire, 5000, 0, '2020-08-10');
+        $this->makeVenteCommission($org, $vehicule, $proprietaire, 5000, 0, '2020-08-20');
+
+        $api = $this->apiJson($user, [
+            'period' => 'custom',
+            'date_debut' => '2020-08-01',
+            'date_fin' => '2020-08-31',
+        ]);
+
+        $this->assertSame(2, $api['summary']['operations_count']);
+        $this->assertEquals(1.0, $api['summary_evolution']['operations_count']['previous_value']);
+        $this->assertEquals(100.0, $api['summary_evolution']['operations_count']['percent']);
+        $this->assertSame('up', $api['summary_evolution']['operations_count']['direction']);
+    }
+
+    /**
+     * `balance` ("reste à payer") est calculé avec les mêmes bornes de date que
+     * les autres KPI (earned_at compris dans la période) — comparer sa valeur
+     * d'une période à l'autre est donc une comparaison de flux cohérente, pas
+     * un solde cumulé à date (cf. rapport du 27/08/2026, point 11).
+     */
+    public function test_balance_evolution_uses_the_same_period_scoped_definition(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->makeProprietaireUser($org);
+        $proprietaire = $user->proprietaire;
+        $vehicule = $this->makeVehicule($org, $proprietaire);
+
+        // Précédente : gagné 10 000, versé 0 → reste 10 000.
+        $this->makeVenteCommission($org, $vehicule, $proprietaire, 10000, 0, '2020-07-15');
+        // Actuelle : gagné 20 000, versé 5 000 → reste 15 000 (+50 %).
+        $this->makeVenteCommission($org, $vehicule, $proprietaire, 20000, 5000, '2020-08-15');
+
+        $api = $this->apiJson($user, [
+            'period' => 'custom',
+            'date_debut' => '2020-08-01',
+            'date_fin' => '2020-08-31',
+        ]);
+
+        $this->assertEquals(15000.0, $api['summary']['balance']);
+        $this->assertEquals(10000.0, $api['summary_evolution']['balance']['previous_value']);
+        $this->assertEquals(50.0, $api['summary_evolution']['balance']['percent']);
+        $this->assertSame('up', $api['summary_evolution']['balance']['direction']);
+    }
+
+    public function test_evolution_respects_the_vehicule_filter_for_both_periods(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->makeProprietaireUser($org);
+        $proprietaire = $user->proprietaire;
+        $vehiculeA = $this->makeVehicule($org, $proprietaire, 'Vehicule A');
+        $vehiculeB = $this->makeVehicule($org, $proprietaire, 'Vehicule B');
+
+        // Véhicule A : 10 000 (juillet) → 15 000 (août).
+        $this->makeVenteCommission($org, $vehiculeA, $proprietaire, 10000, 0, '2020-07-15');
+        $this->makeVenteCommission($org, $vehiculeA, $proprietaire, 15000, 0, '2020-08-15');
+        // Véhicule B : gros montants qui ne doivent JAMAIS entrer dans la comparaison filtrée sur A.
+        $this->makeVenteCommission($org, $vehiculeB, $proprietaire, 99999, 0, '2020-07-15');
+        $this->makeVenteCommission($org, $vehiculeB, $proprietaire, 99999, 0, '2020-08-15');
+
+        $api = $this->apiJson($user, [
+            'period' => 'custom',
+            'date_debut' => '2020-08-01',
+            'date_fin' => '2020-08-31',
+            'vehicule_id' => $vehiculeA->id,
+        ]);
+
+        $this->assertEquals(15000.0, $api['summary']['total_earned']);
+        $this->assertEquals(10000.0, $api['summary_evolution']['total_earned']['previous_value']);
+        $this->assertEquals(50.0, $api['summary_evolution']['total_earned']['percent']);
+    }
+
+    public function test_evolution_computes_correctly_for_a_multi_role_staff_and_proprietaire_account(): void
+    {
+        Role::firstOrCreate(['name' => 'admin_entreprise', 'guard_name' => 'web']);
+        $org = Organization::factory()->create();
+        $user = $this->makeProprietaireUser($org);
+        $user->assignRole('admin_entreprise');
+        $proprietaire = $user->proprietaire;
+        $vehicule = $this->makeVehicule($org, $proprietaire);
+
+        $this->makeVenteCommission($org, $vehicule, $proprietaire, 10000, 0, '2020-07-15');
+        $this->makeVenteCommission($org, $vehicule, $proprietaire, 12000, 0, '2020-08-15');
+
+        $api = $this->apiJson($user, [
+            'period' => 'custom',
+            'date_debut' => '2020-08-01',
+            'date_fin' => '2020-08-31',
+        ]);
+
+        $this->assertEquals(10000.0, $api['summary_evolution']['total_earned']['previous_value']);
+        $this->assertEquals(20.0, $api['summary_evolution']['total_earned']['percent']);
+    }
+
+    public function test_evolution_isolates_another_organizations_previous_period_data(): void
+    {
+        $orgA = Organization::factory()->create();
+        $userA = $this->makeProprietaireUser($orgA);
+        $vehiculeA = $this->makeVehicule($orgA, $userA->proprietaire);
+        $this->makeVenteCommission($orgA, $vehiculeA, $userA->proprietaire, 10000, 0, '2020-08-15');
+
+        $orgB = Organization::factory()->create();
+        $userB = $this->makeProprietaireUser($orgB);
+        $vehiculeB = $this->makeVehicule($orgB, $userB->proprietaire);
+        // Grosses données de l'organisation B sur la période PRÉCÉDENTE : ne
+        // doivent jamais fuiter dans le previous_value de l'organisation A.
+        $this->makeVenteCommission($orgB, $vehiculeB, $userB->proprietaire, 999999, 0, '2020-07-15');
+
+        $api = $this->apiJson($userA, [
+            'period' => 'custom',
+            'date_debut' => '2020-08-01',
+            'date_fin' => '2020-08-31',
+        ]);
+
+        $this->assertEquals(0.0, $api['summary_evolution']['total_earned']['previous_value']);
+        $this->assertFalse($api['summary_evolution']['total_earned']['comparable']);
+    }
+
+    public function test_evolution_and_comparison_period_are_null_when_no_concrete_period_is_resolved(): void
+    {
+        $org = Organization::factory()->create();
+        $user = $this->makeProprietaireUser($org);
+
+        // `period=custom` sans date_debut/date_fin : cas dégénéré préexistant,
+        // aucune période précédente n'est calculable.
+        $api = $this->apiJson($user, ['period' => 'custom']);
+
+        $this->assertNull($api['summary_evolution']);
+        $this->assertNull($api['comparison_period']);
+    }
 }
