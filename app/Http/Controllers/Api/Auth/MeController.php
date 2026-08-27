@@ -5,11 +5,21 @@ namespace App\Http\Controllers\Api\Auth;
 use App\Http\Controllers\Controller;
 use App\Services\Client\ClientIdentity;
 use App\Services\Client\ClientIdentityResolver;
+use Dedoc\Scramble\Attributes\Endpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class MeController extends Controller
 {
+    #[Endpoint(
+        description: '`roles` liste **tous** les rôles du compte (un compte peut cumuler un rôle '
+            .'staff ET un rôle client/proprietaire/livreur, cf. décision multi-rôle du 26/08/2026) — '
+            .'**tableau non ordonné**, ne jamais utiliser `roles[0]` comme "rôle principal" (bug de '
+            .'conception déjà rencontré côté frontend). Un frontend doit vérifier '
+            ."`roles.some(r => ['client','proprietaire','livreur'].includes(r))` pour l'accès espace "
+            .'client, jamais une égalité stricte. `context` est résolu exclusivement via '
+            .'`ClientIdentityResolver` à partir du compte authentifié, jamais un paramètre client.',
+    )]
     public function __invoke(Request $request, ClientIdentityResolver $identityResolver): JsonResponse
     {
         $user = $request->user();

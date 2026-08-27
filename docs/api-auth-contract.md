@@ -5,6 +5,15 @@ API) — `routes/web.php` (guard `web`, session, Fortify, Inertia) reste un syst
 séparé pour le staff et l'espace client Inertia historique et n'est pas concerné
 par ce document.
 
+> **Contrat HTTP machine-readable** : ce document explique les décisions et
+> limitations métier ; le contrat exact (schémas, exemples, essai interactif)
+> est généré depuis le code via **OpenAPI/Swagger** (`dedoc/scramble`) —
+> `/docs/api` (Nuxt/mobile, Bearer Sanctum) et `/docs/public` (vitrine,
+> `X-Vitrine-Key`), local uniquement en accès libre. Fichiers exportés :
+> `docs/openapi/client.json` / `docs/openapi/public.json`. Ce Markdown ne
+> remplace pas la spec générée et n'est jamais resynchronisé automatiquement
+> avec elle — en cas de doute sur un champ précis, la spec générée fait foi.
+
 ## Endpoints
 
 ### `POST /api/auth/login`

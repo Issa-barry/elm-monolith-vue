@@ -10,12 +10,23 @@ use App\Models\TransfertLogistique;
 use App\Models\User;
 use App\Models\Vehicule;
 use App\Services\Client\ClientIdentityResolver;
+use Dedoc\Scramble\Attributes\Endpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 
 class VehiculesController extends Controller
 {
+    #[Endpoint(
+        description: 'Liste des véhicules du proprietaire (les siens) ou du livreur (ceux de son '
+            .'équipe) — jamais toute la flotte de l\'organisation. **Aucun statut "Entretien"/'
+            .'maintenance n\'existe dans le modèle ELM** — seul `is_active` (booléen) existe ; '
+            .'n\'affichez pas un statut de ce type sans colonne backend dédiée (elle n\'existe pas). '
+            .'`capacite` est un champ hérité (nombre unique, packs) — la capacité réelle '
+            .'multi-catégorie n\'est pas exposée ici. `conducteur` : nom du membre d\'équipe au rôle '
+            .'`chauffeur`, `null` si aucune équipe ou aucun chauffeur assigné (jamais le premier '
+            .'membre pris au hasard).',
+    )]
     public function __invoke(Request $request, ClientIdentityResolver $identityResolver): JsonResponse
     {
         /** @var User $user */

@@ -10,6 +10,7 @@ use App\Models\Livreur;
 use App\Models\Proprietaire;
 use App\Models\User;
 use App\Services\Client\ClientIdentityResolver;
+use Dedoc\Scramble\Attributes\Endpoint;
 use Illuminate\Http\JsonResponse;
 
 /**
@@ -21,6 +22,15 @@ use Illuminate\Http\JsonResponse;
  */
 class UpdateProfileController extends Controller
 {
+    #[Endpoint(
+        description: 'Seuls `pays`, `code_pays`, `ville`, `adresse` sont modifiables ici (tous '
+            .'optionnels, seuls les champs envoyés sont modifiés). **Volontairement non '
+            .'modifiables par ce endpoint** (silencieusement ignorés si envoyés) : '
+            .'`nom`/`prenom`/`surnom` (identité civile), `telephone`/`email` (identifiants de '
+            .'connexion, unicité par organisation à revalider), `raison_sociale`/`type` (identité '
+            .'légale), `actif` (jamais en self-service) — réservés au backoffice. `404` si aucun '
+            .'profil n\'est rattaché au compte.',
+    )]
     public function __invoke(
         UpdateProfileRequest $request,
         ClientIdentityResolver $identityResolver,

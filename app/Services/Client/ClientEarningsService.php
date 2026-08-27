@@ -210,6 +210,11 @@ class ClientEarningsService
      * Totaux agrégés (vente + logistique − dépenses). `balance` ne descend
      * jamais sous 0 (comportement préservé tel quel : un solde négatif n'est
      * jamais affiché comme dette du côté propriétaire dans ce moteur).
+     *
+     * Montants en GNF (franc guinéen), sans décimales dans la pratique mais
+     * typés `float` (arrondis à 2 décimales) — jamais des centimes.
+     *
+     * @return array{total_earned: float, total_paid: float, frais_depenses_total: float, balance: float, operations_count: int}
      */
     public function calculateEarnings(Collection $partsVentes, Collection $partsLogistiques, float $fraisDepensesTotal = 0.0): array
     {
@@ -227,16 +232,26 @@ class ClientEarningsService
             'total_earned' => $totalEarned,
             'total_paid' => $totalPaid,
             'frais_depenses_total' => $frais,
-            'balance' => max(0, round($totalEarned - $frais - $totalPaid, 2)),
-            'operations_count' => $partsVentes->count() + $partsLogistiques->count(),
+            // (float) explicite : max(0, float) renvoie l'entier littéral 0 (pas 0.0) dès que le
+            // solde est nul/négatif — même sortie JSON (0), mais un type PHP sans ambiguïté pour
+            // l'inférence statique (Scramble/PHPStan) et pour tout futur usage strict du retour.
+            'balance' => (float) max(0, round($totalEarned - $frais - $totalPaid, 2)),
+            // (int) explicite pour la même raison que (float) ci-dessus sur `balance` — la
+            // somme de deux Collection::count() est déjà un int à l'exécution, ce cast ne
+            // change rien au comportement, seulement à la clarté du type pour l'analyse statique.
+            'operations_count' => (int) ($partsVentes->count() + $partsLogistiques->count()),
         ];
     }
 
     /**
+     * Montants en GNF, sans décimales dans la pratique mais typés `float`
+     * (arrondis à 2 décimales) — jamais des centimes.
+     *
      * @param  Collection<int, Vehicule>  $vehicules
      * @param  Collection<int, CommissionEnveloppePart>  $partsVentes
      * @param  Collection<int, CommissionLogistiquePart>  $partsLogistiques
      * @param  array<string, float>  $fraisParVehicule
+     * @return list<array{vehicule_id: string, nom_vehicule: string, immatriculation: string, frais_depenses: float, total_earned: float, total_paid: float, balance: float}>
      */
     public function earningsByVehicule(Collection $vehicules, Collection $partsVentes, Collection $partsLogistiques, array $fraisParVehicule = []): array
     {
@@ -301,7 +316,7 @@ class ClientEarningsService
                 $row['total_earned'] = round((float) $row['total_earned'], 2);
                 $row['total_paid'] = round((float) $row['total_paid'], 2);
                 $row['frais_depenses'] = round((float) $row['frais_depenses'], 2);
-                $row['balance'] = max(0, round($row['total_earned'] - $row['frais_depenses'] - $row['total_paid'], 2));
+                $row['balance'] = (float) max(0, round($row['total_earned'] - $row['frais_depenses'] - $row['total_paid'], 2));
 
                 return $row;
             })
@@ -467,15 +482,29 @@ class ClientEarningsService
      * différentes pour un même raccourci de période. Extrait tel quel de
      * `ClientDashboardController::resolveDashboardFilters()`.
      */
-    public function resolveFilters(Request $request): array
+    /**
+     * Règles extraites en méthode statique réutilisable (comme
+     * VehicleProposalService::validationRules()) — consommées à la fois par le
+     * `$request->validate()` ci-dessous et par `DashboardMineRequest::rules()`
+     * (API), qui rend ces filtres visibles dans la doc OpenAPI générée sans
+     * dupliquer la liste de règles.
+     *
+     * @return array<string, array<int, mixed>>
+     */
+    public static function filterValidationRules(): array
     {
-        $validated = $request->validate([
+        return [
             'period' => ['nullable', Rule::in(['7j', '30j', 'ce_mois', 'mois_passe', 'custom'])],
             'date_debut' => ['nullable', 'date'],
             'date_fin' => ['nullable', 'date', 'after_or_equal:date_debut'],
             'vehicule_id' => ['nullable', 'string'],
             'statut' => ['nullable', Rule::in(array_map(fn (StatutCommission $s) => $s->value, StatutCommission::cases()))],
-        ]);
+        ];
+    }
+
+    public function resolveFilters(Request $request): array
+    {
+        $validated = $request->validate(self::filterValidationRules());
 
         $period = $validated['period'] ?? 'ce_mois';
         $dateDebut = $validated['date_debut'] ?? null;

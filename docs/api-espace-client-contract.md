@@ -7,6 +7,18 @@ les véhicules, les gains, les dépenses, les livraisons, les notifications et l
 recherche — avec, pour chaque section, ce qui existe réellement et ce qui n'existe
 pas encore.
 
+> **Contrat HTTP machine-readable** : ce document explique les décisions et
+> limitations métier (pourquoi tel champ n'existe pas, pourquoi tel endpoint
+> est déconseillé...) ; le schéma exact de chaque endpoint (paramètres,
+> réponses, exemples, essai interactif avec un vrai token) est généré depuis
+> le code via **OpenAPI/Swagger** (`dedoc/scramble`) : `/docs/api` en local
+> (Nuxt/mobile, Bearer Sanctum), export `docs/openapi/client.json`. Les
+> endpoints server-to-server de la vitrine ont leur propre document séparé
+> (`/docs/public`, clé `X-Vitrine-Key`) — voir le rapport OpenAPI du
+> 27/08/2026 pour le détail des choix (périmètre, sécurité, environnements).
+> Ce Markdown n'est jamais resynchronisé automatiquement avec la spec
+> générée — en cas de doute sur un champ précis, la spec générée fait foi.
+
 ## 0. Architecture
 
 - **Mécanisme** : Laravel Sanctum, Personal Access Token (Bearer), **pas** de

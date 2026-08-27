@@ -8,6 +8,7 @@ use App\Http\Resources\Api\Client\CommandeVenteMineResource;
 use App\Models\CommandeVente;
 use App\Models\User;
 use App\Services\Client\ClientIdentityResolver;
+use Dedoc\Scramble\Attributes\Endpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
@@ -55,6 +56,16 @@ class CommandesController extends Controller
         return CommandeVenteMineResource::collection($commandes)->additional(['filters' => $filters]);
     }
 
+    #[Endpoint(
+        description: 'Réponse wrappée `{"data": {...}}` (ressource unique, wrapping standard '
+            .'Laravel) — contrairement à `index()` ci-dessus, non wrappée au-delà de la '
+            .'pagination. Inclut les lignes de commande (`lignes[]`), absentes de la liste. '
+            .'Utilise les **snapshots** enregistrés à la commande (`libelle_snapshot`, '
+            .'`prix_vente_snapshot`), jamais une re-jointure vers le catalogue produit actuel '
+            .'(un prix modifié depuis ne réécrit jamais l\'historique). `404` (jamais `403`) si la '
+            .'commande n\'appartient pas au client résolu — ne confirme jamais son existence pour '
+            .'un autre compte.',
+    )]
     public function show(string $commandeId, ClientIdentityResolver $identityResolver): JsonResponse|CommandeVenteMineResource
     {
         $identity = $identityResolver->resolve(request()->user());

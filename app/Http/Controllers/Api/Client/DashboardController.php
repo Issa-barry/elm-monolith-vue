@@ -3,12 +3,13 @@
 namespace App\Http\Controllers\Api\Client;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\Client\DashboardMineRequest;
 use App\Models\User;
 use App\Models\Vehicule;
 use App\Services\Client\ClientEarningsService;
 use App\Services\Client\ClientIdentityResolver;
+use Dedoc\Scramble\Attributes\Endpoint;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 
 /**
  * Dashboard financier de l'espace client — même moteur (`ClientEarningsService`)
@@ -31,7 +32,36 @@ class DashboardController extends Controller
         private readonly ClientEarningsService $earningsService,
     ) {}
 
-    public function __invoke(Request $request): JsonResponse
+    #[Endpoint(
+        title: 'Dashboard financier (résumé + détail par véhicule)',
+        description: <<<'MD'
+            Montants en **GNF** (franc guinéen), sans décimales dans la pratique mais
+            typés nombre (jamais des centimes, jamais un float à diviser par 100).
+
+            Définitions exactes des champs de `summary` (mêmes noms, mêmes valeurs que
+            le dashboard Inertia — `App\Services\Client\ClientEarningsService`) :
+            - `total_earned` : commissions de vente + logistique gagnées sur la période (brut dû).
+            - `total_paid` : déjà versé sur ces mêmes commissions.
+            - `frais_depenses_total` : dépenses véhicule validées sur la période (proprietaire uniquement — jamais imputées à un livreur dans ce moteur).
+            - `balance` : `total_earned - frais_depenses_total - total_paid`, **jamais négatif** (plancher à 0 — un solde négatif n'est jamais affiché comme dette du propriétaire).
+            - `operations_count` : nombre de commissions (vente + logistique) entrant dans `total_earned`.
+
+            `par_vehicule` : même détail que `summary` mais par véhicule, **toujours
+            la liste complète du parc accessible** même si `vehicule_id` filtre le
+            calcul (les véhicules hors filtre apparaissent avec des montants à 0) —
+            ce n'est pas un bug. Chaque élément a la forme
+            `{vehicule_id, nom_vehicule, immatriculation, frais_depenses, total_earned, total_paid, balance}`
+            (identique aux clés de `vehicules[]` + les mêmes montants que `summary`) —
+            **limite connue de la génération automatique** : le schéma ci-dessous décrit
+            `par_vehicule` comme un tableau de chaînes, la vraie forme est ce qui précède
+            (cf. tests de parité `tests/Feature/Api/Client/DashboardControllerTest.php`).
+
+            `filters.period` : raccourci appliqué (`custom` = `date_debut`/`date_fin`
+            pris tels quels, sinon calculés serveur — jamais un défaut inventé côté
+            frontend).
+            MD,
+    )]
+    public function __invoke(DashboardMineRequest $request): JsonResponse
     {
         /** @var User $user */
         $user = $request->user();

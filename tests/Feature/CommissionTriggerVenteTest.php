@@ -525,7 +525,7 @@ class CommissionTriggerVenteTest extends TestCase
         $this->encaisserIntegralement($commande);
 
         $facture = $commande->fresh('facture')->facture;
-        $this->assertSame('payee', $facture->statut->value, 'précondition : facture payée');
+        $this->assertTrue($facture->isPayee(), 'précondition : facture payée');
         $enveloppesAvant = CommissionEnveloppe::where('source_id', $commande->id)->get();
         $this->assertNotEmpty($enveloppesAvant, 'précondition : commission générée');
 
@@ -535,9 +535,8 @@ class CommissionTriggerVenteTest extends TestCase
             ->assertRedirect();
 
         $facture->refresh();
-        $this->assertNotSame(
-            'payee',
-            $facture->statut->value,
+        $this->assertFalse(
+            $facture->isPayee(),
             'la facture doit redescendre sous PAYEE une fois son seul encaissement supprimé',
         );
 

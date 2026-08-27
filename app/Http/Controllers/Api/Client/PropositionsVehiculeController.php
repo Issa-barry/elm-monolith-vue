@@ -9,6 +9,7 @@ use App\Http\Resources\Api\Client\PropositionVehiculeResource;
 use App\Models\User;
 use App\Services\Client\ClientIdentityResolver;
 use App\Services\Client\VehicleProposalService;
+use Dedoc\Scramble\Attributes\Endpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Validation\ValidationException;
@@ -37,6 +38,13 @@ class PropositionsVehiculeController extends Controller
         );
     }
 
+    #[Endpoint(
+        description: 'Requête `multipart/form-data` (`photo` est un fichier image, 5 Mo max, '
+            .'converti en WebP côté serveur). `immatriculation` est normalisée en MAJUSCULES. '
+            .'`422` si une proposition **en attente** existe déjà pour cette immatriculation '
+            .'(même règle que l\'espace client Inertia, même service partagé '
+            .'`VehicleProposalService` — jamais un moteur dupliqué).',
+    )]
     public function store(StoreVehicleProposalRequest $request): JsonResponse|PropositionVehiculeResource
     {
         /** @var User $user */

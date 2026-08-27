@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\Client\ProfileResource;
 use App\Models\User;
 use App\Services\Client\ClientIdentityResolver;
+use Dedoc\Scramble\Attributes\Endpoint;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -23,6 +24,14 @@ use Illuminate\Http\Request;
  */
 class ProfileController extends Controller
 {
+    #[Endpoint(
+        description: 'Aucun champ `siret`/identifiant légal (absent du modèle ELM, ne jamais '
+            .'l\'inventer côté frontend). Aucun champ "quartier" séparé — seuls `pays`, `ville`, '
+            .'`adresse` existent, un quartier doit être saisi dans `adresse` en texte libre. '
+            .'`profile` vaut `null` si le rôle est présent mais qu\'aucune fiche métier n\'est '
+            .'réellement rattachée (cas limite). Seuls `pays`/`code_pays`/`ville`/`adresse` sont '
+            .'modifiables via `PATCH` — voir cet endpoint pour le détail exact.',
+    )]
     public function __invoke(Request $request, ClientIdentityResolver $identityResolver): JsonResponse
     {
         /** @var User $user */

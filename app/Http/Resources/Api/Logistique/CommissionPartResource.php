@@ -2,9 +2,13 @@
 
 namespace App\Http\Resources\Api\Logistique;
 
+use App\Models\CommissionLogistiquePart;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
+/**
+ * @mixin CommissionLogistiquePart
+ */
 class CommissionPartResource extends JsonResource
 {
     public function toArray(Request $request): array

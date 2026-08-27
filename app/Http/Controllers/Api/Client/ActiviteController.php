@@ -10,6 +10,7 @@ use App\Models\TransfertLogistique;
 use App\Models\User;
 use App\Services\Client\ClientEarningsService;
 use App\Services\Client\ClientIdentityResolver;
+use Dedoc\Scramble\Attributes\Endpoint;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -38,6 +39,13 @@ class ActiviteController extends Controller
         private readonly ClientEarningsService $earningsService,
     ) {}
 
+    #[Endpoint(
+        description: 'Mélange deux modèles à vocabulaire de statut distinct (`StatutCommandeVente` '
+            .'pour `type=vente`, `StatutTransfert` pour `type=logistique`) — aucune correspondance '
+            .'n\'est inventée entre les deux. `statut` **exige `type`** (422 explicite sinon, message '
+            .'"Le filtre statut nécessite de préciser type"). `type` omis = les deux mélangés, triés '
+            .'par date décroissante, mais alors sans filtre `statut` possible.',
+    )]
     public function __invoke(ActiviteMineRequest $request): JsonResponse
     {
         /** @var User $user */

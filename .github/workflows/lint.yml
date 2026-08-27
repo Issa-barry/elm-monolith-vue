@@ -58,6 +58,22 @@ jobs:
       - name: Check PHP code style (Pint)
         run: vendor/bin/pint --test
 
+      # `scramble:analyze` échoue (code retour non-zéro) si la génération OpenAPI
+      # lève une erreur — attrape une régression du même type que les warnings
+      # JR001 corrigés le 27/08/2026 (résource sans mixin, type inféré incorrect).
+      # Le `git diff --exit-code` détecte en plus la dérive silencieuse
+      # documentée dans le rapport OpenAPI : une génération qui "réussit" peut
+      # quand même diverger du fichier docs/openapi/*.json committé (celui que
+      # Nuxt utilise pour générer ses types TS) si personne ne l'a régénéré après
+      # un changement de contrat.
+      - name: Check OpenAPI documentation generates and matches the committed spec
+        run: |
+          php artisan scramble:analyze
+          php artisan scramble:analyze --api=public
+          php artisan scramble:export --api=default
+          php artisan scramble:export --api=public
+          git diff --exit-code -- docs/openapi/ || (echo "::error::docs/openapi/*.json is out of date — run 'php artisan scramble:export --api=default' and '--api=public' locally and commit the result." && exit 1)
+
       - name: Check frontend formatting (Prettier)
         run: npm run format:check
 
