@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use Database\Seeders\Organizations\ElmV2Demo\ElmV2DemoCatalogSeeder;
+use Database\Seeders\Organizations\ElmV2Demo\ElmV2DemoCommissionSmokeFixturesSeeder;
 use Database\Seeders\Organizations\ElmV2Demo\ElmV2DemoFleetSeeder;
 use Database\Seeders\Organizations\ElmV2Demo\ElmV2DemoOrganizationSeeder;
 use Database\Seeders\Organizations\ElmV2Demo\ElmV2DemoSitesSeeder;
@@ -37,6 +38,7 @@ class ElmV2DemoSeeder extends Seeder
             ElmV2DemoCatalogSeeder::class,
             ElmV2DemoFleetSeeder::class,
             ElmV2DemoStockSeeder::class,
+            ElmV2DemoCommissionSmokeFixturesSeeder::class,
         ]);
     }
 }

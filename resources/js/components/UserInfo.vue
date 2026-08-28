@@ -24,6 +24,8 @@ const ROLE_LABELS: Record<AppRole, string> = {
     commerciale: 'Commercial',
     comptable: 'Comptable',
     client: 'Client',
+    proprietaire: 'Propriétaire',
+    livreur: 'Livreur',
 };
 
 const showAvatar = computed(

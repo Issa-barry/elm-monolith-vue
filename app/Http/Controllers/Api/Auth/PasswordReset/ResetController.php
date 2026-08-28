@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Auth\PasswordReset;
 
+use App\Enums\OtpPurpose;
 use App\Http\Controllers\Controller;
 use App\Models\Personne;
 use App\Models\UserAuthIdentity;
@@ -28,7 +29,7 @@ class ResetController extends Controller
             throw ValidationException::withMessages(['telephone' => 'Numéro de téléphone invalide.']);
         }
 
-        if (! $otp->isVerified($phone)) {
+        if (! $otp->isVerified($phone, OtpPurpose::PASSWORD_RESET)) {
             throw ValidationException::withMessages(['telephone' => 'La vérification OTP est requise avant de réinitialiser le mot de passe.']);
         }
 
@@ -40,7 +41,7 @@ class ResetController extends Controller
 
         $user->forceFill(['password' => $request->input('password')])->save();
 
-        $otp->clear($phone);
+        $otp->clear($phone, OtpPurpose::PASSWORD_RESET);
 
         // Révoquer tous les tokens existants pour forcer une reconnexion.
         $user->tokens()->delete();

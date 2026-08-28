@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureAccountIsActive;
+use App\Http\Middleware\EnsureApiAccountIsActive;
 use App\Http\Middleware\EnsureIsStaffAccount;
 use App\Http\Middleware\EnsureOrganizationHasSite;
 use App\Http\Middleware\EnsurePasswordIsNotExpired;
@@ -12,6 +13,7 @@ use App\Http\Middleware\RequireModuleEnabled;
 use App\Http\Middleware\RequireSiteAssigned;
 use App\Http\Middleware\VerifyVitrineServiceToken;
 use App\Support\AuthRedirects;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -87,6 +89,14 @@ return Application::configure(basePath: dirname(__DIR__))
             AddLinkHeadersForPreloadedAssets::class,
             PreventCachingOfDynamicResponses::class,
         ]);
+
+        // Filet de sécurité API : coupe l'accès de tout token Sanctum dont le compte a
+        // été désactivé depuis son émission (is_active n'était sinon vérifié qu'au
+        // login) — voir EnsureApiAccountIsActive. Global pour ne pas dépendre de son
+        // ajout manuel sur chaque nouvelle route auth:sanctum.
+        $middleware->api(append: [
+            EnsureApiAccountIsActive::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         // Forcer JSON sur /api/* quel que soit le header Accept,
@@ -94,6 +104,16 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request): bool => $request->is('api/*') || $request->expectsJson()
         );
+
+        // Le message par défaut de Laravel ("Unauthenticated.") est en anglais — contrat
+        // JSON cohérent en français sur api/* (login/logout/reset gardent déjà leurs
+        // messages dédiés). Ne modifie rien sur les routes web (redirection Fortify
+        // habituelle vers /login, gérée en amont par ce type d'exception).
+        $exceptions->render(function (AuthenticationException $e, Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json(['message' => 'Non authentifié.'], 401);
+            }
+        });
 
         $exceptions->respond(function (Response $response, Throwable $e, Request $request) {
             $status = $response->getStatusCode();

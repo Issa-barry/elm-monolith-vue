@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Enums\OtpPurpose;
 use App\Http\Controllers\Controller;
 use App\Models\Livreur;
 use App\Models\Organization;
@@ -43,7 +44,7 @@ class LivreurRegistrationController extends Controller
             throw ValidationException::withMessages(['telephone' => 'Ce numéro est déjà associé à un compte. Connectez-vous ou réinitialisez votre mot de passe.']);
         }
 
-        if (! $otp->isVerified($phone)) {
+        if (! $otp->isVerified($phone, OtpPurpose::PHONE_VERIFICATION)) {
             throw ValidationException::withMessages(['telephone' => 'La vérification par code OTP est requise.']);
         }
 
@@ -77,11 +78,16 @@ class LivreurRegistrationController extends Controller
                 'password' => $validated['password'],
                 'organization_id' => $org?->id,
             ]);
+            // Le code OTP de cette inscription n'est aujourd'hui délivré par AUCUN
+            // canal réel (cf. RegisterLookupController — MVP sans fournisseur
+            // SMS/WhatsApp) : `verified_at` reste donc NULL. Corrigé le 27/08/2026 —
+            // cette identité était auparavant marquée vérifiée à tort du seul fait
+            // que le code OTP avait été validé (souvent via OTP_FIXED_CODE en
+            // local/tests), sans jamais prouver la possession réelle du numéro.
             $user->authIdentities()->create([
                 'type' => UserAuthIdentity::TYPE_TELEPHONE,
                 'value' => $phone,
                 'normalized_value' => $normalise,
-                'verified_at' => now(),
                 'is_primary' => true,
             ]);
 
@@ -105,7 +111,7 @@ class LivreurRegistrationController extends Controller
                 ]);
             }
 
-            $otp->clear($phone);
+            $otp->clear($phone, OtpPurpose::PHONE_VERIFICATION);
 
             return $user;
         });

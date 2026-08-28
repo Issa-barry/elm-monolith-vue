@@ -7,11 +7,16 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\Logistique\TransfertResource;
 use App\Models\TransfertLogistique;
 use App\Models\User;
+use App\Notifications\TransfertReceptionneeNotification;
+use App\Services\Notification\BeneficiaireUserResolver;
+use App\Services\Notification\NotificationDispatcher;
 use App\Services\TransfertActiviteService;
 use App\Services\TransfertLogistiqueService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class ValiderReceptionController extends Controller
 {
@@ -36,6 +41,8 @@ class ValiderReceptionController extends Controller
 
         TransfertActiviteService::log($transfert, 'reception_validee', [], $user->id);
 
+        $this->notifierReception($transfert);
+
         $transfert->load([
             'siteSource:id,nom',
             'siteDestination:id,nom',
@@ -50,5 +57,35 @@ class ValiderReceptionController extends Controller
         ]);
 
         return response()->json(new TransfertResource($transfert));
+    }
+
+    /**
+     * "Livraison terminée" pour le propriétaire du véhicule uniquement — jamais
+     * le livreur, qui vient lui-même d'effectuer l'action (cf. rapport
+     * notifications phase 1, 2026-08-27). Jamais de rethrow : un échec d'envoi
+     * ne doit jamais faire annuler une réception déjà validée.
+     */
+    private function notifierReception(TransfertLogistique $transfert): void
+    {
+        try {
+            $vehicule = $transfert->vehicule()->with('proprietaire')->first();
+            $proprietaire = $vehicule?->proprietaire;
+            if (! $proprietaire) {
+                return;
+            }
+
+            $destinataire = BeneficiaireUserResolver::resolve('proprietaire', $proprietaire->id);
+
+            NotificationDispatcher::send(
+                new TransfertReceptionneeNotification($transfert->id, $transfert->reference),
+                [$destinataire],
+                'livraisons',
+            );
+        } catch (Throwable $e) {
+            Log::error('TransfertReceptionneeNotification : envoi échoué', [
+                'transfert_id' => $transfert->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }

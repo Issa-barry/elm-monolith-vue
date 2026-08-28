@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\DTOs\RegisterData;
+use App\Enums\OtpChannel;
 use App\Enums\UserStatus;
 use App\Mail\EmailVerificationMail;
 use App\Models\Client;
@@ -100,11 +101,17 @@ class RegistrationService
                 'status' => $hasEmail ? UserStatus::PENDING->value : UserStatus::ACTIVE->value,
                 'is_active' => ! $hasEmail,
             ]);
+            // Ce flow ne vérifie le téléphone par AUCUN moyen (ni OTP, ni autre) —
+            // seule l'adresse email, quand elle est fournie, est vérifiée par lien
+            // signé (cf. verifyEmail() plus bas). `verified_at` reste donc NULL ici.
+            // Corrigé le 27/08/2026 : cette identité était auparavant marquée
+            // vérifiée sans aucune preuve de possession du numéro (cf. rapport,
+            // règle de sécurité OTP — s'applique aussi hors du système OTP lui-même,
+            // à toute vérification d'identité téléphone).
             $user->authIdentities()->create([
                 'type' => UserAuthIdentity::TYPE_TELEPHONE,
                 'value' => $phone,
                 'normalized_value' => Personne::normaliserTelephone($phone),
-                'verified_at' => now(),
                 'is_primary' => true,
             ]);
             if ($hasEmail) {
@@ -151,8 +158,8 @@ class RegistrationService
             abort(410, 'Ce lien de validation a expiré. Veuillez vous réinscrire.');
         }
 
+        $identity->markVerifiedVia(OtpChannel::EMAIL);
         $identity->update([
-            'verified_at' => now(),
             'verification_token' => null,
             'verification_expires_at' => null,
         ]);

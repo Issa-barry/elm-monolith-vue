@@ -444,6 +444,48 @@ class UserControllerTest extends TestCase
         $this->assertTrue($target->hasRole('commerciale'));
     }
 
+    /**
+     * syncRoles() remplace TOUS les rôles par défaut — un compte qui cumule un
+     * rôle staff avec un rôle client/proprietaire/livreur (ex: un admin qui
+     * possède aussi un véhicule, décision du 26/08/2026) ne doit pas perdre ce
+     * rôle externe simplement parce qu'un autre admin modifie son rôle staff.
+     */
+    public function test_update_preserves_an_external_role_cumulated_on_the_account(): void
+    {
+        $this->createRole('manager');
+        $this->createRole('commerciale');
+        $this->createRole('proprietaire');
+
+        $org = Organization::factory()->create();
+        $admin = $this->superAdmin($org);
+        $site = $this->createSite($org);
+        $target = User::factory()->create([
+            'organization_id' => $org->id,
+            'telephone' => '+224620000099',
+        ]);
+        $target->assignRole('manager');
+        $target->assignRole('proprietaire');
+        $target->sites()->attach($site->id, ['role' => 'employe', 'is_default' => true]);
+
+        $this->actingAs($admin)
+            ->put(route('users.update', $target), [
+                'prenom' => 'Fatoumata',
+                'nom' => 'Bah',
+                'email' => null,
+                'telephone' => '+224620000099',
+                'role' => 'commerciale',
+                'site_id' => $site->id,
+                'password' => '',
+                'password_confirmation' => '',
+            ])
+            ->assertRedirect(route('users.edit', $target));
+
+        $target->refresh();
+        $this->assertTrue($target->hasRole('commerciale'));
+        $this->assertFalse($target->hasRole('manager'), 'ancien rôle staff remplacé');
+        $this->assertTrue($target->hasRole('proprietaire'), 'rôle externe cumulé préservé');
+    }
+
     public function test_update_does_not_change_password_when_empty(): void
     {
         $this->createRole('manager');

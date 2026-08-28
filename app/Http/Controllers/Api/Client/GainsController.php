@@ -5,31 +5,33 @@ namespace App\Http\Controllers\Api\Client;
 use App\Http\Controllers\Controller;
 use App\Models\CommandeVente;
 use App\Models\CommissionEnveloppePart;
-use App\Models\Livreur;
-use App\Models\Proprietaire;
 use App\Models\User;
+use App\Services\Client\ClientIdentityResolver;
+use App\Services\Client\Data\GainsVehiculeRow;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
+/**
+ * Endpoint historique, déconseillé pour tout nouvel écran — préférer
+ * `GET /v1/mobile/dashboard` (Api\Client\DashboardController), même moteur que
+ * l'espace client Inertia. Celui-ci n'inclut PAS les commissions logistiques
+ * (uniquement `CommissionEnveloppePart`, vente) et n'inclut pas les dépenses —
+ * conservé tel quel pour ne pas casser un contrat mobile existant (cf.
+ * docs/api-espace-client-contract.md §5).
+ */
 class GainsController extends Controller
 {
-    public function __invoke(Request $request): JsonResponse
+    public function __invoke(Request $request, ClientIdentityResolver $identityResolver): JsonResponse
     {
         /** @var User $user */
         $user = $request->user();
 
-        $proprietaire = Proprietaire::query()
-            ->when($user->organization_id, fn ($q) => $q->where('organization_id', $user->organization_id))
-            ->where(fn ($q) => $q->where('user_id', $user->id)
-                ->when($user->telephone, fn ($q2) => $q2->orWhereHas('personne', fn ($p) => $p->where('telephone', $user->telephone))))
-            ->first();
+        $identity = $identityResolver->resolve($user);
+        $proprietaire = $identity->proprietaire;
+        $livreur = $identity->livreur;
 
-        $livreur = Livreur::query()
-            ->when($user->organization_id, fn ($q) => $q->where('organization_id', $user->organization_id))
-            ->where(fn ($q) => $q->where('user_id', $user->id)
-                ->when($user->telephone, fn ($q2) => $q2->orWhereHas('personne', fn ($p) => $p->where('telephone', $user->telephone))))
-            ->first();
-
+        // Ne filtre que par bénéficiaire proprietaire/livreur ci-dessous : un profil
+        // "client" seul (sans proprietaire/livreur) n'a pas de gains à afficher ici.
         if ($proprietaire === null && $livreur === null) {
             return response()->json($this->emptyResponse());
         }
@@ -41,7 +43,7 @@ class GainsController extends Controller
                     ->where('ce.source_type', '=', CommandeVente::class);
             })
             ->join('vehicules', 'vehicules.id', '=', 'cv.vehicule_id')
-            ->when($user->organization_id, fn ($q) => $q->where('ce.organization_id', $user->organization_id))
+            ->when($identity->organizationId, fn ($q) => $q->where('ce.organization_id', $identity->organizationId))
             ->where(function ($q) use ($proprietaire, $livreur) {
                 if ($proprietaire !== null) {
                     $q->orWhere(fn ($sq) => $sq
@@ -71,26 +73,26 @@ class GainsController extends Controller
             ->groupBy('vehicules.id', 'vehicules.nom_vehicule', 'vehicules.immatriculation')
             ->orderBy('vehicules.nom_vehicule')
             ->get()
-            ->map(fn ($row) => [
-                'vehicule_id' => $row->vehicule_id,
-                'nom' => $row->nom,
-                'immatriculation' => $row->immatriculation,
-                'total_brut' => (float) $row->total_brut,
-                'total_net' => (float) $row->total_net,
-                'total_a_payer' => (float) $row->total_a_payer,
-                'total_verse' => (float) $row->total_verse,
-                'total_restant' => max(0.0, (float) $row->total_a_payer - (float) $row->total_verse),
-                'nb_commandes' => (int) $row->nb_commandes,
-            ])
+            ->map(fn ($row) => new GainsVehiculeRow(
+                vehiculeId: $row->vehicule_id,
+                nom: $row->nom,
+                immatriculation: $row->immatriculation,
+                totalBrut: (float) $row->total_brut,
+                totalNet: (float) $row->total_net,
+                totalAPayer: (float) $row->total_a_payer,
+                totalVerse: (float) $row->total_verse,
+                totalRestant: (float) max(0.0, (float) $row->total_a_payer - (float) $row->total_verse),
+                nbCommandes: (int) $row->nb_commandes,
+            ))
             ->values();
 
         return response()->json([
-            'total_brut' => (float) $parVehicule->sum('total_brut'),
-            'total_net' => (float) $parVehicule->sum('total_net'),
-            'total_a_payer' => (float) $parVehicule->sum('total_a_payer'),
-            'total_verse' => (float) $parVehicule->sum('total_verse'),
-            'total_restant' => (float) $parVehicule->sum('total_restant'),
-            'nb_commandes' => (int) $parVehicule->sum('nb_commandes'),
+            'total_brut' => (float) $parVehicule->sum('totalBrut'),
+            'total_net' => (float) $parVehicule->sum('totalNet'),
+            'total_a_payer' => (float) $parVehicule->sum('totalAPayer'),
+            'total_verse' => (float) $parVehicule->sum('totalVerse'),
+            'total_restant' => (float) $parVehicule->sum('totalRestant'),
+            'nb_commandes' => (int) $parVehicule->sum('nbCommandes'),
             'par_vehicule' => $parVehicule,
         ]);
     }

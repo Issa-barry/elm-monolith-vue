@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\DomaineActivite;
+use App\Enums\OtpPurpose;
 use App\Enums\SiteType;
 use App\Models\AppInstallation;
 use App\Models\Organization;
@@ -44,8 +45,8 @@ class ProductionDeploySeedingTest extends TestCase
         // Email obligatoire en on_premise (cf. InstallationService::install()) — pré-vérifié ici
         // pour que payload() reste utilisable telle quelle par tous les tests de ce fichier, qui
         // ne portent pas sur la règle email elle-même (cf. InstallWizardTest pour ça).
-        app(OtpService::class)->generate(self::EMAIL, InstallationService::EMAIL_OTP_CONTEXT);
-        app(OtpService::class)->markVerified(self::EMAIL, InstallationService::EMAIL_OTP_CONTEXT);
+        app(OtpService::class)->generate(self::EMAIL, OtpPurpose::EMAIL_VERIFICATION, InstallationService::EMAIL_OTP_CONTEXT);
+        app(OtpService::class)->markVerified(self::EMAIL, OtpPurpose::EMAIL_VERIFICATION, InstallationService::EMAIL_OTP_CONTEXT);
     }
 
     private function payload(array $overrides = []): array

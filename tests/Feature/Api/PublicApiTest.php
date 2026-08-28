@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api;
 
+use App\Enums\OtpPurpose;
 use App\Mail\ContactMessageReceived;
 use App\Models\Livreur;
 use App\Models\Organization;
@@ -28,8 +29,8 @@ class PublicApiTest extends TestCase
     private function verifyOtp(string $phone): void
     {
         $otp = app(OtpService::class);
-        $otp->generate($phone);
-        $otp->markVerified($phone);
+        $otp->generate($phone, OtpPurpose::PHONE_VERIFICATION);
+        $otp->markVerified($phone, OtpPurpose::PHONE_VERIFICATION);
     }
 
     private function livreurPayload(array $overrides = []): array
@@ -110,7 +111,7 @@ class PublicApiTest extends TestCase
 
     public function test_register_otp_verify_succeeds_with_correct_code(): void
     {
-        app(OtpService::class)->generate('+224622111001');
+        app(OtpService::class)->generate('+224622111001', OtpPurpose::PHONE_VERIFICATION);
 
         $this->postJson(route('api.public.register.otp.verify'), [
             'telephone' => '+224622111001',
@@ -120,7 +121,7 @@ class PublicApiTest extends TestCase
 
     public function test_register_otp_verify_fails_with_wrong_code(): void
     {
-        app(OtpService::class)->generate('+224622111001');
+        app(OtpService::class)->generate('+224622111001', OtpPurpose::PHONE_VERIFICATION);
 
         $this->postJson(route('api.public.register.otp.verify'), [
             'telephone' => '+224622111001',
