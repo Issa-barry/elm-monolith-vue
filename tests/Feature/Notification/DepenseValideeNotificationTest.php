@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Notification;
 
+use App\Jobs\DispatchPushNotificationsJob;
 use App\Models\Depense;
 use App\Models\DepenseType;
 use App\Models\Organization;
@@ -11,6 +12,7 @@ use App\Models\Vehicule;
 use App\Notifications\DepenseValideeNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Queue;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\Feature\Concerns\MakesClientProfiles;
@@ -63,6 +65,7 @@ class DepenseValideeNotificationTest extends TestCase
     public function test_valider_une_depense_vehicule_notifie_le_proprietaire_connecte(): void
     {
         Notification::fake();
+        Queue::fake();
 
         $proprietaireUser = $this->makeProprietaireUser($this->org);
         $vehicule = Vehicule::factory()->create([
@@ -84,6 +87,39 @@ class DepenseValideeNotificationTest extends TestCase
             ->assertRedirect();
 
         Notification::assertSentTo($proprietaireUser, DepenseValideeNotification::class);
+        Queue::assertPushed(DispatchPushNotificationsJob::class, fn (DispatchPushNotificationsJob $job) => $job->userIds === [$proprietaireUser->id]
+            && $job->payload['data']['type'] === 'expense.validated'
+            && $job->payload['data']['depense_id'] === $depense->id);
+    }
+
+    /** Préférence désactivée : ni database ni push (même garantie que le reste du dispatcher). */
+    public function test_preference_depenses_desactivee_bloque_aussi_le_push(): void
+    {
+        Notification::fake();
+        Queue::fake();
+
+        $proprietaireUser = $this->makeProprietaireUser($this->org);
+        $proprietaireUser->update(['notification_preferences' => ['depenses' => false]]);
+        $vehicule = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'proprietaire_id' => $proprietaireUser->proprietaire->id,
+        ]);
+
+        $type = DepenseType::factory()->vehicule()->create(['organization_id' => $this->org->id]);
+        $depense = Depense::factory()->soumis()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->site->id,
+            'depense_type_id' => $type->id,
+            'beneficiaire_type' => 'vehicule',
+            'beneficiaire_id' => $vehicule->id,
+        ]);
+
+        $this->actingAs($this->adminUser())
+            ->patch(route('depenses.valider', $depense))
+            ->assertRedirect();
+
+        Notification::assertNotSentTo($proprietaireUser, DepenseValideeNotification::class);
+        Queue::assertNotPushed(DispatchPushNotificationsJob::class);
     }
 
     public function test_depense_interne_najamais_denvoi(): void

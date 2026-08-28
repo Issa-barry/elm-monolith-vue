@@ -1,8 +1,8 @@
 <script setup lang="ts">
+import DerogationImpayesCard from '@/components/DerogationImpayesCard.vue';
 import DetailHeader from '@/components/DetailHeader.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
@@ -24,7 +24,7 @@ import {
 } from 'lucide-vue-next';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 interface EquipeMembre {
     livreur_nom: string | null;
@@ -182,137 +182,6 @@ const totalApprouve = computed(() =>
 
 function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
-}
-
-/**
- * État local nécessaire ici (contrairement à l'ancien toggle "tout ou rien" sans montant) : le
- * Switch doit révéler le champ plafond dès qu'on l'active SANS persister immédiatement — seul le
- * clic sur "Enregistrer" envoie la requête, avec activation et plafond dans le même appel
- * (cf. VehiculeController::updateDerogation()). Resynchronisé sur les props à chaque
- * succès/erreur ci-dessous, jamais laissé diverger durablement de l'état serveur.
- */
-const derogationActive = ref(props.vehicule.derogation_impayes_autorisee);
-const derogationMontant = ref<number | null>(
-    props.vehicule.seuil_derogation_impayes,
-);
-const derogationProcessing = ref(false);
-const derogationMontantError = ref<string | null>(null);
-
-watch(
-    () => props.vehicule.derogation_impayes_autorisee,
-    (v) => {
-        derogationActive.value = v;
-    },
-);
-watch(
-    () => props.vehicule.seuil_derogation_impayes,
-    (v) => {
-        derogationMontant.value = v;
-    },
-);
-
-// Formatage "2 000 000" pendant la saisie — même pattern que #seuil-impayes-input
-// (settings/Ventes.vue) : un input texte simple plutôt que PrimeVue InputNumber, dont le reste
-// du projet n'active jamais le groupement de milliers (cf. CapacitesEditor.vue, TypeVehicules).
-function formatMontant(val: number | null): string {
-    return val !== null && val > 0
-        ? new Intl.NumberFormat('fr-FR').format(val)
-        : '';
-}
-
-const derogationMontantDisplay = ref(formatMontant(derogationMontant.value));
-
-watch(derogationMontant, (val) => {
-    if (document.activeElement?.id !== 'seuil_derogation_impayes') {
-        derogationMontantDisplay.value = formatMontant(val);
-    }
-});
-
-function onMontantInput(e: Event) {
-    const input = e.target as HTMLInputElement;
-    const raw = input.value.replace(/\D/g, '');
-    derogationMontant.value = raw ? parseInt(raw, 10) : null;
-    derogationMontantDisplay.value = formatMontant(derogationMontant.value);
-    input.value = derogationMontantDisplay.value;
-    derogationMontantError.value = null;
-}
-
-function onMontantFocus() {
-    derogationMontantDisplay.value = formatMontant(derogationMontant.value);
-}
-
-function onMontantBlur() {
-    derogationMontantDisplay.value = formatMontant(derogationMontant.value);
-}
-
-function saveDerogation(active: boolean) {
-    if (derogationProcessing.value) return;
-
-    if (
-        active &&
-        (derogationMontant.value === null || derogationMontant.value <= 0)
-    ) {
-        derogationMontantError.value =
-            "Renseignez un plafond d'impayés autorisé pour activer la dérogation.";
-        return;
-    }
-    derogationMontantError.value = null;
-    derogationProcessing.value = true;
-
-    router.patch(
-        `/backoffice/vehicules/${props.vehicule.id}/derogation-impayes`,
-        {
-            derogation_impayes_autorisee: active,
-            seuil_derogation_impayes: derogationMontant.value,
-        },
-        {
-            preserveScroll: true,
-            onSuccess: () => {
-                toast.add({
-                    severity: 'success',
-                    summary: 'Dérogation impayés',
-                    detail: active
-                        ? 'Dérogation activée.'
-                        : 'Dérogation désactivée.',
-                    life: 4000,
-                    group: 'top',
-                });
-            },
-            onError: (errors) => {
-                // Revert : l'état serveur (props.vehicule) n'a pas changé, le Switch/champ
-                // local ne doivent pas rester sur une valeur jamais persistée.
-                derogationActive.value =
-                    props.vehicule.derogation_impayes_autorisee;
-                derogationMontant.value =
-                    props.vehicule.seuil_derogation_impayes;
-                derogationMontantError.value =
-                    errors.seuil_derogation_impayes ?? null;
-                toast.add({
-                    severity: 'error',
-                    summary: 'Dérogation impayés',
-                    detail:
-                        errors.derogation_impayes_autorisee ??
-                        errors.seuil_derogation_impayes ??
-                        'Impossible de mettre à jour la dérogation.',
-                    life: 5000,
-                    group: 'top',
-                });
-            },
-            onFinish: () => {
-                derogationProcessing.value = false;
-            },
-        },
-    );
-}
-
-function onToggleDerogation(checked: boolean) {
-    derogationActive.value = checked;
-    derogationMontantError.value = null;
-    // Désactivation : action autonome, sans plafond à confirmer — persistée tout de suite.
-    // Activation : reste en attente d'un plafond saisi, confirmé via "Enregistrer".
-    if (!checked) {
-        saveDerogation(false);
-    }
 }
 </script>
 
@@ -650,95 +519,14 @@ function onToggleDerogation(checked: boolean) {
                                     </p>
                                 </template>
                             </div>
-                            <div class="rounded-lg border bg-background p-4">
-                                <div
-                                    class="flex items-center justify-between gap-3"
-                                >
-                                    <p class="text-sm font-medium">
-                                        Dérogation impayés
-                                    </p>
-                                    <Switch
-                                        aria-label="Dérogation impayés"
-                                        :model-value="derogationActive"
-                                        :disabled="
-                                            derogationProcessing ||
-                                            !can('vehicules.update')
-                                        "
-                                        @update:model-value="
-                                            onToggleDerogation($event)
-                                        "
-                                    />
-                                </div>
-
-                                <template v-if="!derogationActive">
-                                    <p
-                                        class="mt-1.5 text-xs text-muted-foreground"
-                                    >
-                                        Seuil standard appliqué :
-                                        {{ formatGNF(seuil_global_impayes) }}
-                                    </p>
-                                </template>
-                                <template v-else>
-                                    <div class="mt-3 space-y-1.5">
-                                        <label
-                                            for="seuil_derogation_impayes"
-                                            class="text-xs font-medium text-muted-foreground"
-                                        >
-                                            Montant maximum (GNF)
-                                        </label>
-                                        <div class="flex items-center gap-2">
-                                            <input
-                                                id="seuil_derogation_impayes"
-                                                type="text"
-                                                inputmode="numeric"
-                                                :value="
-                                                    derogationMontantDisplay
-                                                "
-                                                placeholder="Ex: 500 000"
-                                                class="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm"
-                                                :class="{
-                                                    'border-destructive':
-                                                        derogationMontantError,
-                                                }"
-                                                :disabled="
-                                                    derogationProcessing ||
-                                                    !can('vehicules.update')
-                                                "
-                                                @input="onMontantInput"
-                                                @focus="onMontantFocus"
-                                                @blur="onMontantBlur"
-                                            />
-                                            <Button
-                                                size="sm"
-                                                :disabled="
-                                                    derogationProcessing ||
-                                                    !can('vehicules.update')
-                                                "
-                                                @click="saveDerogation(true)"
-                                            >
-                                                {{
-                                                    derogationProcessing
-                                                        ? 'Enregistrement…'
-                                                        : 'Enregistrer'
-                                                }}
-                                            </Button>
-                                        </div>
-                                        <p
-                                            v-if="derogationMontantError"
-                                            class="text-xs text-destructive"
-                                        >
-                                            {{ derogationMontantError }}
-                                        </p>
-                                        <p
-                                            v-else
-                                            class="text-xs font-medium text-muted-foreground"
-                                        >
-                                            Maximum d'impayés autorisé pour ce
-                                            véhicule.
-                                        </p>
-                                    </div>
-                                </template>
-                            </div>
+                            <DerogationImpayesCard
+                                :active="vehicule.derogation_impayes_autorisee"
+                                :seuil="vehicule.seuil_derogation_impayes"
+                                :seuil-global="seuil_global_impayes"
+                                :update-url="`/backoffice/vehicules/${vehicule.id}/derogation-impayes`"
+                                :can-update="can('vehicules.update')"
+                                entite-label="ce véhicule"
+                            />
                         </div>
                     </div>
                 </template>

@@ -1,0 +1,192 @@
+<script setup lang="ts">
+import {
+    SidebarMenuAction,
+    SidebarMenuButton,
+    SidebarMenuItem,
+    SidebarMenuSub,
+    SidebarMenuSubButton,
+    SidebarMenuSubItem,
+} from '@/components/ui/sidebar';
+import { useSidebar } from '@/components/ui/sidebar/utils';
+import { toUrl } from '@/lib/utils';
+import { type NavItem } from '@/types';
+import { Link, usePage } from '@inertiajs/vue3';
+import { ChevronDown } from 'lucide-vue-next';
+import { reactive } from 'vue';
+
+defineProps<{
+    item: NavItem;
+}>();
+
+const page = usePage();
+const { isMobile, setOpenMobile } = useSidebar();
+
+function closeMobileSidebar() {
+    if (isMobile.value) setOpenMobile(false);
+}
+
+const openMenus = reactive<Record<string, boolean>>({});
+
+function isItemActive(href: NavItem['href']) {
+    const url = toUrl(href);
+    if (!url) return false;
+
+    return (
+        page.url === url ||
+        page.url.startsWith(`${url}/`) ||
+        page.url.startsWith(`${url}?`)
+    );
+}
+
+function isParentActive(item: NavItem): boolean {
+    return (
+        isItemActive(item.href) ||
+        !!item.items?.some((subItem) => isParentActive(subItem))
+    );
+}
+
+function menuKey(item: NavItem) {
+    return `${item.title}:${toUrl(item.href) ?? ''}`;
+}
+
+function isMenuOpen(item: NavItem) {
+    const key = menuKey(item);
+    if (!(key in openMenus)) {
+        openMenus[key] = isParentActive(item);
+    }
+
+    return openMenus[key];
+}
+
+function toggleMenu(item: NavItem) {
+    const key = menuKey(item);
+    openMenus[key] = !isMenuOpen(item);
+}
+
+function parentBadge(item: NavItem): number | undefined {
+    const total = item.items?.reduce((sum, s) => sum + (s.badge ?? 0), 0) ?? 0;
+    return total > 0 ? total : undefined;
+}
+</script>
+
+<template>
+    <SidebarMenuItem>
+        <SidebarMenuButton
+            v-if="!item.items?.length"
+            as-child
+            :is-active="isItemActive(item.href)"
+            :tooltip="item.title"
+        >
+            <Link :href="item.href" @click="closeMobileSidebar">
+                <component
+                    v-if="item.icon"
+                    :is="item.icon"
+                    class="text-sidebar-primary"
+                />
+                <span>{{ item.title }}</span>
+                <span
+                    v-if="item.badge"
+                    class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground"
+                    >{{ item.badge }}</span
+                >
+            </Link>
+        </SidebarMenuButton>
+
+        <template v-else>
+            <SidebarMenuButton
+                :is-active="isParentActive(item)"
+                :tooltip="item.title"
+                @click="toggleMenu(item)"
+            >
+                <component
+                    v-if="item.icon"
+                    :is="item.icon"
+                    class="text-sidebar-primary"
+                />
+                <span>{{ item.title }}</span>
+                <span
+                    v-if="parentBadge(item)"
+                    class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground"
+                    >{{ parentBadge(item) }}</span
+                >
+            </SidebarMenuButton>
+            <SidebarMenuAction @click.stop="toggleMenu(item)">
+                <ChevronDown
+                    class="h-4 w-4 text-sidebar-primary opacity-70 transition-transform"
+                    :class="isMenuOpen(item) ? 'rotate-180' : ''"
+                />
+            </SidebarMenuAction>
+
+            <SidebarMenuSub v-if="isMenuOpen(item)">
+                <SidebarMenuSubItem
+                    v-for="subItem in item.items"
+                    :key="`${item.title}-${subItem.title}`"
+                >
+                    <template v-if="subItem.items?.length">
+                        <SidebarMenuSubButton
+                            as="button"
+                            class="w-full cursor-pointer"
+                            :is-active="isParentActive(subItem)"
+                            :aria-expanded="isMenuOpen(subItem)"
+                            @click="toggleMenu(subItem)"
+                        >
+                            <span>{{ subItem.title }}</span>
+                            <span
+                                v-if="parentBadge(subItem)"
+                                class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground"
+                                >{{ parentBadge(subItem) }}</span
+                            >
+                            <ChevronDown
+                                class="ml-auto h-3.5 w-3.5 shrink-0 opacity-70 transition-transform"
+                                :class="isMenuOpen(subItem) ? 'rotate-180' : ''"
+                            />
+                        </SidebarMenuSubButton>
+
+                        <SidebarMenuSub
+                            v-if="isMenuOpen(subItem)"
+                            class="mx-2.5 pr-0"
+                        >
+                            <SidebarMenuSubItem
+                                v-for="nestedItem in subItem.items"
+                                :key="`${item.title}-${subItem.title}-${nestedItem.title}`"
+                            >
+                                <SidebarMenuSubButton
+                                    as-child
+                                    size="md"
+                                    :is-active="isItemActive(nestedItem.href)"
+                                >
+                                    <Link
+                                        :href="nestedItem.href"
+                                        @click="closeMobileSidebar"
+                                    >
+                                        <span>{{ nestedItem.title }}</span>
+                                        <span
+                                            v-if="nestedItem.badge"
+                                            class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground"
+                                            >{{ nestedItem.badge }}</span
+                                        >
+                                    </Link>
+                                </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                        </SidebarMenuSub>
+                    </template>
+
+                    <SidebarMenuSubButton
+                        v-else
+                        as-child
+                        :is-active="isItemActive(subItem.href)"
+                    >
+                        <Link :href="subItem.href" @click="closeMobileSidebar">
+                            <span>{{ subItem.title }}</span>
+                            <span
+                                v-if="subItem.badge"
+                                class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground"
+                                >{{ subItem.badge }}</span
+                            >
+                        </Link>
+                    </SidebarMenuSubButton>
+                </SidebarMenuSubItem>
+            </SidebarMenuSub>
+        </template>
+    </SidebarMenuItem>
+</template>

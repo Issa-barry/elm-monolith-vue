@@ -165,7 +165,17 @@ class UserController extends Controller
     {
         $this->authorize('viewAny', User::class);
 
-        $authUser = auth()->user();
+        return Inertia::render('Users/Index', $this->indexProps(auth()->user()));
+    }
+
+    /**
+     * Props de la page Users/Index — extrait pour être réutilisé par
+     * AccountController::index() (écran "Comptes"), qui délègue à cette même
+     * liste organisation-scopée pour tout acteur non super_admin, afin de ne
+     * pas dupliquer la logique staff/rôles/validation entre les deux écrans.
+     */
+    public function indexProps(User $authUser): array
+    {
         $orgId = $authUser->organization_id;
 
         $users = User::with([
@@ -218,7 +228,7 @@ class UserController extends Controller
                 ]);
         }
 
-        return Inertia::render('Users/Index', [
+        return [
             'users' => $users,
             'pending_registrations' => $pendingRegistrations,
             // Options du modal de validation de compte (ValidateAccountModal.vue) — cf.
@@ -240,7 +250,7 @@ class UserController extends Controller
                 ? Role::where(fn ($q) => $q->whereNull('organization_id')->orWhere('organization_id', $orgId))
                     ->pluck('label', 'name')
                 : [],
-        ]);
+        ];
     }
 
     public function create(): Response

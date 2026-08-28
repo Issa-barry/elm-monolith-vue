@@ -10,7 +10,7 @@ use App\Enums\ModeTarification;
  * de sa création — voir VehiculeCommandeContextResolver. Regroupe trois notions volontairement
  * indépendantes :
  *  - modeTarification : quel prix sert de base au montant facturé (véhicule de flotte → prix
- *    de vente ; client PARTENAIRE sans véhicule → prix usine, cf. ModeTarification).
+ *    de vente ; client EXTERNE sans véhicule → prix usine, cf. ModeTarification).
  *  - commissionEligible : la commande génère-t-elle une commission (dérivé de
  *    Vehicule::livraison_vente, jamais vrai sans véhicule de flotte — cf. CommissionGenerator).
  *  - categorieTarifaireVehicule : catégorie tarifaire du véhicule de flotte livrant la commande

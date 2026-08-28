@@ -12,6 +12,7 @@ use App\Services\AuditLogService;
 use App\Services\CommissionEnveloppePartAllocationService;
 use App\Services\Notification\BeneficiaireUserResolver;
 use App\Services\Notification\NotificationDispatcher;
+use App\Services\Notification\PushBodyFormatter;
 use App\Services\PeriodePayabilityChecker;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -124,11 +125,20 @@ class PaiementFichePaiementController extends Controller
     {
         try {
             $user = BeneficiaireUserResolver::resolve($fiche->beneficiaire_type, $fiche->beneficiaire_id);
+            $notif = new CommissionPayeeNotification((float) $paiement->montant, $paiement->mode_paiement, $paiement->note, 'paiement_fiche', $fiche->id);
+            $notifData = $user ? $notif->toArray($user) : null;
 
             NotificationDispatcher::send(
-                new CommissionPayeeNotification((float) $paiement->montant, $paiement->mode_paiement, $paiement->note, 'paiement_fiche', $fiche->id),
+                $notif,
                 [$user],
                 'commissions',
+                // Pas d'ID navigable ici (fiche = document comptable interne) — le type seul
+                // suffit (cf. rapport Web Push 7/7).
+                $notifData ? fn () => [
+                    'title' => $notifData['titre'],
+                    'body' => PushBodyFormatter::format($notifData),
+                    'data' => ['type' => 'commission.paid'],
+                ] : null,
             );
         } catch (Throwable $e) {
             Log::error('CommissionPayeeNotification (fiche) : envoi échoué', [

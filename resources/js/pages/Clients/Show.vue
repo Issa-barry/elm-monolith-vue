@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DerogationImpayesCard from '@/components/DerogationImpayesCard.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -21,6 +22,9 @@ interface ClientData {
     is_active: boolean;
     type: string;
     cashback_eligible: boolean;
+    cashback_montant_par_pack: number | null;
+    derogation_impayes_autorisee: boolean;
+    seuil_derogation_impayes: number | null;
 }
 
 interface CashbackSolde {
@@ -33,6 +37,7 @@ interface CashbackSolde {
 const props = defineProps<{
     client: ClientData;
     cashback_solde: CashbackSolde | null;
+    seuil_global_impayes: number;
 }>();
 
 const { can } = usePermissions();
@@ -58,6 +63,7 @@ const form = useForm({
     is_active: Boolean(props.client.is_active),
     type: props.client.type,
     cashback_eligible: Boolean(props.client.cashback_eligible),
+    cashback_montant_par_pack: props.client.cashback_montant_par_pack,
 });
 
 watch(
@@ -75,6 +81,7 @@ watch(
             is_active: Boolean(c.is_active),
             type: c.type,
             cashback_eligible: Boolean(c.cashback_eligible),
+            cashback_montant_par_pack: c.cashback_montant_par_pack,
         }).reset();
     },
 );
@@ -201,6 +208,20 @@ function formatMontant(v: number): string {
                         </p>
                     </div>
                 </div>
+                <!-- Paramétrage courant — purement informatif, jamais utilisé pour recalculer
+                     l'historique ci-dessus (cf. CashbackTransaction.montant_unitaire_snapshot,
+                     seule source de vérité pour un gain déjà généré). -->
+                <div class="border-t px-4 py-2 text-xs text-muted-foreground">
+                    <template v-if="client.cashback_eligible">
+                        Cashback actif —
+                        {{
+                            client.cashback_montant_par_pack !== null
+                                ? `${formatMontant(client.cashback_montant_par_pack)} / pack`
+                                : 'montant non configuré'
+                        }}
+                    </template>
+                    <template v-else>Cashback désactivé</template>
+                </div>
                 <div
                     v-if="cashback_solde.cashback_en_attente > 0"
                     class="border-t bg-amber-50 px-4 py-2 text-xs text-amber-700"
@@ -217,6 +238,17 @@ function formatMontant(v: number): string {
                         >Gérer →</a
                     >
                 </div>
+            </div>
+
+            <div class="mx-6 mb-6">
+                <DerogationImpayesCard
+                    :active="client.derogation_impayes_autorisee"
+                    :seuil="client.seuil_derogation_impayes"
+                    :seuil-global="seuil_global_impayes"
+                    :update-url="`/backoffice/clients/${client.id}/derogation-impayes`"
+                    :can-update="can('clients.update')"
+                    entite-label="ce client"
+                />
             </div>
 
             <ClientForm

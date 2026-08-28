@@ -9,6 +9,7 @@ use App\Enums\CommissionGenerationDeclenchePar;
 use App\Enums\CommissionGenerationStatut;
 use App\Enums\ModeTarification;
 use App\Enums\MotifAnnulation;
+use App\Enums\PrixOrigine;
 use App\Enums\ProduitStatut;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutCommission;
@@ -29,6 +30,7 @@ use App\Services\CommandeVenteActiviteService;
 use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionEnveloppeGenerator;
 use App\Services\PrixUsineResolver;
+use App\Services\PrixVenteNatureResolver;
 use App\Services\SolvabiliteService;
 use App\Services\VehiculeCapaciteService;
 use App\Services\VehiculeCommandeContextResolver;
@@ -354,9 +356,10 @@ class CommandeVenteController extends Controller
 
         $this->ensureVehiculeOrClientSelected($data);
         $this->ensureQuantiteMatchesVehiculeCapacity($data);
-        $this->enforcePrixVentePolicy($data, null);
+        $client = $this->resolveClientForTarification($data['client_id'] ?? null);
+        $this->enforcePrixVentePolicy($data, null, $client);
 
-        $commande = DB::transaction(function () use ($data, $orgId, $userSite) {
+        $commande = DB::transaction(function () use ($data, $orgId, $userSite, $client) {
             // Verrou de ligne sur le véhicule le temps de la transaction : sans cela, deux
             // requêtes concurrentes pour le même véhicule (double clic, deux utilisateurs)
             // passeraient toutes les deux enforceImpayesBlocking() avant qu'aucune des deux
@@ -372,7 +375,7 @@ class CommandeVenteController extends Controller
             $this->enforceImpayesBlocking($data, $orgId);
 
             $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null);
-            [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $context->modeTarification, $context->categorieTarifaireVehicule);
+            [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $context->modeTarification, $context->categorieTarifaireVehicule, $client);
 
             $this->assertStockDisponiblePourLignes($orgId, $userSite->id, $lignesData);
 
@@ -445,6 +448,7 @@ class CommandeVenteController extends Controller
             'ecart_chargement' => $l->ecart_chargement,
             'prix_usine_snapshot' => (float) $l->prix_usine_snapshot,
             'prix_vente_snapshot' => (float) $l->prix_vente_snapshot,
+            'prix_origine_snapshot' => $l->prix_origine_snapshot?->value,
             'total_ligne' => (float) $l->total_ligne,
         ]);
 
@@ -623,13 +627,14 @@ class CommandeVenteController extends Controller
 
         $this->ensureVehiculeOrClientSelected($data);
         $this->ensureQuantiteMatchesVehiculeCapacity($data);
-        $this->enforcePrixVentePolicy($data, $vente);
+        $client = $this->resolveClientForTarification($data['client_id'] ?? null);
+        $this->enforcePrixVentePolicy($data, $vente, $client);
 
         $vente->load(['lignes.variante.produit', 'vehicule', 'client']);
         $oldSnapshot = $this->commandeSnapshot($vente);
 
         $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null);
-        [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $context->modeTarification, $context->categorieTarifaireVehicule);
+        [$lignesData, $totalCommande] = $this->buildLignesDataAndTotal($data['lignes'], $context->modeTarification, $context->categorieTarifaireVehicule, $client);
 
         // Le site ne change jamais lors d'une modification de brouillon (pas de champ site_id
         // dans commandeValidationRules()) : on contrôle donc contre le site déjà porté par la
@@ -974,7 +979,18 @@ class CommandeVenteController extends Controller
         );
     }
 
-    private function enforcePrixVentePolicy(array $data, ?CommandeVente $commande): void
+    /**
+     * Résout le client une seule fois par requête (store/update), réutilisé par
+     * enforcePrixVentePolicy() ET buildLignesDataAndTotal() — jamais un second aller-retour DB
+     * pour la même commande. Sélection minimale ('id', 'type') : c'est tout ce dont
+     * PrixVenteNatureResolver a besoin.
+     */
+    private function resolveClientForTarification(?string $clientId): ?Client
+    {
+        return $clientId ? Client::query()->select(['id', 'type'])->find($clientId) : null;
+    }
+
+    private function enforcePrixVentePolicy(array $data, ?CommandeVente $commande, ?Client $client): void
     {
         if (auth()->user()->can(self::UNIT_PRICE_UPDATE_PERMISSION)) {
             return;
@@ -989,6 +1005,14 @@ class CommandeVenteController extends Controller
 
         foreach ($data['lignes'] as $index => $ligne) {
             $variante = $this->resolveVariante($ligne);
+
+            // Ligne fabricable avec client : le prix effectivement facturé vient de
+            // PrixVenteNatureResolver (cf. buildLignesDataAndTotal()), pas de ce qui est soumis
+            // ici — aucune valeur reçue n'est donc jamais réellement utilisée pour cette ligne,
+            // ce contrôle anti-manipulation n'a plus d'objet.
+            if (PrixVenteNatureResolver::estFabricable($variante) && $client) {
+                continue;
+            }
 
             $prixRecu = (float) ($ligne['prix_vente'] ?? 0);
             $prixAttendu = $existingPrixParVariante[$variante->id] ?? (float) ($variante->prix_vente ?? $prixRecu);
@@ -1015,7 +1039,7 @@ class CommandeVenteController extends Controller
             ->toArray();
     }
 
-    private function buildLignesDataAndTotal(array $lignes, ModeTarification $mode, ?CategorieTarifaireVehicule $categorieTarifaire = null): array
+    private function buildLignesDataAndTotal(array $lignes, ModeTarification $mode, ?CategorieTarifaireVehicule $categorieTarifaire = null, ?Client $client = null): array
     {
         $lignesData = [];
         $totalCommande = 0;
@@ -1024,15 +1048,30 @@ class CommandeVenteController extends Controller
             $variante = $this->resolveVariante($ligne);
             $produit = $variante->produit;
             $qte = (int) $ligne['qte'];
-            $prixVente = (float) $ligne['prix_vente'];
+            // Fabricable + client : le prix par nature de client (Externe/Revendeur/
+            // Distributeur) remplace le prix de vente saisi/existant — jamais l'inverse (cf.
+            // enforcePrixVentePolicy() qui n'a alors plus rien à valider pour cette ligne) — et
+            // gouverne SEUL le total de cette ligne, sans passer par le mode de tarification
+            // véhicule/client (qui basculerait sinon un client Externe entier sur prix_usine,
+            // ignorant le prix_externe qu'on vient de résoudre). Produit non-fabricable ou
+            // aucun client : comportement historique inchangé (mode global).
+            $ligneFabricablePourClient = PrixVenteNatureResolver::estFabricable($variante) && $client;
+            $prixVente = $ligneFabricablePourClient
+                ? (float) PrixVenteNatureResolver::resolve($variante, $client)
+                : (float) $ligne['prix_vente'];
             $prixUsine = (float) PrixUsineResolver::resolve($variante, $categorieTarifaire);
-            $totalLigne = $qte * ($mode === ModeTarification::PRIX_VENTE ? $prixVente : $prixUsine);
+            $appliquerPrixVente = $ligneFabricablePourClient || $mode === ModeTarification::PRIX_VENTE;
+            $totalLigne = $qte * ($appliquerPrixVente ? $prixVente : $prixUsine);
+            $prixOrigine = $ligneFabricablePourClient
+                ? PrixVenteNatureResolver::resolveOrigine($variante, $client)
+                : ($appliquerPrixVente ? PrixOrigine::VENTE : PrixOrigine::USINE);
 
             $lignesData[] = [
                 'variante_id' => $variante->id,
                 'quantite_demandee' => $qte,
                 'prix_usine_snapshot' => $prixUsine,
                 'prix_vente_snapshot' => $prixVente,
+                'prix_origine_snapshot' => $prixOrigine->value,
                 'total_ligne' => $totalLigne,
                 'libelle_snapshot' => $this->libelleSnapshot($produit, $variante),
             ];
@@ -1053,10 +1092,10 @@ class CommandeVenteController extends Controller
     private function resolveVariante(array $ligne): ProduitVariante
     {
         if (! empty($ligne['variante_id'])) {
-            return ProduitVariante::findOrFail($ligne['variante_id']);
+            return ProduitVariante::with('produit.produitType')->findOrFail($ligne['variante_id']);
         }
 
-        $produit = Produit::with('variantes')->findOrFail($ligne['produit_id']);
+        $produit = Produit::with(['variantes', 'produitType'])->findOrFail($ligne['produit_id']);
 
         if ($produit->variantes->count() === 1) {
             return $produit->variantes->first();
@@ -1235,6 +1274,13 @@ class CommandeVenteController extends Controller
                     'categorie_id' => $p->categorie_id,
                     'prix_vente' => (int) ($variante?->prix_vente ?? 0),
                     'prix_usine' => (int) ($variante?->prix_usine ?? 0),
+                    // Tarification par nature de client (cf. PrixVenteNatureResolver) — pilote
+                    // le recalcul live du "Prix appliqué" dans Ventes/Create.vue/Edit.vue dès
+                    // qu'un client est sélectionné. Réservée aux produits fabricables.
+                    'is_fabricable' => $p->produitType?->code === 'fabricable',
+                    'prix_externe' => $variante?->prix_externe,
+                    'prix_revendeur' => $variante?->prix_revendeur,
+                    'prix_distributeur' => $variante?->prix_distributeur,
                 ];
             })
             ->filter()

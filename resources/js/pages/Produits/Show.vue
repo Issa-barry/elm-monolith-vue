@@ -101,6 +101,9 @@ interface Produit {
     statut_label: string;
     prix_usine: number | null;
     prix_usine_tricycle: number | null;
+    prix_externe: number | null;
+    prix_revendeur: number | null;
+    prix_distributeur: number | null;
     prix_vente: number | null;
     prix_achat: number | null;
     cout: number | null;
@@ -707,7 +710,7 @@ const ajustements = props.mouvements.map((m) => ({
                                 class="h-3.5 w-3.5 text-muted-foreground"
                             />
                             <span class="text-xs text-muted-foreground"
-                                >Prix usine — Autres véhicules</span
+                                >Prix usine — Tous véhicules</span
                             >
                         </div>
                         <p class="text-base font-semibold">
@@ -731,6 +734,45 @@ const ajustements = props.mouvements.map((m) => ({
                         </p>
                     </div>
                     <div
+                        v-if="produit.prix_externe !== null"
+                        class="rounded-lg bg-muted/50 p-4"
+                    >
+                        <div class="mb-1 flex items-center gap-1.5">
+                            <span class="text-xs text-muted-foreground"
+                                >Prix externe</span
+                            >
+                        </div>
+                        <p class="text-base font-semibold">
+                            {{ formatPrice(produit.prix_externe) }}
+                        </p>
+                    </div>
+                    <div
+                        v-if="produit.prix_distributeur !== null"
+                        class="rounded-lg bg-muted/50 p-4"
+                    >
+                        <div class="mb-1 flex items-center gap-1.5">
+                            <span class="text-xs text-muted-foreground"
+                                >Prix distributeur</span
+                            >
+                        </div>
+                        <p class="text-base font-semibold">
+                            {{ formatPrice(produit.prix_distributeur) }}
+                        </p>
+                    </div>
+                    <div
+                        v-if="produit.prix_revendeur !== null"
+                        class="rounded-lg bg-muted/50 p-4"
+                    >
+                        <div class="mb-1 flex items-center gap-1.5">
+                            <span class="text-xs text-muted-foreground"
+                                >Prix revendeur</span
+                            >
+                        </div>
+                        <p class="text-base font-semibold">
+                            {{ formatPrice(produit.prix_revendeur) }}
+                        </p>
+                    </div>
+                    <div
                         v-if="produit.cout !== null"
                         class="rounded-lg bg-muted/50 p-4"
                     >
@@ -748,6 +790,9 @@ const ajustements = props.mouvements.map((m) => ({
                             produit.prix_vente === null &&
                             produit.prix_achat === null &&
                             produit.prix_usine === null &&
+                            produit.prix_externe === null &&
+                            produit.prix_revendeur === null &&
+                            produit.prix_distributeur === null &&
                             produit.cout === null
                         "
                         class="col-span-2 py-4 text-center text-sm text-muted-foreground sm:col-span-4"

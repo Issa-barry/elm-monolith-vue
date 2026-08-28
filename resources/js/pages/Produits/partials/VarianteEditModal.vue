@@ -246,7 +246,7 @@ function submit() {
             >
                 <div v-if="prixUsineRequis" class="space-y-1.5">
                     <Label class="block"
-                        >Prix usine — Autres véhicules
+                        >Prix usine — Tous véhicules
                         <span class="text-destructive">*</span></Label
                     >
                     <InputNumber

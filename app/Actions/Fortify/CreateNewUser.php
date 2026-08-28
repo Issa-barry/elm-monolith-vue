@@ -2,6 +2,7 @@
 
 namespace App\Actions\Fortify;
 
+use App\Enums\ClientType;
 use App\Enums\OtpPurpose;
 use App\Features\ModuleFeature;
 use App\Models\Client;
@@ -216,6 +217,11 @@ class CreateNewUser implements CreatesNewUsers
                 'nom' => $user->nom,
                 'prenom' => $user->prenom,
                 'telephone' => $telephone,
+                // Explicite plutôt que de reposer sur le défaut colonne (cf.
+                // FelloDemoCustomersSeeder, même remarque) : un compte auto-créé à
+                // l'inscription n'a pas de nature commerciale connue, Externe est la
+                // valeur neutre (pas de règle cashback obligatoire contrairement à Revendeur).
+                'type' => ClientType::EXTERNE->value,
             ]);
         }
     }

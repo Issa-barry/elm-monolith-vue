@@ -87,11 +87,19 @@ test('create fabricable product with two-tier prix usine and verify persistence'
     await page.locator('#prix_usine').fill('5100');
     await page.locator('#prix_usine_tricycle').fill('5050');
     await page.locator('#prix_vente').fill('6000');
-    // PrimeVue InputNumber ne committe la valeur dans le v-model qu'au blur — les deux
-    // premiers champs sont "blurrés" naturellement quand le focus passe au suivant, mais le
-    // dernier (#prix_vente) ne l'est jamais avant le clic sur "Enregistrer", qui reste alors
-    // bloqué indéfiniment tant que canSubmit est faux (cf. ProduitForm.vue).
     await page.locator('#prix_vente').blur();
+
+    // Type "Fabricable" : les 3 tarifs par nature de client sont obligatoires (cf.
+    // ProduitService::raisonIncoherencePrix()) — sans eux, canSubmit reste faux et le
+    // bouton "Enregistrer" reste désactivé indéfiniment (cf. ProduitForm.vue). Chaque champ
+    // doit être "blurré" individuellement : PrimeVue InputNumber ne committe la valeur dans
+    // le v-model qu'au blur, jamais sur le simple événement "input" de .fill().
+    await page.locator('#prix_externe').fill('5200');
+    await page.locator('#prix_externe').blur();
+    await page.locator('#prix_revendeur').fill('5800');
+    await page.locator('#prix_revendeur').blur();
+    await page.locator('#prix_distributeur').fill('5500');
+    await page.locator('#prix_distributeur').blur();
 
     await page.getByRole('button', { name: /^enregistrer$/i }).click();
 
@@ -101,7 +109,7 @@ test('create fabricable product with two-tier prix usine and verify persistence'
     ).toBeVisible();
 
     // Persistance : les deux tarifs s'affichent distinctement sur la fiche produit.
-    await expect(page.getByText('Prix usine — Autres véhicules')).toBeVisible();
+    await expect(page.getByText('Prix usine — Tous véhicules')).toBeVisible();
     await expect(page.getByText('Prix usine — Tricycle')).toBeVisible();
     await expect(page.getByText('5 100')).toBeVisible();
     await expect(page.getByText('5 050')).toBeVisible();

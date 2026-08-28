@@ -2,8 +2,8 @@
 
 namespace App\Services\Notification;
 
+use App\Jobs\DispatchPushNotificationsJob;
 use App\Models\User;
-use App\Services\ExpoPushNotificationService;
 use Closure;
 use Illuminate\Notifications\Notification;
 
@@ -11,14 +11,17 @@ use Illuminate\Notifications\Notification;
  * Point central d'envoi d'une notification métier : dédoublonne les
  * destinataires par user id, filtre par préférence de notification
  * (User::wantsNotification), notifie (canaux via Notification::via()), puis
- * pousse en Expo si un payload push est fourni — un seul appel groupé, pas un
- * par destinataire.
+ * délègue le fan-out push (Expo + Web Push) à DispatchPushNotificationsJob
+ * (asynchrone) si un payload push est fourni — un seul job, pas un appel par
+ * destinataire ni par canal.
  *
  * Remplace la collecte de tokens/préférences dupliquée dans chaque
  * Job/Service (cf. audit notifications du 27/08/2026) : avant cette classe,
  * NotifierLivreursCommandeVenteJob avait sa propre logique, et
  * NotifierLivreursTransfertJob n'en avait aucune (préférences ignorées, push
- * envoyé à tout le monde sans filtre).
+ * envoyé à tout le monde sans filtre). Le Web Push PWA (2026-08-28) et le
+ * passage d'Expo en asynchrone réutilisent ce même point central, sans
+ * qu'aucun des 7 appelants métier n'ait à changer.
  */
 class NotificationDispatcher
 {
@@ -58,16 +61,8 @@ class NotificationDispatcher
             return;
         }
 
-        $tokens = $destinataires->pluck('expo_push_token')->filter()->unique()->values()->all();
-        if (empty($tokens)) {
-            return;
-        }
-
-        app(ExpoPushNotificationService::class)->sendMany(
-            $tokens,
-            $payload['title'],
-            $payload['body'],
-            $payload['data'] ?? [],
-        );
+        // Asynchrone (cf. DispatchPushNotificationsJob) : un appel réseau Expo/Web Push ne
+        // doit jamais faire attendre la transaction métier qui a déclenché cette notification.
+        DispatchPushNotificationsJob::dispatch($destinataires->pluck('id')->all(), $payload);
     }
 }

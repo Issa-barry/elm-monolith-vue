@@ -9,6 +9,7 @@ use App\Enums\CommissionUniteCalcul;
 use App\Enums\DeclencheurCommissionLogistique;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutTransfert;
+use App\Jobs\DispatchPushNotificationsJob;
 use App\Models\Categorie;
 use App\Models\CommandeVente;
 use App\Models\CommissionCibleType;
@@ -29,6 +30,7 @@ use App\Services\Commission\CommissionEnveloppeGenerator;
 use App\Services\TransfertLogistiqueService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Queue;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -65,6 +67,7 @@ class CommissionGenereeNotificationTest extends TestCase
     public function test_commande_vente_notifie_proprietaire_et_livreur_connectes(): void
     {
         Notification::fake();
+        Queue::fake();
 
         $processus = CommissionProcessus::create([
             'organization_id' => $this->org->id,
@@ -170,11 +173,27 @@ class CommissionGenereeNotificationTest extends TestCase
         Notification::assertSentTo($proprietaireUser, CommissionGenereeNotification::class);
         Notification::assertSentTo($livreurUser, CommissionGenereeNotification::class);
         Notification::assertNotSentTo($autreProprietaireUser, CommissionGenereeNotification::class);
+
+        // Web Push/Expo (7.08.2026) : même événement, poussé pour chaque bénéficiaire réel
+        // uniquement — jamais pour un propriétaire non concerné.
+        Queue::assertPushed(DispatchPushNotificationsJob::class, fn (DispatchPushNotificationsJob $job) => $job->userIds === [$proprietaireUser->id]
+            && $job->payload['data']['type'] === 'commission.generated'
+            && $job->payload['data']['commande_id'] === $commande->id);
+        Queue::assertPushed(DispatchPushNotificationsJob::class, fn (DispatchPushNotificationsJob $job) => $job->userIds === [$livreurUser->id]);
+        Queue::assertPushed(DispatchPushNotificationsJob::class, 2);
+
+        // Nettoyage des messages (2026-08-28) : `message` (API/cloche) ne contient plus le
+        // montant, mais le push (Expo/Web Push, seul champ `body`, pas de `montant` séparé)
+        // doit rester autonome — le montant y réapparaît, construit par PushBodyFormatter.
+        Queue::assertPushed(DispatchPushNotificationsJob::class, fn (DispatchPushNotificationsJob $job) => $job->userIds === [$proprietaireUser->id]
+            && str_contains($job->payload['body'], 'GNF')
+            && str_contains($job->payload['body'], $commande->reference));
     }
 
     public function test_commission_logistique_notifie_le_livreur_beneficiaire(): void
     {
         Notification::fake();
+        Queue::fake();
 
         $org = $this->org;
         Parametre::setDeclencheurCommissionLogistique($org->id, DeclencheurCommissionLogistique::CHARGEMENT_VALIDE);
@@ -223,5 +242,9 @@ class CommissionGenereeNotificationTest extends TestCase
         TransfertLogistiqueService::avancerStatut($transfert);
 
         Notification::assertSentTo($livreurUser, CommissionGenereeNotification::class);
+
+        Queue::assertPushed(DispatchPushNotificationsJob::class, fn (DispatchPushNotificationsJob $job) => $job->userIds === [$livreurUser->id]
+            && $job->payload['data']['type'] === 'commission.generated'
+            && $job->payload['data']['transfert_id'] === $transfert->id);
     }
 }

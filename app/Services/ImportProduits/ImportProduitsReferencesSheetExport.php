@@ -85,6 +85,13 @@ class ImportProduitsReferencesSheetExport implements FromArray, WithEvents, With
         $lignes[] = ['prix_usine_tricycle', 'Prix usine — Tricycle (GNF)'];
 
         $lignes[] = [];
+        $lignes[] = ['COLONNES DE TARIFICATION PAR NATURE DE CLIENT — obligatoires pour le type fabricable'];
+        $lignes[] = ['prix_externe', 'Prix appliqué à un client Externe (GNF)'];
+        $lignes[] = ['prix_revendeur', 'Prix appliqué à un client Revendeur (GNF)'];
+        $lignes[] = ['prix_distributeur', 'Prix appliqué à un client Distributeur (GNF)'];
+        $lignes[] = ['(facultatif pour les autres types)', 'Peut rester vide en dehors du type fabricable'];
+
+        $lignes[] = [];
         $lignes[] = ['CONVENTION #VIDER# (colonnes facultatives uniquement)'];
         $lignes[] = ['Cellule vide', 'Conserver la valeur existante (mise à jour) / valeur par défaut (création)'];
         $lignes[] = ['Valeur renseignée', 'Remplacer la valeur existante'];

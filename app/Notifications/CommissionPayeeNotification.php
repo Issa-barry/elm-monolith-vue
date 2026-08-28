@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Enums\ModePaiement;
 use Illuminate\Notifications\Notification;
 
 /**
@@ -30,12 +31,14 @@ class CommissionPayeeNotification extends Notification
 
     public function toArray(object $notifiable): array
     {
-        $montantFormate = number_format($this->montant, 0, ',', ' ');
+        $modePaiementLabel = ModePaiement::tryFrom($this->modePaiement)?->label() ?? $this->modePaiement;
 
         return [
             'type' => 'commission_payee',
-            'titre' => 'Commission reçue',
-            'message' => "{$montantFormate} GNF versé ({$this->modePaiement})",
+            'titre' => 'Commission payée',
+            // Jamais le montant ici : déjà exposé séparément par `montant` (NotificationResource)
+            // — cf. rapport "nettoyer les messages de notifications", 2026-08-28.
+            'message' => "Payée par {$modePaiementLabel}",
             'montant' => $this->montant,
             'mode_paiement' => $this->modePaiement,
             'note' => $this->note,

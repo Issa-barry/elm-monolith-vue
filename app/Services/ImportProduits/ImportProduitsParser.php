@@ -49,7 +49,11 @@ class ImportProduitsParser
 
     private const SENTINEL_VIDER = '#VIDER#';
 
-    private const CHAMPS_PRIX = ['prix_achat', 'prix_usine', 'prix_usine_tricycle', 'prix_vente', 'cout'];
+    private const CHAMPS_PRIX = [
+        'prix_achat', 'prix_usine', 'prix_usine_tricycle',
+        'prix_externe', 'prix_revendeur', 'prix_distributeur',
+        'prix_vente', 'cout',
+    ];
 
     /**
      * Nom explicite exposé dans les nouveaux classeurs. Le modèle métier et la base conservent
@@ -480,7 +484,15 @@ class ImportProduitsParser
             $donneesPrixEffectives = $estCreation
                 ? $donnees
                 : array_merge(
-                    array_intersect_key(['prix_usine' => $variante->prix_usine, 'prix_usine_tricycle' => $variante->prix_usine_tricycle, 'prix_vente' => $variante->prix_vente, 'prix_achat' => $variante->prix_achat], array_flip(self::CHAMPS_PRIX)),
+                    array_intersect_key([
+                        'prix_usine' => $variante->prix_usine,
+                        'prix_usine_tricycle' => $variante->prix_usine_tricycle,
+                        'prix_externe' => $variante->prix_externe,
+                        'prix_revendeur' => $variante->prix_revendeur,
+                        'prix_distributeur' => $variante->prix_distributeur,
+                        'prix_vente' => $variante->prix_vente,
+                        'prix_achat' => $variante->prix_achat,
+                    ], array_flip(self::CHAMPS_PRIX)),
                     array_intersect_key($donnees, array_flip(self::CHAMPS_PRIX)),
                 );
             try {

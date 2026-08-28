@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Notification;
 
+use App\Jobs\DispatchPushNotificationsJob;
 use App\Models\Organization;
 use App\Models\User;
 use App\Notifications\CommissionGenereeNotification;
@@ -9,6 +10,7 @@ use App\Services\Notification\NotificationDispatcher;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 /**
@@ -115,5 +117,61 @@ class NotificationDispatcherTest extends TestCase
         ]);
 
         Http::assertSent(fn ($request) => in_array('ExponentPushToken[x]', collect($request->data())->pluck('to')->all(), true));
+    }
+
+    /**
+     * Web Push (2026-08-28) : le fan-out Expo/Web Push passe désormais par un
+     * Job asynchrone — preuve qu'ajouter ce canal n'a pas changé les
+     * destinataires déterminés par le dispatcher (BeneficiaireUserResolver
+     * reste seul juge de qui est concerné).
+     */
+    public function test_dispatches_push_job_with_correct_recipients_when_payload_provided(): void
+    {
+        Notification::fake();
+        Queue::fake();
+
+        $org = Organization::factory()->create();
+        $user = User::factory()->create(['organization_id' => $org->id]);
+
+        NotificationDispatcher::send($this->notif(), [$user], 'commissions', fn () => [
+            'title' => 'Titre',
+            'body' => 'Corps',
+        ]);
+
+        Queue::assertPushed(DispatchPushNotificationsJob::class, fn (DispatchPushNotificationsJob $job) => $job->userIds === [$user->id]
+            && $job->payload['title'] === 'Titre'
+            && $job->payload['body'] === 'Corps');
+    }
+
+    public function test_does_not_dispatch_push_job_without_payload(): void
+    {
+        Notification::fake();
+        Queue::fake();
+
+        $org = Organization::factory()->create();
+        $user = User::factory()->create(['organization_id' => $org->id]);
+
+        NotificationDispatcher::send($this->notif(), [$user], 'commissions');
+
+        Queue::assertNotPushed(DispatchPushNotificationsJob::class);
+    }
+
+    public function test_does_not_dispatch_push_job_when_preference_filters_everyone(): void
+    {
+        Notification::fake();
+        Queue::fake();
+
+        $org = Organization::factory()->create();
+        $user = User::factory()->create([
+            'organization_id' => $org->id,
+            'notification_preferences' => ['commissions' => false],
+        ]);
+
+        NotificationDispatcher::send($this->notif(), [$user], 'commissions', fn () => [
+            'title' => 'Titre',
+            'body' => 'Corps',
+        ]);
+
+        Queue::assertNotPushed(DispatchPushNotificationsJob::class);
     }
 }
