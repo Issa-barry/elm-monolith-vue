@@ -28,12 +28,7 @@ interface ProduitOption {
     prix_distributeur: number | null;
 }
 
-type PrixOrigine =
-    | 'usine'
-    | 'vente'
-    | 'externe'
-    | 'revendeur'
-    | 'distributeur';
+type PrixOrigine = 'usine' | 'vente' | 'externe' | 'revendeur' | 'distributeur';
 
 const PRIX_ORIGINE_LABELS: Record<PrixOrigine, string> = {
     usine: 'Prix usine',
@@ -226,7 +221,10 @@ const totalCommandeLabel = 'Total commande';
  *  - sinon → comportement historique (modeTarification global : prix_usine
  *    pour un client Externe sans véhicule, prix_vente saisi/éditable sinon).
  */
-function resoudrePrixLigne(ligne: LigneForm): { montant: number; origine: PrixOrigine } {
+function resoudrePrixLigne(ligne: LigneForm): {
+    montant: number;
+    origine: PrixOrigine;
+} {
     const produit = props.produits.find((p) => p.id === ligne.produit_id);
 
     if (produit?.is_fabricable && clientSelected.value) {
@@ -919,7 +917,9 @@ function submit() {
                                                 onPrixChange(index, $event)
                                             "
                                             :min="0"
-                                            :disabled="!ligneUnitPriceEditable(ligne)"
+                                            :disabled="
+                                                !ligneUnitPriceEditable(ligne)
+                                            "
                                             :use-grouping="false"
                                             suffix=" GNF"
                                             class="w-full"
@@ -1021,7 +1021,9 @@ function submit() {
                                             onPrixChange(index, $event)
                                         "
                                         :min="0"
-                                        :disabled="!ligneUnitPriceEditable(ligne)"
+                                        :disabled="
+                                            !ligneUnitPriceEditable(ligne)
+                                        "
                                         :use-grouping="false"
                                         class="w-full"
                                         input-class="w-full"

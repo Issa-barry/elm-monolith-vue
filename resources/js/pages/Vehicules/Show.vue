@@ -183,7 +183,6 @@ const totalApprouve = computed(() =>
 function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
 }
-
 </script>
 
 <template>

@@ -189,7 +189,9 @@ function formatGNF(val: number): string {
                         :value="derogationMontantDisplay"
                         placeholder="Ex: 500 000"
                         class="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm"
-                        :class="{ 'border-destructive': derogationMontantError }"
+                        :class="{
+                            'border-destructive': derogationMontantError,
+                        }"
                         :disabled="derogationProcessing || !canUpdate"
                         @input="onMontantInput"
                         @focus="onMontantFocus"
@@ -200,7 +202,11 @@ function formatGNF(val: number): string {
                         :disabled="derogationProcessing || !canUpdate"
                         @click="saveDerogation(true)"
                     >
-                        {{ derogationProcessing ? 'Enregistrement…' : 'Enregistrer' }}
+                        {{
+                            derogationProcessing
+                                ? 'Enregistrement…'
+                                : 'Enregistrer'
+                        }}
                     </Button>
                 </div>
                 <p

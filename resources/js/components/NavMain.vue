@@ -43,8 +43,14 @@ const sections = computed((): NavSection[] => {
 
 <template>
     <SidebarGroup class="px-2 py-0">
-        <template v-for="(section, index) in sections" :key="section.label ?? 'root'">
-            <SidebarGroupLabel v-if="section.label" :class="index > 0 ? 'mt-1' : ''">
+        <template
+            v-for="(section, index) in sections"
+            :key="section.label ?? 'root'"
+        >
+            <SidebarGroupLabel
+                v-if="section.label"
+                :class="index > 0 ? 'mt-1' : ''"
+            >
                 {{ section.label }}
             </SidebarGroupLabel>
             <SidebarMenu>

@@ -275,7 +275,10 @@ const CHAMPS_PRIX_NATURE = [
 ] as const;
 
 function prixNatureRequis(champ: string): boolean {
-    return isFabricable.value && (CHAMPS_PRIX_NATURE as readonly string[]).includes(champ);
+    return (
+        isFabricable.value &&
+        (CHAMPS_PRIX_NATURE as readonly string[]).includes(champ)
+    );
 }
 
 const champsObligatoiresManquants = computed(() => {

@@ -63,6 +63,7 @@ const form = useForm({
     is_active: Boolean(props.client.is_active),
     type: props.client.type,
     cashback_eligible: Boolean(props.client.cashback_eligible),
+    cashback_montant_par_pack: props.client.cashback_montant_par_pack,
 });
 
 watch(
@@ -80,6 +81,7 @@ watch(
             is_active: Boolean(c.is_active),
             type: c.type,
             cashback_eligible: Boolean(c.cashback_eligible),
+            cashback_montant_par_pack: c.cashback_montant_par_pack,
         }).reset();
     },
 );

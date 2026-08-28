@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Enums\ClientType;
 use App\Models\Client;
 use App\Models\Organization;
 use Illuminate\Database\Seeder;
@@ -43,6 +44,11 @@ class ClientsInscriptionSeeder extends Seeder
                     'organization_id' => $org->id,
                     'user_id' => null,   // pas encore de compte → éligibles à l'inscription
                     'is_active' => true,
+                    // Explicite plutôt que de reposer sur le défaut colonne (cf.
+                    // FelloDemoCustomersSeeder, même remarque) : ces clients sans compte
+                    // n'ont pas de nature commerciale connue, Externe est la valeur neutre
+                    // (pas de règle cashback obligatoire contrairement à Revendeur).
+                    'type' => ClientType::EXTERNE->value,
                 ]),
             );
         }

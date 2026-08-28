@@ -395,9 +395,9 @@ function onSubmit() {
                     {{ errors.type }}
                 </p>
                 <p v-else class="mt-1.5 text-xs text-muted-foreground">
-                    Un client externe vient charger ses propres commandes,
-                    hors flotte gérée. Un revendeur est automatiquement
-                    éligible au cashback.
+                    Un client externe vient charger ses propres commandes, hors
+                    flotte gérée. Un revendeur est automatiquement éligible au
+                    cashback.
                 </p>
             </div>
         </div>

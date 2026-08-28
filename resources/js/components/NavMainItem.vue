@@ -14,7 +14,7 @@ import { Link, usePage } from '@inertiajs/vue3';
 import { ChevronDown } from 'lucide-vue-next';
 import { reactive } from 'vue';
 
-const props = defineProps<{
+defineProps<{
     item: NavItem;
 }>();
 
@@ -138,9 +138,7 @@ function parentBadge(item: NavItem): number | undefined {
                             >
                             <ChevronDown
                                 class="ml-auto h-3.5 w-3.5 shrink-0 opacity-70 transition-transform"
-                                :class="
-                                    isMenuOpen(subItem) ? 'rotate-180' : ''
-                                "
+                                :class="isMenuOpen(subItem) ? 'rotate-180' : ''"
                             />
                         </SidebarMenuSubButton>
 

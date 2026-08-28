@@ -86,12 +86,7 @@ interface ProduitOption {
     prix_distributeur: number | null;
 }
 
-type PrixOrigine =
-    | 'usine'
-    | 'vente'
-    | 'externe'
-    | 'revendeur'
-    | 'distributeur';
+type PrixOrigine = 'usine' | 'vente' | 'externe' | 'revendeur' | 'distributeur';
 
 const PRIX_ORIGINE_LABELS: Record<PrixOrigine, string> = {
     usine: 'Prix usine',
@@ -301,7 +296,10 @@ function produitPrixUsine(produitId: number | null): number {
  *  - sinon → comportement historique (modeTarification global : prix_usine
  *    pour un client Externe sans véhicule, prix_vente saisi/éditable sinon).
  */
-function resoudrePrixLigne(ligne: LigneForm): { montant: number; origine: PrixOrigine } {
+function resoudrePrixLigne(ligne: LigneForm): {
+    montant: number;
+    origine: PrixOrigine;
+} {
     const produit = props.produits.find((p) => p.id === ligne.produit_id);
 
     if (produit?.is_fabricable && clientSelected.value) {
@@ -320,7 +318,10 @@ function resoudrePrixLigne(ligne: LigneForm): { montant: number; origine: PrixOr
     }
 
     if (modeTarification.value === 'prix_usine') {
-        return { montant: produitPrixUsine(ligne.produit_id), origine: 'usine' };
+        return {
+            montant: produitPrixUsine(ligne.produit_id),
+            origine: 'usine',
+        };
     }
 
     return { montant: ligne.prix_vente, origine: 'vente' };
@@ -814,171 +815,301 @@ function confirmerEtCreer() {
                             logistique), pour ne jamais laisser croire que la dette du véhicule
                             est prise en compte alors qu'elle ne l'est plus. -->
                             <template v-if="!form.client_id">
-                            <div
-                                v-if="vehiculeSolvabiliteLoading"
-                                class="mt-3 flex items-center gap-2 text-xs text-muted-foreground"
-                            >
-                                <svg
-                                    class="h-3.5 w-3.5 animate-spin"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
+                                <div
+                                    v-if="vehiculeSolvabiliteLoading"
+                                    class="mt-3 flex items-center gap-2 text-xs text-muted-foreground"
                                 >
-                                    <circle
-                                        class="opacity-25"
-                                        cx="12"
-                                        cy="12"
-                                        r="10"
-                                        stroke="currentColor"
-                                        stroke-width="4"
-                                    />
-                                    <path
-                                        class="opacity-75"
-                                        fill="currentColor"
-                                        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                                    />
-                                </svg>
-                                Vérification en cours…
-                            </div>
+                                    <svg
+                                        class="h-3.5 w-3.5 animate-spin"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                    >
+                                        <circle
+                                            class="opacity-25"
+                                            cx="12"
+                                            cy="12"
+                                            r="10"
+                                            stroke="currentColor"
+                                            stroke-width="4"
+                                        />
+                                        <path
+                                            class="opacity-75"
+                                            fill="currentColor"
+                                            d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                                        />
+                                    </svg>
+                                    Vérification en cours…
+                                </div>
 
-                            <!-- 🚫 Commande bloquée — verrou « première régularisation » : une facture
+                                <!-- 🚫 Commande bloquée — verrou « première régularisation » : une facture
                                  précédente n'a reçu AUCUN encaissement, indépendamment du seuil
                                  d'impayés et de has_debt/blocked ci-dessous (cf. SolvabiliteService —
                                  une facture encore CREEE n'entre pas dans has_debt mais déclenche
                                  quand même ce verrou). Vérifié en priorité, avant tout le reste de
                                  la chaîne, pour ne jamais laisser passer « ✓ Véhicule à jour ». -->
-                            <div
-                                v-else-if="
-                                    vehiculeSolvabilite?.blocage_premiere_facture
-                                "
-                                class="mt-3 rounded-xl border border-red-300 bg-red-100 p-3 dark:border-red-700 dark:bg-red-950/50"
-                            >
                                 <div
-                                    class="mb-2 flex items-center justify-between gap-3"
+                                    v-else-if="
+                                        vehiculeSolvabilite?.blocage_premiere_facture
+                                    "
+                                    class="mt-3 rounded-xl border border-red-300 bg-red-100 p-3 dark:border-red-700 dark:bg-red-950/50"
                                 >
+                                    <div
+                                        class="mb-2 flex items-center justify-between gap-3"
+                                    >
+                                        <p
+                                            class="text-xs font-bold tracking-wide text-red-800 uppercase dark:text-red-300"
+                                        >
+                                            Commande bloquée — première facture
+                                            non réglée
+                                        </p>
+                                        <button
+                                            type="button"
+                                            class="shrink-0 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-100 dark:border-red-700 dark:bg-red-950/60 dark:text-red-300 dark:hover:bg-red-900/60"
+                                            @click="
+                                                ouvrirDialogFactures(
+                                                    vehiculeSolvabilite,
+                                                    {
+                                                        type: 'vehicule',
+                                                        titre: vehiculeSelected
+                                                            ? vehiculeLabel(
+                                                                  vehiculeSelected,
+                                                              )
+                                                            : 'Véhicule',
+                                                        chauffeur:
+                                                            vehiculeSelected?.livreur_nom
+                                                                ? vehiculeSelected.livreur_nom +
+                                                                  (vehiculeSelected.livreur_telephone
+                                                                      ? ' — ' +
+                                                                        formatPhoneDisplay(
+                                                                            vehiculeSelected.livreur_telephone,
+                                                                        )
+                                                                      : '')
+                                                                : undefined,
+                                                    },
+                                                )
+                                            "
+                                        >
+                                            Voir les factures
+                                        </button>
+                                    </div>
                                     <p
-                                        class="text-xs font-bold tracking-wide text-red-800 uppercase dark:text-red-300"
+                                        class="text-sm text-red-900 dark:text-red-200"
                                     >
-                                        Commande bloquée — première facture non
-                                        réglée
+                                        Ce véhicule possède déjà une
+                                        commande<template
+                                            v-if="
+                                                vehiculeSolvabilite.facture_bloquante_reference
+                                            "
+                                        >
+                                            ({{
+                                                vehiculeSolvabilite.facture_bloquante_reference
+                                            }})</template
+                                        >
+                                        dont la facture n'a encore reçu aucun
+                                        paiement. Enregistrez d'abord un
+                                        encaissement avant de créer une nouvelle
+                                        commande.
                                     </p>
-                                    <button
-                                        type="button"
-                                        class="shrink-0 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-100 dark:border-red-700 dark:bg-red-950/60 dark:text-red-300 dark:hover:bg-red-900/60"
-                                        @click="
-                                            ouvrirDialogFactures(
-                                                vehiculeSolvabilite,
-                                                {
-                                                    type: 'vehicule',
-                                                    titre: vehiculeSelected
-                                                        ? vehiculeLabel(
-                                                              vehiculeSelected,
-                                                          )
-                                                        : 'Véhicule',
-                                                    chauffeur:
-                                                        vehiculeSelected?.livreur_nom
-                                                            ? vehiculeSelected.livreur_nom +
-                                                              (vehiculeSelected.livreur_telephone
-                                                                  ? ' — ' +
-                                                                    formatPhoneDisplay(
-                                                                        vehiculeSelected.livreur_telephone,
-                                                                    )
-                                                                  : '')
-                                                            : undefined,
-                                                },
-                                            )
-                                        "
-                                    >
-                                        Voir les factures
-                                    </button>
                                 </div>
+
+                                <!-- ✅ Aucun impayé -->
                                 <p
-                                    class="text-sm text-red-900 dark:text-red-200"
+                                    v-else-if="
+                                        vehiculeSolvabilite &&
+                                        !vehiculeSolvabilite.has_debt
+                                    "
+                                    class="mt-2 flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400"
                                 >
-                                    Ce véhicule possède déjà une
-                                    commande<template
-                                        v-if="
-                                            vehiculeSolvabilite.facture_bloquante_reference
-                                        "
-                                    >
-                                        ({{
-                                            vehiculeSolvabilite.facture_bloquante_reference
-                                        }})</template
-                                    >
-                                    dont la facture n'a encore reçu aucun
-                                    paiement. Enregistrez d'abord un
-                                    encaissement avant de créer une nouvelle
-                                    commande.
+                                    <span>✓</span>
+                                    Véhicule à jour
                                 </p>
-                            </div>
 
-                            <!-- ✅ Aucun impayé -->
-                            <p
-                                v-else-if="
-                                    vehiculeSolvabilite &&
-                                    !vehiculeSolvabilite.has_debt
-                                "
-                                class="mt-2 flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400"
-                            >
-                                <span>✓</span>
-                                Véhicule à jour
-                            </p>
-
-                            <!-- ⚠ Dettes présentes MAIS commande autorisée (sous le seuil standard
+                                <!-- ⚠ Dettes présentes MAIS commande autorisée (sous le seuil standard
                                  ou couverte par une dérogation) — TOUJOURS warning/orange ici :
                                  ce bloc ne s'affiche que quand !blocked, jamais en fonction du
                                  statut brut des factures (impaye/partiel). Le rouge est réservé
                                  exclusivement au bloc "Commande bloquée" ci-dessous, jamais à la
                                  seule existence d'une dette (cf. principe SUCCESS/WARNING/DANGER,
                                  audit du 28/08/2026). -->
-                            <div
-                                v-else-if="
-                                    vehiculeSolvabilite &&
-                                    vehiculeSolvabilite.has_debt &&
-                                    !vehiculeSolvabilite.blocked
-                                "
-                                class="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30"
-                            >
                                 <div
-                                    class="flex items-start justify-between gap-3"
+                                    v-else-if="
+                                        vehiculeSolvabilite &&
+                                        vehiculeSolvabilite.has_debt &&
+                                        !vehiculeSolvabilite.blocked
+                                    "
+                                    class="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30"
                                 >
-                                    <div class="flex items-start gap-2.5">
-                                        <span
-                                            class="mt-0.5 text-base text-amber-500"
-                                            >⚠</span
+                                    <div
+                                        class="flex items-start justify-between gap-3"
+                                    >
+                                        <div class="flex items-start gap-2.5">
+                                            <span
+                                                class="mt-0.5 text-base text-amber-500"
+                                                >⚠</span
+                                            >
+                                            <div>
+                                                <p
+                                                    class="text-sm font-semibold text-amber-800 dark:text-amber-300"
+                                                >
+                                                    {{
+                                                        vehiculeSolvabilite.status ===
+                                                        'impaye'
+                                                            ? 'Factures impayées détectées'
+                                                            : 'Paiement partiel'
+                                                    }}
+                                                </p>
+                                                <p
+                                                    v-if="
+                                                        vehiculeSolvabilite.seuil_origine ===
+                                                        'derogation'
+                                                    "
+                                                    class="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-400"
+                                                >
+                                                    Commande autorisée par
+                                                    dérogation (plafond :
+                                                    {{
+                                                        formatGNF(
+                                                            vehiculeSolvabilite.seuil_impayes,
+                                                        )
+                                                    }})
+                                                </p>
+                                                <p
+                                                    class="mt-1.5 text-xs font-medium text-amber-800 opacity-70 dark:text-amber-300"
+                                                >
+                                                    Montant total impayé
+                                                </p>
+                                                <p
+                                                    class="text-xl font-bold text-amber-800 dark:text-amber-300"
+                                                >
+                                                    {{
+                                                        formatGNF(
+                                                            vehiculeSolvabilite.total_remaining,
+                                                        )
+                                                    }}
+                                                </p>
+                                                <p
+                                                    class="mt-1 text-xs text-amber-800 opacity-70 dark:text-amber-300"
+                                                >
+                                                    Nombre de factures :
+                                                    {{
+                                                        vehiculeSolvabilite.unpaid_invoices_count
+                                                    }}
+                                                </p>
+                                                <p
+                                                    v-if="
+                                                        vehiculeSolvabilite.last_invoice_reference
+                                                    "
+                                                    class="mt-1 text-xs text-amber-800 opacity-60 dark:text-amber-300"
+                                                >
+                                                    Dernière :
+                                                    {{
+                                                        vehiculeSolvabilite.last_invoice_reference
+                                                    }}
+                                                    ·
+                                                    {{
+                                                        formatDate(
+                                                            vehiculeSolvabilite.last_invoice_date,
+                                                        )
+                                                    }}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            class="shrink-0 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-300 dark:hover:bg-amber-900/60"
+                                            @click="
+                                                ouvrirDialogFactures(
+                                                    vehiculeSolvabilite,
+                                                    {
+                                                        type: 'vehicule',
+                                                        titre: vehiculeSelected
+                                                            ? vehiculeLabel(
+                                                                  vehiculeSelected,
+                                                              )
+                                                            : 'Véhicule',
+                                                        chauffeur:
+                                                            vehiculeSelected?.livreur_nom
+                                                                ? vehiculeSelected.livreur_nom +
+                                                                  (vehiculeSelected.livreur_telephone
+                                                                      ? ' — ' +
+                                                                        formatPhoneDisplay(
+                                                                            vehiculeSelected.livreur_telephone,
+                                                                        )
+                                                                      : '')
+                                                                : undefined,
+                                                    },
+                                                )
+                                            "
                                         >
+                                            Voir les factures
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- 🚫 Commande bloquée — seuil d'impayés dépassé -->
+                                <div
+                                    v-else-if="vehiculeSolvabilite?.blocked"
+                                    class="mt-3 rounded-xl border border-red-300 bg-red-100 p-3 dark:border-red-700 dark:bg-red-950/50"
+                                >
+                                    <div
+                                        class="mb-3 flex items-center justify-between gap-3"
+                                    >
+                                        <p
+                                            class="text-xs font-bold tracking-wide text-red-800 uppercase dark:text-red-300"
+                                        >
+                                            Commande bloquée —
+                                            {{
+                                                vehiculeSolvabilite.total_remaining >
+                                                0
+                                                    ? 'plafond dépassé'
+                                                    : 'cette vente dépasse le plafond'
+                                            }}
+                                        </p>
+                                        <button
+                                            v-if="
+                                                vehiculeSolvabilite.unpaid_invoices_count >
+                                                0
+                                            "
+                                            type="button"
+                                            class="shrink-0 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-100 dark:border-red-700 dark:bg-red-950/60 dark:text-red-300 dark:hover:bg-red-900/60"
+                                            @click="
+                                                ouvrirDialogFactures(
+                                                    vehiculeSolvabilite,
+                                                    {
+                                                        type: 'vehicule',
+                                                        titre: vehiculeSelected
+                                                            ? vehiculeLabel(
+                                                                  vehiculeSelected,
+                                                              )
+                                                            : 'Véhicule',
+                                                        chauffeur:
+                                                            vehiculeSelected?.livreur_nom
+                                                                ? vehiculeSelected.livreur_nom +
+                                                                  (vehiculeSelected.livreur_telephone
+                                                                      ? ' — ' +
+                                                                        formatPhoneDisplay(
+                                                                            vehiculeSelected.livreur_telephone,
+                                                                        )
+                                                                      : '')
+                                                                : undefined,
+                                                    },
+                                                )
+                                            "
+                                        >
+                                            Voir les factures
+                                        </button>
+                                    </div>
+                                    <div
+                                        class="grid grid-cols-3 gap-2 text-center"
+                                    >
                                         <div>
                                             <p
-                                                class="text-sm font-semibold text-amber-800 dark:text-amber-300"
+                                                class="text-xs text-red-700 dark:text-red-400"
                                             >
-                                                {{
-                                                    vehiculeSolvabilite.status ===
-                                                    'impaye'
-                                                        ? 'Factures impayées détectées'
-                                                        : 'Paiement partiel'
-                                                }}
+                                                Dette actuelle
                                             </p>
                                             <p
-                                                v-if="
-                                                    vehiculeSolvabilite.seuil_origine ===
-                                                    'derogation'
-                                                "
-                                                class="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-400"
-                                            >
-                                                Commande autorisée par
-                                                dérogation (plafond :
-                                                {{
-                                                    formatGNF(
-                                                        vehiculeSolvabilite.seuil_impayes,
-                                                    )
-                                                }})
-                                            </p>
-                                            <p
-                                                class="mt-1.5 text-xs font-medium text-amber-800 opacity-70 dark:text-amber-300"
-                                            >
-                                                Montant total impayé
-                                            </p>
-                                            <p
-                                                class="text-xl font-bold text-amber-800 dark:text-amber-300"
+                                                class="font-bold text-red-900 tabular-nums dark:text-red-200"
                                             >
                                                 {{
                                                     formatGNF(
@@ -986,169 +1117,41 @@ function confirmerEtCreer() {
                                                     )
                                                 }}
                                             </p>
+                                        </div>
+                                        <div>
                                             <p
-                                                class="mt-1 text-xs text-amber-800 opacity-70 dark:text-amber-300"
+                                                class="text-xs text-red-700 dark:text-red-400"
                                             >
-                                                Nombre de factures :
-                                                {{
-                                                    vehiculeSolvabilite.unpaid_invoices_count
-                                                }}
+                                                Limite autorisé
                                             </p>
                                             <p
-                                                v-if="
-                                                    vehiculeSolvabilite.last_invoice_reference
-                                                "
-                                                class="mt-1 text-xs text-amber-800 opacity-60 dark:text-amber-300"
+                                                class="font-bold text-red-900 tabular-nums dark:text-red-200"
                                             >
-                                                Dernière :
                                                 {{
-                                                    vehiculeSolvabilite.last_invoice_reference
+                                                    formatGNF(
+                                                        vehiculeSolvabilite.seuil_impayes,
+                                                    )
                                                 }}
-                                                ·
-                                                {{
-                                                    formatDate(
-                                                        vehiculeSolvabilite.last_invoice_date,
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p
+                                                class="text-xs text-red-700 dark:text-red-400"
+                                            >
+                                                Dépassement
+                                            </p>
+                                            <p
+                                                class="font-bold text-red-900 tabular-nums dark:text-red-200"
+                                            >
+                                                +{{
+                                                    formatGNF(
+                                                        vehiculeSolvabilite.depassement,
                                                     )
                                                 }}
                                             </p>
                                         </div>
                                     </div>
-                                    <button
-                                        type="button"
-                                        class="shrink-0 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-300 dark:hover:bg-amber-900/60"
-                                        @click="
-                                            ouvrirDialogFactures(
-                                                vehiculeSolvabilite,
-                                                {
-                                                    type: 'vehicule',
-                                                    titre: vehiculeSelected
-                                                        ? vehiculeLabel(
-                                                              vehiculeSelected,
-                                                          )
-                                                        : 'Véhicule',
-                                                    chauffeur:
-                                                        vehiculeSelected?.livreur_nom
-                                                            ? vehiculeSelected.livreur_nom +
-                                                              (vehiculeSelected.livreur_telephone
-                                                                  ? ' — ' +
-                                                                    formatPhoneDisplay(
-                                                                        vehiculeSelected.livreur_telephone,
-                                                                    )
-                                                                  : '')
-                                                            : undefined,
-                                                },
-                                            )
-                                        "
-                                    >
-                                        Voir les factures
-                                    </button>
                                 </div>
-                            </div>
-
-                            <!-- 🚫 Commande bloquée — seuil d'impayés dépassé -->
-                            <div
-                                v-else-if="vehiculeSolvabilite?.blocked"
-                                class="mt-3 rounded-xl border border-red-300 bg-red-100 p-3 dark:border-red-700 dark:bg-red-950/50"
-                            >
-                                <div
-                                    class="mb-3 flex items-center justify-between gap-3"
-                                >
-                                    <p
-                                        class="text-xs font-bold tracking-wide text-red-800 uppercase dark:text-red-300"
-                                    >
-                                        Commande bloquée —
-                                        {{
-                                            vehiculeSolvabilite.total_remaining >
-                                            0
-                                                ? 'plafond dépassé'
-                                                : 'cette vente dépasse le plafond'
-                                        }}
-                                    </p>
-                                    <button
-                                        v-if="
-                                            vehiculeSolvabilite.unpaid_invoices_count >
-                                            0
-                                        "
-                                        type="button"
-                                        class="shrink-0 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-100 dark:border-red-700 dark:bg-red-950/60 dark:text-red-300 dark:hover:bg-red-900/60"
-                                        @click="
-                                            ouvrirDialogFactures(
-                                                vehiculeSolvabilite,
-                                                {
-                                                    type: 'vehicule',
-                                                    titre: vehiculeSelected
-                                                        ? vehiculeLabel(
-                                                              vehiculeSelected,
-                                                          )
-                                                        : 'Véhicule',
-                                                    chauffeur:
-                                                        vehiculeSelected?.livreur_nom
-                                                            ? vehiculeSelected.livreur_nom +
-                                                              (vehiculeSelected.livreur_telephone
-                                                                  ? ' — ' +
-                                                                    formatPhoneDisplay(
-                                                                        vehiculeSelected.livreur_telephone,
-                                                                    )
-                                                                  : '')
-                                                            : undefined,
-                                                },
-                                            )
-                                        "
-                                    >
-                                        Voir les factures
-                                    </button>
-                                </div>
-                                <div class="grid grid-cols-3 gap-2 text-center">
-                                    <div>
-                                        <p
-                                            class="text-xs text-red-700 dark:text-red-400"
-                                        >
-                                            Dette actuelle
-                                        </p>
-                                        <p
-                                            class="font-bold text-red-900 tabular-nums dark:text-red-200"
-                                        >
-                                            {{
-                                                formatGNF(
-                                                    vehiculeSolvabilite.total_remaining,
-                                                )
-                                            }}
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <p
-                                            class="text-xs text-red-700 dark:text-red-400"
-                                        >
-                                            Limite autorisé
-                                        </p>
-                                        <p
-                                            class="font-bold text-red-900 tabular-nums dark:text-red-200"
-                                        >
-                                            {{
-                                                formatGNF(
-                                                    vehiculeSolvabilite.seuil_impayes,
-                                                )
-                                            }}
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <p
-                                            class="text-xs text-red-700 dark:text-red-400"
-                                        >
-                                            Dépassement
-                                        </p>
-                                        <p
-                                            class="font-bold text-red-900 tabular-nums dark:text-red-200"
-                                        >
-                                            +{{
-                                                formatGNF(
-                                                    vehiculeSolvabilite.depassement,
-                                                )
-                                            }}
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
                             </template>
                         </div>
 
@@ -1691,7 +1694,9 @@ function confirmerEtCreer() {
                                                 onPrixChange(index, $event)
                                             "
                                             :min="0"
-                                            :disabled="!ligneUnitPriceEditable(ligne)"
+                                            :disabled="
+                                                !ligneUnitPriceEditable(ligne)
+                                            "
                                             :use-grouping="false"
                                             suffix=" GNF"
                                             class="w-full"
@@ -1810,7 +1815,9 @@ function confirmerEtCreer() {
                                             onPrixChange(index, $event)
                                         "
                                         :min="0"
-                                        :disabled="!ligneUnitPriceEditable(ligne)"
+                                        :disabled="
+                                            !ligneUnitPriceEditable(ligne)
+                                        "
                                         :use-grouping="false"
                                         class="w-full"
                                         input-class="w-full"
