@@ -20,6 +20,7 @@ import {
     Building2,
     Calculator,
     Car,
+    Contact,
     Layers,
     LayoutGrid,
     Package,
@@ -27,9 +28,6 @@ import {
     Receipt,
     ShoppingCart,
     Truck,
-    UserCog,
-    UserRoundCheck,
-    Users,
     UsersRound,
 } from 'lucide-vue-next';
 import { computed } from 'vue';
@@ -54,6 +52,18 @@ const transfertsAReceptionner = computed(
 /** Guard combiné permission + module actif */
 const canSee = (permission: PermissionKey, module: string): boolean =>
     can(permission) && moduleActive(module);
+
+/** Sous-items Contacts : Clients, Fournisseurs, Prestataires — regroupés sous un seul menu. */
+const contactsItems = computed((): NavItem[] => {
+    const sub: NavItem[] = [];
+    if (can('clients.read'))
+        sub.push({ title: 'Clients', href: '/backoffice/clients' });
+    if (can('fournisseurs.read'))
+        sub.push({ title: 'Fournisseurs', href: '/backoffice/fournisseurs' });
+    if (canSee('prestataires.read', 'prestataires'))
+        sub.push({ title: 'Prestataires', href: '/backoffice/prestataires' });
+    return sub;
+});
 
 const rhItems = computed((): NavItem[] => {
     if (!moduleActive('rh')) return [];
@@ -129,44 +139,35 @@ const mainNavItems = computed((): NavItem[] => {
             href: '/backoffice/ventes',
             icon: ShoppingCart,
             items: ventesSubItems,
+            group: 'Commercial',
         });
     }
 
     if (canSee('achats.read', 'achats')) {
-        const achatsSubItems = [
-            { title: 'Commandes', href: '/backoffice/achats' },
-        ];
-        if (can('fournisseurs.read')) {
-            achatsSubItems.push({
-                title: 'Fournisseurs',
-                href: '/backoffice/fournisseurs',
-            });
-        }
         items.push({
             title: 'Achats',
             href: '/backoffice/achats',
             icon: PackageCheck,
-            items: achatsSubItems,
+            group: 'Commercial',
         });
     }
+
+    if (contactsItems.value.length > 0) {
+        items.push({
+            title: 'Contacts',
+            href: contactsItems.value[0].href,
+            icon: Contact,
+            items: contactsItems.value,
+            group: 'Commercial',
+        });
+    }
+
     if (canSee('packings.read', 'packings'))
         items.push({
             title: 'Packings',
             href: '/backoffice/packings',
             icon: Layers,
-        });
-    if (can('clients.read'))
-        items.push({
-            title: 'Clients',
-            href: '/backoffice/clients',
-            icon: UserRoundCheck,
-        });
-
-    if (canSee('prestataires.read', 'prestataires'))
-        items.push({
-            title: 'Prestataires',
-            href: '/backoffice/prestataires',
-            icon: Users,
+            group: 'Opérations',
         });
 
     if (vehiculesItems.value.length > 0) {
@@ -175,6 +176,7 @@ const mainNavItems = computed((): NavItem[] => {
             href: vehiculesItems.value[0].href,
             icon: Car,
             items: vehiculesItems.value,
+            group: 'Opérations',
         });
     }
 
@@ -220,6 +222,7 @@ const mainNavItems = computed((): NavItem[] => {
                     ? stockAlertes.value.total
                     : undefined,
             items: produitsSousItems.length > 0 ? produitsSousItems : undefined,
+            group: 'Opérations',
         });
     }
 
@@ -228,6 +231,7 @@ const mainNavItems = computed((): NavItem[] => {
             title: 'Logistique',
             href: '/backoffice/logistique/transferts',
             icon: Truck,
+            group: 'Opérations',
             items: [
                 {
                     title: 'Transferts',
@@ -260,15 +264,7 @@ const mainNavItems = computed((): NavItem[] => {
             href: '/backoffice/depenses',
             icon: Receipt,
             items: depensesSousItems.length > 1 ? depensesSousItems : undefined,
-        });
-    }
-
-    if (rhItems.value.length > 0) {
-        items.push({
-            title: 'RH',
-            href: rhItems.value[0].href,
-            icon: Briefcase,
-            items: rhItems.value,
+            group: 'Finance',
         });
     }
 
@@ -277,6 +273,7 @@ const mainNavItems = computed((): NavItem[] => {
             title: 'Comptabilité',
             href: '/backoffice/comptabilite/tresorerie/financement',
             icon: Calculator,
+            group: 'Finance',
             items: [
                 {
                     title: 'Trésorerie',
@@ -343,20 +340,25 @@ const mainNavItems = computed((): NavItem[] => {
             title: 'Sites',
             href: '/backoffice/sites',
             icon: Building2,
+            group: 'Opérations',
         });
 
-    if (canSee('users.read', 'utilisateurs'))
+    if (rhItems.value.length > 0) {
         items.push({
-            title: 'Utilisateurs',
-            href: '/backoffice/users',
-            icon: UserCog,
+            title: 'RH',
+            href: rhItems.value[0].href,
+            icon: Briefcase,
+            items: rhItems.value,
+            group: 'Organisation',
         });
+    }
 
-    if (isSuperAdmin.value)
+    if (isSuperAdmin.value || canSee('users.read', 'utilisateurs'))
         items.push({
             title: 'Comptes',
             href: '/backoffice/comptes',
             icon: UsersRound,
+            group: 'Organisation',
         });
 
     return items;

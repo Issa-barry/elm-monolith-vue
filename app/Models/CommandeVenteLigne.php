@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\PrixOrigine;
 use App\Enums\TypeEcartLogistique;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -24,6 +25,7 @@ class CommandeVenteLigne extends Model
         'commentaire_ecart',
         'prix_usine_snapshot',
         'prix_vente_snapshot',
+        'prix_origine_snapshot',
         'total_ligne',
         'libelle_snapshot',
     ];
@@ -37,6 +39,7 @@ class CommandeVenteLigne extends Model
             'type_ecart' => TypeEcartLogistique::class,
             'prix_usine_snapshot' => 'decimal:2',
             'prix_vente_snapshot' => 'decimal:2',
+            'prix_origine_snapshot' => PrixOrigine::class,
             'total_ligne' => 'decimal:2',
         ];
     }

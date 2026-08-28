@@ -3,6 +3,7 @@
 namespace Tests\Feature\Notification;
 
 use App\Enums\StatutTransfert;
+use App\Jobs\DispatchPushNotificationsJob;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivreur;
 use App\Models\Organization;
@@ -13,6 +14,7 @@ use App\Models\Vehicule;
 use App\Notifications\TransfertReceptionneeNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Queue;
 use Spatie\Permission\Models\Permission;
 use Tests\Feature\Concerns\MakesClientProfiles;
 use Tests\TestCase;
@@ -96,6 +98,7 @@ class TransfertReceptionneeNotificationTest extends TestCase
     public function test_reception_validee_notifie_le_proprietaire_pas_le_livreur(): void
     {
         Notification::fake();
+        Queue::fake();
 
         [$transfert, $proprietaireUser, $livreurUser] = $this->makeTransfertEnTransit();
 
@@ -105,5 +108,9 @@ class TransfertReceptionneeNotificationTest extends TestCase
 
         Notification::assertSentTo($proprietaireUser, TransfertReceptionneeNotification::class);
         Notification::assertNotSentTo($livreurUser, TransfertReceptionneeNotification::class);
+
+        Queue::assertPushed(DispatchPushNotificationsJob::class, fn (DispatchPushNotificationsJob $job) => $job->userIds === [$proprietaireUser->id]
+            && $job->payload['data']['type'] === 'transfer.received'
+            && $job->payload['data']['transfert_id'] === $transfert->id);
     }
 }

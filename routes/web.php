@@ -189,6 +189,8 @@ Route::prefix('backoffice')->group(function () {
 
         // Clients
         Route::resource('clients', ClientController::class);
+        Route::patch('clients/{client}/derogation-impayes', [ClientController::class, 'updateDerogation'])
+            ->name('clients.derogation-impayes.update');
         // Véhicules partenaire (Client::type = PARTENAIRE) — hors flotte gérée, cf. ClientVehicle.
         Route::post('clients/{client}/vehicules', [ClientVehicleController::class, 'store'])
             ->name('clients.vehicules.store');
@@ -384,7 +386,9 @@ Route::prefix('backoffice')->group(function () {
                 ->name('sites.import.confirmer');
         });
 
-        // ── Comptes (super admin) ─────────────────────────────────────────────────
+        // ── Comptes — point d'entrée unique de navigation pour la gestion des comptes ──────
+        // (super_admin : console plateforme multi-organisation ; autres : délègue à la liste
+        // organisation-scopée de UserController, cf. AccountController::index).
         Route::get('comptes', [AccountController::class, 'index'])->name('comptes.index');
         Route::patch('comptes/{user}/toggle-active', [AccountController::class, 'toggleActive'])->name('comptes.toggle-active');
 

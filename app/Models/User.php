@@ -266,6 +266,11 @@ class User extends Authenticatable
         return $this->hasOne(Proprietaire::class);
     }
 
+    public function webPushSubscriptions(): HasMany
+    {
+        return $this->hasMany(WebPushSubscription::class);
+    }
+
     public function sites(): BelongsToMany
     {
         return $this->belongsToMany(Site::class, 'user_sites')

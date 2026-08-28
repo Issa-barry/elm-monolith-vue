@@ -12,6 +12,7 @@ use App\Notifications\CommissionGenereeNotification;
 use App\Notifications\CommissionPayeeNotification;
 use App\Services\Notification\BeneficiaireUserResolver;
 use App\Services\Notification\NotificationDispatcher;
+use App\Services\Notification\PushBodyFormatter;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -257,11 +258,18 @@ class CommissionLogistiqueService
     {
         try {
             $user = BeneficiaireUserResolver::resolve('livreur', $part->livreur_id);
+            $notif = new CommissionGenereeNotification('transfert_logistique', $transfert->id, $transfert->reference, (float) $part->montant_net);
+            $notifData = $user ? $notif->toArray($user) : null;
 
             NotificationDispatcher::send(
-                new CommissionGenereeNotification('transfert_logistique', $transfert->id, $transfert->reference, (float) $part->montant_net),
+                $notif,
                 [$user],
                 'commissions',
+                $notifData ? fn () => [
+                    'title' => $notifData['titre'],
+                    'body' => PushBodyFormatter::format($notifData),
+                    'data' => ['type' => 'commission.generated', 'transfert_id' => $transfert->id],
+                ] : null,
             );
         } catch (Throwable $e) {
             Log::error('CommissionGenereeNotification (logistique) : envoi échoué', [
@@ -281,11 +289,20 @@ class CommissionLogistiqueService
         try {
             $beneficiaireId = $part->type_beneficiaire === 'livreur' ? $part->livreur_id : $part->proprietaire_id;
             $user = BeneficiaireUserResolver::resolve($part->type_beneficiaire, $beneficiaireId);
+            $notif = new CommissionPayeeNotification($montant, $modePaiement, $note, 'commission_logistique_part', $part->id);
+            $notifData = $user ? $notif->toArray($user) : null;
 
             NotificationDispatcher::send(
-                new CommissionPayeeNotification($montant, $modePaiement, $note, 'commission_logistique_part', $part->id),
+                $notif,
                 [$user],
                 'commissions',
+                // Pas d'ID navigable ici (part de commission = ligne comptable interne, aucune
+                // route de détail côté PWA) — le type seul suffit (cf. rapport Web Push 7/7).
+                $notifData ? fn () => [
+                    'title' => $notifData['titre'],
+                    'body' => PushBodyFormatter::format($notifData),
+                    'data' => ['type' => 'commission.paid'],
+                ] : null,
             );
         } catch (Throwable $e) {
             Log::error('CommissionPayeeNotification (versement legacy) : envoi échoué', [

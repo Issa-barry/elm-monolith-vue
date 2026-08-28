@@ -55,7 +55,7 @@ class ProduitController extends Controller
         return ProduitType::where('organization_id', $orgId)
             ->where('statut', 'actif')
             ->orderBy('position')->orderBy('nom')
-            ->get(['id', 'nom', 'gere_stock', 'vendable', 'achetable', 'prix_achat_requis', 'prix_usine_requis', 'prix_vente_requis'])
+            ->get(['id', 'nom', 'code', 'gere_stock', 'vendable', 'achetable', 'prix_achat_requis', 'prix_usine_requis', 'prix_vente_requis'])
             ->map(fn (ProduitType $t) => [
                 'value' => $t->id,
                 'label' => $t->nom,
@@ -68,6 +68,10 @@ class ProduitController extends Controller
                 // saisie (*_requis, cf. required_prices ci-dessus).
                 'achetable' => $t->achetable,
                 'vendable' => $t->vendable,
+                // Repère technique stable (cf. ProduitType docblock) — pilote la visibilité de
+                // la section "Tarification clients" (prix_externe/revendeur/distributeur) dans
+                // ProduitForm.vue, réservée au type fabricable.
+                'code' => $t->code,
             ]);
     }
 
@@ -491,6 +495,9 @@ class ProduitController extends Controller
                 'statut_label' => $produit->statut?->label(),
                 'prix_usine' => $variantePrincipale?->prix_usine,
                 'prix_usine_tricycle' => $variantePrincipale?->prix_usine_tricycle,
+                'prix_externe' => $variantePrincipale?->prix_externe,
+                'prix_revendeur' => $variantePrincipale?->prix_revendeur,
+                'prix_distributeur' => $variantePrincipale?->prix_distributeur,
                 'prix_vente' => $variantePrincipale?->prix_vente,
                 'prix_achat' => $variantePrincipale?->prix_achat,
                 'cout' => $variantePrincipale?->cout,
@@ -629,6 +636,9 @@ class ProduitController extends Controller
                 'statut' => $produit->statut?->value,
                 'prix_usine' => $variantePrincipale?->prix_usine,
                 'prix_usine_tricycle' => $variantePrincipale?->prix_usine_tricycle,
+                'prix_externe' => $variantePrincipale?->prix_externe,
+                'prix_revendeur' => $variantePrincipale?->prix_revendeur,
+                'prix_distributeur' => $variantePrincipale?->prix_distributeur,
                 'prix_vente' => $variantePrincipale?->prix_vente,
                 'prix_achat' => $variantePrincipale?->prix_achat,
                 'cout' => $variantePrincipale?->cout,
@@ -1041,6 +1051,13 @@ class ProduitController extends Controller
             'statut' => 'required|in:'.implode(',', ProduitStatut::values()),
             'prix_usine' => 'nullable|integer|min:0',
             'prix_usine_tricycle' => 'nullable|integer|min:0',
+            // Tarifs par nature de client — n'ont de sens que pour un produit fabricable ;
+            // ProduitService::nettoyerPrixNatureSiNonFabricable() les ignore silencieusement
+            // pour tout autre type plutôt que de les rejeter ici (pas de dépendance entre
+            // champs dans cette validation Laravel, cf. docblock validerFormulaire()).
+            'prix_externe' => 'nullable|integer|min:0',
+            'prix_revendeur' => 'nullable|integer|min:0',
+            'prix_distributeur' => 'nullable|integer|min:0',
             'prix_vente' => 'nullable|integer|min:0',
             'prix_achat' => 'nullable|integer|min:0',
             'cout' => 'nullable|integer|min:0',

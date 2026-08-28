@@ -110,6 +110,40 @@ class NotificationsControllerTest extends TestCase
     }
 
     /**
+     * Nettoyage des messages (2026-08-28, cf. rapport) : `montant` est déjà exposé
+     * séparément — `message` ne doit plus jamais le répéter en toutes lettres
+     * ("432 000 GNF — ..."), sous peine de duplication visuelle côté cloche/dashboard
+     * (titre + message + montant affichés l'un sous l'autre).
+     */
+    public function test_message_ne_duplique_jamais_le_montant_deja_expose_separement(): void
+    {
+        $user = $this->actor();
+        $user->notify(new CommissionGenereeNotification('commande_vente', 'cmd-280826-011', 'CMD-280826-011', 432000.0));
+        $user->notify(new CommissionPayeeNotification(432000.0, 'especes'));
+        $user->notify(new DepenseValideeNotification('dep-1', 'ABDOULAYE', 50000.0));
+
+        $rows = collect($this->getJson(route('client.notifications.index'))->assertOk()->json('data'));
+
+        $genere = $rows->firstWhere('type', 'commission.generated');
+        $this->assertSame('Commission générée', $genere['titre']);
+        $this->assertSame('Réf. CMD-280826-011', $genere['message']);
+        $this->assertEquals(432000.0, $genere['montant']);
+        $this->assertStringNotContainsString('GNF', $genere['message']);
+
+        $paye = $rows->firstWhere('type', 'commission.paid');
+        $this->assertSame('Commission payée', $paye['titre']);
+        $this->assertEquals(432000.0, $paye['montant']);
+        $this->assertStringNotContainsString('GNF', $paye['message']);
+        $this->assertStringNotContainsString((string) 432000, $paye['message']);
+
+        $depense = $rows->firstWhere('type', 'expense.validated');
+        $this->assertSame('Dépense validée', $depense['titre']);
+        $this->assertSame('Véhicule ABDOULAYE', $depense['message']);
+        $this->assertEquals(50000.0, $depense['montant']);
+        $this->assertStringNotContainsString('GNF', $depense['message']);
+    }
+
+    /**
      * `created_at` sur `notifications` n'a que la précision de la seconde
      * (migration Laravel par défaut, hors périmètre de ce chantier) : on
      * force des instants distincts ici pour tester l'ordre sans dépendre

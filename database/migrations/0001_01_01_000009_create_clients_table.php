@@ -26,10 +26,9 @@ return new class extends Migration
             $table->string('code_phone_pays', 10)->nullable();
             $table->string('ville', 100)->nullable();
             $table->boolean('is_active')->default(true);
-            // Nature du client (STANDARD par défaut, PARTENAIRE = vient charger ses propres
-            // commandes, tarifées à prix usine — cf. ClientType et VehiculeCommandeContextResolver).
-            // Volontairement indépendant de cashback_eligible : un partenaire peut en théorie
-            // aussi être éligible au cashback, ce sont deux notions distinctes.
+            // Nature du client — valeurs et défaut réellement appliqués évoluent via des
+            // migrations ultérieures (cf. migrate_client_type_standard_to_revendeur) ; se fier à
+            // App\Enums\ClientType comme seule source de vérité, jamais à ce commentaire figé.
             $table->string('type', 20)->default('standard');
             $table->boolean('cashback_eligible')->default(false);
             $table->timestamps();

@@ -35,6 +35,12 @@ class StoreProduitRequest extends FormRequest
             'statut' => ['required', Rule::in(ProduitStatut::values())],
             'prix_usine' => ['nullable', 'integer', 'min:0'],
             'prix_usine_tricycle' => ['nullable', 'integer', 'min:0'],
+            // Tarifs par nature de client — n'ont de sens que pour un produit fabricable ;
+            // ProduitService::raisonIncoherencePrix() les rend obligatoires pour ce type
+            // précisément (source de vérité unique, partagée avec le formulaire web).
+            'prix_externe' => ['nullable', 'integer', 'min:0'],
+            'prix_revendeur' => ['nullable', 'integer', 'min:0'],
+            'prix_distributeur' => ['nullable', 'integer', 'min:0'],
             'prix_vente' => ['nullable', 'integer', 'min:0'],
             'prix_achat' => ['nullable', 'integer', 'min:0'],
             'cout' => ['nullable', 'integer', 'min:0'],

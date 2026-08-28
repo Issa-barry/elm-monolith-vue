@@ -45,6 +45,7 @@ use App\Http\Controllers\Api\Mobile\Logistique\SaisirQuantitesChargeesController
 use App\Http\Controllers\Api\Mobile\NotificationsController;
 use App\Http\Controllers\Api\Mobile\PushTokenController;
 use App\Http\Controllers\Api\Mobile\ScanCommandeController;
+use App\Http\Controllers\Api\Mobile\WebPushSubscriptionsController;
 use App\Http\Controllers\Api\Produits\ProduitController;
 use App\Http\Controllers\Api\Produits\ProduitHistoriqueController;
 use App\Http\Controllers\Api\Public\ContactController as PublicContactController;
@@ -264,6 +265,11 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/', [NotificationsController::class, 'index'])->name('index');
             Route::post('mark-all-read', [NotificationsController::class, 'markAllRead'])->name('mark-all-read');
             Route::post('{id}/read', [NotificationsController::class, 'markRead'])->name('mark-read');
+        });
+        Route::prefix('web-push')->name('client.web-push.')->group(function () {
+            Route::get('vapid-public-key', [WebPushSubscriptionsController::class, 'vapidPublicKey'])->name('vapid-public-key');
+            Route::post('subscriptions', [WebPushSubscriptionsController::class, 'store'])->name('subscriptions.store');
+            Route::delete('subscriptions', [WebPushSubscriptionsController::class, 'destroy'])->name('subscriptions.destroy');
         });
     });
     Route::middleware('role:client|proprietaire|livreur')->group(function () {

@@ -12,6 +12,7 @@ use App\Enums\DeclencheurCommissionVente;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutCommission;
 use App\Models\Categorie;
+use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
 use App\Models\CommissionCibleType;
@@ -319,6 +320,27 @@ class CommissionTriggerVenteTest extends TestCase
         // CREEE, pas IMPAYE : ne devient payable qu'à la validation de la période
         // de paiement (cf. CommissionAdjustmentService::activerCommissionsCreees()).
         $this->assertTrue($enveloppes->every(fn (CommissionEnveloppe $e) => $e->statut === StatutCommission::CREEE));
+    }
+
+    /**
+     * Décision du 28/08/2026 : un client sélectionné devient le débiteur de la facture (cf.
+     * SolvabiliteService), mais le véhicule reste le support logistique de la livraison — la
+     * commission de son équipe doit naître exactement comme sans client, aucune dépendance
+     * entre "qui paie" et "qui livre/touche une commission".
+     */
+    public function test_commission_generee_normalement_meme_avec_un_client_facture(): void
+    {
+        $vehicule = $this->makeVehiculeAvecEquipe();
+        $produit = $this->makeProduit();
+        $client = Client::factory()->create(['organization_id' => $this->org->id]);
+        ['commande' => $commande, 'ligne' => $ligne] = $this->creerCommandeAvecLigne(
+            $vehicule, $produit, attrs: ['client_id' => $client->id]
+        );
+
+        $commande = $this->validerChargementComplet($commande, $ligne);
+
+        $enveloppes = CommissionEnveloppe::where('source_id', $commande->id)->get();
+        $this->assertNotEmpty($enveloppes, 'la commission équipe doit naître même quand la commande est facturée à un client');
     }
 
     public function test_commission_calculee_sur_la_quantite_reellement_chargee_pas_la_demandee(): void

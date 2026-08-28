@@ -262,7 +262,7 @@ function enregistrer() {
                                 v-if="prixUsineRequis"
                                 class="px-2 py-2 text-right"
                             >
-                                Prix usine — Autres véhicules *
+                                Prix usine — Tous véhicules *
                             </th>
                             <th
                                 v-if="prixUsineRequis"

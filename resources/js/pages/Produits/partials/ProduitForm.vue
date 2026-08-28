@@ -46,6 +46,9 @@ interface ProduitTypeOption extends Option {
     required_prices: string[];
     achetable: boolean;
     vendable: boolean;
+    /** Repère technique stable (cf. ProduitType) — pilote la visibilité de la section
+     * "Tarification clients", réservée au type dont le code vaut 'fabricable'. */
+    code: string;
 }
 
 interface Categorie {
@@ -93,6 +96,11 @@ interface FormData {
     statut: string;
     prix_usine: number | null;
     prix_usine_tricycle: number | null;
+    // Tarifs par nature de client — n'ont d'effet que pour un produit fabricable, cf.
+    // isFabricable ci-dessous et PrixVenteNatureResolver côté serveur.
+    prix_externe: number | null;
+    prix_revendeur: number | null;
+    prix_distributeur: number | null;
     prix_vente: number | null;
     prix_achat: number | null;
     cout: number | null;
@@ -173,13 +181,18 @@ const prixVenteApplicable = computed(
     () => selectedType.value?.vendable ?? true,
 );
 
+// Tarification par nature de client (Externe/Revendeur/Distributeur) — réservée aux produits
+// fabricables (cf. ProduitService::nettoyerPrixNatureSiNonFabricable() côté serveur, seule
+// source de vérité ; ce computed ne pilote que l'affichage).
+const isFabricable = computed(() => selectedType.value?.code === 'fabricable');
+
 // Rouge dès qu'un champ requis est vide ET que le formulaire a déjà été refusé une fois pour
 // ce motif — le backend regroupe toutes les erreurs de prix sous la clé `produit_type_id` (un
 // seul message listant les champs manquants), jamais sous le champ lui-même individuellement.
 function prixInvalide(champ: string, valeur: number | null): boolean {
     return (
         !!props.errors.produit_type_id &&
-        prixRequis(champ) &&
+        (prixRequis(champ) || prixNatureRequis(champ)) &&
         (valeur === null || valeur === undefined)
     );
 }
@@ -252,6 +265,19 @@ const margeUsineBloquante = computed(() => {
     return depasseAutresVehicules || depasseTricycle;
 });
 
+// Tarification par nature de client — obligatoire pour un produit fabricable (au même titre
+// que prix_usine/prix_usine_tricycle/prix_vente), cf. ProduitService::raisonIncoherencePrix()
+// côté serveur, seule source de vérité reproduite ici pour l'anticipation visuelle.
+const CHAMPS_PRIX_NATURE = [
+    'prix_externe',
+    'prix_revendeur',
+    'prix_distributeur',
+] as const;
+
+function prixNatureRequis(champ: string): boolean {
+    return isFabricable.value && (CHAMPS_PRIX_NATURE as readonly string[]).includes(champ);
+}
+
 const champsObligatoiresManquants = computed(() => {
     if (
         !props.form.nom?.trim() ||
@@ -260,7 +286,11 @@ const champsObligatoiresManquants = computed(() => {
     )
         return true;
 
-    return requiredPrices.value.some((champ) => {
+    const champsPrixRequis = isFabricable.value
+        ? [...requiredPrices.value, ...CHAMPS_PRIX_NATURE]
+        : requiredPrices.value;
+
+    return champsPrixRequis.some((champ) => {
         const valeur = (props.form as unknown as Record<string, unknown>)[
             champ
         ];
@@ -853,7 +883,7 @@ const depasseLimiteVariantes = computed(
             >
                 <div v-if="prixRequis('prix_usine')">
                     <Label for="prix_usine" class="mb-1.5 block"
-                        >Prix usine — Autres véhicules
+                        >Prix usine — Tous véhicules
                         <span
                             v-if="prixRequis('prix_usine')"
                             class="text-destructive"
@@ -1015,6 +1045,123 @@ const depasseLimiteVariantes = computed(
                         class="w-full"
                         input-class="w-full"
                     />
+                </div>
+            </div>
+
+            <!-- Tarification par nature de client — fabricable uniquement ─────────── -->
+            <div v-if="isFabricable" class="mt-4 border-t pt-4 sm:mt-5 sm:pt-5">
+                <h4
+                    class="mb-1 text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                >
+                    Tarification clients
+                </h4>
+                <p class="mb-3 text-xs text-muted-foreground">
+                    Remplace le prix de vente selon la nature du client.
+                </p>
+                <div
+                    class="grid grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] gap-4 sm:gap-5"
+                >
+                    <div>
+                        <Label for="prix_externe" class="mb-1.5 block"
+                            >Prix externe
+                            <span class="text-destructive">*</span></Label
+                        >
+                        <InputNumber
+                            input-id="prix_externe"
+                            :model-value="form.prix_externe"
+                            @update:model-value="
+                                $emit('update:form', {
+                                    ...form,
+                                    prix_externe: $event,
+                                })
+                            "
+                            :min="0"
+                            :use-grouping="true"
+                            locale="fr-GN"
+                            class="w-full"
+                            input-class="w-full"
+                            :class="{
+                                'p-invalid': prixInvalide(
+                                    'prix_externe',
+                                    form.prix_externe,
+                                ),
+                            }"
+                        />
+                        <p
+                            v-if="errors.prix_externe"
+                            class="mt-1 text-xs text-destructive"
+                        >
+                            {{ errors.prix_externe }}
+                        </p>
+                    </div>
+
+                    <div>
+                        <Label for="prix_distributeur" class="mb-1.5 block"
+                            >Prix distributeur
+                            <span class="text-destructive">*</span></Label
+                        >
+                        <InputNumber
+                            input-id="prix_distributeur"
+                            :model-value="form.prix_distributeur"
+                            @update:model-value="
+                                $emit('update:form', {
+                                    ...form,
+                                    prix_distributeur: $event,
+                                })
+                            "
+                            :min="0"
+                            :use-grouping="true"
+                            locale="fr-GN"
+                            class="w-full"
+                            input-class="w-full"
+                            :class="{
+                                'p-invalid': prixInvalide(
+                                    'prix_distributeur',
+                                    form.prix_distributeur,
+                                ),
+                            }"
+                        />
+                        <p
+                            v-if="errors.prix_distributeur"
+                            class="mt-1 text-xs text-destructive"
+                        >
+                            {{ errors.prix_distributeur }}
+                        </p>
+                    </div>
+
+                    <div>
+                        <Label for="prix_revendeur" class="mb-1.5 block"
+                            >Prix revendeur
+                            <span class="text-destructive">*</span></Label
+                        >
+                        <InputNumber
+                            input-id="prix_revendeur"
+                            :model-value="form.prix_revendeur"
+                            @update:model-value="
+                                $emit('update:form', {
+                                    ...form,
+                                    prix_revendeur: $event,
+                                })
+                            "
+                            :min="0"
+                            :use-grouping="true"
+                            locale="fr-GN"
+                            class="w-full"
+                            input-class="w-full"
+                            :class="{
+                                'p-invalid': prixInvalide(
+                                    'prix_revendeur',
+                                    form.prix_revendeur,
+                                ),
+                            }"
+                        />
+                        <p
+                            v-if="errors.prix_revendeur"
+                            class="mt-1 text-xs text-destructive"
+                        >
+                            {{ errors.prix_revendeur }}
+                        </p>
+                    </div>
                 </div>
             </div>
 

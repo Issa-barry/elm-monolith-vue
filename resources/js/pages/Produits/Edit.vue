@@ -21,6 +21,7 @@ interface ProduitTypeOption extends Option {
     required_prices: string[];
     achetable: boolean;
     vendable: boolean;
+    code: string;
 }
 
 interface Categorie {
@@ -73,6 +74,9 @@ interface ProduitData {
     statut: string;
     prix_usine: number | null;
     prix_usine_tricycle: number | null;
+    prix_externe: number | null;
+    prix_revendeur: number | null;
+    prix_distributeur: number | null;
     prix_vente: number | null;
     prix_achat: number | null;
     cout: number | null;
@@ -133,6 +137,9 @@ const form = useForm({
     statut: props.produit.statut,
     prix_usine: props.produit.prix_usine,
     prix_usine_tricycle: props.produit.prix_usine_tricycle,
+    prix_externe: props.produit.prix_externe,
+    prix_revendeur: props.produit.prix_revendeur,
+    prix_distributeur: props.produit.prix_distributeur,
     prix_vente: props.produit.prix_vente,
     prix_achat: props.produit.prix_achat,
     cout: props.produit.cout,

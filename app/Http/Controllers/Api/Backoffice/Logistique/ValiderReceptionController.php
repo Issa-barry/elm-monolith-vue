@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Notifications\TransfertReceptionneeNotification;
 use App\Services\Notification\BeneficiaireUserResolver;
 use App\Services\Notification\NotificationDispatcher;
+use App\Services\Notification\PushBodyFormatter;
 use App\Services\TransfertActiviteService;
 use App\Services\TransfertLogistiqueService;
 use Illuminate\Http\JsonResponse;
@@ -75,11 +76,18 @@ class ValiderReceptionController extends Controller
             }
 
             $destinataire = BeneficiaireUserResolver::resolve('proprietaire', $proprietaire->id);
+            $notif = new TransfertReceptionneeNotification($transfert->id, $transfert->reference);
+            $notifData = $destinataire ? $notif->toArray($destinataire) : null;
 
             NotificationDispatcher::send(
-                new TransfertReceptionneeNotification($transfert->id, $transfert->reference),
+                $notif,
                 [$destinataire],
                 'livraisons',
+                $notifData ? fn () => [
+                    'title' => $notifData['titre'],
+                    'body' => PushBodyFormatter::format($notifData),
+                    'data' => ['type' => 'transfer.received', 'transfert_id' => $transfert->id],
+                ] : null,
             );
         } catch (Throwable $e) {
             Log::error('TransfertReceptionneeNotification : envoi échoué', [

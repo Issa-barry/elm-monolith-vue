@@ -26,12 +26,13 @@ class CommissionGenereeNotification extends Notification
 
     public function toArray(object $notifiable): array
     {
-        $montantFormate = number_format($this->montant, 0, ',', ' ');
-
         return [
             'type' => 'commission_generee',
             'titre' => 'Commission générée',
-            'message' => "{$montantFormate} GNF — Réf. {$this->reference}",
+            // Jamais le montant ici : déjà exposé séparément par `montant` (NotificationResource)
+            // — la cloche/le dashboard l'affichent une seule fois, pas dans titre+message+montant
+            // (cf. rapport "nettoyer les messages de notifications", 2026-08-28).
+            'message' => "Réf. {$this->reference}",
             'montant' => $this->montant,
             'resource' => [
                 'type' => $this->resourceType,

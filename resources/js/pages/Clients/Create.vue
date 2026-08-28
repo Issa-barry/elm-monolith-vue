@@ -29,8 +29,11 @@ const form = useForm({
     code_pays: 'GN' as string | null,
     code_phone_pays: '+224' as string | null,
     is_active: true,
-    type: 'standard',
-    cashback_eligible: false,
+    type: 'revendeur',
+    // Cohérent avec la valeur par défaut ci-dessus : un Revendeur est automatiquement éligible
+    // au cashback, montant obligatoire (cf. ClientForm.vue/CashbackEligibiliteService).
+    cashback_eligible: true,
+    cashback_montant_par_pack: null as number | null,
 });
 
 function submit() {

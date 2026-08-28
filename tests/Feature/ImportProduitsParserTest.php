@@ -139,6 +139,9 @@ class ImportProduitsParserTest extends TestCase
             'prix_usine_autres_vehicules' => '18000',
             'prix_usine_tricycle' => '17500',
             'prix_vente' => '20000',
+            'prix_externe' => '1',
+            'prix_revendeur' => '1',
+            'prix_distributeur' => '1',
             'type_code' => 'fabricable',
         ])]), $this->org->id);
 
@@ -155,6 +158,9 @@ class ImportProduitsParserTest extends TestCase
             'prix_usine' => '18000',
             'prix_usine_tricycle' => '17500',
             'prix_vente' => '20000',
+            'prix_externe' => '1',
+            'prix_revendeur' => '1',
+            'prix_distributeur' => '1',
             'type_code' => 'fabricable',
         ])]), $this->org->id);
 
@@ -170,12 +176,37 @@ class ImportProduitsParserTest extends TestCase
             'prix_usine_autres_vehicules' => '19000',
             'prix_usine_tricycle' => '17500',
             'prix_vente' => '21000',
+            'prix_externe' => '1',
+            'prix_revendeur' => '1',
+            'prix_distributeur' => '1',
             'type_code' => 'fabricable',
         ])]), $this->org->id);
 
         $ligne = $resultat['lignes'][0];
         $this->assertSame('erreur', $ligne['statut']);
         $this->assertStringContainsString('valeur différente', implode(' ', $ligne['erreurs']));
+    }
+
+    /**
+     * Les trois tarifs par nature de client sont obligatoires pour un produit fabricable —
+     * l'absence d'un seul (ici prix_distributeur) doit être détectée par l'import, exactement
+     * comme le fait ProduitService::validerPrixSelonType() côté formulaire web/API.
+     */
+    public function test_fabricable_avec_un_seul_prix_par_nature_manquant_est_une_erreur_claire(): void
+    {
+        $resultat = $this->parser->analyser(collect([$this->ligne([
+            'prix_achat' => '',
+            'prix_usine' => '18000',
+            'prix_usine_tricycle' => '17500',
+            'prix_vente' => '20000',
+            'prix_externe' => '18250',
+            'prix_revendeur' => '19000',
+            'type_code' => 'fabricable',
+        ])]), $this->org->id);
+
+        $ligne = $resultat['lignes'][0];
+        $this->assertSame('erreur', $ligne['statut']);
+        $this->assertStringContainsString('obligatoires', implode(' ', $ligne['erreurs']));
     }
 
     public function test_sku_dune_variante_non_default_est_rejete(): void

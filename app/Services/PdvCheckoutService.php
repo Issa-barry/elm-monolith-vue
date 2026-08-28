@@ -4,8 +4,10 @@ namespace App\Services;
 
 use App\Enums\CategorieTarifaireVehicule;
 use App\Enums\ModeTarification;
+use App\Enums\PrixOrigine;
 use App\Enums\ProduitStatut;
 use App\Enums\StatutCommandeVente;
+use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
 use App\Models\FactureVente;
@@ -59,7 +61,8 @@ class PdvCheckoutService
             );
 
             $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null);
-            [$lignesData, $total, $stockTrackedVarianteIds, $autoriseVenteStockNegatif] = $this->buildLignes($data['lignes'], $user->organization_id, (string) $siteId, $context->modeTarification, $context->categorieTarifaireVehicule);
+            $client = ! empty($data['client_id']) ? Client::query()->select(['id', 'type'])->find($data['client_id']) : null;
+            [$lignesData, $total, $stockTrackedVarianteIds, $autoriseVenteStockNegatif] = $this->buildLignes($data['lignes'], $user->organization_id, (string) $siteId, $context->modeTarification, $context->categorieTarifaireVehicule, $client);
 
             $commande = CommandeVente::create([
                 'organization_id' => $user->organization_id,
@@ -195,7 +198,7 @@ class PdvCheckoutService
      * tracer le mouvement). lockForUpdate() sur les stocks du site garantit
      * l'atomicité contre les ventes concurrentes sur ce même site.
      */
-    private function buildLignes(array $lignes, string $orgId, string $siteId, ModeTarification $mode, ?CategorieTarifaireVehicule $categorieTarifaire = null): array
+    private function buildLignes(array $lignes, string $orgId, string $siteId, ModeTarification $mode, ?CategorieTarifaireVehicule $categorieTarifaire = null, ?Client $client = null): array
     {
         $resolved = collect($lignes)->map(fn (array $ligne) => [
             'variante' => $this->resolveVariante($ligne, $orgId),
@@ -250,14 +253,27 @@ class PdvCheckoutService
                 }
             }
 
-            $prixVente = (int) ($variante->prix_vente ?? 0);
+            // Le PDV n'a jamais reçu de prix du frontend (contrairement au back-office) : ce
+            // resolver est donc toujours la seule source du prix de vente ici, fabricable ou
+            // non — il retombe lui-même sur prix_vente hors du cas fabricable+client. Fabricable
+            // + client : ce prix gouverne SEUL le total, sans passer par le mode de tarification
+            // véhicule/client (qui basculerait sinon un client Externe entier sur prix_usine,
+            // ignorant le prix_externe qu'on vient de résoudre) — cf. CommandeVenteController::
+            // buildLignesDataAndTotal() pour le même correctif côté back-office.
+            $ligneFabricablePourClient = PrixVenteNatureResolver::estFabricable($variante) && $client;
+            $prixVente = PrixVenteNatureResolver::resolve($variante, $client);
             $prixUsine = PrixUsineResolver::resolve($variante, $categorieTarifaire);
-            $totalLigne = $qte * ($mode === ModeTarification::PRIX_VENTE ? $prixVente : $prixUsine);
+            $appliquerPrixVente = $ligneFabricablePourClient || $mode === ModeTarification::PRIX_VENTE;
+            $totalLigne = $qte * ($appliquerPrixVente ? $prixVente : $prixUsine);
+            $prixOrigine = $ligneFabricablePourClient
+                ? PrixVenteNatureResolver::resolveOrigine($variante, $client)
+                : ($appliquerPrixVente ? PrixOrigine::VENTE : PrixOrigine::USINE);
 
             $lignesData[] = [
                 'variante_id' => $variante->id,
                 'quantite_demandee' => $qte,
                 'prix_usine_snapshot' => $prixUsine,
+                'prix_origine_snapshot' => $prixOrigine->value,
                 'prix_vente_snapshot' => $prixVente,
                 'total_ligne' => $totalLigne,
                 'libelle_snapshot' => $variante->libelle !== '' ? "{$produit->nom} — {$variante->libelle}" : $produit->nom,

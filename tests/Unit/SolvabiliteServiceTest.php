@@ -324,6 +324,86 @@ class SolvabiliteServiceTest extends TestCase
         $this->assertTrue($resultat['blocked']);
     }
 
+    // ── Dérogation individuelle par client (DerogationImpayesService, mutualisée avec le
+    // véhicule — cf. tests miroir ci-dessus dans la section "Dérogation individuelle par
+    // véhicule") ─────────────────────────────────────────────────────────────────
+
+    public function test_client_avec_derogation_utilise_son_propre_plafond(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 0);
+        $client = Client::factory()->create([
+            'organization_id' => $this->org->id,
+            'derogation_impayes_autorisee' => true,
+            'seuil_derogation_impayes' => 3_000_000,
+        ]);
+        $this->makeFacture(2_500_000, StatutFactureVente::IMPAYEE, null, $client->id);
+
+        $resultat = $this->service->evaluer($this->org->id, null, $client->id);
+
+        $this->assertSame(3_000_000, $resultat['seuil_impayes']);
+        $this->assertSame('derogation', $resultat['seuil_origine']);
+        $this->assertFalse($resultat['blocked'], 'sous le plafond dérogatoire du client → autorisé');
+    }
+
+    public function test_client_avec_derogation_bloque_au_dela_de_son_propre_plafond(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 10_000_000);
+        $client = Client::factory()->create([
+            'organization_id' => $this->org->id,
+            'derogation_impayes_autorisee' => true,
+            'seuil_derogation_impayes' => 3_000_000,
+        ]);
+        $this->makeFacture(3_000_001, StatutFactureVente::IMPAYEE, null, $client->id);
+
+        $resultat = $this->service->evaluer($this->org->id, null, $client->id);
+
+        $this->assertTrue($resultat['blocked'], 'le plafond du client prime sur un seuil global bien plus large');
+        $this->assertSame(1, $resultat['depassement']);
+    }
+
+    /**
+     * Filet de sécurité miroir de test_vehicule_avec_derogation_mais_sans_plafond_configure_
+     * retombe_sur_le_seuil_global() : un client dérogatoire sans plafond propre configuré ne
+     * doit jamais être traité comme illimité.
+     */
+    public function test_client_avec_derogation_mais_sans_plafond_configure_retombe_sur_le_seuil_global(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 500_000);
+        $client = Client::factory()->create([
+            'organization_id' => $this->org->id,
+            'derogation_impayes_autorisee' => true,
+            'seuil_derogation_impayes' => null,
+        ]);
+        $this->makeFacture(600_000, StatutFactureVente::IMPAYEE, null, $client->id);
+
+        $resultat = $this->service->evaluer($this->org->id, null, $client->id);
+
+        $this->assertSame(500_000, $resultat['seuil_impayes'], 'pas de plafond configuré → filet de sécurité, jamais illimité');
+        $this->assertSame('standard', $resultat['seuil_origine']);
+        $this->assertTrue($resultat['blocked']);
+    }
+
+    /** Modifier le plafond d'un client n'affecte jamais un autre client. */
+    public function test_modification_du_plafond_dun_client_naffecte_jamais_un_autre(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 0);
+        $clientA = Client::factory()->create([
+            'organization_id' => $this->org->id,
+            'derogation_impayes_autorisee' => true,
+            'seuil_derogation_impayes' => 2_000_000,
+        ]);
+        $clientB = Client::factory()->create([
+            'organization_id' => $this->org->id,
+            'derogation_impayes_autorisee' => true,
+            'seuil_derogation_impayes' => 2_000_000,
+        ]);
+
+        $clientA->update(['seuil_derogation_impayes' => 3_000_000]);
+
+        $this->assertSame(3_000_000, $this->service->evaluer($this->org->id, null, $clientA->id)['seuil_impayes']);
+        $this->assertSame(2_000_000, $this->service->evaluer($this->org->id, null, $clientB->id)['seuil_impayes']);
+    }
+
     /**
      * Un véhicule d'un même propriétaire n'entre jamais dans le calcul d'un autre — la dette
      * n'est jamais consolidée par propriétaire (cf. analyse du 18/08/2026), même dérogation
@@ -355,17 +435,60 @@ class SolvabiliteServiceTest extends TestCase
      * seul le véhicule compte, le client n'est jamais consulté — cf. règle "véhicule
      * prioritaire, client en repli" validée le 18/08/2026.
      */
-    public function test_vehicule_et_client_simultanes_seul_le_vehicule_compte(): void
+    /**
+     * Décision du 28/08/2026 (EN CORRECTION de la priorité inverse qui prévalait jusque-là) :
+     * le client porte la facture dès qu'il est sélectionné, le véhicule n'est plus qu'un
+     * support logistique — sa propre dette (ici nulle) n'a plus voix au chapitre.
+     */
+    public function test_vehicule_et_client_simultanes_seul_le_client_compte(): void
     {
         Parametre::setVentesControleImpayes($this->org->id, true, 0);
-        $vehicule = $this->makeVehicule(); // aucune dette
+        $vehicule = $this->makeVehicule(); // aucune dette propre
         $client = Client::factory()->create(['organization_id' => $this->org->id]);
-        $this->makeFacture(9_999_999, StatutFactureVente::IMPAYEE, null, $client->id);
+        // Livrée par ce véhicule MAIS facturée à ce client.
+        $this->makeFacture(9_999_999, StatutFactureVente::IMPAYEE, $vehicule->id, $client->id);
 
         $resultat = $this->service->evaluer($this->org->id, $vehicule->id, $client->id);
 
+        $this->assertSame('client', $resultat['cible']);
+        $this->assertTrue($resultat['blocked'], 'la dette du client doit bloquer même quand un véhicule est aussi renseigné');
+    }
+
+    /**
+     * Conséquence directe de la priorité client (cf. test ci-dessus) : une facture livrée par un
+     * véhicule mais facturée à un client ne doit JAMAIS alourdir la dette PROPRE de ce véhicule —
+     * elle compte déjà pour le client. Sans ce filtre, une commande ultérieure sur ce même
+     * véhicule (sans client, ou avec un autre client) serait bloquée à tort par une dette qui ne
+     * lui appartient plus (cf. rapport du 28/08/2026 — cas réel observé en production).
+     */
+    public function test_dette_vehicule_exclut_les_factures_facturees_a_un_client(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 0);
+        $vehicule = $this->makeVehicule();
+        $client = Client::factory()->create(['organization_id' => $this->org->id]);
+        $this->makeFacture(9_999_999, StatutFactureVente::IMPAYEE, $vehicule->id, $client->id);
+
+        $resultat = $this->service->evaluer($this->org->id, $vehicule->id, null);
+
         $this->assertSame('vehicule', $resultat['cible']);
-        $this->assertFalse($resultat['blocked'], 'la dette du client ne doit jamais bloquer quand un véhicule est renseigné');
+        $this->assertFalse($resultat['has_debt']);
+        $this->assertFalse($resultat['blocked'], 'une facture financée par un client ne doit jamais alourdir la dette du véhicule');
+    }
+
+    /**
+     * Même exclusion pour le verrou absolu « première régularisation » — sinon un véhicule
+     * resterait bloqué indéfiniment par une facture qui n'est plus de sa responsabilité.
+     */
+    public function test_verrou_premiere_regularisation_ignore_les_factures_facturees_a_un_client(): void
+    {
+        $vehicule = $this->makeVehicule();
+        $client = Client::factory()->create(['organization_id' => $this->org->id]);
+        $this->makeFacture(500_000, StatutFactureVente::IMPAYEE, $vehicule->id, $client->id);
+
+        $resultat = $this->service->evaluer($this->org->id, $vehicule->id, null);
+
+        $this->assertFalse($resultat['blocage_premiere_facture']);
+        $this->assertFalse($resultat['blocked']);
     }
 
     // ── enforcerOuEchouer() ───────────────────────────────────────────────────────

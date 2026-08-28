@@ -28,6 +28,7 @@ use App\Notifications\CommissionGenereeNotification;
 use App\Notifications\CommissionManquanteNotification;
 use App\Services\Notification\BeneficiaireUserResolver;
 use App\Services\Notification\NotificationDispatcher;
+use App\Services\Notification\PushBodyFormatter;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -247,11 +248,20 @@ class CommissionEnveloppeGenerator
 
             foreach ($parts as $part) {
                 $user = BeneficiaireUserResolver::resolve($part->beneficiaire_type, $part->beneficiaire_id);
+                $notif = new CommissionGenereeNotification('commande_vente', $commande->id, $commande->reference, (float) $part->montant_net);
+                // Réutilise le titre/message déjà construits par la notification database —
+                // jamais un second texte pour le push (même événement, même sens).
+                $notifData = $user ? $notif->toArray($user) : null;
 
                 NotificationDispatcher::send(
-                    new CommissionGenereeNotification('commande_vente', $commande->id, $commande->reference, (float) $part->montant_net),
+                    $notif,
                     [$user],
                     'commissions',
+                    $notifData ? fn () => [
+                        'title' => $notifData['titre'],
+                        'body' => PushBodyFormatter::format($notifData),
+                        'data' => ['type' => 'commission.generated', 'commande_id' => $commande->id],
+                    ] : null,
                 );
             }
         } catch (Throwable $e) {

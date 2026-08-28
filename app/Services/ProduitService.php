@@ -10,10 +10,18 @@ use Illuminate\Validation\ValidationException;
 
 class ProduitService
 {
+    /** Code stable du type de produit pour lequel la tarification par nature de client existe. */
+    private const TYPE_CODE_FABRICABLE = 'fabricable';
+
     /** Champs de produit_variantes portés par le formulaire Produit (variante par défaut/générées). */
     private const CHAMPS_VARIANTE = [
-        'code_barres', 'prix_usine', 'prix_usine_tricycle', 'prix_vente', 'prix_achat', 'cout',
+        'code_barres', 'prix_usine', 'prix_usine_tricycle',
+        'prix_externe', 'prix_revendeur', 'prix_distributeur',
+        'prix_vente', 'prix_achat', 'cout',
     ];
+
+    /** Sous-ensemble de CHAMPS_VARIANTE réservé aux produits fabricables (cf. PrixVenteNatureResolver). */
+    private const CHAMPS_PRIX_NATURE = ['prix_externe', 'prix_revendeur', 'prix_distributeur'];
 
     /**
      * CHAMPS_VARIANTE + 'sku', utilisé UNIQUEMENT par creer() : un SKU fourni explicitement (ex.
@@ -37,7 +45,10 @@ class ProduitService
     public function creer(array $donnees): Produit
     {
         $type = ProduitType::findOrFail($donnees['produit_type_id']);
-        $donneesVariante = Arr::only($donnees, self::CHAMPS_VARIANTE_CREATION);
+        $donneesVariante = $this->nettoyerPrixNatureSiNonFabricable(
+            $type,
+            Arr::only($donnees, self::CHAMPS_VARIANTE_CREATION)
+        );
         $this->validerPrixSelonType($type, $donneesVariante);
 
         // Un SKU explicite n'a de sens que pour la variante par défaut d'un produit simple : les
@@ -73,7 +84,10 @@ class ProduitService
         $ancienTypeId = $produit->produit_type_id;
         $type = ProduitType::findOrFail($donnees['produit_type_id'] ?? $ancienTypeId);
         $variante = $produit->variantePrincipale()->first();
-        $donneesVariante = Arr::only($donnees, self::CHAMPS_VARIANTE);
+        $donneesVariante = $this->nettoyerPrixNatureSiNonFabricable(
+            $type,
+            Arr::only($donnees, self::CHAMPS_VARIANTE)
+        );
 
         // Valide les prix EFFECTIFS (valeurs déjà sur la variante, écrasées par celles
         // envoyées) — une mise à jour partielle qui ne touche pas au prix ne doit pas être
@@ -118,6 +132,27 @@ class ProduitService
      * l'organisation (cf. ProduitTypeController) — l'admin choisit la configuration du type,
      * jamais la désactivation de la règle de marge qui en découle.
      */
+    /**
+     * Les tarifs par nature de client (prix_externe/prix_revendeur/prix_distributeur, cf.
+     * PrixVenteNatureResolver) n'ont de sens que pour les produits fabricables — toute valeur
+     * soumise pour un autre type est ignorée plutôt que silencieusement persistée, pour ne
+     * jamais laisser une variante non-fabricable porter un tarif mort qu'aucun code ne consulte.
+     */
+    private function nettoyerPrixNatureSiNonFabricable(ProduitType $type, array $donneesVariante): array
+    {
+        if ($type->code === self::TYPE_CODE_FABRICABLE) {
+            return $donneesVariante;
+        }
+
+        foreach (self::CHAMPS_PRIX_NATURE as $champ) {
+            if (array_key_exists($champ, $donneesVariante)) {
+                $donneesVariante[$champ] = null;
+            }
+        }
+
+        return $donneesVariante;
+    }
+
     public function validerPrixSelonType(ProduitType $type, array $donneesPrix): void
     {
         $raison = $this->raisonIncoherencePrix($type, $donneesPrix);
@@ -167,10 +202,20 @@ class ProduitService
             'prix_usine_tricycle' => 'prix usine tricycle',
             'prix_vente' => 'prix de vente',
             'prix_achat' => "prix d'achat",
+            'prix_externe' => 'prix externe',
+            'prix_revendeur' => 'prix revendeur',
+            'prix_distributeur' => 'prix distributeur',
         ];
 
+        // Les tarifs par nature de client sont obligatoires pour un produit fabricable — au même
+        // titre que prix_usine/prix_usine_tricycle/prix_vente — et non configurables par type
+        // (contrairement à requiredPrices()) : ils n'ont de sens que pour ce code stable précis.
+        $champsRequis = $type->code === self::TYPE_CODE_FABRICABLE
+            ? [...$type->requiredPrices(), ...self::CHAMPS_PRIX_NATURE]
+            : $type->requiredPrices();
+
         $manquants = array_filter(
-            $type->requiredPrices(),
+            $champsRequis,
             fn (string $champ) => ! array_key_exists($champ, $donneesPrix) || $donneesPrix[$champ] === null || $donneesPrix[$champ] === ''
         );
 

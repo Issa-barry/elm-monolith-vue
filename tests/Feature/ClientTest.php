@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Client;
 use App\Models\Organization;
+use App\Models\Parametre;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -488,6 +489,186 @@ class ClientTest extends TestCase
         $this->assertNotContains($client->id, $ids);
     }
 
+    // ── Nature du client : Revendeur → cashback automatique ─────────────────────
+
+    public function test_store_force_cashback_eligible_pour_revendeur_meme_si_non_soumis(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('clients.store'), [
+                'nom_complet' => 'Boutique Diallo',
+                'telephone' => '622000030',
+                'code_pays' => 'GN',
+                'type' => 'revendeur',
+                // cashback_eligible volontairement absent du payload (jamais soumis) — doit être
+                // complété à true. Contrairement à un payload qui l'enverrait explicitement à
+                // false (cf. test_update_tentative_de_desactiver_le_cashback_dun_revendeur_est_
+                // refusee), qui doit lui être REJETÉ, pas silencieusement corrigé.
+                'cashback_montant_par_pack' => 300,
+            ]);
+
+        $this->assertDatabaseHas('clients', [
+            'nom_complet' => 'Boutique Diallo',
+            'type' => 'revendeur',
+            'cashback_eligible' => true,
+        ]);
+    }
+
+    public function test_update_force_cashback_eligible_pour_revendeur(): void
+    {
+        $client = Client::factory()->create([
+            'organization_id' => $this->org->id,
+            'type' => 'externe',
+            'cashback_eligible' => false,
+        ]);
+
+        $this->actingAs($this->user)
+            ->put(route('clients.update', $client), [
+                'nom_complet' => $client->nom_complet,
+                'telephone' => '622000031',
+                'code_pays' => 'GN',
+                'ville' => 'Conakry',
+                'type' => 'revendeur',
+                // cashback_eligible volontairement absent (cf. commentaire ci-dessus).
+                'cashback_montant_par_pack' => 300,
+            ]);
+
+        $this->assertDatabaseHas('clients', [
+            'id' => $client->id,
+            'type' => 'revendeur',
+            'cashback_eligible' => true,
+        ]);
+    }
+
+    public function test_store_distributeur_ne_force_pas_le_cashback(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('clients.store'), [
+                'nom_complet' => 'Grossiste Barry',
+                'telephone' => '622000032',
+                'code_pays' => 'GN',
+                'type' => 'distributeur',
+                'cashback_eligible' => false,
+            ]);
+
+        $this->assertDatabaseHas('clients', [
+            'nom_complet' => 'Grossiste Barry',
+            'type' => 'distributeur',
+            'cashback_eligible' => false,
+        ]);
+    }
+
+    // ── Cashback = commission par pack propre au client (CASHBACK-001/002) ──────
+
+    public function test_store_revendeur_sans_montant_cashback_est_refuse(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('clients.store'), [
+                'nom_complet' => 'Revendeur Sans Montant',
+                'telephone' => '622000040',
+                'code_pays' => 'GN',
+                'type' => 'revendeur',
+            ])
+            ->assertSessionHasErrors('cashback_montant_par_pack');
+
+        $this->assertDatabaseMissing('clients', ['nom_complet' => 'Revendeur Sans Montant']);
+    }
+
+    public function test_store_revendeur_avec_montant_cashback_positif_est_accepte(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('clients.store'), [
+                'nom_complet' => 'Revendeur Avec Montant',
+                'telephone' => '622000041',
+                'code_pays' => 'GN',
+                'type' => 'revendeur',
+                'cashback_montant_par_pack' => 300,
+            ])
+            ->assertSessionDoesntHaveErrors();
+
+        $this->assertDatabaseHas('clients', [
+            'nom_complet' => 'Revendeur Avec Montant',
+            'cashback_eligible' => true,
+            'cashback_montant_par_pack' => 300,
+        ]);
+    }
+
+    public function test_update_tentative_de_desactiver_le_cashback_dun_revendeur_est_refusee(): void
+    {
+        $client = Client::factory()->create([
+            'organization_id' => $this->org->id,
+            'type' => 'revendeur',
+            'cashback_eligible' => true,
+            'cashback_montant_par_pack' => 300,
+        ]);
+
+        $this->actingAs($this->user)
+            ->put(route('clients.update', $client), [
+                'nom_complet' => $client->nom_complet,
+                'telephone' => '622000042',
+                'code_pays' => 'GN',
+                'ville' => 'Conakry',
+                'type' => 'revendeur',
+                'cashback_eligible' => false,
+                'cashback_montant_par_pack' => 300,
+            ])
+            ->assertSessionHasErrors('cashback_eligible');
+
+        $this->assertDatabaseHas('clients', ['id' => $client->id, 'cashback_eligible' => true]);
+    }
+
+    public function test_store_externe_avec_cashback_desactive_est_accepte(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('clients.store'), [
+                'nom_complet' => 'Externe Sans Cashback',
+                'telephone' => '622000043',
+                'code_pays' => 'GN',
+                'type' => 'externe',
+                'cashback_eligible' => false,
+            ])
+            ->assertSessionDoesntHaveErrors();
+
+        $this->assertDatabaseHas('clients', [
+            'nom_complet' => 'Externe Sans Cashback',
+            'cashback_eligible' => false,
+        ]);
+    }
+
+    public function test_store_externe_avec_cashback_actif_sans_montant_est_refuse(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('clients.store'), [
+                'nom_complet' => 'Externe Cashback Incomplet',
+                'telephone' => '622000044',
+                'code_pays' => 'GN',
+                'type' => 'externe',
+                'cashback_eligible' => true,
+            ])
+            ->assertSessionHasErrors('cashback_montant_par_pack');
+
+        $this->assertDatabaseMissing('clients', ['nom_complet' => 'Externe Cashback Incomplet']);
+    }
+
+    public function test_store_externe_avec_cashback_actif_et_montant_est_accepte(): void
+    {
+        $this->actingAs($this->user)
+            ->post(route('clients.store'), [
+                'nom_complet' => 'Externe Cashback Complet',
+                'telephone' => '622000045',
+                'code_pays' => 'GN',
+                'type' => 'externe',
+                'cashback_eligible' => true,
+                'cashback_montant_par_pack' => 250,
+            ])
+            ->assertSessionDoesntHaveErrors();
+
+        $this->assertDatabaseHas('clients', [
+            'nom_complet' => 'Externe Cashback Complet',
+            'cashback_eligible' => true,
+            'cashback_montant_par_pack' => 250,
+        ]);
+    }
+
     public function test_soft_deleted_telephone_can_be_reused(): void
     {
         $client = Client::factory()->create([
@@ -509,5 +690,179 @@ class ClientTest extends TestCase
             'nom_complet' => 'Mariama Sylla',
             'deleted_at' => null,
         ]);
+    }
+
+    // ── derogation-impayes (fiche client, cf. Clients/Show.vue) ─────────────────
+    // Même règle de cohérence que le véhicule (DerogationImpayesService, mutualisée) — cf.
+    // VehiculeTest::test_update_derogation_*() pour la version véhicule de ces mêmes scénarios.
+
+    public function test_edit_expose_la_derogation_et_le_seuil_global(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 300_000);
+        $client = Client::factory()->create(['organization_id' => $this->org->id]);
+        $client->update(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 1_200_000]);
+
+        $this->actingAs($this->user)
+            ->get(route('clients.edit', $client))
+            ->assertInertia(fn ($page) => $page
+                ->component('Clients/Edit')
+                ->where('client.derogation_impayes_autorisee', true)
+                ->where('client.seuil_derogation_impayes', 1_200_000)
+                ->where('seuil_global_impayes', 300_000)
+            );
+    }
+
+    public function test_show_expose_le_plafond_propre_du_client(): void
+    {
+        $client = Client::factory()->create(['organization_id' => $this->org->id]);
+        $client->update(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 4_000_000]);
+
+        $this->actingAs($this->user)
+            ->get(route('clients.show', $client))
+            ->assertInertia(fn ($page) => $page
+                ->component('Clients/Show')
+                ->where('client.derogation_impayes_autorisee', true)
+                ->where('client.seuil_derogation_impayes', 4_000_000)
+            );
+    }
+
+    public function test_update_derogation_active_avec_un_plafond_puis_desactive(): void
+    {
+        $client = Client::factory()->create(['organization_id' => $this->org->id]);
+
+        $this->actingAs($this->user)
+            ->patch(route('clients.derogation-impayes.update', $client), [
+                'derogation_impayes_autorisee' => true,
+                'seuil_derogation_impayes' => 5_000_000,
+            ])
+            ->assertRedirect();
+        $client->refresh();
+        $this->assertTrue($client->derogation_impayes_autorisee);
+        $this->assertSame(5_000_000, $client->seuil_derogation_impayes);
+
+        $this->actingAs($this->user)
+            ->patch(route('clients.derogation-impayes.update', $client), [
+                'derogation_impayes_autorisee' => false,
+            ])
+            ->assertRedirect();
+        $this->assertFalse($client->fresh()->derogation_impayes_autorisee);
+    }
+
+    /** Même règle que le véhicule : pas de dérogation sans plafond valide. */
+    public function test_update_derogation_refuse_lactivation_sans_plafond(): void
+    {
+        $client = Client::factory()->create(['organization_id' => $this->org->id]);
+
+        $this->actingAs($this->user)
+            ->patch(route('clients.derogation-impayes.update', $client), [
+                'derogation_impayes_autorisee' => true,
+            ])
+            ->assertSessionHasErrors('derogation_impayes_autorisee');
+
+        $this->assertFalse($client->fresh()->derogation_impayes_autorisee);
+    }
+
+    /** Même règle que le véhicule : plafond inférieur au seuil standard refusé. */
+    public function test_update_derogation_refuse_un_plafond_inferieur_au_seuil_standard(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 3_000_000);
+        $client = Client::factory()->create(['organization_id' => $this->org->id]);
+
+        $this->actingAs($this->user)
+            ->patch(route('clients.derogation-impayes.update', $client), [
+                'derogation_impayes_autorisee' => true,
+                'seuil_derogation_impayes' => 2_000_000,
+            ])
+            ->assertSessionHasErrors('derogation_impayes_autorisee');
+
+        $this->assertFalse($client->fresh()->derogation_impayes_autorisee);
+    }
+
+    /** Désactiver reste toujours possible, sans condition de plafond. */
+    public function test_update_derogation_desactive_sans_condition(): void
+    {
+        $client = Client::factory()->create(['organization_id' => $this->org->id]);
+        $client->update(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 5_000_000]);
+
+        $this->actingAs($this->user)
+            ->patch(route('clients.derogation-impayes.update', $client), [
+                'derogation_impayes_autorisee' => false,
+            ])
+            ->assertRedirect();
+
+        $this->assertFalse($client->fresh()->derogation_impayes_autorisee);
+    }
+
+    /**
+     * Désactiver la dérogation sans renvoyer de plafond conserve le plafond déjà enregistré en
+     * base — il n'est simplement plus appliqué au calcul (cf. SolvabiliteService), pour faciliter
+     * une éventuelle réactivation ultérieure sans ressaisie.
+     */
+    public function test_update_derogation_desactivation_conserve_le_plafond_deja_enregistre(): void
+    {
+        $client = Client::factory()->create(['organization_id' => $this->org->id]);
+        $client->update(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 5_000_000]);
+
+        $this->actingAs($this->user)
+            ->patch(route('clients.derogation-impayes.update', $client), [
+                'derogation_impayes_autorisee' => false,
+            ])
+            ->assertRedirect();
+
+        $client->refresh();
+        $this->assertFalse($client->derogation_impayes_autorisee);
+        $this->assertSame(5_000_000, $client->seuil_derogation_impayes);
+    }
+
+    /**
+     * Réactiver sans renvoyer de nouveau plafond réutilise celui déjà enregistré en base — pas
+     * besoin de le ressaisir.
+     */
+    public function test_update_derogation_reactivation_sans_nouveau_plafond_reutilise_lancien(): void
+    {
+        $client = Client::factory()->create(['organization_id' => $this->org->id]);
+        $client->update([
+            'derogation_impayes_autorisee' => false,
+            'seuil_derogation_impayes' => 5_000_000,
+        ]);
+
+        $this->actingAs($this->user)
+            ->patch(route('clients.derogation-impayes.update', $client), [
+                'derogation_impayes_autorisee' => true,
+            ])
+            ->assertRedirect();
+
+        $client->refresh();
+        $this->assertTrue($client->derogation_impayes_autorisee);
+        $this->assertSame(5_000_000, $client->seuil_derogation_impayes);
+    }
+
+    /** Un plafond fourni au moment de l'activation remplace celui éventuellement déjà enregistré. */
+    public function test_update_derogation_avec_nouveau_plafond_remplace_lancien(): void
+    {
+        $client = Client::factory()->create(['organization_id' => $this->org->id]);
+        $client->update(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 5_000_000]);
+
+        $this->actingAs($this->user)
+            ->patch(route('clients.derogation-impayes.update', $client), [
+                'derogation_impayes_autorisee' => true,
+                'seuil_derogation_impayes' => 7_500_000,
+            ])
+            ->assertRedirect();
+
+        $this->assertSame(7_500_000, $client->fresh()->seuil_derogation_impayes);
+    }
+
+    public function test_update_derogation_returns_403_for_other_organization(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $client = Client::factory()->create(['organization_id' => $otherOrg->id]);
+
+        $this->actingAs($this->user)
+            ->patch(route('clients.derogation-impayes.update', $client), [
+                'derogation_impayes_autorisee' => true,
+                'seuil_derogation_impayes' => 5_000_000,
+            ])
+            ->assertStatus(403);
     }
 }

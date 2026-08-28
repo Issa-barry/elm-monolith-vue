@@ -908,6 +908,79 @@ pour les 3 routes.
 **Confirmation** : le frontend peut consommer `GET /v1/mobile/notifications`
 comme un contrat unique, sans connaître les classes `Notification` Laravel.
 
+### 7.4 Web Push PWA — 3ᵉ canal (2026-08-28)
+
+Architecture (cf. rapport dédié) : `NotificationDispatcher` reste le seul
+point d'entrée (aucun changement de destinataires) ; le fan-out Expo + Web
+Push est désormais **asynchrone**, via `DispatchPushNotificationsJob`
+(`ShouldQueue`) — un événement métier (paiement, validation...) n'attend plus
+les appels réseau vers Expo/les fournisseurs Web Push. Bibliothèque :
+`minishlink/web-push` v11 (VAPID natif, protocole/chiffrement jamais
+réimplémenté ici), client PSR-18 = Guzzle explicite (déjà dépendance Laravel).
+
+**Web Push suit exactement la couverture Expo actuelle** : seuls 2 événements
+sur 7 fournissent un payload push aujourd'hui (commande validée, transfert
+créé) — les 5 autres (commission générée/payée, dépense validée, transfert
+réceptionné) restent `database`-only, ce chantier n'a pas élargi cette
+couverture (pas de redéfinition des destinataires/canaux, hors périmètre).
+
+#### `GET /v1/mobile/web-push/vapid-public-key`
+
+```json
+{ "public_key": "BN...xyz" }
+```
+
+`null` si l'installation n'a pas encore généré de clés VAPID — le canal Web
+Push est alors simplement indisponible (database + Expo continuent de
+fonctionner normalement).
+
+#### `POST /v1/mobile/web-push/subscriptions`
+
+```json
+// Requête — forme standard `PushSubscription.toJSON()`
+{
+  "endpoint": "https://fcm.googleapis.com/fcm/send/...",
+  "keys": { "p256dh": "...", "auth": "..." }
+}
+// Réponse
+{ "success": true }
+```
+
+Le serveur associe **toujours** l'abonnement à `$request->user()` — jamais à
+un `user_id` envoyé par le client. Idempotent : upsert par `endpoint` (unique
+globalement, pas par compte) — un même endpoint réabonné par un autre compte
+(poste partagé) lui est réassigné, jamais dupliqué. Un compte peut avoir
+plusieurs abonnements (un par navigateur/appareil).
+
+#### `DELETE /v1/mobile/web-push/subscriptions?endpoint=...`
+
+```json
+{ "success": true }
+```
+
+`endpoint` en **query string**, jamais un corps JSON (support body-on-DELETE
+inégal selon clients/proxys, et non documentable proprement en OpenAPI).
+Supprime uniquement l'abonnement identifié par cet `endpoint`, scopé au
+compte authentifié — jamais un "delete all" (se désabonner depuis un
+navigateur ne doit jamais toucher les autres appareils). Idempotent : un
+endpoint déjà absent, ou appartenant à un autre compte, renvoie le même
+succès (jamais de 404 — n'expose jamais l'existence d'un abonnement pour un
+tiers).
+
+**Abonnements expirés** : si un fournisseur push répond que l'abonnement
+n'existe plus (404/410 — `MessageSentReport::isSubscriptionExpired()`, natif
+de la lib, jamais réinterprété nous-mêmes), la ligne est supprimée
+automatiquement. Un échec temporaire (5xx, réseau) conserve l'abonnement.
+
+**Sécurité** : `p256dh`/`auth`/`endpoint` ne sont jamais sérialisés dans une
+réponse API (`WebPushSubscription::$hidden`) ni logués en clair (seul un
+`subscription_id` apparaît dans les logs).
+
+**Préférences** : inchangées — un abonnement Web Push enregistré ne
+contourne jamais `notification_preferences` ; la permission navigateur
+(`Notification.requestPermission()`) reste gérée côté client, le backend ne
+prétend jamais pouvoir l'accorder.
+
 ---
 
 ## 8. Divers

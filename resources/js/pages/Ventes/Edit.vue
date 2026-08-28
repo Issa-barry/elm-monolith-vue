@@ -20,7 +20,28 @@ interface ProduitOption {
     categorie_id: number | null;
     prix_vente: number;
     prix_usine: number;
+    // Tarification par nature de client (cf. PrixVenteNatureResolver côté serveur) —
+    // réservée aux produits fabricables, null = pas de tarif spécifique configuré.
+    is_fabricable: boolean;
+    prix_externe: number | null;
+    prix_revendeur: number | null;
+    prix_distributeur: number | null;
 }
+
+type PrixOrigine =
+    | 'usine'
+    | 'vente'
+    | 'externe'
+    | 'revendeur'
+    | 'distributeur';
+
+const PRIX_ORIGINE_LABELS: Record<PrixOrigine, string> = {
+    usine: 'Prix usine',
+    vente: 'Prix vente',
+    externe: 'Prix externe',
+    revendeur: 'Prix revendeur',
+    distributeur: 'Prix distributeur',
+};
 
 interface CapaciteCategorie {
     categorie_id: number;
@@ -45,7 +66,7 @@ interface ClientOption {
     id: number;
     nom_complet: string;
     telephone: string | null;
-    type: 'standard' | 'partenaire';
+    type: 'externe' | 'revendeur' | 'distributeur';
     vehicules: ClientVehiculeOption[];
 }
 
@@ -105,13 +126,13 @@ function produitPrixUsineFrom(
 }
 
 // Un véhicule de flotte (toujours livraison_vente=true dans ce picker) facture
-// toujours au prix de vente plein ; sans véhicule, seul un client partenaire
+// toujours au prix de vente plein ; sans véhicule, seul un client externe
 // facture à prix usine — cf. useVehiculeCommandeTarification.
 const initialClient = props.clients.find(
     (c) => c.id === props.commande.client_id,
 );
 const initialModeTarification: 'prix_vente' | 'prix_usine' =
-    !props.commande.vehicule_id && initialClient?.type === 'partenaire'
+    !props.commande.vehicule_id && initialClient?.type === 'externe'
         ? 'prix_usine'
         : 'prix_vente';
 
@@ -187,34 +208,74 @@ const { modeTarification, commissionEligible } =
         () => form.client_id,
     );
 
-// ── Libellés de prix — explicites (prix vente vs prix usine) ──────────────────
-// Le prix unitaire AFFICHÉ doit être celui réellement utilisé dans le calcul
-// du total (prix_usine si le véhicule n'est pas pris en charge par l'usine),
-// sinon libellé et valeur se contredisent.
-const prixUnitLabel = computed(() =>
-    modeTarification.value === 'prix_usine'
-        ? 'Prix usine (unit.)'
-        : 'Prix vente (unit.)',
-);
-const unitPriceEditable = computed(
-    () => canUpdateUnitPrice.value && modeTarification.value !== 'prix_usine',
-);
-function ligneUnitPrice(ligne: LigneForm): number {
-    return modeTarification.value === 'prix_usine'
-        ? produitPrixUsineFrom(props.produits, ligne.produit_id)
-        : ligne.prix_vente;
-}
-const totalColumnLabel = computed(() =>
-    modeTarification.value === 'prix_usine'
-        ? 'Total (prix usine)'
-        : 'Total (prix vente)',
-);
+// ── Prix affiché — "Prix appliqué" plutôt qu'un intitulé de colonne unique :
+// des lignes différentes peuvent relever de politiques de prix différentes
+// dans la même commande (ex: un produit fabricable au tarif Revendeur à côté
+// d'un produit classique au prix de vente), donc chaque ligne affiche à la
+// fois le montant et l'origine de son propre prix (cf. resoudrePrixLigne()).
+const prixUnitLabel = 'Prix appliqué';
+const totalColumnLabel = 'Total';
 const totalCommandeLabel = 'Total commande';
 
+/**
+ * Résolution du prix RÉELLEMENT appliqué à une ligne — miroir d'affichage de
+ * PrixVenteNatureResolver (backend, seul juge à l'enregistrement) :
+ *  - produit fabricable + client sélectionné → tarif de la nature du client
+ *    (Externe/Revendeur/Distributeur), ou repli sur prix_vente si ce tarif
+ *    n'est pas configuré pour ce produit ;
+ *  - sinon → comportement historique (modeTarification global : prix_usine
+ *    pour un client Externe sans véhicule, prix_vente saisi/éditable sinon).
+ */
+function resoudrePrixLigne(ligne: LigneForm): { montant: number; origine: PrixOrigine } {
+    const produit = props.produits.find((p) => p.id === ligne.produit_id);
+
+    if (produit?.is_fabricable && clientSelected.value) {
+        const tarifsParNature: Record<ClientOption['type'], number | null> = {
+            externe: produit.prix_externe,
+            revendeur: produit.prix_revendeur,
+            distributeur: produit.prix_distributeur,
+        };
+        const nature = clientSelected.value.type;
+        const tarif = tarifsParNature[nature];
+        if (tarif !== null && tarif !== undefined) {
+            return { montant: tarif, origine: nature };
+        }
+
+        return { montant: produit.prix_vente, origine: 'vente' };
+    }
+
+    if (modeTarification.value === 'prix_usine') {
+        return {
+            montant: produitPrixUsineFrom(props.produits, ligne.produit_id),
+            origine: 'usine',
+        };
+    }
+
+    return { montant: ligne.prix_vente, origine: 'vente' };
+}
+
+function ligneUnitPrice(ligne: LigneForm): number {
+    return resoudrePrixLigne(ligne).montant;
+}
+function ligneOrigineLabel(ligne: LigneForm): string {
+    return PRIX_ORIGINE_LABELS[resoudrePrixLigne(ligne).origine];
+}
+/**
+ * Une ligne au tarif de nature (fabricable + client) n'est jamais éditable — le serveur
+ * ignore de toute façon le prix soumis pour ces lignes (cf. CommandeVenteController::
+ * buildLignesDataAndTotal()), l'éditer donnerait une fausse impression de contrôle.
+ */
+function ligneUnitPriceEditable(ligne: LigneForm): boolean {
+    const produit = props.produits.find((p) => p.id === ligne.produit_id);
+    if (produit?.is_fabricable && clientSelected.value) {
+        return false;
+    }
+
+    return canUpdateUnitPrice.value && modeTarification.value !== 'prix_usine';
+}
+
 function computeLigneTotal(ligne: LigneForm): number {
-    return modeTarification.value === 'prix_usine'
-        ? produitPrixUsineFrom(props.produits, ligne.produit_id) * ligne.qte
-        : ligne.prix_vente * ligne.qte;
+    return resoudrePrixLigne(ligne).montant * ligne.qte;
 }
 
 function recomputeAllTotals() {
@@ -251,7 +312,7 @@ const selectedClientVehicules = computed(
 function onClientSelect(c: ClientOption | null) {
     form.client_id = c?.id ?? null;
     form.client_vehicule_id = null;
-    // Le type de client (partenaire) peut à lui seul faire basculer modeTarification
+    // Le type de client (externe) peut à lui seul faire basculer modeTarification
     // vers "prix_usine" (cf. useVehiculeCommandeTarification) — sans ce recalcul, le
     // total des lignes déjà saisies reste figé sur l'ancien mode (prix_vente) alors
     // que le prix unitaire affiché, lui, se met à jour immédiatement.
@@ -429,6 +490,9 @@ onMounted(() => {
     if (form.lignes.length === 0) {
         form.lignes.push({ produit_id: null, qte: 1, prix_vente: 0, total: 0 });
     }
+    // Le total initial (calculé ci-dessus, avant que clientSelected n'existe) ignore encore
+    // la tarification par nature de client — recalculé ici pour rester correct dès l'affichage.
+    recomputeAllTotals();
 });
 
 // ── Validation locale ────────────────────────────────────────────────────────
@@ -644,10 +708,10 @@ function submit() {
                                 {{ form.errors.client_id }}
                             </p>
 
-                            <!-- Véhicule partenaire : facultatif, jamais requis pour vendre -->
+                            <!-- Véhicule externe : facultatif, jamais requis pour vendre -->
                             <div
                                 v-if="
-                                    clientSelected?.type === 'partenaire' &&
+                                    clientSelected?.type === 'externe' &&
                                     selectedClientVehicules.length > 0
                                 "
                                 class="mt-3"
@@ -692,15 +756,11 @@ function submit() {
                     </p>
 
                     <p
-                        v-if="!unitPriceEditable"
+                        v-if="!canUpdateUnitPrice"
                         class="mb-3 flex items-center gap-1 text-xs text-muted-foreground"
                     >
                         <Lock class="h-3.5 w-3.5" />
-                        {{
-                            modeTarification === 'prix_usine'
-                                ? 'Prix usine fixé par le produit — non modifiable.'
-                                : 'Prix unitaire verrouille pour votre profil.'
-                        }}
+                        Prix unitaire verrouille pour votre profil.
                     </p>
 
                     <template v-if="form.vehicule_id !== null">
@@ -784,7 +844,7 @@ function submit() {
                                         >
                                             {{ prixUnitLabel }}
                                             <Lock
-                                                v-if="!unitPriceEditable"
+                                                v-if="!canUpdateUnitPrice"
                                                 class="h-3.5 w-3.5"
                                             />
                                         </span>
@@ -859,12 +919,18 @@ function submit() {
                                                 onPrixChange(index, $event)
                                             "
                                             :min="0"
-                                            :disabled="!unitPriceEditable"
+                                            :disabled="!ligneUnitPriceEditable(ligne)"
                                             :use-grouping="false"
                                             suffix=" GNF"
                                             class="w-full"
                                             input-class="w-full text-right"
                                         />
+                                        <p
+                                            v-if="ligne.produit_id"
+                                            class="mt-1 text-right text-[11px] text-muted-foreground"
+                                        >
+                                            {{ ligneOrigineLabel(ligne) }}
+                                        </p>
                                     </td>
                                     <td
                                         class="px-4 py-3 text-right font-medium tabular-nums"
@@ -944,7 +1010,7 @@ function submit() {
                                         >
                                             {{ prixUnitLabel }} (GNF)
                                             <Lock
-                                                v-if="!unitPriceEditable"
+                                                v-if="!canUpdateUnitPrice"
                                                 class="h-3.5 w-3.5"
                                             />
                                         </span>
@@ -955,11 +1021,17 @@ function submit() {
                                             onPrixChange(index, $event)
                                         "
                                         :min="0"
-                                        :disabled="!unitPriceEditable"
+                                        :disabled="!ligneUnitPriceEditable(ligne)"
                                         :use-grouping="false"
                                         class="w-full"
                                         input-class="w-full"
                                     />
+                                    <p
+                                        v-if="ligne.produit_id"
+                                        class="mt-1 text-[11px] text-muted-foreground"
+                                    >
+                                        {{ ligneOrigineLabel(ligne) }}
+                                    </p>
                                 </div>
                             </div>
 

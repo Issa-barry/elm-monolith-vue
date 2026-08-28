@@ -329,7 +329,12 @@ class SolvabiliteImpayesTest extends TestCase
      * indépendants, cf. Ventes/Create.vue) : seul le véhicule compte — la dette écrasante du
      * client ne doit jamais bloquer une commande dont le véhicule est propre.
      */
-    public function test_commande_avec_vehicule_et_client_ignore_la_dette_du_client(): void
+    /**
+     * Décision du 28/08/2026 (EN CORRECTION de la priorité inverse) : le client porte la
+     * facture dès qu'il est sélectionné, même si un véhicule (sain) est aussi renseigné — le
+     * véhicule n'est alors qu'un support logistique, jamais débiteur.
+     */
+    public function test_commande_avec_vehicule_sain_et_client_endette_est_bloquee(): void
     {
         Parametre::setVentesControleImpayes($this->org->id, true, 0);
         $vehicule = $this->makeVehicule();
@@ -341,6 +346,49 @@ class SolvabiliteImpayesTest extends TestCase
             ->post(route('ventes.store'), [
                 'vehicule_id' => $vehicule->id,
                 'client_id' => $client->id,
+                'lignes' => [['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 5000]],
+            ])
+            ->assertSessionHasErrors('impayes');
+    }
+
+    /**
+     * Symétrique : un véhicule endetté ne doit plus bloquer une commande dès qu'un client
+     * (sain) est également renseigné — c'est lui qui porte désormais la facture.
+     */
+    public function test_commande_avec_vehicule_endette_et_client_sain_nest_pas_bloquee(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 0);
+        $vehicule = $this->makeVehicule();
+        $this->makeDette(9_999_999, $vehicule->id);
+        $client = Client::factory()->create(['organization_id' => $this->org->id]);
+        $produit = $this->makeProduitAvecVariante($this->org, ['categorie_id' => $this->categorie->id], ['prix_vente' => 5000]);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'client_id' => $client->id,
+                'lignes' => [['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 5000]],
+            ])
+            ->assertSessionDoesntHaveErrors('impayes');
+    }
+
+    /**
+     * Reproduit le cas réel signalé le 28/08/2026 : un véhicule livre une commande facturée à
+     * un client, cette facture reste impayée — une commande ULTÉRIEURE sur ce même véhicule
+     * (sans client cette fois) ne doit jamais être bloquée par une dette qui appartient au
+     * client de la commande précédente, jamais au véhicule lui-même.
+     */
+    public function test_vehicule_reutilisable_apres_une_commande_client_impayee(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 0);
+        $vehicule = $this->makeVehicule();
+        $ancienClient = Client::factory()->create(['organization_id' => $this->org->id]);
+        $this->makeDette(9_999_999, $vehicule->id, $ancienClient->id);
+        $produit = $this->makeProduitAvecVariante($this->org, ['categorie_id' => $this->categorie->id], ['prix_vente' => 5000]);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
                 'lignes' => [['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 5000]],
             ])
             ->assertSessionDoesntHaveErrors('impayes');
@@ -415,6 +463,76 @@ class SolvabiliteImpayesTest extends TestCase
                 'lignes' => [['produit_id' => $produit->id, 'qte' => 1, 'prix_vente' => 10_800_000]],
             ])
             ->assertSessionDoesntHaveErrors('impayes');
+    }
+
+    // ── Contrat couleur (cf. audit du 28/08/2026) : Ventes/Create.vue colore désormais le bloc
+    // "Factures impayées détectées" exclusivement à partir de has_debt/blocked/seuil_origine —
+    // jamais du statut brut d'une facture (impaye/partiel). Le rouge est réservé à blocked=true ;
+    // has_debt=true && blocked=false doit toujours pouvoir s'afficher en warning/orange, y
+    // compris quand seuil_origine vaut 'derogation' (message "Commande autorisée par
+    // dérogation" affiché dans ce cas précis). Ces tests verrouillent ce contrat côté backend,
+    // seule source de vérité consommée par le template.
+
+    public function test_check_solvabilite_client_sans_dette_est_a_jour(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 0);
+        $client = Client::factory()->create(['organization_id' => $this->org->id]);
+
+        $apercu = $this->actingAs($this->user)
+            ->get('/backoffice/ventes/check-solvabilite?client_id='.$client->id)
+            ->assertOk()
+            ->json();
+
+        $this->assertFalse($apercu['has_debt']);
+        $this->assertFalse($apercu['blocked']);
+    }
+
+    /**
+     * Dette CLIENT existante sous son plafond dérogatoire mais au-dessus du seuil global — la
+     * commande reste autorisée (comme test_check_solvabilite_nannonce_jamais_de_blocage_pour_un_
+     * vehicule_en_derogation_sans_dette ci-dessus pour le véhicule), mais ici avec une dette
+     * RÉELLEMENT existante (has_debt=true) : c'est précisément le cas que Ventes/Create.vue doit
+     * afficher en warning/orange, jamais en rouge.
+     */
+    public function test_check_solvabilite_client_avec_dette_sous_plafond_derogatoire_reste_autorise(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 15_000);
+        $client = Client::factory()->create([
+            'organization_id' => $this->org->id,
+            'derogation_impayes_autorisee' => true,
+            'seuil_derogation_impayes' => 500_000,
+        ]);
+        $this->makeDette(300_000, null, $client->id);
+
+        $apercu = $this->actingAs($this->user)
+            ->get('/backoffice/ventes/check-solvabilite?client_id='.$client->id)
+            ->assertOk()
+            ->json();
+
+        $this->assertTrue($apercu['has_debt']);
+        $this->assertFalse($apercu['blocked'], 'la dérogation client doit autoriser malgré le seuil global très bas');
+        $this->assertSame('derogation', $apercu['seuil_origine']);
+    }
+
+    /**
+     * Symétrique côté véhicule du test ci-dessus — via makeDettePartielle() (au moins 1 GNF
+     * encaissé) pour isoler le contrôle de seuil du verrou « première régularisation », propre
+     * à la cible véhicule et qui bloquerait sinon inconditionnellement, dérogation ou non.
+     */
+    public function test_check_solvabilite_vehicule_avec_dette_sous_plafond_derogatoire_reste_autorise(): void
+    {
+        Parametre::setVentesControleImpayes($this->org->id, true, 15_000);
+        $vehicule = $this->makeVehicule(['derogation_impayes_autorisee' => true, 'seuil_derogation_impayes' => 500_000]);
+        $this->makeDettePartielle(300_001, 1, $vehicule->id);
+
+        $apercu = $this->actingAs($this->user)
+            ->get('/backoffice/ventes/check-solvabilite?vehicule_id='.$vehicule->id)
+            ->assertOk()
+            ->json();
+
+        $this->assertTrue($apercu['has_debt']);
+        $this->assertFalse($apercu['blocked'], 'la dérogation véhicule doit autoriser malgré le seuil global très bas');
+        $this->assertSame('derogation', $apercu['seuil_origine']);
     }
 
     /**

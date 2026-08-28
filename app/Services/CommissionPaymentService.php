@@ -12,6 +12,7 @@ use App\Models\Vehicule;
 use App\Notifications\CommissionPayeeNotification;
 use App\Services\Notification\BeneficiaireUserResolver;
 use App\Services\Notification\NotificationDispatcher;
+use App\Services\Notification\PushBodyFormatter;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -446,11 +447,20 @@ class CommissionPaymentService
     ): void {
         try {
             $user = BeneficiaireUserResolver::resolve($beneficiaryType, $beneficiaryId);
+            $notif = new CommissionPayeeNotification($montant, $modePaiement, $note, 'commission_payment', $paymentId);
+            $notifData = $user ? $notif->toArray($user) : null;
 
             NotificationDispatcher::send(
-                new CommissionPayeeNotification($montant, $modePaiement, $note, 'commission_payment', $paymentId),
+                $notif,
                 [$user],
                 'commissions',
+                // Pas d'ID navigable ici (paiement = ligne comptable interne) — le type seul
+                // suffit (cf. rapport Web Push 7/7).
+                $notifData ? fn () => [
+                    'title' => $notifData['titre'],
+                    'body' => PushBodyFormatter::format($notifData),
+                    'data' => ['type' => 'commission.paid'],
+                ] : null,
             );
         } catch (Throwable $e) {
             Log::error('CommissionPayeeNotification : envoi échoué', [

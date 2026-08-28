@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\StatutFactureVente;
+use App\Models\Client;
 use App\Models\FactureVente;
 use App\Models\Parametre;
 use App\Models\Vehicule;
@@ -17,23 +18,34 @@ use Illuminate\Validation\ValidationException;
  * Réutilisé identiquement par CommandeVenteController (back-office) et PdvCheckoutService (PDV) :
  * le frontend n'est plus qu'un affichage de ce que ce service calcule, jamais une garantie.
  *
- * Règle de ciblage (véhicule prioritaire, client en repli) :
- * - un `vehiculeId` renseigné → dette = somme des FactureVente.montant_restant rattachées à CE
- *   véhicule (colonne `factures_ventes.vehicule_id`, indépendante du propriétaire — deux
- *   véhicules d'un même propriétaire ont des dettes totalement indépendantes, cf. analyse du
- *   18/08/2026) ; seuil = Vehicule::seuil_derogation_impayes de CE véhicule si
- *   Vehicule::derogation_impayes_autorisee est actif ET qu'un plafond y est configuré, sinon le
- *   seuil global (cf. seuilApplicableVehicule() — décision produit du 22/08/2026, en correction
- *   de la version du 19/08/2026 qui portait le plafond sur le TYPE de véhicule : deux véhicules
- *   du même type peuvent avoir des performances de paiement différentes, donc des plafonds
- *   différents — jamais un plafond partagé par tout un type) ;
- * - sinon, un `clientId` renseigné → dette = factures des commandes de ce client, seuil global
- *   uniquement (pas de dérogation client) ;
+ * Règle de ciblage (client prioritaire, véhicule en repli — décision produit du 28/08/2026,
+ * EN CORRECTION de la priorité inverse qui prévalait jusque-là) :
+ * - un `clientId` renseigné → c'est LUI qui porte la facture (le véhicule, s'il est également
+ *   choisi, n'est plus qu'un support logistique — livraison, équipe, commissions, cf.
+ *   VehiculeCommandeContextResolver, inchangé) : dette = factures des commandes de ce client ;
+ *   seuil = Client::seuil_derogation_impayes de CE client si Client::derogation_impayes_autorisee
+ *   est actif ET qu'un plafond y est configuré, sinon le seuil global (cf. resoudrePlafondClient()
+ *   — dérogation client possible depuis la décision produit du 28/08/2026, symétrique à la
+ *   dérogation véhicule ci-dessous) ;
+ * - sinon, un `vehiculeId` renseigné → dette = somme des FactureVente.montant_restant rattachées
+ *   à CE véhicule ET dont la commande n'a PAS de client (colonne `factures_ventes.vehicule_id`,
+ *   indépendante du propriétaire — deux véhicules d'un même propriétaire ont des dettes
+ *   totalement indépendantes, cf. analyse du 18/08/2026 — combinée à un filtre sur
+ *   `commande.client_id IS NULL` : une commande livrée par ce véhicule mais facturée à un client
+ *   n'est jamais comptée dans la dette du véhicule, cf. facturesImpayeesVehicule()) ; seuil =
+ *   Vehicule::seuil_derogation_impayes de CE véhicule si Vehicule::derogation_impayes_autorisee
+ *   est actif ET qu'un plafond y est configuré, sinon le seuil global (cf.
+ *   seuilApplicableVehicule() — décision produit du 22/08/2026, en correction de la version du
+ *   19/08/2026 qui portait le plafond sur le TYPE de véhicule : deux véhicules du même type
+ *   peuvent avoir des performances de paiement différentes, donc des plafonds différents —
+ *   jamais un plafond partagé par tout un type) ;
  * - ni l'un ni l'autre → aucune dette (rien à contrôler).
  * Un véhicule ET un client peuvent être renseignés simultanément sur le formulaire de vente (ce
- * ne sont pas des champs mutuellement exclusifs) : dans ce cas seul le véhicule compte, le
- * client n'est jamais consulté — Ventes/Create.vue doit refléter exactement cette priorité,
- * jamais bloquer indépendamment sur les deux.
+ * ne sont pas des champs mutuellement exclusifs) : dans ce cas seul le client compte pour la
+ * facturation/solvabilité, le véhicule n'est jamais consulté pour cette évaluation (il reste
+ * néanmoins le support logistique de la livraison et génère sa commission normalement) —
+ * Ventes/Create.vue doit refléter exactement cette priorité, jamais bloquer indépendamment sur
+ * les deux.
  *
  * Factures prises en compte pour le calcul de la DETTE (seuil/dérogation) : statut IMPAYEE ou
  * PARTIEL uniquement (CREEE/PAYEE/ANNULEE n'entrent jamais dans ce calcul). Le montant compté
@@ -92,16 +104,15 @@ class SolvabiliteService
         $controleActif = Parametre::isVentesControleImpayesActif($orgId);
         $factureBloquante = null;
 
-        if ($vehiculeId) {
+        if ($clientId) {
+            $cible = 'client';
+            [$seuil, $seuilOrigine] = $this->resoudrePlafondClient($orgId, $clientId);
+            $factures = $this->facturesImpayeesClient($orgId, $clientId);
+        } elseif ($vehiculeId) {
             $cible = 'vehicule';
             [$seuil, $seuilOrigine] = $this->resoudrePlafondVehicule($orgId, $vehiculeId);
             $factures = $this->facturesImpayeesVehicule($orgId, $vehiculeId);
             $factureBloquante = $this->premiereFactureNonEncaisseeVehicule($orgId, $vehiculeId);
-        } elseif ($clientId) {
-            $cible = 'client';
-            $seuil = Parametre::getVentesSeuilImpayesMax($orgId);
-            $seuilOrigine = 'standard';
-            $factures = $this->facturesImpayeesClient($orgId, $clientId);
         } else {
             $cible = 'aucun';
             $seuil = Parametre::getVentesSeuilImpayesMax($orgId);
@@ -228,6 +239,37 @@ class SolvabiliteService
     }
 
     /**
+     * Symétrique de resoudrePlafondVehicule() pour un client — dérogation possible depuis la
+     * décision du 28/08/2026 (le client porte la facture dès qu'il est sélectionné). Même filet
+     * de sécurité : un client dérogatoire sans plafond configuré retombe sur le seuil global.
+     *
+     * @return array{0: int, 1: 'standard'|'derogation'}
+     */
+    private function resoudrePlafondClient(string $orgId, string $clientId): array
+    {
+        $client = Client::where('organization_id', $orgId)
+            ->whereKey($clientId)
+            ->select('id', 'derogation_impayes_autorisee', 'seuil_derogation_impayes')
+            ->first();
+
+        if ($client && $client->derogation_impayes_autorisee && $client->seuil_derogation_impayes !== null) {
+            return [(int) $client->seuil_derogation_impayes, 'derogation'];
+        }
+
+        return [Parametre::getVentesSeuilImpayesMax($orgId), 'standard'];
+    }
+
+    /**
+     * Seuil applicable à ce client, sans le détail de son origine — utilisé par ClientController
+     * pour afficher le seuil sur la fiche client, sans dupliquer la règle de résolution côté
+     * frontend (même rôle que seuilApplicableVehicule()).
+     */
+    public function seuilApplicableClient(string $orgId, string $clientId): int
+    {
+        return $this->resoudrePlafondClient($orgId, $clientId)[0];
+    }
+
+    /**
      * Première facture (par ordre de création) rattachée à ce véhicule n'ayant reçu STRICTEMENT
      * AUCUN encaissement alors qu'elle porte encore un solde — cf. docblock de classe. Volontai-
      * rement basé sur le calcul montant_encaisse/montant_restant plutôt que sur `statut_facture`
@@ -241,18 +283,30 @@ class SolvabiliteService
         return FactureVente::where('organization_id', $orgId)
             ->where('vehicule_id', $vehiculeId)
             ->where('statut_facture', '!=', StatutFactureVente::ANNULEE->value)
+            ->whereHas('commande', fn ($q) => $q->whereNull('client_id'))
             ->with('encaissements')
             ->orderBy('created_at')
             ->get()
             ->first(fn (FactureVente $f) => (float) $f->montant_encaisse <= 0.0 && (float) $f->montant_restant > 0.0);
     }
 
-    /** @return Collection<int, FactureVente> */
+    /**
+     * @return Collection<int, FactureVente>
+     *
+     * `whereHas('commande', ... whereNull('client_id'))` : une commande livrée par ce véhicule
+     * mais facturée à un client (les deux champs ne sont pas mutuellement exclusifs, cf.
+     * docblock de classe) ne doit jamais alourdir la dette du véhicule — cette facture est déjà
+     * comptée dans facturesImpayeesClient() pour le client responsable. Sans ce filtre, le
+     * véhicule resterait bloqué par une dette qui n'est plus la sienne dès qu'un client a réglé
+     * la commande courante mais qu'une commande PRÉCÉDENTE de ce même véhicule, elle aussi
+     * facturée à un client, restait impayée (cf. rapport du 28/08/2026).
+     */
     private function facturesImpayeesVehicule(string $orgId, string $vehiculeId): Collection
     {
         return FactureVente::where('organization_id', $orgId)
             ->where('vehicule_id', $vehiculeId)
             ->whereIn('statut_facture', [StatutFactureVente::IMPAYEE->value, StatutFactureVente::PARTIEL->value])
+            ->whereHas('commande', fn ($q) => $q->whereNull('client_id'))
             ->with('encaissements')
             ->orderByDesc('created_at')
             ->get();
