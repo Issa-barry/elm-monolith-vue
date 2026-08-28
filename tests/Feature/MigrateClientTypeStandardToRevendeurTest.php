@@ -6,6 +6,7 @@ use App\Models\Client;
 use App\Models\Organization;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
@@ -24,7 +25,7 @@ class MigrateClientTypeStandardToRevendeurTest extends TestCase
 
         // Insertion SQL brute : le cast ClientType du modèle Eloquent refuserait 'standard'.
         DB::table('clients')->insert([
-            'id' => (string) \Illuminate\Support\Str::ulid(),
+            'id' => (string) Str::ulid(),
             'organization_id' => $org->id,
             'nom_complet' => 'Ancien client standard',
             'telephone' => '+224622000099',
