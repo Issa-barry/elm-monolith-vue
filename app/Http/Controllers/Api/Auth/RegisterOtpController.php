@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Auth;
 
+use App\Enums\OtpPurpose;
 use App\Http\Controllers\Controller;
 use App\Services\OtpService;
 use App\Services\PhoneNormalizer;
@@ -23,15 +24,15 @@ class RegisterOtpController extends Controller
             return response()->json(['error' => 'Numéro de téléphone invalide.'], 422);
         }
 
-        if ($otp->tooManyAttempts($phone)) {
+        if ($otp->tooManyAttempts($phone, OtpPurpose::PHONE_VERIFICATION)) {
             return response()->json(['error' => 'Trop de tentatives. Demandez un nouveau code.'], 429);
         }
 
-        if (! $otp->verify($phone, $request->input('code', ''))) {
+        if (! $otp->verify($phone, $request->input('code', ''), OtpPurpose::PHONE_VERIFICATION)) {
             return response()->json(['error' => 'Code incorrect ou expiré.'], 422);
         }
 
-        $otp->markVerified($phone);
+        $otp->markVerified($phone, OtpPurpose::PHONE_VERIFICATION);
 
         return response()->json(['verified' => true]);
     }

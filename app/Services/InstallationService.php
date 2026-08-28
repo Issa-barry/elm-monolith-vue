@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Actions\Fortify\PasswordValidationRules;
 use App\Enums\DomaineActivite;
+use App\Enums\OtpChannel;
+use App\Enums\OtpPurpose;
 use App\Enums\SiteType;
 use App\Models\AppInstallation;
 use App\Models\Organization;
@@ -313,7 +315,7 @@ class InstallationService
                 ]);
             }
 
-            if ($emailFourni && ! app(OtpService::class)->isVerified($admin['email'], self::EMAIL_OTP_CONTEXT)) {
+            if ($emailFourni && ! app(OtpService::class)->isVerified($admin['email'], OtpPurpose::EMAIL_VERIFICATION, self::EMAIL_OTP_CONTEXT)) {
                 throw ValidationException::withMessages([
                     'admin.email' => 'Veuillez vérifier votre adresse email avant de continuer.',
                 ]);
@@ -337,24 +339,30 @@ class InstallationService
                 'personne_id' => $personne->id,
                 'password' => $admin['password'],
             ]);
+            // Le téléphone du Super Admin n'est prouvé par AUCUN canal pendant
+            // l'installation (seul l'email, s'il est renseigné, passe par un vrai
+            // OTP ci-dessous) — `verified_at` reste donc NULL ici. Corrigé le
+            // 27/08/2026 : cette identité était auparavant marquée vérifiée sans
+            // aucune preuve, y compris quand aucun email n'était fourni du tout.
             $user->authIdentities()->create([
                 'type' => UserAuthIdentity::TYPE_TELEPHONE,
                 'value' => $telephoneInfo['telephone'],
                 'normalized_value' => Personne::normaliserTelephone($telephoneInfo['telephone']),
-                'verified_at' => now(),
                 'is_primary' => true,
             ]);
             if ($emailFourni) {
-                $user->authIdentities()->create([
+                // Vérifié avant même d'entrer dans cette transaction (cf. contrôle
+                // isVerified() plus haut) — jamais déduit de la simple présence du champ.
+                // markVerifiedVia() applique la même règle que ci-dessus, dans l'autre
+                // sens : un canal email prouve un email, jamais un téléphone.
+                $emailIdentity = $user->authIdentities()->create([
                     'type' => UserAuthIdentity::TYPE_EMAIL,
                     'value' => $admin['email'],
                     'normalized_value' => UserAuthIdentity::normaliser(UserAuthIdentity::TYPE_EMAIL, $admin['email']),
-                    // Vérifié avant même d'entrer dans cette transaction (cf. contrôle
-                    // isVerified() plus haut) — jamais déduit de la simple présence du champ.
-                    'verified_at' => now(),
                 ]);
+                $emailIdentity->markVerifiedVia(OtpChannel::EMAIL);
                 // Le code n'a plus lieu d'être réutilisable une fois l'installation terminée.
-                app(OtpService::class)->clear($admin['email'], self::EMAIL_OTP_CONTEXT);
+                app(OtpService::class)->clear($admin['email'], OtpPurpose::EMAIL_VERIFICATION, self::EMAIL_OTP_CONTEXT);
             }
             $user->syncRoles(['super_admin']);
             app(MatriculeService::class)->assignForUser($user);

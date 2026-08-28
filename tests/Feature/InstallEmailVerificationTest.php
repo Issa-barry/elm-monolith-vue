@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\DomaineActivite;
+use App\Enums\OtpPurpose;
 use App\Enums\SiteType;
 use App\Mail\InstallEmailVerificationMail;
 use App\Models\AppInstallation;
@@ -60,24 +61,24 @@ class InstallEmailVerificationTest extends TestCase
     public function test_code_correct_marque_lemail_verifie(): void
     {
         Mail::fake();
-        app(OtpService::class)->generate(self::EMAIL, InstallationService::EMAIL_OTP_CONTEXT);
+        app(OtpService::class)->generate(self::EMAIL, OtpPurpose::EMAIL_VERIFICATION, InstallationService::EMAIL_OTP_CONTEXT);
 
         $this->postJson('/install/email/verify-code', ['email' => self::EMAIL, 'code' => '123456'])
             ->assertOk()
             ->assertJson(['verified' => true]);
 
-        $this->assertTrue(app(OtpService::class)->isVerified(self::EMAIL, InstallationService::EMAIL_OTP_CONTEXT));
+        $this->assertTrue(app(OtpService::class)->isVerified(self::EMAIL, OtpPurpose::EMAIL_VERIFICATION, InstallationService::EMAIL_OTP_CONTEXT));
     }
 
     public function test_code_incorrect_est_refuse(): void
     {
-        app(OtpService::class)->generate(self::EMAIL, InstallationService::EMAIL_OTP_CONTEXT);
+        app(OtpService::class)->generate(self::EMAIL, OtpPurpose::EMAIL_VERIFICATION, InstallationService::EMAIL_OTP_CONTEXT);
 
         $this->postJson('/install/email/verify-code', ['email' => self::EMAIL, 'code' => '000000'])
             ->assertStatus(422)
             ->assertJson(['reason' => 'invalid']);
 
-        $this->assertFalse(app(OtpService::class)->isVerified(self::EMAIL, InstallationService::EMAIL_OTP_CONTEXT));
+        $this->assertFalse(app(OtpService::class)->isVerified(self::EMAIL, OtpPurpose::EMAIL_VERIFICATION, InstallationService::EMAIL_OTP_CONTEXT));
     }
 
     public function test_verifier_sans_code_envoye_au_prealable_echoue(): void
@@ -89,7 +90,7 @@ class InstallEmailVerificationTest extends TestCase
 
     public function test_trop_de_tentatives_verrouille_le_code(): void
     {
-        app(OtpService::class)->generate(self::EMAIL, InstallationService::EMAIL_OTP_CONTEXT);
+        app(OtpService::class)->generate(self::EMAIL, OtpPurpose::EMAIL_VERIFICATION, InstallationService::EMAIL_OTP_CONTEXT);
 
         for ($i = 0; $i < 5; $i++) {
             $this->postJson('/install/email/verify-code', ['email' => self::EMAIL, 'code' => '000000']);
@@ -103,7 +104,7 @@ class InstallEmailVerificationTest extends TestCase
     public function test_renvoi_immediat_est_soumis_au_delai_anti_spam(): void
     {
         Mail::fake();
-        app(OtpService::class)->generate(self::EMAIL, InstallationService::EMAIL_OTP_CONTEXT);
+        app(OtpService::class)->generate(self::EMAIL, OtpPurpose::EMAIL_VERIFICATION, InstallationService::EMAIL_OTP_CONTEXT);
 
         $this->postJson('/install/email/send-code', ['email' => self::EMAIL])
             ->assertStatus(429)
@@ -112,11 +113,11 @@ class InstallEmailVerificationTest extends TestCase
 
     public function test_changer_dadresse_ninherite_pas_de_la_verification_precedente(): void
     {
-        app(OtpService::class)->generate(self::EMAIL, InstallationService::EMAIL_OTP_CONTEXT);
-        app(OtpService::class)->markVerified(self::EMAIL, InstallationService::EMAIL_OTP_CONTEXT);
+        app(OtpService::class)->generate(self::EMAIL, OtpPurpose::EMAIL_VERIFICATION, InstallationService::EMAIL_OTP_CONTEXT);
+        app(OtpService::class)->markVerified(self::EMAIL, OtpPurpose::EMAIL_VERIFICATION, InstallationService::EMAIL_OTP_CONTEXT);
 
         $autreEmail = 'autre@gmail.com';
-        $this->assertFalse(app(OtpService::class)->isVerified($autreEmail, InstallationService::EMAIL_OTP_CONTEXT));
+        $this->assertFalse(app(OtpService::class)->isVerified($autreEmail, OtpPurpose::EMAIL_VERIFICATION, InstallationService::EMAIL_OTP_CONTEXT));
     }
 
     /**

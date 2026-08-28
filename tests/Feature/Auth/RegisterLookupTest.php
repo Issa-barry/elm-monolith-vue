@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Enums\OtpPurpose;
 use App\Models\Client;
 use App\Models\Livreur;
 use App\Models\Organization;
@@ -140,8 +141,11 @@ class RegisterLookupTest extends TestCase
     {
         $this->postJson(route('register.lookup'), ['telephone' => '+224620000007']);
 
+        // Clé alignée sur OtpService::challengeCacheKey() — le purpose (PHONE_VERIFICATION
+        // pour ce contrôleur) fait partie de la clé depuis le chantier OTP agnostique du
+        // canal (27/08/2026) : un même identifiant a un challenge distinct par purpose.
         $this->assertTrue(
-            Cache::has('otp:'.md5('+224620000007')),
+            Cache::has('otp:'.md5('+224620000007|'.OtpPurpose::PHONE_VERIFICATION->value)),
             'OTP should be stored in cache after lookup.',
         );
     }
@@ -153,7 +157,7 @@ class RegisterLookupTest extends TestCase
         $this->postJson(route('register.lookup'), ['telephone' => '+224620000008']);
 
         $this->assertFalse(
-            Cache::has('otp:'.md5('+224620000008')),
+            Cache::has('otp:'.md5('+224620000008|'.OtpPurpose::PHONE_VERIFICATION->value)),
             'OTP should NOT be stored when phone already in users.',
         );
     }

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api\Auth;
 
+use App\Enums\OtpPurpose;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
@@ -104,11 +105,14 @@ class TokenLifecycleTest extends TestCase
 
         $token = $this->loginAndGetToken('+224620000100', 'elm-mobile-android');
 
-        // Simule un OTP déjà vérifié — même format de clé que OtpService::verifiedKey()
-        // (prefix 'otp:verified', pas de contexte pour ce flux) : reproduire l'appel
-        // complet lookup+send+verify sortirait du périmètre de ce test de non-régression
-        // sur la révocation des tokens, déjà exercée par ailleurs pour le flux OTP lui-même.
-        Cache::put('otp:verified:'.md5('+224620000100'), true, now()->addMinutes(10));
+        // Simule un OTP déjà vérifié — même format de clé que
+        // OtpService::challengeCacheKey() (prefix 'otp:verified', purpose
+        // PASSWORD_RESET pour ce flux, pas de contexte) : reproduire l'appel complet
+        // lookup+send+verify sortirait du périmètre de ce test de non-régression sur
+        // la révocation des tokens, déjà exercée par ailleurs pour le flux OTP
+        // lui-même. Le purpose fait partie de la clé depuis le chantier OTP
+        // agnostique du canal (27/08/2026).
+        Cache::put('otp:verified:'.md5('+224620000100|'.OtpPurpose::PASSWORD_RESET->value), true, now()->addMinutes(10));
 
         $this->postJson(route('api.auth.password.reset'), [
             'telephone' => '+224620000100',

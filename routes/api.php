@@ -7,6 +7,8 @@ use App\Http\Controllers\Api\Auth\LoginController;
 use App\Http\Controllers\Api\Auth\LogoutAllController;
 use App\Http\Controllers\Api\Auth\LogoutController;
 use App\Http\Controllers\Api\Auth\MeController;
+use App\Http\Controllers\Api\Auth\OtpLogin\RequestController as OtpLoginRequestController;
+use App\Http\Controllers\Api\Auth\OtpLogin\VerifyController as OtpLoginVerifyController;
 use App\Http\Controllers\Api\Auth\PasswordReset\LookupController as PasswordLookupController;
 use App\Http\Controllers\Api\Auth\PasswordReset\ResetController;
 use App\Http\Controllers\Api\Auth\PasswordReset\VerifyController as PasswordVerifyController;
@@ -61,6 +63,17 @@ Route::prefix('auth')->name('api.auth.')->group(function () {
     // Connexion
     Route::post('login', LoginController::class)->name('login')
         ->middleware('throttle:10,1');
+
+    // Connexion sans mot de passe par OTP (cf. rapport du 27/08/2026) — canal
+    // transporteur résolu dynamiquement (config('otp.channels')), email
+    // aujourd'hui en l'absence de fournisseur SMS/WhatsApp. Une connexion
+    // réussie ici ne vérifie jamais le téléphone (cf. OtpLogin\VerifyController).
+    Route::prefix('otp-login')->name('otp-login.')->group(function () {
+        Route::post('request', OtpLoginRequestController::class)->name('request')
+            ->middleware('throttle:otp-send');
+        Route::post('verify', OtpLoginVerifyController::class)->name('verify')
+            ->middleware('throttle:otp-verify');
+    });
 
     // Vérification email (accessible sans authentification)
     Route::get('verify-email/{token}', EmailVerificationController::class)

@@ -108,6 +108,77 @@ Révoque tous les **autres** tokens à la réussite (garde le token courant acti
 — protège un compte si un autre appareil avait un token compromis.
 `422` si `current_password` incorrect.
 
+### Connexion sans mot de passe par OTP (ajouté le 27/08/2026)
+
+Alternative à `POST /api/auth/login` pour un compte qui préfère un code à usage
+unique plutôt qu'un mot de passe — **deux appels**, jamais un seul.
+
+**Étape 1 — `POST /api/auth/otp-login/request`**
+
+```json
+// Requête
+{ "telephone": "+224620000100" }
+```
+
+```json
+// 200
+{ "sent": true, "channel": "email", "destination_masked": "j***@gmail.com", "cooldown_seconds": 30 }
+```
+
+- `channel` indique **par où** le code vient réellement d'être envoyé — utilisez-le
+  pour le message affiché ("Code envoyé par email à j***@...") plutôt que de
+  supposer un canal fixe. **Aujourd'hui, `channel` vaut toujours `"email"`** :
+  aucun fournisseur SMS/WhatsApp n'est encore branché côté serveur (cf. rapport
+  du 27/08/2026). Le jour où WhatsApp/SMS sera actif, cette même réponse
+  renverra `"whatsapp"` ou `"sms"` **sans aucun changement de contrat** — ne
+  codez jamais en dur `channel === 'email'` comme condition d'affichage,
+  traitez `channel` comme une valeur parmi `"email" | "sms" | "whatsapp"`.
+- `destination_masked` (ajouté le 27/08/2026, demande front) : la coordonnée
+  **réellement utilisée** pour ce canal, **déjà masquée côté serveur**
+  (`App\Services\Otp\OtpDestinationMasker`) — un email donne `"j*******@example.com"`
+  (premier caractère local visible, reste masqué, domaine intact) ; un futur
+  SMS/WhatsApp donnerait `"+224 ••• •• 26 93"` (indicatif + 2 derniers chiffres
+  visibles). N'inventez jamais cette valeur côté frontend (pas de
+  reconstruction depuis une autre source, pas d'email deviné) — c'est
+  précisément pour éviter ça que ce champ existe : le backend seul connaît
+  la vraie coordonnée.
+- `404` : `{ "error": "Aucun compte trouvé pour ce numéro de téléphone." }` —
+  aucun compte n'est lié à ce numéro (proposez l'inscription, pas un nouvel essai).
+- `429` : `{ "error": "...", "retry_after_seconds": N }` — anti-spam
+  (cooldown 30s + plafonds horaire/journalier, mêmes limites que le reste des
+  parcours OTP de l'app).
+- `503` : `{ "error": "..." }` — **aucun canal n'est utilisable pour ce compte
+  précis** (cas réel aujourd'hui : le compte n'a pas d'adresse email connue, et
+  email est l'unique canal actif). Affichez un message du type "Impossible de
+  vous envoyer un code pour le moment, contactez le support" — ce n'est pas une
+  erreur de saisie, ne réessayez pas automatiquement.
+
+**Étape 2 — `POST /api/auth/otp-login/verify`**
+
+```json
+// Requête
+{ "telephone": "+224620000100", "code": "123456", "device_name": "elm-nuxt-web" }
+```
+
+- `200` : **même forme exacte que `POST /api/auth/login`** —
+  `{ "token": "...", "user": {id, prenom, nom, telephone, email, roles} }`.
+  Traitez le succès de cette route exactement comme un login classique côté
+  frontend (stockage du token, redirection...).
+- `422` : `{ "error": "Code incorrect ou expiré." }` — code faux, expiré (10 min),
+  ou déjà utilisé (usage unique).
+- `429` : `{ "error": "Trop de tentatives. Demandez un nouveau code." }` — verrouillé
+  après 5 essais incorrects, il faut relancer l'étape 1.
+- `403` : `{ "message": "...", "code": "..." }` — **même tableau de statuts de
+  compte que le login mot de passe** (§1.2 : `pending_validation`,
+  `account_blocked`...), vérifié uniquement une fois le code validé.
+
+**Point important, invisible dans la réponse mais à ne jamais présumer côté
+UI** : une connexion réussie par ce parcours **ne vérifie jamais le numéro de
+téléphone** au sens strict — si le code est arrivé par email (cas d'aujourd'hui),
+cela authentifie la session mais ne prouve pas la possession du numéro. Ne
+retirez donc jamais un éventuel badge/état "téléphone non vérifié" affiché
+ailleurs dans l'app suite à une simple connexion OTP réussie.
+
 ### 1.1 Politique de tokens
 
 | Aspect | Règle |
@@ -629,31 +700,60 @@ actuel (un prix modifié depuis ne doit jamais réécrire l'historique).
 
 ### `GET /v1/mobile/notifications`
 
+Contrat finalisé le 27/08/2026 (cf. §7.3) — normalisé par
+`App\Http\Resources\Api\Mobile\NotificationResource`, quelle que soit la
+classe `Notification` Laravel d'origine. Pagination Laravel standard
+(`?per_page=`, défaut 20, max 100 — mêmes bornes que
+`GET /v1/mobile/depenses/mine`), tri décroissant sur `created_at`.
+
 ```json
 {
   "data": [
-    { "id": "...", "type": "livraison_terminee", "titre": "Livraison CMD-2841 terminée",
-      "message": "12 packs livrés aujourd'hui", "data": {}, "lu": false,
-      "created_at": "2026-08-26T10:00:00.000000Z" }
+    {
+      "id": "0199...",
+      "type": "commission.generated",
+      "titre": "Commission générée",
+      "message": "175 500 GNF — Réf. CMD-2841",
+      "montant": 175500,
+      "resource": { "type": "commande_vente", "id": "0199..." },
+      "lu": false,
+      "read_at": null,
+      "created_at": "2026-08-27T10:00:00.000000Z"
+    }
   ],
+  "links": { "first": "...", "last": "...", "prev": null, "next": "..." },
+  "meta": { "current_page": 1, "last_page": 3, "per_page": 20, "total": 47, "...": "..." },
   "unread_count": 3
 }
 ```
 
-Système générique Laravel (`Notifiable`/`DatabaseNotifications`) — **aucune
-garde de rôle** sur ces 3 routes (`auth:sanctum` seul suffit, y compris pour un
-compte staff pur). `type`/`titre`/`message` viennent du payload `data` stocké à
-la création de la notification (structure libre selon le type de notif émis
-côté backend).
+- `type` : identifiant technique **stable**, jamais le nom de la classe PHP
+  ni l'ancien type snake_case interne (table de mapping ci-dessous, §7.3).
+- `montant` : nombre brut (jamais formaté "175 500 GNF") — `null` si non
+  pertinent pour ce type.
+- `resource` : `{type, id}` navigable si pertinent, `null` sinon — jamais un
+  ID fabriqué.
+- `lu`/`read_at` : `read_at` est la colonne native Laravel `DatabaseNotification.read_at`.
+- Le champ `data` (payload brut Laravel) **n'existe plus** dans la réponse —
+  remplacé par `montant`/`resource` (seul retrait du contrat, cf. §7.3 pour la
+  justification et la compatibilité avec les lignes déjà en base).
+
+**Aucune garde de rôle** sur ces 3 routes (`auth:sanctum` seul suffit) —
+`NotificationDispatcher` (§7.1) a déjà décidé qui reçoit quoi au moment du
+dispatch ; le controller ne refait jamais cette matrice.
 
 ### `POST /v1/mobile/notifications/mark-all-read`
 
-Marque toutes les notifications non lues comme lues.
+Marque toutes les notifications non lues **du compte authentifié uniquement**
+comme lues. Idempotent. Réponse : `{ "success": true, "unread_count": 0 }`.
 
 ### `POST /v1/mobile/notifications/{id}/read`
 
-Marque une notification précise comme lue (no-op si déjà lue ou introuvable
-pour ce compte).
+Marque une notification précise comme lue. **404** (jamais 403) si l'ID
+n'appartient pas au compte authentifié — même convention que
+`GET /v1/mobile/commandes/{commandeId}` (n'expose jamais si l'ID existe pour
+un autre compte). Idempotent (second appel sans effet). Réponse :
+`{ "success": true, "data": <NotificationResource>, "unread_count": N }`.
 
 ### `POST /v1/mobile/push-token`
 
@@ -664,40 +764,149 @@ pour ce compte).
 Enregistre le jeton technique Expo pour le push — distinct de la préférence
 métier `notification_preferences` (§3). Écrit sur `users.expo_push_token`.
 
-### 7.1 Audit de fiabilité — `notification_preferences` est-il vraiment respecté ?
+### 7.1 Architecture notifications — phase 1 (2026-08-27)
 
-Audit du 26/08/2026 : **une seule** catégorie de préférence existe
-(`activite`, cf. `User::NOTIFICATION_PREFERENCE_DEFAULTS`) et **un seul**
-job envoie réellement ce type de notification —
-`App\Jobs\NotifierLivreursCommandeVenteJob` (dispatché depuis
-`CommandeVenteController` à la validation d'une commande), qui notifie le
-livreur affecté ET le propriétaire du véhicule, à la fois en base
-(`CommandeValideeNotification`, canal `database`) et par push Expo.
+Suite à l'audit du 26/08/2026 (ci-dessous pour mémoire), une architecture
+centralisée a été construite pour les contextes réellement connectés
+aujourd'hui — **client, propriétaire, livreur, staff** — le rôle `prestataire`
+reste explicitement hors périmètre (pas de compte connecté, pas de `user_id`
+sur `Prestataire`, pas de cible commission).
 
-**Avant ce correctif**, ce job ignorait totalement la préférence : désactiver
-"activite" via `PATCH /v1/mobile/profile/notification-preferences` n'avait
-**aucun effet réel**, ni sur la notification en base ni sur le push — un
-réglage qui semblait fonctionner côté API/UI mais ne changeait rien côté
-envoi. **Corrigé** : le job vérifie désormais `notificationPreferences()['activite']`
-individuellement pour le livreur et pour le propriétaire avant d'appeler
-`notify()` et avant d'inclure leur token dans l'envoi Expo — chacun peut
-être filtré indépendamment de l'autre (cf. tests
-`tests/Feature/Jobs/NotifierLivreursCommandeVenteJobTest.php`).
+Deux classes partagées (`app/Services/Notification/`) :
+- `BeneficiaireUserResolver::resolve($type, $id)` — résout un `User` réel à
+  partir du couple `beneficiaire_type`/`beneficiaire_id` (`proprietaire`,
+  `livreur`, avec repli téléphone `UserAuthIdentity::resoudre` si `user_id` est
+  null) — vocabulaire commun à `CommissionEnveloppePart`,
+  `CommissionLogistiquePart`, `PaiementFiche`, `DepenseImputation`. `site` /
+  `salarie` / `prestataire` n'ont aucun compte : renvoie toujours `null`, sans
+  erreur.
+- `NotificationDispatcher::send($notification, $recipients, $category, $pushPayload)`
+  — dédoublonne les destinataires par id, filtre par préférence
+  (`User::wantsNotification()`), notifie, puis pousse en Expo si un payload
+  push est fourni. Remplace la collecte dupliquée qui existait dans chaque
+  Job/Service.
 
-**Ce qui n'a volontairement PAS changé** :
-- `GET /v1/mobile/notifications` (lecture) continue de renvoyer **tout**
-  l'historique déjà généré — une préférence désactivée ne purge jamais
-  rétroactivement les notifications déjà créées, elle n'empêche que les
-  **futures** générations.
-- Deux autres classes `Notification` existent mais sont **hors périmètre**
-  de `activite` (staff, pas espace client) : `CommissionManquanteNotification`
-  (alerte interne mail+database, jamais concernée par les préférences client)
-  et `CommissionPayeeNotification` (canal `database` seul) — cette dernière
-  n'est en réalité **dispatchée nulle part dans le code actuel** (classe
-  définie mais jamais appelée), constat factuel distinct du sujet préférences,
-  signalé ici pour mémoire.
-- Aucune donnée de notification existante n'a été supprimée ou modifiée par
-  cet audit — uniquement le comportement de génération future.
+**Préférences** (`User::NOTIFICATION_PREFERENCE_DEFAULTS`) étendues à
+`livraisons`, `commissions`, `depenses`, en plus de l'ancienne clé unique
+`activite` — conservée comme repli de compatibilité :
+`wantsNotification($categorie)` retourne `$prefs[$categorie] ?? $prefs['activite'] ?? true`.
+Un compte qui n'a jamais réglé que `activite` continue donc de s'appliquer à
+toutes les catégories ; `PATCH /v1/mobile/profile/notification-preferences`
+reste inchangé (seule `activite` y est exposée pour l'instant).
+
+**Événements couverts** (canal `database`, + push Expo pour les 2 premiers) :
+
+| Événement | Destinataire(s) | Catégorie |
+|---|---|---|
+| Commande validée (`CommandeValideeNotification`) | Livreurs de l'équipe **uniquement** — le propriétaire ne le reçoit plus (affectation logistique, pas financière ; décision produit 2026-08-27) | `livraisons` |
+| Transfert créé (`TransfertCreeNotification`, nouveau) | Livreurs de l'équipe | `livraisons` |
+| Transfert réceptionné (`TransfertReceptionneeNotification`, nouveau) | Propriétaire du véhicule (jamais le livreur, qui vient d'effectuer l'action) | `livraisons` |
+| Commission générée (`CommissionGenereeNotification`, nouveau ; vente et logistique) | Propriétaire + livreur(s) réellement connectés — jamais `site`/`consultant` (aucun compte) | `commissions` |
+| Commission payée (`CommissionPayeeNotification`, réactivée) | Bénéficiaire réel, sur les 3 chemins de paiement (direct logistique, versement legacy, paiement de fiche vente/logistique) | `commissions` |
+| Dépense validée (`DepenseValideeNotification`, nouveau) | Propriétaire du véhicule, uniquement si la dépense est imputée à un `proprietaire` (catégorie VEHICULE) | `depenses` |
+| Commission manquante (`CommissionManquanteNotification`) | Staff org + déclencheur — inchangé, hors préférences | — |
+
+**Gaps documentés, volontairement hors phase 1** :
+- `CommandeVente.LIVREE` (déclenché au premier encaissement, pas une action
+  "livraison terminée" isolée) n'alimente aucune notification — "livraison
+  terminée" est portée par la réception de transfert logistique à la place.
+- Dépense imputée à `livreur`/`site`/`salarie`/`prestataire` : aucun envoi
+  (scope limité à `proprietaire`, priorité produit explicite).
+- Tout le contexte `prestataire` (compte connecté, `user_id`, flux
+  commissions/dépenses, préférences) reste un chantier métier séparé.
+
+Tests : `tests/Feature/Jobs/NotifierLivreursCommandeVenteJobTest.php`,
+`tests/Feature/Jobs/NotifierLivreursTransfertJobTest.php`,
+`tests/Feature/Notification/*` (commission générée/payée, dépense validée,
+transfert réceptionné, dédoublonnage/préférences du dispatcher).
+
+### 7.2 Audit de fiabilité initial — `notification_preferences` (26/08/2026)
+
+Avant la phase 1 ci-dessus : **une seule** catégorie de préférence existait
+(`activite`) et **un seul** job envoyait réellement une notification —
+`NotifierLivreursCommandeVenteJob`, qui notifiait le livreur **et** le
+propriétaire. Ce job ignorait alors totalement la préférence : désactiver
+"activite" n'avait aucun effet réel. Corrigé une première fois le 26/08
+(préférence enfin consultée), puis reciblé le 27/08 (propriétaire retiré des
+destinataires, cf. §7.1). `CommissionPayeeNotification` était à l'époque
+définie mais jamais dispatchée — également corrigé en phase 1.
+
+`GET /v1/mobile/notifications` (lecture) continue de renvoyer **tout**
+l'historique déjà généré — une préférence désactivée n'empêche que les
+**futures** générations, jamais une purge rétroactive.
+
+### 7.3 Finalisation du contrat API — avant Web Push (27/08/2026)
+
+Objectif : que Nuxt/mobile consomment `GET /v1/mobile/notifications` comme un
+contrat unique et stable, sans jamais brancher sur le nom d'une classe
+`App\Notifications\*` ni sur la forme historique de son payload `data`.
+
+**Stratégie de compatibilité** : aucune ligne de la table `notifications`
+n'est réécrite. `CommandeValideeNotification` et `CommissionManquanteNotification`
+(antérieures à la phase 1) stockent `commande_id`/`reference` au lieu de
+`resource` — `NotificationResource::resolveResource()` synthétise
+`{type:'commande_vente', id: commande_id}` à la lecture pour ces deux-là
+uniquement ; les 5 classes phase 1 stockent déjà `resource`/`montant`
+directement (passthrough). Une notification historique et une notification
+neuve ressortent avec exactement les mêmes clés
+(`tests/Feature/Api/Mobile/NotificationsControllerTest.php::test_toutes_les_classes_notification_partagent_la_meme_structure`).
+
+**Table de mapping `type`** (interne → stable, seule liste blanche, dans
+`NotificationResource::TYPE_MAP`) :
+
+| Type interne (stocké en base) | `type` exposé |
+|---|---|
+| `commande_validee` | `delivery.assigned` |
+| `commission_manquante` | `commission.missing` |
+| `commission_generee` | `commission.generated` |
+| `commission_payee` | `commission.paid` |
+| `depense_validee` | `expense.validated` |
+| `transfert_cree` | `transfer.created` |
+| `transfert_receptionne` | `transfer.received` |
+
+**Convention de champs retenue** : français pour les champs de domaine
+(`titre`, `lu`, `montant` — comme `DepenseResource::montant` déjà en
+production), anglais pour les champs techniques (`id`, `type`, `resource`,
+`created_at`, `read_at`, `unread_count`) — convention réelle du projet,
+délibérément préférée à un gabarit tout-anglais pour ne pas introduire une
+deuxième convention concurrente sur la même API.
+
+**Changement cassant assumé** : l'enveloppe passe de `{data:[...], unread_count}`
+(plafond fixe de 50, jamais paginé) à la pagination Laravel standard
+`{data:[...], links:{...}, meta:{...}, unread_count}` — `data` reste un
+tableau au même endroit (compatible avec tout code lisant `response.data`
+directement) ; `links`/`meta` sont de purs ajouts. Le seul retrait réel est la
+clé `data` **par notification** (payload brut) — remplacée par
+`montant`/`resource`, précisément ce que ce chantier visait à éliminer.
+
+**Sécurité/isolation** : `markRead`/`markAllRead` étaient déjà scopés à
+`$user->notifications()`/`$user->unreadNotifications` (jamais un autre
+compte) ; `markRead` renvoie désormais explicitement 404 (au lieu d'un
+`{success:true}` silencieux) quand l'ID n'appartient pas à l'appelant.
+
+**Performance** : `unread_count` reste un `COUNT` SQL
+(`unreadNotifications()->count()`), jamais un chargement PHP de la liste
+complète ; `index()` utilise `paginate()` (une seule requête page + une
+requête `COUNT` pour `meta.total`), aucun N+1 (une seule table, pas de
+relation chargée par ligne).
+
+**Limite connue, hors périmètre** : `notifications.created_at` est un
+`timestamp` (précision à la seconde, migration Laravel par défaut du
+06/06/2026) sans colonne monotone de secours — deux notifications créées
+dans la même seconde n'ont pas d'ordre relatif garanti par le schéma. Le tri
+"plus récent d'abord" est fiable au-delà d'une seconde d'écart (cas normal),
+pas à l'intérieur d'un burst simultané. Modifier ce schéma serait un chantier
+séparé (table `notifications` partagée avec le cœur Laravel), volontairement
+hors périmètre ici.
+
+**OpenAPI** : `NotificationResource`/`NotificationsIndexRequest` sont
+réellement typés (retours de méthode PHP natifs + PHPDoc `array{...}`, jamais
+une annotation Scramble artificielle) — `docs/openapi/client.json` expose un
+schéma complet (`resource` en `object` typé, pas un `array`/`object` dégradé)
+pour les 3 routes.
+
+**Confirmation** : le frontend peut consommer `GET /v1/mobile/notifications`
+comme un contrat unique, sans connaître les classes `Notification` Laravel.
 
 ---
 

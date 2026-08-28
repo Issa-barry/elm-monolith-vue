@@ -8,10 +8,16 @@ use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
 use App\Models\TransfertLogistique;
 use App\Models\VersementCommissionLogistique;
+use App\Notifications\CommissionGenereeNotification;
+use App\Notifications\CommissionPayeeNotification;
+use App\Services\Notification\BeneficiaireUserResolver;
+use App\Services\Notification\NotificationDispatcher;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
+use Throwable;
 
 class CommissionLogistiqueService
 {
@@ -159,6 +165,8 @@ class CommissionLogistiqueService
 
             $part->recalculStatut();
 
+            self::notifierCommissionPayee($part, $montant, $modePaiement, $note);
+
             return $versement;
         });
     }
@@ -219,7 +227,7 @@ class CommissionLogistiqueService
                     ? $membre->livreur->libelleAffichage()
                     : "Livreur #{$membre->livreur_id}";
 
-                CommissionLogistiquePart::create([
+                $part = CommissionLogistiquePart::create([
                     'commission_logistique_id' => $commission->id,
                     'type_beneficiaire' => 'livreur',
                     'livreur_id' => $membre->livreur_id,
@@ -234,7 +242,56 @@ class CommissionLogistiqueService
                     'earned_at' => $earnedAt->toDateString(),
                     'periode' => PeriodeComptableService::codeForLivreur($earnedAt),
                 ]);
+
+                self::notifierCommissionGeneree($transfert, $part);
             }
+        }
+    }
+
+    /**
+     * Notifie le livreur bénéficiaire réellement connecté d'une part de
+     * commission logistique venant d'être créée — jamais de rethrow vers
+     * l'appelant (même garantie que le reste de cette classe).
+     */
+    private static function notifierCommissionGeneree(TransfertLogistique $transfert, CommissionLogistiquePart $part): void
+    {
+        try {
+            $user = BeneficiaireUserResolver::resolve('livreur', $part->livreur_id);
+
+            NotificationDispatcher::send(
+                new CommissionGenereeNotification('transfert_logistique', $transfert->id, $transfert->reference, (float) $part->montant_net),
+                [$user],
+                'commissions',
+            );
+        } catch (Throwable $e) {
+            Log::error('CommissionGenereeNotification (logistique) : envoi échoué', [
+                'transfert_id' => $transfert->id,
+                'part_id' => $part->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Notifie le bénéficiaire réel (livreur ou proprietaire — cf.
+     * type_beneficiaire) d'un versement legacy de commission logistique.
+     */
+    private static function notifierCommissionPayee(CommissionLogistiquePart $part, float $montant, string $modePaiement, ?string $note): void
+    {
+        try {
+            $beneficiaireId = $part->type_beneficiaire === 'livreur' ? $part->livreur_id : $part->proprietaire_id;
+            $user = BeneficiaireUserResolver::resolve($part->type_beneficiaire, $beneficiaireId);
+
+            NotificationDispatcher::send(
+                new CommissionPayeeNotification($montant, $modePaiement, $note, 'commission_logistique_part', $part->id),
+                [$user],
+                'commissions',
+            );
+        } catch (Throwable $e) {
+            Log::error('CommissionPayeeNotification (versement legacy) : envoi échoué', [
+                'part_id' => $part->id,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 }

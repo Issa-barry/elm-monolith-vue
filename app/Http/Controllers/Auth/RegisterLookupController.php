@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Enums\OtpPurpose;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Livreur;
@@ -76,8 +77,11 @@ class RegisterLookupController extends Controller
             return response()->json(['error' => 'Trop de demandes de code. Veuillez réessayer plus tard.'], 429);
         }
 
-        // 3. Générer l'OTP (stocké en session, pas encore envoyé par SMS en MVP)
-        $otp->generate($phone);
+        // 3. Générer l'OTP (stocké en cache, pas encore envoyé par SMS/WhatsApp en
+        // MVP — aucun fournisseur téléphonique n'est encore configuré dans
+        // config('otp.channels'), cf. rapport du 27/08/2026). Reste un flux
+        // fonctionnel uniquement avec OTP_FIXED_CODE (local/tests) en attendant.
+        $otp->generate($phone, OtpPurpose::PHONE_VERIFICATION);
 
         return response()->json([
             'status' => $prefill ? 'prefill_available' : 'not_found',

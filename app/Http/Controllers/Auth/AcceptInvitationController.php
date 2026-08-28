@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Enums\OtpPurpose;
 use App\Http\Controllers\Concerns\HasOtpRateLimitResponse;
 use App\Http\Controllers\Controller;
 use App\Mail\OtpInvitationMail;
@@ -88,7 +89,7 @@ class AcceptInvitationController extends Controller
         }
 
         $prefill = $service->phonePrefill($phone);
-        $code = $otp->generate($phone, $context);
+        $code = $otp->generate($phone, OtpPurpose::INVITATION, $context);
 
         Mail::to($invitation->email)->send(new OtpInvitationMail($code));
 
@@ -128,7 +129,7 @@ class AcceptInvitationController extends Controller
             return $this->tooManyRequestsResponse($wait);
         }
 
-        $code = $otp->generate($phone, $context);
+        $code = $otp->generate($phone, OtpPurpose::INVITATION, $context);
 
         Mail::to($invitation->email)->send(new OtpInvitationMail($code));
 
@@ -163,28 +164,28 @@ class AcceptInvitationController extends Controller
 
         $context = $this->otpContext($invitation);
 
-        if ($otp->tooManyAttempts($phone, $context)) {
+        if ($otp->tooManyAttempts($phone, OtpPurpose::INVITATION, $context)) {
             return response()->json([
                 'error' => 'Trop de tentatives. Demandez un nouveau code.',
                 'reason' => 'locked',
             ], 429);
         }
 
-        if (! $otp->hasActiveCode($phone, $context)) {
+        if (! $otp->hasActiveCode($phone, OtpPurpose::INVITATION, $context)) {
             return response()->json([
                 'error' => 'Votre code a expiré.',
                 'reason' => 'expired',
             ], 422);
         }
 
-        if (! $otp->verify($phone, $request->input('code', ''), $context)) {
+        if (! $otp->verify($phone, $request->input('code', ''), OtpPurpose::INVITATION, $context)) {
             return response()->json([
                 'error' => 'Code incorrect.',
                 'reason' => 'invalid',
             ], 422);
         }
 
-        $otp->markVerified($phone, $context);
+        $otp->markVerified($phone, OtpPurpose::INVITATION, $context);
 
         return response()->json(['verified' => true]);
     }
@@ -243,7 +244,7 @@ class AcceptInvitationController extends Controller
 
         $context = $this->otpContext($invitation);
 
-        if (! $otp->isVerified($data['telephone'], $context)) {
+        if (! $otp->isVerified($data['telephone'], OtpPurpose::INVITATION, $context)) {
             throw ValidationException::withMessages([
                 'telephone' => 'Veuillez vérifier votre numéro de téléphone.',
             ]);
@@ -251,7 +252,7 @@ class AcceptInvitationController extends Controller
 
         $service->accept($invitation, $data);
 
-        $otp->clear($data['telephone'], $context);
+        $otp->clear($data['telephone'], OtpPurpose::INVITATION, $context);
 
         // Le compte est créé en pending_validation : jamais de connexion automatique
         // ni d'accès au dashboard tant qu'un admin ne l'a pas validé.

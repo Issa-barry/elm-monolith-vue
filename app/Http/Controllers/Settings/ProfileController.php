@@ -81,6 +81,15 @@ class ProfileController extends Controller
         }
     }
 
+    /**
+     * Ce numéro n'est prouvé par aucun moyen ici (simple saisie dans un
+     * formulaire de profil) — `verified_at` reste NULL, cf. rapport du
+     * 27/08/2026 (règle de sécurité OTP, s'applique à toute vérification
+     * d'identité téléphone, pas seulement au système OTP lui-même). Corrigé le
+     * même jour : cette identité était auparavant marquée vérifiée à la simple
+     * saisie, sans aucune preuve — déjà incohérent avec syncEmailIdentity()
+     * ci-dessus, qui ne vérifie jamais un email à la simple présence du champ.
+     */
     private function syncTelephoneIdentity(User $user, string $telephone): void
     {
         $identity = $user->telephoneIdentity();
@@ -93,7 +102,6 @@ class ProfileController extends Controller
                 'type' => UserAuthIdentity::TYPE_TELEPHONE,
                 'value' => $telephone,
                 'normalized_value' => $normalized,
-                'verified_at' => now(),
                 'is_primary' => true,
             ]);
         }

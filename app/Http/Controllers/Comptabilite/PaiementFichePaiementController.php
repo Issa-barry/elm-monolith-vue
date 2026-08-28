@@ -7,13 +7,18 @@ use App\Enums\ModePaiement;
 use App\Http\Controllers\Controller;
 use App\Models\PaiementFiche;
 use App\Models\PaiementFichePaiement;
+use App\Notifications\CommissionPayeeNotification;
 use App\Services\AuditLogService;
 use App\Services\CommissionEnveloppePartAllocationService;
+use App\Services\Notification\BeneficiaireUserResolver;
+use App\Services\Notification\NotificationDispatcher;
 use App\Services\PeriodePayabilityChecker;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
+use Throwable;
 
 class PaiementFichePaiementController extends Controller
 {
@@ -62,6 +67,8 @@ class PaiementFichePaiementController extends Controller
                 // aucune ligne de la fiche ne référence CommissionEnveloppePart.
                 CommissionEnveloppePartAllocationService::allouer($fiche, $paiement);
 
+                $this->notifierCommissionPayee($fiche, $paiement);
+
                 return $paiement;
             });
         } catch (\RuntimeException $e) {
@@ -104,5 +111,31 @@ class PaiementFichePaiementController extends Controller
         $paiement->delete();
 
         return back()->with('success', 'Paiement supprimé.');
+    }
+
+    /**
+     * Bénéficiaire réel de la fiche (proprietaire/livreur) — couvre à la fois
+     * les fiches vente et logistique en un seul point : `site`/`salarie`/
+     * `prestataire` n'ont aucun compte utilisateur et ne déclenchent jamais
+     * d'envoi (cf. BeneficiaireUserResolver). Jamais de rethrow : un échec
+     * d'envoi ne doit jamais faire annuler un paiement déjà enregistré.
+     */
+    private function notifierCommissionPayee(PaiementFiche $fiche, PaiementFichePaiement $paiement): void
+    {
+        try {
+            $user = BeneficiaireUserResolver::resolve($fiche->beneficiaire_type, $fiche->beneficiaire_id);
+
+            NotificationDispatcher::send(
+                new CommissionPayeeNotification((float) $paiement->montant, $paiement->mode_paiement, $paiement->note, 'paiement_fiche', $fiche->id),
+                [$user],
+                'commissions',
+            );
+        } catch (Throwable $e) {
+            Log::error('CommissionPayeeNotification (fiche) : envoi échoué', [
+                'fiche_id' => $fiche->id,
+                'paiement_id' => $paiement->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }
