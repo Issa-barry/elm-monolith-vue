@@ -1035,13 +1035,13 @@ class DepenseController extends Controller
                         ->where('beneficiaire_type', 'prestataire')
                         ->whereHas('prestataireBeneficiaire', $this->matchPrestataireIdentite($like, $likeTel, $norm))
                     )->orWhere(fn ($w2) => $w2
-                        ->where('beneficiaire_type', 'client')
-                        ->whereHas('clientBeneficiaire', fn ($q) => $q
-                            ->where('nom', 'LIKE', $like)
-                            ->orWhere('prenom', 'LIKE', $like)
-                            ->orWhereRaw("CONCAT(prenom, ' ', nom) LIKE ?", [$like])
-                            ->when($likeTel, fn ($query) => $query->orWhereRaw("{$norm} LIKE ?", [$likeTel]))
-                        )
+                    ->where('beneficiaire_type', 'client')
+                    ->whereHas('clientBeneficiaire', fn ($q) => $q
+                        ->where('nom', 'LIKE', $like)
+                        ->orWhere('prenom', 'LIKE', $like)
+                        ->orWhereRaw("CONCAT(prenom, ' ', nom) LIKE ?", [$like])
+                        ->when($likeTel, fn ($query) => $query->orWhereRaw("{$norm} LIKE ?", [$likeTel]))
+                    )
                     );
             });
         }

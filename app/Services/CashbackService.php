@@ -2,13 +2,13 @@
 
 namespace App\Services;
 
+use App\Enums\StatutDepense;
 use App\Models\CashbackSolde;
 use App\Models\CashbackTransaction;
 use App\Models\CashbackVersement;
 use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\Depense;
-use App\Enums\StatutDepense;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
