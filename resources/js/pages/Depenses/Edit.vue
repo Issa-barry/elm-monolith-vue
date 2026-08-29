@@ -65,6 +65,7 @@ const props = defineProps<{
     livreurs: PersonneOption[];
     proprietaires: PersonneOption[];
     prestataires: PersonneOption[];
+    clients: PersonneOption[];
     categories: { value: string; label: string }[];
     can_change_site: boolean;
 }>();
@@ -89,6 +90,7 @@ watch(concerneSelectionne, (newVal, oldVal) => {
         livreurSelected.value = null;
         proprietaireSelected.value = null;
         prestataireSelected.value = null;
+        clientSelected.value = null;
     }
 });
 
@@ -123,6 +125,7 @@ watch(
             livreurSelected.value = null;
             proprietaireSelected.value = null;
             prestataireSelected.value = null;
+            clientSelected.value = null;
         }
     },
 );
@@ -279,6 +282,27 @@ function clearPrestataire() {
     form.beneficiaire_id = '';
 }
 
+const clientSelected = ref<PersonneOption | null>(
+    props.depense.beneficiaire_type === 'client' &&
+        props.depense.beneficiaire_id
+        ? (props.clients.find(
+              (client) => client.id === props.depense.beneficiaire_id,
+          ) ?? null)
+        : null,
+);
+const showClientPicker = ref(false);
+const clientFields: PickerField<PersonneOption>[] = [nomField, telephoneField];
+
+function onClientSelect(client: PersonneOption) {
+    clientSelected.value = client;
+    form.beneficiaire_id = client.id;
+}
+
+function clearClient() {
+    clientSelected.value = null;
+    form.beneficiaire_id = '';
+}
+
 // ── Computed pour la fiche récapitulative ─────────────────────────────────────
 const categorie = computed(
     () => selectedType.value?.categorie ?? concerneSelectionne.value ?? null,
@@ -328,6 +352,11 @@ const beneficiaireLabel = computed<string | null>(() => {
             props.prestataires.find((p) => p.id === form.beneficiaire_id)
                 ?.nom_complet ?? null
         );
+    if (cat === 'client')
+        return (
+            props.clients.find((client) => client.id === form.beneficiaire_id)
+                ?.nom_complet ?? null
+        );
     return null;
 });
 
@@ -343,6 +372,7 @@ const concerneBadgeClass = computed(() => {
         employe: 'border-blue-200 bg-blue-50 text-blue-700',
         interne: 'border-slate-200 bg-slate-50 text-slate-700',
         prestataire: 'border-teal-200 bg-teal-50 text-teal-700',
+        client: 'border-indigo-200 bg-indigo-50 text-indigo-700',
     };
     return map[concerneSelectionne.value] ?? '';
 });
@@ -944,6 +974,84 @@ function submitAs(statut: 'brouillon' | 'soumis') {
                                     :fields="prestataireFields"
                                     empty-label="Aucun prestataire trouvé"
                                     @select="onPrestataireSelect"
+                                >
+                                    <template #option="{ option }">
+                                        <div class="leading-tight font-medium">
+                                            {{ option.nom_complet }}
+                                        </div>
+                                        <div
+                                            v-if="option.telephone"
+                                            class="mt-0.5 text-xs text-muted-foreground"
+                                        >
+                                            ☎ {{ option.telephone }}
+                                        </div>
+                                    </template>
+                                </BeneficiairePickerDialog>
+                            </div>
+
+                            <!-- Client -->
+                            <div v-else-if="categorie === 'client'">
+                                <Label
+                                    for="dep-client"
+                                    class="mb-1.5 block text-xs font-medium"
+                                >
+                                    Client
+                                    <span class="text-destructive">*</span>
+                                </Label>
+                                <div class="relative">
+                                    <button
+                                        id="dep-client"
+                                        type="button"
+                                        class="flex h-9 w-full items-center rounded-md border border-input bg-background px-3 text-sm shadow-sm transition-colors hover:bg-muted/40"
+                                        :class="[
+                                            form.errors.beneficiaire_id
+                                                ? 'border-destructive'
+                                                : '',
+                                            clientSelected ? 'pr-8' : '',
+                                        ]"
+                                        @click="showClientPicker = true"
+                                    >
+                                        <Search
+                                            class="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                                        />
+                                        <span
+                                            class="truncate text-left"
+                                            :class="
+                                                clientSelected
+                                                    ? ''
+                                                    : 'text-muted-foreground'
+                                            "
+                                        >
+                                            {{
+                                                clientSelected?.nom_complet ??
+                                                'Rechercher un client…'
+                                            }}
+                                        </span>
+                                    </button>
+                                    <button
+                                        v-if="clientSelected"
+                                        type="button"
+                                        class="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                        aria-label="Effacer la sélection"
+                                        @click.stop="clearClient"
+                                    >
+                                        <X class="h-3.5 w-3.5" />
+                                    </button>
+                                </div>
+                                <p
+                                    v-if="form.errors.beneficiaire_id"
+                                    class="mt-1 text-xs text-destructive"
+                                >
+                                    {{ form.errors.beneficiaire_id }}
+                                </p>
+
+                                <BeneficiairePickerDialog
+                                    v-model:visible="showClientPicker"
+                                    title="Sélectionner un client"
+                                    :options="clients"
+                                    :fields="clientFields"
+                                    empty-label="Aucun client trouvé"
+                                    @select="onClientSelect"
                                 >
                                     <template #option="{ option }">
                                         <div class="leading-tight font-medium">

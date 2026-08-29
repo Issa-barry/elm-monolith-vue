@@ -44,7 +44,10 @@ class DepenseComptabilisationService
         $depense->loadMissing('depenseType');
 
         return match ($depense->depenseType?->categorie) {
-            CategorieDepense::INTERNE => EvenementComptable::DEPENSE_INTERNE_VALIDEE,
+            // Une dépense Client constitue une partie du cashback réglée directement pour le
+            // client. Elle est donc une charge décaissée, puis déduite du net encore versable,
+            // jamais une avance tiers à solder une seconde fois.
+            CategorieDepense::INTERNE, CategorieDepense::CLIENT => EvenementComptable::DEPENSE_INTERNE_VALIDEE,
             CategorieDepense::VEHICULE, CategorieDepense::PROPRIETAIRE, CategorieDepense::LIVREUR => EvenementComptable::DEPENSE_AVANCE_TIERS_VALIDEE,
             default => null,
         };
@@ -56,7 +59,7 @@ class DepenseComptabilisationService
         $categorie = $depense->depenseType?->categorie;
 
         return match ($categorie) {
-            CategorieDepense::INTERNE => $this->comptabiliserInterne($depense),
+            CategorieDepense::INTERNE, CategorieDepense::CLIENT => $this->comptabiliserInterne($depense),
             CategorieDepense::VEHICULE, CategorieDepense::PROPRIETAIRE, CategorieDepense::LIVREUR => $this->comptabiliserAvanceTiers($depense, $categorie),
             // EMPLOYE (salaire) : géré par le module Paie existant, hors périmètre V1
             // de la comptabilité générale — laissé volontairement non branché.

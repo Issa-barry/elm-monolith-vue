@@ -417,7 +417,7 @@ function saveCashback(): void {
                                 </span>
                             </p>
                             <Link
-                                href="/backoffice/cashback"
+                                href="/backoffice/comptabilite/commissions/cashback"
                                 class="shrink-0 font-medium underline underline-offset-4 hover:no-underline"
                             >
                                 Gérer le cashback

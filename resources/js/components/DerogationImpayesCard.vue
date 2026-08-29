@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { router } from '@inertiajs/vue3';
 import { useToast } from 'primevue/usetoast';
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const props = defineProps<{
     active: boolean;
@@ -154,6 +154,13 @@ function onToggleDerogation(checked: boolean) {
 function formatGNF(val: number): string {
     return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
 }
+
+// Rien à enregistrer tant que le plafond saisi n'a pas divergé de la dernière valeur
+// persistée côté serveur (props.seuil, resynchronisé après chaque succès/erreur) : le bouton
+// reste désactivé après une sauvegarde et tant qu'aucune modification n'est en attente.
+const isMontantDirty = computed(
+    () => derogationMontant.value !== props.seuil,
+);
 </script>
 
 <template>
@@ -199,7 +206,11 @@ function formatGNF(val: number): string {
                     />
                     <Button
                         size="sm"
-                        :disabled="derogationProcessing || !canUpdate"
+                        :disabled="
+                            derogationProcessing ||
+                            !canUpdate ||
+                            (!isMontantDirty && props.active)
+                        "
                         @click="saveDerogation(true)"
                     >
                         {{

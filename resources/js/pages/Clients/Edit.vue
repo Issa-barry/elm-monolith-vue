@@ -262,7 +262,7 @@ function destroyVehicule(vehiculeId: number) {
                     }}</strong>
                     à verser.
                     <a
-                        href="/backoffice/cashback"
+                        href="/backoffice/comptabilite/commissions/cashback"
                         class="ml-1 underline hover:no-underline"
                         >Gérer →</a
                     >
