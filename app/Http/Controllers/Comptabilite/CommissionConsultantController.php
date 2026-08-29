@@ -383,7 +383,7 @@ class CommissionConsultantController extends Controller
     private function statutLabel(string $statut): string
     {
         return match ($statut) {
-            StatutCommission::CREEE->value => 'Créée',
+            StatutCommission::CREEE->value => 'À valider',
             StatutCommission::IMPAYE->value => 'Impayé',
             StatutCommission::PARTIEL->value => 'Partiel',
             StatutCommission::PAYE->value => 'Payé',

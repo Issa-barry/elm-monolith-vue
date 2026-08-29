@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Comptabilite;
 
 use App\Enums\ModePaiement;
+use App\Enums\MotifAjustementCommission;
 use App\Enums\StatutCommission;
 use App\Enums\StatutDepense;
 use App\Enums\TypePeriodePaiement;
@@ -117,6 +118,7 @@ class CommissionVenteController extends Controller
         $vehiculesParLivreur = $partsParLivreur->map(fn ($parts) => $parts
             ->pluck('enveloppe.source.vehicule')->filter()->unique('id')
             ->map(fn ($v) => [
+                'id' => $v->id,
                 'nom' => $v->nom_vehicule,
                 'immatriculation' => $v->immatriculation,
                 'type' => $v->typeVehicule?->nom,
@@ -159,30 +161,41 @@ class CommissionVenteController extends Controller
             $premier = $parts->first();
             $fraisDepenses = $fraisDepensesParLivreur[$livreurId] ?? 0.0;
 
-            // total_brut_cumule/total_net_cumule/total_verse/solde_restant restent calculés
-            // exclusivement sur les parts déjà « actives » (jamais CREEE) — comportement
-            // inchangé par rapport à avant (l'ancien filtre au niveau de la requête excluait déjà
-            // CREEE ici même). Les montants CREEE apparaissent uniquement dans les nouveaux
-            // compartiments ci-dessous, jamais mélangés à ces totaux existants.
-            $partsPayables = $parts->filter(
-                fn (CommissionEnveloppePart $p) => $p->statut !== StatutCommission::CREEE
-            );
-
+            // total_brut_cumule/total_net_cumule/total_verse/solde_restant sont désormais
+            // calculés sur TOUTES les parts actives (CREEE incluse) — décision produit du
+            // 29/08/2026, qui affine « visible ne veut pas dire payable » (20/08/2026) :
+            // le MONTANT affiché doit toujours refléter la valeur retenue courante
+            // (montant_actuel ?? montant_net), la VALIDATION ne conditionnant que le
+            // droit au paiement (statutGlobal ci-dessous), jamais l'affichage du montant.
             $resume = CommissionVenteCalculatorService::calculerResume(
-                (float) $partsPayables->sum('montant_brut'),
+                (float) $parts->sum('montant_brut'),
                 0.0, // pas de frais_supplementaires sur CommissionEnveloppePart
-                (float) $partsPayables->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer),
+                (float) $parts->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer),
                 $fraisDepenses,
-                (float) $partsPayables->sum('montant_verse'),
+                (float) $parts->sum('montant_verse'),
             );
 
             $buckets = CommissionKpiBuckets::calculer($parts);
 
-            // Un livreur dont TOUTES les commissions sont encore CREEE n'a rien de « payable » à
-            // proprement parler : calculerResume() retomberait sinon sur IMPAYE par défaut
-            // (net=0, verse=0), ce qui laisserait croire à une dette de 0 GNF plutôt qu'à des
-            // commissions déjà générées mais pas encore éligibles au paiement.
-            $statutGlobal = $partsPayables->isEmpty() && $buckets['en_attente_periode'] > 0.009
+            // Parts encore CREEE et pas encore pré-validées (validated_at) de ce bénéficiaire :
+            // la liste sert de plan de travail — ces id sont ce qu'envoient les actions
+            // Ajuster/Valider directement depuis cet écran (CommissionAjustementController::
+            // ajusterParts()/validerParts()), sans jamais passer par une PaiementPeriode. Exclure
+            // les parts déjà validées fait disparaître le bouton Valider une fois le travail fait
+            // sur cette ligne — validerPart() ne touche jamais le statut CREEE lui-même (il ne
+            // bascule qu'à la validation de la période, cf. activerCommissionsCreees()), donc
+            // sans ce filtre sur validated_at le bouton resterait affiché indéfiniment.
+            $creeeParts = $parts
+                ->filter(fn (CommissionEnveloppePart $p) => $p->statut === StatutCommission::CREEE && $p->validated_at === null)
+                ->map(fn (CommissionEnveloppePart $p) => ['id' => $p->id, 'montant' => $p->montant_a_payer])
+                ->values();
+
+            // Le STATUT (badge) reste gouverné exclusivement par la validation/période — jamais
+            // par le fait que le montant soit désormais toujours affiché : un livreur dont TOUTES
+            // les commissions sont encore CREEE n'a rien de payable, quel que soit le montant net
+            // affiché à côté.
+            $aUnePartPayable = $parts->contains(fn (CommissionEnveloppePart $p) => $p->statut !== StatutCommission::CREEE);
+            $statutGlobal = ! $aUnePartPayable && $buckets['en_attente_periode'] > 0.009
                 ? StatutCommission::CREEE->value
                 : $resume['statut'];
 
@@ -221,6 +234,7 @@ class CommissionVenteController extends Controller
                 'total_genere' => $buckets['total_genere'],
                 'en_attente_periode' => $buckets['en_attente_periode'],
                 'payable' => $buckets['payable'],
+                'creee_parts' => $creeeParts,
                 ...$resolved,
             ];
         })->values();
@@ -282,6 +296,7 @@ class CommissionVenteController extends Controller
                 'statut_label' => $periodeAffichee->statut_label,
             ] : null,
             'sites' => $sites,
+            'motifs' => MotifAjustementCommission::options(),
             // Jamais de paiement direct depuis cet écran, quel que soit le
             // droit "comptabilite.payer" — cf. can_pay forcé à false ci-dessus.
             'can_payer' => false,
@@ -359,26 +374,21 @@ class CommissionVenteController extends Controller
             $siteIds,
         );
 
-        // $resume (et le statut/la période qui en découlent) reste calculé exclusivement sur les
-        // parts déjà actives (jamais CREEE) — comportement inchangé par rapport à avant (l'ancien
-        // filtre au niveau de la requête excluait déjà CREEE de tout $allParts/$filteredParts ici
-        // même). Les compartiments CREEE sont exposés séparément via $buckets, jamais mélangés.
-        $filteredPartsPourResume = $filteredParts->filter(
-            fn (CommissionEnveloppePart $p) => $p->statut !== StatutCommission::CREEE
-        );
+        // $resume porte désormais sur TOUTES les parts filtrées actives (CREEE incluse) — même
+        // règle qu'index() : le montant affiché (net_a_payer/reste_a_payer) reflète toujours la
+        // valeur retenue courante, indépendamment de la validation de la période (décision
+        // produit du 29/08/2026). $statutResume, lui, reste conditionné par la payabilité.
         $resume = CommissionVenteCalculatorService::calculerResume(
-            (float) $filteredPartsPourResume->sum('montant_brut'),
+            (float) $filteredParts->sum('montant_brut'),
             0.0,
-            (float) $filteredPartsPourResume->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer),
+            (float) $filteredParts->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer),
             $fraisDepenses,
-            (float) $filteredPartsPourResume->sum('montant_verse'),
+            (float) $filteredParts->sum('montant_verse'),
         );
 
         $buckets = CommissionKpiBuckets::calculer($filteredParts);
-        // Aucune part payable (tout est encore CREEE) : ne pas laisser calculerResume() retomber
-        // sur IMPAYE par défaut (net=0, verse=0), qui masquerait qu'il existe bien des
-        // commissions générées, seulement pas encore éligibles au paiement.
-        $statutResume = $filteredPartsPourResume->isEmpty() && $buckets['en_attente_periode'] > 0.009
+        $aUnePartPayable = $filteredParts->contains(fn (CommissionEnveloppePart $p) => $p->statut !== StatutCommission::CREEE);
+        $statutResume = ! $aUnePartPayable && $buckets['en_attente_periode'] > 0.009
             ? StatutCommission::CREEE->value
             : $resume['statut'];
 
@@ -729,18 +739,18 @@ class CommissionVenteController extends Controller
             $first = $livParts->first();
             $beneficiaire = $first->resoudreBeneficiaire();
             $fraisDepenses = $fraisDepensesParLivreur[(string) $first->beneficiaire_id] ?? 0.0;
-            $partsValidees = $livParts->filter(
-                fn (CommissionEnveloppePart $part) => $part->statut !== StatutCommission::CREEE
-            );
+            // Même règle que index()/showLivreur() : le résumé porte sur toutes les parts
+            // actives (CREEE incluse), seul le statut reste conditionné par la payabilité.
             $resume = CommissionVenteCalculatorService::calculerResume(
-                (float) $partsValidees->sum('montant_brut'),
+                (float) $livParts->sum('montant_brut'),
                 0.0, // pas de frais_supplementaires sur CommissionEnveloppePart
-                (float) $partsValidees->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer),
+                (float) $livParts->sum(fn (CommissionEnveloppePart $p) => $p->montant_a_payer),
                 $fraisDepenses,
-                (float) $partsValidees->sum('montant_verse'),
+                (float) $livParts->sum('montant_verse'),
             );
             $buckets = CommissionKpiBuckets::calculer($livParts);
-            $statut = $partsValidees->isEmpty() && $buckets['en_attente_periode'] > 0.009
+            $aUnePartPayable = $livParts->contains(fn (CommissionEnveloppePart $part) => $part->statut !== StatutCommission::CREEE);
+            $statut = ! $aUnePartPayable && $buckets['en_attente_periode'] > 0.009
                 ? StatutCommission::CREEE->value
                 : $resume['statut'];
 
@@ -776,7 +786,7 @@ class CommissionVenteController extends Controller
                 'reste' => $resume['reste'],
                 'statut_code' => $statut,
                 'statut' => $statut === StatutCommission::CREEE->value
-                    ? 'Partage à valider'
+                    ? 'À valider'
                     : StatutCommission::from($statut)->label(),
             ];
         });

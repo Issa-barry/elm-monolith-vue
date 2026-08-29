@@ -8,6 +8,7 @@ use App\Enums\StatutDepense;
 use App\Http\Requests\StoreDepenseRequest;
 use App\Http\Requests\UpdateDepenseRequest;
 use App\Models\AuditLog;
+use App\Models\Client;
 use App\Models\Depense;
 use App\Models\DepenseImputation;
 use App\Models\DepenseType;
@@ -266,6 +267,19 @@ class DepenseController extends Controller
 
             $results = $results->merge($prestataires);
 
+            $clients = Depense::where('organization_id', $orgId)
+                ->where('beneficiaire_type', 'client')
+                ->with('clientBeneficiaire:id,nom,prenom,nom_complet')
+                ->get()
+                ->pluck('clientBeneficiaire')
+                ->filter()
+                ->unique('id')
+                ->filter(fn (Client $client) => str_contains(mb_strtolower($client->nom_complet), mb_strtolower($q)))
+                ->take(4)
+                ->map(fn (Client $client) => ['label' => $client->nom_complet, 'value' => $client->nom_complet]);
+
+            $results = $results->merge($clients);
+
             return response()->json($results->unique('value')->take(8)->values());
         }
 
@@ -310,6 +324,19 @@ class DepenseController extends Controller
 
             $results = $results->merge($prestataires);
 
+            $clients = Depense::where('organization_id', $orgId)
+                ->where('beneficiaire_type', 'client')
+                ->with('clientBeneficiaire:id,nom,prenom,nom_complet,telephone')
+                ->get()
+                ->pluck('clientBeneficiaire')
+                ->filter(fn (?Client $client) => $client?->telephone)
+                ->unique('id')
+                ->filter(fn (Client $client) => str_contains(preg_replace('/\D/', '', $client->telephone), $digits ?: $q))
+                ->take(4)
+                ->map(fn (Client $client) => ['label' => $client->nom_complet.' — '.$client->telephone, 'value' => $client->telephone]);
+
+            $results = $results->merge($clients);
+
             return response()->json($results->unique('value')->take(8)->values());
         }
 
@@ -329,6 +356,7 @@ class DepenseController extends Controller
             'livreur' => $this->buildLivreurDetail($id, $orgId),
             'employe' => $this->buildEmployeDetail($id, $orgId),
             'prestataire' => $this->buildPrestataireDetail($id, $orgId),
+            'client' => $this->buildClientDetail($id, $orgId),
             default => null,
         };
 
@@ -442,6 +470,21 @@ class DepenseController extends Controller
         ];
     }
 
+    private function buildClientDetail(string $id, string $orgId): ?array
+    {
+        $client = Client::where('organization_id', $orgId)->find($id);
+        if (! $client) {
+            return null;
+        }
+
+        return [
+            'type' => 'client',
+            'nom' => $client->nom_complet,
+            'telephone' => $client->telephone ?? '—',
+            'site' => '—',
+        ];
+    }
+
     public function imprimer(Request $request): \Illuminate\Http\Response
     {
         $this->authorize('viewAny', Depense::class);
@@ -543,12 +586,19 @@ class DepenseController extends Controller
         ]);
     }
 
-    public function create(): Response
+    public function create(Request $request): Response
     {
         $this->authorize('create', Depense::class);
 
         $user = auth()->user();
         $orgId = $user->organization_id;
+        $initialBeneficiaireType = $request->query('beneficiaire_type') === 'client' ? 'client' : '';
+        $initialBeneficiaireId = '';
+        if ($initialBeneficiaireType === 'client') {
+            $initialBeneficiaireId = (string) Client::where('organization_id', $orgId)
+                ->whereKey($request->query('beneficiaire_id'))
+                ->value('id');
+        }
 
         $sites = $user->isAdmin()
             ? $this->loadSites($orgId)
@@ -566,9 +616,12 @@ class DepenseController extends Controller
             'livreurs' => $this->loadLivreurs($orgId),
             'proprietaires' => $this->loadProprietaires($orgId),
             'prestataires' => $this->loadPrestataires($orgId),
+            'clients' => $this->loadClients($orgId),
             'default_site_id' => $this->defaultSiteId(),
             'categories' => CategorieDepense::optionsConcerne(),
             'can_change_site' => $user->isAdmin(),
+            'initial_beneficiaire_type' => $initialBeneficiaireType,
+            'initial_beneficiaire_id' => $initialBeneficiaireId,
         ]);
     }
 
@@ -652,6 +705,7 @@ class DepenseController extends Controller
             'livreurs' => $this->loadLivreurs($orgId),
             'proprietaires' => $this->loadProprietaires($orgId),
             'prestataires' => $this->loadPrestataires($orgId),
+            'clients' => $this->loadClients($orgId),
             'categories' => CategorieDepense::optionsConcerne(),
             'can_change_site' => $user->isAdmin(),
         ]);
@@ -980,6 +1034,14 @@ class DepenseController extends Controller
                     ->orWhere(fn ($w2) => $w2
                         ->where('beneficiaire_type', 'prestataire')
                         ->whereHas('prestataireBeneficiaire', $this->matchPrestataireIdentite($like, $likeTel, $norm))
+                    )->orWhere(fn ($w2) => $w2
+                    ->where('beneficiaire_type', 'client')
+                    ->whereHas('clientBeneficiaire', fn ($q) => $q
+                        ->where('nom', 'LIKE', $like)
+                        ->orWhere('prenom', 'LIKE', $like)
+                        ->orWhereRaw("CONCAT(prenom, ' ', nom) LIKE ?", [$like])
+                        ->when($likeTel, fn ($query) => $query->orWhereRaw("{$norm} LIKE ?", [$likeTel]))
+                    )
                     );
             });
         }
@@ -1019,6 +1081,14 @@ class DepenseController extends Controller
                 )->orWhere(fn ($w2) => $w2
                     ->where('beneficiaire_type', 'prestataire')
                     ->whereHas('prestataireBeneficiaire', $this->matchPrestataireIdentite($like, $likeTel, $norm))
+                )->orWhere(fn ($w2) => $w2
+                    ->where('beneficiaire_type', 'client')
+                    ->whereHas('clientBeneficiaire', fn ($q) => $q
+                        ->where('nom', 'LIKE', $like)
+                        ->orWhere('prenom', 'LIKE', $like)
+                        ->orWhereRaw("CONCAT(prenom, ' ', nom) LIKE ?", [$like])
+                        ->when($likeTel, fn ($query) => $query->orWhereRaw("{$norm} LIKE ?", [$likeTel]))
+                    )
                 );
             });
         }
@@ -1045,6 +1115,9 @@ class DepenseController extends Controller
                         ->whereHas('personne', fn ($p) => $p->whereRaw("{$norm} LIKE ?", [$likeTel]))
                         ->orWhereHas('entrepriseTierce', fn ($e) => $e->whereRaw("REPLACE(REPLACE(telephone, ' ', ''), '-', '') LIKE ?", [$likeTel]))
                     )
+                )->orWhere(fn ($w2) => $w2
+                    ->where('beneficiaire_type', 'client')
+                    ->whereHas('clientBeneficiaire', fn ($q) => $q->whereRaw("{$norm} LIKE ?", [$likeTel]))
                 );
             });
         }
@@ -1188,6 +1261,7 @@ class DepenseController extends Controller
                 $fields = match (true) {
                     $type === 'livreur' => ['id', 'personne_id', 'nom_complet'],
                     $type === 'prestataire' => null,
+                    $type === 'client' => ['id', 'nom', 'prenom', 'nom_complet', 'telephone'],
                     default => ['id', 'personne_id'],
                 };
 
@@ -1196,6 +1270,7 @@ class DepenseController extends Controller
                     'livreur' => Livreur::with('personne')->findMany($ids, $fields),
                     'proprietaire' => Proprietaire::with('personne')->findMany($ids, $fields),
                     'prestataire' => Prestataire::with(['personne', 'entrepriseTierce'])->findMany($ids),
+                    'client' => Client::findMany($ids, $fields),
                     default => collect(),
                 };
 
@@ -1203,6 +1278,13 @@ class DepenseController extends Controller
                     if ($type === 'prestataire') {
                         $labelCache["prestataire:{$model->id}"] = $model->nom_complet;
                         $labelCache["tel:prestataire:{$model->id}"] = $model->phone;
+
+                        continue;
+                    }
+
+                    if ($type === 'client') {
+                        $labelCache["client:{$model->id}"] = $model->nom_complet;
+                        $labelCache["tel:client:{$model->id}"] = $model->telephone;
 
                         continue;
                     }
@@ -1261,6 +1343,7 @@ class DepenseController extends Controller
             'proprietaire' => trim(optional(Proprietaire::find($id))?->prenom.' '.optional(Proprietaire::find($id))?->nom),
             'vehicule' => optional(Vehicule::find($id))->nom_vehicule,
             'prestataire' => optional(Prestataire::find($id))->nom_complet,
+            'client' => optional(Client::find($id))->nom_complet,
             default => null,
         };
     }
@@ -1379,6 +1462,21 @@ class DepenseController extends Controller
                 'id' => $p->id,
                 'nom_complet' => $p->nom_complet,
                 'telephone' => $p->phone,
+            ])
+            ->values();
+    }
+
+    private function loadClients(string $orgId)
+    {
+        return Client::where('organization_id', $orgId)
+            ->where('is_active', true)
+            ->orderBy('nom')
+            ->orderBy('prenom')
+            ->get(['id', 'nom', 'prenom', 'nom_complet', 'telephone'])
+            ->map(fn (Client $client) => [
+                'id' => $client->id,
+                'nom_complet' => $client->nom_complet,
+                'telephone' => $client->telephone,
             ])
             ->values();
     }

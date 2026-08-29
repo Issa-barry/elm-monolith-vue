@@ -61,8 +61,8 @@ class CommissionStatusResolverTest extends TestCase
         $result = CommissionStatusResolver::resolve(null, null, 'impaye', 'Impayé');
 
         $this->assertSame('creee', $result['commission_status']);
-        $this->assertSame('creee', $result['display_status']);
-        $this->assertSame('Créée', $result['display_label']);
+        $this->assertSame('en_attente', $result['display_status']);
+        $this->assertSame('À valider', $result['display_label']);
         $this->assertFalse($result['can_pay']);
         $this->assertNull($result['periode_status']);
         $this->assertNull($result['team_validation_status']);
@@ -76,7 +76,7 @@ class CommissionStatusResolverTest extends TestCase
 
         $this->assertSame('en_attente_validation', $result['commission_status']);
         $this->assertSame('en_attente', $result['display_status']);
-        $this->assertSame('En attente de validation', $result['display_label']);
+        $this->assertSame('À valider', $result['display_label']);
         $this->assertFalse($result['can_pay']);
         $this->assertSame('a_verifier', $result['team_validation_status']);
     }

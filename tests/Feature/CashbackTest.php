@@ -8,6 +8,8 @@ use App\Models\CashbackTransaction;
 use App\Models\CashbackVersement;
 use App\Models\Client;
 use App\Models\CommandeVente;
+use App\Models\Depense;
+use App\Models\DepenseType;
 use App\Models\Organization;
 use App\Models\ProduitVariante;
 use App\Models\Site;
@@ -513,6 +515,7 @@ class CashbackTest extends TestCase
     public function test_controller_calcule_montant_verse_depuis_versements(): void
     {
         $org = $this->createOrgAvecCashbackActif();
+        Feature::for($org)->activate(ModuleFeature::COMPTABILITE);
         $user = $this->staffUser($org);
         $client = Client::factory()->create(['organization_id' => $org->id]);
 
@@ -530,11 +533,11 @@ class CashbackTest extends TestCase
             ->get('/backoffice/cashback')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                ->component('Cashback/Index')
-                ->has('transactions', 1)
-                // Le controller recompute depuis la relation — 0 versement = montant_verse 0
-                ->where('transactions.0.montant_verse', 0)
-                ->where('transactions.0.montant_restant', 100)
+                ->component('Comptabilite/Cashback/Index')
+                ->has('beneficiaires', 1)
+                // Le controller recompute depuis la relation — 0 versement = total versé 0.
+                ->where('beneficiaires.0.total_verse', 0)
+                ->where('beneficiaires.0.solde_restant', 100)
             );
     }
 
@@ -604,11 +607,101 @@ class CashbackTest extends TestCase
             ->get('/backoffice/cashback?statut=en_attente')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                ->component('Cashback/Index')
-                ->has('transactions', 1)
-                ->where('transactions.0.montant', 10000)
-                ->where('transactions.0.statut', 'en_attente')
+                ->component('Comptabilite/Cashback/Index')
+                ->has('beneficiaires', 1)
+                ->where('beneficiaires.0.total_genere', 10000)
+                ->where('beneficiaires.0.statut', 'en_attente')
             );
+    }
+
+    public function test_index_et_detail_deduisent_uniquement_les_depenses_client_validees(): void
+    {
+        $org = $this->createOrgAvecCashbackActif();
+        $user = $this->staffUser($org);
+        $client = Client::factory()->create(['organization_id' => $org->id]);
+        $transaction = $this->makeTransaction($org, $client, 10000, CashbackTransaction::STATUT_VALIDE);
+        $type = DepenseType::create([
+            'organization_id' => $org->id,
+            'code' => 'CLIENT-TEST',
+            'libelle' => 'Avance client',
+            'categorie' => 'client',
+            'is_active' => true,
+        ]);
+
+        foreach ([['montant' => 2500, 'statut' => 'valide'], ['montant' => 900, 'statut' => 'soumis']] as $data) {
+            Depense::create([
+                'organization_id' => $org->id,
+                'site_id' => $user->sites()->value('sites.id'),
+                'user_id' => $user->id,
+                'depense_type_id' => $type->id,
+                'beneficiaire_type' => 'client',
+                'beneficiaire_id' => $client->id,
+                'montant' => $data['montant'],
+                'date_depense' => now()->toDateString(),
+                'statut' => $data['statut'],
+            ]);
+        }
+
+        $this->actingAs($user)
+            ->get('/backoffice/comptabilite/commissions/cashback')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Comptabilite/Cashback/Index')
+                ->where('beneficiaires.0.total_frais', 2500)
+                ->where('beneficiaires.0.total_net', 7500)
+                ->where('beneficiaires.0.solde_restant', 7500)
+            );
+
+        $this->actingAs($user)
+            ->get("/backoffice/comptabilite/commissions/cashback/{$client->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Comptabilite/Cashback/Show')
+                ->where('commission_summary.frais', 2500)
+                ->where('commission_summary.net_a_payer', 7500)
+                ->where('montant_disponible', 7500)
+                ->has('transactions', 1)
+                ->has('expenses', 1)
+            );
+
+        $this->assertSame($transaction->id, CashbackTransaction::first()->id);
+    }
+
+    public function test_depenses_client_protegent_le_plafond_de_versement(): void
+    {
+        $org = $this->createOrgAvecCashbackActif();
+        $client = Client::factory()->create(['organization_id' => $org->id]);
+        $user = $this->staffUser($org, 'admin_entreprise');
+        $transaction = $this->makeTransaction($org, $client, 10000, CashbackTransaction::STATUT_VALIDE);
+        $type = DepenseType::create([
+            'organization_id' => $org->id,
+            'code' => 'CLIENT-PLAFOND',
+            'libelle' => 'Dépense client',
+            'categorie' => 'client',
+            'is_active' => true,
+        ]);
+        Depense::create([
+            'organization_id' => $org->id,
+            'site_id' => $user->sites()->value('sites.id'),
+            'user_id' => $user->id,
+            'depense_type_id' => $type->id,
+            'beneficiaire_type' => 'client',
+            'beneficiaire_id' => $client->id,
+            'montant' => 3000,
+            'date_depense' => now()->toDateString(),
+            'statut' => 'valide',
+        ]);
+
+        $this->actingAs($user)
+            ->patch("/backoffice/cashback/{$transaction->id}/verser", [
+                'montant' => 7001,
+                'mode_paiement' => 'especes',
+                'date_versement' => now()->toDateString(),
+            ])
+            ->assertRedirect()
+            ->assertSessionHasErrors('montant');
+
+        $this->assertDatabaseCount('cashback_versements', 0);
     }
 
     public function test_valider_via_controller(): void

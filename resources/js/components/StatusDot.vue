@@ -23,6 +23,7 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     disponible: 'bg-emerald-500',
     couvert: 'bg-emerald-500',
     recu: 'bg-emerald-500',
+    verse: 'bg-emerald-500',
 
     // Bleu — en cours
     en_cours: 'bg-blue-500',

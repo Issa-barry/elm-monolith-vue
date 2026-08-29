@@ -37,7 +37,7 @@ const LIVRAISON_MONTANT = 1000;
  * absente d'un `String(montant)` brut — un `toContainText(String(1000))` ne matche donc
  * jamais "1 000 GNF". Tolère aussi une espace normale, au cas où le rendu diffère.
  */
-function montantPattern(amount: number): string {
+export function montantPattern(amount: number): string {
     const formatted = new Intl.NumberFormat('fr-FR').format(amount);
     return formatted
         .split('')
@@ -50,7 +50,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 /** Paramètres → Commissions : définit Propriétaire ET Livraison sur la ligne de la catégorie de démo. */
-async function configurerBaremes(page: Page): Promise<void> {
+export async function configurerBaremes(page: Page): Promise<void> {
     await page.goto('/settings/commissions');
     await expect(
         page.getByRole('heading', { name: /^commissions$/i }),
@@ -91,7 +91,7 @@ async function configurerBaremes(page: Page): Promise<void> {
  * maintenant configuré) avec le chauffeur unique auto-complété à 100 %, et
  * enregistre.
  */
-async function configurerPartageVehicule(page: Page): Promise<void> {
+export async function configurerPartageVehicule(page: Page): Promise<void> {
     await page.goto('/backoffice/vehicules');
     const vehiculeRow = page
         .locator('tbody tr', { hasText: new RegExp(VEHICULE_IMMAT, 'i') })
@@ -152,7 +152,7 @@ async function configurerPartageVehicule(page: Page): Promise<void> {
 }
 
 /** Commande → confirmation → chargement → encaissement (miroir de facture-flow.spec.ts). */
-async function creerVenteEtEncaisser(page: Page): Promise<void> {
+export async function creerVenteEtEncaisser(page: Page): Promise<void> {
     await page.goto('/backoffice/ventes/create');
     await expect(page).toHaveURL(/\/ventes\/create$/, { timeout: 20_000 });
 
@@ -293,7 +293,7 @@ async function verifierCommissionVisible(page: Page): Promise<void> {
         page.getByRole('menuitem', { name: 'Exporter en PDF' }),
     ).toBeVisible();
 
-    // La commission est encore « Partage à valider » à cette étape. Les deux
+    // La commission est encore « À valider » à cette étape. Les deux
     // exports doivent néanmoins reprendre la ligne visible, sans attendre la
     // validation de la période.
     const [excelDownload] = await Promise.all([
@@ -307,7 +307,7 @@ async function verifierCommissionVisible(page: Page): Promise<void> {
     expect(excelPath).not.toBeNull();
     const excelContent = await readFile(excelPath!, 'utf8');
     expect(excelContent).toContain('Chauffeur V2 Demo');
-    expect(excelContent).toContain('Partage à valider');
+    expect(excelContent).toContain('À valider');
 
     await page.getByRole('button', { name: 'Exporter', exact: true }).click();
     const [pdfDownload] = await Promise.all([
@@ -372,7 +372,7 @@ async function validerPeriodeLivreurCourante(page: Page): Promise<void> {
     await confirmAlertDialog(page, 'Valider');
 }
 
-async function confirmAlertDialog(
+export async function confirmAlertDialog(
     page: Page,
     buttonLabel: RegExp | string,
 ): Promise<void> {

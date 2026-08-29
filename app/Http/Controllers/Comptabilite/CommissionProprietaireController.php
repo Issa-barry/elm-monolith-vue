@@ -871,7 +871,7 @@ class CommissionProprietaireController extends Controller
                 'reste' => $solde,
                 'statut_code' => $statutCode,
                 'statut' => $statutCode === StatutCommission::CREEE->value
-                    ? 'Partage à valider'
+                    ? 'À valider'
                     : StatutCommission::from($statutCode)->label(),
             ];
         });

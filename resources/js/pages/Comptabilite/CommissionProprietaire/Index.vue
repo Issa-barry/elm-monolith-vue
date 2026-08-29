@@ -117,7 +117,7 @@ const filterFields = computed((): FilterField[] => [
         label: 'Statut',
         type: 'select' as const,
         options: [
-            { value: 'creee', label: 'Créée — en attente de période' },
+            { value: 'creee', label: 'À valider' },
             { value: 'impaye', label: 'Impayé' },
             { value: 'partiel', label: 'Partiel' },
             { value: 'paye', label: 'Payé' },
@@ -249,14 +249,6 @@ const indexSummary = computed<CommissionIndexSummary>(() => ({
     remaining: props.kpis.solde_total,
     paid: props.kpis.total_verse,
 }));
-
-function statusValue(b: BeneficiaireRow): string {
-    return b.statut_global === 'creee' ? 'en_attente' : b.display_status;
-}
-
-function statusLabel(b: BeneficiaireRow): string {
-    return b.statut_global === 'creee' ? 'Partage à valider' : b.display_label;
-}
 
 function fmt(val: number | null | undefined) {
     return (
@@ -477,8 +469,8 @@ function fmtTel(tel: string | null | undefined): string {
                         </td>
                         <td class="px-4 py-3">
                             <StatusDot
-                                :status="statusValue(b)"
-                                :label="statusLabel(b)"
+                                :status="b.display_status"
+                                :label="b.display_label"
                             />
                         </td>
                         <td
