@@ -81,7 +81,7 @@ const filterFields = computed((): FilterField[] => [
         label: 'Statut',
         type: 'select' as const,
         options: [
-            { value: 'creee', label: 'Créée' },
+            { value: 'creee', label: 'À valider' },
             { value: 'impaye', label: 'Impayé' },
             { value: 'partiel', label: 'Partiel' },
             { value: 'paye', label: 'Payé' },
@@ -347,7 +347,11 @@ function fmt(val: number | null | undefined) {
                         </td>
                         <td class="px-4 py-3">
                             <StatusDot
-                                :status="b.statut_global"
+                                :status="
+                                    b.statut_global === 'creee'
+                                        ? 'en_attente'
+                                        : b.statut_global
+                                "
                                 :label="b.statut_label"
                             />
                         </td>

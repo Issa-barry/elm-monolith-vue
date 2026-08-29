@@ -483,6 +483,13 @@ Route::prefix('backoffice')->group(function () {
         // ── Module : Comptabilité ─────────────────────────────────────────────────
         Route::middleware('module:'.ModuleFeature::COMPTABILITE)->prefix('comptabilite')->name('comptabilite.')->group(function () {
 
+            Route::middleware('module:'.ModuleFeature::CASHBACK)->group(function () {
+                Route::get('commissions/cashback', [CashbackController::class, 'index'])
+                    ->name('commissions.cashback.index');
+                Route::get('commissions/cashback/{client}', [CashbackController::class, 'show'])
+                    ->name('commissions.cashback.show');
+            });
+
             // ── Trésorerie : Financement des agences + Mouvements de fonds ──────────
             // Remplace l'ancien "Besoin de trésorerie" (BesoinTresorerieController) —
             // cf. compte-rendu du chantier Financement des agences (2026-08-22).
@@ -540,6 +547,14 @@ Route::prefix('backoffice')->group(function () {
                 ->name('commissions.vente.pdf');
             Route::get('commissions/vente/livreurs/{livreurId}', [ComptabiliteCommissionVenteController::class, 'showLivreur'])
                 ->name('commissions.vente.livreur');
+            // Ajustement/validation directement depuis la liste, sans passer par une période
+            // (cf. CommissionAjustementController::ajusterParts()/validerParts()).
+            Route::patch('commissions/ajustements/ajuster', [CommissionAjustementController::class, 'ajusterParts'])
+                ->name('commissions.ajustements.ajuster');
+            Route::post('commissions/ajustements/valider', [CommissionAjustementController::class, 'validerParts'])
+                ->name('commissions.ajustements.valider');
+            Route::get('commissions/vehicules/{vehiculeId}/repartir', [CommissionAjustementController::class, 'repartirVehicule'])
+                ->name('commissions.vehicules.repartir');
 
             // ── Commission sites ────────────────────────────────────────────────────
             Route::get('commissions/sites', [CommissionSiteController::class, 'index'])

@@ -78,13 +78,17 @@ final class CommissionStatusResolver
         }
 
         // Pas encore rattachée à une période calculée : rien à afficher côté paiement.
+        // display_status/display_label utilisent volontairement le même badge « À valider »
+        // que la branche en_attente ci-dessous (période résolue, équipe pas encore validée) :
+        // du point de vue de l'utilisateur, les deux signifient exactement la même action à
+        // faire, seule commission_status garde la nuance technique CREEE.
         if ($periode === null) {
             return [
                 ...$base,
                 'commission_status' => StatutCommissionMetier::CREEE->value,
                 'commission_status_label' => StatutCommissionMetier::CREEE->label(),
-                'display_status' => 'creee',
-                'display_label' => 'Créée',
+                'display_status' => 'en_attente',
+                'display_label' => 'À valider',
                 'can_pay' => false,
             ];
         }
@@ -135,7 +139,7 @@ final class CommissionStatusResolver
             'commission_status' => StatutCommissionMetier::EN_ATTENTE_VALIDATION->value,
             'commission_status_label' => StatutCommissionMetier::EN_ATTENTE_VALIDATION->label(),
             'display_status' => 'en_attente',
-            'display_label' => 'En attente de validation',
+            'display_label' => 'À valider',
             'can_pay' => false,
         ];
     }

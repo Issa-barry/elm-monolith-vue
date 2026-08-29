@@ -9,11 +9,32 @@ import { formatGNF } from '@/lib/utils';
 import type { CommissionIndexSummary } from '@/types/commission';
 import { Info } from 'lucide-vue-next';
 
-const props = defineProps<{
-    summary: CommissionIndexSummary;
-}>();
+interface CardLabelOverride {
+    label?: string;
+    ariaLabel?: string;
+    tooltip?: string;
+}
 
-const cards = [
+const props = withDefaults(
+    defineProps<{
+        summary: CommissionIndexSummary;
+        /**
+         * Surcharge label/tooltip par carte — pour les écrans où le montant retenu courant est
+         * désormais toujours affiché (indépendamment de la validation de la période, cf.
+         * CommissionVenteController) : « Net validé » y devient trompeur, « Net à payer » plus
+         * juste. Les écrans dont le calcul sous-jacent n'a pas encore été aligné gardent le
+         * libellé par défaut, pour ne pas laisser croire à un montant définitif.
+         */
+        labelOverrides?: Partial<
+            Record<'generated' | 'expenses' | 'netValidated' | 'remaining', CardLabelOverride>
+        >;
+    }>(),
+    {
+        labelOverrides: () => ({}),
+    },
+);
+
+const cardsDefaults = [
     {
         key: 'generated',
         label: 'Commissions générées',
@@ -42,6 +63,11 @@ const cards = [
             'Net validé restant à verser après les paiements déjà effectués.',
     },
 ] as const;
+
+const cards = cardsDefaults.map((card) => ({
+    ...card,
+    ...props.labelOverrides[card.key],
+}));
 
 function formattedValue(key: (typeof cards)[number]['key']): string {
     const value = props.summary[key];

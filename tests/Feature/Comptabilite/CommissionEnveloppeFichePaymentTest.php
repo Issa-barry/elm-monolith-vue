@@ -437,7 +437,7 @@ class CommissionEnveloppeFichePaymentTest extends TestCase
 
         $this->assertNotNull($beneficiaire, 'Un livreur dont la seule commission est CREEE doit rester visible.');
         $this->assertSame('creee', $beneficiaire['commission_status']);
-        $this->assertSame('creee', $beneficiaire['display_status']);
+        $this->assertSame('en_attente', $beneficiaire['display_status']);
         $this->assertFalse($beneficiaire['can_pay']);
         $this->assertSame(10_000.0, $beneficiaire['total_genere']);
         $this->assertSame(10_000.0, $beneficiaire['en_attente_periode']);
@@ -483,7 +483,7 @@ class CommissionEnveloppeFichePaymentTest extends TestCase
                 ->where('commission_summary.total_genere', 10_000)
                 ->where('commission_summary.en_attente_periode', 10_000)
                 ->where('commission_summary.payable', 0)
-                ->where('commission_summary.net_a_payer', 0)
+                ->where('commission_summary.net_a_payer', 10_000)
                 ->where('payable', false)
             );
     }
