@@ -274,6 +274,53 @@ test('create client without required fields -> stays on create page', async ({
     await expect(page).toHaveURL(/\/clients\/create$/);
 });
 
+test('create client -> switching nature from Revendeur to Distributeur resets cashback to Non by default', async ({
+    page,
+}) => {
+    const uid = `${Date.now()}`.slice(-6);
+    const nomComplet = `${PREFIX}${uid} CashbackDefault${uid}`;
+    const tel = `6${randomDigits(8)}`;
+
+    await login(page);
+    await page.goto('/backoffice/clients/create');
+    await page.locator('#nom_complet').fill(nomComplet);
+
+    const paysCombo = page
+        .locator('#client-form')
+        .getByRole('combobox')
+        .first();
+    await selectOptionFromCombobox(page, paysCombo, /guin(?!.*bissau)/i);
+    await page.locator('#telephone').fill(tel);
+
+    // Nature par défaut = Revendeur -> cashback verrouillé sur "Cashback actif", pas de choix
+    // Oui/Non affiché.
+    await expect(page.getByText(/cashback actif/i)).toBeVisible();
+
+    // Changement de nature vers Distributeur : le cashback hérité (true, forcé pour Revendeur)
+    // ne doit jamais se propager silencieusement -> "Non" doit être le choix actif par défaut.
+    const typeCombo = page
+        .locator('#client-form')
+        .getByRole('combobox')
+        .nth(1);
+    await selectOptionFromCombobox(page, typeCombo, /^distributeur$/i);
+
+    const nonButton = page.getByRole('button', { name: /^Non$/i });
+    const ouiButton = page.getByRole('button', { name: /^Oui$/i });
+    await expect(nonButton).toBeVisible();
+    await expect(nonButton).toHaveClass(/bg-destructive/);
+    await expect(ouiButton).not.toHaveClass(/bg-primary/);
+
+    await page
+        .locator('#client-form button[type="submit"]:visible')
+        .first()
+        .click();
+
+    await expect(page).toHaveURL(/\/clients\/[a-z0-9]+\/edit$/);
+    await expect(page.getByRole('button', { name: /^Non$/i })).toHaveClass(
+        /bg-destructive/,
+    );
+});
+
 test('stat cards reflect active search filter', async ({ page }) => {
     await login(page);
     await page.goto('/backoffice/clients');

@@ -64,6 +64,12 @@ interface Limites {
     max_variantes_produit: number;
 }
 
+interface SiteOption {
+    id: string;
+    code: string;
+    label: string;
+}
+
 interface OptionInput {
     nom: string;
     valeurs: string[];
@@ -107,9 +113,12 @@ interface FormData {
     // Choix obligatoire, jamais de valeur implicite : l'utilisateur tranche explicitement
     // s'il veut être alerté en cas de stock faible.
     alerte_stock_active: boolean;
-    // null = hérite du seuil par défaut de l'organisation ; valeur = seuil spécifique à ce
-    // produit, appliqué à toutes ses variantes/sites (cf. StockStatutService).
-    seuil_alerte_stock: number | null;
+    // Seuil spécifique PAR SITE (absent d'un site = hérite du seuil par défaut de
+    // l'organisation, cf. StockStatutService::seuilEffectifPourSite()) — remplace l'ancien
+    // seuil unique produit. Toujours vide à la création (aucun site ne peut encore être
+    // configuré tant que le produit n'a pas d'id) ; peuplé par Edit.vue à partir des sites
+    // actifs de l'organisation.
+    seuils_site: { site_id: string; seuil: number | null }[];
     description: string | null;
     // Tableau (même si un seul fichier ici) : le backend attend la clé "images[]"
     // (ProduitController::validerFormulaire()), partagée avec la galerie multi-photo.
@@ -134,9 +143,13 @@ const props = withDefaults(
         // ne gère que le produit simple (variante par défaut), pas l'ajout de déclinaisons après coup.
         allowDeclinaisons?: boolean;
         existingVariantes?: Variante[];
-        /** Seuil de stock faible par défaut de l'organisation (Paramètres) — affiché comme
-         * repère dans le choix "seuil par défaut / seuil spécifique" ci-dessous. */
+        /** Seuil de stock faible par défaut de l'organisation (Paramètres) — utilisé par tout
+         * site n'ayant pas de seuil spécifique ci-dessous. */
         seuilOrganisationDefaut?: number;
+        /** Sites ACTIFS de l'organisation, pour la section "Alerte de stock faible" par
+         * agence — absent/vide à la création (aucun produit id à rattacher), peuplé par
+         * Edit.vue. */
+        sites?: SiteOption[];
     }>(),
     {
         categories: () => [],
@@ -148,6 +161,7 @@ const props = withDefaults(
         allowDeclinaisons: false,
         existingVariantes: () => [],
         seuilOrganisationDefaut: 10,
+        sites: () => [],
     },
 );
 
@@ -308,19 +322,23 @@ const canSubmit = computed(
 
 defineExpose({ canSubmit });
 
-// ── Alerte de stock faible ──────────────────────────────────────────────────
-const seuilSpecifique = computed({
-    get: () => props.form.seuil_alerte_stock !== null,
-    set: (actif: boolean) => {
-        emit('update:form', {
-            ...props.form,
-            seuil_alerte_stock: actif
-                ? (props.form.seuil_alerte_stock ??
-                  props.seuilOrganisationDefaut)
-                : null,
-        });
-    },
-});
+// ── Alerte de stock faible (seuil par site) ─────────────────────────────────
+function seuilPourSite(siteId: string): number | null {
+    return (
+        props.form.seuils_site.find((s) => s.site_id === siteId)?.seuil ??
+        null
+    );
+}
+
+function setSeuilPourSite(siteId: string, valeur: number | null) {
+    const existe = props.form.seuils_site.some((s) => s.site_id === siteId);
+    const seuils = existe
+        ? props.form.seuils_site.map((s) =>
+              s.site_id === siteId ? { ...s, seuil: valeur } : s,
+          )
+        : [...props.form.seuils_site, { site_id: siteId, seuil: valeur }];
+    emit('update:form', { ...props.form, seuils_site: seuils });
+}
 
 const previewUrl = ref<string | null>(null);
 
@@ -1281,7 +1299,7 @@ const depasseLimiteVariantes = computed(
                                     $emit('update:form', {
                                         ...form,
                                         alerte_stock_active: false,
-                                        seuil_alerte_stock: null,
+                                        seuils_site: [],
                                     })
                                 "
                             />
@@ -1298,60 +1316,55 @@ const depasseLimiteVariantes = computed(
 
                 <div
                     v-if="form.alerte_stock_active"
-                    class="space-y-2 border-t pt-4"
+                    class="space-y-3 border-t pt-4"
                 >
-                    <Label class="block">Seuil d'alerte</Label>
-                    <label class="flex cursor-pointer items-center gap-2">
-                        <RadioButton
-                            :model-value="seuilSpecifique"
-                            :value="false"
-                            @update:model-value="seuilSpecifique = false"
-                        />
-                        <span class="text-sm"
-                            >Utiliser le seuil par défaut de l'organisation :
-                            {{ seuilOrganisationDefaut }} unités</span
-                        >
-                    </label>
-                    <label class="flex cursor-pointer items-center gap-2">
-                        <RadioButton
-                            :model-value="seuilSpecifique"
-                            :value="true"
-                            @update:model-value="seuilSpecifique = true"
-                        />
-                        <span class="text-sm"
-                            >Définir un seuil spécifique :</span
-                        >
-                        <InputNumber
-                            v-if="seuilSpecifique"
-                            :model-value="form.seuil_alerte_stock"
-                            @update:model-value="
-                                $emit('update:form', {
-                                    ...form,
-                                    seuil_alerte_stock: $event,
-                                })
-                            "
-                            :min="1"
-                            class="w-32"
-                            input-class="w-full"
-                        />
-                    </label>
-                    <p class="text-xs text-muted-foreground">
-                        Le stock sera signalé comme faible lorsqu'une variante
-                        atteindra
-                        {{
-                            seuilSpecifique
-                                ? (form.seuil_alerte_stock ??
-                                  seuilOrganisationDefaut)
-                                : seuilOrganisationDefaut
+                    <Label class="block">Seuil d'alerte par agence</Label>
+
+                    <template v-if="sites.length > 0">
+                        <div class="divide-y rounded-lg border">
+                            <div
+                                v-for="site in sites"
+                                :key="site.id"
+                                class="flex items-center justify-between gap-3 px-3 py-2"
+                            >
+                                <span class="text-sm font-medium">{{
+                                    site.label
+                                }}</span>
+                                <div class="flex items-center gap-2">
+                                    <InputNumber
+                                        :model-value="seuilPourSite(site.id)"
+                                        @update:model-value="
+                                            setSeuilPourSite(site.id, $event)
+                                        "
+                                        :min="1"
+                                        :placeholder="
+                                            String(seuilOrganisationDefaut)
+                                        "
+                                        class="w-28"
+                                        input-class="w-full text-right"
+                                    />
+                                    <span
+                                        v-if="seuilPourSite(site.id) === null"
+                                        class="w-24 text-[11px] text-muted-foreground"
+                                    >
+                                        Défaut : {{ seuilOrganisationDefaut }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <p class="text-xs text-muted-foreground">
+                            Chaque agence peut avoir son propre seuil.
+                            Lorsqu'aucun seuil spécifique n'est renseigné, le
+                            seuil par défaut de l'organisation est utilisé.
+                        </p>
+                    </template>
+                    <p v-else class="text-xs text-muted-foreground">
+                        Le seuil par défaut de l'organisation ({{
+                            seuilOrganisationDefaut
                         }}
-                        unités ou moins, sur un site donné — ce seuil s'applique
-                        à toutes les variantes de ce produit.
-                    </p>
-                    <p
-                        v-if="errors.seuil_alerte_stock"
-                        class="text-xs text-destructive"
-                    >
-                        {{ errors.seuil_alerte_stock }}
+                        unités) s'appliquera à toutes les agences. Vous
+                        pourrez définir un seuil spécifique par agence après
+                        la création du produit.
                     </p>
                 </div>
             </div>

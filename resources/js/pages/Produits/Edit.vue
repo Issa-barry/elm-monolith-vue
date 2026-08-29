@@ -43,6 +43,12 @@ interface Limites {
     max_variantes_produit: number;
 }
 
+interface SiteOption {
+    id: string;
+    code: string;
+    label: string;
+}
+
 interface VarianteOption {
     option: string;
     valeur: string;
@@ -81,7 +87,6 @@ interface ProduitData {
     prix_achat: number | null;
     cout: number | null;
     alerte_stock_active: boolean;
-    seuil_alerte_stock: number | null;
     description: string | null;
     image_url: string | null;
     variantes_count: number;
@@ -96,6 +101,8 @@ const props = defineProps<{
     fournisseurs: FournisseurOption[];
     limites: Limites;
     seuilOrganisationDefaut: number;
+    sites: SiteOption[];
+    seuilsAlerteSite: Record<string, number>;
 }>();
 
 const showVarianteModal = ref(false);
@@ -144,7 +151,10 @@ const form = useForm({
     prix_achat: props.produit.prix_achat,
     cout: props.produit.cout,
     alerte_stock_active: props.produit.alerte_stock_active,
-    seuil_alerte_stock: props.produit.seuil_alerte_stock,
+    seuils_site: props.sites.map((s) => ({
+        site_id: s.id,
+        seuil: props.seuilsAlerteSite[s.id] ?? null,
+    })),
     description: props.produit.description,
     images: [] as File[],
     options: [] as {
@@ -210,6 +220,7 @@ function submit() {
                 :fournisseurs="fournisseurs"
                 :limites="limites"
                 :seuil-organisation-defaut="seuilOrganisationDefaut"
+                :sites="sites"
                 :processing="form.processing"
                 :current-image-url="produit.image_url"
                 :current-sku="produit.sku"

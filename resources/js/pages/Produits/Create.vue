@@ -89,7 +89,7 @@ const form = useForm({
     prix_achat: null as number | null,
     cout: null as number | null,
     alerte_stock_active: false,
-    seuil_alerte_stock: null as number | null,
+    seuils_site: [] as { site_id: string; seuil: number | null }[],
     description: null as string | null,
     images: [] as File[],
     options: [] as {

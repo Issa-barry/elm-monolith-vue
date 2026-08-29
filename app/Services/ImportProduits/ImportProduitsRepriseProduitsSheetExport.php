@@ -3,6 +3,7 @@
 namespace App\Services\ImportProduits;
 
 use App\Models\Produit;
+use App\Services\ProduitSeuilAlerteService;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromArray;
 use Maatwebsite\Excel\Concerns\WithEvents;
@@ -67,7 +68,11 @@ class ImportProduitsRepriseProduitsSheetExport implements FromArray, WithEvents,
                     $variante?->prix_distributeur,
                     $variante?->cout,
                     $produit->alerte_stock_active ? 'oui' : 'non',
-                    $produit->seuil_alerte_stock,
+                    // Le seuil se règle désormais par site (cf. ProduitSeuilAlerteService) : la
+                    // colonne unique du fichier ne peut représenter qu'une valeur COMMUNE à tous
+                    // les sites actifs — vide si mixte/absente, jamais la valeur d'un site
+                    // arbitraire (un blanc réimporté = "ne pas toucher", jamais une suppression).
+                    app(ProduitSeuilAlerteService::class)->valeurUniformePourSitesActifs($produit),
                     ImportProduitsCellSanitizer::neutraliser($produit->description),
                 ];
             })

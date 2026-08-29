@@ -2,12 +2,30 @@
 
 namespace App\Http\Resources\Api;
 
+use App\Models\Parametre;
 use App\Services\StockStatutService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 class ProduitResource extends JsonResource
 {
+    /**
+     * Seuil effectif pour le site par défaut de l'utilisateur authentifié (ou son premier site
+     * s'il n'a pas de site par défaut) — repli sur le seuil global de l'organisation si aucun
+     * site n'est associé à l'utilisateur.
+     */
+    private function seuilAlerteEffectifPourRequete(Request $request): int
+    {
+        $user = $request->user();
+        $site = $user?->sites()->wherePivot('is_default', true)->first() ?? $user?->sites()->first();
+
+        if ($site === null) {
+            return Parametre::getSeuilStockFaible((string) $this->organization_id);
+        }
+
+        return app(StockStatutService::class)->seuilEffectifPourSite($this->resource, (string) $site->id);
+    }
+
     public function toArray(Request $request): array
     {
         $variante = $this->relationLoaded('variantes')
@@ -40,8 +58,12 @@ class ProduitResource extends JsonResource
             'cout' => $variante?->cout,
             'qte_stock' => $this->qte_stock,
             'alerte_stock_active' => $this->alerte_stock_active,
-            'seuil_alerte_stock' => $this->seuil_alerte_stock,
-            'seuil_alerte_effectif' => app(StockStatutService::class)->seuilEffectif($this->resource),
+            // Seuil résolu pour le site PAR DÉFAUT de l'utilisateur qui consulte l'API (même
+            // résolution que ProduitController@ajusterStock côté API) — repli sur le seuil
+            // global de l'organisation si l'utilisateur n'a aucun site. Le seuil se règle
+            // désormais par site (cf. ProduitSeuilAlerteService) : sans site précis, aucune
+            // valeur unique n'a de sens pour tous les sites de l'organisation.
+            'seuil_alerte_effectif' => $this->seuilAlerteEffectifPourRequete($request),
             'description' => $this->description,
             'image_url' => $this->image_url,
             'in_stock' => $this->in_stock,

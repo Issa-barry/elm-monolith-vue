@@ -61,12 +61,14 @@ const isReadOnly = computed(() => props.readonly);
 // Un Revendeur est automatiquement éligible au cashback (règle métier) — le toggle Cashback est
 // donc verrouillé sur "Oui" pour cette nature, jamais de valeur contradictoire possible côté UI.
 const isRevendeur = computed(() => props.form.type === 'revendeur');
+// Externe/Distributeur : cashback facultatif mais désactivé PAR DÉFAUT (l'utilisateur l'active
+// explicitement ensuite via le toggle) — reset à chaque changement de nature pour ne jamais
+// laisser un "Oui" hérité du Revendeur quitté se propager silencieusement.
 function onTypeChange(type: string) {
     emit('update:form', {
         ...props.form,
         type,
-        cashback_eligible:
-            type === 'revendeur' ? true : props.form.cashback_eligible,
+        cashback_eligible: type === 'revendeur',
     });
 }
 const readonlyInputClass = computed(() =>

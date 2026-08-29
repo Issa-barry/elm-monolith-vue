@@ -54,8 +54,6 @@ interface Produit {
     cout: number | null;
     qte_stock: number | null;
     alerte_stock_active: boolean;
-    seuil_alerte_stock: number | null;
-    seuil_alerte_effectif: number;
     description: string | null;
     in_stock: boolean;
     is_low_stock: boolean;

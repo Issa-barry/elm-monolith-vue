@@ -84,7 +84,11 @@ class StockController extends Controller
         // même bug que la page Commande CMD-* : deux commandes pouvaient toutes deux promettre le
         // même stock tant que rien n'était retenu entre la confirmation et le chargement).
         $quantite = "({$physique} - {$reserve})";
-        $seuil = 'COALESCE(p.seuil_alerte_stock, ?)';
+        // Seuil résolu PAR SITE (produit_seuils_alerte, cf. StockStatutService::
+        // seuilEffectifPourSite()) — jamais l'ancienne colonne p.seuil_alerte_stock (unique,
+        // conservée en base à titre historique) : le seuil de Matoto ne doit jamais servir à
+        // contrôler le stock de CBA.
+        $seuil = 'COALESCE(psa.seuil_alerte_stock, ?)';
 
         $query = DB::table('produit_variantes as pv')
             ->join('produits as p', 'p.id', '=', 'pv.produit_id')
@@ -98,6 +102,10 @@ class StockController extends Controller
             ->leftJoin('variante_stocks as vs', function ($join) {
                 $join->on('vs.produit_variante_id', '=', 'pv.id')
                     ->on('vs.site_id', '=', 's.id');
+            })
+            ->leftJoin('produit_seuils_alerte as psa', function ($join) {
+                $join->on('psa.produit_id', '=', 'p.id')
+                    ->on('psa.site_id', '=', 's.id');
             })
             ->where('p.organization_id', $orgId)
             ->where('pv.organization_id', $orgId)
@@ -113,7 +121,6 @@ class StockController extends Controller
                 'p.categorie_id',
                 'c.nom as categorie_nom',
                 'p.alerte_stock_active',
-                'p.seuil_alerte_stock',
                 'pv.id as variante_id',
                 'pv.sku',
                 'pv.is_default',
