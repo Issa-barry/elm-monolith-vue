@@ -129,9 +129,9 @@ class Produit extends Model
      * Vrai si au moins un couple variante × site de ce produit est actuellement en stock
      * faible ou en rupture — délègue à StockStatutService (source unique de la règle, cf.
      * son docblock) plutôt que de réimplémenter la comparaison qte/seuil ici. Nécessite
-     * $this chargé avec ['produitType', 'variantes.stocks'] pour éviter un N+1 ; sinon
-     * déclenche un chargement paresseux (acceptable pour un accès isolé, ex: Show d'un
-     * seul produit — à éviter en boucle sur une liste, cf. ProduitController@index qui
+     * $this chargé avec ['produitType', 'variantes.stocks', 'seuilsAlerte'] pour éviter un
+     * N+1 ; sinon déclenche un chargement paresseux (acceptable pour un accès isolé, ex: Show
+     * d'un seul produit — à éviter en boucle sur une liste, cf. ProduitController@index qui
      * calcule ceci autrement pour cette raison).
      */
     public function getIsLowStockAttribute(): bool
@@ -218,6 +218,17 @@ class Produit extends Model
             'produit_id',
             'produit_variante_id'
         );
+    }
+
+    /**
+     * Seuils d'alerte de stock faible spécifiques par SITE — remplace l'ancien seuil unique
+     * seuil_alerte_stock (colonne conservée en base à titre historique, plus jamais lue ni
+     * écrite, cf. StockStatutService::seuilEffectifPourSite()). Absence de ligne pour un site =
+     * repli sur le seuil global de l'organisation.
+     */
+    public function seuilsAlerte(): HasMany
+    {
+        return $this->hasMany(ProduitSeuilAlerte::class);
     }
 
     public function organization(): BelongsTo

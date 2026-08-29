@@ -15,13 +15,16 @@ use Illuminate\Support\Facades\DB;
  * constatées avant refonte (Produit::getIsLowStockAttribute() d'un côté, logique réécrite
  * inline dans ProduitController@index de l'autre, avec des résultats parfois différents).
  *
- * Règle métier actée pour ELM :
- *   - le SEUIL est configuré au niveau PRODUIT (produits.seuil_alerte_stock, repli sur
- *     parametres.seuil_stock_faible de l'organisation si null) et s'applique uniformément à
- *     toutes les variantes du produit ;
+ * Règle métier actée pour ELM (revue le 29/08/2026 — seuil par SITE, cf. ProduitSeuilAlerte) :
+ *   - le SEUIL est configuré par COUPLE (produit, site) — table produit_seuils_alerte — avec
+ *     repli sur parametres.seuil_stock_faible de l'organisation si aucune ligne n'existe pour ce
+ *     site. L'ancienne colonne produits.seuil_alerte_stock (seuil unique appliqué à tous les
+ *     sites) est conservée en base à titre historique mais n'est plus jamais lue ici ;
  *   - la QUANTITE vit au niveau VARIANTE × SITE (variante_stocks.qte_stock) ;
- *   - l'ETAT est calculé pour chaque couple VARIANTE × SITE, jamais sur un total agrégé — un
- *     stock élevé sur une variante ou un site ne doit jamais masquer un stock faible ailleurs.
+ *   - l'ETAT est calculé pour chaque couple VARIANTE × SITE, avec le seuil DE CE SITE, jamais
+ *     sur un total agrégé — un stock élevé sur une variante ou un site ne doit jamais masquer un
+ *     stock faible ailleurs, et le seuil de Matoto ne doit jamais servir à contrôler le stock de
+ *     CBA.
  *
  * RUPTURE est toujours calculée dès lors que le type du produit gère du stock, indépendamment
  * du choix "être alerté si stock faible" : c'est un fait de disponibilité (comme "Épuisé" chez
@@ -31,9 +34,19 @@ use Illuminate\Support\Facades\DB;
  */
 class StockStatutService
 {
-    public function seuilEffectif(Produit $produit): int
+    /**
+     * Seuil effectif d'un produit POUR UN SITE donné : seuil spécifique produit/site s'il existe,
+     * sinon seuil global de l'organisation. Ne lit jamais le seuil d'un autre site.
+     */
+    public function seuilEffectifPourSite(Produit $produit, string $siteId): int
     {
-        return $produit->seuil_alerte_stock ?? Parametre::getSeuilStockFaible((string) $produit->organization_id);
+        $seuils = $produit->relationLoaded('seuilsAlerte')
+            ? $produit->seuilsAlerte
+            : $produit->seuilsAlerte()->get();
+
+        $specifique = $seuils->firstWhere('site_id', $siteId)?->seuil_alerte_stock;
+
+        return $specifique ?? Parametre::getSeuilStockFaible((string) $produit->organization_id);
     }
 
     public function statutPour(int $qte, int $seuil, bool $alerteActive): StockStatut
@@ -63,30 +76,32 @@ class StockStatutService
         // physique positif mais entièrement engagé par des commandes confirmées n'est plus
         // vendable, jamais affiché "Disponible" (même règle que StockController::stockQuery()).
         $disponible = $varianteStock->qte_stock - $varianteStock->qte_reservee;
+        $seuil = $this->seuilEffectifPourSite($produit, $varianteStock->site_id);
 
-        return $this->statutPour($disponible, $this->seuilEffectif($produit), (bool) $produit->alerte_stock_active);
+        return $this->statutPour($disponible, $seuil, (bool) $produit->alerte_stock_active);
     }
 
     /**
      * Détail variante × site pour un produit — nécessite $produit chargé avec
-     * ['variantes.stocks']. Utilisé par les pages Show/Index pour afficher où se trouve
-     * précisément le problème (cf. décision : jamais masquer une alerte locale derrière un
-     * total agrégé).
+     * ['variantes.stocks', 'seuilsAlerte']. Utilisé par les pages Show/Index pour afficher où se
+     * trouve précisément le problème (cf. décision : jamais masquer une alerte locale derrière un
+     * total agrégé). Le seuil est résolu PAR SITE (cf. seuilEffectifPourSite()) : deux sites du
+     * même produit peuvent légitimement afficher des états différents pour la même quantité.
      *
-     * @return Collection<int, array{variante_id: string, variante_libelle: string, site_id: string, qte_stock: int, qte_reservee: int, qte_disponible: int, statut: string, statut_label: string}>
+     * @return Collection<int, array{variante_id: string, variante_libelle: string, site_id: string, qte_stock: int, qte_reservee: int, qte_disponible: int, seuil_effectif: int, statut: string, statut_label: string}>
      */
     public function detailParVarianteEtSite(Produit $produit): Collection
     {
-        $seuil = $this->seuilEffectif($produit);
         $alerteActive = (bool) $produit->alerte_stock_active;
         $gereStock = (bool) $produit->produitType?->gere_stock;
 
         return $produit->variantes->flatMap(
-            fn ($variante) => $variante->stocks->map(function (VarianteStock $vs) use ($variante, $seuil, $alerteActive, $gereStock) {
+            fn ($variante) => $variante->stocks->map(function (VarianteStock $vs) use ($variante, $produit, $alerteActive, $gereStock) {
                 // Disponible = physique − engagé (cf. statutPourVarianteStock()) : l'État se
                 // base toujours sur cette quantité, jamais le physique brut qte_stock (conservé
                 // ci-dessous pour l'affichage détaillé, mais plus pour le calcul de l'état).
                 $disponible = $vs->qte_stock - $vs->qte_reservee;
+                $seuil = $this->seuilEffectifPourSite($produit, $vs->site_id);
                 $statut = $gereStock ? $this->statutPour($disponible, $seuil, $alerteActive) : StockStatut::DISPONIBLE;
 
                 return [
@@ -96,6 +111,7 @@ class StockStatutService
                     'qte_stock' => $vs->qte_stock,
                     'qte_reservee' => $vs->qte_reservee,
                     'qte_disponible' => $disponible,
+                    'seuil_effectif' => $seuil,
                     'statut' => $statut->value,
                     'statut_label' => $statut->label(),
                 ];
@@ -132,12 +148,15 @@ class StockStatutService
             ->join('produit_variantes as pv', 'pv.id', '=', 'vs.produit_variante_id')
             ->join('produits as p', 'p.id', '=', 'pv.produit_id')
             ->join('produit_types as pt', 'pt.id', '=', 'p.produit_type_id')
+            ->leftJoin('produit_seuils_alerte as psa', function ($join) {
+                $join->on('psa.produit_id', '=', 'p.id')->on('psa.site_id', '=', 'vs.site_id');
+            })
             ->where('p.organization_id', $organizationId)
             ->where('p.statut', '!=', 'archive')
             ->where('pt.gere_stock', true)
             ->whereNull('p.deleted_at')
             ->whereNull('pv.deleted_at')
-            ->select('p.seuil_alerte_stock', 'p.alerte_stock_active')
+            ->select('psa.seuil_alerte_stock as seuil_specifique', 'p.alerte_stock_active')
             ->selectRaw('(vs.qte_stock - COALESCE(vs.qte_reservee, 0)) as qte_disponible')
             ->get();
 
@@ -152,7 +171,9 @@ class StockStatutService
 
                 continue;
             }
-            $seuil = $row->seuil_alerte_stock ?? $seuilOrg;
+            // Seuil du SITE de cette ligne (psa filtré sur vs.site_id ci-dessus), jamais celui
+            // d'un autre site du même produit.
+            $seuil = $row->seuil_specifique ?? $seuilOrg;
             if ($row->alerte_stock_active && $seuil > 0 && $row->qte_disponible <= $seuil) {
                 $faibles++;
             }

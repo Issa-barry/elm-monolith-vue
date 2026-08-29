@@ -6,6 +6,7 @@ use App\Models\Categorie;
 use App\Models\DroitAjustementStock;
 use App\Models\MouvementStock;
 use App\Models\Organization;
+use App\Models\ProduitSeuilAlerte;
 use App\Models\ProduitType;
 use App\Models\ProduitVariante;
 use App\Models\Site;
@@ -69,8 +70,16 @@ class StockIndexTest extends TestCase
         $produit = $this->makeProduitAvecVariante($this->organization, [
             'nom' => 'Bidon premium',
             'alerte_stock_active' => true,
-            'seuil_alerte_stock' => 5,
         ], ['sku' => 'BIDON-001']);
+        // Seuil spécifique PAR SITE (remplace l'ancien seuil unique produits.seuil_alerte_stock,
+        // désormais historique/figé) — ici uniquement sur Agence Alpha, cf. StockStatutService::
+        // seuilEffectifPourSite().
+        ProduitSeuilAlerte::create([
+            'organization_id' => $this->organization->id,
+            'produit_id' => $produit->id,
+            'site_id' => $this->siteA->id,
+            'seuil_alerte_stock' => 5,
+        ]);
         $variante = $produit->variantePrincipale()->first();
         $secondeVariante = $this->makeVariante($produit, [
             'sku' => 'BIDON-002',
