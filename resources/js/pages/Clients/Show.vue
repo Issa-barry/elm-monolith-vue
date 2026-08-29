@@ -1,18 +1,28 @@
 <script setup lang="ts">
 import DerogationImpayesCard from '@/components/DerogationImpayesCard.vue';
+import DetailHeader from '@/components/DetailHeader.vue';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatGNF, formatPhoneDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { ArrowLeft, Gift, Pencil, TrendingUp } from 'lucide-vue-next';
-import { watch } from 'vue';
-import ClientForm from './partials/ClientForm.vue';
+import {
+    ArrowLeft,
+    CircleHelp,
+    Gift,
+    Lock,
+    Pencil,
+    TrendingUp,
+    UserRound,
+} from 'lucide-vue-next';
+import InputNumber from 'primevue/inputnumber';
+import { useToast } from 'primevue/usetoast';
+import { computed, ref } from 'vue';
 
 interface ClientData {
     id: number;
     nom_complet: string;
-    email: string | null;
     telephone: string | null;
     adresse: string | null;
     ville: string | null;
@@ -21,6 +31,7 @@ interface ClientData {
     code_phone_pays: string | null;
     is_active: boolean;
     type: string;
+    type_label: string;
     cashback_eligible: boolean;
     cashback_montant_par_pack: number | null;
     derogation_impayes_autorisee: boolean;
@@ -41,223 +52,630 @@ const props = defineProps<{
 }>();
 
 const { can } = usePermissions();
+const toast = useToast();
+const activeTab = ref<'informations' | 'cashback'>('informations');
+const isRevendeur = computed(() => props.client.type === 'revendeur');
+const isEditingCashback = ref(false);
 
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
-    { title: 'Clients', href: '/backoffice/clients' },
-    {
-        title: props.client.nom_complet,
-        href: '#',
-    },
-];
-
-const form = useForm({
-    nom_complet: props.client.nom_complet,
-    email: props.client.email,
-    telephone: props.client.telephone,
-    adresse: props.client.adresse,
-    ville: props.client.ville,
-    pays: props.client.pays,
-    code_pays: props.client.code_pays,
-    code_phone_pays: props.client.code_phone_pays,
-    is_active: Boolean(props.client.is_active),
-    type: props.client.type,
+const cashbackForm = useForm({
     cashback_eligible: Boolean(props.client.cashback_eligible),
     cashback_montant_par_pack: props.client.cashback_montant_par_pack,
 });
 
-watch(
-    () => props.client,
-    (c) => {
-        form.defaults({
-            nom_complet: c.nom_complet,
-            email: c.email,
-            telephone: c.telephone,
-            adresse: c.adresse,
-            ville: c.ville,
-            pays: c.pays,
-            code_pays: c.code_pays,
-            code_phone_pays: c.code_phone_pays,
-            is_active: Boolean(c.is_active),
-            type: c.type,
-            cashback_eligible: Boolean(c.cashback_eligible),
-            cashback_montant_par_pack: c.cashback_montant_par_pack,
-        }).reset();
-    },
-);
+const breadcrumbs: BreadcrumbItem[] = [
+    { title: 'Tableau de bord', href: '/backoffice/dashboard' },
+    { title: 'Clients', href: '/backoffice/clients' },
+    { title: props.client.nom_complet, href: '#' },
+];
 
-function formatMontant(v: number): string {
-    return new Intl.NumberFormat('fr-GN').format(v) + ' GNF';
+const locationLabel = computed(() => {
+    const address = (props.client.adresse ?? '').trim();
+    const city = (props.client.ville ?? '').trim();
+
+    if (!address && !city) return '—';
+    if (!address) return city;
+    if (!city) return address;
+
+    return address + ', ' + city;
+});
+
+function flagUrl(code: string): string {
+    return 'https://flagcdn.com/20x15/' + code.toLowerCase() + '.png';
+}
+
+function startCashbackEdit(): void {
+    cashbackForm.clearErrors();
+    cashbackForm.reset();
+    isEditingCashback.value = true;
+}
+
+function cancelCashbackEdit(): void {
+    cashbackForm.clearErrors();
+    cashbackForm.reset();
+    isEditingCashback.value = false;
+}
+
+function saveCashback(): void {
+    if (isRevendeur.value) {
+        cashbackForm.cashback_eligible = true;
+    }
+
+    cashbackForm.patch('/backoffice/clients/' + props.client.id + '/cashback', {
+        preserveScroll: true,
+        onSuccess: () => {
+            cashbackForm.defaults({
+                cashback_eligible: cashbackForm.cashback_eligible,
+                cashback_montant_par_pack:
+                    cashbackForm.cashback_montant_par_pack,
+            });
+            cashbackForm.reset();
+            isEditingCashback.value = false;
+            toast.add({
+                severity: 'success',
+                summary: 'Configuration cashback',
+                detail: 'Les paramètres du client ont été enregistrés.',
+                life: 4000,
+                group: 'top',
+            });
+        },
+    });
 }
 </script>
 
 <template>
-    <Head :title="`Voir — ${client.nom_complet}`" />
+    <Head :title="client.nom_complet + ' — Détail client'" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
-        <!-- Header mobile -->
-        <div
-            class="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur-sm sm:hidden"
-        >
-            <div class="relative flex items-center justify-center px-4 py-3">
-                <Link
-                    href="/backoffice/clients"
-                    class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
-                >
-                    <ArrowLeft class="h-4 w-4" />
-                </Link>
-                <div class="text-center">
-                    <h1 class="text-[17px] leading-tight font-semibold">
-                        Voir
-                    </h1>
-                    <p class="text-[11px] text-muted-foreground">
-                        {{ client.nom_complet }}
-                    </p>
-                </div>
-                <Link
-                    v-if="can('clients.update')"
-                    :href="`/backoffice/clients/${client.id}/edit`"
-                    class="absolute right-4 inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-xs font-medium text-foreground"
-                >
-                    <Pencil class="h-3.5 w-3.5" />
-                    Modifier
-                </Link>
-            </div>
-        </div>
-
-        <div class="mx-auto max-w-2xl pb-6 sm:p-6">
-            <div class="mx-auto hidden max-w-2xl px-6 pt-6 pb-0 sm:block">
-                <div class="mb-8 flex items-start justify-between gap-3">
-                    <div>
-                        <h1 class="text-2xl font-semibold tracking-tight">
-                            Voir le client
-                        </h1>
-                        <p
-                            class="mt-1 text-sm font-medium text-muted-foreground"
+        <div class="w-full space-y-6 p-4 sm:p-6">
+            <DetailHeader
+                eyebrow="Client"
+                :title="client.nom_complet"
+                :icon="UserRound"
+                :status-label="client.is_active ? 'Actif' : 'Inactif'"
+                :status-dot-class="
+                    client.is_active
+                        ? 'bg-emerald-500'
+                        : 'bg-zinc-400 dark:bg-zinc-500'
+                "
+                data-testid="client-detail-header"
+            >
+                <template #subtitle>
+                    <div class="mt-1 flex flex-wrap items-center gap-2">
+                        <span
+                            class="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium"
+                            data-testid="client-type-badge"
                         >
-                            {{ client.nom_complet }}
-                        </p>
+                            {{ client.type_label }}
+                        </span>
+                        <span class="text-sm text-muted-foreground">
+                            {{
+                                formatPhoneDisplay(
+                                    client.telephone,
+                                    client.code_phone_pays,
+                                )
+                            }}
+                        </span>
                     </div>
-                    <Link
-                        v-if="can('clients.update')"
-                        :href="`/backoffice/clients/${client.id}/edit`"
-                    >
-                        <Button type="button" variant="outline" class="gap-2">
-                            <Pencil class="h-4 w-4" />
-                            Modifier
+                </template>
+
+                <template #actions>
+                    <Link href="/backoffice/clients">
+                        <Button variant="outline" size="sm">
+                            <ArrowLeft class="mr-1.5 h-4 w-4" />
+                            Liste des clients
                         </Button>
                     </Link>
-                </div>
-            </div>
+                </template>
+            </DetailHeader>
 
-            <!-- Widget cashback (affiché uniquement si le module est actif) -->
-            <div
-                v-if="cashback_solde !== null"
-                class="mx-6 mb-6 overflow-hidden rounded-xl border bg-card"
-            >
-                <div
-                    class="flex items-center gap-2 border-b bg-muted/30 px-4 py-2.5"
+            <div class="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+                <aside
+                    class="grid h-fit grid-cols-2 gap-2 rounded-xl border bg-card p-2 lg:block"
+                    aria-label="Sections de la fiche client"
+                    data-testid="client-detail-navigation"
                 >
-                    <Gift class="h-4 w-4 text-primary" />
-                    <span class="text-sm font-semibold">Cashback</span>
-                </div>
-                <div class="grid grid-cols-2 divide-x sm:grid-cols-4">
-                    <div class="px-4 py-3 text-center">
-                        <p class="text-xs text-muted-foreground">
-                            Cumul achats
-                        </p>
-                        <p class="mt-0.5 text-sm font-semibold">
-                            {{ formatMontant(cashback_solde.cumul_achats) }}
-                        </p>
-                    </div>
-                    <div class="px-4 py-3 text-center">
-                        <p class="text-xs text-muted-foreground">En attente</p>
-                        <p
-                            class="mt-0.5 text-sm font-semibold"
-                            :class="
-                                cashback_solde.cashback_en_attente > 0
-                                    ? 'text-amber-600'
-                                    : ''
-                            "
-                        >
-                            {{
-                                formatMontant(
-                                    cashback_solde.cashback_en_attente,
-                                )
-                            }}
-                        </p>
-                    </div>
-                    <div class="px-4 py-3 text-center">
-                        <p class="text-xs text-muted-foreground">Total gagné</p>
-                        <p class="mt-0.5 text-sm font-semibold text-primary">
-                            {{
-                                formatMontant(
-                                    cashback_solde.total_cashback_gagne,
-                                )
-                            }}
-                        </p>
-                    </div>
-                    <div class="px-4 py-3 text-center">
-                        <p class="text-xs text-muted-foreground">Total versé</p>
-                        <p class="mt-0.5 text-sm font-semibold text-green-600">
-                            {{
-                                formatMontant(
-                                    cashback_solde.total_cashback_verse,
-                                )
-                            }}
-                        </p>
-                    </div>
-                </div>
-                <!-- Paramétrage courant — purement informatif, jamais utilisé pour recalculer
-                     l'historique ci-dessus (cf. CashbackTransaction.montant_unitaire_snapshot,
-                     seule source de vérité pour un gain déjà généré). -->
-                <div class="border-t px-4 py-2 text-xs text-muted-foreground">
-                    <template v-if="client.cashback_eligible">
-                        Cashback actif —
-                        {{
-                            client.cashback_montant_par_pack !== null
-                                ? `${formatMontant(client.cashback_montant_par_pack)} / pack`
-                                : 'montant non configuré'
-                        }}
-                    </template>
-                    <template v-else>Cashback désactivé</template>
-                </div>
-                <div
-                    v-if="cashback_solde.cashback_en_attente > 0"
-                    class="border-t bg-amber-50 px-4 py-2 text-xs text-amber-700"
-                >
-                    <TrendingUp class="mr-1 inline h-3 w-3" />
-                    Ce client a un cashback de
-                    <strong>{{
-                        formatMontant(cashback_solde.cashback_en_attente)
-                    }}</strong>
-                    à verser.
-                    <a
-                        href="/backoffice/cashback"
-                        class="ml-1 underline hover:no-underline"
-                        >Gérer →</a
+                    <button
+                        type="button"
+                        class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+                        :class="
+                            activeTab === 'informations'
+                                ? 'bg-primary text-primary-foreground'
+                                : 'text-muted-foreground hover:bg-muted'
+                        "
+                        data-testid="client-informations-tab"
+                        @click="activeTab = 'informations'"
                     >
+                        <span class="inline-flex items-center gap-2">
+                            <CircleHelp class="h-4 w-4" />
+                            Informations
+                        </span>
+                    </button>
+
+                    <button
+                        type="button"
+                        class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors lg:mt-2"
+                        :class="
+                            activeTab === 'cashback'
+                                ? 'bg-primary text-primary-foreground'
+                                : 'text-muted-foreground hover:bg-muted'
+                        "
+                        data-testid="client-cashback-tab"
+                        @click="activeTab = 'cashback'"
+                    >
+                        <span class="inline-flex items-center gap-2">
+                            <Gift class="h-4 w-4" />
+                            Cashback
+                        </span>
+                    </button>
+                </aside>
+
+                <div
+                    v-if="activeTab === 'informations'"
+                    class="rounded-xl border bg-card p-5 sm:p-6"
+                    data-testid="client-informations-panel"
+                >
+                    <div class="flex items-center justify-between gap-3">
+                        <h2
+                            class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                        >
+                            Informations du client
+                        </h2>
+                        <Link
+                            v-if="can('clients.update')"
+                            :href="'/backoffice/clients/' + client.id + '/edit'"
+                            data-testid="client-edit-button"
+                        >
+                            <Button size="sm" variant="outline">
+                                <Pencil class="mr-1.5 h-4 w-4" />
+                                Modifier
+                            </Button>
+                        </Link>
+                    </div>
+
+                    <div class="mt-5 grid gap-4 sm:grid-cols-2">
+                        <div class="rounded-lg border bg-background p-4">
+                            <p class="text-xs text-muted-foreground">
+                                Nom complet
+                            </p>
+                            <p
+                                class="mt-1 text-sm font-medium"
+                                data-testid="client-name"
+                            >
+                                {{ client.nom_complet }}
+                            </p>
+                        </div>
+
+                        <div class="rounded-lg border bg-background p-4">
+                            <p class="text-xs text-muted-foreground">
+                                Nature du client
+                            </p>
+                            <p
+                                class="mt-1 text-sm font-medium"
+                                data-testid="client-type"
+                            >
+                                {{ client.type_label }}
+                            </p>
+                        </div>
+
+                        <div class="rounded-lg border bg-background p-4">
+                            <p class="text-xs text-muted-foreground">
+                                Téléphone
+                            </p>
+                            <p
+                                class="mt-1 text-sm font-medium"
+                                data-testid="client-phone"
+                            >
+                                {{
+                                    formatPhoneDisplay(
+                                        client.telephone,
+                                        client.code_phone_pays,
+                                    )
+                                }}
+                            </p>
+                        </div>
+
+                        <div class="rounded-lg border bg-background p-4">
+                            <p class="text-xs text-muted-foreground">
+                                Localisation
+                            </p>
+                            <div class="mt-1 flex items-center gap-2">
+                                <img
+                                    v-if="client.code_pays"
+                                    :src="flagUrl(client.code_pays)"
+                                    :alt="client.pays ?? 'Pays du client'"
+                                    class="h-4 w-auto rounded-sm shadow-sm"
+                                />
+                                <p
+                                    class="text-sm font-medium"
+                                    data-testid="client-location"
+                                >
+                                    {{ locationLabel }}
+                                </p>
+                            </div>
+                            <p class="mt-1 text-xs text-muted-foreground">
+                                {{ client.pays || 'Pays non renseigné' }}
+                            </p>
+                        </div>
+
+                        <DerogationImpayesCard
+                            class="sm:col-span-2"
+                            :active="client.derogation_impayes_autorisee"
+                            :seuil="client.seuil_derogation_impayes"
+                            :seuil-global="seuil_global_impayes"
+                            :update-url="
+                                '/backoffice/clients/' +
+                                client.id +
+                                '/derogation-impayes'
+                            "
+                            :can-update="can('clients.update')"
+                            entite-label="ce client"
+                        />
+                    </div>
+                </div>
+
+                <div
+                    v-else
+                    class="space-y-6"
+                    data-testid="client-cashback-panel"
+                >
+                    <div
+                        v-if="cashback_solde !== null"
+                        class="rounded-xl border bg-card p-5 sm:p-6"
+                    >
+                        <div>
+                            <h2
+                                class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                            >
+                                Synthèse cashback
+                            </h2>
+                            <p class="mt-1 text-sm text-muted-foreground">
+                                Vue d'ensemble des achats et des gains de ce
+                                client.
+                            </p>
+                        </div>
+
+                        <div
+                            class="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+                        >
+                            <div class="rounded-lg border bg-background p-4">
+                                <p class="text-xs text-muted-foreground">
+                                    Cumul des achats
+                                </p>
+                                <p
+                                    class="mt-1 text-lg font-semibold tabular-nums"
+                                    data-testid="cashback-purchases-total"
+                                >
+                                    {{ formatGNF(cashback_solde.cumul_achats) }}
+                                </p>
+                            </div>
+                            <div class="rounded-lg border bg-background p-4">
+                                <p class="text-xs text-muted-foreground">
+                                    En attente
+                                </p>
+                                <p
+                                    class="mt-1 text-lg font-semibold tabular-nums"
+                                    :class="
+                                        cashback_solde.cashback_en_attente > 0
+                                            ? 'text-amber-600 dark:text-amber-400'
+                                            : ''
+                                    "
+                                    data-testid="cashback-pending-total"
+                                >
+                                    {{
+                                        formatGNF(
+                                            cashback_solde.cashback_en_attente,
+                                        )
+                                    }}
+                                </p>
+                            </div>
+                            <div class="rounded-lg border bg-background p-4">
+                                <p class="text-xs text-muted-foreground">
+                                    Total gagné
+                                </p>
+                                <p
+                                    class="mt-1 text-lg font-semibold text-primary tabular-nums"
+                                    data-testid="cashback-earned-total"
+                                >
+                                    {{
+                                        formatGNF(
+                                            cashback_solde.total_cashback_gagne,
+                                        )
+                                    }}
+                                </p>
+                            </div>
+                            <div class="rounded-lg border bg-background p-4">
+                                <p class="text-xs text-muted-foreground">
+                                    Total versé
+                                </p>
+                                <p
+                                    class="mt-1 text-lg font-semibold text-emerald-600 tabular-nums dark:text-emerald-400"
+                                    data-testid="cashback-paid-total"
+                                >
+                                    {{
+                                        formatGNF(
+                                            cashback_solde.total_cashback_verse,
+                                        )
+                                    }}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div
+                            v-if="cashback_solde.cashback_en_attente > 0"
+                            class="mt-4 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+                            data-testid="cashback-pending-alert"
+                        >
+                            <p class="flex items-start gap-2">
+                                <TrendingUp class="mt-0.5 h-4 w-4 shrink-0" />
+                                <span>
+                                    <strong>{{
+                                        formatGNF(
+                                            cashback_solde.cashback_en_attente,
+                                        )
+                                    }}</strong>
+                                    de cashback sont à verser à ce client.
+                                </span>
+                            </p>
+                            <Link
+                                href="/backoffice/cashback"
+                                class="shrink-0 font-medium underline underline-offset-4 hover:no-underline"
+                            >
+                                Gérer le cashback
+                            </Link>
+                        </div>
+                    </div>
+
+                    <div
+                        v-else
+                        class="rounded-xl border bg-card p-5 sm:p-6"
+                        data-testid="cashback-module-disabled"
+                    >
+                        <div
+                            class="flex min-h-40 flex-col items-center justify-center rounded-lg border border-dashed p-6 text-center"
+                        >
+                            <Gift class="h-8 w-8 text-muted-foreground/60" />
+                            <h2 class="mt-3 text-sm font-semibold">
+                                Module cashback désactivé
+                            </h2>
+                            <p
+                                class="mt-1 max-w-md text-sm text-muted-foreground"
+                            >
+                                La synthèse cashback n'est pas disponible pour
+                                cette organisation.
+                            </p>
+                        </div>
+                    </div>
+
+                    <form
+                        class="rounded-xl border bg-card p-5 sm:p-6"
+                        data-testid="cashback-configuration-form"
+                        @submit.prevent="saveCashback"
+                    >
+                        <div
+                            class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
+                        >
+                            <div>
+                                <h2
+                                    class="text-sm font-semibold tracking-wider text-muted-foreground uppercase"
+                                >
+                                    Configuration cashback
+                                </h2>
+                                <p class="mt-1 text-sm text-muted-foreground">
+                                    Paramétrage actuellement appliqué à ce
+                                    client.
+                                </p>
+                            </div>
+
+                            <div
+                                v-if="can('clients.update')"
+                                class="flex shrink-0 items-center gap-2"
+                            >
+                                <Button
+                                    v-if="!isEditingCashback"
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    data-testid="cashback-edit-button"
+                                    @click="startCashbackEdit"
+                                >
+                                    <Pencil class="mr-1.5 h-4 w-4" />
+                                    Modifier
+                                </Button>
+                                <template v-else>
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        :disabled="cashbackForm.processing"
+                                        data-testid="cashback-cancel-button"
+                                        @click="cancelCashbackEdit"
+                                    >
+                                        Annuler
+                                    </Button>
+                                    <Button
+                                        type="submit"
+                                        size="sm"
+                                        :disabled="
+                                            cashbackForm.processing ||
+                                            !cashbackForm.isDirty
+                                        "
+                                        data-testid="cashback-save-button"
+                                    >
+                                        {{
+                                            cashbackForm.processing
+                                                ? 'Enregistrement…'
+                                                : 'Enregistrer'
+                                        }}
+                                    </Button>
+                                </template>
+                            </div>
+                        </div>
+
+                        <div class="mt-5 grid gap-4 md:grid-cols-2">
+                            <div class="rounded-lg border bg-background p-4">
+                                <p class="text-sm font-medium">
+                                    Éligible au cashback
+                                </p>
+
+                                <div v-if="isRevendeur" class="mt-2">
+                                    <span
+                                        class="inline-flex items-center gap-1.5 text-sm font-medium text-primary"
+                                        data-testid="cashback-revendeur-locked"
+                                    >
+                                        <Lock class="h-3.5 w-3.5" />
+                                        Oui — obligatoire
+                                    </span>
+                                </div>
+
+                                <div
+                                    v-else
+                                    class="mt-2 inline-flex gap-1 rounded-lg border bg-muted/40 p-1"
+                                    role="radiogroup"
+                                    aria-label="Éligible au cashback"
+                                >
+                                    <label
+                                        class="rounded-md px-5 py-1.5 text-sm font-medium transition-colors"
+                                        :class="[
+                                            cashbackForm.cashback_eligible
+                                                ? 'bg-primary text-primary-foreground shadow-sm'
+                                                : 'text-muted-foreground',
+                                            isEditingCashback
+                                                ? 'cursor-pointer hover:text-foreground'
+                                                : 'cursor-default',
+                                        ]"
+                                    >
+                                        <input
+                                            v-model="
+                                                cashbackForm.cashback_eligible
+                                            "
+                                            class="sr-only"
+                                            type="radio"
+                                            :value="true"
+                                            :disabled="
+                                                cashbackForm.processing ||
+                                                !isEditingCashback
+                                            "
+                                            data-testid="cashback-eligible-yes"
+                                            @change="cashbackForm.clearErrors()"
+                                        />
+                                        Oui
+                                    </label>
+                                    <label
+                                        class="rounded-md px-5 py-1.5 text-sm font-medium transition-colors"
+                                        :class="[
+                                            !cashbackForm.cashback_eligible
+                                                ? 'bg-destructive text-white shadow-sm'
+                                                : 'text-muted-foreground',
+                                            isEditingCashback
+                                                ? 'cursor-pointer hover:text-foreground'
+                                                : 'cursor-default',
+                                        ]"
+                                    >
+                                        <input
+                                            v-model="
+                                                cashbackForm.cashback_eligible
+                                            "
+                                            class="sr-only"
+                                            type="radio"
+                                            :value="false"
+                                            :disabled="
+                                                cashbackForm.processing ||
+                                                !isEditingCashback
+                                            "
+                                            data-testid="cashback-eligible-no"
+                                            @change="cashbackForm.clearErrors()"
+                                        />
+                                        Non
+                                    </label>
+                                </div>
+
+                                <p
+                                    v-if="cashbackForm.errors.cashback_eligible"
+                                    class="mt-1.5 text-xs text-destructive"
+                                >
+                                    {{ cashbackForm.errors.cashback_eligible }}
+                                </p>
+                            </div>
+
+                            <div class="rounded-lg border bg-background p-4">
+                                <label
+                                    for="cashback_montant_par_pack_show"
+                                    class="text-sm font-medium"
+                                >
+                                    Montant cashback par pack
+                                    <span class="text-destructive">*</span>
+                                </label>
+                                <div
+                                    class="mt-2 flex max-w-sm items-center gap-2"
+                                >
+                                    <InputNumber
+                                        v-model="
+                                            cashbackForm.cashback_montant_par_pack
+                                        "
+                                        input-id="cashback_montant_par_pack_show"
+                                        :min="1"
+                                        :use-grouping="true"
+                                        locale="fr-GN"
+                                        class="w-full"
+                                        input-class="w-full"
+                                        :disabled="
+                                            cashbackForm.processing ||
+                                            !isEditingCashback ||
+                                            (!isRevendeur &&
+                                                !cashbackForm.cashback_eligible)
+                                        "
+                                        :class="{
+                                            'p-invalid':
+                                                cashbackForm.errors
+                                                    .cashback_montant_par_pack,
+                                        }"
+                                        data-testid="cashback-amount-per-pack"
+                                        @update:model-value="
+                                            cashbackForm.clearErrors(
+                                                'cashback_montant_par_pack',
+                                            )
+                                        "
+                                    />
+                                    <span
+                                        class="shrink-0 text-sm text-muted-foreground"
+                                        >GNF</span
+                                    >
+                                </div>
+                                <p
+                                    v-if="
+                                        cashbackForm.errors
+                                            .cashback_montant_par_pack
+                                    "
+                                    class="mt-1.5 text-xs text-destructive"
+                                >
+                                    {{
+                                        cashbackForm.errors
+                                            .cashback_montant_par_pack
+                                    }}
+                                </p>
+                                <p
+                                    v-else
+                                    class="mt-1.5 text-xs text-muted-foreground"
+                                >
+                                    {{
+                                        cashbackForm.cashback_eligible
+                                            ? 'Montant attribué pour chaque pack éligible.'
+                                            : 'Activez le cashback pour modifier ce montant.'
+                                    }}
+                                </p>
+                            </div>
+                        </div>
+
+                        <p
+                            class="mt-5 border-t pt-4 text-xs text-muted-foreground"
+                        >
+                            Les montants déjà gagnés conservent leur valeur
+                            historique ; ce paramétrage concerne les prochains
+                            gains.
+                        </p>
+                    </form>
                 </div>
             </div>
-
-            <div class="mx-6 mb-6">
-                <DerogationImpayesCard
-                    :active="client.derogation_impayes_autorisee"
-                    :seuil="client.seuil_derogation_impayes"
-                    :seuil-global="seuil_global_impayes"
-                    :update-url="`/backoffice/clients/${client.id}/derogation-impayes`"
-                    :can-update="can('clients.update')"
-                    entite-label="ce client"
-                />
-            </div>
-
-            <ClientForm
-                :form="form"
-                :errors="{}"
-                :processing="false"
-                :readonly="true"
-                @update:form="Object.assign(form, $event)"
-            />
         </div>
     </AppLayout>
 </template>

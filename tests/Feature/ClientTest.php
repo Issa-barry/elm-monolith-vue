@@ -669,6 +669,90 @@ class ClientTest extends TestCase
         ]);
     }
 
+    // ── Configuration cashback depuis la fiche client ────────────────────────
+
+    public function test_update_cashback_depuis_la_fiche_active_le_cashback(): void
+    {
+        $client = Client::factory()->create([
+            'organization_id' => $this->org->id,
+            'type' => 'externe',
+            'cashback_eligible' => false,
+            'cashback_montant_par_pack' => null,
+        ]);
+
+        $this->actingAs($this->user)
+            ->from(route('clients.show', $client))
+            ->patch(route('clients.cashback.update', $client), [
+                'cashback_eligible' => true,
+                'cashback_montant_par_pack' => 450,
+            ])
+            ->assertRedirect(route('clients.show', $client))
+            ->assertSessionHas('success', 'Configuration cashback mise à jour.');
+
+        $this->assertDatabaseHas('clients', [
+            'id' => $client->id,
+            'cashback_eligible' => true,
+            'cashback_montant_par_pack' => 450,
+        ]);
+    }
+
+    public function test_update_cashback_depuis_la_fiche_refuse_un_montant_absent(): void
+    {
+        $client = Client::factory()->create([
+            'organization_id' => $this->org->id,
+            'type' => 'externe',
+            'cashback_eligible' => false,
+            'cashback_montant_par_pack' => null,
+        ]);
+
+        $this->actingAs($this->user)
+            ->patch(route('clients.cashback.update', $client), [
+                'cashback_eligible' => true,
+                'cashback_montant_par_pack' => null,
+            ])
+            ->assertSessionHasErrors('cashback_montant_par_pack');
+
+        $this->assertFalse($client->fresh()->cashback_eligible);
+    }
+
+    public function test_update_cashback_depuis_la_fiche_refuse_de_desactiver_un_revendeur(): void
+    {
+        $client = Client::factory()->create([
+            'organization_id' => $this->org->id,
+            'type' => 'revendeur',
+            'cashback_eligible' => true,
+            'cashback_montant_par_pack' => 300,
+        ]);
+
+        $this->actingAs($this->user)
+            ->patch(route('clients.cashback.update', $client), [
+                'cashback_eligible' => false,
+                'cashback_montant_par_pack' => 300,
+            ])
+            ->assertSessionHasErrors('cashback_eligible');
+
+        $this->assertTrue($client->fresh()->cashback_eligible);
+    }
+
+    public function test_update_cashback_depuis_la_fiche_est_isole_par_organisation(): void
+    {
+        $otherOrg = Organization::factory()->create();
+        $client = Client::factory()->create([
+            'organization_id' => $otherOrg->id,
+            'type' => 'externe',
+            'cashback_eligible' => false,
+        ]);
+
+        $this->actingAs($this->user)
+            ->patch(route('clients.cashback.update', $client), [
+                'cashback_eligible' => true,
+                'cashback_montant_par_pack' => 450,
+            ])
+            ->assertStatus(403);
+
+        $this->assertFalse($client->fresh()->cashback_eligible);
+    }
+
     public function test_soft_deleted_telephone_can_be_reused(): void
     {
         $client = Client::factory()->create([

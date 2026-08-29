@@ -189,6 +189,8 @@ Route::prefix('backoffice')->group(function () {
 
         // Clients
         Route::resource('clients', ClientController::class);
+        Route::patch('clients/{client}/cashback', [ClientController::class, 'updateCashback'])
+            ->name('clients.cashback.update');
         Route::patch('clients/{client}/derogation-impayes', [ClientController::class, 'updateDerogation'])
             ->name('clients.derogation-impayes.update');
         // Véhicules partenaire (Client::type = PARTENAIRE) — hors flotte gérée, cf. ClientVehicle.
