@@ -10,6 +10,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import RoleBadges from '@/components/users/RoleBadges.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/vue3';
@@ -34,10 +35,14 @@ interface Account {
     is_active: boolean;
     email_verified: boolean;
     type: 'agent' | 'client' | 'inscrit';
+    roles: string[];
     created_at: string | null;
 }
 
-const props = defineProps<{ accounts: Account[] }>();
+const props = defineProps<{
+    accounts: Account[];
+    role_labels: Record<string, string>;
+}>();
 
 const confirm = useConfirm();
 const toast = useToast();
@@ -305,6 +310,16 @@ function confirmToggle(a: Account) {
                             >
                                 {{ TYPE_LABELS[data.type] }}
                             </span>
+                        </template>
+                    </Column>
+
+                    <!-- Rôle -->
+                    <Column field="roles" header="Rôle" style="width: 180px">
+                        <template #body="{ data }">
+                            <RoleBadges
+                                :roles="data.roles"
+                                :role-labels="props.role_labels"
+                            />
                         </template>
                     </Column>
 

@@ -7,15 +7,23 @@ use App\Models\CashbackTransaction;
 use App\Models\CashbackVersement;
 use App\Models\Client;
 use App\Models\CommandeVente;
-use App\Models\Parametre;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
 class CashbackService
 {
     /**
-     * Déclenché au paiement complet de la facture (EncaissementVenteController).
-     * Incrémente le cumul et crée un gain si le seuil est atteint.
+     * Déclenché au paiement complet de la facture (EncaissementVenteController) — moment
+     * inchangé (CASHBACK-006, cf. docs/cashback.md), seule la FORMULE change (décision produit
+     * du 28/08/2026, EN REMPLACEMENT du modèle à seuil d'achat global/gain fixe qui prévalait
+     * jusque-là, cf. Parametre::CLE_CASHBACK_SEUIL_ACHAT/CLE_CASHBACK_MONTANT_GAIN, désormais
+     * inertes — plus aucun code ne les lit).
+     *
+     * Cashback traité comme une commission propre au CLIENT (CASHBACK-002) : chaque client
+     * éligible porte son propre montant fixe par pack (Client::cashback_montant_par_pack),
+     * appliqué à la quantité éligible de CETTE vente — jamais de seuil cumulatif, jamais de
+     * montant global d'organisation. Une vente sans le moindre pack éligible (produit non
+     * fabricable, quantité nulle) ne génère aucun cashback, sans lever d'erreur.
      */
     public function processVente(CommandeVente $vente): void
     {
@@ -29,21 +37,20 @@ class CashbackService
             return;
         }
 
+        $montantUnitaire = (int) ($client->cashback_montant_par_pack ?? 0);
+        if ($montantUnitaire <= 0) {
+            return;
+        }
+
+        $quantiteEligible = $this->quantiteEligible($vente);
+        if ($quantiteEligible <= 0) {
+            return;
+        }
+
         $orgId = $vente->organization_id;
-        $montant = (int) $vente->total_commande;
+        $montantTotal = $quantiteEligible * $montantUnitaire;
 
-        if ($montant <= 0) {
-            return;
-        }
-
-        $seuil = Parametre::getCashbackSeuilAchat($orgId);
-        $gain = Parametre::getCashbackMontantGain($orgId);
-
-        if ($seuil <= 0 || $gain <= 0) {
-            return;
-        }
-
-        DB::transaction(function () use ($vente, $orgId, $montant, $seuil, $gain) {
+        DB::transaction(function () use ($vente, $orgId, $montantUnitaire, $quantiteEligible, $montantTotal) {
             $alreadyProcessed = CashbackTransaction::where('vente_id', $vente->id)
                 ->where('type', CashbackTransaction::TYPE_GAIN)
                 ->lockForUpdate()
@@ -58,26 +65,44 @@ class CashbackService
                 ['cumul_achats' => 0, 'cashback_en_attente' => 0, 'total_cashback_gagne' => 0, 'total_cashback_verse' => 0],
             );
 
-            $solde->cumul_achats += $montant;
+            // Indicateur purement informatif désormais (widget "Cumul achats" de la fiche
+            // client) — ne déclenche plus rien et n'est plus jamais remis à zéro (l'ancien
+            // modèle à seuil le réinitialisait à chaque gain).
+            $solde->cumul_achats += (int) $vente->total_commande;
 
-            if ($solde->cumul_achats >= $seuil) {
-                CashbackTransaction::create([
-                    'organization_id' => $orgId,
-                    'client_id' => $vente->client_id,
-                    'type' => CashbackTransaction::TYPE_GAIN,
-                    'montant' => $gain,
-                    'montant_verse' => 0,
-                    'statut' => CashbackTransaction::STATUT_EN_ATTENTE,
-                    'vente_id' => $vente->id,
-                ]);
+            CashbackTransaction::create([
+                'organization_id' => $orgId,
+                'client_id' => $vente->client_id,
+                'type' => CashbackTransaction::TYPE_GAIN,
+                'montant' => $montantTotal,
+                'montant_unitaire_snapshot' => $montantUnitaire,
+                'quantite_eligible_snapshot' => $quantiteEligible,
+                'montant_verse' => 0,
+                'statut' => CashbackTransaction::STATUT_EN_ATTENTE,
+                'vente_id' => $vente->id,
+            ]);
 
-                $solde->cashback_en_attente += $gain;
-                $solde->total_cashback_gagne += $gain;
-                $solde->cumul_achats = 0;
-            }
-
+            $solde->cashback_en_attente += $montantTotal;
+            $solde->total_cashback_gagne += $montantTotal;
             $solde->save();
         });
+    }
+
+    /**
+     * Quantité de packs ouvrant droit au cashback pour cette vente — réutilise le même repère
+     * métier que la tarification par nature de client (PrixVenteNatureResolver::estFabricable()) :
+     * seules les lignes de produits fabricables comptent, jamais un matériel/service facturé
+     * accessoirement sur la même commande. Préfère la quantité réellement livrée quand un
+     * chargement véhicule a eu lieu (cf. CommandeVenteLigne::quantite_livree), sinon la quantité
+     * demandée (vente directe client, sans étape de chargement/livraison).
+     */
+    private function quantiteEligible(CommandeVente $vente): int
+    {
+        $vente->loadMissing('lignes.variante.produit.produitType');
+
+        return (int) $vente->lignes
+            ->filter(fn ($ligne) => $ligne->variante && PrixVenteNatureResolver::estFabricable($ligne->variante))
+            ->sum(fn ($ligne) => (int) ($ligne->quantite_livree ?? $ligne->quantite_demandee));
     }
 
     /**

@@ -79,6 +79,8 @@ export interface NavItem {
     isActive?: boolean;
     badge?: number;
     items?: NavItem[];
+    /** Groupe fonctionnel affiché comme label de section dans la sidebar (top-level uniquement). */
+    group?: string;
 }
 
 export type ModuleFlagKey =

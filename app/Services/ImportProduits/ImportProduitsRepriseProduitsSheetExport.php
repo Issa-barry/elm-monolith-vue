@@ -62,6 +62,9 @@ class ImportProduitsRepriseProduitsSheetExport implements FromArray, WithEvents,
                     $variante?->prix_usine,
                     $variante?->prix_usine_tricycle,
                     $variante?->prix_vente,
+                    $variante?->prix_externe,
+                    $variante?->prix_revendeur,
+                    $variante?->prix_distributeur,
                     $variante?->cout,
                     $produit->alerte_stock_active ? 'oui' : 'non',
                     $produit->seuil_alerte_stock,
@@ -79,7 +82,7 @@ class ImportProduitsRepriseProduitsSheetExport implements FromArray, WithEvents,
             AfterSheet::class => function (AfterSheet $event): void {
                 $sheet = $event->sheet->getDelegate();
                 $sheet->freezePane('A2');
-                $sheet->setAutoFilter('A1:O1');
+                $sheet->setAutoFilter('A1:R1');
                 foreach (['A', 'C', 'D', 'E', 'G'] as $col) {
                     $sheet->getStyle("{$col}2:{$col}501")->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_TEXT);
                 }

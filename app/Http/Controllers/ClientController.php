@@ -7,6 +7,9 @@ use App\Features\ModuleFeature;
 use App\Models\CashbackSolde;
 use App\Models\Client;
 use App\Models\Organization;
+use App\Models\Parametre;
+use App\Services\CashbackEligibiliteService;
+use App\Services\DerogationImpayesService;
 use App\Traits\PhoneHandlerTrait;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -77,7 +80,15 @@ class ClientController extends Controller
             'is_active' => 'boolean',
             'type' => ['nullable', Rule::in(ClientType::values())],
             'cashback_eligible' => 'boolean',
+            'cashback_montant_par_pack' => 'nullable|integer|min:1',
         ], $this->validationMessages());
+
+        $data = CashbackEligibiliteService::resoudreEligibilite($data);
+        CashbackEligibiliteService::validerCoherence(
+            $data['type'] ?? ClientType::EXTERNE->value,
+            (bool) ($data['cashback_eligible'] ?? false),
+            $data['cashback_montant_par_pack'] ?? null,
+        );
 
         // Règle métier : Guinée → Conakry par défaut
         if (empty($data['ville']) && ($data['code_pays'] ?? null) === 'GN') {
@@ -154,9 +165,13 @@ class ClientController extends Controller
                 'type' => $client->type->value,
                 'type_label' => $client->type->label(),
                 'cashback_eligible' => $client->cashback_eligible,
+                'cashback_montant_par_pack' => $client->cashback_montant_par_pack,
+                'derogation_impayes_autorisee' => $client->derogation_impayes_autorisee,
+                'seuil_derogation_impayes' => $client->seuil_derogation_impayes,
             ],
             'types' => ClientType::options(),
             'cashback_solde' => $cashbackSolde,
+            'seuil_global_impayes' => Parametre::getVentesSeuilImpayesMax($client->organization_id),
         ]);
     }
 
@@ -210,8 +225,12 @@ class ClientController extends Controller
                 'type' => $client->type->value,
                 'type_label' => $client->type->label(),
                 'cashback_eligible' => $client->cashback_eligible,
+                'cashback_montant_par_pack' => $client->cashback_montant_par_pack,
+                'derogation_impayes_autorisee' => $client->derogation_impayes_autorisee,
+                'seuil_derogation_impayes' => $client->seuil_derogation_impayes,
             ],
             'types' => ClientType::options(),
+            'seuil_global_impayes' => Parametre::getVentesSeuilImpayesMax($client->organization_id),
             'vehicules' => $client->vehicules()->get(['id', 'nom_vehicule', 'immatriculation', 'chauffeur_nom', 'chauffeur_telephone', 'chauffeur_code_pays'])
                 ->map(fn ($v) => [
                     'id' => $v->id,
@@ -239,7 +258,15 @@ class ClientController extends Controller
             'is_active' => 'boolean',
             'type' => ['nullable', Rule::in(ClientType::values())],
             'cashback_eligible' => 'boolean',
+            'cashback_montant_par_pack' => 'nullable|integer|min:1',
         ], $this->validationMessages());
+
+        $data = CashbackEligibiliteService::resoudreEligibilite($data);
+        CashbackEligibiliteService::validerCoherence(
+            $data['type'] ?? $client->type->value,
+            (bool) ($data['cashback_eligible'] ?? $client->cashback_eligible),
+            $data['cashback_montant_par_pack'] ?? $client->cashback_montant_par_pack,
+        );
 
         // Règle métier : Guinée → Conakry par défaut
         if (empty($data['ville']) && ($data['code_pays'] ?? null) === 'GN') {
@@ -264,6 +291,72 @@ class ClientController extends Controller
 
         return redirect()->route('clients.edit', $client)
             ->with('success', 'Client mis à jour avec succès.');
+    }
+
+    /**
+     * Met à jour uniquement la configuration cashback depuis la fiche client, sans réémettre
+     * les autres informations du client. La même règle métier que le formulaire complet reste
+     * appliquée : un Revendeur ne peut pas être désactivé et tout cashback actif exige un
+     * montant par pack strictement positif.
+     */
+    public function updateCashback(Request $request, Client $client): RedirectResponse
+    {
+        $this->authorize('update', $client);
+
+        $data = $request->validate([
+            'cashback_eligible' => 'required|boolean',
+            'cashback_montant_par_pack' => 'nullable|integer|min:1',
+        ]);
+
+        CashbackEligibiliteService::validerCoherence(
+            $client->type->value,
+            (bool) $data['cashback_eligible'],
+            $data['cashback_montant_par_pack'] ?? null,
+        );
+
+        $client->update([
+            'cashback_eligible' => $data['cashback_eligible'],
+            'cashback_montant_par_pack' => $data['cashback_montant_par_pack'] ?? null,
+        ]);
+
+        return back()->with('success', 'Configuration cashback mise à jour.');
+    }
+
+    /**
+     * Active/désactive la dérogation ET son plafond, atomiquement, directement depuis la fiche
+     * client (Clients/Show.vue) — même schéma que VehiculeController::updateDerogation(), même
+     * règle de cohérence (DerogationImpayesService, mutualisée). `seuil_derogation_impayes` est
+     * facultatif dans la requête : omis, le plafond déjà enregistré en base est conservé tel
+     * quel (ex: réactiver une dérogation précédemment désactivée sans ressaisir son montant).
+     */
+    public function updateDerogation(Request $request, Client $client): RedirectResponse
+    {
+        $this->authorize('update', $client);
+
+        $data = $request->validate([
+            'derogation_impayes_autorisee' => 'required|boolean',
+            'seuil_derogation_impayes' => 'nullable|integer|min:0|max:999999999',
+        ]);
+
+        $seuil = array_key_exists('seuil_derogation_impayes', $data) && $request->filled('seuil_derogation_impayes')
+            ? $data['seuil_derogation_impayes']
+            : $client->seuil_derogation_impayes;
+
+        DerogationImpayesService::validerCoherence(
+            $data['derogation_impayes_autorisee'],
+            $seuil,
+            $client->organization_id,
+            'ce client',
+        );
+
+        $client->update([
+            'derogation_impayes_autorisee' => $data['derogation_impayes_autorisee'],
+            'seuil_derogation_impayes' => $seuil,
+        ]);
+
+        $label = $data['derogation_impayes_autorisee'] ? 'activée' : 'désactivée';
+
+        return back()->with('success', "Dérogation impayés {$label}.");
     }
 
     public function destroy(Client $client): RedirectResponse

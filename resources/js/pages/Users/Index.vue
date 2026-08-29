@@ -12,6 +12,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import RoleBadges from '@/components/users/RoleBadges.vue';
 import ValidateAccountModal from '@/components/users/ValidateAccountModal.vue';
 import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -25,7 +26,6 @@ import {
     MoreVertical,
     Pencil,
     Plus,
-    Shield,
     Trash2,
     UserCircle,
     XCircle,
@@ -88,35 +88,6 @@ const page = usePage();
 const isSuperAdmin = computed(() =>
     (page.props as any).auth?.roles?.includes('super_admin'),
 );
-
-const ROLE_LABELS: Record<string, string> = {
-    super_admin: 'Super administrateur',
-    admin_entreprise: 'Administrateur',
-    manager: 'Manager',
-    commerciale: 'Commercial(e)',
-    comptable: 'Comptable',
-};
-
-const ROLE_COLORS: Record<string, string> = {
-    super_admin:
-        'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-    admin_entreprise:
-        'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-    manager:
-        'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-    commerciale:
-        'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
-    comptable:
-        'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
-};
-
-function roleLabel(role: string) {
-    return props.role_labels[role] ?? ROLE_LABELS[role] ?? role;
-}
-
-function roleColor(role: string) {
-    return ROLE_COLORS[role] ?? 'bg-muted text-muted-foreground';
-}
 
 function initials(name: string) {
     return name
@@ -437,17 +408,10 @@ function confirmReject(u: StaffUser) {
                         style="width: 180px"
                     >
                         <template #body="{ data }">
-                            <div class="flex flex-wrap items-center gap-1.5">
-                                <span
-                                    v-for="role in data.roles"
-                                    :key="role"
-                                    class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                    :class="roleColor(role)"
-                                >
-                                    <Shield class="h-3 w-3" />
-                                    {{ roleLabel(role) }}
-                                </span>
-                            </div>
+                            <RoleBadges
+                                :roles="data.roles"
+                                :role-labels="props.role_labels"
+                            />
                         </template>
                     </Column>
 

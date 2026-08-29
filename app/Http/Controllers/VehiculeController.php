@@ -19,6 +19,7 @@ use App\Models\TypeVehicule;
 use App\Models\User;
 use App\Models\Vehicule;
 use App\Models\VehiculeFrais;
+use App\Services\DerogationImpayesService;
 use App\Services\ImageService;
 use App\Services\VehiculeCapaciteService;
 use Illuminate\Http\RedirectResponse;
@@ -882,25 +883,12 @@ class VehiculeController extends Controller
      */
     private function ensureDerogationCoherente(array $data, string $orgId): void
     {
-        if (empty($data['derogation_impayes_autorisee'])) {
-            return;
-        }
-
-        $seuil = $data['seuil_derogation_impayes'] ?? null;
-
-        if ($seuil === null || $seuil <= 0) {
-            throw ValidationException::withMessages([
-                'derogation_impayes_autorisee' => 'Impossible d\'activer la dérogation : renseignez un plafond d\'impayés autorisé pour ce véhicule.',
-            ]);
-        }
-
-        $seuilStandard = Parametre::getVentesSeuilImpayesMax($orgId);
-        if ($seuil < $seuilStandard) {
-            throw ValidationException::withMessages([
-                'derogation_impayes_autorisee' => 'Le plafond doit être supérieur ou égal au seuil standard actuel ('
-                    .number_format($seuilStandard, 0, ',', ' ').' GNF).',
-            ]);
-        }
+        DerogationImpayesService::validerCoherence(
+            (bool) ($data['derogation_impayes_autorisee'] ?? false),
+            $data['seuil_derogation_impayes'] ?? null,
+            $orgId,
+            'ce véhicule',
+        );
     }
 
     private function messages(): array

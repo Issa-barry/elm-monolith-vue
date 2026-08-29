@@ -30,6 +30,9 @@ class Client extends Model
         'is_active',
         'type',
         'cashback_eligible',
+        'cashback_montant_par_pack',
+        'derogation_impayes_autorisee',
+        'seuil_derogation_impayes',
     ];
 
     protected function casts(): array
@@ -38,6 +41,9 @@ class Client extends Model
             'is_active' => 'boolean',
             'type' => ClientType::class,
             'cashback_eligible' => 'boolean',
+            'cashback_montant_par_pack' => 'integer',
+            'derogation_impayes_autorisee' => 'boolean',
+            'seuil_derogation_impayes' => 'integer',
         ];
     }
 
@@ -56,6 +62,11 @@ class Client extends Model
     public function isExterne(): bool
     {
         return $this->type === ClientType::EXTERNE;
+    }
+
+    public function isRevendeur(): bool
+    {
+        return $this->type === ClientType::REVENDEUR;
     }
 
     public function organization(): BelongsTo

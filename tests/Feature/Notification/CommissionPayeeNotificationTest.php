@@ -10,6 +10,7 @@ use App\Enums\CommissionUniteCalcul;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutPeriodePaiement;
 use App\Enums\TypePeriodePaiement;
+use App\Jobs\DispatchPushNotificationsJob;
 use App\Models\Categorie;
 use App\Models\CommandeVente;
 use App\Models\CommissionCibleType;
@@ -34,6 +35,7 @@ use App\Services\PeriodeCalculatorService;
 use App\Services\PeriodePaiementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Queue;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
 use Tests\Feature\Concerns\HasOrgAndUser;
@@ -104,6 +106,7 @@ class CommissionPayeeNotificationTest extends TestCase
     public function test_paiement_direct_notifie_le_livreur_beneficiaire(): void
     {
         Notification::fake();
+        Queue::fake();
         $this->actingAs($this->user);
 
         $livreurUser = $this->makeLivreurUser($this->org);
@@ -118,11 +121,14 @@ class CommissionPayeeNotificationTest extends TestCase
         );
 
         Notification::assertSentTo($livreurUser, CommissionPayeeNotification::class);
+        Queue::assertPushed(DispatchPushNotificationsJob::class, fn (DispatchPushNotificationsJob $job) => $job->userIds === [$livreurUser->id]
+            && $job->payload['data']['type'] === 'commission.paid');
     }
 
     public function test_versement_legacy_notifie_le_livreur_beneficiaire(): void
     {
         Notification::fake();
+        Queue::fake();
         $this->actingAs($this->user);
 
         $livreurUser = $this->makeLivreurUser($this->org);
@@ -161,11 +167,14 @@ class CommissionPayeeNotificationTest extends TestCase
         CommissionLogistiqueService::verser($part, 50_000, now()->toDateString(), 'especes');
 
         Notification::assertSentTo($livreurUser, CommissionPayeeNotification::class);
+        Queue::assertPushed(DispatchPushNotificationsJob::class, fn (DispatchPushNotificationsJob $job) => $job->userIds === [$livreurUser->id]
+            && $job->payload['data']['type'] === 'commission.paid');
     }
 
     public function test_paiement_de_fiche_notifie_le_beneficiaire(): void
     {
         Notification::fake();
+        Queue::fake();
 
         $processus = CommissionProcessus::create([
             'organization_id' => $this->org->id,
@@ -280,5 +289,9 @@ class CommissionPayeeNotificationTest extends TestCase
             ->assertRedirect();
 
         Notification::assertSentTo($livreurUser, CommissionPayeeNotification::class);
+        // Filtre explicitement sur 'commission.paid' : ce test déclenche AUSSI une
+        // commission.generated (génération vente) plus tôt — deux Jobs distincts attendus.
+        Queue::assertPushed(DispatchPushNotificationsJob::class, fn (DispatchPushNotificationsJob $job) => $job->userIds === [$livreurUser->id]
+            && $job->payload['data']['type'] === 'commission.paid');
     }
 }

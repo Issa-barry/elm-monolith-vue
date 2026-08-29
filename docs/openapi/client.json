@@ -1513,6 +1513,131 @@
                 "security": []
             }
         },
+        "/v1/mobile/web-push/vapid-public-key": {
+            "get": {
+                "operationId": "client.web-push.vapid-public-key",
+                "summary": "Cl\u00e9 PUBLIQUE VAPID uniquement \u2014 la cl\u00e9 priv\u00e9e ne quitte jamais le\nserveur. `null` si l'installation n'a pas encore g\u00e9n\u00e9r\u00e9 de cl\u00e9s\n(canal Web Push simplement indisponible, jamais une erreur)",
+                "tags": [
+                    "Autres"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "public_key": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "public_key"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
+        },
+        "/v1/mobile/web-push/subscriptions": {
+            "post": {
+                "operationId": "client.web-push.subscriptions.store",
+                "summary": "Idempotent : upsert par `endpoint_hash` (unique globalement \u2014 cf.\nmigration). Un m\u00eame endpoint r\u00e9abonn\u00e9 par un autre compte (poste\npartag\u00e9) lui est r\u00e9assign\u00e9, jamais dupliqu\u00e9",
+                "tags": [
+                    "Autres"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WebPushSubscriptionStoreRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean"
+                                        }
+                                    },
+                                    "required": [
+                                        "success"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "client.web-push.subscriptions.destroy",
+                "summary": "Ne supprime QUE l'abonnement identifi\u00e9 par `endpoint`, scop\u00e9 au compte\nauthentifi\u00e9 \u2014 jamais un \"delete all\" (un User peut avoir plusieurs\nappareils). Idempotent : un endpoint d\u00e9j\u00e0 absent (ou appartenant \u00e0 un\nautre compte) renvoie le m\u00eame succ\u00e8s, sans jamais confirmer/infirmer\nson existence pour un tiers",
+                "tags": [
+                    "Autres"
+                ],
+                "parameters": [
+                    {
+                        "name": "endpoint",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uri",
+                            "maxLength": 2048
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean"
+                                        }
+                                    },
+                                    "required": [
+                                        "success"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
         "/v1/mobile/dashboard": {
             "get": {
                 "operationId": "client.dashboard.mine",
@@ -5543,6 +5668,50 @@
                     "balance"
                 ],
                 "title": "VehiculeEarningsRow"
+            },
+            "WebPushSubscriptionStoreRequest": {
+                "type": "object",
+                "description": "Payload standard `PushSubscription.toJSON()` \u2014 cf.\nhttps://developer.mozilla.org/docs/Web/API/PushSubscription/toJSON.\nBornes de taille explicites (point s\u00e9curit\u00e9 du rapport Web Push) :\nun `endpoint`/des cl\u00e9s anormalement longs sont rejet\u00e9s plut\u00f4t\nqu'accept\u00e9s silencieusement.",
+                "properties": {
+                    "endpoint": {
+                        "type": "string",
+                        "format": "uri",
+                        "maxLength": 2048
+                    },
+                    "keys": {
+                        "type": "object",
+                        "properties": {
+                            "p256dh": {
+                                "type": "string",
+                                "maxLength": 255
+                            },
+                            "auth": {
+                                "type": "string",
+                                "maxLength": 255
+                            }
+                        },
+                        "required": [
+                            "p256dh",
+                            "auth"
+                        ]
+                    },
+                    "content_encoding": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "enum": [
+                            "aes128gcm",
+                            "aesgcm",
+                            null
+                        ]
+                    }
+                },
+                "required": [
+                    "endpoint",
+                    "keys"
+                ],
+                "title": "WebPushSubscriptionStoreRequest"
             }
         },
         "responses": {

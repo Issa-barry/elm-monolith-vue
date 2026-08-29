@@ -102,10 +102,10 @@ class CommandeVenteModeTarificationTest extends TestCase
         ]);
     }
 
-    public function test_store_direct_client_standard_sale_uses_prix_vente(): void
+    public function test_store_direct_client_revendeur_sale_uses_prix_vente(): void
     {
         $produit = $this->makeProduit(prixVente: 5000, prixUsine: 3500);
-        $client = Client::factory()->create(['organization_id' => $this->org->id, 'type' => 'standard']);
+        $client = Client::factory()->create(['organization_id' => $this->org->id, 'type' => 'revendeur']);
 
         $this->actingAs($this->user)
             ->post(route('ventes.store'), [

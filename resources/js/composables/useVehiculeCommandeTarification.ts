@@ -6,7 +6,7 @@
  * Règle : un véhicule de flotte gérée (toujours livraison_vente=true dans ce picker,
  * cf. CommandeVenteController::vehiculesActifs()) facture toujours au prix de vente
  * plein et est toujours éligible aux commissions. Sans véhicule, seul un client
- * PARTENAIRE facture à prix usine (jamais de commission — aucun véhicule de flotte
+ * Externe facture à prix usine (jamais de commission — aucun véhicule de flotte
  * impliqué). Partagé entre Ventes/Create.vue et Ventes/Edit.vue pour ne pas dupliquer
  * ce calcul (et le laisser diverger silencieusement entre les deux pages).
  */
@@ -14,7 +14,7 @@ import { computed, type ComputedRef } from 'vue';
 
 export interface ClientTarificationOption {
     id: number;
-    type?: 'standard' | 'partenaire';
+    type?: 'externe' | 'revendeur' | 'distributeur';
 }
 
 export function useVehiculeCommandeTarification<T extends { id: number }>(
@@ -46,7 +46,7 @@ export function useVehiculeCommandeTarification<T extends { id: number }>(
     const modeTarification = computed<'prix_vente' | 'prix_usine'>(() => {
         if (selectedVehicule.value) return 'prix_vente';
 
-        return selectedClient.value?.type === 'partenaire'
+        return selectedClient.value?.type === 'externe'
             ? 'prix_usine'
             : 'prix_vente';
     });

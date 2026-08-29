@@ -28,6 +28,8 @@ class CashbackTransaction extends Model
         'client_id',
         'type',
         'montant',
+        'montant_unitaire_snapshot',
+        'quantite_eligible_snapshot',
         'montant_verse',
         'statut',
         'vente_id',
@@ -42,6 +44,8 @@ class CashbackTransaction extends Model
     {
         return [
             'montant' => 'integer',
+            'montant_unitaire_snapshot' => 'integer',
+            'quantite_eligible_snapshot' => 'integer',
             'montant_verse' => 'integer',
             'verse_le' => 'datetime',
             'valide_le' => 'datetime',

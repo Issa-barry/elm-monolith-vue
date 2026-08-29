@@ -26,6 +26,7 @@ use App\Services\DepenseImputationService;
 use App\Services\DroitCreationDepenseService;
 use App\Services\Notification\BeneficiaireUserResolver;
 use App\Services\Notification\NotificationDispatcher;
+use App\Services\Notification\PushBodyFormatter;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -793,10 +794,18 @@ class DepenseController extends Controller
                 ? ($depense->vehiculeBeneficiaire?->nom_vehicule ?? '—')
                 : '—';
 
+            $notif = new DepenseValideeNotification($depense->id, $vehiculeNom, (float) $depense->montant);
+            $notifData = $user ? $notif->toArray($user) : null;
+
             NotificationDispatcher::send(
-                new DepenseValideeNotification($depense->id, $vehiculeNom, (float) $depense->montant),
+                $notif,
                 [$user],
                 'depenses',
+                $notifData ? fn () => [
+                    'title' => $notifData['titre'],
+                    'body' => PushBodyFormatter::format($notifData),
+                    'data' => ['type' => 'expense.validated', 'depense_id' => $depense->id],
+                ] : null,
             );
         } catch (\Throwable $e) {
             Log::error('DepenseValideeNotification : envoi échoué', [

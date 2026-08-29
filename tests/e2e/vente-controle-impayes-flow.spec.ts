@@ -478,6 +478,12 @@ test('vente client sous le seuil autorisée, la même dette dépassant un seuil 
     await expect(page.locator('body')).toContainText(/commande bloquée/i, {
         timeout: 10_000,
     });
+    // Danger/rouge réservé exclusivement au cas réellement bloquant (cf. audit du 28/08/2026 —
+    // le rouge ne doit jamais apparaître pour une dette autorisée par le seuil standard ou une
+    // dérogation, cf. tests dédiés ci-dessous).
+    await expect(
+        page.locator('.border-red-300.bg-red-100').first(),
+    ).toBeVisible({ timeout: 10_000 });
     const submitBtn = page
         .locator('#vente-form button[type="submit"]:visible')
         .first();
