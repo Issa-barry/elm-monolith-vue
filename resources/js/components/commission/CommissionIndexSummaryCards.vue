@@ -26,7 +26,10 @@ const props = withDefaults(
          * libellé par défaut, pour ne pas laisser croire à un montant définitif.
          */
         labelOverrides?: Partial<
-            Record<'generated' | 'expenses' | 'netValidated' | 'remaining', CardLabelOverride>
+            Record<
+                'generated' | 'expenses' | 'netValidated' | 'remaining',
+                CardLabelOverride
+            >
         >;
     }>(),
     {

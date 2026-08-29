@@ -103,10 +103,7 @@ function handleSubmit() {
                     :use-grouping="true"
                     :allow-empty="false"
                 />
-                <p
-                    v-if="errors?.montant"
-                    class="mt-1 text-xs text-destructive"
-                >
+                <p v-if="errors?.montant" class="mt-1 text-xs text-destructive">
                     {{ errors.montant }}
                 </p>
             </div>
@@ -121,7 +118,9 @@ function handleSubmit() {
             </div>
 
             <div>
-                <Label class="mb-1.5 block text-sm">Motif <span class="text-destructive">*</span></Label>
+                <Label class="mb-1.5 block text-sm"
+                    >Motif <span class="text-destructive">*</span></Label
+                >
                 <Select
                     v-model="motif"
                     :options="motifs"
@@ -136,7 +135,9 @@ function handleSubmit() {
             </div>
 
             <div>
-                <Label class="mb-1.5 block text-sm">Commentaire (optionnel)</Label>
+                <Label class="mb-1.5 block text-sm"
+                    >Commentaire (optionnel)</Label
+                >
                 <Textarea
                     v-model="commentaire"
                     rows="2"

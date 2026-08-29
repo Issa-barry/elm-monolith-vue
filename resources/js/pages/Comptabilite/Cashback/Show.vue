@@ -70,10 +70,7 @@ const verserForm = useForm({
 
 const maximumVersement = computed(() =>
     verserTarget.value
-        ? Math.min(
-              verserTarget.value.montant_restant,
-              props.montant_disponible,
-          )
+        ? Math.min(verserTarget.value.montant_restant, props.montant_disponible)
         : 0,
 );
 const verserErrors = computed(
@@ -107,13 +104,10 @@ function openVerser(transaction: CashbackTransaction) {
 
 function submitVerser() {
     if (!verserTarget.value) return;
-    verserForm.patch(
-        `/backoffice/cashback/${verserTarget.value.id}/verser`,
-        {
-            preserveScroll: true,
-            onSuccess: () => (verserTarget.value = null),
-        },
-    );
+    verserForm.patch(`/backoffice/cashback/${verserTarget.value.id}/verser`, {
+        preserveScroll: true,
+        onSuccess: () => (verserTarget.value = null),
+    });
 }
 </script>
 
@@ -147,38 +141,77 @@ function submitVerser() {
                 v-if="activeTab === 'informations'"
                 class="overflow-hidden rounded-xl border bg-card shadow-sm"
             >
-                <div class="flex items-center justify-between border-b px-4 py-3">
+                <div
+                    class="flex items-center justify-between border-b px-4 py-3"
+                >
                     <h2 class="text-sm font-semibold">Gains cashback</h2>
                     <span class="text-xs text-muted-foreground">
-                        {{ transactions.length }} gain{{ transactions.length !== 1 ? 's' : '' }}
+                        {{ transactions.length }} gain{{
+                            transactions.length !== 1 ? 's' : ''
+                        }}
                     </span>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full min-w-[860px] text-sm">
                         <thead>
                             <tr class="border-b bg-muted/40">
-                                <th class="px-4 py-3 text-left font-medium">Date</th>
-                                <th class="px-4 py-3 text-left font-medium">Vente</th>
-                                <th class="px-4 py-3 text-right font-medium">Gagné</th>
-                                <th class="px-4 py-3 text-right font-medium">Versé</th>
-                                <th class="px-4 py-3 text-right font-medium">Restant brut</th>
-                                <th class="px-4 py-3 text-left font-medium">Statut</th>
-                                <th class="px-4 py-3 text-right font-medium">Action</th>
+                                <th class="px-4 py-3 text-left font-medium">
+                                    Date
+                                </th>
+                                <th class="px-4 py-3 text-left font-medium">
+                                    Vente
+                                </th>
+                                <th class="px-4 py-3 text-right font-medium">
+                                    Gagné
+                                </th>
+                                <th class="px-4 py-3 text-right font-medium">
+                                    Versé
+                                </th>
+                                <th class="px-4 py-3 text-right font-medium">
+                                    Restant brut
+                                </th>
+                                <th class="px-4 py-3 text-left font-medium">
+                                    Statut
+                                </th>
+                                <th class="px-4 py-3 text-right font-medium">
+                                    Action
+                                </th>
                             </tr>
                         </thead>
                         <tbody class="divide-y">
-                            <tr v-for="transaction in transactions" :key="transaction.id">
-                                <td class="px-4 py-3 text-muted-foreground">{{ transaction.date ?? '—' }}</td>
-                                <td class="px-4 py-3 font-medium">{{ transaction.reference ?? '—' }}</td>
-                                <td class="px-4 py-3 text-right tabular-nums">{{ formatGNF(transaction.montant) }}</td>
-                                <td class="px-4 py-3 text-right tabular-nums">{{ formatGNF(transaction.montant_verse) }}</td>
-                                <td class="px-4 py-3 text-right font-medium tabular-nums">{{ formatGNF(transaction.montant_restant) }}</td>
+                            <tr
+                                v-for="transaction in transactions"
+                                :key="transaction.id"
+                            >
+                                <td class="px-4 py-3 text-muted-foreground">
+                                    {{ transaction.date ?? '—' }}
+                                </td>
+                                <td class="px-4 py-3 font-medium">
+                                    {{ transaction.reference ?? '—' }}
+                                </td>
+                                <td class="px-4 py-3 text-right tabular-nums">
+                                    {{ formatGNF(transaction.montant) }}
+                                </td>
+                                <td class="px-4 py-3 text-right tabular-nums">
+                                    {{ formatGNF(transaction.montant_verse) }}
+                                </td>
+                                <td
+                                    class="px-4 py-3 text-right font-medium tabular-nums"
+                                >
+                                    {{ formatGNF(transaction.montant_restant) }}
+                                </td>
                                 <td class="px-4 py-3">
-                                    <StatusDot :status="transaction.statut" :label="transaction.statut_label" />
+                                    <StatusDot
+                                        :status="transaction.statut"
+                                        :label="transaction.statut_label"
+                                    />
                                 </td>
                                 <td class="px-4 py-3 text-right">
                                     <Button
-                                        v-if="transaction.statut === 'en_attente' && can_valider"
+                                        v-if="
+                                            transaction.statut ===
+                                                'en_attente' && can_valider
+                                        "
                                         size="sm"
                                         variant="outline"
                                         @click="openValider(transaction)"
@@ -187,14 +220,22 @@ function submitVerser() {
                                         Valider
                                     </Button>
                                     <Button
-                                        v-else-if="['valide', 'partiel'].includes(transaction.statut) && montant_disponible > 0"
+                                        v-else-if="
+                                            ['valide', 'partiel'].includes(
+                                                transaction.statut,
+                                            ) && montant_disponible > 0
+                                        "
                                         size="sm"
                                         @click="openVerser(transaction)"
                                     >
                                         <HandCoins class="mr-1.5 h-4 w-4" />
                                         Verser
                                     </Button>
-                                    <span v-else class="text-xs text-muted-foreground">—</span>
+                                    <span
+                                        v-else
+                                        class="text-xs text-muted-foreground"
+                                        >—</span
+                                    >
                                 </td>
                             </tr>
                         </tbody>
@@ -206,10 +247,14 @@ function submitVerser() {
                 v-if="activeTab === 'depenses'"
                 class="overflow-hidden rounded-xl border bg-card shadow-sm"
             >
-                <div class="flex items-center justify-between border-b px-4 py-3">
+                <div
+                    class="flex items-center justify-between border-b px-4 py-3"
+                >
                     <h2 class="text-sm font-semibold">Dépenses client</h2>
                     <Button as-child size="sm" variant="outline">
-                        <Link :href="`/backoffice/depenses/create?beneficiaire_type=client&beneficiaire_id=${client.id}`">
+                        <Link
+                            :href="`/backoffice/depenses/create?beneficiaire_type=client&beneficiaire_id=${client.id}`"
+                        >
                             <Plus class="mr-1.5 h-4 w-4" />
                             Nouvelle dépense
                         </Link>
@@ -223,7 +268,9 @@ function submitVerser() {
                 class="overflow-hidden rounded-xl border bg-card shadow-sm"
             >
                 <div class="border-b px-4 py-3">
-                    <h2 class="text-sm font-semibold">Versements enregistrés</h2>
+                    <h2 class="text-sm font-semibold">
+                        Versements enregistrés
+                    </h2>
                 </div>
                 <CommissionPaymentsTable
                     :rows="payments"
@@ -236,22 +283,46 @@ function submitVerser() {
                 class="overflow-hidden rounded-xl border bg-card shadow-sm"
             >
                 <div class="border-b px-4 py-3">
-                    <h2 class="text-sm font-semibold">Historique des validations</h2>
+                    <h2 class="text-sm font-semibold">
+                        Historique des validations
+                    </h2>
                 </div>
-                <div v-if="transactions.some((transaction) => transaction.note || transaction.valide_le)" class="divide-y">
+                <div
+                    v-if="
+                        transactions.some(
+                            (transaction) =>
+                                transaction.note || transaction.valide_le,
+                        )
+                    "
+                    class="divide-y"
+                >
                     <div
-                        v-for="transaction in transactions.filter((item) => item.note || item.valide_le)"
+                        v-for="transaction in transactions.filter(
+                            (item) => item.note || item.valide_le,
+                        )"
                         :key="transaction.id"
                         class="px-4 py-3"
                     >
-                        <p class="text-sm font-medium">{{ transaction.reference ?? `Gain #${transaction.id.slice(-6)}` }}</p>
+                        <p class="text-sm font-medium">
+                            {{
+                                transaction.reference ??
+                                `Gain #${transaction.id.slice(-6)}`
+                            }}
+                        </p>
                         <p class="text-xs text-muted-foreground">
                             {{ transaction.valide_le ?? transaction.date }}
-                            <template v-if="transaction.note"> · {{ transaction.note }}</template>
+                            <template v-if="transaction.note">
+                                · {{ transaction.note }}</template
+                            >
                         </p>
                     </div>
                 </div>
-                <p v-else class="px-4 py-10 text-center text-sm text-muted-foreground">Aucun historique de validation.</p>
+                <p
+                    v-else
+                    class="px-4 py-10 text-center text-sm text-muted-foreground"
+                >
+                    Aucun historique de validation.
+                </p>
             </div>
         </div>
     </AppLayout>
@@ -266,16 +337,28 @@ function submitVerser() {
         <div v-if="validerTarget" class="space-y-4">
             <div class="rounded-lg border bg-muted/30 px-4 py-3">
                 <p class="text-xs text-muted-foreground">Montant à valider</p>
-                <p class="text-lg font-bold tabular-nums">{{ formatGNF(validerTarget.montant) }}</p>
+                <p class="text-lg font-bold tabular-nums">
+                    {{ formatGNF(validerTarget.montant) }}
+                </p>
             </div>
             <div>
-                <label class="mb-1 block text-sm font-medium">Note (facultative)</label>
-                <textarea v-model="validerForm.note" rows="3" class="w-full rounded-md border bg-background px-3 py-2 text-sm" />
+                <label class="mb-1 block text-sm font-medium"
+                    >Note (facultative)</label
+                >
+                <textarea
+                    v-model="validerForm.note"
+                    rows="3"
+                    class="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                />
             </div>
         </div>
         <template #footer>
-            <Button variant="outline" @click="validerTarget = null">Annuler</Button>
-            <Button :disabled="validerForm.processing" @click="submitValider">Confirmer</Button>
+            <Button variant="outline" @click="validerTarget = null"
+                >Annuler</Button
+            >
+            <Button :disabled="validerForm.processing" @click="submitValider"
+                >Confirmer</Button
+            >
         </template>
     </Dialog>
 
@@ -289,16 +372,22 @@ function submitVerser() {
         <div v-if="verserTarget" class="space-y-4">
             <div class="rounded-lg border bg-muted/30 px-4 py-3 text-sm">
                 <div class="flex justify-between gap-4">
-                    <span class="text-muted-foreground">Net disponible client</span>
+                    <span class="text-muted-foreground"
+                        >Net disponible client</span
+                    >
                     <strong>{{ formatGNF(montant_disponible) }}</strong>
                 </div>
                 <div class="mt-1 flex justify-between gap-4">
-                    <span class="text-muted-foreground">Maximum sur ce gain</span>
+                    <span class="text-muted-foreground"
+                        >Maximum sur ce gain</span
+                    >
                     <strong>{{ formatGNF(maximumVersement) }}</strong>
                 </div>
             </div>
             <div>
-                <label class="mb-1 block text-sm font-medium">Montant (GNF)</label>
+                <label class="mb-1 block text-sm font-medium"
+                    >Montant (GNF)</label
+                >
                 <input
                     v-model.number="verserForm.montant"
                     type="number"
@@ -306,10 +395,17 @@ function submitVerser() {
                     :max="maximumVersement"
                     class="h-9 w-full rounded-md border bg-background px-3 text-sm"
                 />
-                <p v-if="verserForm.errors.montant" class="mt-1 text-xs text-destructive">{{ verserForm.errors.montant }}</p>
+                <p
+                    v-if="verserForm.errors.montant"
+                    class="mt-1 text-xs text-destructive"
+                >
+                    {{ verserForm.errors.montant }}
+                </p>
             </div>
             <div>
-                <label class="mb-1 block text-sm font-medium">Mode de paiement</label>
+                <label class="mb-1 block text-sm font-medium"
+                    >Mode de paiement</label
+                >
                 <Select
                     v-model="verserForm.mode_paiement"
                     :options="modes_paiement"
@@ -320,20 +416,40 @@ function submitVerser() {
                 />
             </div>
             <div>
-                <label class="mb-1 block text-sm font-medium">Date du versement</label>
-                <input v-model="verserForm.date_versement" type="date" class="h-9 w-full rounded-md border bg-background px-3 text-sm" />
+                <label class="mb-1 block text-sm font-medium"
+                    >Date du versement</label
+                >
+                <input
+                    v-model="verserForm.date_versement"
+                    type="date"
+                    class="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                />
             </div>
             <div>
-                <label class="mb-1 block text-sm font-medium">Note (facultative)</label>
-                <textarea v-model="verserForm.note" rows="2" class="w-full rounded-md border bg-background px-3 py-2 text-sm" />
+                <label class="mb-1 block text-sm font-medium"
+                    >Note (facultative)</label
+                >
+                <textarea
+                    v-model="verserForm.note"
+                    rows="2"
+                    class="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                />
             </div>
-            <p v-if="verserErrors.comptabilisation" class="text-xs text-destructive">
+            <p
+                v-if="verserErrors.comptabilisation"
+                class="text-xs text-destructive"
+            >
                 {{ verserErrors.comptabilisation }}
             </p>
         </div>
         <template #footer>
-            <Button variant="outline" @click="verserTarget = null">Annuler</Button>
-            <Button :disabled="verserForm.processing || maximumVersement <= 0" @click="submitVerser">
+            <Button variant="outline" @click="verserTarget = null"
+                >Annuler</Button
+            >
+            <Button
+                :disabled="verserForm.processing || maximumVersement <= 0"
+                @click="submitVerser"
+            >
                 Confirmer le versement
             </Button>
         </template>

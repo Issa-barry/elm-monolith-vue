@@ -158,9 +158,7 @@ function formatGNF(val: number): string {
 // Rien à enregistrer tant que le plafond saisi n'a pas divergé de la dernière valeur
 // persistée côté serveur (props.seuil, resynchronisé après chaque succès/erreur) : le bouton
 // reste désactivé après une sauvegarde et tant qu'aucune modification n'est en attente.
-const isMontantDirty = computed(
-    () => derogationMontant.value !== props.seuil,
-);
+const isMontantDirty = computed(() => derogationMontant.value !== props.seuil);
 </script>
 
 <template>

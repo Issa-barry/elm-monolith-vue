@@ -278,7 +278,9 @@ const selectableRows = computed(() =>
 const allSelected = computed(
     () =>
         selectableRows.value.length > 0 &&
-        selectableRows.value.every((b) => selected.value.has(b.beneficiaire_id)),
+        selectableRows.value.every((b) =>
+            selected.value.has(b.beneficiaire_id),
+        ),
 );
 
 function toggleRow(b: BeneficiaireRow) {
@@ -296,7 +298,9 @@ function toggleAll() {
         selected.value = new Set();
         return;
     }
-    selected.value = new Set(selectableRows.value.map((b) => b.beneficiaire_id));
+    selected.value = new Set(
+        selectableRows.value.map((b) => b.beneficiaire_id),
+    );
 }
 
 function flashToast(fallback: string) {
@@ -471,7 +475,11 @@ function fmtTel(tel: string | null | undefined): string {
                         }}
                     </span>
                     <div class="flex items-center gap-2">
-                        <Button variant="ghost" size="sm" @click="selected = new Set()">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            @click="selected = new Set()"
+                        >
                             Annuler
                         </Button>
                         <Button size="sm" @click="validerSelection">
@@ -739,7 +747,9 @@ function fmtTel(tel: string | null | undefined): string {
                                             class="cursor-pointer"
                                             @click="validerRow(b)"
                                         >
-                                            <CheckCircle2 class="mr-2 h-4 w-4" />
+                                            <CheckCircle2
+                                                class="mr-2 h-4 w-4"
+                                            />
                                             Valider
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
