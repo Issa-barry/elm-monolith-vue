@@ -325,8 +325,7 @@ defineExpose({ canSubmit });
 // ── Alerte de stock faible (seuil par site) ─────────────────────────────────
 function seuilPourSite(siteId: string): number | null {
     return (
-        props.form.seuils_site.find((s) => s.site_id === siteId)?.seuil ??
-        null
+        props.form.seuils_site.find((s) => s.site_id === siteId)?.seuil ?? null
     );
 }
 
@@ -1362,9 +1361,9 @@ const depasseLimiteVariantes = computed(
                         Le seuil par défaut de l'organisation ({{
                             seuilOrganisationDefaut
                         }}
-                        unités) s'appliquera à toutes les agences. Vous
-                        pourrez définir un seuil spécifique par agence après
-                        la création du produit.
+                        unités) s'appliquera à toutes les agences. Vous pourrez
+                        définir un seuil spécifique par agence après la création
+                        du produit.
                     </p>
                 </div>
             </div>
