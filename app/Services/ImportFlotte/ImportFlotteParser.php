@@ -295,7 +295,7 @@ class ImportFlotteParser
 
             $equipeExistante = EquipeLivraison::where('vehicule_id', $vehicule->id)->whereNull('deleted_at')->first();
 
-            [$livreurs, $erreurs, $normalisations] = $this->resoudreLivreurs($lignes->all(), $orgId, $equipeExistante);
+            [$livreurs, $erreurs, $normalisations, $avertissements] = $this->resoudreLivreurs($lignes->all(), $orgId, $equipeExistante);
 
             if (! empty($erreurs)) {
                 $groupes[] = [
@@ -305,7 +305,7 @@ class ImportFlotteParser
                     'statut' => 'erreur',
                     'erreurs' => $erreurs,
                     'normalisations' => $normalisations,
-                    'avertissements' => [],
+                    'avertissements' => $avertissements,
                 ];
 
                 continue;
@@ -320,7 +320,7 @@ class ImportFlotteParser
                 'statut' => 'valide',
                 'erreurs' => [],
                 'normalisations' => $normalisations,
-                'avertissements' => [],
+                'avertissements' => $avertissements,
                 'vehicule' => [
                     'existe' => true,
                     'id' => $vehicule->id,
@@ -924,9 +924,10 @@ class ImportFlotteParser
         // créé sans aucun livreur, auquel cas aucune équipe n'est créée du tout
         // (voir construction de 'equipe' plus bas). Un véhicule existant sans
         // ligne livreur ne touche pas non plus à ses membres actuels.
-        [$livreurs, $erreursLivreurs, $normalisationsLivreurs] = $this->resoudreLivreurs($lignesLivreursGroupe, $orgId, $equipeExistante);
+        [$livreurs, $erreursLivreurs, $normalisationsLivreurs, $avertissementsLivreurs] = $this->resoudreLivreurs($lignesLivreursGroupe, $orgId, $equipeExistante);
         $erreurs = array_merge($erreurs, $erreursLivreurs);
         $normalisations = array_merge($normalisations, $normalisationsLivreurs);
+        $avertissements = array_merge($avertissements, $avertissementsLivreurs);
 
         if (! empty($erreurs)) {
             return [
@@ -1056,18 +1057,33 @@ class ImportFlotteParser
      *                                                                                   ligne dont le téléphone est en conflit multi-véhicules (déjà exclues en amont,
      *                                                                                   cf. livreursParImmatSansConflit) — remontées séparément par
      *                                                                                   groupesConflitLivreurMultiVehicules().
-     * @return array{0: array, 1: string[], 2: string[]}
+     * @return array{0: array, 1: string[], 2: string[], 3: string[]}
      */
     private function resoudreLivreurs(array $lignesGroupe, string $orgId, ?EquipeLivraison $equipeExistante): array
     {
         $livreurs = [];
         $erreurs = [];
         $normalisations = [];
+        $avertissements = [];
         $telephonesVus = [];
 
         $membresExistants = $equipeExistante
             ? $equipeExistante->membres()->with('livreur')->get()->keyBy(fn ($m) => $m->livreur?->telephone)
             : collect();
+
+        // Livreurs déjà en base pour cette organisation, avec un vrai nom saisi (jamais les
+        // livreurs "sans nom", dont libelleAffichage() replierait sur un téléphone ou le
+        // libellé générique "Livreur" — comparer ces valeurs-là créerait des faux positifs).
+        // Chargé une seule fois pour tout le groupe (pas par ligne), même principe que
+        // $membresExistants — le nom, contrairement au téléphone, n'est JAMAIS une clé
+        // d'identité (cf. Personne::resoudreOuCreer()) : ce contrôle ne sert qu'à avertir
+        // l'utilisateur d'un doublon probable AVANT création, jamais à rapprocher/fusionner
+        // silencieusement deux livreurs.
+        $livreursNommesOrg = Livreur::where('organization_id', $orgId)
+            ->whereNull('deleted_at')
+            ->with('personne')
+            ->get()
+            ->filter(fn (Livreur $l) => $l->nom_complet || $l->personne?->nom || $l->personne?->prenom);
 
         foreach ($lignesGroupe as $ligneInfo) {
             $ligne = $ligneInfo['donnees'];
@@ -1144,6 +1160,32 @@ class ImportFlotteParser
                 }
             }
 
+            // Aucun livreur retrouvé par téléphone : avant de conclure "nouveau livreur", on
+            // vérifie que son nom ne désigne pas en réalité un livreur déjà en base (faute de
+            // frappe sur le téléphone, numéro corrigé, deuxième contact de la même personne...)
+            // — même mécanique "valeur proche, à confirmer" que pour l'immatriculation véhicule
+            // (cf. ReferenceValueResolver::suggestClosest() plus haut dans ce fichier), jamais
+            // une fusion automatique : le téléphone reste la seule vraie clé de rapprochement.
+            if (! $livreurExistant && $nomComplet !== '' && $livreursNommesOrg->isNotEmpty()) {
+                $label = fn (Livreur $l) => $l->libelleAffichage();
+
+                $doublonExact = ReferenceValueResolver::matchExact($nomComplet, $livreursNommesOrg, $label);
+                if ($doublonExact !== null) {
+                    $erreurs[] = "Ligne {$numero} : un livreur nommé \"{$doublonExact->libelleAffichage()}\" existe déjà (téléphone {$doublonExact->telephone}). Vérifiez qu'il ne s'agit pas de la même personne avant de continuer avec un numéro différent, ou corrigez le nom si c'est bien quelqu'un d'autre.";
+
+                    continue;
+                }
+
+                $procheNom = ReferenceValueResolver::suggestClosest($nomComplet, $livreursNommesOrg, $label);
+                if ($procheNom !== null) {
+                    $procheLivreur = $livreursNommesOrg->first(fn (Livreur $l) => $l->libelleAffichage() === $procheNom);
+                    $avertissements[] = "\"{$nomComplet}\" ressemble à un livreur déjà existant : \"{$procheNom}\" ({$procheLivreur->telephone}).";
+                    $erreurs[] = "Ligne {$numero} : nom proche d'un livreur existant : \"{$procheNom}\" (téléphone {$procheLivreur->telephone}). Vérifiez qu'il ne s'agit pas de la même personne avant de continuer, ou corrigez le nom si c'est bien quelqu'un d'autre.";
+
+                    continue;
+                }
+            }
+
             $livreurs[] = [
                 'existe' => (bool) $livreurExistant,
                 'id' => $livreurExistant?->id,
@@ -1157,7 +1199,7 @@ class ImportFlotteParser
             ];
         }
 
-        return [$livreurs, $erreurs, $normalisations];
+        return [$livreurs, $erreurs, $normalisations, $avertissements];
     }
 
     /**

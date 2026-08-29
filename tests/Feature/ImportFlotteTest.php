@@ -614,6 +614,95 @@ class ImportFlotteTest extends TestCase
         $this->assertSame(0, Livreur::where('organization_id', $this->org->id)->count());
     }
 
+    /**
+     * Même nom qu'un livreur déjà en base (casse/espaces différents), mais un tout autre
+     * numéro de téléphone — le rapprochement reste strictement par téléphone (jamais de fusion
+     * automatique par nom), mais l'utilisateur doit être bloqué avant de créer un second
+     * `Livreur`/`Personne` désignant probablement la même personne.
+     */
+    public function test_analyse_bloque_un_livreur_dont_le_nom_correspond_exactement_a_un_livreur_existant(): void
+    {
+        Livreur::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Camara',
+            'prenom' => 'Ibrahima',
+            'telephone' => '+224623000099',
+        ]);
+
+        $import = $this->importerVehiculeEtChauffeur([], [
+            'livreur_nom' => 'camara',
+            'livreur_prenom' => '  Ibrahima ',
+            'livreur_telephone' => '623000001',
+        ]);
+
+        $this->assertSame(1, $import->nb_groupes_erreur);
+        $erreur = $import->rapport['groupes'][0]['erreurs'][0];
+        $this->assertStringContainsString('existe déjà', $erreur);
+        $this->assertStringContainsString('+224623000099', $erreur);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertStatus(422);
+
+        $this->assertSame(1, Livreur::where('organization_id', $this->org->id)->count());
+    }
+
+    /**
+     * Nom proche (faute de frappe) d'un livreur déjà en base, téléphone différent — signalé
+     * pour confirmation/correction, jamais fusionné ni créé silencieusement (même mécanique que
+     * l'immatriculation proche d'un véhicule existant, cf. test ci-dessus).
+     */
+    public function test_analyse_signale_un_nom_de_livreur_proche_dun_livreur_existant(): void
+    {
+        Livreur::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Camara',
+            'prenom' => 'Ibrahima',
+            'telephone' => '+224623000099',
+        ]);
+
+        $import = $this->importerVehiculeEtChauffeur([], [
+            'livreur_nom' => 'Camaraa',
+            'livreur_prenom' => 'Ibrahima',
+            'livreur_telephone' => '623000001',
+        ]);
+
+        $this->assertSame(1, $import->nb_groupes_erreur);
+        $erreur = $import->rapport['groupes'][0]['erreurs'][0];
+        $this->assertStringContainsString("nom proche d'un livreur existant", $erreur);
+        $this->assertStringContainsString('+224623000099', $erreur);
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertStatus(422);
+
+        $this->assertSame(1, Livreur::where('organization_id', $this->org->id)->count());
+    }
+
+    /**
+     * Le même livreur déjà en base, réimporté avec exactement le même téléphone : le
+     * rapprochement se fait par téléphone (chemin normal, jamais par le contrôle de nom
+     * ci-dessus) — aucune erreur, pas de doublon.
+     */
+    public function test_analyse_naffiche_aucune_erreur_quand_le_meme_livreur_est_retrouve_par_telephone(): void
+    {
+        Livreur::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom' => 'Camara',
+            'prenom' => 'Ibrahima',
+            'telephone' => '+224623000001',
+        ]);
+
+        $import = $this->importerVehiculeEtChauffeur([], [
+            'livreur_nom' => 'Camara',
+            'livreur_prenom' => 'Ibrahima',
+            'livreur_telephone' => '623000001',
+        ]);
+
+        $this->assertSame(0, $import->nb_groupes_erreur);
+        $this->assertSame(1, $import->nb_groupes_valides);
+    }
+
     // ── confirmation / création ──────────────────────────────────────────────
 
     public function test_confirm_creates_proprietaire_vehicule_equipe_and_livreur_as_draft(): void
