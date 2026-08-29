@@ -11,6 +11,7 @@
     "require": {
         "php": "^8.2",
         "barryvdh/laravel-dompdf": "^3.1",
+        "dedoc/scramble": "^0.13.42",
         "giggsey/libphonenumber-for-php": "^9.0",
         "inertiajs/inertia-laravel": "^2.0",
         "intervention/image": "^3.0",
@@ -21,6 +22,7 @@
         "laravel/tinker": "^2.10.1",
         "laravel/wayfinder": "^0.1.9",
         "maatwebsite/excel": "^3.1",
+        "minishlink/web-push": "^11.0",
         "predis/predis": "^3.4",
         "sentry/sentry-laravel": "^4.26",
         "spatie/laravel-permission": "^7.2",
@@ -80,6 +82,10 @@
         "test": [
             "@php artisan config:clear --ansi",
             "@php artisan test"
+        ],
+        "openapi:export": [
+            "@php artisan scramble:export --api=default",
+            "@php artisan scramble:export --api=vitrine"
         ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",

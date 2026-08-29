@@ -9,10 +9,16 @@ use App\Models\CommissionPaymentItem;
 use App\Models\PaiementFiche;
 use App\Models\PaiementFicheLigne;
 use App\Models\Vehicule;
+use App\Notifications\CommissionPayeeNotification;
+use App\Services\Notification\BeneficiaireUserResolver;
+use App\Services\Notification\NotificationDispatcher;
+use App\Services\Notification\PushBodyFormatter;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
+use Throwable;
 
 class CommissionPaymentService
 {
@@ -90,6 +96,8 @@ class CommissionPaymentService
                 $part->recalculStatut();
                 $restant = round($restant - $alloue, 2);
             }
+
+            self::notifierCommissionPayee($beneficiaryType, $beneficiaryId, $montant, $modePaiement, $note, $payment->id);
 
             return $payment->load('items');
         });
@@ -309,6 +317,8 @@ class CommissionPaymentService
                 $restant = round($restant - $alloue, 2);
             }
 
+            self::notifierCommissionPayee('livreur', $livreurId, $montant, $modePaiement, $note, $payment->id);
+
             return $payment->load('items');
         });
     }
@@ -419,5 +429,44 @@ class CommissionPaymentService
         }
 
         return $query->get();
+    }
+
+    /**
+     * Notifie le bénéficiaire réel (livreur ou proprietaire) d'un paiement
+     * direct de commission logistique — jamais de rethrow vers l'appelant :
+     * un échec d'envoi ne doit jamais faire annuler un paiement déjà
+     * enregistré.
+     */
+    private static function notifierCommissionPayee(
+        string $beneficiaryType,
+        string $beneficiaryId,
+        float $montant,
+        string $modePaiement,
+        ?string $note,
+        string $paymentId,
+    ): void {
+        try {
+            $user = BeneficiaireUserResolver::resolve($beneficiaryType, $beneficiaryId);
+            $notif = new CommissionPayeeNotification($montant, $modePaiement, $note, 'commission_payment', $paymentId);
+            $notifData = $user ? $notif->toArray($user) : null;
+
+            NotificationDispatcher::send(
+                $notif,
+                [$user],
+                'commissions',
+                // Pas d'ID navigable ici (paiement = ligne comptable interne) — le type seul
+                // suffit (cf. rapport Web Push 7/7).
+                $notifData ? fn () => [
+                    'title' => $notifData['titre'],
+                    'body' => PushBodyFormatter::format($notifData),
+                    'data' => ['type' => 'commission.paid'],
+                ] : null,
+            );
+        } catch (Throwable $e) {
+            Log::error('CommissionPayeeNotification : envoi échoué', [
+                'payment_id' => $paymentId,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }

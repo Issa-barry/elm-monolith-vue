@@ -2,6 +2,8 @@
 
 namespace App\Actions\Fortify;
 
+use App\Enums\ClientType;
+use App\Enums\OtpPurpose;
 use App\Features\ModuleFeature;
 use App\Models\Client;
 use App\Models\Livreur;
@@ -80,7 +82,7 @@ class CreateNewUser implements CreatesNewUsers
             /** @var OtpService $otp */
             $otp = app(OtpService::class);
 
-            if (! $otp->isVerified($telephone)) {
+            if (! $otp->isVerified($telephone, OtpPurpose::PHONE_VERIFICATION)) {
                 throw ValidationException::withMessages([
                     'telephone' => 'La vérification par code OTP est requise pour créer un compte avec ce numéro.',
                 ]);
@@ -104,11 +106,13 @@ class CreateNewUser implements CreatesNewUsers
                 'password' => $validated['password'],
             ]);
             if ($telephone !== null) {
+                // Cf. LivreurRegistrationController — même correctif du 27/08/2026 :
+                // aucun canal réel ne délivre ce code aujourd'hui (MVP sans
+                // fournisseur SMS/WhatsApp), `verified_at` reste NULL.
                 $user->authIdentities()->create([
                     'type' => UserAuthIdentity::TYPE_TELEPHONE,
                     'value' => $telephone,
                     'normalized_value' => Personne::normaliserTelephone($telephone),
-                    'verified_at' => now(),
                     'is_primary' => true,
                 ]);
             }
@@ -128,7 +132,7 @@ class CreateNewUser implements CreatesNewUsers
                 $this->linkOrCreateClient($user, $telephone);
 
                 // Libérer l'OTP de la session
-                app(OtpService::class)->clear($telephone);
+                app(OtpService::class)->clear($telephone, OtpPurpose::PHONE_VERIFICATION);
             }
 
             return $user;
@@ -213,6 +217,11 @@ class CreateNewUser implements CreatesNewUsers
                 'nom' => $user->nom,
                 'prenom' => $user->prenom,
                 'telephone' => $telephone,
+                // Explicite plutôt que de reposer sur le défaut colonne (cf.
+                // FelloDemoCustomersSeeder, même remarque) : un compte auto-créé à
+                // l'inscription n'a pas de nature commerciale connue, Externe est la
+                // valeur neutre (pas de règle cashback obligatoire contrairement à Revendeur).
+                'type' => ClientType::EXTERNE->value,
             ]);
         }
     }

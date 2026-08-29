@@ -3,9 +3,13 @@
 namespace App\Http\Resources\Api\Logistique;
 
 use App\Enums\StatutTransfert;
+use App\Models\TransfertLogistique;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
+/**
+ * @mixin TransfertLogistique
+ */
 class TransfertResource extends JsonResource
 {
     public function toArray(Request $request): array

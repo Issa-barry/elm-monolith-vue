@@ -4,19 +4,29 @@ namespace App\Jobs;
 
 use App\Models\CommandeVente;
 use App\Models\Livreur;
-use App\Models\Personne;
-use App\Models\Proprietaire;
-use App\Models\User;
-use App\Models\UserAuthIdentity;
 use App\Notifications\CommandeValideeNotification;
-use App\Services\ExpoPushNotificationService;
+use App\Services\Notification\BeneficiaireUserResolver;
+use App\Services\Notification\NotificationDispatcher;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Log;
 
+/**
+ * Notifie les livreurs de l'équipe affectée à la commande — SEULS
+ * destinataires depuis la phase 1 de l'architecture notifications
+ * (2026-08-27, cf. rapport) : le propriétaire du véhicule ne reçoit plus
+ * cette notification d'affectation logistique ("vous avez une livraison à
+ * faire"), qui ne le concernait pas. Il reste informé via
+ * CommissionGenereeNotification — financièrement pertinente pour lui,
+ * déclenchée séparément par CommissionEnveloppeGenerator une fois la
+ * commission calculée pour cette même commande.
+ *
+ * Collecte destinataires/préférences/push centralisée dans
+ * NotificationDispatcher — avant ce correctif, cette logique était dupliquée
+ * ici (et absente de NotifierLivreursTransfertJob).
+ */
 class NotifierLivreursCommandeVenteJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
@@ -28,13 +38,10 @@ class NotifierLivreursCommandeVenteJob implements ShouldQueue
         private readonly string $reference,
     ) {}
 
-    public function handle(ExpoPushNotificationService $push): void
+    public function handle(): void
     {
-        $commande = CommandeVente::with([
-            'site:id,nom',
-            'vehicule.proprietaire',
-            'vehicule.equipe.livreurs.user',
-        ])->find($this->commandeId);
+        $commande = CommandeVente::with(['site:id,nom', 'vehicule.equipe.livreurs'])
+            ->find($this->commandeId);
 
         if (! $commande?->vehicule) {
             return;
@@ -42,78 +49,19 @@ class NotifierLivreursCommandeVenteJob implements ShouldQueue
 
         $siteNom = $commande->site?->nom ?? '—';
         $notif = new CommandeValideeNotification($this->commandeId, $this->reference, $siteNom);
-        $pushTokens = [];
 
-        // ── Livreurs de l'équipe ─────────────────────────────────────────────
         $livreurs = $commande->vehicule->equipe?->livreurs ?? collect();
+        $users = $livreurs->map(fn (Livreur $livreur) => BeneficiaireUserResolver::resolve('livreur', $livreur->id));
 
-        foreach ($livreurs as $livreur) {
-            $user = $this->userForLivreur($livreur);
-            if ($user) {
-                $user->notify($notif);
-                if ($user->expo_push_token) {
-                    $pushTokens[] = $user->expo_push_token;
-                }
-            }
-        }
-
-        // ── Propriétaire du véhicule ─────────────────────────────────────────
-        $proprietaire = $commande->vehicule->proprietaire;
-        if ($proprietaire) {
-            $user = $this->userForProprietaire($proprietaire);
-            $user?->notify($notif);
-            if ($user?->expo_push_token) {
-                $pushTokens[] = $user->expo_push_token;
-            }
-        }
-
-        // ── Push Expo ────────────────────────────────────────────────────────
-        $pushTokens = array_unique(array_filter($pushTokens));
-        if (empty($pushTokens)) {
-            return;
-        }
-
-        try {
-            $push->sendMany(
-                array_values($pushTokens),
-                'Nouvelle commande assignée',
-                "Réf. {$this->reference} — Vous avez une livraison à effectuer.",
-                [
-                    'type' => 'commande_vente_validee',
-                    'commande_id' => $this->commandeId,
-                ]
-            );
-        } catch (\Throwable $e) {
-            Log::error('NotifierLivreursCommandeVenteJob: push échoué', [
-                'commande_id' => $this->commandeId,
-                'error' => $e->getMessage(),
-            ]);
-
-            throw $e;
-        }
-    }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private function userForLivreur(Livreur $livreur): ?User
-    {
-        if ($livreur->user_id) {
-            return $livreur->user ?? User::find($livreur->user_id);
-        }
-
-        return $livreur->telephone
-            ? UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_TELEPHONE, Personne::normaliserTelephone($livreur->telephone))
-            : null;
-    }
-
-    private function userForProprietaire(Proprietaire $proprietaire): ?User
-    {
-        if ($proprietaire->user_id) {
-            return User::find($proprietaire->user_id);
-        }
-
-        return $proprietaire->telephone
-            ? UserAuthIdentity::resoudre(UserAuthIdentity::TYPE_TELEPHONE, Personne::normaliserTelephone($proprietaire->telephone))
-            : null;
+        NotificationDispatcher::send(
+            $notif,
+            $users,
+            'livraisons',
+            fn () => [
+                'title' => 'Nouvelle commande assignée',
+                'body' => "Réf. {$this->reference} — Vous avez une livraison à effectuer.",
+                'data' => ['type' => 'commande_vente_validee', 'commande_id' => $this->commandeId],
+            ],
+        );
     }
 }

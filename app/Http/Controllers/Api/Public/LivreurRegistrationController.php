@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Public;
 
+use App\Enums\OtpPurpose;
 use App\Http\Controllers\Controller;
 use App\Models\Livreur;
 use App\Models\Organization;
@@ -51,7 +52,7 @@ class LivreurRegistrationController extends Controller
             throw ValidationException::withMessages(['telephone' => 'Ce numéro est déjà associé à un compte. Connectez-vous ou réinitialisez votre mot de passe.']);
         }
 
-        if (! $otp->isVerified($phone)) {
+        if (! $otp->isVerified($phone, OtpPurpose::PHONE_VERIFICATION)) {
             throw ValidationException::withMessages(['telephone' => 'La vérification par code OTP est requise.']);
         }
 
@@ -82,11 +83,13 @@ class LivreurRegistrationController extends Controller
                 'password' => $validated['password'],
                 'organization_id' => $org?->id,
             ]);
+            // Cf. App\Http\Controllers\Auth\LivreurRegistrationController — même
+            // correctif du 27/08/2026 : aucun canal réel ne délivre ce code
+            // aujourd'hui, `verified_at` reste NULL.
             $user->authIdentities()->create([
                 'type' => UserAuthIdentity::TYPE_TELEPHONE,
                 'value' => $phone,
                 'normalized_value' => $normalise,
-                'verified_at' => now(),
                 'is_primary' => true,
             ]);
 
@@ -110,7 +113,7 @@ class LivreurRegistrationController extends Controller
                 ]);
             }
 
-            $otp->clear($phone);
+            $otp->clear($phone, OtpPurpose::PHONE_VERIFICATION);
         });
 
         return response()->json([

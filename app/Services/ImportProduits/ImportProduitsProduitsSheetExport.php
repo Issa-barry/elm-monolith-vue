@@ -24,7 +24,8 @@ class ImportProduitsProduitsSheetExport implements FromArray, WithEvents, WithHe
 {
     public const COLONNES = [
         'sku', 'nom', 'type_code', 'categorie_reference', 'fournisseur_reference', 'statut',
-        'code_barres', 'prix_achat', 'prix_usine_autres_vehicules', 'prix_usine_tricycle', 'prix_vente', 'cout',
+        'code_barres', 'prix_achat', 'prix_usine_autres_vehicules', 'prix_usine_tricycle', 'prix_vente',
+        'prix_externe', 'prix_revendeur', 'prix_distributeur', 'cout',
         'alerte_stock_active', 'seuil_alerte_stock', 'description',
     ];
 
@@ -52,7 +53,7 @@ class ImportProduitsProduitsSheetExport implements FromArray, WithEvents, WithHe
             AfterSheet::class => function (AfterSheet $event): void {
                 $sheet = $event->sheet->getDelegate();
                 $sheet->freezePane('A2');
-                $sheet->setAutoFilter('A1:O1');
+                $sheet->setAutoFilter('A1:R1');
 
                 // Colonnes texte (jamais de conversion numérique silencieuse par Excel — même
                 // piège que `code_facultatif` chez ImportSites) : sku, type_code,
@@ -60,8 +61,10 @@ class ImportProduitsProduitsSheetExport implements FromArray, WithEvents, WithHe
                 foreach (['A', 'C', 'D', 'E', 'G'] as $col) {
                     $sheet->getStyle("{$col}2:{$col}501")->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_TEXT);
                 }
-                // Colonnes prix : entiers, jamais de décimales (montants GNF).
-                foreach (['H', 'I', 'J', 'K', 'L'] as $col) {
+                // Colonnes prix : entiers, jamais de décimales (montants GNF). H..K = tarification
+                // usine/vente, L..N = tarification par nature de client (obligatoires pour un
+                // produit fabricable, cf. onglet REFERENCES), O = coût de revient.
+                foreach (['H', 'I', 'J', 'K', 'L', 'M', 'N', 'O'] as $col) {
                     $sheet->getStyle("{$col}2:{$col}501")->getNumberFormat()->setFormatCode('0');
                 }
                 // Les deux libellés usine doivent rester lisibles sans agrandissement manuel.
@@ -76,7 +79,7 @@ class ImportProduitsProduitsSheetExport implements FromArray, WithEvents, WithHe
                         $this->liste($sheet, "C{$row}", $codesTypes, 'Type invalide', 'Choisissez un code de type dans la liste (onglet REFERENCES).');
                     }
                     $this->liste($sheet, "F{$row}", $statuts, 'Statut invalide', 'Choisissez une valeur dans la liste.');
-                    $this->liste($sheet, "M{$row}", 'oui,non', 'Valeur invalide', 'Choisissez oui ou non.');
+                    $this->liste($sheet, "P{$row}", 'oui,non', 'Valeur invalide', 'Choisissez oui ou non.');
                 }
             },
         ];

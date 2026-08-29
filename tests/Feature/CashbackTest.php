@@ -9,7 +9,7 @@ use App\Models\CashbackVersement;
 use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\Organization;
-use App\Models\Parametre;
+use App\Models\ProduitVariante;
 use App\Models\Site;
 use App\Models\User;
 use App\Services\CashbackService;
@@ -18,37 +18,75 @@ use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Pennant\Feature;
 use Spatie\Permission\Models\Role;
+use Tests\Concerns\HasProduitVariante;
 use Tests\TestCase;
 
 class CashbackTest extends TestCase
 {
-    use RefreshDatabase;
+    use HasProduitVariante, RefreshDatabase;
 
     // ── Helpers ────────────────────────────────────────────────────────────────
 
-    private function createOrgWithCashback(int $seuil = 100000, int $gain = 10000): Organization
+    private function createOrgAvecCashbackActif(): Organization
     {
         $org = Organization::factory()->create();
         Feature::for($org)->activate(ModuleFeature::CASHBACK);
 
-        Parametre::create([
-            'organization_id' => $org->id,
-            'cle' => Parametre::CLE_CASHBACK_SEUIL_ACHAT,
-            'valeur' => (string) $seuil,
-            'type' => Parametre::TYPE_INTEGER,
-            'groupe' => Parametre::GROUPE_CASHBACK,
-            'description' => 'Seuil test',
-        ]);
-        Parametre::create([
-            'organization_id' => $org->id,
-            'cle' => Parametre::CLE_CASHBACK_MONTANT_GAIN,
-            'valeur' => (string) $gain,
-            'type' => Parametre::TYPE_INTEGER,
-            'groupe' => Parametre::GROUPE_CASHBACK,
-            'description' => 'Gain test',
-        ]);
-
         return $org;
+    }
+
+    /** Variante d'un produit fabricable — seul type ouvrant droit au cashback (cf. CashbackService::quantiteEligible()). */
+    private function makeFabricable(Organization $org, array $varianteOverrides = []): ProduitVariante
+    {
+        $produit = $this->makeProduitAvecVariante(
+            $org,
+            ['nom' => 'Pack Test', 'type' => 'fabricable'],
+            array_merge([
+                'prix_vente' => 20000,
+                'prix_usine' => 15000,
+                'prix_usine_tricycle' => 15000,
+                'prix_externe' => 15000,
+                'prix_revendeur' => 16000,
+                'prix_distributeur' => 15500,
+            ], $varianteOverrides),
+        );
+
+        return $produit->variantePrincipale()->first();
+    }
+
+    /**
+     * Vente avec des lignes explicites (jamais juste total_commande) — nécessaire depuis que
+     * CashbackService calcule la quantité éligible à partir des lignes elles-mêmes, plus du
+     * seul montant de la commande.
+     *
+     * @param  array<int, array<string, mixed>>  $lignes
+     */
+    private function makeVenteAvecLignes(Organization $org, Client $client, array $lignes, ?int $totalCommande = null): CommandeVente
+    {
+        $vente = CommandeVente::withoutEvents(fn () => CommandeVente::factory()->create([
+            'organization_id' => $org->id,
+            'client_id' => $client->id,
+            'total_commande' => $totalCommande ?? array_sum(array_column($lignes, 'total_ligne')),
+        ]));
+
+        foreach ($lignes as $ligne) {
+            $vente->lignes()->create($ligne);
+        }
+
+        return $vente->fresh();
+    }
+
+    /** @return array<string, mixed> */
+    private function ligne(ProduitVariante $variante, int $qteDemandee, ?int $qteLivree = null, int $prixVente = 20000): array
+    {
+        return [
+            'variante_id' => $variante->id,
+            'quantite_demandee' => $qteDemandee,
+            'quantite_livree' => $qteLivree,
+            'prix_usine_snapshot' => 0,
+            'prix_vente_snapshot' => $prixVente,
+            'total_ligne' => $qteDemandee * $prixVente,
+        ];
     }
 
     private function makeVenteSilently(Organization $org, Client $client, int $montant): CommandeVente
@@ -97,72 +135,76 @@ class CashbackTest extends TestCase
         return $t;
     }
 
-    // ── processVente ───────────────────────────────────────────────────────────
+    // ── processVente : cashback = commission propre au client, jamais un seuil global ───────
+    // (décision produit du 28/08/2026, EN REMPLACEMENT du modèle seuil d'achat/gain fixe —
+    // cf. docs/cashback.md, CASHBACK-002/003).
 
-    public function test_process_vente_increments_cumul_achats(): void
+    public function test_process_vente_incremente_cumul_achats_de_facon_purement_informative(): void
     {
-        $org = $this->createOrgWithCashback(seuil: 500000, gain: 25000);
-        $client = Client::factory()->create(['organization_id' => $org->id, 'cashback_eligible' => true]);
+        $org = $this->createOrgAvecCashbackActif();
+        $client = Client::factory()->create(['organization_id' => $org->id, 'cashback_eligible' => true, 'cashback_montant_par_pack' => 300]);
+        $variante = $this->makeFabricable($org);
 
-        $vente = $this->makeVenteSilently($org, $client, 200000);
+        $vente = $this->makeVenteAvecLignes($org, $client, [$this->ligne($variante, 10)]);
         (new CashbackService)->processVente($vente);
 
         $solde = CashbackSolde::where('client_id', $client->id)->first();
         $this->assertNotNull($solde);
-        $this->assertSame(200000, $solde->cumul_achats);
-        $this->assertSame(0, $solde->cashback_en_attente);
+        // cumul_achats reflète le total_commande, mais ne déclenche plus rien ni ne se
+        // réinitialise jamais (contrairement à l'ancien modèle à seuil).
+        $this->assertSame((int) $vente->total_commande, $solde->cumul_achats);
     }
 
-    public function test_gain_cree_quand_seuil_atteint(): void
+    public function test_gain_genere_selon_le_montant_par_pack_propre_au_client(): void
     {
-        $org = $this->createOrgWithCashback(seuil: 100000, gain: 10000);
-        $client = Client::factory()->create(['organization_id' => $org->id, 'cashback_eligible' => true]);
+        $org = $this->createOrgAvecCashbackActif();
+        $client = Client::factory()->create(['organization_id' => $org->id, 'cashback_eligible' => true, 'cashback_montant_par_pack' => 300]);
+        $variante = $this->makeFabricable($org);
 
-        $vente = $this->makeVenteSilently($org, $client, 100000);
+        // 20 packs éligibles × 300 GNF/pack = 6 000 GNF (cf. exemple du chantier).
+        $vente = $this->makeVenteAvecLignes($org, $client, [$this->ligne($variante, 20)]);
         (new CashbackService)->processVente($vente);
 
         $this->assertDatabaseHas('cashback_transactions', [
             'organization_id' => $org->id,
             'client_id' => $client->id,
             'type' => CashbackTransaction::TYPE_GAIN,
-            'montant' => 10000,
+            'montant' => 6000,
+            'montant_unitaire_snapshot' => 300,
+            'quantite_eligible_snapshot' => 20,
             'statut' => CashbackTransaction::STATUT_EN_ATTENTE,
             'vente_id' => $vente->id,
         ]);
 
         $solde = CashbackSolde::where('client_id', $client->id)->first();
-        $this->assertSame(0, $solde->cumul_achats);
-        $this->assertSame(10000, $solde->cashback_en_attente);
-        $this->assertSame(10000, $solde->total_cashback_gagne);
+        $this->assertSame(6000, $solde->cashback_en_attente);
+        $this->assertSame(6000, $solde->total_cashback_gagne);
     }
 
-    public function test_cumul_entre_plusieurs_ventes_avant_seuil(): void
+    /** Deux clients avec des montants par pack différents obtiennent des gains différents pour la même quantité. */
+    public function test_deux_clients_ont_des_montants_par_pack_independants(): void
     {
-        $org = $this->createOrgWithCashback(seuil: 300000, gain: 15000);
-        $client = Client::factory()->create(['organization_id' => $org->id, 'cashback_eligible' => true]);
+        $org = $this->createOrgAvecCashbackActif();
+        $variante = $this->makeFabricable($org);
+        $clientA = Client::factory()->create(['organization_id' => $org->id, 'cashback_eligible' => true, 'cashback_montant_par_pack' => 300]);
+        $clientB = Client::factory()->create(['organization_id' => $org->id, 'cashback_eligible' => true, 'cashback_montant_par_pack' => 500]);
         $service = new CashbackService;
 
-        $service->processVente($this->makeVenteSilently($org, $client, 100000));
-        $service->processVente($this->makeVenteSilently($org, $client, 100000));
+        $service->processVente($this->makeVenteAvecLignes($org, $clientA, [$this->ligne($variante, 10)]));
+        $service->processVente($this->makeVenteAvecLignes($org, $clientB, [$this->ligne($variante, 10)]));
 
-        $solde = CashbackSolde::where('client_id', $client->id)->first();
-        $this->assertSame(200000, $solde->cumul_achats);
-        $this->assertSame(0, $solde->cashback_en_attente);
-
-        $service->processVente($this->makeVenteSilently($org, $client, 100000));
-
-        $solde->refresh();
-        $this->assertSame(0, $solde->cumul_achats);
-        $this->assertSame(15000, $solde->cashback_en_attente);
+        $this->assertSame(3000, (int) CashbackSolde::where('client_id', $clientA->id)->value('total_cashback_gagne'));
+        $this->assertSame(5000, (int) CashbackSolde::where('client_id', $clientB->id)->value('total_cashback_gagne'));
     }
 
     public function test_pas_de_doublon_gain_pour_meme_vente(): void
     {
-        $org = $this->createOrgWithCashback(seuil: 100000, gain: 10000);
-        $client = Client::factory()->create(['organization_id' => $org->id, 'cashback_eligible' => true]);
+        $org = $this->createOrgAvecCashbackActif();
+        $client = Client::factory()->create(['organization_id' => $org->id, 'cashback_eligible' => true, 'cashback_montant_par_pack' => 300]);
+        $variante = $this->makeFabricable($org);
         $service = new CashbackService;
 
-        $vente = $this->makeVenteSilently($org, $client, 100000);
+        $vente = $this->makeVenteAvecLignes($org, $client, [$this->ligne($variante, 10)]);
         $service->processVente($vente);
         $service->processVente($vente); // idempotent
 
@@ -176,7 +218,7 @@ class CashbackTest extends TestCase
 
     public function test_vente_sans_client_ignoree(): void
     {
-        $org = $this->createOrgWithCashback(seuil: 100000, gain: 10000);
+        $org = $this->createOrgAvecCashbackActif();
         $vente = $this->makeVenteSilently($org, Client::factory()->create(['organization_id' => $org->id]), 200000);
         $vente->client_id = null;
 
@@ -187,21 +229,140 @@ class CashbackTest extends TestCase
 
     public function test_client_non_eligible_ne_recoit_pas_cashback(): void
     {
-        $org = $this->createOrgWithCashback(seuil: 100000, gain: 10000);
-        $client = Client::factory()->create(['organization_id' => $org->id, 'cashback_eligible' => false]);
+        $org = $this->createOrgAvecCashbackActif();
+        $client = Client::factory()->create(['organization_id' => $org->id, 'cashback_eligible' => false, 'cashback_montant_par_pack' => 300]);
+        $variante = $this->makeFabricable($org);
 
-        $vente = $this->makeVenteSilently($org, $client, 200000);
+        $vente = $this->makeVenteAvecLignes($org, $client, [$this->ligne($variante, 10)]);
         (new CashbackService)->processVente($vente);
 
         $this->assertDatabaseCount('cashback_soldes', 0);
         $this->assertDatabaseCount('cashback_transactions', 0);
     }
 
+    /** CASHBACK-002 : un client éligible sans montant configuré ne génère jamais de cashback (jamais un montant implicite). */
+    public function test_client_eligible_sans_montant_configure_ne_genere_aucun_cashback(): void
+    {
+        $org = $this->createOrgAvecCashbackActif();
+        $client = Client::factory()->create(['organization_id' => $org->id, 'cashback_eligible' => true, 'cashback_montant_par_pack' => null]);
+        $variante = $this->makeFabricable($org);
+
+        $vente = $this->makeVenteAvecLignes($org, $client, [$this->ligne($variante, 10)]);
+        (new CashbackService)->processVente($vente);
+
+        $this->assertDatabaseCount('cashback_transactions', 0);
+    }
+
+    /** Un produit non fabricable (matériel, service…) n'est jamais un "pack" éligible au cashback. */
+    public function test_produit_non_fabricable_nest_jamais_eligible_au_cashback(): void
+    {
+        $org = $this->createOrgAvecCashbackActif();
+        $client = Client::factory()->create(['organization_id' => $org->id, 'cashback_eligible' => true, 'cashback_montant_par_pack' => 300]);
+        $produitMateriel = $this->makeProduitAvecVariante($org, ['nom' => 'Rouleau', 'type' => 'materiel'], ['prix_vente' => 500, 'prix_achat' => 300]);
+        $varianteMateriel = $produitMateriel->variantePrincipale()->first();
+
+        $vente = $this->makeVenteAvecLignes($org, $client, [$this->ligne($varianteMateriel, 10, prixVente: 500)]);
+        (new CashbackService)->processVente($vente);
+
+        $this->assertDatabaseCount('cashback_transactions', 0);
+    }
+
+    /** Vente multi-lignes : seules les lignes fabricables comptent, la quantité livrée prime sur la demandée quand elle existe. */
+    public function test_vente_multi_lignes_calcule_la_quantite_et_le_montant_corrects(): void
+    {
+        $org = $this->createOrgAvecCashbackActif();
+        $client = Client::factory()->create(['organization_id' => $org->id, 'cashback_eligible' => true, 'cashback_montant_par_pack' => 300]);
+        $varianteFabricable = $this->makeFabricable($org);
+        $produitMateriel = $this->makeProduitAvecVariante($org, ['nom' => 'Rouleau', 'type' => 'materiel'], ['prix_vente' => 500, 'prix_achat' => 300]);
+        $varianteMateriel = $produitMateriel->variantePrincipale()->first();
+
+        $vente = $this->makeVenteAvecLignes($org, $client, [
+            // 15 demandés mais seulement 12 réellement livrés (véhicule) : 12 comptent.
+            $this->ligne($varianteFabricable, 15, qteLivree: 12),
+            // Ligne matériel : jamais comptée, quelle que soit sa quantité.
+            $this->ligne($varianteMateriel, 100, prixVente: 500),
+        ]);
+        (new CashbackService)->processVente($vente);
+
+        $this->assertDatabaseHas('cashback_transactions', [
+            'vente_id' => $vente->id,
+            'montant' => 3600, // 12 × 300
+            'quantite_eligible_snapshot' => 12,
+        ]);
+    }
+
+    /** CASHBACK-004 : une modification du montant n'est jamais rétroactive. */
+    public function test_modification_du_montant_ne_recalcule_jamais_les_gains_deja_generes(): void
+    {
+        $org = $this->createOrgAvecCashbackActif();
+        $client = Client::factory()->create(['organization_id' => $org->id, 'cashback_eligible' => true, 'cashback_montant_par_pack' => 300]);
+        $variante = $this->makeFabricable($org);
+        $service = new CashbackService;
+
+        $venteA = $this->makeVenteAvecLignes($org, $client, [$this->ligne($variante, 10)]);
+        $service->processVente($venteA);
+
+        $client->update(['cashback_montant_par_pack' => 500]);
+
+        $venteB = $this->makeVenteAvecLignes($org, $client, [$this->ligne($variante, 10)]);
+        $service->processVente($venteB);
+
+        $this->assertSame(300, (int) CashbackTransaction::where('vente_id', $venteA->id)->value('montant_unitaire_snapshot'));
+        $this->assertSame(3000, (int) CashbackTransaction::where('vente_id', $venteA->id)->value('montant'));
+        $this->assertSame(500, (int) CashbackTransaction::where('vente_id', $venteB->id)->value('montant_unitaire_snapshot'));
+        $this->assertSame(5000, (int) CashbackTransaction::where('vente_id', $venteB->id)->value('montant'));
+
+        $solde = CashbackSolde::where('client_id', $client->id)->first();
+        $this->assertSame(8000, $solde->total_cashback_gagne);
+    }
+
+    /** CASHBACK-005/006 : la désactivation bloque les nouvelles générations mais ne touche jamais à l'historique. */
+    public function test_desactivation_conserve_lhistorique_et_bloque_les_nouvelles_generations(): void
+    {
+        $org = $this->createOrgAvecCashbackActif();
+        $client = Client::factory()->create(['organization_id' => $org->id, 'cashback_eligible' => true, 'cashback_montant_par_pack' => 300]);
+        $variante = $this->makeFabricable($org);
+        $service = new CashbackService;
+
+        $service->processVente($this->makeVenteAvecLignes($org, $client, [$this->ligne($variante, 10)]));
+        $soldeAvant = CashbackSolde::where('client_id', $client->id)->first();
+        $this->assertSame(3000, $soldeAvant->total_cashback_gagne);
+
+        $client->update(['cashback_eligible' => false]);
+
+        $service->processVente($this->makeVenteAvecLignes($org, $client, [$this->ligne($variante, 10)]));
+
+        $this->assertSame(1, CashbackTransaction::where('client_id', $client->id)->count());
+        $soldeApres = CashbackSolde::where('client_id', $client->id)->first();
+        $this->assertSame(3000, $soldeApres->total_cashback_gagne, 'le total historique ne doit ni être supprimé, ni annulé, ni recalculé');
+        $this->assertSame(3000, $soldeApres->cashback_en_attente);
+    }
+
+    /** Isolation multi-organisation : le cashback d'un client ne fuite jamais vers une autre organisation. */
+    public function test_isolation_organization_id(): void
+    {
+        $orgA = $this->createOrgAvecCashbackActif();
+        $orgB = $this->createOrgAvecCashbackActif();
+        $clientA = Client::factory()->create(['organization_id' => $orgA->id, 'cashback_eligible' => true, 'cashback_montant_par_pack' => 300]);
+        $clientB = Client::factory()->create(['organization_id' => $orgB->id, 'cashback_eligible' => true, 'cashback_montant_par_pack' => 500]);
+        $varianteA = $this->makeFabricable($orgA);
+        $varianteB = $this->makeFabricable($orgB);
+        $service = new CashbackService;
+
+        $service->processVente($this->makeVenteAvecLignes($orgA, $clientA, [$this->ligne($varianteA, 10)]));
+        $service->processVente($this->makeVenteAvecLignes($orgB, $clientB, [$this->ligne($varianteB, 10)]));
+
+        $this->assertSame(1, CashbackTransaction::where('organization_id', $orgA->id)->count());
+        $this->assertSame(1, CashbackTransaction::where('organization_id', $orgB->id)->count());
+        $this->assertSame(3000, (int) CashbackSolde::where('organization_id', $orgA->id)->value('total_cashback_gagne'));
+        $this->assertSame(5000, (int) CashbackSolde::where('organization_id', $orgB->id)->value('total_cashback_gagne'));
+    }
+
     // ── valider ────────────────────────────────────────────────────────────────
 
     public function test_valider_passe_statut_en_valide(): void
     {
-        $org = $this->createOrgWithCashback();
+        $org = $this->createOrgAvecCashbackActif();
         $client = Client::factory()->create(['organization_id' => $org->id]);
         $staff = $this->staffUser($org);
 
@@ -218,7 +379,7 @@ class CashbackTest extends TestCase
 
     public function test_valider_deja_valide_leve_exception(): void
     {
-        $org = $this->createOrgWithCashback();
+        $org = $this->createOrgAvecCashbackActif();
         $client = Client::factory()->create(['organization_id' => $org->id]);
         $staff = $this->staffUser($org);
         $t = $this->makeTransaction($org, $client, 10000, CashbackTransaction::STATUT_VALIDE);
@@ -231,7 +392,7 @@ class CashbackTest extends TestCase
 
     public function test_verser_total_passe_statut_verse(): void
     {
-        $org = $this->createOrgWithCashback();
+        $org = $this->createOrgAvecCashbackActif();
         $client = Client::factory()->create(['organization_id' => $org->id]);
         $staff = $this->staffUser($org);
         $t = $this->makeTransaction($org, $client, 10000, CashbackTransaction::STATUT_VALIDE);
@@ -258,7 +419,7 @@ class CashbackTest extends TestCase
 
     public function test_verser_partiel_passe_statut_partiel(): void
     {
-        $org = $this->createOrgWithCashback();
+        $org = $this->createOrgAvecCashbackActif();
         $client = Client::factory()->create(['organization_id' => $org->id]);
         $staff = $this->staffUser($org);
         $t = $this->makeTransaction($org, $client, 10000, CashbackTransaction::STATUT_VALIDE);
@@ -273,7 +434,7 @@ class CashbackTest extends TestCase
 
     public function test_versement_partiel_puis_solde_complet(): void
     {
-        $org = $this->createOrgWithCashback();
+        $org = $this->createOrgAvecCashbackActif();
         $client = Client::factory()->create(['organization_id' => $org->id]);
         $staff = $this->staffUser($org);
         $t = $this->makeTransaction($org, $client, 10000, CashbackTransaction::STATUT_VALIDE);
@@ -294,7 +455,7 @@ class CashbackTest extends TestCase
 
     public function test_verser_montant_superieur_au_restant_leve_exception(): void
     {
-        $org = $this->createOrgWithCashback();
+        $org = $this->createOrgAvecCashbackActif();
         $client = Client::factory()->create(['organization_id' => $org->id]);
         $staff = $this->staffUser($org);
         $t = $this->makeTransaction($org, $client, 10000, CashbackTransaction::STATUT_VALIDE);
@@ -305,7 +466,7 @@ class CashbackTest extends TestCase
 
     public function test_verser_transaction_non_versable_leve_exception(): void
     {
-        $org = $this->createOrgWithCashback();
+        $org = $this->createOrgAvecCashbackActif();
         $client = Client::factory()->create(['organization_id' => $org->id]);
         $staff = $this->staffUser($org);
         // en_attente → non versable (pas encore validée)
@@ -317,7 +478,7 @@ class CashbackTest extends TestCase
 
     public function test_verser_transaction_deja_verse_leve_exception(): void
     {
-        $org = $this->createOrgWithCashback();
+        $org = $this->createOrgAvecCashbackActif();
         $client = Client::factory()->create(['organization_id' => $org->id]);
         $staff = $this->staffUser($org);
         $t = $this->makeTransaction($org, $client, 10000, CashbackTransaction::STATUT_VERSE);
@@ -351,7 +512,7 @@ class CashbackTest extends TestCase
 
     public function test_controller_calcule_montant_verse_depuis_versements(): void
     {
-        $org = $this->createOrgWithCashback();
+        $org = $this->createOrgAvecCashbackActif();
         $user = $this->staffUser($org);
         $client = Client::factory()->create(['organization_id' => $org->id]);
 
@@ -380,7 +541,7 @@ class CashbackTest extends TestCase
     public function test_migration_repair_corrige_verse_sans_versements(): void
     {
         // Simule l'état incohérent avant la migration de réparation
-        $org = $this->createOrgWithCashback();
+        $org = $this->createOrgAvecCashbackActif();
         $client = Client::factory()->create(['organization_id' => $org->id]);
 
         $stale = CashbackTransaction::create([
@@ -413,7 +574,7 @@ class CashbackTest extends TestCase
 
     public function test_index_accessible_admin_entreprise(): void
     {
-        $org = $this->createOrgWithCashback();
+        $org = $this->createOrgAvecCashbackActif();
         $user = $this->staffUser($org, 'admin_entreprise');
 
         $this->actingAs($user)->get('/backoffice/cashback')->assertOk();
@@ -421,7 +582,7 @@ class CashbackTest extends TestCase
 
     public function test_index_interdit_role_client(): void
     {
-        $org = $this->createOrgWithCashback();
+        $org = $this->createOrgAvecCashbackActif();
         Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
         $user = User::factory()->create(['organization_id' => $org->id]);
         $user->assignRole('client');
@@ -431,7 +592,7 @@ class CashbackTest extends TestCase
 
     public function test_index_filtre_par_statut(): void
     {
-        $org = $this->createOrgWithCashback();
+        $org = $this->createOrgAvecCashbackActif();
         $user = $this->staffUser($org);
         $client1 = Client::factory()->create(['organization_id' => $org->id]);
         $client2 = Client::factory()->create(['organization_id' => $org->id]);
@@ -452,7 +613,7 @@ class CashbackTest extends TestCase
 
     public function test_valider_via_controller(): void
     {
-        $org = $this->createOrgWithCashback();
+        $org = $this->createOrgAvecCashbackActif();
         $client = Client::factory()->create(['organization_id' => $org->id]);
         $user = $this->staffUser($org, 'admin_entreprise');
         $t = $this->makeTransaction($org, $client, 10000, CashbackTransaction::STATUT_EN_ATTENTE);
@@ -468,7 +629,7 @@ class CashbackTest extends TestCase
 
     public function test_verser_via_controller(): void
     {
-        $org = $this->createOrgWithCashback();
+        $org = $this->createOrgAvecCashbackActif();
         $client = Client::factory()->create(['organization_id' => $org->id]);
         $user = $this->staffUser($org, 'admin_entreprise');
         // Transaction déjà validée (étape 1 faite)
@@ -490,7 +651,7 @@ class CashbackTest extends TestCase
 
     public function test_verser_partiel_via_controller(): void
     {
-        $org = $this->createOrgWithCashback();
+        $org = $this->createOrgAvecCashbackActif();
         $client = Client::factory()->create(['organization_id' => $org->id]);
         $user = $this->staffUser($org, 'admin_entreprise');
         $t = $this->makeTransaction($org, $client, 10000, CashbackTransaction::STATUT_VALIDE);
@@ -511,7 +672,7 @@ class CashbackTest extends TestCase
 
     public function test_verser_sur_en_attente_retourne_422(): void
     {
-        $org = $this->createOrgWithCashback();
+        $org = $this->createOrgAvecCashbackActif();
         $client = Client::factory()->create(['organization_id' => $org->id]);
         $user = $this->staffUser($org, 'admin_entreprise');
         $t = $this->makeTransaction($org, $client, 10000, CashbackTransaction::STATUT_EN_ATTENTE);
@@ -527,7 +688,7 @@ class CashbackTest extends TestCase
 
     public function test_verser_montant_superieur_rejete_par_validation(): void
     {
-        $org = $this->createOrgWithCashback();
+        $org = $this->createOrgAvecCashbackActif();
         $client = Client::factory()->create(['organization_id' => $org->id]);
         $user = $this->staffUser($org, 'admin_entreprise');
         $t = $this->makeTransaction($org, $client, 10000, CashbackTransaction::STATUT_VALIDE);

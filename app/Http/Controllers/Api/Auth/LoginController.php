@@ -2,13 +2,13 @@
 
 namespace App\Http\Controllers\Api\Auth;
 
+use App\Http\Controllers\Api\Auth\Concerns\IssuesTelephoneLoginToken;
 use App\Http\Controllers\Controller;
-use App\Models\Livreur;
 use App\Models\Personne;
-use App\Models\Proprietaire;
-use App\Models\User;
 use App\Models\UserAuthIdentity;
 use App\Services\PhoneNormalizer;
+use App\Support\Auth\AccountEligibility;
+use App\Support\Auth\AccountStatus;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -16,6 +16,8 @@ use Illuminate\Validation\ValidationException;
 
 class LoginController extends Controller
 {
+    use IssuesTelephoneLoginToken;
+
     public function __invoke(Request $request): JsonResponse
     {
         $request->validate([
@@ -40,17 +42,12 @@ class LoginController extends Controller
             ]);
         }
 
-        if (! $user->hasVerifiedEmail() && ! $user->isSuperAdmin()) {
-            return response()->json([
-                'message' => 'Veuillez vérifier votre adresse email pour activer votre compte. Consultez votre boîte de réception.',
-                'code' => 'email_not_verified',
-            ], 403);
-        }
+        $status = AccountEligibility::status($user);
 
-        if (! $user->is_active && ! $user->isSuperAdmin()) {
+        if ($status !== AccountStatus::Ok) {
             return response()->json([
-                'message' => 'Votre compte a été bloqué. Veuillez contacter notre service client pour plus d\'informations.',
-                'code' => 'account_blocked',
+                'message' => AccountEligibility::message($status),
+                'code' => $status->value,
             ], 403);
         }
 
@@ -62,41 +59,5 @@ class LoginController extends Controller
             'token' => $token,
             'user' => $this->userResource($user),
         ]);
-    }
-
-    /**
-     * Si le téléphone de l'utilisateur correspond à un livreur ou propriétaire
-     * sans user_id, on établit le lien automatiquement.
-     */
-    private function lierCompteParTelephone(User $user): void
-    {
-        if (! $user->telephone) {
-            return;
-        }
-
-        // nom/prenom/telephone ne sont plus des colonnes de livreurs/proprietaires — l'identité
-        // civile est portée par Personne (cf. Personne::normaliserTelephone(), même pattern que
-        // RegisterLookupController/UserInvitationService).
-        $normalise = Personne::normaliserTelephone($user->telephone);
-
-        Livreur::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
-            ->whereNull('user_id')
-            ->update(['user_id' => $user->id]);
-
-        Proprietaire::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
-            ->whereNull('user_id')
-            ->update(['user_id' => $user->id]);
-    }
-
-    private function userResource(User $user): array
-    {
-        return [
-            'id' => $user->id,
-            'prenom' => $user->prenom,
-            'nom' => $user->nom,
-            'telephone' => $user->telephone,
-            'email' => $user->email,
-            'roles' => $user->getRoleNames(),
-        ];
     }
 }

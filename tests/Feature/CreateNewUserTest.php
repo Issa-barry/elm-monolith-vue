@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Actions\Fortify\CreateNewUser;
+use App\Enums\OtpPurpose;
 use App\Features\ModuleFeature;
 use App\Models\Client;
 use App\Models\Livreur;
@@ -39,8 +40,8 @@ class CreateNewUserTest extends TestCase
     {
         /** @var OtpService $otp */
         $otp = app(OtpService::class);
-        $otp->generate($phone);
-        $otp->markVerified($phone);
+        $otp->generate($phone, OtpPurpose::PHONE_VERIFICATION);
+        $otp->markVerified($phone, OtpPurpose::PHONE_VERIFICATION);
     }
 
     // ─── Rôle et formatage ────────────────────────────────────────────────────
@@ -204,7 +205,7 @@ class CreateNewUserTest extends TestCase
         $this->expectException(ValidationException::class);
 
         // OTP généré mais pas encore vérifié (verified = false)
-        app(OtpService::class)->generate('+224622000001');
+        app(OtpService::class)->generate('+224622000001', OtpPurpose::PHONE_VERIFICATION);
 
         $action = new CreateNewUser;
         $action->create($this->validInput());
@@ -319,7 +320,7 @@ class CreateNewUserTest extends TestCase
         ]);
 
         $this->assertFalse(
-            app(OtpService::class)->isVerified('+224622000013'),
+            app(OtpService::class)->isVerified('+224622000013', OtpPurpose::PHONE_VERIFICATION),
             'OTP should be cleared from session after successful user creation.',
         );
     }

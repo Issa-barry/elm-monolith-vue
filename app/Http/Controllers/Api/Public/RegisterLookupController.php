@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Public;
 
+use App\Enums\OtpPurpose;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Livreur;
@@ -67,7 +68,7 @@ class RegisterLookupController extends Controller
             return response()->json(['error' => 'Trop de demandes de code. Veuillez réessayer plus tard.'], 429);
         }
 
-        $otp->generate($phone);
+        $otp->generate($phone, OtpPurpose::PHONE_VERIFICATION);
 
         return response()->json([
             'status' => $prefill ? 'prefill_available' : 'not_found',

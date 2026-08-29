@@ -2,6 +2,7 @@
 
 namespace Database\Seeders\Organizations\FelloDemo;
 
+use App\Enums\ClientType;
 use App\Models\Client;
 use App\Models\Organization;
 use Illuminate\Database\Seeder;
@@ -37,6 +38,11 @@ class FelloDemoCustomersSeeder extends Seeder
                     'pays' => 'Guinée',
                     'ville' => 'Conakry',
                     'is_active' => true,
+                    // Explicite plutôt que de reposer sur le défaut colonne (cf. ClientFactory,
+                    // même remarque) : un client de démo "Externe" reste compatible avec
+                    // cashback_eligible=true ou false, sans déclencher la règle "montant par
+                    // pack obligatoire" réservée aux Revendeurs (cf. CashbackEligibiliteService).
+                    'type' => ClientType::EXTERNE->value,
                     'cashback_eligible' => $data['cashback'],
                     'user_id' => null,
                 ]

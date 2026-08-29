@@ -303,6 +303,9 @@ class ProduitApiTest extends TestCase
             'prix_usine' => 5100,
             'prix_usine_tricycle' => 5000,
             'prix_vente' => 6000,
+            'prix_externe' => 1,
+            'prix_revendeur' => 1,
+            'prix_distributeur' => 1,
         ])->assertCreated();
     }
 
@@ -317,6 +320,9 @@ class ProduitApiTest extends TestCase
             'prix_usine' => 18000,
             'prix_usine_tricycle' => 10000,
             'prix_vente' => 18000,
+            'prix_externe' => 1,
+            'prix_revendeur' => 1,
+            'prix_distributeur' => 1,
         ])
             ->assertUnprocessable()
             ->assertJsonValidationErrors('prix_vente');
@@ -353,6 +359,9 @@ class ProduitApiTest extends TestCase
             'prix_usine' => 5100,
             'prix_usine_tricycle' => 5000,
             'prix_vente' => 6000,
+            'prix_externe' => 1,
+            'prix_revendeur' => 1,
+            'prix_distributeur' => 1,
         ]);
 
         $this->putJson(route('api.backoffice.produits.update', $produit), [

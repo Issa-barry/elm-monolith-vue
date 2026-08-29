@@ -75,6 +75,12 @@ class BackofficeLoginController extends Controller
         ]);
     }
 
+    /**
+     * Même principe que LoginController::lierCompteParTelephone() (cf. sa
+     * docblock) : le rattachement se fait par instance (`get()->each(update())`,
+     * pas un update() de masse) pour que BusinessProfileRoleObserver attribue le
+     * rôle Spatie correspondant automatiquement.
+     */
     private function lierCompteParTelephone(User $user): void
     {
         if (! $user->telephone) {
@@ -88,11 +94,13 @@ class BackofficeLoginController extends Controller
 
         Livreur::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
             ->whereNull('user_id')
-            ->update(['user_id' => $user->id]);
+            ->get()
+            ->each(fn (Livreur $livreur) => $livreur->update(['user_id' => $user->id]));
 
         Proprietaire::whereHas('personne', fn ($q) => $q->where('telephone_normalise', $normalise))
             ->whereNull('user_id')
-            ->update(['user_id' => $user->id]);
+            ->get()
+            ->each(fn (Proprietaire $proprietaire) => $proprietaire->update(['user_id' => $user->id]));
     }
 
     private function userResource(User $user): array

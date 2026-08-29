@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use App\Enums\OtpChannel;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use LogicException;
 
 /**
  * "Comment je me connecte" — séparé de Personne ("qui je suis") et de User ("à quoi j'ai
@@ -24,7 +26,7 @@ class UserAuthIdentity extends Model
 
     protected $fillable = [
         'user_id', 'type', 'value', 'normalized_value',
-        'verified_at', 'verification_token', 'verification_expires_at', 'is_primary',
+        'verified_at', 'verification_channel', 'verification_token', 'verification_expires_at', 'is_primary',
     ];
 
     // Défense en profondeur (cf. HandleInertiaRequests::authUserPayload()) : ce modèle
@@ -56,6 +58,30 @@ class UserAuthIdentity extends Model
     public function isVerified(): bool
     {
         return $this->verified_at !== null;
+    }
+
+    /**
+     * SEUL point qui doit écrire `verified_at`/`verification_channel` suite à
+     * une vérification OTP — refuse structurellement de marquer un téléphone
+     * vérifié via un canal qui ne prouve pas la possession d'un téléphone (ex:
+     * email), cf. `OtpChannel::provesPossessionOf()`. `isVerified()` continue
+     * de signifier strictement `verified_at !== null` : aucun état
+     * intermédiaire/provisoire n'existe (cf. rapport du 27/08/2026).
+     *
+     * @throws LogicException si le canal ne prouve pas la possession du type d'identité concerné.
+     */
+    public function markVerifiedVia(OtpChannel $channel): void
+    {
+        if (! $channel->provesPossessionOf($this->type)) {
+            throw new LogicException(
+                "Le canal [{$channel->value}] ne prouve pas la possession d'une identité de type [{$this->type}] — impossible de la marquer vérifiée via ce canal."
+            );
+        }
+
+        $this->forceFill([
+            'verified_at' => now(),
+            'verification_channel' => $channel->value,
+        ])->save();
     }
 
     /** Forme canonique de comparaison — chiffres seuls pour un téléphone, minuscules pour un email. */

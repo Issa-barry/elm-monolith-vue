@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Auth;
 
+use App\Enums\OtpChannel;
 use App\Enums\UserStatus;
 use App\Http\Controllers\Controller;
 use App\Models\UserAuthIdentity;
@@ -23,8 +24,12 @@ class EmailVerificationController extends Controller
             return response()->view('emails.verify-error', ['expired' => true], 410);
         }
 
+        // Lien de vérification reçu par email : preuve réelle de possession de
+        // cette adresse — markVerifiedVia() applique la même règle que le reste
+        // du système OTP (cf. rapport du 27/08/2026), même si ce mécanisme
+        // (lien signé) est distinct d'OtpService.
+        $identity->markVerifiedVia(OtpChannel::EMAIL);
         $identity->update([
-            'verified_at' => now(),
             'verification_token' => null,
             'verification_expires_at' => null,
         ]);

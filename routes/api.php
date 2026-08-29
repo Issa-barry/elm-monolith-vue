@@ -4,8 +4,11 @@ use App\Http\Controllers\Api\Auth\BackofficeLoginController;
 use App\Http\Controllers\Api\Auth\CheckPhoneController;
 use App\Http\Controllers\Api\Auth\EmailVerificationController;
 use App\Http\Controllers\Api\Auth\LoginController;
+use App\Http\Controllers\Api\Auth\LogoutAllController;
 use App\Http\Controllers\Api\Auth\LogoutController;
 use App\Http\Controllers\Api\Auth\MeController;
+use App\Http\Controllers\Api\Auth\OtpLogin\RequestController as OtpLoginRequestController;
+use App\Http\Controllers\Api\Auth\OtpLogin\VerifyController as OtpLoginVerifyController;
 use App\Http\Controllers\Api\Auth\PasswordReset\LookupController as PasswordLookupController;
 use App\Http\Controllers\Api\Auth\PasswordReset\ResetController;
 use App\Http\Controllers\Api\Auth\PasswordReset\VerifyController as PasswordVerifyController;
@@ -19,8 +22,16 @@ use App\Http\Controllers\Api\Backoffice\Logistique\TransfertsController;
 use App\Http\Controllers\Api\Backoffice\Logistique\ValidationAdminController;
 use App\Http\Controllers\Api\Backoffice\Logistique\ValiderReceptionController;
 use App\Http\Controllers\Api\Backoffice\StatsController;
+use App\Http\Controllers\Api\Client\ActiviteController;
+use App\Http\Controllers\Api\Client\CommandesController;
+use App\Http\Controllers\Api\Client\DashboardController;
+use App\Http\Controllers\Api\Client\DepensesController;
 use App\Http\Controllers\Api\Client\GainsController;
 use App\Http\Controllers\Api\Client\LivraisonsEnCoursController;
+use App\Http\Controllers\Api\Client\ProfileController;
+use App\Http\Controllers\Api\Client\PropositionsVehiculeController;
+use App\Http\Controllers\Api\Client\UpdateNotificationPreferencesController;
+use App\Http\Controllers\Api\Client\UpdateProfileController;
 use App\Http\Controllers\Api\Client\VehiculeCommissionsController;
 use App\Http\Controllers\Api\Client\VehiculeFraisController;
 use App\Http\Controllers\Api\Client\VehiculesController;
@@ -34,6 +45,7 @@ use App\Http\Controllers\Api\Mobile\Logistique\SaisirQuantitesChargeesController
 use App\Http\Controllers\Api\Mobile\NotificationsController;
 use App\Http\Controllers\Api\Mobile\PushTokenController;
 use App\Http\Controllers\Api\Mobile\ScanCommandeController;
+use App\Http\Controllers\Api\Mobile\WebPushSubscriptionsController;
 use App\Http\Controllers\Api\Produits\ProduitController;
 use App\Http\Controllers\Api\Produits\ProduitHistoriqueController;
 use App\Http\Controllers\Api\Public\ContactController as PublicContactController;
@@ -52,6 +64,17 @@ Route::prefix('auth')->name('api.auth.')->group(function () {
     // Connexion
     Route::post('login', LoginController::class)->name('login')
         ->middleware('throttle:10,1');
+
+    // Connexion sans mot de passe par OTP (cf. rapport du 27/08/2026) — canal
+    // transporteur résolu dynamiquement (config('otp.channels')), email
+    // aujourd'hui en l'absence de fournisseur SMS/WhatsApp. Une connexion
+    // réussie ici ne vérifie jamais le téléphone (cf. OtpLogin\VerifyController).
+    Route::prefix('otp-login')->name('otp-login.')->group(function () {
+        Route::post('request', OtpLoginRequestController::class)->name('request')
+            ->middleware('throttle:otp-send');
+        Route::post('verify', OtpLoginVerifyController::class)->name('verify')
+            ->middleware('throttle:otp-verify');
+    });
 
     // Vérification email (accessible sans authentification)
     Route::get('verify-email/{token}', EmailVerificationController::class)
@@ -78,6 +101,10 @@ Route::prefix('auth')->name('api.auth.')->group(function () {
     // Routes protégées (token requis)
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('logout', LogoutController::class)->name('logout');
+        // Révoque tous les tokens de l'utilisateur (tous appareils/clients), à la
+        // différence de `logout` qui ne révoque que le token courant — cf. section
+        // "Politique de tokens" de docs/api-auth-contract.md.
+        Route::post('logout-all', LogoutAllController::class)->name('logout-all');
         Route::get('me', MeController::class)->name('me');
     });
 });
@@ -167,12 +194,51 @@ Route::middleware('auth:sanctum')->prefix('v1/backoffice')->name('api.backoffice
 // ── Routes mobile ─────────────────────────────────────────────────────────────
 Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('v1/mobile')->group(function () {
-        Route::get('vehicules/mine', VehiculesController::class)
-            ->name('client.vehicules.mine');
-        Route::get('vehicules/{vehiculeId}/commissions', VehiculeCommissionsController::class)
-            ->name('client.vehicules.commissions');
-        Route::get('vehicules/{vehiculeId}/frais', VehiculeFraisController::class)
-            ->name('client.vehicules.frais');
+        // Autorisation explicite en plus de auth:sanctum : ces 3 routes exposent des
+        // données financières/véhicule scopées par profil métier (proprietaire/livreur)
+        // — un token valide seul ne doit pas suffire (ex: un compte staff n'a ni
+        // proprietaire ni livreur associé et recevrait une réponse vide, mais la
+        // sécurité ne doit pas reposer sur cet effet de bord). Cf. audit backend du
+        // 26/08/2026, section 13.
+        Route::middleware('role:client|proprietaire|livreur')->group(function () {
+            // Nom volontairement distinct de 'client.dashboard' (page Inertia,
+            // routes/web.php) : même nom sur deux routes différentes rend
+            // route('client.dashboard') ambigu pour l'helper de nommage Laravel.
+            Route::get('dashboard', DashboardController::class)
+                ->name('client.dashboard.mine');
+            Route::get('depenses/mine', DepensesController::class)
+                ->name('client.depenses.mine');
+            Route::get('activite', ActiviteController::class)
+                ->name('client.activite.mine');
+            Route::get('commandes/mine', [CommandesController::class, 'index'])
+                ->name('client.commandes.mine');
+            Route::get('commandes/{commandeId}', [CommandesController::class, 'show'])
+                ->name('client.commandes.show');
+            // Noms 'propositions-vehicules.*' (pas 'propositions.*') : routes/web.php a déjà
+            // 'client.propositions.index'/'client.propositions.store' pour les pages Inertia —
+            // même piège de collision que 'client.dashboard'/'client.profile' plus haut.
+            Route::get('propositions-vehicules', [PropositionsVehiculeController::class, 'index'])
+                ->name('client.propositions-vehicules.index');
+            Route::post('propositions-vehicules', [PropositionsVehiculeController::class, 'store'])
+                ->name('client.propositions-vehicules.store');
+            Route::get('vehicules/mine', VehiculesController::class)
+                ->name('client.vehicules.mine');
+            Route::get('vehicules/{vehiculeId}/commissions', VehiculeCommissionsController::class)
+                ->name('client.vehicules.commissions');
+            Route::get('vehicules/{vehiculeId}/frais', VehiculeFraisController::class)
+                ->name('client.vehicules.frais');
+            // Nom volontairement distinct de 'client.profile' (page Inertia,
+            // routes/web.php) : même collision que 'client.dashboard' plus haut —
+            // route('client.profile') résolvait vers cette route API (dernière
+            // enregistrée), jamais vers la page Inertia, un piège pour tout futur
+            // lien Ziggy côté frontend.
+            Route::get('profile', ProfileController::class)
+                ->name('client.profile.mine');
+            Route::patch('profile', UpdateProfileController::class)
+                ->name('client.profile.update');
+            Route::patch('profile/notification-preferences', UpdateNotificationPreferencesController::class)
+                ->name('client.profile.notification-preferences');
+        });
         Route::post('push-token', PushTokenController::class)
             ->name('client.push-token');
         Route::post('auth/change-password', ChangePasswordController::class)
@@ -200,11 +266,18 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('mark-all-read', [NotificationsController::class, 'markAllRead'])->name('mark-all-read');
             Route::post('{id}/read', [NotificationsController::class, 'markRead'])->name('mark-read');
         });
+        Route::prefix('web-push')->name('client.web-push.')->group(function () {
+            Route::get('vapid-public-key', [WebPushSubscriptionsController::class, 'vapidPublicKey'])->name('vapid-public-key');
+            Route::post('subscriptions', [WebPushSubscriptionsController::class, 'store'])->name('subscriptions.store');
+            Route::delete('subscriptions', [WebPushSubscriptionsController::class, 'destroy'])->name('subscriptions.destroy');
+        });
     });
-    Route::get('gains/mine', GainsController::class)
-        ->name('client.gains.mine');
-    Route::get('livraisons/en-cours', LivraisonsEnCoursController::class)
-        ->name('client.livraisons.en-cours');
+    Route::middleware('role:client|proprietaire|livreur')->group(function () {
+        Route::get('gains/mine', GainsController::class)
+            ->name('client.gains.mine');
+        Route::get('livraisons/en-cours', LivraisonsEnCoursController::class)
+            ->name('client.livraisons.en-cours');
+    });
 });
 
 // ── Recherche globale (web + mobile, un seul endpoint pour tous les profils) ──

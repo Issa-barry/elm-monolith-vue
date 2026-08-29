@@ -3,8 +3,9 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { paysOptionsByName } from '@/lib/pays';
-import { Save } from 'lucide-vue-next';
+import { Lock, Save } from 'lucide-vue-next';
 import Dropdown from 'primevue/dropdown';
+import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import { computed } from 'vue';
 
@@ -29,6 +30,7 @@ interface FormData {
     is_active: boolean;
     type: string;
     cashback_eligible: boolean;
+    cashback_montant_par_pack: number | null;
 }
 
 interface TypeOption {
@@ -47,14 +49,26 @@ const props = withDefaults(
     {
         readonly: false,
         types: () => [
-            { value: 'standard', label: 'Standard' },
             { value: 'externe', label: 'Externe' },
+            { value: 'revendeur', label: 'Revendeur' },
+            { value: 'distributeur', label: 'Distributeur' },
         ],
     },
 );
 
 const emit = defineEmits<{ submit: []; 'update:form': [FormData] }>();
 const isReadOnly = computed(() => props.readonly);
+// Un Revendeur est automatiquement éligible au cashback (règle métier) — le toggle Cashback est
+// donc verrouillé sur "Oui" pour cette nature, jamais de valeur contradictoire possible côté UI.
+const isRevendeur = computed(() => props.form.type === 'revendeur');
+function onTypeChange(type: string) {
+    emit('update:form', {
+        ...props.form,
+        type,
+        cashback_eligible:
+            type === 'revendeur' ? true : props.form.cashback_eligible,
+    });
+}
 const readonlyInputClass = computed(() =>
     isReadOnly.value
         ? 'disabled:!bg-muted/20 disabled:!text-foreground/85 disabled:!border-border/70 disabled:!opacity-100'
@@ -366,9 +380,7 @@ function onSubmit() {
             <div class="max-w-xs">
                 <Dropdown
                     :model-value="form.type"
-                    @update:model-value="
-                        $emit('update:form', { ...form, type: $event })
-                    "
+                    @update:model-value="onTypeChange($event)"
                     :options="types"
                     option-label="label"
                     option-value="value"
@@ -383,8 +395,9 @@ function onSubmit() {
                     {{ errors.type }}
                 </p>
                 <p v-else class="mt-1.5 text-xs text-muted-foreground">
-                    Un client externe vient charger ses propres commandes,
-                    tarifées à prix usine, hors flotte gérée.
+                    Un client externe vient charger ses propres commandes, hors
+                    flotte gérée. Un revendeur est automatiquement éligible au
+                    cashback.
                 </p>
             </div>
         </div>
@@ -396,7 +409,24 @@ function onSubmit() {
             >
                 Cashback
             </h3>
-            <div>
+
+            <!-- Revendeur : aucun choix Oui/Non affiché (la règle métier l'interdit), juste un
+                 badge verrouillé — jamais laisser penser que "Non" serait sélectionnable. -->
+            <div v-if="isRevendeur">
+                <span
+                    class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary"
+                >
+                    <Lock class="h-3.5 w-3.5" />
+                    Cashback actif
+                </span>
+                <p class="mt-1.5 text-xs text-muted-foreground">
+                    Obligatoire pour un client Revendeur — désactivation
+                    impossible.
+                </p>
+            </div>
+
+            <!-- Externe / Distributeur : facultatif, choix Oui/Non normal. -->
+            <div v-else>
                 <p class="mb-2 text-sm font-medium">Éligible au cashback</p>
                 <div
                     class="inline-flex gap-1 rounded-lg border bg-muted/40 p-1"
@@ -441,8 +471,55 @@ function onSubmit() {
                 <p class="mt-1.5 text-xs text-muted-foreground">
                     {{
                         form.cashback_eligible
-                            ? 'Ce client recevra du cashback selon les règles définies.'
-                            : 'Ce client ne recevra aucun cashback.'
+                            ? 'Ce client recevra du cashback selon le montant par pack ci-dessous.'
+                            : 'Ce client ne recevra aucun cashback — un cashback déjà acquis reste conservé.'
+                    }}
+                </p>
+            </div>
+
+            <!-- Montant par pack : toujours affiché pour un Revendeur (obligatoire), affiché
+                 seulement si actif pour Externe/Distributeur. -->
+            <div
+                v-if="isRevendeur || form.cashback_eligible"
+                class="mt-4 border-t pt-4"
+            >
+                <Label for="cashback_montant_par_pack" class="mb-1.5 block"
+                    >Montant cashback par pack
+                    <span class="text-destructive">*</span></Label
+                >
+                <div class="flex max-w-xs items-center gap-2">
+                    <InputNumber
+                        input-id="cashback_montant_par_pack"
+                        :model-value="form.cashback_montant_par_pack"
+                        @update:model-value="
+                            $emit('update:form', {
+                                ...form,
+                                cashback_montant_par_pack: $event,
+                            })
+                        "
+                        :min="0"
+                        :use-grouping="true"
+                        locale="fr-GN"
+                        class="w-full"
+                        input-class="w-full"
+                        :disabled="isReadOnly"
+                        :class="{
+                            'p-invalid': errors.cashback_montant_par_pack,
+                        }"
+                    />
+                    <span class="text-sm text-muted-foreground">GNF</span>
+                </div>
+                <p
+                    v-if="errors.cashback_montant_par_pack"
+                    class="mt-1 text-xs text-destructive"
+                >
+                    {{ errors.cashback_montant_par_pack }}
+                </p>
+                <p v-else class="mt-1.5 text-xs text-muted-foreground">
+                    {{
+                        isRevendeur
+                            ? 'Obligatoire pour un client Revendeur.'
+                            : 'Montant gagné par pack vendu à ce client.'
                     }}
                 </p>
             </div>

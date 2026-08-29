@@ -12,6 +12,7 @@ use App\Enums\DeclencheurCommissionVente;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutCommission;
 use App\Models\Categorie;
+use App\Models\Client;
 use App\Models\CommandeVente;
 use App\Models\CommandeVenteLigne;
 use App\Models\CommissionCibleType;
@@ -321,6 +322,27 @@ class CommissionTriggerVenteTest extends TestCase
         $this->assertTrue($enveloppes->every(fn (CommissionEnveloppe $e) => $e->statut === StatutCommission::CREEE));
     }
 
+    /**
+     * Décision du 28/08/2026 : un client sélectionné devient le débiteur de la facture (cf.
+     * SolvabiliteService), mais le véhicule reste le support logistique de la livraison — la
+     * commission de son équipe doit naître exactement comme sans client, aucune dépendance
+     * entre "qui paie" et "qui livre/touche une commission".
+     */
+    public function test_commission_generee_normalement_meme_avec_un_client_facture(): void
+    {
+        $vehicule = $this->makeVehiculeAvecEquipe();
+        $produit = $this->makeProduit();
+        $client = Client::factory()->create(['organization_id' => $this->org->id]);
+        ['commande' => $commande, 'ligne' => $ligne] = $this->creerCommandeAvecLigne(
+            $vehicule, $produit, attrs: ['client_id' => $client->id]
+        );
+
+        $commande = $this->validerChargementComplet($commande, $ligne);
+
+        $enveloppes = CommissionEnveloppe::where('source_id', $commande->id)->get();
+        $this->assertNotEmpty($enveloppes, 'la commission équipe doit naître même quand la commande est facturée à un client');
+    }
+
     public function test_commission_calculee_sur_la_quantite_reellement_chargee_pas_la_demandee(): void
     {
         $vehicule = $this->makeVehiculeAvecEquipe();
@@ -500,6 +522,61 @@ class CommissionTriggerVenteTest extends TestCase
         // CREEE même à l'encaissement : jamais IMPAYE direct, quel que soit le
         // déclencheur — seule la validation de période sort de CREEE.
         $this->assertTrue($enveloppes->every(fn (CommissionEnveloppe $e) => $e->statut === StatutCommission::CREEE));
+    }
+
+    /**
+     * Non-régression (incident du 2026-08-26) : une commission générée sous FACTURE_ENCAISSEE
+     * restait active/payable même après suppression de l'encaissement qui l'avait fait naître
+     * (facture repassée sous PAYEE). Corrigé par
+     * CommissionTriggerService::onFactureVenteEncaissementRetire(), appelé symétriquement à
+     * onFactureVenteEncaissee() depuis FactureVente::recalculStatut() — annule les parts/
+     * enveloppes non encore payées quand la facture sort de PAYEE.
+     */
+    public function test_facture_encaissee_suppression_de_lencaissement_declencheur_devrait_invalider_la_commission(): void
+    {
+        Parametre::setDeclencheurCommissionVente($this->org->id, DeclencheurCommissionVente::FACTURE_ENCAISSEE);
+
+        $vehicule = $this->makeVehiculeAvecEquipe();
+        $produit = $this->makeProduit();
+        ['commande' => $commande, 'ligne' => $ligne] = $this->creerCommandeAvecLigne($vehicule, $produit);
+
+        $commande = $this->validerChargementComplet($commande, $ligne);
+        $this->encaisserIntegralement($commande);
+
+        $facture = $commande->fresh('facture')->facture;
+        $this->assertTrue($facture->isPayee(), 'précondition : facture payée');
+        $enveloppesAvant = CommissionEnveloppe::where('source_id', $commande->id)->get();
+        $this->assertNotEmpty($enveloppesAvant, 'précondition : commission générée');
+
+        $encaissement = $facture->encaissements()->sole();
+        $this->actingAs($this->user)
+            ->delete(route('encaissements.destroy', $encaissement))
+            ->assertRedirect();
+
+        $facture->refresh();
+        $this->assertFalse(
+            $facture->isPayee(),
+            'la facture doit redescendre sous PAYEE une fois son seul encaissement supprimé',
+        );
+
+        // Plus de fait générateur (facture non payée) = plus de commission active/payable :
+        // les enveloppes doivent être passées ANNULEE, jamais laissées CREEE/IMPAYE comme si
+        // l'encaissement existait toujours.
+        $enveloppesActives = CommissionEnveloppe::where('source_id', $commande->id)
+            ->where('statut', '!=', StatutCommission::ANNULEE->value)
+            ->get();
+        $this->assertEmpty($enveloppesActives, 'toutes les enveloppes doivent être annulées');
+
+        $enveloppesAnnulees = CommissionEnveloppe::where('source_id', $commande->id)
+            ->where('statut', StatutCommission::ANNULEE->value)
+            ->get();
+        $this->assertCount(2, $enveloppesAnnulees);
+        $this->assertTrue(
+            $enveloppesAnnulees->every(
+                fn (CommissionEnveloppe $e) => $e->parts->every(fn ($p) => $p->statut === StatutCommission::ANNULEE)
+            ),
+            'les parts individuelles doivent aussi être annulées, pas seulement l’enveloppe',
+        );
     }
 
     public function test_facture_encaissee_encaissement_partiel_ne_genere_pas_de_commission(): void

@@ -16,8 +16,8 @@ import {
     PackageCheck,
     ShoppingCart,
     Truck,
-    UserCog,
     UserRoundCheck,
+    UsersRound,
 } from 'lucide-vue-next';
 import { computed } from 'vue';
 
@@ -32,6 +32,9 @@ interface QuickMenuItem {
 
 const page = usePage<AppPageProps>();
 const { can } = usePermissions();
+const isSuperAdmin = computed(() =>
+    (page.props as any).auth?.roles?.includes('super_admin'),
+);
 const moduleFlags = computed(() => page.props.module_flags ?? {});
 const moduleActive = (key: ModuleFlagKey): boolean =>
     moduleFlags.value[key] !== false;
@@ -114,10 +117,10 @@ const quickMenuItems = computed((): QuickMenuItem[] =>
             visible: canSee('sites.read', 'sites'),
         },
         {
-            title: 'Utilisateurs',
-            href: '/backoffice/users',
-            icon: UserCog,
-            visible: canSee('users.read', 'utilisateurs'),
+            title: 'Comptes',
+            href: '/backoffice/comptes',
+            icon: UsersRound,
+            visible: isSuperAdmin.value || canSee('users.read', 'utilisateurs'),
         },
     ].filter((item) => item.visible),
 );

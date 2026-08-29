@@ -112,7 +112,13 @@ class UserController extends Controller
         ];
     }
 
-    /** Crée/renseigne l'identité de connexion téléphone (toujours obligatoire). */
+    /**
+     * Crée/renseigne l'identité de connexion téléphone (toujours obligatoire).
+     * Ce numéro n'est prouvé par aucun moyen ici (saisi par un admin dans le
+     * formulaire de gestion des utilisateurs) — `verified_at` reste NULL, cf.
+     * rapport du 27/08/2026 (règle de sécurité OTP, s'applique à toute
+     * vérification d'identité téléphone). Corrigé le même jour.
+     */
     private function syncTelephoneIdentity(User $user, string $telephone): void
     {
         $identity = $user->telephoneIdentity();
@@ -125,7 +131,6 @@ class UserController extends Controller
                 'type' => UserAuthIdentity::TYPE_TELEPHONE,
                 'value' => $telephone,
                 'normalized_value' => $normalized,
-                'verified_at' => now(),
                 'is_primary' => true,
             ]);
         }
@@ -160,7 +165,17 @@ class UserController extends Controller
     {
         $this->authorize('viewAny', User::class);
 
-        $authUser = auth()->user();
+        return Inertia::render('Users/Index', $this->indexProps(auth()->user()));
+    }
+
+    /**
+     * Props de la page Users/Index — extrait pour être réutilisé par
+     * AccountController::index() (écran "Comptes"), qui délègue à cette même
+     * liste organisation-scopée pour tout acteur non super_admin, afin de ne
+     * pas dupliquer la logique staff/rôles/validation entre les deux écrans.
+     */
+    public function indexProps(User $authUser): array
+    {
         $orgId = $authUser->organization_id;
 
         $users = User::with([
@@ -213,7 +228,7 @@ class UserController extends Controller
                 ]);
         }
 
-        return Inertia::render('Users/Index', [
+        return [
             'users' => $users,
             'pending_registrations' => $pendingRegistrations,
             // Options du modal de validation de compte (ValidateAccountModal.vue) — cf.
@@ -235,7 +250,7 @@ class UserController extends Controller
                 ? Role::where(fn ($q) => $q->whereNull('organization_id')->orWhere('organization_id', $orgId))
                     ->pluck('label', 'name')
                 : [],
-        ]);
+        ];
     }
 
     public function create(): Response
@@ -434,7 +449,15 @@ class UserController extends Controller
             $userUpdate['password'] = $data['password'];
         }
         $user->update($userUpdate);
-        $user->syncRoles([$data['role']]);
+
+        // syncRoles() remplace TOUS les rôles — un compte qui cumule ce rôle staff
+        // avec un rôle client/proprietaire/livreur (ex: un admin qui possède aussi
+        // un véhicule, cf. décision du 26/08/2026) perdrait silencieusement ce rôle
+        // externe si on ne le préservait pas explicitement ici. Ce formulaire ne
+        // gère que le rôle staff — jamais le rôle externe, qui vient exclusivement
+        // du rattachement à un profil Client/Proprietaire/Livreur.
+        $externalRoles = $user->getRoleNames()->intersect(User::EXTERNAL_ROLES)->all();
+        $user->syncRoles([$data['role'], ...$externalRoles]);
 
         if ($previousRole !== $data['role']) {
             $auditLog->record($user, AuditEvent::UPDATED, auth()->user(), ['role' => $previousRole], ['role' => $data['role']]);

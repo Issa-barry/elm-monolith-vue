@@ -137,6 +137,8 @@ class FactureVente extends Model
         // effet sous le déclencheur CHARGEMENT_VALIDE (défaut).
         if (! $etaitPayee && $this->statut_facture === StatutFactureVente::PAYEE) {
             CommissionTriggerService::onFactureVenteEncaissee($this);
+        } elseif ($etaitPayee && $this->statut_facture !== StatutFactureVente::PAYEE) {
+            CommissionTriggerService::onFactureVenteEncaissementRetire($this);
         }
 
         return $saved;

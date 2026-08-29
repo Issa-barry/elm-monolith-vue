@@ -6,17 +6,17 @@ use App\Enums\StatutCommission;
 use App\Http\Controllers\Controller;
 use App\Models\CommandeVente;
 use App\Models\CommissionEnveloppePart;
-use App\Models\Livreur;
-use App\Models\Proprietaire;
 use App\Models\User;
 use App\Models\Vehicule;
+use App\Services\Client\ClientIdentityResolver;
+use App\Services\Client\Data\VehiculeCommissionRow;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class VehiculeCommissionsController extends Controller
 {
-    public function __invoke(Request $request, string $vehiculeId): JsonResponse
+    public function __invoke(Request $request, string $vehiculeId, ClientIdentityResolver $identityResolver): JsonResponse
     {
         /** @var User $user */
         $user = $request->user();
@@ -26,17 +26,9 @@ class VehiculeCommissionsController extends Controller
             return response()->json(['message' => 'Véhicule introuvable.'], 404);
         }
 
-        $proprietaire = Proprietaire::query()
-            ->when($user->organization_id, fn ($q) => $q->where('organization_id', $user->organization_id))
-            ->where(fn ($q) => $q->where('user_id', $user->id)
-                ->when($user->telephone, fn ($q2) => $q2->orWhereHas('personne', fn ($p) => $p->where('telephone', $user->telephone))))
-            ->first();
-
-        $livreur = Livreur::query()
-            ->when($user->organization_id, fn ($q) => $q->where('organization_id', $user->organization_id))
-            ->where(fn ($q) => $q->where('user_id', $user->id)
-                ->when($user->telephone, fn ($q2) => $q2->orWhereHas('personne', fn ($p) => $p->where('telephone', $user->telephone))))
-            ->first();
+        $identity = $identityResolver->resolve($user);
+        $proprietaire = $identity->proprietaire;
+        $livreur = $identity->livreur;
 
         if ($proprietaire === null && $livreur === null) {
             return response()->json([]);
@@ -49,7 +41,7 @@ class VehiculeCommissionsController extends Controller
                     ->where('ce.source_type', '=', CommandeVente::class);
             })
             ->where('cmd.vehicule_id', $vehiculeId)
-            ->when($user->organization_id, fn ($q) => $q->where('ce.organization_id', $user->organization_id))
+            ->when($identity->organizationId, fn ($q) => $q->where('ce.organization_id', $identity->organizationId))
             ->where(function ($q) use ($proprietaire, $livreur) {
                 if ($proprietaire !== null) {
                     $q->orWhere(fn ($sq) => $sq
@@ -80,7 +72,16 @@ class VehiculeCommissionsController extends Controller
                     ? Carbon::parse($row->commission_date)
                     : null;
 
-                $statutMobile = match ($row->statut) {
+                // Bug réel découvert le 27/08/2026 (audit OpenAPI, écriture du premier test
+                // de ce contrôleur — jusqu'ici aucun test ne l'exerçait) : `$row` provient
+                // de `CommissionEnveloppePart::query()->...->get()`, donc chaque ligne est un
+                // modèle Eloquent hydraté, PAS un stdClass — `statut` y est casté en
+                // StatutCommission (enum), jamais une string brute. Le match() ci-dessous
+                // comparait cet enum à des littéraux ->value (des strings) : `===` ne matchait
+                // JAMAIS, donc CE endpoint affichait TOUJOURS "en_attente", quel que soit le
+                // vrai statut de paiement. Non corrigé jusqu'ici faute de test.
+                $statutValue = $row->statut instanceof StatutCommission ? $row->statut->value : $row->statut;
+                $statutMobile = match ($statutValue) {
                     StatutCommission::PAYE->value => 'paye',
                     StatutCommission::PARTIEL->value => 'partiel',
                     default => 'en_attente',
@@ -88,17 +89,17 @@ class VehiculeCommissionsController extends Controller
 
                 $montantAPayer = $row->montant_actuel !== null ? (float) $row->montant_actuel : (float) $row->montant_net;
 
-                return [
-                    'id' => $row->id,
-                    'reference' => $row->reference ?? '—',
-                    'date' => $date?->toISOString(),
-                    'montant_net' => (float) $row->montant_net,
-                    'montant_a_payer' => $montantAPayer,
-                    'montant_verse' => (float) $row->montant_verse,
-                    'montant_restant' => max(0.0, $montantAPayer - (float) $row->montant_verse),
-                    'statut' => $statutMobile,
-                    'mois' => $date ? $this->labelMois($date) : '—',
-                ];
+                return new VehiculeCommissionRow(
+                    id: $row->id,
+                    reference: $row->reference ?? '—',
+                    date: $date?->toISOString(),
+                    montantNet: (float) $row->montant_net,
+                    montantAPayer: $montantAPayer,
+                    montantVerse: (float) $row->montant_verse,
+                    montantRestant: (float) max(0.0, $montantAPayer - (float) $row->montant_verse),
+                    statut: $statutMobile,
+                    mois: $date ? $this->labelMois($date) : '—',
+                );
             });
 
         return response()->json($parts->values());

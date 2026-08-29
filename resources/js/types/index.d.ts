@@ -47,7 +47,9 @@ export type AppRole =
     | 'manager'
     | 'commerciale'
     | 'comptable'
-    | 'client';
+    | 'client'
+    | 'proprietaire'
+    | 'livreur';
 
 export interface AuthSite {
     id: number;
@@ -77,6 +79,8 @@ export interface NavItem {
     isActive?: boolean;
     badge?: number;
     items?: NavItem[];
+    /** Groupe fonctionnel affiché comme label de section dans la sidebar (top-level uniquement). */
+    group?: string;
 }
 
 export type ModuleFlagKey =

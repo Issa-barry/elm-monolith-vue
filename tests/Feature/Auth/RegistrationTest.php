@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Enums\OtpPurpose;
 use App\Features\ModuleFeature;
 use App\Models\Client;
 use App\Models\Organization;
@@ -23,7 +24,7 @@ class RegistrationTest extends TestCase
      */
     private function withVerifiedOtp(string $phone): static
     {
-        app(OtpService::class)->markVerified($phone);
+        app(OtpService::class)->markVerified($phone, OtpPurpose::PHONE_VERIFICATION);
 
         return $this;
     }
@@ -188,7 +189,7 @@ class RegistrationTest extends TestCase
     public function test_registration_with_unverified_otp_in_session_is_rejected(): void
     {
         // OTP généré mais pas encore vérifié
-        app(OtpService::class)->generate('+224620000002');
+        app(OtpService::class)->generate('+224620000002', OtpPurpose::PHONE_VERIFICATION);
 
         $this->post(route('register.store'), [
             'prenom' => 'Test',

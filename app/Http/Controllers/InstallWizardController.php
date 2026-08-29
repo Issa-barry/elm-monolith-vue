@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\DomaineActivite;
+use App\Enums\OtpPurpose;
 use App\Enums\SiteType;
 use App\Http\Controllers\Concerns\HasOtpRateLimitResponse;
 use App\Mail\InstallEmailVerificationMail;
@@ -122,7 +123,7 @@ class InstallWizardController extends Controller
             return $this->tooManyRequestsResponse($wait);
         }
 
-        $code = $otp->generate($email, InstallationService::EMAIL_OTP_CONTEXT);
+        $code = $otp->generate($email, OtpPurpose::EMAIL_VERIFICATION, InstallationService::EMAIL_OTP_CONTEXT);
         Mail::to($email)->send(new InstallEmailVerificationMail($code));
 
         return response()->json([
@@ -148,19 +149,19 @@ class InstallWizardController extends Controller
         ]);
         $email = $request->string('email')->toString();
 
-        if ($otp->tooManyAttempts($email, InstallationService::EMAIL_OTP_CONTEXT)) {
+        if ($otp->tooManyAttempts($email, OtpPurpose::EMAIL_VERIFICATION, InstallationService::EMAIL_OTP_CONTEXT)) {
             return response()->json(['error' => 'Trop de tentatives. Demandez un nouveau code.', 'reason' => 'locked'], 429);
         }
 
-        if (! $otp->hasActiveCode($email, InstallationService::EMAIL_OTP_CONTEXT)) {
+        if (! $otp->hasActiveCode($email, OtpPurpose::EMAIL_VERIFICATION, InstallationService::EMAIL_OTP_CONTEXT)) {
             return response()->json(['error' => 'Votre code a expiré.', 'reason' => 'expired'], 422);
         }
 
-        if (! $otp->verify($email, $request->input('code', ''), InstallationService::EMAIL_OTP_CONTEXT)) {
+        if (! $otp->verify($email, $request->input('code', ''), OtpPurpose::EMAIL_VERIFICATION, InstallationService::EMAIL_OTP_CONTEXT)) {
             return response()->json(['error' => 'Code incorrect.', 'reason' => 'invalid'], 422);
         }
 
-        $otp->markVerified($email, InstallationService::EMAIL_OTP_CONTEXT);
+        $otp->markVerified($email, OtpPurpose::EMAIL_VERIFICATION, InstallationService::EMAIL_OTP_CONTEXT);
 
         return response()->json(['verified' => true]);
     }

@@ -10,6 +10,8 @@ use App\Models\Personne;
 use App\Models\UserAuthIdentity;
 use App\Services\ModuleService;
 use App\Services\PhoneNormalizer;
+use App\Support\Auth\AccountEligibility;
+use App\Support\Auth\AccountStatus;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -89,22 +91,13 @@ class FortifyServiceProvider extends ServiceProvider
                 ]);
             }
 
-            // Le statut du compte (en attente/désactivé) est un blocage plus fondamental
-            // que l'email non vérifié : même une fois l'email vérifié, l'utilisateur ne
-            // pourrait toujours pas se connecter. On le vérifie donc en premier pour
-            // toujours afficher le message le plus pertinent.
-            if (! $user->is_active) {
-                $message = $user->isPendingValidation()
-                    ? 'Votre compte a bien été créé. Il est en attente de validation par un administrateur.'
-                    : 'Votre compte a été désactivé. Veuillez contacter notre service client pour plus d\'informations.';
+            // AccountEligibility priorise déjà le statut du compte (en attente/désactivé)
+            // sur l'email non vérifié : même une fois l'email vérifié, l'utilisateur ne
+            // pourrait toujours pas se connecter, donc c'est le message le plus pertinent.
+            $status = AccountEligibility::status($user);
 
-                throw ValidationException::withMessages(['telephone' => [$message]]);
-            }
-
-            if (! $user->hasVerifiedEmail() && ! $user->isSuperAdmin()) {
-                throw ValidationException::withMessages([
-                    'telephone' => ['Veuillez vérifier votre adresse email pour activer votre compte. Consultez votre boîte de réception.'],
-                ]);
+            if ($status !== AccountStatus::Ok) {
+                throw ValidationException::withMessages(['telephone' => [AccountEligibility::message($status)]]);
             }
 
             return $user;

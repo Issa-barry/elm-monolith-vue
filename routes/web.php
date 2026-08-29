@@ -72,6 +72,7 @@ use App\Http\Controllers\SiteController;
 use App\Http\Controllers\SiteImportController;
 use App\Http\Controllers\SitemapController;
 use App\Http\Controllers\StockController;
+use App\Http\Controllers\Testing\CommissionE2eDiagnosticController;
 use App\Http\Controllers\TransfertLogistiqueController;
 use App\Http\Controllers\TransfertStatutController;
 use App\Http\Controllers\TypeVehiculeController;
@@ -188,6 +189,10 @@ Route::prefix('backoffice')->group(function () {
 
         // Clients
         Route::resource('clients', ClientController::class);
+        Route::patch('clients/{client}/cashback', [ClientController::class, 'updateCashback'])
+            ->name('clients.cashback.update');
+        Route::patch('clients/{client}/derogation-impayes', [ClientController::class, 'updateDerogation'])
+            ->name('clients.derogation-impayes.update');
         // Véhicules partenaire (Client::type = PARTENAIRE) — hors flotte gérée, cf. ClientVehicle.
         Route::post('clients/{client}/vehicules', [ClientVehicleController::class, 'store'])
             ->name('clients.vehicules.store');
@@ -383,7 +388,9 @@ Route::prefix('backoffice')->group(function () {
                 ->name('sites.import.confirmer');
         });
 
-        // ── Comptes (super admin) ─────────────────────────────────────────────────
+        // ── Comptes — point d'entrée unique de navigation pour la gestion des comptes ──────
+        // (super_admin : console plateforme multi-organisation ; autres : délègue à la liste
+        // organisation-scopée de UserController, cf. AccountController::index).
         Route::get('comptes', [AccountController::class, 'index'])->name('comptes.index');
         Route::patch('comptes/{user}/toggle-active', [AccountController::class, 'toggleActive'])->name('comptes.toggle-active');
 
@@ -696,5 +703,14 @@ Route::middleware(['auth'])->group(function () {
     // Résolution référence livraison → URL page backoffice (scanner QR de la livraison)
     Route::get('scan/livraison/{reference}', ScanLivraisonController::class)->name('scan.livraison');
 });
+
+// Support de test E2E uniquement — la route n'existe même pas hors APP_ENV=e2e
+// (cf. app/Http/Controllers/Testing/CommissionE2eDiagnosticController.php).
+if (app()->environment('e2e')) {
+    Route::middleware(['auth'])->group(function () {
+        Route::get('e2e/diagnostics/commandes-vente/{commandeId}/commissions', [CommissionE2eDiagnosticController::class, 'commande'])
+            ->name('e2e.diagnostics.commande-vente-commissions');
+    });
+}
 
 require __DIR__.'/settings.php';

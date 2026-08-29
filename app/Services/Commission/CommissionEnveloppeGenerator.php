@@ -24,7 +24,11 @@ use App\Models\EquipeLivraisonPartageCategorie;
 use App\Models\Parametre;
 use App\Models\Prestataire;
 use App\Models\User;
+use App\Notifications\CommissionGenereeNotification;
 use App\Notifications\CommissionManquanteNotification;
+use App\Services\Notification\BeneficiaireUserResolver;
+use App\Services\Notification\NotificationDispatcher;
+use App\Services\Notification\PushBodyFormatter;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -146,6 +150,8 @@ class CommissionEnveloppeGenerator
 
                 if (! $auMoinsUneEnveloppe) {
                     self::alerterCommissionManquante($commande, $declencheurUserId, null);
+                } else {
+                    self::notifierCommissionGeneree($commande);
                 }
             } catch (InvalidArgumentException $e) {
                 Log::warning('Génération commission v2 en erreur : '.$e->getMessage(), [
@@ -216,6 +222,50 @@ class CommissionEnveloppeGenerator
             }
         } catch (Throwable $e) {
             Log::error('CommissionManquanteNotification : envoi échoué', [
+                'commande_id' => $commande->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Notifie les bénéficiaires réellement connectés (proprietaire, livreur)
+     * des parts de commission venant d'être créées pour cette commande —
+     * jamais `site`/`consultant` (aucun compte utilisateur, cf.
+     * BeneficiaireUserResolver). Même garantie d'isolation que
+     * alerterCommissionManquante() : jamais de rethrow vers l'appelant.
+     */
+    private static function notifierCommissionGeneree(CommandeVente $commande): void
+    {
+        try {
+            $parts = CommissionEnveloppePart::whereHas(
+                'enveloppe',
+                fn ($q) => $q->where('source_type', CommandeVente::class)->where('source_id', $commande->id)
+            )->whereIn('beneficiaire_type', [
+                CommissionEnveloppePart::TYPE_PROPRIETAIRE,
+                CommissionEnveloppePart::TYPE_LIVREUR,
+            ])->get();
+
+            foreach ($parts as $part) {
+                $user = BeneficiaireUserResolver::resolve($part->beneficiaire_type, $part->beneficiaire_id);
+                $notif = new CommissionGenereeNotification('commande_vente', $commande->id, $commande->reference, (float) $part->montant_net);
+                // Réutilise le titre/message déjà construits par la notification database —
+                // jamais un second texte pour le push (même événement, même sens).
+                $notifData = $user ? $notif->toArray($user) : null;
+
+                NotificationDispatcher::send(
+                    $notif,
+                    [$user],
+                    'commissions',
+                    $notifData ? fn () => [
+                        'title' => $notifData['titre'],
+                        'body' => PushBodyFormatter::format($notifData),
+                        'data' => ['type' => 'commission.generated', 'commande_id' => $commande->id],
+                    ] : null,
+                );
+            }
+        } catch (Throwable $e) {
+            Log::error('CommissionGenereeNotification : envoi échoué', [
                 'commande_id' => $commande->id,
                 'error' => $e->getMessage(),
             ]);

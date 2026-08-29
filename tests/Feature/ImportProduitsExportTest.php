@@ -78,7 +78,8 @@ class ImportProduitsExportTest extends TestCase
 
         $this->assertSame([
             'sku', 'nom', 'type_code', 'categorie_reference', 'fournisseur_reference', 'statut',
-            'code_barres', 'prix_achat', 'prix_usine_autres_vehicules', 'prix_usine_tricycle', 'prix_vente', 'cout',
+            'code_barres', 'prix_achat', 'prix_usine_autres_vehicules', 'prix_usine_tricycle', 'prix_vente',
+            'prix_externe', 'prix_revendeur', 'prix_distributeur', 'cout',
             'alerte_stock_active', 'seuil_alerte_stock', 'description',
         ], $entetes);
         $this->assertSame(32.0, $sheet->getColumnDimension('I')->getWidth());
@@ -171,6 +172,45 @@ class ImportProduitsExportTest extends TestCase
         $ligne = $sheet->toArray(null, true, true, false)[1];
         $this->assertNotEmpty($ligne[0], 'le SKU généré doit être renseigné dans le fichier de reprise');
         $this->assertSame('Sel Alpha 1kg', $ligne[1]);
+    }
+
+    /**
+     * Garde-fou contre un décalage positionnel : ImportProduitsRepriseProduitsSheetExport
+     * construit chaque ligne dans un tableau ordonné à la main (pas par nom d'en-tête) — si les 3
+     * colonnes de tarification par nature ne sont pas insérées au bon endroit, prix_externe
+     * afficherait en réalité la valeur de prix_vente/cout d'un autre champ.
+     */
+    public function test_reprise_aligne_correctement_les_prix_par_nature_pour_un_produit_fabricable(): void
+    {
+        Storage::disk('local')->makeDirectory('imports-produits');
+
+        $spreadsheet = new Spreadsheet;
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('PRODUITS');
+        $headers = ['sku', 'nom', 'type_code', 'categorie_reference', 'fournisseur_reference', 'statut', 'code_barres', 'prix_achat', 'prix_usine_autres_vehicules', 'prix_usine_tricycle', 'prix_vente', 'prix_externe', 'prix_revendeur', 'prix_distributeur', 'cout', 'alerte_stock_active', 'seuil_alerte_stock', 'description'];
+        $sheet->fromArray($headers, null, 'A1');
+        $row = ['', 'Bidon Fabricable', 'fabricable', '', '', 'actif', '', '', '18000', '18000', '20000', '18250', '19000', '18500', '', 'non', '', ''];
+        foreach ($row as $col => $valeur) {
+            $sheet->setCellValueExplicit(Coordinate::stringFromColumnIndex($col + 1).'2', (string) $valeur, DataType::TYPE_STRING);
+        }
+        $tmpPath = tempnam(sys_get_temp_dir(), 'reprise_fabricable_test').'.xlsx';
+        (new Xlsx($spreadsheet))->save($tmpPath);
+        $fichier = new UploadedFile($tmpPath, 'import.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+
+        $this->actingAs($this->user)->post(route('produits.imports.store'), ['fichier' => $fichier])->assertRedirect();
+        $import = ImportProduits::orderByDesc('id')->firstOrFail();
+        $this->actingAs($this->user)->post(route('produits.imports.confirm', $import))->assertRedirect();
+
+        $spreadsheet = $this->telechargerEtOuvrir('produits.imports.reprise', ['importProduits' => $import->fresh()->id]);
+        $sheet = $spreadsheet->getSheetByName('PRODUITS');
+        $tableau = $sheet->toArray(null, true, true, false);
+        $donnees = array_combine($tableau[0], $tableau[1]);
+
+        $this->assertEquals(18250, $donnees['prix_externe']);
+        $this->assertEquals(19000, $donnees['prix_revendeur']);
+        $this->assertEquals(18500, $donnees['prix_distributeur']);
+        $this->assertEquals(20000, $donnees['prix_vente']);
+        $this->assertEquals(18000, $donnees['prix_usine_autres_vehicules']);
     }
 
     public function test_reprise_est_interdite_a_une_autre_organisation(): void

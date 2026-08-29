@@ -20,15 +20,20 @@ use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\User;
 use App\Models\Vehicule;
+use App\Notifications\DepenseValideeNotification;
 use App\Services\AuditLogService;
 use App\Services\DepenseImputationService;
 use App\Services\DroitCreationDepenseService;
+use App\Services\Notification\BeneficiaireUserResolver;
+use App\Services\Notification\NotificationDispatcher;
+use App\Services\Notification\PushBodyFormatter;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -739,8 +744,10 @@ class DepenseController extends Controller
 
         $depense->load('depenseType');
 
+        $imputation = null;
+
         try {
-            DB::transaction(function () use ($depense) {
+            DB::transaction(function () use ($depense, &$imputation) {
                 $depense->update([
                     'statut' => StatutDepense::VALIDE,
                     'validateur_id' => auth()->id(),
@@ -748,11 +755,13 @@ class DepenseController extends Controller
                     'motif_rejet' => null,
                 ]);
 
-                $this->imputationService->creer($depense);
+                $imputation = $this->imputationService->creer($depense);
             });
         } catch (\RuntimeException $e) {
             return back()->withErrors(['imputation' => $e->getMessage()]);
         }
+
+        $this->notifierDepenseValidee($depense, $imputation);
 
         $montantFmt = number_format((float) $depense->montant, 0, ',', "\u{202F}");
         $this->audit->record($depense, AuditEvent::VALIDATED, auth()->user(), null, null, [
@@ -762,6 +771,48 @@ class DepenseController extends Controller
         ]);
 
         return back()->with('success', 'Dépense validée et imputée.');
+    }
+
+    /**
+     * Scope phase 1 (cf. rapport notifications, 2026-08-27) : seul
+     * beneficiaire_type === 'proprietaire' (dépense catégorie VEHICULE imputée
+     * au propriétaire du véhicule) déclenche cette notification —
+     * livreur/site/salarie/prestataire restent hors périmètre pour l'instant,
+     * sans erreur. Jamais de rethrow : un échec d'envoi ne doit jamais faire
+     * annuler une validation déjà enregistrée.
+     */
+    private function notifierDepenseValidee(Depense $depense, ?DepenseImputation $imputation): void
+    {
+        if ($imputation?->beneficiaire_type !== 'proprietaire') {
+            return;
+        }
+
+        try {
+            $user = BeneficiaireUserResolver::resolve('proprietaire', $imputation->beneficiaire_id);
+
+            $vehiculeNom = $depense->beneficiaire_type === 'vehicule'
+                ? ($depense->vehiculeBeneficiaire?->nom_vehicule ?? '—')
+                : '—';
+
+            $notif = new DepenseValideeNotification($depense->id, $vehiculeNom, (float) $depense->montant);
+            $notifData = $user ? $notif->toArray($user) : null;
+
+            NotificationDispatcher::send(
+                $notif,
+                [$user],
+                'depenses',
+                $notifData ? fn () => [
+                    'title' => $notifData['titre'],
+                    'body' => PushBodyFormatter::format($notifData),
+                    'data' => ['type' => 'expense.validated', 'depense_id' => $depense->id],
+                ] : null,
+            );
+        } catch (\Throwable $e) {
+            Log::error('DepenseValideeNotification : envoi échoué', [
+                'depense_id' => $depense->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     public function rejeter(Request $request, Depense $depense): RedirectResponse

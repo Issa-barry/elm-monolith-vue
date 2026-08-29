@@ -61,6 +61,9 @@ class ProduitVarianteTest extends TestCase
             'prix_usine' => 4000,
             'prix_usine_tricycle' => 3800,
             'prix_vente' => 5000,
+            'prix_externe' => 1,
+            'prix_revendeur' => 1,
+            'prix_distributeur' => 1,
         ]);
 
         $this->assertCount(1, $produit->variantes);

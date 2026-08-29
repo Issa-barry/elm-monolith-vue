@@ -95,8 +95,26 @@ interface LigneCommande {
     ecart_chargement: number | null;
     prix_usine_snapshot: number;
     prix_vente_snapshot: number;
+    // null pour les commandes créées avant la tarification par nature de client (backfillées en
+    // 'usine'/'vente' à partir de mode_tarification_snapshot, cf. migration correspondante) —
+    // reste défensivement optionnel ici au cas où une ligne y échapperait.
+    prix_origine_snapshot?:
+        | 'usine'
+        | 'vente'
+        | 'externe'
+        | 'revendeur'
+        | 'distributeur'
+        | null;
     total_ligne: number;
 }
+
+const PRIX_ORIGINE_LABELS: Record<string, string> = {
+    usine: 'Prix usine',
+    vente: 'Prix vente',
+    externe: 'Prix externe',
+    revendeur: 'Prix revendeur',
+    distributeur: 'Prix distributeur',
+};
 
 interface VehiculeDetail {
     nom: string;
@@ -543,26 +561,30 @@ const showChargeeCol = computed(
     () => !props.commande.is_brouillon && !props.commande.is_a_charger,
 );
 
-// ── Libellés de prix — explicites (prix vente vs prix usine) ──────────────────
-// Le prix unitaire AFFICHÉ doit être celui réellement utilisé dans le calcul
-// du total (prix_usine si le véhicule n'était pas pris en charge par l'usine),
-// sinon libellé et valeur se contredisent.
-const prixUnitLabel = computed(() =>
-    props.commande.mode_tarification_snapshot === 'prix_usine'
-        ? 'Prix usine (unit.)'
-        : 'Prix vente (unit.)',
-);
+// ── Prix affiché — "Prix appliqué" par ligne (cf. Ventes/Create.vue) : des lignes d'une même
+// commande peuvent relever de politiques de prix différentes (ex: un produit fabricable au
+// tarif Revendeur à côté d'un produit classique au prix de vente). L'origine est celle figée à
+// la création (prix_origine_snapshot) — jamais recalculée depuis les tarifs actuels du produit.
+// Repli sur mode_tarification_snapshot (globale) pour les lignes antérieures à ce snapshot.
+const prixUnitLabel = 'Prix appliqué';
+const totalColumnLabel = 'Total';
+const totalCommandeLabel = 'Total commande';
+function ligneOrigine(ligne: LigneCommande): string {
+    return (
+        ligne.prix_origine_snapshot ??
+        (props.commande.mode_tarification_snapshot === 'prix_usine'
+            ? 'usine'
+            : 'vente')
+    );
+}
 function ligneUnitPrice(ligne: LigneCommande): number {
-    return props.commande.mode_tarification_snapshot === 'prix_usine'
+    return ligneOrigine(ligne) === 'usine'
         ? ligne.prix_usine_snapshot
         : ligne.prix_vente_snapshot;
 }
-const totalColumnLabel = computed(() =>
-    props.commande.mode_tarification_snapshot === 'prix_usine'
-        ? 'Total (prix usine)'
-        : 'Total (prix vente)',
-);
-const totalCommandeLabel = 'Total commande';
+function ligneOrigineLabel(ligne: LigneCommande): string {
+    return PRIX_ORIGINE_LABELS[ligneOrigine(ligne)] ?? '';
+}
 
 // ── Ticket impression ─────────────────────────────────────────────────────────
 const page = usePage();
@@ -1294,6 +1316,9 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                         class="px-4 py-3 text-right text-muted-foreground tabular-nums"
                                     >
                                         {{ formatGNF(ligneUnitPrice(ligne)) }}
+                                        <p class="text-[11px]">
+                                            {{ ligneOrigineLabel(ligne) }}
+                                        </p>
                                     </td>
                                     <td
                                         class="px-4 py-3 text-right font-semibold tabular-nums"

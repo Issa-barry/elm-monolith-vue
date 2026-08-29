@@ -20,8 +20,9 @@ use App\Models\Vehicule;
  *    aux commissions que s'il est autorisé `livraison_vente` ;
  *  - une vente sans véhicule de flotte pour un client EXTERNE facture à prix usine, jamais
  *    de commission (aucun véhicule de flotte impliqué) ;
- *  - une vente sans véhicule de flotte pour un client standard/cashback facture au prix de
- *    vente plein, comportement historique inchangé.
+ *  - une vente sans véhicule de flotte pour un client Revendeur ou Distributeur facture au prix
+ *    de vente plein (hors produit fabricable, cf. PrixVenteNatureResolver), comportement
+ *    historique inchangé.
  *
  * Centralise ce qui était auparavant dupliqué à l'identique entre
  * CommandeVenteController::resolveModeTarification() et
