@@ -36,6 +36,7 @@ use App\Models\Site;
 use App\Models\TransfertLigne;
 use App\Models\TransfertLogistique;
 use App\Models\User;
+use App\Models\VarianteStock;
 use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionEnveloppeGenerator;
@@ -214,6 +215,17 @@ class CommissionMoteurGeneriqueMultiProcessusTest extends TestCase
             ['id' => $ligne->id, 'quantite_chargee' => $qte, 'type_ecart' => 'conforme'],
         ]);
 
+        // distribution_client (décision produit du 30/08/2026, révise COMM-004) : hybride
+        // vente/logistique — la mission n'est considérée réalisée, et la commission générée,
+        // qu'à la validation de réception, jamais au chargement (cf.
+        // CommandeVenteService::validerReceptionDistribution()). vente_standard s'arrête ici, sa
+        // commission naît au chargement (déclencheur CHARGEMENT_VALIDE de ce test).
+        if ($nature === NatureOperation::DISTRIBUTION_CLIENT) {
+            CommandeVenteService::validerReceptionDistribution($commande->fresh(), [
+                ['id' => $ligne->id, 'quantite_livree' => $qte, 'type_ecart_reception' => 'conforme'],
+            ]);
+        }
+
         return $commande->fresh();
     }
 
@@ -349,8 +361,10 @@ class CommissionMoteurGeneriqueMultiProcessusTest extends TestCase
                 ->where('commission_generation_statut.value', 'erreur')
             );
 
-        // L'opération commerciale elle-même n'est jamais bloquée par la commission manquante.
-        $this->assertSame(StatutCommandeVente::LIVRAISON_EN_COURS, $commande->fresh()->statut);
+        // L'opération commerciale elle-même n'est jamais bloquée par la commission manquante :
+        // creerCommande() va jusqu'à la validation de réception pour cette nature (cf. helper),
+        // qui aboutit normalement à LIVREE même si sa propre tentative de génération échoue.
+        $this->assertSame(StatutCommandeVente::LIVREE, $commande->fresh()->statut);
     }
 
     // ── 3. Idempotence vente / distribution ──────────────────────────────────
@@ -376,22 +390,158 @@ class CommissionMoteurGeneriqueMultiProcessusTest extends TestCase
         $this->assertSame(1, CommissionEnveloppe::where('source_id', $commandeDistrib->id)->count());
     }
 
-    // ── 4. Workflow CommandeVente identique entre les deux natures ──────────
+    // ── 4. Workflow distribution_client — hybride vente/logistique (révise COMM-004) ──
 
-    /** @test */
-    public function distribution_client_suit_exactement_le_meme_workflow_que_vente_standard(): void
+    /**
+     * Correctif du 30/08/2026 : distribution_client n'est PLUS un simple clone du workflow
+     * vente_standard (contrairement à la décision initiale) — c'est désormais un hybride
+     * vente/logistique : commercialement une vente (même CommandeVente/FactureVente, aucun
+     * nouveau modèle), mais logistiquement soumise à une validation de réception explicite avant
+     * LIVREE. Ce test remplace l'ancien
+     * distribution_client_suit_exactement_le_meme_workflow_que_vente_standard(), dont la prémisse
+     * (workflow identique) est désormais fausse par décision produit explicite.
+     */
+    public function distribution_client_est_un_hybride_vente_logistique_pas_un_nouveau_modele(): void
     {
-        $this->assertCount(8, StatutCommandeVente::cases(), 'Aucun nouveau statut ne doit avoir été introduit pour la distribution.');
+        $this->assertCount(8, StatutCommandeVente::cases(), 'Aucun nouveau statut n\'a été introduit — LIVREE existait déjà.');
 
         $commande = $this->creerCommande(NatureOperation::DISTRIBUTION_CLIENT, 5);
 
-        $this->assertSame(StatutCommandeVente::LIVRAISON_EN_COURS, $commande->statut);
+        // La réception fait partie de creerCommande() pour cette nature (cf. helper) — la
+        // commande atteint donc LIVREE, jamais s'arrêter à LIVRAISON_EN_COURS comme avant.
+        $this->assertSame(StatutCommandeVente::LIVREE, $commande->statut);
         $this->assertNotNull($commande->chargement_valide_at);
+        $this->assertNotNull($commande->reception_validee_at);
         // La facture suit exactement le même mécanisme normal que vente_standard (créée dès la
         // confirmation par CommandeVenteService::creerFactureInitiale()) — aucun mécanisme de
         // facturation dédié n'a été introduit pour la distribution.
         $this->assertNotNull($commande->facture);
         $this->assertSame(1, FactureVente::where('commande_vente_id', $commande->id)->count());
+    }
+
+    /** @test */
+    public function distribution_client_naccede_pas_a_livree_sans_validation_de_reception(): void
+    {
+        $distribution = $this->processusPour(CommissionProcessus::CODE_DISTRIBUTION_CLIENT);
+        $this->creerRegle($distribution, CommissionCibleType::CODE_PROPRIETAIRE, 900);
+
+        // Reproduit manuellement le tronc commun de creerCommande() SANS l'étape de réception,
+        // pour vérifier l'état intermédiaire.
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->site->id,
+            'vehicule_id' => $this->vehicule->id,
+            'nature_operation' => NatureOperation::DISTRIBUTION_CLIENT->value,
+            'statut' => StatutCommandeVente::BROUILLON,
+            'commission_eligible_snapshot' => true,
+            'total_commande' => 5 * 2000,
+        ]);
+        $variante = $this->produit->variantePrincipale()->first();
+        $ligne = $commande->lignes()->create([
+            'variante_id' => $variante->id,
+            'quantite_demandee' => 5,
+            'prix_usine_snapshot' => (float) $variante->prix_usine,
+            'prix_vente_snapshot' => (float) $variante->prix_vente,
+            'total_ligne' => 5 * (float) $variante->prix_vente,
+        ]);
+        $this->seedVarianteStockSuffisant($variante, $this->site);
+
+        $this->actingAs($this->user);
+        CommandeVenteService::confirmer($commande);
+        CommandeVenteService::demarrerChargement($commande->fresh());
+        CommandeVenteService::validerChargement($commande->fresh(), [
+            ['id' => $ligne->id, 'quantite_chargee' => 5, 'type_ecart' => 'conforme'],
+        ]);
+
+        // Chargement validé : reste en LIVRAISON_EN_COURS, jamais LIVREE — contrairement à
+        // vente_standard, aucun mécanisme n'avance distribution_client au-delà sans réception.
+        $this->assertSame(StatutCommandeVente::LIVRAISON_EN_COURS, $commande->fresh()->statut);
+        // Et surtout : aucune commission générée au chargement pour cette nature, quel que soit
+        // le déclencheur organisation (ici CHARGEMENT_VALIDE, qui fonctionne pourtant pour vente).
+        $this->assertSame(0, CommissionEnveloppe::where('source_id', $commande->id)->count());
+
+        // Un encaissement avant réception ne fait pas non plus passer en LIVREE (contrairement à
+        // vente_standard) — statut et paiement sont deux axes indépendants pour la distribution.
+        // Passe réellement par le contrôleur (pas une création directe du modèle) : c'est
+        // EncaissementVenteController::store() qui porte le garde-fou testé ici, jamais
+        // l'observer du modèle EncaissementVente (qui ne gère que recalculStatut()/
+        // cloturerSiComplete(), pas la transition LIVRAISON_EN_COURS → LIVREE).
+        $facture = $commande->fresh()->facture;
+        $this->post(route('encaissements.store', $facture), [
+            'montant' => (float) $facture->montant_net,
+            'mode_paiement' => 'especes',
+        ])->assertRedirect();
+
+        $this->assertSame(StatutCommandeVente::LIVRAISON_EN_COURS, $commande->fresh()->statut, 'Un encaissement seul ne doit jamais faire passer une distribution en LIVREE.');
+
+        // La validation de réception, elle, fait enfin naître la commission et passe en LIVREE.
+        CommandeVenteService::validerReceptionDistribution($commande->fresh(), [
+            ['id' => $ligne->id, 'quantite_livree' => 5, 'type_ecart_reception' => 'conforme'],
+        ]);
+
+        $this->assertSame(StatutCommandeVente::LIVREE, $commande->fresh()->statut);
+        $this->assertSame(1, CommissionEnveloppe::where('source_id', $commande->id)->where('cible_type', CommissionCibleType::CODE_PROPRIETAIRE)->count());
+    }
+
+    /** @test */
+    public function distribution_client_ecart_de_reception_recalcule_la_facture_et_la_commission_sans_toucher_au_stock(): void
+    {
+        $distribution = $this->processusPour(CommissionProcessus::CODE_DISTRIBUTION_CLIENT);
+        $this->creerRegle($distribution, CommissionCibleType::CODE_PROPRIETAIRE, 100);
+
+        $commande = CommandeVente::factory()->create([
+            'organization_id' => $this->org->id,
+            'site_id' => $this->site->id,
+            'vehicule_id' => $this->vehicule->id,
+            'nature_operation' => NatureOperation::DISTRIBUTION_CLIENT->value,
+            'statut' => StatutCommandeVente::BROUILLON,
+            'commission_eligible_snapshot' => true,
+            'total_commande' => 10 * 2000,
+        ]);
+        $variante = $this->produit->variantePrincipale()->first();
+        $ligne = $commande->lignes()->create([
+            'variante_id' => $variante->id,
+            'quantite_demandee' => 10,
+            'prix_usine_snapshot' => (float) $variante->prix_usine,
+            'prix_vente_snapshot' => (float) $variante->prix_vente,
+            'total_ligne' => 10 * (float) $variante->prix_vente,
+        ]);
+        $this->seedVarianteStockSuffisant($variante, $this->site);
+
+        $this->actingAs($this->user);
+        CommandeVenteService::confirmer($commande);
+        CommandeVenteService::demarrerChargement($commande->fresh());
+        CommandeVenteService::validerChargement($commande->fresh(), [
+            ['id' => $ligne->id, 'quantite_chargee' => 10, 'type_ecart' => 'conforme'],
+        ]);
+
+        $stockAvantReception = VarianteStock::where('produit_variante_id', $variante->id)
+            ->where('site_id', $this->site->id)
+            ->value('qte_stock');
+
+        // Le distributeur n'accepte que 8 sur les 10 chargés.
+        CommandeVenteService::validerReceptionDistribution($commande->fresh(), [
+            ['id' => $ligne->id, 'quantite_livree' => 8, 'type_ecart_reception' => 'manquant'],
+        ]);
+
+        $commande = $commande->fresh(['facture', 'lignes']);
+
+        // Facture recalculée sur le réceptionné (8 × 2000 = 16 000), jamais sur le chargé.
+        $this->assertSame(16000.0, (float) $commande->total_commande);
+        $this->assertSame(16000.0, (float) $commande->facture->montant_net);
+
+        // Commission calculée sur quantite_livree (8), jamais quantite_chargee (10).
+        $enveloppe = CommissionEnveloppe::where('source_id', $commande->id)
+            ->where('cible_type', CommissionCibleType::CODE_PROPRIETAIRE)
+            ->firstOrFail();
+        $this->assertSame(800.0, (float) $enveloppe->montant_total); // 100 × 8, jamais 100 × 10
+
+        // Le stock n'est jamais réajusté par l'écart de réception (décision produit du
+        // 30/08/2026) : les 2 unités refusées restent sorties, déjà décrémentées au chargement.
+        $stockApresReception = VarianteStock::where('produit_variante_id', $variante->id)
+            ->where('site_id', $this->site->id)
+            ->value('qte_stock');
+        $this->assertSame($stockAvantReception, $stockApresReception);
     }
 
     // ── 5/6. Transfert logistique : exclusivité mutuelle legacy / générique ──

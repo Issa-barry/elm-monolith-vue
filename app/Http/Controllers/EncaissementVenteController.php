@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\AuditEvent;
 use App\Enums\ModePaiement;
+use App\Enums\NatureOperation;
 use App\Features\ModuleFeature;
 use App\Models\EncaissementVente;
 use App\Models\FactureVente;
@@ -69,8 +70,12 @@ class EncaissementVenteController extends Controller
                 // EncaissementVente::created (seul point désormais responsable de
                 // recalculStatut()/cloturerSiComplete(), cf. commentaire plus bas) doit
                 // trouver la commande déjà en LIVREE pour pouvoir la clôturer dans la
-                // foulée si tout est complet.
-                if ($commande?->isLivraisonEnCours()) {
+                // foulée si tout est complet. JAMAIS pour distribution_client (décision produit
+                // du 30/08/2026) : sa transition vers LIVREE exige une validation de réception
+                // explicite, indépendante de tout encaissement — cf.
+                // CommandeVenteService::validerReceptionDistribution(). Un encaissement reçu
+                // avant la réception laisse donc la commande en LIVRAISON_EN_COURS.
+                if ($commande?->isLivraisonEnCours() && $commande->nature_operation !== NatureOperation::DISTRIBUTION_CLIENT) {
                     CommandeVenteService::passerEnLivree($commande);
                     CommandeVenteActiviteService::log($commande, 'livree');
                 }

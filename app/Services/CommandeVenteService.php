@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\ClientType;
 use App\Enums\ModeTarification;
+use App\Enums\NatureOperation;
 use App\Enums\StatutCommandeVente;
 use App\Enums\StatutCommission;
 use App\Enums\StatutFactureVente;
@@ -43,7 +44,15 @@ class CommandeVenteService
     }
 
     /**
-     * Workflow : BROUILLON → A_CHARGER → CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS → LIVREE → CLOTUREE
+     * Workflow vente_standard : BROUILLON → A_CHARGER → CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS
+     * → LIVREE (1er encaissement, cf. passerEnLivree()) → CLOTUREE.
+     *
+     * Workflow distribution_client (décision produit du 30/08/2026, révise COMM-004) : même
+     * tronc commun jusqu'à LIVRAISON_EN_COURS, puis une étape logistique supplémentaire —
+     * LIVRAISON_EN_COURS → LIVREE exige désormais une validation de réception explicite (cf.
+     * validerReceptionDistribution()), jamais l'encaissement. Commercialement inchangé : même
+     * CommandeVente/FactureVente, même créance/paiement, indépendants de la réception.
+     *
      *            ↘ ANNULEE (depuis BROUILLON ou A_CHARGER seulement)
      *
      * @throws ValidationException si les pré-conditions ne sont pas satisfaites
@@ -54,6 +63,7 @@ class CommandeVenteService
             StatutCommandeVente::BROUILLON => self::confirmer($commande),
             StatutCommandeVente::A_CHARGER => self::demarrerChargement($commande),
             StatutCommandeVente::CHARGEMENT_EN_COURS => self::validerChargement($commande, $lignesData),
+            StatutCommandeVente::LIVRAISON_EN_COURS => self::validerReceptionDistribution($commande, $lignesData),
             default => abort(422, 'Impossible d\'avancer depuis ce statut.'),
         };
 
@@ -298,12 +308,15 @@ class CommandeVenteService
     /**
      * CHARGEMENT_EN_COURS → LIVRAISON_EN_COURS.
      * Enregistre les quantités chargées par ligne — quantités qui déterminent
-     * définitivement le calcul de la commission de vente, quel que soit le
+     * définitivement le calcul de la commission de VENTE STANDARD, quel que soit le
      * déclencheur configuré (jamais recalculée plus tard). Sous CHARGEMENT_VALIDE
      * (déclencheur par défaut), c'est ici que la commission naît, en statut
      * CREEE — elle ne devient payable qu'à la validation de la période de
      * paiement qui la couvre (cf. CommissionTriggerService::onChargementValide(),
-     * CommissionAdjustmentService::activerCommissionsCreees()).
+     * CommissionAdjustmentService::activerCommissionsCreees()). Pour distribution_client,
+     * onChargementValide() est désormais un no-op (décision produit du 30/08/2026) : sa
+     * commission naît exclusivement à la validation de réception, cf.
+     * validerReceptionDistribution().
      *
      * @param  array<array{id: string, quantite_chargee?: int|null, type_ecart?: string|null, commentaire_ecart?: string|null}>  $lignesData
      */
@@ -386,8 +399,104 @@ class CommandeVenteService
     }
 
     /**
-     * Recalcule le total de la commande à partir des lignes (quantités réellement chargées)
-     * et répercute le nouveau montant sur la facture associée si elle existe.
+     * LIVRAISON_EN_COURS → LIVREE, réservée à distribution_client (décision produit du
+     * 30/08/2026, révise COMM-004 : distribution devient un hybride vente/logistique — la vente
+     * standard continue de passer en LIVREE automatiquement au premier encaissement, cf.
+     * passerEnLivree()). Enregistre les quantités réellement réceptionnées par le distributeur
+     * (quantite_livree, écart éventuel vs quantite_chargee), recalcule la facture sur la base du
+     * réceptionné — le client n'est jamais facturé au-delà de ce qu'il a accepté (décision
+     * produit) — puis déclenche la commission de distribution, dont la réception validée est
+     * désormais l'UNIQUE déclencheur (cf. CommissionTriggerService::onReceptionDistributionValidee(),
+     * jamais conditionné au paramètre organisation qui ne régit plus que vente_standard).
+     *
+     * Un écart de réception ne réajuste jamais le stock physique (décision produit du
+     * 30/08/2026) : les unités refusées par le distributeur restent sorties du stock, déjà
+     * décrémenté au chargement — leur sort physique est traité hors de ce système.
+     *
+     * @param  array<array{id: string, quantite_livree?: int|null, type_ecart_reception?: string|null, commentaire_ecart_reception?: string|null}>  $lignesData
+     */
+    public static function validerReceptionDistribution(CommandeVente $commande, array $lignesData = []): void
+    {
+        abort_if(
+            $commande->nature_operation !== NatureOperation::DISTRIBUTION_CLIENT,
+            422,
+            'Cette étape ne s\'applique qu\'aux commandes de distribution.'
+        );
+        abort_if(! $commande->isLivraisonEnCours(), 422, 'La commande doit être en livraison.');
+
+        DB::transaction(function () use ($commande, $lignesData) {
+            self::appliquerQuantitesRecues($commande, $lignesData);
+            self::recalculerTotaux($commande);
+
+            $commande->update([
+                'statut' => StatutCommandeVente::LIVREE,
+                'livree_at' => now(),
+                'reception_validee_at' => now(),
+            ]);
+
+            CommissionTriggerService::onReceptionDistributionValidee($commande->fresh());
+        });
+    }
+
+    /**
+     * @param  array<array{id: string, quantite_livree?: int|null, type_ecart_reception?: string|null, commentaire_ecart_reception?: string|null}>  $lignesData
+     */
+    private static function appliquerQuantitesRecues(CommandeVente $commande, array $lignesData): void
+    {
+        if (empty($lignesData)) {
+            return;
+        }
+
+        $commande->loadMissing('lignes');
+
+        foreach ($lignesData as $ligneData) {
+            $ligne = $commande->lignes->find($ligneData['id'] ?? null);
+            if (! $ligne) {
+                continue;
+            }
+
+            $update = array_intersect_key($ligneData, array_flip([
+                'quantite_livree',
+                'type_ecart_reception',
+                'commentaire_ecart_reception',
+            ]));
+
+            if (array_key_exists('quantite_livree', $update) && $update['quantite_livree'] !== null) {
+                $prixUnitaire = $commande->mode_tarification_snapshot === ModeTarification::PRIX_USINE
+                    ? (float) $ligne->prix_usine_snapshot
+                    : (float) $ligne->prix_vente_snapshot;
+                $update['total_ligne'] = $update['quantite_livree'] * $prixUnitaire;
+            }
+
+            if (! empty($update)) {
+                $ligne->update($update);
+            }
+        }
+
+        // Garde-fou : un encaissement (total ou partiel) a pu avoir lieu AVANT la validation de
+        // réception — l'ordre inverse du cas nominal (« réception aujourd'hui, paiement la
+        // semaine prochaine ») reste possible puisqu'une facture de distribution est encaissable
+        // dès LIVRAISON_EN_COURS, comme toute vente. Un écart de réception ne doit jamais faire
+        // repasser la facture sous ce qui a déjà été réellement encaissé.
+        $commande->load('lignes', 'facture');
+        $nouveauTotal = (float) $commande->lignes->sum('total_ligne');
+        $montantEncaisse = (float) ($commande->facture?->montant_encaisse ?? 0);
+
+        if ($montantEncaisse > $nouveauTotal) {
+            throw ValidationException::withMessages([
+                'lignes' => 'Impossible de valider cette réception : '
+                    .number_format($montantEncaisse, 0, ',', ' ')
+                    .' GNF déjà encaissés dépasseraient le nouveau montant facturé ('
+                    .number_format($nouveauTotal, 0, ',', ' ')
+                    .' GNF). Régularisez l\'encaissement avant de continuer.',
+            ]);
+        }
+    }
+
+    /**
+     * Recalcule le total de la commande à partir des lignes (quantités réellement chargées, ou
+     * réceptionnées pour distribution_client depuis validerReceptionDistribution()) et répercute
+     * le nouveau montant sur la facture associée si elle existe.
      */
     private static function recalculerTotaux(CommandeVente $commande): void
     {

@@ -16,9 +16,32 @@ même principe de barème dynamique au transfert logistique interne.
   modifier ce choix par défaut avant l'enregistrement.
 - **COMM-003** — `nature_operation = distribution_client` exige un véhicule — contrôlé côté
   backend, jamais uniquement par le formulaire (`CommandeVenteController::ensureNatureOperationCoherente()`).
-- **COMM-004** — Le workflow (`StatutCommandeVente`) est strictement identique entre les deux
-  natures. Aucune étape de réception distincte n'a été ajoutée : le statut « Livrée » reste
-  déclenché par le premier encaissement pour les deux, décision produit assumée.
+- **COMM-004** (révisée le 30/08/2026 — la version précédente de cette règle affirmait l'inverse :
+  workflow strictement identique entre les deux natures) — `distribution_client` est un hybride
+  vente/logistique : commercialement une vente à part entière (même `CommandeVente`/`FactureVente`,
+  même créance/paiement, indépendants de la logistique), mais logistiquement soumise à une
+  validation de réception explicite avant de passer LIVREE — mission de distribution non
+  considérée réalisée avant que le distributeur ait effectivement accepté la marchandise.
+  `vente_standard` reste inchangée : LIVREE toujours déclenché par le premier encaissement (cf.
+  `CommandeVenteService::passerEnLivree()`), jamais de validation de réception.
+  - Workflow distribution_client : … → LIVRAISON_EN_COURS → **validation de réception**
+    (`CommandeVenteService::validerReceptionDistribution()`, quantités par ligne dans
+    `quantite_livree` — colonne préexistante mais jamais écrite avant cette révision, déjà lue par
+    `CashbackService::quantiteEligible()`) → LIVREE. Un encaissement reçu avant la réception ne
+    déclenche jamais LIVREE pour cette nature (`EncaissementVenteController` le vérifie
+    explicitement) — statut et paiement sont deux axes indépendants pour la distribution,
+    contrairement à la vente standard où le premier encaissement fait les deux à la fois.
+  - Écart de réception vs chargement : décision produit du 30/08/2026, la facture est
+    **recalculée sur le réceptionné**, jamais figée au chargement — le client n'est jamais facturé
+    au-delà de ce qu'il a accepté (garde-fou : refusé si le nouveau total tomberait sous ce qui est
+    déjà encaissé). Contrairement à l'écart de chargement, un écart de réception ne réajuste
+    **jamais** le stock physique — les unités refusées restent sorties du stock, leur sort
+    physique est traité hors de ce système.
+  - Commission distribution_client : la validation de réception est son **unique** déclencheur,
+    jamais conditionné au paramètre organisation `Parametre::getDeclencheurCommissionVente()` (qui
+    ne régit plus que `vente_standard`) — calculée sur `quantite_livree`, jamais `quantite_chargee`
+    (cf. `CommissionEnveloppeGenerator::contexteDepuisCommandeVente()`,
+    `CommissionTriggerService::onReceptionDistributionValidee()`).
 - **COMM-005** — La commission d'une commande est routée vers le processus `vente` ou
   `distribution_client` selon `nature_operation`, avec des barèmes (`CommissionRegle`)
   totalement indépendants — un même produit/catégorie peut avoir un montant différent en vente et
@@ -62,6 +85,7 @@ la répartition d'équipe restent une seule implémentation, partagée par `Comm
 | `App\Services\Commission\CommissionOperationContext` | Contexte générique consommé par le générateur. |
 | `App\Services\Commission\CommissionProcessusDefaults` | Valeurs par défaut (libellé/déclencheur/ancrage) par code processus — évite la duplication entre le générateur, le contrôleur de paramétrage et les services équipe. |
 | `App\Services\CommissionTriggerService::estMigreVersMoteurGenerique()` | Bascule par organisation pour le transfert logistique. |
+| `App\Services\Commission\CommissionPartageLivraisonCategorieChecker` | Source unique de la résolution "enveloppe équipe_livraison > 0 + partage actif ?" — partagée par le générateur, la validation de saisie de l'équipe et les garde-fous préventifs à la création (voir ci-dessous). |
 | Paramètres > Commissions (`Settings\CommissionRegleController`) | Un seul écran, 3 onglets (`?processus=vente\|distribution_client\|logistique_transfert`), même grille catégorie × cible × type de véhicule pour les trois. |
 | `Commercial > Ventes` / `Commercial > Distribution` | Même liste (`CommandeVenteController::index()`), filtrée par nom de route (`ventes.index` / `distributions.index`), jamais un paramètre modifiable côté client. |
 
@@ -96,6 +120,21 @@ la répartition d'équipe restent une seule implémentation, partagée par `Comm
   Livreur correspondante est marquée « À régulariser » (jamais un montant à 0 silencieux, jamais un
   repli sur le partage d'un autre processus) — cf. `CommissionMoteurGeneriqueMultiProcessusTest::
   transfert_migre_avec_bareme_mais_sans_partage_equipe_est_marque_a_regulariser_jamais_zero_silencieux`.
+- **Garde-fou préventif à la création** (30/08/2026, cf. incident CMD-300826-007 : commande
+  facturée et payée le jour même de l'ajout de `processus_id` ci-dessus, bloquée « à régulariser »
+  faute de partage migré pour `distribution_client`) — `CommandeVenteController::store()` et
+  `TransfertLogistiqueController::store()` refusent désormais la création (`ValidationException`
+  sur `vehicule_id`, jamais un simple avertissement) si l'équipe du véhicule sélectionné n'a aucun
+  partage actif pour une catégorie vendue/transférée dont l'enveloppe équipe_livraison est positive
+  sur le processus résolu, via `CommissionPartageLivraisonCategorieChecker`. Ce contrôle :
+  - rejoue exactement la même résolution que la génération (même enveloppe, même notion de
+    partage actif) — jamais une règle divergente ;
+  - ne s'applique jamais à une vente sans véhicule, à un véhicule non éligible aux commissions
+    (`livraison_vente = false`), ni — côté transfert — à une organisation non migrée vers le
+    moteur générique (`CommissionTriggerService::estMigreVersMoteurGenerique()`) ;
+  - reste un contrôle **préventif**, pas une garantie : le filet de sécurité de la génération
+    (ci-dessus) reste seul responsable au moment réel de la génération, la configuration pouvant
+    encore changer entre la création et le déclencheur (chargement/encaissement/réception).
 
 ## Reporting Comptabilité — cloisonnement par processus
 

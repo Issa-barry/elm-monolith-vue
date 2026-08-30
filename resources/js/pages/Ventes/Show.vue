@@ -25,6 +25,7 @@ import {
     HandCoins,
     MoreVertical,
     Package,
+    PackageCheck,
     PackageOpen,
     Pencil,
     Printer,
@@ -39,6 +40,7 @@ import Textarea from 'primevue/textarea';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 import ChargementDialog from './partials/ChargementDialog.vue';
+import ReceptionDialog from './partials/ReceptionDialog.vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface AuditEntry {
@@ -92,7 +94,11 @@ interface LigneCommande {
     type_ecart: string | null;
     type_ecart_label: string | null;
     commentaire_ecart: string | null;
+    type_ecart_reception: string | null;
+    type_ecart_reception_label: string | null;
+    commentaire_ecart_reception: string | null;
     ecart_chargement: number | null;
+    ecart_livraison: number | null;
     prix_usine_snapshot: number;
     prix_vente_snapshot: number;
     // null pour les commandes créées avant la tarification par nature de client (backfillées en
@@ -150,6 +156,7 @@ interface EquipeDetail {
 interface CommandeData {
     id: string;
     reference: string;
+    nature_operation: 'vente_standard' | 'distribution_client';
     statut: string;
     statut_label: string;
     statut_color: string;
@@ -170,6 +177,7 @@ interface CommandeData {
     chargement_demarre_at: string | null;
     chargement_valide_at: string | null;
     livree_at: string | null;
+    reception_validee_at: string | null;
     closed_at: string | null;
     is_brouillon: boolean;
     is_a_charger: boolean;
@@ -183,6 +191,7 @@ interface CommandeData {
     can_confirmer: boolean;
     can_demarrer_chargement: boolean;
     can_valider_chargement: boolean;
+    can_valider_reception: boolean;
     can_annuler: boolean;
     can_encaisser: boolean;
     created_at: string;
@@ -463,6 +472,9 @@ function relancerCommissions() {
 // ── Chargement dialog ─────────────────────────────────────────────────────────
 const chargementDialogVisible = ref(false);
 
+// ── Réception dialog (distribution_client) ────────────────────────────────────
+const receptionDialogVisible = ref(false);
+
 // ── Annulation commande ───────────────────────────────────────────────────────
 const MOTIFS_ANNULATION = [
     { value: 'erreur_saisie', label: 'Erreur de saisie' },
@@ -561,6 +573,15 @@ const showChargeeCol = computed(
     () => !props.commande.is_brouillon && !props.commande.is_a_charger,
 );
 
+// Distribution client uniquement (validerReceptionDistribution()) — vente_standard ne
+// renseigne jamais quantite_livree, la colonne reste donc naturellement absente pour elle.
+const showLivreeCol = computed(() =>
+    props.commande.lignes.some((l) => l.quantite_livree !== null),
+);
+const chargeeEtEcartColspan = computed(
+    () => 2 + (showChargeeCol.value ? 3 : 0) + (showLivreeCol.value ? 3 : 0) + 1,
+);
+
 // ── Prix affiché — "Prix appliqué" par ligne (cf. Ventes/Create.vue) : des lignes d'une même
 // commande peuvent relever de politiques de prix différentes (ex: un produit fabricable au
 // tarif Revendeur à côté d'un produit classique au prix de vente). L'origine est celle figée à
@@ -612,7 +633,12 @@ function printTicketCommande(): void {
 }
 
 // ── Timeline de progression ────────────────────────────────────────────────────
-const STEPS = [
+// distribution_client uniquement (décision produit du 31/08/2026) : une étape "Réception"
+// supplémentaire s'intercale entre "Livraison en cours" et "Facturation" — reflet visuel de
+// validerReceptionDistribution(), jamais un nouveau statut ajouté pour l'occasion (calculé ici à
+// partir de nature_operation + statut + reception_validee_at). vente_standard garde exactement
+// son stepper actuel, inchangé.
+const STEPS_VENTE = [
     { key: 'creee', shortLabel: 'Créée', icon: FileText },
     { key: 'a_charger', shortLabel: 'À charger', icon: Package },
     { key: 'chargement', shortLabel: 'Chargement en cours', icon: PackageOpen },
@@ -622,7 +648,27 @@ const STEPS = [
     { key: 'cloturee', shortLabel: 'Clôturée', icon: CheckCircle2 },
 ];
 
+const STEPS_DISTRIBUTION = [
+    { key: 'creee', shortLabel: 'Créée', icon: FileText },
+    { key: 'a_charger', shortLabel: 'À charger', icon: Package },
+    { key: 'chargement', shortLabel: 'Chargement en cours', icon: PackageOpen },
+    { key: 'livraison', shortLabel: 'Livraison en cours', icon: Truck },
+    { key: 'reception', shortLabel: 'Réception', icon: PackageCheck },
+    { key: 'facturation', shortLabel: 'Facturation', icon: Receipt },
+    { key: 'commissions', shortLabel: 'Commissions', icon: HandCoins },
+    { key: 'cloturee', shortLabel: 'Clôturée', icon: CheckCircle2 },
+];
+
 const isCommandeDirecte = computed(() => !props.commande.vehicule_nom);
+// Une distribution exige toujours un véhicule (COMM-003) : isCommandeDirecte et isDistribution
+// ne sont donc jamais vrais simultanément.
+const isDistribution = computed(
+    () => props.commande.nature_operation === 'distribution_client',
+);
+
+const STEPS = computed(() =>
+    isDistribution.value ? STEPS_DISTRIBUTION : STEPS_VENTE,
+);
 
 const currentStepIdx = computed(() => {
     if (props.commande.is_annulee) return -1;
@@ -630,6 +676,22 @@ const currentStepIdx = computed(() => {
         if (props.commande.is_cloturee) return 6;
         if (props.facture?.statut === 'payee') return 5;
         return 4;
+    }
+    if (isDistribution.value) {
+        if (props.commande.is_cloturee) return 7;
+        if (props.commande.is_livree) {
+            return props.facture?.statut === 'payee' ? 6 : 5;
+        }
+        const mapDistribution: Record<string, number> = {
+            brouillon: 0,
+            a_charger: 1,
+            chargement_en_cours: 2,
+            // Le chargement est déjà validé : la Réception, pas "Livraison en cours" (déjà
+            // franchie), est l'étape actionnable courante tant que reception_validee_at est
+            // vide — cf. demande explicite du 31/08/2026.
+            livraison_en_cours: 4,
+        };
+        return mapDistribution[props.commande.statut] ?? 0;
     }
     if (props.commande.is_livree) {
         return props.facture?.statut === 'payee' ? 5 : 4;
@@ -660,17 +722,17 @@ function connectorIsActive(idx: number): boolean {
     return idx < currentStepIdx.value;
 }
 
-// L'étape "Commissions" (idx 5) doit rester visuellement en anomalie tant que
-// la dernière tentative de génération a échoué — jamais confondue avec "en
-// cours" (bleu) ou "faite" (vert), cf. incident CMD-230826-004 où cet état
-// n'était visible nulle part.
-const COMMISSIONS_STEP_IDX = 5;
+// L'étape "Commissions" doit rester visuellement en anomalie tant que la dernière tentative de
+// génération a échoué — jamais confondue avec "en cours" (bleu) ou "faite" (vert), cf. incident
+// CMD-230826-004 où cet état n'était visible nulle part. Son index décale de +1 pour
+// distribution_client (étape Réception insérée avant elle).
+const COMMISSIONS_STEP_IDX = computed(() => (isDistribution.value ? 6 : 5));
 const commissionsEnErreur = computed(
     () => props.commission_generation_statut?.value === 'erreur',
 );
 
 function stepLabel(idx: number, defaultLabel: string): string {
-    return idx === COMMISSIONS_STEP_IDX && commissionsEnErreur.value
+    return idx === COMMISSIONS_STEP_IDX.value && commissionsEnErreur.value
         ? 'À régulariser'
         : defaultLabel;
 }
@@ -706,6 +768,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
                         commande.can_confirmer ||
                         commande.can_demarrer_chargement ||
                         commande.can_valider_chargement ||
+                        commande.can_valider_reception ||
                         commande.can_annuler
                     "
                     class="absolute right-4"
@@ -763,13 +826,22 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                 <CheckCircle class="h-4 w-4" />
                                 Valider le chargement
                             </DropdownMenuItem>
+                            <DropdownMenuItem
+                                v-if="commande.can_valider_reception"
+                                class="cursor-pointer text-blue-600 focus:text-blue-600"
+                                @click="receptionDialogVisible = true"
+                            >
+                                <CheckCircle class="h-4 w-4" />
+                                Valider la réception
+                            </DropdownMenuItem>
                             <DropdownMenuSeparator
                                 v-if="
                                     commande.can_annuler &&
                                     (commande.can_modifier ||
                                         commande.can_confirmer ||
                                         commande.can_demarrer_chargement ||
-                                        commande.can_valider_chargement)
+                                        commande.can_valider_chargement ||
+                                        commande.can_valider_reception)
                                 "
                             />
                             <DropdownMenuItem
@@ -874,6 +946,16 @@ function stepLabel(idx: number, defaultLabel: string): string {
                     >
                         <CheckCircle class="mr-2 h-4 w-4" />
                         Valider le chargement
+                    </Button>
+
+                    <!-- Valider la réception (distribution_client, livraison_en_cours) -->
+                    <Button
+                        v-if="commande.can_valider_reception"
+                        size="sm"
+                        @click="receptionDialogVisible = true"
+                    >
+                        <CheckCircle class="mr-2 h-4 w-4" />
+                        Valider la réception
                     </Button>
 
                     <!-- Annuler -->
@@ -1249,6 +1331,26 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                         Motif d'écart
                                     </th>
                                     <th
+                                        v-if="showLivreeCol"
+                                        class="px-4 py-2.5 text-center font-medium text-muted-foreground"
+                                        style="width: 80px"
+                                    >
+                                        Reçue
+                                    </th>
+                                    <th
+                                        v-if="showLivreeCol"
+                                        class="px-4 py-2.5 text-center font-medium text-muted-foreground"
+                                        style="width: 70px"
+                                    >
+                                        Écart
+                                    </th>
+                                    <th
+                                        v-if="showLivreeCol"
+                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                    >
+                                        Motif d'écart
+                                    </th>
+                                    <th
                                         class="px-4 py-2.5 text-right font-medium text-muted-foreground"
                                         style="width: 150px"
                                     >
@@ -1313,6 +1415,37 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                         </p>
                                     </td>
                                     <td
+                                        v-if="showLivreeCol"
+                                        class="px-4 py-3 text-center tabular-nums"
+                                    >
+                                        {{ ligne.quantite_livree ?? '—' }}
+                                    </td>
+                                    <td
+                                        v-if="showLivreeCol"
+                                        class="px-4 py-3 text-center font-semibold tabular-nums"
+                                        :class="ecartClass(ligne.ecart_livraison)"
+                                    >
+                                        {{ ecartLabel(ligne.ecart_livraison) }}
+                                    </td>
+                                    <td v-if="showLivreeCol" class="px-4 py-3 text-sm">
+                                        <span
+                                            v-if="ligne.type_ecart_reception_label"
+                                            class="text-foreground"
+                                            >{{
+                                                ligne.type_ecart_reception_label
+                                            }}</span
+                                        >
+                                        <span v-else class="text-muted-foreground"
+                                            >—</span
+                                        >
+                                        <p
+                                            v-if="ligne.commentaire_ecart_reception"
+                                            class="mt-0.5 text-xs text-muted-foreground"
+                                        >
+                                            {{ ligne.commentaire_ecart_reception }}
+                                        </p>
+                                    </td>
+                                    <td
                                         class="px-4 py-3 text-right text-muted-foreground tabular-nums"
                                     >
                                         {{ formatGNF(ligneUnitPrice(ligne)) }}
@@ -1330,7 +1463,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
                             <tfoot>
                                 <tr class="border-t bg-muted/20">
                                     <td
-                                        :colspan="showChargeeCol ? 6 : 3"
+                                        :colspan="chargeeEtEcartColspan"
                                         class="px-4 py-3 text-right text-sm font-semibold text-muted-foreground"
                                     >
                                         {{ totalColumnLabel }}
@@ -2133,6 +2266,14 @@ function stepLabel(idx: number, defaultLabel: string): string {
         <!-- Dialog Chargement -->
         <ChargementDialog
             v-model:visible="chargementDialogVisible"
+            :commande-id="commande.id"
+            :lignes="commande.lignes"
+            :types-ecart="TYPES_ECART"
+        />
+
+        <!-- Dialog Réception (distribution_client) -->
+        <ReceptionDialog
+            v-model:visible="receptionDialogVisible"
             :commande-id="commande.id"
             :lignes="commande.lignes"
             :types-ecart="TYPES_ECART"

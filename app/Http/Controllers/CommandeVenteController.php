@@ -30,6 +30,7 @@ use App\Services\AuditLogService;
 use App\Services\CommandeVenteActiviteService;
 use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionEnveloppeGenerator;
+use App\Services\Commission\CommissionPartageLivraisonCategorieChecker;
 use App\Services\PrixUsineResolver;
 use App\Services\PrixVenteNatureResolver;
 use App\Services\SolvabiliteService;
@@ -369,6 +370,7 @@ class CommandeVenteController extends Controller
         $this->ensureQuantiteMatchesVehiculeCapacity($data);
         $client = $this->resolveClientForTarification($data['client_id'] ?? null);
         $this->enforcePrixVentePolicy($data, null, $client);
+        $this->ensurePartageLivraisonCategorieConfigure($data, $client);
 
         $commande = DB::transaction(function () use ($data, $orgId, $userSite, $client) {
             // Verrou de ligne sur le véhicule le temps de la transaction : sans cela, deux
@@ -458,7 +460,11 @@ class CommandeVenteController extends Controller
             'type_ecart' => $l->type_ecart?->value,
             'type_ecart_label' => $l->type_ecart?->label(),
             'commentaire_ecart' => $l->commentaire_ecart,
+            'type_ecart_reception' => $l->type_ecart_reception?->value,
+            'type_ecart_reception_label' => $l->type_ecart_reception?->label(),
+            'commentaire_ecart_reception' => $l->commentaire_ecart_reception,
             'ecart_chargement' => $l->ecart_chargement,
+            'ecart_livraison' => $l->ecart_livraison,
             'prix_usine_snapshot' => (float) $l->prix_usine_snapshot,
             'prix_vente_snapshot' => (float) $l->prix_vente_snapshot,
             'prix_origine_snapshot' => $l->prix_origine_snapshot?->value,
@@ -548,6 +554,7 @@ class CommandeVenteController extends Controller
                 'chargement_demarre_at' => $commande->chargement_demarre_at?->format(self::DATE_DISPLAY_FORMAT),
                 'chargement_valide_at' => $commande->chargement_valide_at?->format(self::DATE_DISPLAY_FORMAT),
                 'livree_at' => $commande->livree_at?->format(self::DATE_DISPLAY_FORMAT),
+                'reception_validee_at' => $commande->reception_validee_at?->format(self::DATE_DISPLAY_FORMAT),
                 'closed_at' => $commande->closed_at?->format(self::DATE_DISPLAY_FORMAT),
                 'is_brouillon' => $commande->isBrouillon(),
                 'is_a_charger' => $commande->isACharger(),
@@ -561,6 +568,7 @@ class CommandeVenteController extends Controller
                 'can_confirmer' => $commande->isBrouillon() && $user->can('confirmer', $commande),
                 'can_demarrer_chargement' => $commande->isACharger() && $user->can('demarrerChargement', $commande),
                 'can_valider_chargement' => $commande->isChargementEnCours() && $user->can('validerChargement', $commande),
+                'can_valider_reception' => $commande->isLivraisonEnCours() && $user->can('validerReceptionDistribution', $commande),
                 'can_annuler' => $commande->statut->isAnnulable()
                     && (! $facture || (float) $facture->montant_encaisse === 0.0)
                     && $user->can('annuler', $commande),
@@ -1017,6 +1025,63 @@ class CommandeVenteController extends Controller
             'qte',
             ! Parametre::isVentesAutorisationSaisieDessousQteMax($orgId),
         );
+    }
+
+    /**
+     * Garde-fou préventif — jamais un remplacement du filet de sécurité de la génération
+     * (CommissionEnveloppeGenerator, différée au déclencheur configuré par l'organisation, cf.
+     * CommissionTriggerService) : réduit le risque qu'une commande apparaisse "payée" mais reste
+     * bloquée "à régulariser" faute de partage Livreur configuré pour une catégorie vendue (cf.
+     * incident CMD-300826-007, 30/08/2026). La configuration de partage peut encore changer entre
+     * cette création et la génération réelle — ce contrôle réduit le risque, il ne l'élimine pas.
+     *
+     * Hors périmètre volontairement : véhicule sans équipe de livraison du tout (erreur distincte,
+     * déjà portée par le générateur), vente directe sans véhicule (aucune équipe à commissionner)
+     * et véhicule non éligible aux commissions (commission_eligible_snapshot resterait false, la
+     * génération ne tente jamais de résoudre le partage Livreur pour ce véhicule).
+     */
+    private function ensurePartageLivraisonCategorieConfigure(array $data, ?Client $client): void
+    {
+        if (empty($data['vehicule_id'])) {
+            return;
+        }
+
+        $vehicule = Vehicule::query()->with('equipe')->find($data['vehicule_id']);
+        if (! $vehicule || ! $vehicule->equipe || ! (bool) ($vehicule->livraison_vente ?? true)) {
+            return;
+        }
+
+        $natureOperation = isset($data['nature_operation'])
+            ? NatureOperation::from($data['nature_operation'])
+            : NatureOperation::deriverParDefaut($client?->type, $data['vehicule_id']);
+
+        $processusCode = $natureOperation === NatureOperation::DISTRIBUTION_CLIENT
+            ? CommissionProcessus::CODE_DISTRIBUTION_CLIENT
+            : CommissionProcessus::CODE_VENTE;
+
+        $categorieIds = CommissionPartageLivraisonCategorieChecker::categorieIdsDepuisLignes($data['lignes'] ?? []);
+
+        $manquantes = CommissionPartageLivraisonCategorieChecker::categoriesManquantes(
+            auth()->user()->organization_id,
+            $vehicule->equipe->id,
+            $processusCode,
+            $vehicule->type_vehicule_id,
+            $categorieIds,
+            Carbon::today(),
+        );
+
+        if ($manquantes->isEmpty()) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'vehicule_id' => sprintf(
+                'Le véhicule %s n\'a pas de partage de commission configuré pour le processus « %s » sur : %s. Configurez la répartition de l\'équipe avant de continuer.',
+                $vehicule->nom_vehicule,
+                $natureOperation->label(),
+                $manquantes->pluck('nom')->implode(', '),
+            ),
+        ]);
     }
 
     /**

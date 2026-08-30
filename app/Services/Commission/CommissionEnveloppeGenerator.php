@@ -116,6 +116,14 @@ class CommissionEnveloppeGenerator
     {
         $commande->loadMissing(['lignes.variante.produit.categorie', 'vehicule.equipe.membres.livreur', 'vehicule.proprietaire', 'site']);
 
+        // distribution_client se calcule sur les quantités réellement RÉCEPTIONNÉES
+        // (quantite_livree), jamais chargées — la validation de réception est son unique
+        // déclencheur (cf. CommissionTriggerService::onReceptionDistributionValidee()), décision
+        // produit du 30/08/2026 qui révise COMM-004. vente_standard reste inchangée.
+        $quantiteField = $commande->nature_operation === NatureOperation::DISTRIBUTION_CLIENT
+            ? 'quantite_livree'
+            : 'quantite_chargee';
+
         return new CommissionOperationContext(
             organizationId: $commande->organization_id,
             sourceType: CommandeVente::class,
@@ -126,7 +134,7 @@ class CommissionEnveloppeGenerator
             site: $commande->site,
             earnedAt: Carbon::today(),
             sourceLigneType: CommandeVenteLigne::class,
-            quantiteField: 'quantite_chargee',
+            quantiteField: $quantiteField,
             lignes: $commande->lignes,
         );
     }
