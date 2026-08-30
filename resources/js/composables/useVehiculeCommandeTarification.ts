@@ -25,7 +25,9 @@ export function useVehiculeCommandeTarification<T extends { id: number }>(
 ): {
     modeTarification: ComputedRef<'prix_vente' | 'prix_usine'>;
     commissionEligible: ComputedRef<boolean>;
-    natureOperationParDefaut: ComputedRef<'vente_standard' | 'distribution_client'>;
+    natureOperationParDefaut: ComputedRef<
+        'vente_standard' | 'distribution_client'
+    >;
 } {
     const selectedVehicule = computed<T | null>(() => {
         const id = getVehiculeId();

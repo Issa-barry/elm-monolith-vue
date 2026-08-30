@@ -47,6 +47,18 @@ return new class extends Migration
                 ->update(['equipe_livraison_partages_categorie.processus_id' => $processusVente->id]);
         }
 
+        // eq_liv_partage_categorie_equipe_idx : les 3 index composites ci-dessous vont perdre
+        // equipe_id en tête (remplacé par processus_id) — sans cet index dédié, la contrainte
+        // FK sur equipe_id (equipes_livraison, cf. migration de création) se retrouverait sans
+        // AUCUN index la couvrant dès la suppression du dernier des 3 anciens index composites,
+        // ce que MySQL/InnoDB refuse (contrairement à SQLite, qui laisse passer silencieusement
+        // — d'où un échec visible seulement sur la base MySQL réelle des environnements E2E/
+        // production, jamais dans la suite de tests Pest en SQLite : correctif du 30/08/2026,
+        // après échec du job E2E). Conservé en permanence, jamais supprimé par la suite.
+        Schema::table('equipe_livraison_partages_categorie', function (Blueprint $table) {
+            $table->index('equipe_id', 'eq_liv_partage_categorie_equipe_idx');
+        });
+
         Schema::table('equipe_livraison_partages_categorie', function (Blueprint $table) {
             $table->foreignUlid('processus_id')->nullable(false)->change();
 
@@ -70,7 +82,12 @@ return new class extends Migration
             $table->index(['equipe_id', 'categorie_id'], 'eq_liv_partage_categorie_lookup_idx');
             $table->index(['equipe_id', 'categorie_id', 'livreur_id', 'effective_from'], 'eq_liv_partage_categorie_version_idx');
             $table->index(['equipe_id', 'categorie_id', 'effective_to'], 'eq_liv_partage_categorie_actif_idx');
+        });
 
+        // Retiré seulement maintenant que les 3 index ci-dessus couvrent de nouveau equipe_id
+        // (même raisonnement FK qu'en up(), en sens inverse).
+        Schema::table('equipe_livraison_partages_categorie', function (Blueprint $table) {
+            $table->dropIndex('eq_liv_partage_categorie_equipe_idx');
             $table->dropConstrainedForeignId('processus_id');
         });
     }

@@ -671,7 +671,9 @@ function formatGNF(val: number): string {
                             v-if="equipe && vehicule.equipe_membres.length > 0"
                             class="mt-2 space-y-2"
                         >
-                            <div class="flex flex-wrap items-center justify-between gap-2">
+                            <div
+                                class="flex flex-wrap items-center justify-between gap-2"
+                            >
                                 <p
                                     class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
                                 >

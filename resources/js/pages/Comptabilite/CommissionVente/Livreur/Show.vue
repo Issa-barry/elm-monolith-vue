@@ -93,7 +93,8 @@ const PROCESSUS_LABELS: Record<string, string> = {
     distribution_client: 'Livreur — distribution client',
     logistique_transfert: 'Livreur — transfert logistique',
 };
-const eyebrowLabel = PROCESSUS_LABELS[props.filtre_processus] ?? 'Livreur — vente';
+const eyebrowLabel =
+    PROCESSUS_LABELS[props.filtre_processus] ?? 'Livreur — vente';
 </script>
 
 <template>

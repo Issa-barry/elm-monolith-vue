@@ -1,9 +1,9 @@
 ﻿<script setup lang="ts">
+import NatureOperationBadge from '@/components/commande-vente/NatureOperationBadge.vue';
 import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
 import ListPageActions from '@/components/ListPageActions.vue';
-import NatureOperationBadge from '@/components/commande-vente/NatureOperationBadge.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -553,7 +553,9 @@ function confirmDelete(c: Commande) {
                                 :status="c.statut"
                                 :label="c.statut_label"
                             />
-                            <NatureOperationBadge :nature="c.nature_operation" />
+                            <NatureOperationBadge
+                                :nature="c.nature_operation"
+                            />
                             <span
                                 class="text-xs text-muted-foreground tabular-nums"
                                 >{{ c.created_at }}</span

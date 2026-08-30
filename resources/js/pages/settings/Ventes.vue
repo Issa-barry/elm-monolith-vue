@@ -450,9 +450,9 @@ function onMontantLogistiqueBlur() {
                                 <p class="mt-0.5 text-xs text-muted-foreground">
                                     Utilise quand la commission logistique est
                                     generee automatiquement, sans saisie
-                                    manuelle. Sans effet sur la validation
-                                    admin d'une reception, qui demande
-                                    toujours un montant explicite.
+                                    manuelle. Sans effet sur la validation admin
+                                    d'une reception, qui demande toujours un
+                                    montant explicite.
                                 </p>
                             </div>
                             <div class="relative">

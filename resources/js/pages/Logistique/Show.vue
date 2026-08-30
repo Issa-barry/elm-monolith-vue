@@ -519,7 +519,8 @@ const totalCommissionPreview = computed(
 watch(showValidationCommissionDialog, (open) => {
     if (open) {
         validationEtape.value = 'review';
-        montantParPack.value = props.montant_defaut_commission_logistique_par_pack;
+        montantParPack.value =
+            props.montant_defaut_commission_logistique_par_pack;
         validationErrors.value = [];
     }
 });
