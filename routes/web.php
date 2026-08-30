@@ -213,6 +213,10 @@ Route::prefix('backoffice')->group(function () {
         Route::middleware('module:'.ModuleFeature::VENTES)->group(function () {
             Route::get('ventes/check-solvabilite', [CommandeVenteController::class, 'checkSolvabilite'])->name('ventes.check-solvabilite');
             Route::resource('ventes', CommandeVenteController::class)->except([]);
+            // Même liste que ventes.index, filtrée sur nature_operation=distribution_client côté
+            // contrôleur (déterminé par le nom de route, jamais un paramètre client) — la création
+            // reste sur ventes.create/ventes.store, avec le choix de nature sur le formulaire.
+            Route::get('distributions', [CommandeVenteController::class, 'index'])->name('distributions.index');
             Route::patch('ventes/{commande_vente}/valider', [CommandeVenteController::class, 'valider'])->name('ventes.valider');
             Route::patch('ventes/{commande_vente}/annuler', [CommandeVenteController::class, 'annuler'])->name('ventes.annuler');
             Route::post('ventes/{commande_vente}/statut/avancer', [CommandeVenteStatutController::class, 'avancer'])->name('ventes.statut.avancer');

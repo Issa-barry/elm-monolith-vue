@@ -105,6 +105,8 @@ const props = defineProps<{
     search: string;
     filtre_statut: string;
     filtre_site_ids: string[];
+    filtre_processus: string;
+    processus_options: { value: string; label: string }[];
     selected_periode: string;
     periodes_disponibles: PeriodeOption[];
     periode_courante: string;
@@ -126,6 +128,13 @@ const breadcrumbs: BreadcrumbItem[] = [
 const search = ref(props.search ?? '');
 
 const filterFields = computed((): FilterField[] => [
+    {
+        key: 'processus',
+        label: 'Processus',
+        type: 'select' as const,
+        inline: true,
+        options: props.processus_options,
+    },
     {
         key: 'statut',
         label: 'Statut',
@@ -152,6 +161,7 @@ const currentFilters = computed(() => ({
     site_ids: props.filtre_site_ids ?? [],
     statut: props.filtre_statut ?? '',
     periode: props.selected_periode ?? '',
+    processus: props.filtre_processus ?? 'vente',
 }));
 
 // Dialog paiement
@@ -579,7 +589,7 @@ function fmtTel(tel: string | null | undefined): string {
                     <ClickableTableRow
                         v-for="b in beneficiaires"
                         :key="b.beneficiaire_id"
-                        :href="`/backoffice/comptabilite/commissions/vente/livreurs/${b.beneficiaire_id}`"
+                        :href="`/backoffice/comptabilite/commissions/vente/livreurs/${b.beneficiaire_id}?processus=${currentFilters.processus}`"
                         :aria-label="`Voir le détail de ${b.beneficiaire_nom}`"
                         class="group even:bg-muted/20"
                     >
@@ -728,7 +738,7 @@ function fmtTel(tel: string | null | undefined): string {
                                 <DropdownMenuContent align="end">
                                     <DropdownMenuItem as-child>
                                         <Link
-                                            :href="`/backoffice/comptabilite/commissions/vente/livreurs/${b.beneficiaire_id}`"
+                                            :href="`/backoffice/comptabilite/commissions/vente/livreurs/${b.beneficiaire_id}?processus=${currentFilters.processus}`"
                                             class="flex w-full cursor-pointer items-center"
                                         >
                                             Détail

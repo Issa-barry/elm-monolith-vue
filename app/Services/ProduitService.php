@@ -228,8 +228,13 @@ class ProduitService
             ];
         }
 
+        // Le contrôle de marge compare toujours au prix de vente : un type non vendable (ex.
+        // Matière de production, achetée et consommée en fabrication, jamais vendue telle
+        // quelle) n'a jamais de prix_vente saisi — la comparaison retomberait systématiquement
+        // sur 0, rejetant CHAQUE création quel que soit le prix d'achat renseigné. Correctif du
+        // 30/08/2026 : bug réel bloquant la création de tout produit « Matière de production ».
         $champReference = $type->champPrixReference();
-        if ($champReference === null) {
+        if ($champReference === null || ! $type->isVendable()) {
             return null;
         }
 

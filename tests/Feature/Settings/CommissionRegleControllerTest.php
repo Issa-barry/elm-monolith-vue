@@ -79,6 +79,7 @@ class CommissionRegleControllerTest extends TestCase
 
         $this->actingAs($this->user)
             ->post('/settings/commissions/configuration', [
+                'processus_code' => CommissionProcessus::CODE_VENTE,
                 'lignes' => [[
                     'categorie_id' => $categorie->id,
                     'beneficiaires' => [
@@ -97,7 +98,7 @@ class CommissionRegleControllerTest extends TestCase
                     'exceptions' => [],
                 ]],
             ])
-            ->assertRedirect(route('settings.commissions.index'))
+            ->assertRedirect(route('settings.commissions.index', ['processus' => CommissionProcessus::CODE_VENTE]))
             ->assertSessionHasNoErrors();
 
         $this->assertDatabaseHas('commission_regles', [
@@ -125,6 +126,7 @@ class CommissionRegleControllerTest extends TestCase
 
         $this->actingAs($this->user)
             ->post('/settings/commissions/configuration', [
+                'processus_code' => CommissionProcessus::CODE_VENTE,
                 'lignes' => [[
                     'categorie_id' => $categorie->id,
                     'beneficiaires' => [CommissionCibleType::CODE_CONSULTANT],
@@ -168,6 +170,7 @@ class CommissionRegleControllerTest extends TestCase
         ]);
 
         $this->actingAs($this->user)->post('/settings/commissions/configuration', [
+            'processus_code' => CommissionProcessus::CODE_VENTE,
             'lignes' => [[
                 'categorie_id' => $categorie->id,
                 'beneficiaires' => [
@@ -217,6 +220,7 @@ class CommissionRegleControllerTest extends TestCase
 
         $this->actingAs($this->user)
             ->post('/settings/commissions/configuration', [
+                'processus_code' => CommissionProcessus::CODE_VENTE,
                 'lignes' => [[
                     'categorie_id' => $categorie->id,
                     'beneficiaires' => [
@@ -315,11 +319,13 @@ class CommissionRegleControllerTest extends TestCase
         ];
 
         $this->actingAs($this->user)
-            ->post('/settings/commissions/configuration', ['lignes' => [$bouteillePayload]])
+            ->post('/settings/commissions/configuration', [
+                'processus_code' => CommissionProcessus::CODE_VENTE, 'lignes' => [$bouteillePayload]])
             ->assertSessionHasNoErrors();
 
         $this->actingAs($this->user)
             ->post('/settings/commissions/configuration', [
+                'processus_code' => CommissionProcessus::CODE_VENTE,
                 'lignes' => [
                     $bouteillePayload,
                     [

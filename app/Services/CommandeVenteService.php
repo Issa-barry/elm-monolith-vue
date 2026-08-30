@@ -140,6 +140,21 @@ class CommandeVenteService
     }
 
     /**
+     * Symétrique de decrementerStockDirect() : annule au besoin la sortie physique enregistrée
+     * pour une vente directe (chemin véhicule non concerné — decrementerStock() n'intervient
+     * qu'à validerChargement(), qui mène à LIVRAISON_EN_COURS, jamais annulable ; no-op ici dans
+     * ce cas puisqu'aucune sortie n'existe encore).
+     */
+    private static function annulerSortieStockDirecte(CommandeVente $commande): void
+    {
+        $commande->loadMissing('lignes');
+
+        foreach ($commande->lignes as $ligne) {
+            MouvementStockService::annulerSortieStock(CommandeVenteLigne::class, $ligne->id, $commande->site_id);
+        }
+    }
+
+    /**
      * Crée la facture (statut CREEE) — idempotent : ne la recrée pas si déjà
      * présente.
      */
@@ -166,6 +181,15 @@ class CommandeVenteService
     /**
      * Vente directe client (sans véhicule) : BROUILLON → FACTURATION + création facture.
      * Aucune commission n'est générée.
+     *
+     * Correctif du 30/08/2026 : ce chemin ne passe jamais par confirmer()/reserverLignes()
+     * (pas d'étape « à charger » pour une vente sans véhicule — la facture est immédiate), et
+     * jusqu'ici ne décrémentait donc AUCUN stock physique — une facture pouvait être émise et
+     * encaissée sans qu'aucun mouvement de stock correspondant n'existe. decrementerStockDirect()
+     * décrémente désormais le stock physique directement (pas de réservation intermédiaire à
+     * consommer, contrairement à decrementerStock() du chemin véhicule), sous le même verrou et
+     * le même garde-fou anti-survente que le reste de l'application (MouvementStockService::
+     * appliquer()).
      */
     public static function creerFactureDirecte(CommandeVente $commande): void
     {
@@ -185,6 +209,8 @@ class CommandeVenteService
                 'statut' => StatutCommandeVente::FACTURATION,
             ]);
 
+            self::decrementerStockDirect($commande);
+
             $facture = FactureVente::create([
                 'organization_id' => $commande->organization_id,
                 'site_id' => $commande->site_id,
@@ -198,6 +224,39 @@ class CommandeVenteService
 
             self::comptabiliserVenteFacturee($facture);
         });
+    }
+
+    /**
+     * Décrément physique direct du stock pour la vente sans véhicule — sans réservation
+     * préalable à consommer, contrairement à decrementerStock() (chemin véhicule, réservée dès
+     * confirmer()). Même convention que decrementerStock()/reserverLignes() : ignore les lignes
+     * dont le produit ne gère pas de stock (type service), respecte la politique d'organisation
+     * de vente au-delà du disponible (Parametre::isVentesAutoriseesSansStock()). Idempotent
+     * (MouvementStockService::sortirStock()) : un second appel sur la même commande est un no-op.
+     */
+    private static function decrementerStockDirect(CommandeVente $commande): void
+    {
+        $commande->load('lignes.variante.produit.produitType');
+        $userId = Auth::id();
+        $autoriseVenteStockNegatif = Parametre::isVentesAutoriseesSansStock($commande->organization_id);
+
+        foreach ($commande->lignes as $ligne) {
+            $produit = $ligne->variante?->produit;
+            if (! $produit?->produitType?->gere_stock) {
+                continue;
+            }
+
+            MouvementStockService::sortirStock(
+                varianteId: $ligne->variante_id,
+                siteId: $commande->site_id,
+                orgId: $commande->organization_id,
+                quantite: $ligne->quantite_demandee,
+                sourceType: CommandeVenteLigne::class,
+                sourceId: $ligne->id,
+                userId: $userId,
+                allowNegative: $autoriseVenteStockNegatif,
+            );
+        }
     }
 
     /**
@@ -449,6 +508,7 @@ class CommandeVenteService
             ]);
 
             self::libererLignesReservees($commande);
+            self::annulerSortieStockDirecte($commande);
 
             $commande->loadMissing('facture');
             if ($commande->facture && ! $commande->facture->isAnnulee() && ! $commande->facture->isPayee()) {

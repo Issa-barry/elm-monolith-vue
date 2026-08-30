@@ -5,8 +5,8 @@ namespace App\Services\Commission;
 use App\Enums\CommissionActivationStatut;
 use App\Enums\CommissionGenerationDeclenchePar;
 use App\Enums\CommissionGenerationStatut;
-use App\Enums\CommissionStrategieAncrageSite;
 use App\Enums\CommissionUniteCalcul;
+use App\Enums\NatureOperation;
 use App\Enums\OrigineCommissionPart;
 use App\Enums\PrestataireType;
 use App\Enums\StatutCommission;
@@ -21,8 +21,9 @@ use App\Models\CommissionGenerationAttempt;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
 use App\Models\EquipeLivraisonPartageCategorie;
-use App\Models\Parametre;
 use App\Models\Prestataire;
+use App\Models\TransfertLigne;
+use App\Models\TransfertLogistique;
 use App\Models\User;
 use App\Notifications\CommissionGenereeNotification;
 use App\Notifications\CommissionManquanteNotification;
@@ -30,31 +31,36 @@ use App\Services\Notification\BeneficiaireUserResolver;
 use App\Services\Notification\NotificationDispatcher;
 use App\Services\Notification\PushBodyFormatter;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use Throwable;
 
 /**
- * Moteur unique de génération d'enveloppes de commission vente. Chaque méthode
- * publique ouvre sa PROPRE transaction, isolée, et n'échoue jamais de façon à
- * faire annuler l'opération appelante : toute erreur est interceptée et tracée
- * dans commission_generation_attempts, jamais relancée vers l'appelant. Cette
- * isolation rend l'appel sans risque même imbriqué dans la transaction métier
- * déclenchante (chargement, encaissement...) — appelé en tout dernier, une
- * fois toutes les écritures métier de l'opération faites.
+ * Moteur unique de génération d'enveloppes de commission — vente (standard ou distribution
+ * client), et transfert logistique pour les organisations migrées vers ce moteur générique (cf.
+ * CommissionTriggerService::estMigreVersMoteurGenerique()). Chaque méthode publique ouvre sa
+ * PROPRE transaction, isolée, et n'échoue jamais de façon à faire annuler l'opération appelante :
+ * toute erreur est interceptée et tracée dans commission_generation_attempts, jamais relancée vers
+ * l'appelant. Cette isolation rend l'appel sans risque même imbriqué dans la transaction métier
+ * déclenchante (chargement, encaissement...) — appelé en tout dernier, une fois toutes les
+ * écritures métier de l'opération faites.
  *
  * Barèmes fixes PAR_UNITE_VENDUE résolus par catégorie/produit/variante via
- * CommissionRegleResolver, répartition via CommissionRepartitionEngine.
- * Branché sur le déclencheur réel via CommissionTriggerService::genererCommissionVente().
+ * CommissionRegleResolver, répartition Livreur en montants fixes via EquipeLivraisonPartageCategorie
+ * (jamais un pourcentage). Le couplage à une source précise (CommandeVente/TransfertLogistique) est
+ * isolé dans les deux adaptateurs contexteDepuis*() ; genererDepuisContexte() ne connaît que
+ * CommissionOperationContext, un objet générique.
  */
 class CommissionEnveloppeGenerator
 {
     /**
      * Résout un CommissionRegle PAR_UNITE_VENDUE par ligne de commande
      * (variante > produit > catégorie exacte > globale, décision AMOA #3),
-     * agrège en une seule enveloppe par cible (décision AMOA #6), répartit
-     * via CommissionRepartitionEngine.
+     * agrège en une seule enveloppe par cible (décision AMOA #6). Le processus
+     * (vente ou distribution_client) est déterminé par CommandeVente::nature_operation,
+     * figé à la création de la commande — jamais recalculé ici.
      */
     public static function genererPourCommandeVente(
         CommandeVente $commande,
@@ -70,19 +76,98 @@ class CommissionEnveloppeGenerator
             return;
         }
 
+        $processusCode = $commande->nature_operation === NatureOperation::DISTRIBUTION_CLIENT
+            ? CommissionProcessus::CODE_DISTRIBUTION_CLIENT
+            : CommissionProcessus::CODE_VENTE;
+
+        $ctx = self::contexteDepuisCommandeVente($commande);
+
         self::executerAvecTentative(
-            $commande, CommissionProcessus::CODE_VENTE, $declenchePar, $declencheurUserId,
-            fn (CommissionProcessus $processus) => self::genererParReglesDansTransaction($commande, $processus),
+            $ctx, $processusCode, $declenchePar, $declencheurUserId,
+            fn (CommissionProcessus $processus) => self::genererDepuisContexte($ctx, $processus),
         );
     }
 
     /**
-     * Encapsule le cycle commun aux deux voies : résolution du processus actif,
+     * Génère la commission d'un transfert logistique via le moteur générique — uniquement pour
+     * les organisations ayant activé le processus logistique_transfert (cf.
+     * CommissionTriggerService::estMigreVersMoteurGenerique()) ; sinon l'ancien moteur
+     * (CommissionLogistiqueService) reste seul appelé. $champQuantite ('quantite_chargee' ou
+     * 'quantite_recue') est décidé par l'appelant selon le déclencheur configuré pour
+     * l'organisation, jamais ici.
+     */
+    public static function genererPourTransfertLogistique(
+        TransfertLogistique $transfert,
+        string $champQuantite,
+        CommissionGenerationDeclenchePar $declenchePar = CommissionGenerationDeclenchePar::SYSTEME,
+        ?string $declencheurUserId = null,
+    ): void {
+        $ctx = self::contexteDepuisTransfertLogistique($transfert, $champQuantite);
+
+        self::executerAvecTentative(
+            $ctx, CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT, $declenchePar, $declencheurUserId,
+            fn (CommissionProcessus $processus) => self::genererDepuisContexte($ctx, $processus),
+        );
+    }
+
+    // ── Adaptateurs source → contexte générique ──────────────────────────────
+
+    private static function contexteDepuisCommandeVente(CommandeVente $commande): CommissionOperationContext
+    {
+        $commande->loadMissing(['lignes.variante.produit.categorie', 'vehicule.equipe.membres.livreur', 'vehicule.proprietaire', 'site']);
+
+        return new CommissionOperationContext(
+            organizationId: $commande->organization_id,
+            sourceType: CommandeVente::class,
+            sourceId: $commande->id,
+            reference: $commande->reference,
+            montantReference: (float) $commande->total_commande,
+            vehicule: $commande->vehicule,
+            site: $commande->site,
+            earnedAt: Carbon::today(),
+            sourceLigneType: CommandeVenteLigne::class,
+            quantiteField: 'quantite_chargee',
+            lignes: $commande->lignes,
+        );
+    }
+
+    /**
+     * Site cible toujours le site SOURCE du transfert, jamais la destination, et toujours
+     * explicite (jamais une stratégie d'ancrage implicite) — décision produit explicite.
+     */
+    private static function contexteDepuisTransfertLogistique(TransfertLogistique $transfert, string $champQuantite): CommissionOperationContext
+    {
+        $transfert->loadMissing(['lignes.variante.produit.categorie', 'vehicule.equipe.membres.livreur', 'vehicule.proprietaire', 'siteSource']);
+
+        $verbeEvenement = $champQuantite === 'quantite_recue' ? 'réceptionné' : 'chargé';
+
+        return new CommissionOperationContext(
+            organizationId: $transfert->organization_id,
+            sourceType: TransfertLogistique::class,
+            sourceId: $transfert->id,
+            reference: $transfert->reference,
+            montantReference: 0.0,
+            vehicule: $transfert->vehicule,
+            site: $transfert->siteSource,
+            earnedAt: $transfert->date_arrivee_reelle ? Carbon::instance($transfert->date_arrivee_reelle) : Carbon::today(),
+            sourceLigneType: TransfertLigne::class,
+            quantiteField: $champQuantite,
+            lignes: $transfert->lignes,
+            notifSourceLabel: 'transfert_logistique',
+            notifLibelleOperation: 'Le transfert logistique',
+            notifVerbeEvenement: $verbeEvenement,
+            notifUrlPath: '/backoffice/logistique/',
+            notifActionLabel: 'Voir le transfert',
+        );
+    }
+
+    /**
+     * Encapsule le cycle commun à toutes les sources : résolution du processus actif,
      * idempotence, transaction isolée, traçabilité de la tentative — jamais de
      * rethrow vers l'appelant (décision AMOA #2, round 2).
      */
     private static function executerAvecTentative(
-        CommandeVente $commande,
+        CommissionOperationContext $ctx,
         string $processusCode,
         CommissionGenerationDeclenchePar $declenchePar,
         ?string $declencheurUserId,
@@ -93,17 +178,12 @@ class CommissionEnveloppeGenerator
         // volée s'il n'existe pas encore (ex: organisation fraîchement créée), jamais
         // un pré-requis silencieusement bloquant.
         $processus = CommissionProcessus::firstOrCreate(
-            ['organization_id' => $commande->organization_id, 'code' => $processusCode],
-            [
-                'libelle' => 'Vente',
-                'declencheur' => Parametre::getDeclencheurCommissionVente($commande->organization_id)->value,
-                'strategie_ancrage_site' => CommissionStrategieAncrageSite::OPERATION->value,
-                'statut' => CommissionActivationStatut::ACTIF->value,
-            ],
+            ['organization_id' => $ctx->organizationId, 'code' => $processusCode],
+            [...CommissionProcessusDefaults::pour($ctx->organizationId, $processusCode), 'statut' => CommissionActivationStatut::ACTIF->value],
         );
 
-        // Verrou de ligne sur la commande le temps de vérifier l'idempotence et de
-        // générer : deux déclenchements concurrents pour la même commande (retry,
+        // Verrou de ligne sur la source le temps de vérifier l'idempotence et de
+        // générer : deux déclenchements concurrents pour la même opération (retry,
         // webhook, double appel résiduel côté déclencheur) se sérialisent — le second,
         // une fois le verrou obtenu, retrouve l'enveloppe déjà créée et s'arrête, au lieu
         // de produire deux tentatives quasi simultanées (cf. incident CMD-230826-004, 2
@@ -112,12 +192,12 @@ class CommissionEnveloppeGenerator
         // verrou couvre tout futur appel qui dupliquerait malgré tout le déclenchement.
         // Transaction imbriquée (savepoint) sans risque : la génération elle-même garde
         // sa propre transaction interne isolée juste en dessous.
-        DB::transaction(function () use ($commande, $processus, $declenchePar, $declencheurUserId, $generation) {
-            CommandeVente::whereKey($commande->id)->lockForUpdate()->value('id');
+        DB::transaction(function () use ($ctx, $processus, $declenchePar, $declencheurUserId, $generation) {
+            $ctx->sourceType::whereKey($ctx->sourceId)->lockForUpdate()->value('id');
 
             $dejaGenere = CommissionEnveloppe::query()
-                ->where('source_type', CommandeVente::class)
-                ->where('source_id', $commande->id)
+                ->where('source_type', $ctx->sourceType)
+                ->where('source_id', $ctx->sourceId)
                 ->exists();
             if ($dejaGenere) {
                 return;
@@ -127,9 +207,9 @@ class CommissionEnveloppeGenerator
                 DB::transaction(fn () => $generation($processus));
 
                 CommissionGenerationAttempt::create([
-                    'organization_id' => $commande->organization_id,
-                    'source_type' => CommandeVente::class,
-                    'source_id' => $commande->id,
+                    'organization_id' => $ctx->organizationId,
+                    'source_type' => $ctx->sourceType,
+                    'source_id' => $ctx->sourceId,
                     'processus_id' => $processus->id,
                     'statut' => CommissionGenerationStatut::SUCCES->value,
                     'declenchee_par' => $declenchePar->value,
@@ -139,29 +219,30 @@ class CommissionEnveloppeGenerator
                 // "Succès" ne veut pas dire "une commission a réellement été créée" :
                 // l'absence de barème actif pour une catégorie résout silencieusement à
                 // 0 (décision AMOA #4, jamais une erreur) — correct pour le calcul, mais
-                // une facture encaissée sans AUCUNE enveloppe créée doit être signalée,
-                // sinon ça passe totalement inaperçu (incident 2026-08-25 : CMD-250826-007
-                // facturée et payée, catégorie jamais configurée dans Paramètres >
-                // Commissions, aucune alerte).
+                // une opération dont le fait générateur est passé sans AUCUNE enveloppe
+                // créée doit être signalée, sinon ça passe totalement inaperçu (incident
+                // 2026-08-25 : CMD-250826-007 facturée et payée, catégorie jamais
+                // configurée dans Paramètres > Commissions, aucune alerte).
                 $auMoinsUneEnveloppe = CommissionEnveloppe::query()
-                    ->where('source_type', CommandeVente::class)
-                    ->where('source_id', $commande->id)
+                    ->where('source_type', $ctx->sourceType)
+                    ->where('source_id', $ctx->sourceId)
                     ->exists();
 
                 if (! $auMoinsUneEnveloppe) {
-                    self::alerterCommissionManquante($commande, $declencheurUserId, null);
+                    self::alerterCommissionManquante($ctx, $declencheurUserId, null);
                 } else {
-                    self::notifierCommissionGeneree($commande);
+                    self::notifierCommissionGeneree($ctx);
                 }
             } catch (InvalidArgumentException $e) {
                 Log::warning('Génération commission v2 en erreur : '.$e->getMessage(), [
-                    'commande_id' => $commande->id,
+                    'source_type' => $ctx->sourceType,
+                    'source_id' => $ctx->sourceId,
                 ]);
 
                 CommissionGenerationAttempt::create([
-                    'organization_id' => $commande->organization_id,
-                    'source_type' => CommandeVente::class,
-                    'source_id' => $commande->id,
+                    'organization_id' => $ctx->organizationId,
+                    'source_type' => $ctx->sourceType,
+                    'source_id' => $ctx->sourceId,
                     'processus_id' => $processus->id,
                     'statut' => CommissionGenerationStatut::ERREUR->value,
                     'motif_erreur' => $e->getMessage(),
@@ -170,10 +251,10 @@ class CommissionEnveloppeGenerator
                     'created_by' => $declencheurUserId,
                 ]);
 
-                self::alerterCommissionManquante($commande, $declencheurUserId, $e->getMessage());
+                self::alerterCommissionManquante($ctx, $declencheurUserId, $e->getMessage());
 
                 // Volontairement pas de rethrow : un échec de génération n'est jamais
-                // une erreur de l'opération commerciale qui l'a déclenchée. L'opération
+                // une erreur de l'opération métier qui l'a déclenchée. L'opération
                 // reste "à régulariser", jamais rollbackée.
             }
         });
@@ -181,31 +262,34 @@ class CommissionEnveloppeGenerator
 
     /**
      * Alerte l'organisation (administrateurs + utilisateur à l'origine de
-     * l'événement déclencheur, ex: la personne qui a encaissé) qu'une vente
-     * n'a produit AUCUNE commission — échec technique (motif renseigné) ou
-     * succès silencieux (aucun barème actif, cf. ci-dessus). Ne doit JAMAIS
-     * interrompre la génération ni l'opération métier appelante : toute
-     * erreur d'envoi (mail indisponible, etc.) est avalée et journalisée,
-     * jamais relancée — même garantie que le reste de cette classe.
+     * l'événement déclencheur) qu'une opération n'a produit AUCUNE commission —
+     * échec technique (motif renseigné) ou succès silencieux (aucun barème actif,
+     * cf. ci-dessus). Ne doit JAMAIS interrompre la génération ni l'opération métier
+     * appelante : toute erreur d'envoi (mail indisponible, etc.) est avalée et
+     * journalisée, jamais relancée — même garantie que le reste de cette classe.
      */
     private static function alerterCommissionManquante(
-        CommandeVente $commande,
+        CommissionOperationContext $ctx,
         ?string $declencheurUserId,
         ?string $motifErreur,
     ): void {
         try {
             $notification = new CommissionManquanteNotification(
-                $commande->id,
-                $commande->reference,
-                (float) $commande->total_commande,
+                $ctx->sourceId,
+                $ctx->reference,
+                $ctx->montantReference,
                 $motifErreur,
+                $ctx->notifLibelleOperation,
+                $ctx->notifVerbeEvenement,
+                $ctx->notifUrlPath,
+                $ctx->notifActionLabel,
             );
 
             // whereHas(...) plutôt que le scope role() de Spatie : ce dernier lève
             // RoleDoesNotExist dès qu'UN SEUL des noms fournis n'existe pas encore pour
             // le guard (constaté : "super_admin" absent sur une organisation fraîche en
             // test) — un simple whereIn SQL reste robuste même si un rôle n'existe pas.
-            $destinataires = User::where('organization_id', $commande->organization_id)
+            $destinataires = User::where('organization_id', $ctx->organizationId)
                 ->whereHas('roles', fn ($q) => $q->whereIn('name', ['super_admin', 'admin_entreprise']))
                 ->get()
                 ->keyBy('id');
@@ -222,7 +306,8 @@ class CommissionEnveloppeGenerator
             }
         } catch (Throwable $e) {
             Log::error('CommissionManquanteNotification : envoi échoué', [
-                'commande_id' => $commande->id,
+                'source_type' => $ctx->sourceType,
+                'source_id' => $ctx->sourceId,
                 'error' => $e->getMessage(),
             ]);
         }
@@ -230,25 +315,29 @@ class CommissionEnveloppeGenerator
 
     /**
      * Notifie les bénéficiaires réellement connectés (proprietaire, livreur)
-     * des parts de commission venant d'être créées pour cette commande —
+     * des parts de commission venant d'être créées pour cette opération —
      * jamais `site`/`consultant` (aucun compte utilisateur, cf.
      * BeneficiaireUserResolver). Même garantie d'isolation que
      * alerterCommissionManquante() : jamais de rethrow vers l'appelant.
      */
-    private static function notifierCommissionGeneree(CommandeVente $commande): void
+    private static function notifierCommissionGeneree(CommissionOperationContext $ctx): void
     {
         try {
             $parts = CommissionEnveloppePart::whereHas(
                 'enveloppe',
-                fn ($q) => $q->where('source_type', CommandeVente::class)->where('source_id', $commande->id)
+                fn ($q) => $q->where('source_type', $ctx->sourceType)->where('source_id', $ctx->sourceId)
             )->whereIn('beneficiaire_type', [
                 CommissionEnveloppePart::TYPE_PROPRIETAIRE,
                 CommissionEnveloppePart::TYPE_LIVREUR,
             ])->get();
 
+            // Clé du payload push : historique "commande_id"/"transfert_id" selon la source, cf.
+            // CommissionLogistiqueService::notifierCommissionGeneree() pour le transfert legacy.
+            $pushDataKey = $ctx->sourceType === TransfertLogistique::class ? 'transfert_id' : 'commande_id';
+
             foreach ($parts as $part) {
                 $user = BeneficiaireUserResolver::resolve($part->beneficiaire_type, $part->beneficiaire_id);
-                $notif = new CommissionGenereeNotification('commande_vente', $commande->id, $commande->reference, (float) $part->montant_net);
+                $notif = new CommissionGenereeNotification($ctx->notifSourceLabel, $ctx->sourceId, $ctx->reference, (float) $part->montant_net);
                 // Réutilise le titre/message déjà construits par la notification database —
                 // jamais un second texte pour le push (même événement, même sens).
                 $notifData = $user ? $notif->toArray($user) : null;
@@ -260,60 +349,60 @@ class CommissionEnveloppeGenerator
                     $notifData ? fn () => [
                         'title' => $notifData['titre'],
                         'body' => PushBodyFormatter::format($notifData),
-                        'data' => ['type' => 'commission.generated', 'commande_id' => $commande->id],
+                        'data' => ['type' => 'commission.generated', $pushDataKey => $ctx->sourceId],
                     ] : null,
                 );
             }
         } catch (Throwable $e) {
             Log::error('CommissionGenereeNotification : envoi échoué', [
-                'commande_id' => $commande->id,
+                'source_type' => $ctx->sourceType,
+                'source_id' => $ctx->sourceId,
                 'error' => $e->getMessage(),
             ]);
         }
     }
 
-    // ── Voie réelle Phase 2+ : barèmes fixes PAR_UNITE_VENDUE ────────────────
+    // ── Cœur générique : résolution de règles + agrégation par cible ─────────
 
-    private static function genererParReglesDansTransaction(CommandeVente $commande, CommissionProcessus $processus): void
+    private static function genererDepuisContexte(CommissionOperationContext $ctx, CommissionProcessus $processus): void
     {
-        $commande->loadMissing(['lignes.variante.produit.categorie', 'vehicule.equipe.membres.livreur', 'vehicule.proprietaire', 'site']);
-
-        $vehicule = $commande->vehicule;
+        $vehicule = $ctx->vehicule;
         if (! $vehicule) {
-            throw new InvalidArgumentException("La commande {$commande->id} ne possède pas de véhicule lié.");
+            throw new InvalidArgumentException("L'opération {$ctx->reference} ne possède pas de véhicule lié.");
         }
 
-        $earnedAt = Carbon::today();
-        $lignes = $commande->lignes;
+        $earnedAt = $ctx->earnedAt;
+        $lignes = $ctx->lignes;
 
         $cibles = [CommissionCibleType::CODE_PROPRIETAIRE, CommissionCibleType::CODE_EQUIPE_LIVRAISON];
-        // Site : cible directe supplémentaire, ancrée sur le SITE métier de l'opération (pas le
-        // véhicule) — s'applique à TOUT type de site dès qu'une opération lui est rattachée
-        // (décision produit 2026-08-21 : jamais limité aux dépôts, jamais conditionné à un
-        // gérant/une fonction/un rôle). Un site absent laisse simplement la cible hors de
-        // $cibles : aucune tentative, aucune erreur — mirroring le comportement "pas de règle
-        // configurée = pas de cible" déjà appliqué partout ailleurs.
-        if ($commande->site) {
+        // Site : cible directe supplémentaire, ancrée sur le site porté par le contexte (site de
+        // l'opération pour une vente, site source explicite pour un transfert) — s'applique dès
+        // qu'un site est présent (décision produit 2026-08-21 : jamais limité aux dépôts, jamais
+        // conditionné à un gérant/une fonction/un rôle). Un site absent laisse simplement la cible
+        // hors de $cibles : aucune tentative, aucune erreur — mirroring le comportement "pas de
+        // règle configurée = pas de cible" déjà appliqué partout ailleurs.
+        if ($ctx->site) {
             $cibles[] = CommissionCibleType::CODE_SITE;
         }
         // Consultant : toujours candidate, contrairement à Site — elle ne dépend d'aucune donnée
-        // de la commande, seulement d'une désignation au niveau organisation (cf.
+        // de l'opération, seulement d'une désignation au niveau organisation (cf.
         // CommissionConsultantAffectation). Une organisation qui n'a jamais configuré de barème
         // consultant ne verra jamais cette cible produire de contribution (absence de règle = 0,
         // décision AMOA #4) : aucun impact pour les organisations existantes.
         $cibles[] = CommissionCibleType::CODE_CONSULTANT;
 
-        /** @var array<string, array<int, array{ligne: CommandeVenteLigne, montant: float, regle: CommissionRegle}>> $lignesParCible */
+        /** @var array<string, array<int, array{ligne: Model, montant: float, regle: CommissionRegle}>> $lignesParCible */
         $lignesParCible = [];
 
         foreach ($lignes as $ligne) {
             $variante = $ligne->variante;
             $produit = $variante?->produit;
             $categorie = $produit?->categorie;
+            $quantite = (float) $ligne->{$ctx->quantiteField};
 
             foreach ($cibles as $cibleCode) {
                 $regle = CommissionRegleResolver::resolve(
-                    $commande->organization_id,
+                    $ctx->organizationId,
                     $processus->id,
                     $cibleCode,
                     $variante?->id,
@@ -329,12 +418,13 @@ class CommissionEnveloppeGenerator
                     continue;
                 }
 
-                $montantLigne = round((float) $ligne->quantite_chargee * (float) $regle->montant, 2);
+                $montantLigne = round($quantite * (float) $regle->montant, 2);
 
                 $lignesParCible[$cibleCode][] = [
                     'ligne' => $ligne,
                     'variante' => $variante,
                     'categorie' => $categorie,
+                    'quantite' => $quantite,
                     'montant' => $montantLigne,
                     'regle' => $regle,
                 ];
@@ -380,8 +470,9 @@ class CommissionEnveloppeGenerator
 
                 // Toujours synchronisé pour disposer d'un CommissionGroupe stable (cible_id,
                 // traçabilité inchangée) — le partage réel n'est cependant plus calculé via ce
-                // groupe : le partage Livreur est défini PAR CATÉGORIE, en montants GNF entiers
-                // fixes (equipe_livraison_partages_categorie), jamais un pourcentage.
+                // groupe : le partage Livreur est défini PAR CATÉGORIE (ET PAR PROCESSUS), en
+                // montants GNF entiers fixes (equipe_livraison_partages_categorie), jamais un
+                // pourcentage.
                 $groupe = CommissionGroupeSyncService::syncEquipeLivraisonVehicule($vehicule);
 
                 $parCategorie = collect($contributions)->groupBy(
@@ -413,7 +504,7 @@ class CommissionEnveloppeGenerator
                     // compte ici, contrairement aux autres cibles — limite assumée, cohérente
                     // avec le fait que le partage Livreur n'existe jamais à un grain plus fin.
                     $regleCategorie = CommissionRegleResolver::resolve(
-                        $commande->organization_id,
+                        $ctx->organizationId,
                         $processus->id,
                         $cibleCode,
                         null,
@@ -432,9 +523,10 @@ class CommissionEnveloppeGenerator
                         continue;
                     }
 
-                    $quantiteCategorie = (int) $contribsCategorie->sum(fn (array $c) => (float) $c['ligne']->quantite_chargee);
+                    $quantiteCategorie = (int) $contribsCategorie->sum('quantite');
 
-                    $partages = EquipeLivraisonPartageCategorie::where('equipe_id', $vehicule->equipe->id)
+                    $partages = EquipeLivraisonPartageCategorie::where('processus_id', $processus->id)
+                        ->where('equipe_id', $vehicule->equipe->id)
                         ->where('categorie_id', $categorieId)
                         ->actifA($earnedAt)
                         ->get();
@@ -500,14 +592,14 @@ class CommissionEnveloppeGenerator
             }
 
             if ($cibleCode === CommissionCibleType::CODE_SITE) {
-                $site = $commande->site;
+                $site = $ctx->site;
 
                 // Bénéficiaire = le Site lui-même, directement — jamais un gérant, un employé, ou
                 // un CommissionGroupe. Aucune vérification de gérant/fonction/rôle/statut/compte
                 // utilisateur (décision produit 2026-08-21) : mode DIRECT au même titre que
                 // CODE_PROPRIETAIRE ci-dessus, pas de répartition à calculer.
                 if (! $site) {
-                    $erreurs[] = "Cible {$cibleCode} : commande sans site.";
+                    $erreurs[] = "Cible {$cibleCode} : opération sans site.";
 
                     continue;
                 }
@@ -532,7 +624,7 @@ class CommissionEnveloppeGenerator
                 // l'ancienne affectation globale ne sert qu'aux règles historiques créées
                 // avant l'introduction du paramétrage par catégorie.
                 $affectationHistorique = CommissionConsultantAffectation::actifPour(
-                    $commande->organization_id,
+                    $ctx->organizationId,
                 );
                 $parConsultant = collect($contributions)->groupBy(
                     fn (array $contribution) => $contribution['regle']->consultant_id
@@ -548,7 +640,7 @@ class CommissionEnveloppeGenerator
                     }
 
                     $consultantActif = Prestataire::whereKey($consultantId)
-                        ->where('organization_id', $commande->organization_id)
+                        ->where('organization_id', $ctx->organizationId)
                         ->where('type', PrestataireType::CONSULTANT->value)
                         ->where('is_active', true)
                         ->exists();
@@ -585,9 +677,9 @@ class CommissionEnveloppeGenerator
 
         foreach ($enveloppesACreer as $cibleCode => $e) {
             $enveloppe = CommissionEnveloppe::create([
-                'organization_id' => $commande->organization_id,
-                'source_type' => CommandeVente::class,
-                'source_id' => $commande->id,
+                'organization_id' => $ctx->organizationId,
+                'source_type' => $ctx->sourceType,
+                'source_id' => $ctx->sourceId,
                 'processus_id' => $processus->id,
                 'cible_type' => $e['cible_type'] ?? $cibleCode,
                 'cible_id' => $e['cible_id'],
@@ -599,12 +691,12 @@ class CommissionEnveloppeGenerator
             foreach ($e['contributions'] as $c) {
                 CommissionEnveloppeLigne::create([
                     'enveloppe_id' => $enveloppe->id,
-                    'source_ligne_type' => CommandeVenteLigne::class,
+                    'source_ligne_type' => $ctx->sourceLigneType,
                     'source_ligne_id' => $c['ligne']->id,
                     'variante_id' => $c['variante']?->id,
                     'categorie_id_snapshot' => $c['categorie']?->id,
                     'commission_regle_id' => $c['regle']->id,
-                    'quantite' => $c['ligne']->quantite_chargee,
+                    'quantite' => $c['quantite'],
                     'unite_calcul_snapshot' => CommissionUniteCalcul::PAR_UNITE_VENDUE->value,
                     'montant_ligne' => $c['montant'],
                 ]);

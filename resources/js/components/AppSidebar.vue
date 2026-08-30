@@ -21,6 +21,7 @@ import {
     Calculator,
     Car,
     Contact,
+    Handshake,
     Layers,
     LayoutGrid,
     Package,
@@ -133,6 +134,12 @@ const mainNavItems = computed((): NavItem[] => {
             href: '/backoffice/ventes',
             icon: ShoppingCart,
             items: ventesSubItems,
+            group: 'Commercial',
+        });
+        items.push({
+            title: 'Distribution',
+            href: '/backoffice/distributions',
+            icon: Handshake,
             group: 'Commercial',
         });
     }

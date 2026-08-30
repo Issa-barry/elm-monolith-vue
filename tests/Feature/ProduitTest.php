@@ -279,6 +279,32 @@ class ProduitTest extends TestCase
         ]);
     }
 
+    /**
+     * Correctif du 30/08/2026 : le type par défaut « Matière de production » (non vendable,
+     * achetée puis consommée en fabrication) portait un champ_prix_reference = 'prix_achat'
+     * hérité d'un défaut buggé — ProduitService::raisonIncoherencePrix() comparait alors un
+     * prix_vente jamais saisi pour ce type (toujours 0) au prix d'achat, rejetant SYSTÉMATIQUEMENT
+     * toute création, quel que soit le prix d'achat renseigné (bug réel signalé en usage).
+     */
+    public function test_store_matiere_production_reussit_malgre_labsence_de_prix_de_vente(): void
+    {
+        $response = $this->actingAs($this->user)
+            ->post(route('produits.store'), [
+                'nom' => 'Bouchon 28mm',
+                'produit_type_id' => $this->typeId('matiere_production'),
+                'statut' => 'actif',
+                'prix_achat' => 150,
+            ]);
+
+        $produit = Produit::where('nom', 'Bouchon 28mm')->first();
+        $response->assertRedirect(route('produits.show', $produit));
+        $this->assertDatabaseHas('produit_variantes', [
+            'produit_id' => $produit->id,
+            'prix_achat' => 150,
+            'is_default' => true,
+        ]);
+    }
+
     public function test_store_redirige_vers_la_fiche_produit(): void
     {
         $response = $this->actingAs($this->user)

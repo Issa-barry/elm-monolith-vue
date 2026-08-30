@@ -91,6 +91,11 @@ const props = defineProps<{
     equipe: EquipeExistante | null;
     proprietaires: ProprietaireOption[];
     baremesCommissionCategories: BaremeCommissionCategorie[];
+    // Processus actif de la page (Vente/Distribution client/Transfert logistique) — le
+    // partage saisi ici ne remplace jamais que CE processus (cf. syncPartagesCategorie()) ;
+    // changer d'onglet recharge la page avec les barèmes/partages du nouveau processus.
+    processusActif: string;
+    processusOptions: { value: string; label: string }[];
 }>();
 
 const emit = defineEmits<{
@@ -411,6 +416,9 @@ function buildPayload() {
         // Vehicule::proprietaire_id (cf. EquipeLivraisonController), pour ne jamais désynchroniser
         // l'équipe du propriétaire réel du véhicule.
         is_active: props.equipe?.is_active ?? true,
+        // Le partage saisi ne remplace que CE processus — jamais un fallback implicite vers
+        // vente (cf. EquipeLivraisonController::syncPartagesCategorie()).
+        processus_code: props.processusActif,
     };
 
     return {
@@ -555,6 +563,16 @@ const hasStep1Errors = computed(() =>
                 <div v-if="n < 3" class="h-px flex-1 bg-border" />
             </template>
         </div>
+
+        <p v-if="step === 2" class="mb-4 text-xs text-muted-foreground">
+            Répartition pour le processus
+            <span class="font-medium text-foreground">{{
+                processusOptions.find((o) => o.value === processusActif)
+                    ?.label ?? processusActif
+            }}</span>
+            — les autres processus conservent leur propre répartition,
+            inchangée.
+        </p>
 
         <!-- Erreurs serveur -->
         <div

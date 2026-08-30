@@ -225,6 +225,10 @@ class VenteComptabilisationTriggerTest extends TestCase
             'prix_vente_snapshot' => 2000.0,
             'total_ligne' => 2000.0,
         ]);
+        // Correctif du 30/08/2026 (creerFactureDirecte() décrémente désormais réellement le
+        // stock, cf. CommandeVenteDirecteStockTest) : cette vente directe a désormais besoin
+        // d'un stock disponible, comme le chemin véhicule (cf. creerCommandeAvecLigne()).
+        $this->seedVarianteStockSuffisant($produit->variantePrincipale()->first(), $this->defaultSite);
 
         $this->actingAs($this->user);
         CommandeVenteService::creerFactureDirecte($commande);

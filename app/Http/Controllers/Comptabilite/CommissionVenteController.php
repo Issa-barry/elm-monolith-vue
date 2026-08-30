@@ -9,6 +9,7 @@ use App\Enums\StatutDepense;
 use App\Enums\TypePeriodePaiement;
 use App\Http\Controllers\Controller;
 use App\Models\CommissionEnveloppePart;
+use App\Models\CommissionProcessus;
 use App\Models\Depense;
 use App\Models\Livreur;
 use App\Models\Organization;
@@ -23,6 +24,7 @@ use App\Services\PeriodePaiementService;
 use App\Services\SiteScopeService;
 use App\Support\Commission\CommissionDetailFilters;
 use App\Support\Commission\CommissionKpiBuckets;
+use App\Support\Commission\CommissionProcessusFilter;
 use App\Support\Commission\CommissionSummaryFormatter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -72,6 +74,10 @@ class CommissionVenteController extends Controller
         if ($filtrePeriode !== '' && ! preg_match('/^\d{4}-\d{2}-(P1|P2|M)$/', $filtrePeriode)) {
             $filtrePeriode = '';
         }
+        // Cet écran s'appelle "Commission vente" : par défaut, il ne montre que le processus
+        // vente — jamais un mélange silencieux avec distribution_client/logistique_transfert
+        // (cf. docs/commissions.md). Explicitement changeable via le filtre.
+        $filtreProcessus = $this->scalarInput($request, 'processus') ?: CommissionProcessus::CODE_VENTE;
 
         $isAdmin = $user->isAdmin();
         $sites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
@@ -99,6 +105,7 @@ class CommissionVenteController extends Controller
                     $q->whereBetween('earned_at', [$debut, $fin]);
                 }
             });
+        CommissionProcessusFilter::appliquer($query, $filtreProcessus);
 
         if ($isAdmin && ! empty($filtreSiteIds)) {
             $query->whereHas('enveloppe.source', fn ($q) => $q->whereIn('site_id', $filtreSiteIds));
@@ -286,6 +293,8 @@ class CommissionVenteController extends Controller
             'search' => $search,
             'filtre_statut' => $filtreStatut,
             'filtre_site_ids' => $filtreSiteIds,
+            'filtre_processus' => $filtreProcessus,
+            'processus_options' => CommissionProcessusFilter::options(),
             'selected_periode' => $filtrePeriode,
             'periodes_disponibles' => $periodesDisponibles,
             'periode_courante' => $periodeCourante,
@@ -316,12 +325,13 @@ class CommissionVenteController extends Controller
         // apparaît dans historiqueCommandes avec son propre statut ("Créée"), mais n'entre
         // jamais dans $resume (calculé sur $filteredPartsPourResume, qui l'exclut explicitement
         // plus bas) — jamais mélangée aux montants déjà éligibles au paiement.
-        $allParts = CommissionEnveloppePart::with(['enveloppe.source.site', 'enveloppe.source.vehicule'])
+        $filtreProcessus = $this->scalarInput($request, 'processus') ?: CommissionProcessus::CODE_VENTE;
+        $allPartsQuery = CommissionEnveloppePart::with(['enveloppe.source.site', 'enveloppe.source.vehicule'])
             ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_LIVREUR)
             ->where('beneficiaire_id', $livreurId)
             ->whereHas('enveloppe', fn ($q) => $q->where('organization_id', $orgId))
-            ->orderByDesc('enveloppe_id')
-            ->get();
+            ->orderByDesc('enveloppe_id');
+        $allParts = CommissionProcessusFilter::appliquer($allPartsQuery, $filtreProcessus)->get();
 
         $periodeCourante = PeriodeComptableService::periodeCouranteLivreur();
         $filters = CommissionDetailFilters::fromRequest($request, $periodeCourante);
@@ -550,6 +560,8 @@ class CommissionVenteController extends Controller
             ),
             'commission_details' => $historiqueCommandes,
             'payments' => $historiquePaiements,
+            'filtre_processus' => $filtreProcessus,
+            'processus_options' => CommissionProcessusFilter::options(),
             'expenses' => $expenses,
             'modes_paiement' => ModePaiement::options(),
             'periode_courante' => $periodeCourante,
@@ -625,12 +637,13 @@ class CommissionVenteController extends Controller
         $isAdmin = $user->isAdmin();
         $filtrePeriode = $this->scalarInput($request, 'periode');
         $filtreStatut = $this->scalarInput($request, 'statut');
+        $filtreProcessus = $this->scalarInput($request, 'processus') ?: CommissionProcessus::CODE_VENTE;
         $search = trim((string) $request->input('search', ''));
         $filtreSiteIds = $isAdmin
             ? array_values(array_filter((array) $request->input('site_ids', [])))
             : $this->siteScope->accessibleSiteIds($user)->all();
 
-        $parts = $this->loadPartsForExport($orgId, $filtrePeriode, $filtreSiteIds);
+        $parts = $this->loadPartsForExport($orgId, $filtrePeriode, $filtreSiteIds, $filtreProcessus);
         $fraisDepensesParLivreur = CommissionVenteCalculatorService::fraisDepensesParLivreur(
             $orgId,
             $parts->pluck('beneficiaire_id')->filter()->unique()->values()->all(),
@@ -676,12 +689,13 @@ class CommissionVenteController extends Controller
         $isAdmin = $user->isAdmin();
         $filtrePeriode = $this->scalarInput($request, 'periode');
         $filtreStatut = $this->scalarInput($request, 'statut');
+        $filtreProcessus = $this->scalarInput($request, 'processus') ?: CommissionProcessus::CODE_VENTE;
         $search = trim((string) $request->input('search', ''));
         $filtreSiteIds = $isAdmin
             ? array_values(array_filter((array) $request->input('site_ids', [])))
             : $this->siteScope->accessibleSiteIds($user)->all();
 
-        $parts = $this->loadPartsForExport($orgId, $filtrePeriode, $filtreSiteIds);
+        $parts = $this->loadPartsForExport($orgId, $filtrePeriode, $filtreSiteIds, $filtreProcessus);
         $fraisDepensesParLivreur = CommissionVenteCalculatorService::fraisDepensesParLivreur(
             $orgId,
             $parts->pluck('beneficiaire_id')->filter()->unique()->values()->all(),
@@ -709,7 +723,7 @@ class CommissionVenteController extends Controller
     }
 
     /** @param  array<int, string>  $filtreSiteIds */
-    private function loadPartsForExport(string $orgId, string $filtrePeriode, array $filtreSiteIds = []): Collection
+    private function loadPartsForExport(string $orgId, string $filtrePeriode, array $filtreSiteIds = [], string $filtreProcessus = CommissionProcessus::CODE_VENTE): Collection
     {
         $query = CommissionEnveloppePart::with([
             'enveloppe.source.site:id,nom',
@@ -724,6 +738,7 @@ class CommissionVenteController extends Controller
                     $q->whereBetween('earned_at', [$debut, $fin]);
                 }
             });
+        CommissionProcessusFilter::appliquer($query, $filtreProcessus);
 
         if (! empty($filtreSiteIds)) {
             $query->whereHas('enveloppe.source', fn ($q) => $q->whereIn('site_id', $filtreSiteIds));

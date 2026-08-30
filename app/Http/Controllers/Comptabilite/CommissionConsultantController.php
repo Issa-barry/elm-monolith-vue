@@ -8,6 +8,7 @@ use App\Enums\StatutDepense;
 use App\Http\Controllers\Controller;
 use App\Models\CommissionCibleType;
 use App\Models\CommissionEnveloppePart;
+use App\Models\CommissionProcessus;
 use App\Models\Depense;
 use App\Models\Organization;
 use App\Models\PaiementFichePaiement;
@@ -16,6 +17,7 @@ use App\Services\CommissionVenteCalculatorService;
 use App\Services\PeriodeComptableService;
 use App\Support\Commission\CommissionDetailFilters;
 use App\Support\Commission\CommissionKpiBuckets;
+use App\Support\Commission\CommissionProcessusFilter;
 use App\Support\Commission\CommissionSummaryFormatter;
 use App\Support\PhoneFormatter;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -83,6 +85,8 @@ class CommissionConsultantController extends Controller
             'search' => $meta['search'],
             'filtre_statut' => $meta['filtre_statut'],
             'filtre_consultant_id' => $meta['filtre_consultant_id'],
+            'filtre_processus' => $meta['filtre_processus'],
+            'processus_options' => CommissionProcessusFilter::options(),
             'selected_periode' => $meta['filtre_periode'],
             'periodes_disponibles' => $periodesDisponibles,
             'consultants_options' => $meta['consultants_options'],
@@ -107,13 +111,14 @@ class CommissionConsultantController extends Controller
         $prestataire = Prestataire::with(['personne', 'entrepriseTierce'])->find($consultantId);
         $nom = $prestataire?->nom_complet ?? '—';
 
-        $allParts = CommissionEnveloppePart::with(['enveloppe.source'])
+        $filtreProcessus = $this->scalarInput($request, 'processus') ?: CommissionProcessus::CODE_VENTE;
+        $allPartsQuery = CommissionEnveloppePart::with(['enveloppe.source'])
             ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PRESTATAIRE)
             ->where('beneficiaire_id', $consultantId)
             ->whereHas('enveloppe', fn ($q) => $q->where('organization_id', $orgId)
                 ->where('cible_type', CommissionCibleType::CODE_CONSULTANT))
-            ->orderByDesc('enveloppe_id')
-            ->get();
+            ->orderByDesc('enveloppe_id');
+        $allParts = CommissionProcessusFilter::appliquer($allPartsQuery, $filtreProcessus)->get();
 
         $filters = CommissionDetailFilters::fromRequest($request);
         $periodeFilter = $filters['periode'];
@@ -258,6 +263,8 @@ class CommissionConsultantController extends Controller
                 'site_ids' => [],
                 'periode_range' => $periodeRange,
             ],
+            'filtre_processus' => $filtreProcessus,
+            'processus_options' => CommissionProcessusFilter::options(),
             'can_payer' => false,
         ]);
     }
@@ -279,6 +286,7 @@ class CommissionConsultantController extends Controller
             $filtrePeriode = '';
         }
         $filtreConsultantId = $this->scalarInput($request, 'consultant_id');
+        $filtreProcessus = $this->scalarInput($request, 'processus') ?: CommissionProcessus::CODE_VENTE;
 
         $query = CommissionEnveloppePart::with(['enveloppe.source'])
             ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PRESTATAIRE)
@@ -295,6 +303,8 @@ class CommissionConsultantController extends Controller
         if ($filtreConsultantId !== '') {
             $query->where('beneficiaire_id', $filtreConsultantId);
         }
+
+        CommissionProcessusFilter::appliquer($query, $filtreProcessus);
 
         $allParts = $query->get();
         $partsParConsultant = $allParts->groupBy('beneficiaire_id');
@@ -376,6 +386,7 @@ class CommissionConsultantController extends Controller
             'filtre_statut' => $filtreStatut,
             'filtre_periode' => $filtrePeriode,
             'filtre_consultant_id' => $filtreConsultantId,
+            'filtre_processus' => $filtreProcessus,
             'consultants_options' => $consultantsOptions,
         ]];
     }

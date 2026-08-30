@@ -6,6 +6,7 @@ use App\Enums\BaseCalculLogistique;
 use App\Enums\StatutCommission;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionLogistiquePart;
+use App\Models\Parametre;
 use App\Models\TransfertLogistique;
 use App\Models\VersementCommissionLogistique;
 use App\Notifications\CommissionGenereeNotification;
@@ -94,7 +95,8 @@ class CommissionLogistiqueService
     }
 
     /**
-     * Génération automatique après validation admin : 200 FG × packs reçus.
+     * Génération automatique après validation admin : montant configurable (Parametre::
+     * getMontantDefautCommissionLogistiquePack(), 200 FG par défaut) × packs reçus.
      * Idempotente : si une commission existe déjà, ne rien faire.
      */
     public static function genererAutomatique(TransfertLogistique $transfert): CommissionLogistique
@@ -110,14 +112,15 @@ class CommissionLogistiqueService
         return self::genererPourTransfert(
             $transfert,
             BaseCalculLogistique::PAR_PACK->value,
-            200.0,
+            Parametre::getMontantDefautCommissionLogistiquePack($transfert->organization_id),
             $quantiteRecue > 0 ? $quantiteRecue : 0,
         );
     }
 
     /**
      * Génération automatique au chargement validé (départ, CHARGEMENT → TRANSIT) :
-     * 200 FG × packs **chargés** — la quantité reçue n'existe pas encore à ce stade.
+     * montant configurable (Parametre::getMontantDefautCommissionLogistiquePack(), 200 FG par
+     * défaut) × packs **chargés** — la quantité reçue n'existe pas encore à ce stade.
      * Idempotente : si une commission existe déjà, ne rien faire. Le montant est figé
      * à cet instant ; un écart constaté à la réception (quantite_recue) ne déclenche
      * jamais de recalcul rétroactif de cette commission.
@@ -135,7 +138,7 @@ class CommissionLogistiqueService
         return self::genererPourTransfert(
             $transfert,
             BaseCalculLogistique::PAR_PACK->value,
-            200.0,
+            Parametre::getMontantDefautCommissionLogistiquePack($transfert->organization_id),
             $quantiteChargee > 0 ? $quantiteChargee : 0,
         );
     }

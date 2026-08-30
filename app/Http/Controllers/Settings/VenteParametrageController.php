@@ -51,6 +51,7 @@ class VenteParametrageController extends Controller
             'seuil_impayes_max' => Parametre::getVentesSeuilImpayesMax($orgId),
             'declencheur_commission_vente' => Parametre::getDeclencheurCommissionVente($orgId)->value,
             'declencheur_commission_logistique' => Parametre::getDeclencheurCommissionLogistique($orgId)->value,
+            'montant_defaut_commission_logistique_par_pack' => Parametre::getMontantDefautCommissionLogistiquePack($orgId),
             'declencheurs_commission_vente_options' => DeclencheurCommissionVente::options(),
             'declencheurs_commission_logistique_options' => DeclencheurCommissionLogistique::options(),
         ]);
@@ -72,6 +73,7 @@ class VenteParametrageController extends Controller
             'seuil_impayes_max' => ['required', 'integer', 'min:0'],
             'declencheur_commission_vente' => ['required', Rule::in(array_column(DeclencheurCommissionVente::cases(), 'value'))],
             'declencheur_commission_logistique' => ['required', Rule::in(array_column(DeclencheurCommissionLogistique::cases(), 'value'))],
+            'montant_defaut_commission_logistique_par_pack' => ['required', 'integer', 'min:1'],
         ]);
 
         $enabledQuantityRoleNames = collect($validated['quantity_edit_role_names'] ?? [])
@@ -114,6 +116,10 @@ class VenteParametrageController extends Controller
         Parametre::setDeclencheurCommissionLogistique(
             $orgId,
             DeclencheurCommissionLogistique::from($validated['declencheur_commission_logistique']),
+        );
+        Parametre::setMontantDefautCommissionLogistiquePack(
+            $orgId,
+            (int) $validated['montant_defaut_commission_logistique_par_pack'],
         );
 
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
