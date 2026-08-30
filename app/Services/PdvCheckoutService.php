@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\CategorieTarifaireVehicule;
 use App\Enums\ModeTarification;
+use App\Enums\NatureOperation;
 use App\Enums\PrixOrigine;
 use App\Enums\ProduitStatut;
 use App\Enums\StatutCommandeVente;
@@ -73,6 +74,7 @@ class PdvCheckoutService
                 'total_commande' => $total,
                 'mode_tarification_snapshot' => $context->modeTarification->value,
                 'commission_eligible_snapshot' => $context->commissionEligible,
+                'nature_operation' => NatureOperation::deriverParDefaut($client?->type, $data['vehicule_id'] ?? null)->value,
                 'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
                 'validated_at' => now(),
                 'created_by' => $user->id,

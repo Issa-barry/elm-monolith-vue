@@ -25,6 +25,7 @@ export function useVehiculeCommandeTarification<T extends { id: number }>(
 ): {
     modeTarification: ComputedRef<'prix_vente' | 'prix_usine'>;
     commissionEligible: ComputedRef<boolean>;
+    natureOperationParDefaut: ComputedRef<'vente_standard' | 'distribution_client'>;
 } {
     const selectedVehicule = computed<T | null>(() => {
         const id = getVehiculeId();
@@ -57,5 +58,16 @@ export function useVehiculeCommandeTarification<T extends { id: number }>(
         () => !!selectedVehicule.value,
     );
 
-    return { modeTarification, commissionEligible };
+    // Miroir de NatureOperation::deriverParDefaut() (backend, seul juge à l'enregistrement) :
+    // distribution_client seulement si le client est distributeur ET qu'un véhicule de flotte
+    // assure la livraison — sans véhicule, aucune équipe à commissionner, vente standard.
+    const natureOperationParDefaut = computed<
+        'vente_standard' | 'distribution_client'
+    >(() =>
+        selectedClient.value?.type === 'distributeur' && selectedVehicule.value
+            ? 'distribution_client'
+            : 'vente_standard',
+    );
+
+    return { modeTarification, commissionEligible, natureOperationParDefaut };
 }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Settings\CommissionRegleController;
 use App\Models\CommissionCibleType;
 use App\Models\CommissionProcessus;
 use App\Models\EquipeLivraison;
@@ -13,6 +14,7 @@ use App\Models\Proprietaire;
 use App\Models\Vehicule;
 use App\Models\VehiculeCapacite;
 use App\Services\Commission\CommissionPartageLivraisonValidator;
+use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\Commission\CommissionRegleResolver;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -65,6 +67,7 @@ class EquipeLivraisonController extends Controller
             $data['partages_categorie'] ?? [],
             $orgId,
             $vehiculeSelectionne?->type_vehicule_id,
+            $data['processus_code'],
         );
         $this->validateUniquePhones($data['membres']);
         $this->validateMembresExclusivite($data['membres'], $orgId);
@@ -95,7 +98,7 @@ class EquipeLivraisonController extends Controller
                 ]);
             }
 
-            $this->syncPartagesCategorie($equipe->id, $data['partages_categorie'] ?? [], $livreurIdParOrdre);
+            $this->syncPartagesCategorie($equipe->id, $data['partages_categorie'] ?? [], $livreurIdParOrdre, $orgId, $data['processus_code']);
         });
 
         return redirect()->route('vehicules.show', $equipe->vehicule_id)
@@ -128,6 +131,7 @@ class EquipeLivraisonController extends Controller
             $data['partages_categorie'] ?? [],
             $orgId,
             $vehiculeSelectionne?->type_vehicule_id,
+            $data['processus_code'],
         );
         $this->validateUniquePhones($data['membres']);
         $this->validateMembresExclusivite($data['membres'], $orgId, $equipes_livraison->id);
@@ -161,7 +165,7 @@ class EquipeLivraisonController extends Controller
                 ]);
             }
 
-            $this->syncPartagesCategorie($equipes_livraison->id, $data['partages_categorie'] ?? [], $livreurIdParOrdre);
+            $this->syncPartagesCategorie($equipes_livraison->id, $data['partages_categorie'] ?? [], $livreurIdParOrdre, $orgId, $data['processus_code']);
         });
 
         return redirect()->route('vehicules.show', $equipes_livraison->vehicule_id)
@@ -196,6 +200,10 @@ class EquipeLivraisonController extends Controller
     {
         return [
             'is_active' => 'boolean',
+            // Détermine quel partage (vente / distribution_client / logistique_transfert) cette
+            // soumission remplace — jamais un fallback implicite vers vente. Chaque processus a
+            // ses propres montants fixes pour la même équipe/catégorie (cf. syncPartagesCategorie()).
+            'processus_code' => ['required', Rule::in(CommissionRegleController::processusCodesDisponibles())],
             'vehicule_id' => [
                 'required', 'string',
                 Rule::exists('vehicules', 'id')->where('organization_id', $orgId)->whereNull('deleted_at'),
@@ -441,13 +449,14 @@ class EquipeLivraisonController extends Controller
         array $partagesCategorie,
         string $orgId,
         ?string $typeVehiculeId,
+        string $processusCode = CommissionProcessus::CODE_VENTE,
     ): void {
         if (empty($partagesCategorie)) {
             return;
         }
 
         $processus = CommissionProcessus::where('organization_id', $orgId)
-            ->where('code', CommissionProcessus::CODE_VENTE)
+            ->where('code', $processusCode)
             ->first();
 
         foreach ($partagesCategorie as $pc) {
@@ -494,11 +503,20 @@ class EquipeLivraisonController extends Controller
      * courante. part_pourcentage reçoit un placeholder 0 (colonne legacy en
      * cours de retrait, plus jamais lue par ce flux).
      */
-    private function syncPartagesCategorie(string $equipeId, array $partagesCategorie, array $livreurIdParOrdre): void
-    {
+    private function syncPartagesCategorie(
+        string $equipeId,
+        array $partagesCategorie,
+        array $livreurIdParOrdre,
+        string $orgId,
+        string $processusCode = CommissionProcessus::CODE_VENTE,
+    ): void {
         $maintenant = now();
+        $processus = CommissionProcessusDefaults::resoudreOuCreer($orgId, $processusCode);
 
+        // Scopée par processus : sans ce filtre, enregistrer le partage Vente fermerait aussi
+        // silencieusement les partages Distribution/Transfert logistique de la même équipe.
         EquipeLivraisonPartageCategorie::where('equipe_id', $equipeId)
+            ->where('processus_id', $processus->id)
             ->whereNull('effective_to')
             ->update(['effective_to' => $maintenant]);
 
@@ -506,6 +524,7 @@ class EquipeLivraisonController extends Controller
             foreach ($pc['parts'] as $p) {
                 EquipeLivraisonPartageCategorie::create([
                     'equipe_id' => $equipeId,
+                    'processus_id' => $processus->id,
                     'categorie_id' => $pc['categorie_id'],
                     'livreur_id' => $livreurIdParOrdre[$p['membre_ordre']],
                     'part_pourcentage' => 0,
@@ -561,6 +580,8 @@ class EquipeLivraisonController extends Controller
     private function messages(): array
     {
         return [
+            'processus_code.required' => 'Le processus (Vente / Distribution client / Transfert logistique) est obligatoire.',
+            'processus_code.in' => 'Processus invalide.',
             'vehicule_id.required' => 'Le véhicule est obligatoire.',
             'vehicule_id.exists' => 'Le véhicule sélectionné est introuvable.',
             'vehicule_id.unique' => 'Ce véhicule est déjà affecté à une autre équipe.',

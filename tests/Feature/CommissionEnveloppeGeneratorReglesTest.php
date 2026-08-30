@@ -29,6 +29,7 @@ use App\Models\Vehicule;
 use App\Notifications\CommissionManquanteNotification;
 use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionEnveloppeGenerator;
+use App\Services\Commission\CommissionProcessusDefaults;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Tests\Concerns\HasProduitVariante;
@@ -134,6 +135,7 @@ class CommissionEnveloppeGeneratorReglesTest extends TestCase
             EquipeLivraisonPartageCategorie::create([
                 'equipe_id' => $equipe->id,
                 'categorie_id' => $categorie->id,
+                'processus_id' => CommissionProcessusDefaults::resoudreOuCreer($this->org->id, CommissionProcessus::CODE_VENTE)->id,
                 'livreur_id' => $livreurId,
                 'part_pourcentage' => 0,
                 'montant_unitaire' => $montant,

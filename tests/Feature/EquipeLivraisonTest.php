@@ -76,6 +76,7 @@ class EquipeLivraisonTest extends TestCase
         return array_merge([
             'nom' => 'Équipe Test',
             'is_active' => true,
+            'processus_code' => CommissionProcessus::CODE_VENTE,
             'proprietaire_id' => $proprietaireId,
             'membres' => [
                 [
@@ -670,6 +671,7 @@ class EquipeLivraisonTest extends TestCase
 
         return array_merge([
             'is_active' => true,
+            'processus_code' => CommissionProcessus::CODE_VENTE,
             'membres' => [
                 [
                     'livreur_id' => null,

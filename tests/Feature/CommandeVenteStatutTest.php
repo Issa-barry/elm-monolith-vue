@@ -27,6 +27,7 @@ use App\Models\Site;
 use App\Models\VarianteStock;
 use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
+use App\Services\Commission\CommissionProcessusDefaults;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
@@ -275,11 +276,13 @@ class CommandeVenteStatutTest extends TestCase
         EquipeLivreur::create(['equipe_id' => $equipe->id, 'livreur_id' => $convoyeur->id, 'role' => 'convoyeur', 'ordre' => 1]);
         EquipeLivraisonPartageCategorie::create([
             'equipe_id' => $equipe->id, 'categorie_id' => $this->categorie->id,
+            'processus_id' => CommissionProcessusDefaults::resoudreOuCreer($this->org->id, CommissionProcessus::CODE_VENTE)->id,
             'livreur_id' => $chauffeur->id, 'part_pourcentage' => 0,
             'montant_unitaire' => $montantChauffeur, 'effective_from' => now()->subDay(),
         ]);
         EquipeLivraisonPartageCategorie::create([
             'equipe_id' => $equipe->id, 'categorie_id' => $this->categorie->id,
+            'processus_id' => CommissionProcessusDefaults::resoudreOuCreer($this->org->id, CommissionProcessus::CODE_VENTE)->id,
             'livreur_id' => $convoyeur->id, 'part_pourcentage' => 0,
             'montant_unitaire' => $montantConvoyeur, 'effective_from' => now()->subDay(),
         ]);

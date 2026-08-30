@@ -153,6 +153,7 @@ class EquipeLivraisonMoteurRoundTripTest extends TestCase
             ->post(route('equipes-livraison.store'), [
                 'vehicule_id' => $vehicule->id,
                 'is_active' => true,
+                'processus_code' => CommissionProcessus::CODE_VENTE,
                 'membres' => [[
                     'livreur_id' => null, 'nom_complet' => 'Mamadou Diallo',
                     'telephone' => '+224620000001', 'role' => 'chauffeur', 'ordre' => 0,

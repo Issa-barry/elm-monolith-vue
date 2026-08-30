@@ -32,6 +32,7 @@ use App\Models\Site;
 use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionEnveloppeGenerator;
+use App\Services\Commission\CommissionProcessusDefaults;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\HasProduitVariante;
 use Tests\Feature\Concerns\HasAdminSetup;
@@ -153,6 +154,7 @@ class CommissionCmd230826004NonRegressionTest extends TestCase
             EquipeLivraisonPartageCategorie::create([
                 'equipe_id' => $equipe->id,
                 'categorie_id' => $categorie->id,
+                'processus_id' => CommissionProcessusDefaults::resoudreOuCreer($this->org->id, CommissionProcessus::CODE_VENTE)->id,
                 'livreur_id' => $livreur->id,
                 'part_pourcentage' => 0,
                 'montant_unitaire' => $montant,

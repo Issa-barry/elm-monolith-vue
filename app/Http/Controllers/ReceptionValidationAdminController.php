@@ -24,9 +24,14 @@ class ReceptionValidationAdminController extends Controller
     {
         $this->authorize('validerReceptionAdmin', $transfert_logistique);
 
+        // Moteur générique (Paramètres > Commissions > Transferts logistiques) : le montant est
+        // désormais résolu par CommissionRegle, la saisie manuelle n'a plus de sens et n'est donc
+        // plus exigée. Ancien moteur (non migré) : comportement historique inchangé.
+        $migree = CommissionTriggerService::estMigreVersMoteurGenerique($transfert_logistique->organization_id);
+
         $data = $request->validate([
             'decision' => ['required', 'in:accord,refus,invalider'],
-            'montant_par_pack' => ['required_if:decision,accord', 'nullable', 'integer', 'min:1'],
+            'montant_par_pack' => [$migree ? 'nullable' : 'required_if:decision,accord', 'nullable', 'integer', 'min:1'],
             'motif' => ['required_if:decision,refus', 'nullable', 'string', 'max:1000'],
         ], [
             'decision.required' => 'La décision est obligatoire.',
@@ -44,7 +49,7 @@ class ReceptionValidationAdminController extends Controller
                 'validation_motif' => null,
             ]);
 
-            $montantParPack = (float) $data['montant_par_pack'];
+            $montantParPack = $migree || ! isset($data['montant_par_pack']) ? null : (float) $data['montant_par_pack'];
 
             try {
                 // Déclencheur configurable (cf. CommissionTriggerService) : ne génère que

@@ -18,6 +18,7 @@ use App\Models\TransfertLigne;
 use App\Models\TransfertLogistique;
 use App\Models\User;
 use App\Models\Vehicule;
+use App\Services\CommissionLogistiqueService;
 use App\Services\TransfertLogistiqueService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Pennant\Feature;
@@ -212,6 +213,33 @@ class CommissionTriggerLogistiqueTest extends TestCase
         // la quantité reçue (90) constatée ensuite — cf. spec §7.
         $commission = CommissionLogistique::where('transfert_logistique_id', $transfert->id)->first();
         $this->assertEquals(100, $commission->quantite_reference);
+    }
+
+    // ── Montant par défaut configurable (Parametre::getMontantDefautCommissionLogistiquePack) ──
+
+    public function test_chargement_valide_utilise_le_montant_configure_si_present(): void
+    {
+        Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::CHARGEMENT_VALIDE);
+        Parametre::setMontantDefautCommissionLogistiquePack($this->org->id, 350);
+
+        $transfert = $this->makeTransfertEnChargement(qteChargee: 100);
+
+        $this->actingAs($this->admin);
+        TransfertLogistiqueService::avancerStatut($transfert);
+
+        $commission = CommissionLogistique::where('transfert_logistique_id', $transfert->id)->first();
+        $this->assertEquals(35000.0, (float) $commission->montant_total); // 100 × 350 GNF configuré
+    }
+
+    public function test_genere_automatique_utilise_le_montant_configure_si_present(): void
+    {
+        Parametre::setMontantDefautCommissionLogistiquePack($this->org->id, 300);
+
+        $transfert = $this->makeTransfertEnReception(qteRecue: 100);
+
+        $commission = CommissionLogistiqueService::genererAutomatique($transfert);
+
+        $this->assertEquals(30000.0, (float) $commission->montant_total); // 100 × 300 GNF configuré
     }
 
     // ── RECEPTION_EFFECTUEE (défaut) ─────────────────────────────────────────

@@ -8,6 +8,7 @@ use App\Enums\StatutDepense;
 use App\Enums\TypePeriodePaiement;
 use App\Http\Controllers\Controller;
 use App\Models\CommissionEnveloppePart;
+use App\Models\CommissionProcessus;
 use App\Models\Depense;
 use App\Models\Organization;
 use App\Models\PaiementFichePaiement;
@@ -21,6 +22,7 @@ use App\Services\PeriodePaiementService;
 use App\Services\SiteScopeService;
 use App\Support\Commission\CommissionDetailFilters;
 use App\Support\Commission\CommissionKpiBuckets;
+use App\Support\Commission\CommissionProcessusFilter;
 use App\Support\Commission\CommissionSummaryFormatter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -66,6 +68,7 @@ class CommissionProprietaireController extends Controller
         if ($filtrePeriode !== '' && ! preg_match('/^\d{4}-\d{2}-(P1|P2|M)$/', $filtrePeriode)) {
             $filtrePeriode = '';
         }
+        $filtreProcessus = $this->scalarInput($request, 'processus') ?: CommissionProcessus::CODE_VENTE;
 
         $isAdmin = $user->isAdmin();
         $sites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
@@ -93,6 +96,8 @@ class CommissionProprietaireController extends Controller
             // l'absence de restriction reste exclusivement reservee aux administrateurs.
             $query->whereHas('enveloppe.source', fn ($q) => $q->whereIn('site_id', $siteIds));
         }
+
+        CommissionProcessusFilter::appliquer($query, $filtreProcessus);
 
         $allParts = $query->get();
         $partsParProprio = $allParts->groupBy('beneficiaire_id');
@@ -312,6 +317,8 @@ class CommissionProprietaireController extends Controller
             'filtre_telephone' => $filtreTelephone,
             'filtre_statut' => $filtreStatut,
             'filtre_site_ids' => $filtreSiteIds,
+            'filtre_processus' => $filtreProcessus,
+            'processus_options' => CommissionProcessusFilter::options(),
             'selected_periode' => $filtrePeriode,
             'periodes_disponibles' => $periodesDisponibles,
             'periode_courante' => $periodeCourante,
@@ -335,12 +342,13 @@ class CommissionProprietaireController extends Controller
         $proprio = Proprietaire::find($proprietaireId);
         $nom = $proprio ? trim(($proprio->prenom ?? '').' '.($proprio->nom ?? '')) : '—';
 
-        $allParts = CommissionEnveloppePart::with(['enveloppe.source.site', 'enveloppe.source.vehicule'])
+        $filtreProcessus = $this->scalarInput($request, 'processus') ?: CommissionProcessus::CODE_VENTE;
+        $allPartsQuery = CommissionEnveloppePart::with(['enveloppe.source.site', 'enveloppe.source.vehicule'])
             ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PROPRIETAIRE)
             ->where('beneficiaire_id', $proprietaireId)
             ->whereHas('enveloppe', fn ($q) => $q->where('organization_id', $orgId))
-            ->orderByDesc('enveloppe_id')
-            ->get();
+            ->orderByDesc('enveloppe_id');
+        $allParts = CommissionProcessusFilter::appliquer($allPartsQuery, $filtreProcessus)->get();
 
         $vehicules = Vehicule::where('proprietaire_id', $proprietaireId)
             ->where('organization_id', $orgId)
@@ -594,6 +602,8 @@ class CommissionProprietaireController extends Controller
             ],
             'vehicules_disponibles' => $vehiculesDisponibles,
             'agences_disponibles' => $agencesDisponibles,
+            'filtre_processus' => $filtreProcessus,
+            'processus_options' => CommissionProcessusFilter::options(),
             'can_payer' => false,
         ]);
     }
@@ -650,12 +660,14 @@ class CommissionProprietaireController extends Controller
             ? array_values(array_filter((array) $request->input('site_ids', [])))
             : $this->siteScope->accessibleSiteIds($user)->all();
         $restreindreAuxSites = ! $user->isAdmin() || ! empty($filtreSiteIds);
+        $filtreProcessus = $this->scalarInput($request, 'processus') ?: CommissionProcessus::CODE_VENTE;
 
         [$parts, $fraisParProprio, $motifsParProprio] = $this->loadPartsForExport(
             $orgId,
             $filtrePeriode,
             $filtreSiteIds,
             $restreindreAuxSites,
+            $filtreProcessus,
         );
         $rows = $this->buildExportRows($parts, $fraisParProprio, $motifsParProprio, $filtrePeriode, $filtreStatut, $filtreNom, $filtreTelephone);
 
@@ -701,12 +713,14 @@ class CommissionProprietaireController extends Controller
             ? array_values(array_filter((array) $request->input('site_ids', [])))
             : $this->siteScope->accessibleSiteIds($user)->all();
         $restreindreAuxSites = ! $user->isAdmin() || ! empty($filtreSiteIds);
+        $filtreProcessus = $this->scalarInput($request, 'processus') ?: CommissionProcessus::CODE_VENTE;
 
         [$parts, $fraisParProprio, $motifsParProprio] = $this->loadPartsForExport(
             $orgId,
             $filtrePeriode,
             $filtreSiteIds,
             $restreindreAuxSites,
+            $filtreProcessus,
         );
         $rows = $this->buildExportRows($parts, $fraisParProprio, $motifsParProprio, $filtrePeriode, $filtreStatut, $filtreNom, $filtreTelephone);
         $siteGroups = $this->buildSiteGroups($rows);
@@ -734,6 +748,7 @@ class CommissionProprietaireController extends Controller
         string $filtrePeriode,
         array $filtreSiteIds = [],
         bool $restreindreAuxSites = false,
+        string $filtreProcessus = CommissionProcessus::CODE_VENTE,
     ): array {
         $query = CommissionEnveloppePart::with(['enveloppe.source.site:id,nom', 'enveloppe.source.vehicule:id,nom_vehicule,immatriculation'])
             ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_PROPRIETAIRE)
@@ -749,6 +764,8 @@ class CommissionProprietaireController extends Controller
         if ($restreindreAuxSites) {
             $query->whereHas('enveloppe.source', fn ($q) => $q->whereIn('site_id', $filtreSiteIds));
         }
+
+        CommissionProcessusFilter::appliquer($query, $filtreProcessus);
 
         $parts = $query->get();
 

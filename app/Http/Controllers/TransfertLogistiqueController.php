@@ -8,11 +8,13 @@ use App\Enums\TypeEcartLogistique;
 use App\Jobs\NotifierLivreursTransfertJob;
 use App\Models\CommissionLogistique;
 use App\Models\EquipeLivraison;
+use App\Models\Parametre;
 use App\Models\Produit;
 use App\Models\ProduitVariante;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
 use App\Models\Vehicule;
+use App\Services\CommissionTriggerService;
 use App\Services\TransfertActiviteService;
 use App\Services\VehiculeCapaciteService;
 use Illuminate\Http\RedirectResponse;
@@ -417,6 +419,8 @@ class TransfertLogistiqueController extends Controller
             'can_generer_commission' => $user->can('genererCommission', $transfert_logistique),
             'can_verser_commission' => $user->can('verserCommission', $transfert_logistique),
             'can_valider_reception_admin' => $user->can('validerReceptionAdmin', $transfert_logistique),
+            'commission_moteur_generique' => CommissionTriggerService::estMigreVersMoteurGenerique($transfert_logistique->organization_id),
+            'montant_defaut_commission_logistique_par_pack' => Parametre::getMontantDefautCommissionLogistiquePack($transfert_logistique->organization_id),
             'activites' => $transfert_logistique->activites->map(fn ($a) => [
                 'id' => $a->id,
                 'action' => $a->action,

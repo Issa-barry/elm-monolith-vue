@@ -3,6 +3,7 @@ import DataFilters, {
     type FilterField,
 } from '@/components/filters/DataFilters.vue';
 import ListPageActions from '@/components/ListPageActions.vue';
+import NatureOperationBadge from '@/components/commande-vente/NatureOperationBadge.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -50,6 +51,7 @@ interface Commande {
     reference: string;
     statut: string;
     statut_label: string;
+    nature_operation: 'vente_standard' | 'distribution_client';
     total_commande: number;
     vehicule_nom: string | null;
     vehicule_immatriculation: string | null;
@@ -109,6 +111,8 @@ interface Filters {
 const props = defineProps<{
     commandes: Commande[];
     totaux: Totaux;
+    nature_filtree: 'vente_standard' | 'distribution_client';
+    page_title: string;
     periode: string;
     statuts_actifs: string[];
     sites: SiteOption[];
@@ -137,10 +141,16 @@ const { onRowClick, bodyRowPt } = useClickableTableRow<Commande>(
     (commande) => `/backoffice/ventes/${commande.id}`,
 );
 
-const breadcrumbs: BreadcrumbItem[] = [
+const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
-    { title: 'Ventes', href: '/backoffice/ventes' },
-];
+    {
+        title: props.page_title,
+        href:
+            props.nature_filtree === 'distribution_client'
+                ? '/backoffice/distributions'
+                : '/backoffice/ventes',
+    },
+]);
 
 // ── Options statique ──────────────────────────────────────────────────────────
 const filtresStatut = [
@@ -416,7 +426,7 @@ function confirmDelete(c: Commande) {
 </script>
 
 <template>
-    <Head title="Ventes" />
+    <Head :title="page_title" />
 
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
         <!-- ── MOBILE VIEW ─────────────────────────────────────────────────── -->
@@ -543,6 +553,7 @@ function confirmDelete(c: Commande) {
                                 :status="c.statut"
                                 :label="c.statut_label"
                             />
+                            <NatureOperationBadge :nature="c.nature_operation" />
                             <span
                                 class="text-xs text-muted-foreground tabular-nums"
                                 >{{ c.created_at }}</span
@@ -808,10 +819,15 @@ function confirmDelete(c: Commande) {
                         style="width: 130px"
                     >
                         <template #body="{ data }">
-                            <StatusDot
-                                :status="data.statut"
-                                :label="data.statut_label"
-                            />
+                            <div class="flex flex-col items-start gap-1">
+                                <StatusDot
+                                    :status="data.statut"
+                                    :label="data.statut_label"
+                                />
+                                <NatureOperationBadge
+                                    :nature="data.nature_operation"
+                                />
+                            </div>
                         </template>
                     </Column>
 

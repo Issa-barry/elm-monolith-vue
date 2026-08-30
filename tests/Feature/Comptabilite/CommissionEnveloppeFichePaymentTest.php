@@ -32,6 +32,7 @@ use App\Models\Site;
 use App\Models\Vehicule;
 use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionEnveloppeGenerator;
+use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\CommissionAdjustmentService;
 use App\Services\PeriodeCalculatorService;
 use App\Services\PeriodePaiementService;
@@ -133,6 +134,7 @@ class CommissionEnveloppeFichePaymentTest extends TestCase
         $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachets', 'statut' => 'actif']);
         EquipeLivraisonPartageCategorie::create([
             'equipe_id' => $equipe->id,
+            'processus_id' => CommissionProcessusDefaults::resoudreOuCreer($this->org->id, CommissionProcessus::CODE_VENTE)->id,
             'categorie_id' => $categorie->id,
             'livreur_id' => $livreur->id,
             'part_pourcentage' => 0,

@@ -56,6 +56,8 @@ const props = defineProps<{
     filtre_site_ids: string[];
     filtre_categorie_id: string;
     filtre_site_type: string;
+    filtre_processus: string;
+    processus_options: { value: string; label: string }[];
     selected_periode: string;
     periodes_disponibles: PeriodeOption[];
     sites: { id: string; nom: string }[];
@@ -76,6 +78,13 @@ const breadcrumbs: BreadcrumbItem[] = [
 const search = ref(props.search ?? '');
 
 const filterFields = computed((): FilterField[] => [
+    {
+        key: 'processus',
+        label: 'Processus',
+        type: 'select' as const,
+        inline: true,
+        options: props.processus_options,
+    },
     {
         key: 'statut',
         label: 'Statut',
@@ -116,6 +125,7 @@ const currentFilters = computed(() => ({
     periode: props.selected_periode ?? '',
     categorie_id: props.filtre_categorie_id ?? '',
     site_type: props.filtre_site_type ?? '',
+    processus: props.filtre_processus ?? 'vente',
 }));
 
 const showAudit = ref(false);
@@ -138,6 +148,7 @@ function buildParams(): URLSearchParams {
     if (props.filtre_categorie_id)
         params.set('categorie_id', props.filtre_categorie_id);
     if (props.filtre_site_type) params.set('site_type', props.filtre_site_type);
+    if (props.filtre_processus) params.set('processus', props.filtre_processus);
     if (search.value) params.set('search', search.value);
     return params;
 }
@@ -277,7 +288,7 @@ function fmt(val: number | null | undefined) {
                     <ClickableTableRow
                         v-for="b in beneficiaires"
                         :key="b.beneficiaire_id"
-                        :href="`/backoffice/comptabilite/commissions/sites/${b.beneficiaire_id}`"
+                        :href="`/backoffice/comptabilite/commissions/sites/${b.beneficiaire_id}?processus=${currentFilters.processus}`"
                         :aria-label="`Voir le détail de ${b.beneficiaire_nom}`"
                         class="even:bg-muted/20"
                     >

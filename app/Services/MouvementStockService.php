@@ -2,13 +2,21 @@
 
 namespace App\Services;
 
+use App\Enums\StockStatut;
 use App\Models\MouvementStock;
+use App\Models\Parametre;
+use App\Models\Produit;
 use App\Models\ProduitVariante;
+use App\Models\Site;
 use App\Models\TransfertLigne;
 use App\Models\TransfertLogistique;
+use App\Models\User;
 use App\Models\VarianteStock;
+use App\Notifications\StockAlerteNotification;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 /**
  * Gestion des mouvements de stock, ventilés par site. Point d'entrée unique
@@ -87,9 +95,10 @@ class MouvementStockService
 
         $varianteStock->update(['qte_stock' => $stockApres]);
 
-        ProduitVariante::find($varianteId)?->produit?->resynchroniserQteStock();
+        $produit = ProduitVariante::with('produit.produitType')->find($varianteId)?->produit;
+        $produit?->resynchroniserQteStock();
 
-        return MouvementStock::create([
+        $mouvement = MouvementStock::create([
             'organization_id' => $orgId,
             'site_id' => $siteId,
             'produit_variante_id' => $varianteId,
@@ -102,6 +111,86 @@ class MouvementStockService
             'notes' => $notes,
             'created_by' => $userId,
         ]);
+
+        if ($produit) {
+            self::alerterSiFranchissementSeuil($produit, $siteId, $stockAvant, $stockApres, $qteReservee);
+        }
+
+        return $mouvement;
+    }
+
+    /**
+     * Alerte les administrateurs (super_admin/admin_entreprise) de l'organisation quand ce
+     * mouvement fait FRANCHIR le seuil d'alerte (transition Disponible → Faible/Rupture/Négatif)
+     * pour ce couple produit × site — jamais à chaque mouvement tant que le produit reste sous le
+     * seuil (cf. docblock StockAlerteNotification). Toujours envoyée à TOUS les administrateurs
+     * de l'organisation, sans restriction d'agence (décision produit 30/08/2026) — jamais
+     * seulement ceux rattachés au site concerné.
+     *
+     * Ne doit JAMAIS interrompre le mouvement de stock ni l'opération métier appelante : toute
+     * erreur (mail indisponible, etc.) est avalée et journalisée, même garantie que
+     * CommissionEnveloppeGenerator::alerterCommissionManquante().
+     */
+    private static function alerterSiFranchissementSeuil(
+        Produit $produit,
+        string $siteId,
+        int $stockAvant,
+        int $stockApres,
+        int $qteReservee,
+    ): void {
+        if (! $produit->produitType?->gere_stock) {
+            return;
+        }
+
+        // Interrupteur d'organisation existant (Paramètres > Général > "Alertes de stock
+        // faible", cf. Parametre::CLE_NOTIFICATIONS_STOCK_ACTIVES) — jamais dupliqué par un
+        // second réglage : quand un admin le désactive, plus aucun email d'alerte stock ne
+        // doit partir pour son organisation, quel que soit le produit/site concerné.
+        if (! Parametre::isNotificationsStockActives($produit->organization_id)) {
+            return;
+        }
+
+        try {
+            $stockStatutService = app(StockStatutService::class);
+            $seuil = $stockStatutService->seuilEffectifPourSite($produit, $siteId);
+            $alerteActive = (bool) $produit->alerte_stock_active;
+
+            $statutAvant = $stockStatutService->statutPour($stockAvant - $qteReservee, $seuil, $alerteActive);
+            $statutApres = $stockStatutService->statutPour($stockApres - $qteReservee, $seuil, $alerteActive);
+
+            $etaitEnAlerte = $statutAvant !== StockStatut::DISPONIBLE;
+            $estEnAlerte = $statutApres !== StockStatut::DISPONIBLE;
+
+            if ($etaitEnAlerte || ! $estEnAlerte) {
+                return;
+            }
+
+            $site = Site::find($siteId);
+
+            $destinataires = User::where('organization_id', $produit->organization_id)
+                ->whereHas('roles', fn ($q) => $q->whereIn('name', ['super_admin', 'admin_entreprise']))
+                ->get();
+
+            $notification = new StockAlerteNotification(
+                $produit->id,
+                $produit->nom,
+                $site?->id,
+                $site?->nom,
+                $stockApres - $qteReservee,
+                $seuil,
+                $statutApres,
+            );
+
+            foreach ($destinataires as $destinataire) {
+                $destinataire->notify($notification);
+            }
+        } catch (Throwable $e) {
+            Log::error('StockAlerteNotification : envoi échoué', [
+                'produit_id' => $produit->id,
+                'site_id' => $siteId,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -127,10 +216,12 @@ class MouvementStockService
         $typeContraire = $mouvement->type === 'entree' ? 'sortie' : 'entree';
         $delta = $typeContraire === 'entree' ? $mouvement->quantite : -$mouvement->quantite;
         $stockAvant = $varianteStock->qte_stock;
+        $qteReservee = $varianteStock->qte_reservee;
         $stockApres = max(0, $stockAvant + $delta);
 
         $varianteStock->update(['qte_stock' => $stockApres]);
-        ProduitVariante::find($mouvement->produit_variante_id)?->produit?->resynchroniserQteStock();
+        $produit = ProduitVariante::with('produit.produitType')->find($mouvement->produit_variante_id)?->produit;
+        $produit?->resynchroniserQteStock();
 
         $contreMouvement = MouvementStock::create([
             'organization_id' => $mouvement->organization_id,
@@ -147,6 +238,10 @@ class MouvementStockService
         ]);
 
         $mouvement->update(['annule_par_id' => $contreMouvement->id]);
+
+        if ($produit) {
+            self::alerterSiFranchissementSeuil($produit, $mouvement->site_id, $stockAvant, $stockApres, $qteReservee);
+        }
     }
 
     /**
@@ -298,6 +393,28 @@ class MouvementStockService
             userId: $userId,
             allowNegative: $allowNegative,
         );
+    }
+
+    /**
+     * Annule la sortie de stock précédemment enregistrée par sortirStock() pour une source
+     * donnée, en inversant symétriquement son effet sur VarianteStock (cf. annulerMouvement()).
+     * Idempotent : no-op si aucune sortie n'a jamais été enregistrée (rien à annuler) ou si elle
+     * l'a déjà été. Utilisé par CommandeVenteService::annuler() pour la vente directe sans
+     * véhicule (creerFactureDirecte() décrémente le stock immédiatement, sans étape de
+     * réservation intermédiaire — contrairement au chemin véhicule, jamais annulable après son
+     * propre décrément physique, cf. StatutCommandeVente::isAnnulable()).
+     */
+    public static function annulerSortieStock(string $sourceType, string $sourceId, string $siteId): void
+    {
+        $mouvements = MouvementStock::where('source_type', $sourceType)
+            ->where('source_id', $sourceId)
+            ->where('site_id', $siteId)
+            ->where('type', 'sortie')
+            ->get();
+
+        foreach ($mouvements as $mouvement) {
+            self::annulerMouvement($mouvement);
+        }
     }
 
     /**

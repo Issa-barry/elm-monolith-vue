@@ -89,6 +89,43 @@ ligne (pas de colonne par site — le nombre et la liste des sites varient par o
 `definirPourTousLesSitesActifs()`, préservant le comportement historique de l'ancienne colonne
 produit (« s'applique à tous les sites ») sans jamais réécrire `produits.seuil_alerte_stock`.
 
+## Visibilité multi-agences des administrateurs
+
+Décision produit du 30/08/2026 — un `super_admin`/`admin_entreprise` (`User::isAdmin()`) voit
+et est alerté sur les stocks faibles/ruptures de **toutes** les agences de son organisation,
+jamais restreint à ses propres agences de rattachement. C'était déjà le cas pour l'affichage
+(`ProduitController::index()`/`show()`, `StockController::index()` ne scopent `site_ids` que
+pour les non-admins ; le badge sidebar `compterAlertesPourOrganisation()` est org-wide pour tout
+le monde) — ce chantier ajoute l'email/notification correspondant (ci-dessous), avec la même
+règle : jamais filtré par site pour les administrateurs.
+
+## Notification email/in-app aux administrateurs
+
+En plus de l'affichage (badges/pages ci-dessus), un email et une notification in-app
+(consommée par l'API mobile) sont envoyés à **tous** les `super_admin`/`admin_entreprise` de
+l'organisation quand un couple PRODUIT × SITE **franchit** un état d'alerte — cf.
+[`StockAlerteNotification`](../app/Notifications/StockAlerteNotification.php), déclenchée par
+[`MouvementStockService::alerterSiFranchissementSeuil()`](../app/Services/MouvementStockService.php),
+appelée depuis les deux points d'entrée de mutation du stock (`appliquer()` et
+`annulerMouvement()`).
+
+- **Portée** — Stock faible (seuil configuré, respecte `alerte_stock_active`) **et** Rupture/
+  Stock négatif (toujours calculée, cf. STOCK-ALERTE-004 : la rupture reste un fait de
+  disponibilité, indépendant du choix "être alerté").
+- **Fréquence** — une seule fois PAR FRANCHISSEMENT, jamais à chaque mouvement tant que le
+  produit reste sous le seuil : comparaison du statut (`StockStatutService::statutPour()`) juste
+  avant/après le mouvement pour ce couple produit × site ; un nouvel email repart seulement si
+  le produit redevient d'abord Disponible puis rebascule en alerte.
+- **Interrupteur d'organisation** — `Parametre::CLE_NOTIFICATIONS_STOCK_ACTIVES`
+  (`isNotificationsStockActives()`, réglable depuis Paramètres > "Alertes de stock faible",
+  défaut : actif) coupe l'envoi pour toute l'organisation quel que soit le produit/site. Reste
+  distinct de `alerte_stock_active` (par produit) et du seuil (par site) : les trois filtres
+  s'appliquent en cascade (organisation → produit → seuil du site).
+- **Résilience** — un échec d'envoi (mail indisponible, etc.) est avalé et journalisé
+  (`Log::error`), jamais rethrow : ne doit jamais interrompre le mouvement de stock ni
+  l'opération métier appelante (même garantie que
+  `CommissionEnveloppeGenerator::alerterCommissionManquante()`).
+
 ## Tests
 
 - [`StockStatutServiceTest`](../tests/Unit/StockStatutServiceTest.php) — résolution du seuil
@@ -102,3 +139,8 @@ produit (« s'applique à tous les sites ») sans jamais réécrire `produits.se
   seuil).
 - [`StockAlerteMultiVarianteSiteTest`](../tests/Feature/StockAlerteMultiVarianteSiteTest.php) —
   scénario de référence multi-variantes × multi-sites avec seuils différents par site.
+- [`StockAlerteNotificationTest`](../tests/Feature/StockAlerteNotificationTest.php) —
+  administrateurs alertés même hors de leur agence, aucun spam tant que le produit reste sous le
+  seuil, ré-alerte après un retour à Disponible, rupture alertée même `alerte_stock_active`
+  désactivé, stock faible non alerté si désactivé, coupure globale par
+  `notifications_stock_actives`.

@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -128,9 +129,16 @@ class TransfertLogistique extends Model
         return $this->hasMany(TransfertLigne::class);
     }
 
+    /** @deprecated commission legacy (moteur CommissionLogistiqueService) — historique en lecture seule */
     public function commission(): HasOne
     {
         return $this->hasOne(CommissionLogistique::class);
+    }
+
+    /** Commissions générées par le moteur générique (CommissionEnveloppeGenerator), organisations migrées uniquement. */
+    public function commissions(): MorphMany
+    {
+        return $this->morphMany(CommissionEnveloppe::class, 'source');
     }
 
     public function createur(): BelongsTo
