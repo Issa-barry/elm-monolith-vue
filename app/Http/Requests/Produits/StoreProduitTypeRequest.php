@@ -32,8 +32,11 @@ class StoreProduitTypeRequest extends FormRequest
 
     /**
      * Le champ de référence pour le contrôle de marge doit obligatoirement faire partie des
-     * prix requis de ce type — sinon la règle "prix_vente > champ_prix_reference" appliquée par
-     * ProduitService compare le prix de vente à un champ qui peut légitimement être vide.
+     * prix requis de ce type, ET le prix de vente lui-même doit être requis — sinon la règle
+     * "prix_vente > champ_prix_reference" appliquée par ProduitService compare un prix de vente
+     * jamais saisi (toujours 0) à un champ renseigné, rejetant systématiquement toute création
+     * (bug réel constaté sur le type par défaut « Matière de production », non vendable, corrigé
+     * le 30/08/2026).
      */
     public function withValidator(Validator $validator): void
     {
@@ -45,6 +48,9 @@ class StoreProduitTypeRequest extends FormRequest
             $requisKey = $champ === 'prix_achat' ? 'prix_achat_requis' : 'prix_usine_requis';
             if (! $this->boolean($requisKey)) {
                 $v->errors()->add('champ_prix_reference', 'Le champ de référence pour la marge doit faire partie des prix obligatoires de ce type.');
+            }
+            if (! $this->boolean('prix_vente_requis')) {
+                $v->errors()->add('champ_prix_reference', 'Le prix de vente doit être obligatoire pour ce type si un champ de référence de marge est défini.');
             }
         });
     }
