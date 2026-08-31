@@ -634,10 +634,17 @@ d'opérations sur une seule période demandée.
 
 ### `GET /v1/mobile/livraisons/scan/{reference}`
 
-Résout une référence scannée (QR) — préfixe `CMD-` = commande de vente, `TR-` =
-transfert logistique. `404` si référence non reconnue ou introuvable. Pas de
-garde de rôle explicite (`auth:sanctum` seul) — la donnée retournée dépend
-uniquement de l'existence de la référence, pas d'un filtre par propriétaire.
+Résout une référence scannée (QR). Depuis le 31/08/2026, le préfixe dépend du processus
+d'origine (cf. `docs/references-metier.md`) : `VTE-`/`DST-`/legacy `CMD-` = commande de vente
+(vente standard ou distribution client), `TRF-`/legacy `TR-` = transfert logistique — les
+anciennes références ne sont jamais renommées et restent reconnues indéfiniment. `404` si
+préfixe non reconnu ou référence introuvable **ou appartenant à une autre organisation**. Pas de
+garde de rôle explicite (`auth:sanctum` seul), mais la recherche est systématiquement filtrée par
+`organization_id` de l'utilisateur authentifié, sur les deux méthodes privées — corrigé le
+31/08/2026 : la numérotation scopée par organisation (cf. `docs/references-metier.md`) rend deux
+organisations capables de porter *exactement* la même référence (ex: `VTE-310826-001` pour l'une
+ET l'autre), ce qui aurait sinon rendu une recherche non scopée fonctionnellement ambiguë (retour
+possible des données d'une autre organisation), pas seulement un défaut d'isolation préexistant.
 
 ---
 

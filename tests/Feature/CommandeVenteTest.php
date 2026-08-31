@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\ClientType;
 use App\Enums\StatutCommandeVente;
 use App\Models\Categorie;
 use App\Models\Client;
@@ -1145,9 +1146,14 @@ class CommandeVenteTest extends TestCase
         $this->assertEquals(StatutCommandeVente::CLOTUREE, $commande->fresh()->statut);
     }
 
-    // ── référence CMD-JJMMAA-XXX ─────────────────────────────────────────────
+    // ── référence PREFIXE-JJMMAA-XXX (VTE/DST/TRF, révisé le 31/08/2026) ─────
 
-    public function test_store_genere_reference_au_format_cmd(): void
+    /**
+     * Remplace l'ancien test_store_genere_reference_au_format_cmd : décision produit du
+     * 31/08/2026, le préfixe dépend désormais de nature_operation — vente_standard reçoit
+     * VTE- (jamais CMD-, réservé aux références déjà émises avant ce chantier).
+     */
+    public function test_store_genere_reference_au_format_vte_pour_vente_standard(): void
     {
         ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
 
@@ -1163,10 +1169,45 @@ class CommandeVenteTest extends TestCase
         $commande = CommandeVente::where('organization_id', $this->org->id)->latest()->first();
 
         $this->assertNotNull($commande);
-        $this->assertMatchesRegularExpression('/^CMD-\d{6}-\d{3}$/', $commande->reference);
+        $this->assertMatchesRegularExpression('/^VTE-\d{6}-\d{3}$/', $commande->reference);
     }
 
-    public function test_references_incrementales_dans_le_mois(): void
+    /**
+     * distribution_client (client DISTRIBUTEUR + véhicule) reçoit DST- — jamais VTE-, jamais le
+     * même compteur que la vente standard (séquences indépendantes par préfixe, cf.
+     * ReferenceNumeroService).
+     */
+    public function test_store_genere_reference_au_format_dst_pour_distribution_client(): void
+    {
+        ['produit' => $produit, 'vehicule' => $vehicule] = $this->makeContext($this->org);
+        $distributeur = Client::factory()->create([
+            'organization_id' => $this->org->id,
+            'type' => ClientType::DISTRIBUTEUR->value,
+        ]);
+
+        $this->actingAs($this->user)
+            ->post(route('ventes.store'), [
+                'vehicule_id' => $vehicule->id,
+                'client_id' => $distributeur->id,
+                'lignes' => [
+                    ['produit_id' => $produit->id, 'qte' => 2, 'prix_vente' => 2000],
+                ],
+            ])
+            ->assertRedirect();
+
+        $commande = CommandeVente::where('organization_id', $this->org->id)->latest()->first();
+
+        $this->assertNotNull($commande);
+        $this->assertSame('distribution_client', $commande->nature_operation->value);
+        $this->assertMatchesRegularExpression('/^DST-\d{6}-\d{3}$/', $commande->reference);
+    }
+
+    /**
+     * Le compteur est désormais journalier et scopé par organisation + préfixe (cf.
+     * ReferenceNumeroService) — remplace l'ancien test_references_incrementales_dans_le_mois,
+     * dont le nom supposait à tort un compteur mensuel.
+     */
+    public function test_references_incrementales_dans_la_meme_journee_pour_le_meme_prefixe(): void
     {
         ['produit' => $produit, 'vehicule' => $vehicule, 'client' => $client] = $this->makeContext($this->org);
 
@@ -1189,6 +1230,8 @@ class CommandeVenteTest extends TestCase
 
         $this->assertStringEndsWith('-001', $commandes->first()->reference);
         $this->assertStringEndsWith('-002', $commandes->last()->reference);
+        $this->assertStringStartsWith('VTE-', $commandes->first()->reference);
+        $this->assertStringStartsWith('VTE-', $commandes->last()->reference);
     }
 
     public function test_valider_sets_a_charger_at_timestamp(): void
