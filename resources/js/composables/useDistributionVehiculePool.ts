@@ -7,7 +7,12 @@
  * Ventes/Create.vue (AutoComplete PrimeVue, fetch de solvabilité, etc.).
  */
 
-export type ClientTypePourPool = 'externe' | 'revendeur' | 'distributeur' | undefined | null;
+export type ClientTypePourPool =
+    | 'externe'
+    | 'revendeur'
+    | 'distributeur'
+    | undefined
+    | null;
 
 /**
  * Retourne la liste de véhicules à proposer à la saisie pour ce type de client — jamais un
@@ -19,7 +24,9 @@ export function poolVehiculesPourClient<T>(
     vehiculesVente: T[],
     vehiculesDistribution: T[],
 ): T[] {
-    return clientType === 'distributeur' ? vehiculesDistribution : vehiculesVente;
+    return clientType === 'distributeur'
+        ? vehiculesDistribution
+        : vehiculesVente;
 }
 
 /**

@@ -616,7 +616,9 @@ const vehiculeSelectionne = computed(() => {
         return null;
     }
 
-    return vehiculesPourLookup.value.find((v) => v.id === form.vehicule_id) ?? null;
+    return (
+        vehiculesPourLookup.value.find((v) => v.id === form.vehicule_id) ?? null
+    );
 });
 
 // Plafonds par groupe de capacité du véhicule sélectionné (Sachets, Bouteilles, ...) — vide si
@@ -950,8 +952,8 @@ function confirmerEtCreer() {
                                 v-else-if="livreurManquantPourDistribution"
                                 class="mt-1 text-xs text-destructive"
                             >
-                                Ce véhicule n'a aucun livreur actif assigné —
-                                la distribution nécessite un livreur.
+                                Ce véhicule n'a aucun livreur actif assigné — la
+                                distribution nécessite un livreur.
                             </p>
 
                             <!-- Solvabilité véhicule — n'est le facteur de blocage QUE si aucun

@@ -50,7 +50,7 @@ describe('poolVehiculesPourClient', () => {
         ).toBe(vehiculesVente);
     });
 
-    it('retourne le pool vente quand aucun client n\'est sélectionné (undefined/null)', () => {
+    it("retourne le pool vente quand aucun client n'est sélectionné (undefined/null)", () => {
         expect(
             poolVehiculesPourClient(
                 undefined,
@@ -69,7 +69,7 @@ describe('poolVehiculesPourClient', () => {
 });
 
 describe('vehiculeEstDansPool', () => {
-    it('retourne true quand aucun véhicule n\'est sélectionné', () => {
+    it("retourne true quand aucun véhicule n'est sélectionné", () => {
         expect(vehiculeEstDansPool(null, vehiculesVente)).toBe(true);
     });
 
