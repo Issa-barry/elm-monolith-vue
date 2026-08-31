@@ -4,11 +4,13 @@ import { Button } from '@/components/ui/button';
 import type {
     AgenceOption,
     CommissionGlobalFiltersValue,
+    CommissionProcessusOption,
     CommissionVehiculeInfo,
     PeriodeOption,
 } from '@/types/commission';
 import { computed } from 'vue';
 import CommissionPeriodSelect from './CommissionPeriodSelect.vue';
+import CommissionProcessusSelect from './CommissionProcessusSelect.vue';
 import CommissionVehiculeSelect from './CommissionVehiculeSelect.vue';
 
 const props = defineProps<{
@@ -16,6 +18,10 @@ const props = defineProps<{
     periodesDisponibles: PeriodeOption[];
     vehiculesDisponibles: CommissionVehiculeInfo[];
     agencesDisponibles: AgenceOption[];
+    // Optionnel : n'affiche le sélecteur de processus que sur les pages qui le fournissent
+    // (fiche détail bénéficiaire) — absent partout ailleurs (Logistique/Propriétaire/
+    // Consultant/Site/Cashback/Salaire), qui n'ont pas demandé cette ventilation.
+    processusOptions?: CommissionProcessusOption[];
 }>();
 
 const emit = defineEmits<{
@@ -44,7 +50,8 @@ const hasActiveFilters = computed(
     () =>
         props.filters.periode !== '' ||
         props.filters.vehicule_ids.length > 0 ||
-        props.filters.site_ids.length > 0,
+        props.filters.site_ids.length > 0 ||
+        !!props.filters.processus,
 );
 
 function emitChange(next: Partial<CommissionGlobalFiltersValue>) {
@@ -66,9 +73,18 @@ function onAgenceChange(value: (string | number)[]) {
     emitChange({ site_ids: value });
 }
 
+function onProcessusChange(value: string) {
+    emitChange({ processus: value });
+}
+
 function reset() {
     emit('reset');
-    emitChange({ periode: '', vehicule_ids: [], site_ids: [] });
+    emitChange({
+        periode: '',
+        vehicule_ids: [],
+        site_ids: [],
+        ...(props.processusOptions ? { processus: '' } : {}),
+    });
 }
 </script>
 
@@ -98,6 +114,17 @@ function reset() {
                 placeholder="Toutes les agences"
                 class="text-sm"
                 @update:model-value="onAgenceChange"
+            />
+        </div>
+        <div
+            v-if="processusOptions && processusOptions.length"
+            class="w-full sm:w-56"
+            data-testid="commission-filters-processus"
+        >
+            <CommissionProcessusSelect
+                :model-value="filters.processus ?? ''"
+                :options="processusOptions"
+                @update:model-value="onProcessusChange"
             />
         </div>
         <Button

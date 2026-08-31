@@ -217,6 +217,12 @@ Route::prefix('backoffice')->group(function () {
             // contrôleur (déterminé par le nom de route, jamais un paramètre client) — la création
             // reste sur ventes.create/ventes.store, avec le choix de nature sur le formulaire.
             Route::get('distributions', [CommandeVenteController::class, 'index'])->name('distributions.index');
+            // Même contrôleur/données que ventes.show — seul le composant Inertia rendu diffère
+            // (Distributions/Show au lieu de Ventes/Show), choisi côté contrôleur selon
+            // nature_operation, jamais par ce nom de route lui-même. Le paramètre {vente} doit
+            // rester identique à celui de ventes.show : show(CommandeVente $vente) résout le
+            // binding implicite par nom de paramètre, pas par position.
+            Route::get('distributions/{vente}', [CommandeVenteController::class, 'show'])->name('distributions.show');
             Route::patch('ventes/{commande_vente}/valider', [CommandeVenteController::class, 'valider'])->name('ventes.valider');
             Route::patch('ventes/{commande_vente}/annuler', [CommandeVenteController::class, 'annuler'])->name('ventes.annuler');
             Route::post('ventes/{commande_vente}/statut/avancer', [CommandeVenteStatutController::class, 'avancer'])->name('ventes.statut.avancer');

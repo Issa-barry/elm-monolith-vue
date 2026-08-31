@@ -24,6 +24,37 @@ class CommissionProcessusFilter
     }
 
     /**
+     * Mêmes options que options(), avec en tête un choix "Tous les processus" (valeur vide, donc
+     * sans effet dans appliquer()) — pour les fiches détail bénéficiaire, où la situation globale
+     * est la valeur par défaut la plus utile (cf. docs/commissions.md).
+     *
+     * @return array<array{value:string,label:string}>
+     */
+    public static function optionsAvecTous(): array
+    {
+        return [
+            ['value' => '', 'label' => 'Tous les processus'],
+            ...self::options(),
+        ];
+    }
+
+    /** Résout le libellé d'un code processus depuis options() — jamais dupliqué localement. */
+    public static function labelFor(?string $processusCode): ?string
+    {
+        if (! $processusCode) {
+            return null;
+        }
+
+        foreach (self::options() as $option) {
+            if ($option['value'] === $processusCode) {
+                return $option['label'];
+            }
+        }
+
+        return $processusCode;
+    }
+
+    /**
      * Applique le filtre sur une requête CommissionEnveloppePart si $processusCode est non vide —
      * sans effet sinon (vue consolidée par défaut, cf. décision produit : "les vues comptables
      * globales peuvent naturellement consolider plusieurs processus").

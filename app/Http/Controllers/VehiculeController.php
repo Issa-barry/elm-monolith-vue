@@ -20,6 +20,7 @@ use App\Models\TypeVehicule;
 use App\Models\User;
 use App\Models\Vehicule;
 use App\Models\VehiculeFrais;
+use App\Services\Commission\CommissionPartageLivraisonValidator;
 use App\Services\DerogationImpayesService;
 use App\Services\ImageService;
 use App\Services\VehiculeCapaciteService;
@@ -81,6 +82,7 @@ class VehiculeController extends Controller
             // données historiques sans nom_complet) est déjà composé ici pour
             // ne pas dupliquer cette logique côté frontend — voir self::membreLabel().
             'equipe_membres' => $this->membresAvecLabel($membres)->map(fn ($m) => [
+                'livreur_id' => $m['membre']->livreur_id,
                 'livreur_nom' => $m['label'],
                 'telephone' => $m['membre']->livreur?->telephone ?? null,
                 'role' => $m['membre']->role,
@@ -332,6 +334,9 @@ class VehiculeController extends Controller
             // (cf. décision AMOA post-Phase 2 : plus de montant global blended, un
             // barème par cible peut différer d'une catégorie à l'autre).
             'baremes_commission_categories' => $this->baremesCommissionParCategorie($vehicule->organization_id, $vehicule->type_vehicule_id, $processusCode),
+            'statuts_partage_commission' => $equipe
+                ? $this->statutsPartageCommission($equipe->id, $vehicule->organization_id, $vehicule->type_vehicule_id)
+                : [],
             'processus_actif' => $processusCode,
             'processus_options' => array_map(
                 fn (string $code) => ['value' => $code, 'label' => CommissionRegleController::processusLabel($code)],
@@ -718,6 +723,58 @@ class VehiculeController extends Controller
             ])
             ->values()
             ->all();
+    }
+
+    /**
+     * État du partage Livreur pour chaque catégorie et chaque processus.
+     * « fait » signifie que les montants fixes actifs passent la même validation
+     * stricte que celle utilisée lors de l'enregistrement et de la génération.
+     */
+    private function statutsPartageCommission(string $equipeId, string $orgId, ?string $typeVehiculeId): array
+    {
+        $codes = CommissionRegleController::processusCodesDisponibles();
+        $processus = CommissionProcessus::where('organization_id', $orgId)
+            ->whereIn('code', $codes)
+            ->get()
+            ->keyBy('code');
+
+        $partages = EquipeLivraisonPartageCategorie::where('equipe_id', $equipeId)
+            ->whereIn('processus_id', $processus->pluck('id'))
+            ->whereNull('effective_to')
+            ->get()
+            ->groupBy(fn (EquipeLivraisonPartageCategorie $partage) => $partage->processus_id.'|'.$partage->categorie_id
+            );
+
+        $statuts = [];
+
+        foreach ($codes as $code) {
+            $processusCourant = $processus->get($code);
+            $baremes = $this->baremesCommissionParCategorie($orgId, $typeVehiculeId, $code);
+
+            foreach ($baremes as $bareme) {
+                $categorieId = $bareme['categorie_id'];
+                $enveloppe = (int) $bareme['montant_livraison'];
+
+                if ($enveloppe <= 0) {
+                    $statuts[$categorieId][$code] = 'non_requis';
+
+                    continue;
+                }
+
+                $lignes = $processusCourant
+                    ? $partages->get($processusCourant->id.'|'.$categorieId, collect())
+                    : collect();
+
+                try {
+                    CommissionPartageLivraisonValidator::valider($lignes, $enveloppe);
+                    $statuts[$categorieId][$code] = 'fait';
+                } catch (\InvalidArgumentException) {
+                    $statuts[$categorieId][$code] = 'a_faire';
+                }
+            }
+        }
+
+        return $statuts;
     }
 
     private function proprietairesOptions(): array

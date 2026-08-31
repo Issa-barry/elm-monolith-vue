@@ -13,6 +13,9 @@ import {
 import { Label } from '@/components/ui/label';
 import { useTicketPrint } from '@/composables/useTicketPrint';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatGNF, formatPhoneDisplay } from '@/lib/utils';
+import ChargementDialog from '@/pages/Ventes/partials/ChargementDialog.vue';
+import ReceptionDialog from '@/pages/Ventes/partials/ReceptionDialog.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import {
@@ -25,6 +28,7 @@ import {
     HandCoins,
     MoreVertical,
     Package,
+    PackageCheck,
     PackageOpen,
     Pencil,
     Printer,
@@ -38,9 +42,11 @@ import Select from 'primevue/select';
 import Textarea from 'primevue/textarea';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
-import ChargementDialog from './partials/ChargementDialog.vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+// Page dédiée à nature_operation = 'distribution_client' (cf. CommandeVenteController::show()).
+// Même backend, mêmes props que Ventes/Show.vue — seule la présentation diffère : stepper avec
+// étape Réception, distributeur mis en avant, table de lignes toujours complète (chargée + reçue).
 interface AuditEntry {
     id: number;
     event_code: string;
@@ -88,15 +94,17 @@ interface LigneCommande {
     produit_nom: string | null;
     quantite_demandee: number;
     quantite_chargee: number | null;
+    quantite_livree: number | null;
     type_ecart: string | null;
     type_ecart_label: string | null;
     commentaire_ecart: string | null;
+    type_ecart_reception: string | null;
+    type_ecart_reception_label: string | null;
+    commentaire_ecart_reception: string | null;
     ecart_chargement: number | null;
+    ecart_livraison: number | null;
     prix_usine_snapshot: number;
     prix_vente_snapshot: number;
-    // null pour les commandes créées avant la tarification par nature de client (backfillées en
-    // 'usine'/'vente' à partir de mode_tarification_snapshot, cf. migration correspondante) —
-    // reste défensivement optionnel ici au cas où une ligne y échapperait.
     prix_origine_snapshot?:
         | 'usine'
         | 'vente'
@@ -149,6 +157,7 @@ interface EquipeDetail {
 interface CommandeData {
     id: string;
     reference: string;
+    nature_operation: 'vente_standard' | 'distribution_client';
     statut: string;
     statut_label: string;
     statut_color: string;
@@ -169,6 +178,7 @@ interface CommandeData {
     chargement_demarre_at: string | null;
     chargement_valide_at: string | null;
     livree_at: string | null;
+    reception_validee_at: string | null;
     closed_at: string | null;
     is_brouillon: boolean;
     is_a_charger: boolean;
@@ -182,6 +192,7 @@ interface CommandeData {
     can_confirmer: boolean;
     can_demarrer_chargement: boolean;
     can_valider_chargement: boolean;
+    can_valider_reception: boolean;
     can_annuler: boolean;
     can_encaisser: boolean;
     created_at: string;
@@ -218,68 +229,16 @@ const toast = useToast();
 // ── Breadcrumbs ───────────────────────────────────────────────────────────────
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
-    { title: 'Ventes', href: '/backoffice/ventes' },
+    { title: 'Distribution', href: '/backoffice/distributions' },
     { title: props.commande.reference, href: '#' },
 ];
 
-// ── Popups véhicule / équipe ──────────────────────────────────────────────────
+// ── Popups véhicule / équipe / distributeur ───────────────────────────────────
 const vehiculeDialogVisible = ref(false);
 const equipeDialogVisible = ref(false);
 const clientDialogVisible = ref(false);
 
-// ── Formatage ─────────────────────────────────────────────────────────────────
-function formatPhone(
-    tel: string | null | undefined,
-    dialCode?: string | null,
-): string {
-    if (!tel) return '—';
-    const digits = tel.replace(/\D/g, '');
-    if (!digits) return '—';
-
-    let local: string | null = null;
-    let resolvedDial = dialCode?.replace(/\D/g, '') ?? null;
-
-    // Préfixe 00224 (ex: 0022462200...)
-    if (digits.startsWith('00224') && digits.length >= 14) {
-        local = digits.slice(5);
-        resolvedDial = '224';
-        // Préfixe 224 (ex: 22462200...)
-    } else if (digits.startsWith('224') && digits.length >= 12) {
-        local = digits.slice(3);
-        resolvedDial = '224';
-        // Numéro local 9 chiffres → Guinea par défaut
-    } else if (digits.length === 9) {
-        local = digits;
-        resolvedDial = resolvedDial ?? '224';
-        // Préfixe connu passé en paramètre
-    } else if (resolvedDial && digits.startsWith(resolvedDial)) {
-        local = digits.slice(resolvedDial.length);
-        // Heuristique : 11 chiffres → 2 chiffres indicatif + 9 local
-    } else if (digits.length === 11) {
-        resolvedDial = digits.slice(0, 2);
-        local = digits.slice(2);
-        // Heuristique : 12 chiffres non-Guinea → 3 chiffres indicatif + 9 local
-    } else if (digits.length === 12) {
-        resolvedDial = digits.slice(0, 3);
-        local = digits.slice(3);
-    }
-
-    if (!local) return tel;
-
-    if (resolvedDial === '224') {
-        return `+224 ${local.slice(0, 3)} ${local.slice(3, 5)} ${local.slice(5, 7)} ${local.slice(7, 9)}`;
-    }
-
-    const grouped = local.match(/.{1,2}/g)?.join(' ') ?? local;
-    return `+${resolvedDial} ${grouped}`;
-}
-
-function formatGNF(val: number | string | null | undefined): string {
-    const n = Math.round(Number(val ?? 0));
-    const s = n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-    return s + ' GNF';
-}
-
+// ── Helpers écart ─────────────────────────────────────────────────────────────
 function ecartClass(ecart: number | null): string {
     if (ecart === null || ecart === 0) return 'text-muted-foreground';
     return ecart < 0 ? 'text-red-600' : 'text-amber-600';
@@ -459,8 +418,9 @@ function relancerCommissions() {
     );
 }
 
-// ── Chargement dialog ─────────────────────────────────────────────────────────
+// ── Chargement / Réception dialogs ────────────────────────────────────────────
 const chargementDialogVisible = ref(false);
+const receptionDialogVisible = ref(false);
 
 // ── Annulation commande ───────────────────────────────────────────────────────
 const MOTIFS_ANNULATION = [
@@ -555,19 +515,9 @@ function submitEncaisser() {
     );
 }
 
-// ── Colonnes lignes conditionnelles ───────────────────────────────────────────
-const showChargeeCol = computed(
-    () => !props.commande.is_brouillon && !props.commande.is_a_charger,
-);
-const chargeeEtEcartColspan = computed(
-    () => 2 + (showChargeeCol.value ? 3 : 0) + 1,
-);
-
 // ── Prix affiché — "Prix appliqué" par ligne (cf. Ventes/Create.vue) : des lignes d'une même
-// commande peuvent relever de politiques de prix différentes (ex: un produit fabricable au
-// tarif Revendeur à côté d'un produit classique au prix de vente). L'origine est celle figée à
-// la création (prix_origine_snapshot) — jamais recalculée depuis les tarifs actuels du produit.
-// Repli sur mode_tarification_snapshot (globale) pour les lignes antérieures à ce snapshot.
+// commande peuvent relever de politiques de prix différentes. L'origine est celle figée à la
+// création (prix_origine_snapshot) — jamais recalculée depuis les tarifs actuels du produit.
 const prixUnitLabel = 'Prix appliqué';
 const totalColumnLabel = 'Total';
 const totalCommandeLabel = 'Total commande';
@@ -614,35 +564,36 @@ function printTicketCommande(): void {
 }
 
 // ── Timeline de progression ────────────────────────────────────────────────────
+// distribution_client uniquement : une étape "Réception" s'intercale entre "Livraison en cours"
+// et "Facturation", reflet visuel de validerReceptionDistribution() — jamais un nouveau statut,
+// calculé ici à partir du statut courant et de reception_validee_at (une commande de distribution
+// exige toujours un véhicule, cf. COMM-003 : pas de variante "commande directe" sur cette page).
 const STEPS = [
     { key: 'creee', shortLabel: 'Créée', icon: FileText },
     { key: 'a_charger', shortLabel: 'À charger', icon: Package },
     { key: 'chargement', shortLabel: 'Chargement en cours', icon: PackageOpen },
     { key: 'livraison', shortLabel: 'Livraison en cours', icon: Truck },
+    { key: 'reception', shortLabel: 'Réception', icon: PackageCheck },
     { key: 'facturation', shortLabel: 'Facturation', icon: Receipt },
     { key: 'commissions', shortLabel: 'Commissions', icon: HandCoins },
     { key: 'cloturee', shortLabel: 'Clôturée', icon: CheckCircle2 },
 ];
 
-const isCommandeDirecte = computed(() => !props.commande.vehicule_nom);
+const COMMISSIONS_STEP_IDX = 6;
 
 const currentStepIdx = computed(() => {
     if (props.commande.is_annulee) return -1;
-    if (isCommandeDirecte.value) {
-        if (props.commande.is_cloturee) return 6;
-        if (props.facture?.statut === 'payee') return 5;
-        return 4;
-    }
+    if (props.commande.is_cloturee) return 7;
     if (props.commande.is_livree) {
-        return props.facture?.statut === 'payee' ? 5 : 4;
+        return props.facture?.statut === 'payee' ? 6 : 5;
     }
     const map: Record<string, number> = {
         brouillon: 0,
         a_charger: 1,
         chargement_en_cours: 2,
-        livraison_en_cours: 3,
-        facturation: 4,
-        cloturee: 6,
+        // Le chargement est déjà validé : la Réception, pas "Livraison en cours" (déjà
+        // franchie), est l'étape actionnable courante tant que reception_validee_at est vide.
+        livraison_en_cours: 4,
     };
     return map[props.commande.statut] ?? 0;
 });
@@ -650,22 +601,18 @@ const currentStepIdx = computed(() => {
 function stepState(idx: number): 'done' | 'current' | 'future' {
     const cur = currentStepIdx.value;
     if (cur === -1) return 'future';
-    if (isCommandeDirecte.value && idx >= 1 && idx <= 3) return 'future';
     if (idx < cur) return 'done';
     if (idx === cur) return 'current';
     return 'future';
 }
 
 function connectorIsActive(idx: number): boolean {
-    if (currentStepIdx.value === -1) return false;
-    if (isCommandeDirecte.value && idx < 4) return false;
-    return idx < currentStepIdx.value;
+    return currentStepIdx.value !== -1 && idx < currentStepIdx.value;
 }
 
 // L'étape "Commissions" doit rester visuellement en anomalie tant que la dernière tentative de
 // génération a échoué — jamais confondue avec "en cours" (bleu) ou "faite" (vert), cf. incident
 // CMD-230826-004 où cet état n'était visible nulle part.
-const COMMISSIONS_STEP_IDX = 5;
 const commissionsEnErreur = computed(
     () => props.commission_generation_statut?.value === 'erreur',
 );
@@ -687,7 +634,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
         >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
-                    href="/backoffice/ventes"
+                    href="/backoffice/distributions"
                     class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
                 >
                     <ArrowLeft class="h-4 w-4" />
@@ -707,6 +654,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
                         commande.can_confirmer ||
                         commande.can_demarrer_chargement ||
                         commande.can_valider_chargement ||
+                        commande.can_valider_reception ||
                         commande.can_annuler
                     "
                     class="absolute right-4"
@@ -764,13 +712,22 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                 <CheckCircle class="h-4 w-4" />
                                 Valider le chargement
                             </DropdownMenuItem>
+                            <DropdownMenuItem
+                                v-if="commande.can_valider_reception"
+                                class="cursor-pointer text-blue-600 focus:text-blue-600"
+                                @click="receptionDialogVisible = true"
+                            >
+                                <CheckCircle class="h-4 w-4" />
+                                Valider la réception
+                            </DropdownMenuItem>
                             <DropdownMenuSeparator
                                 v-if="
                                     commande.can_annuler &&
                                     (commande.can_modifier ||
                                         commande.can_confirmer ||
                                         commande.can_demarrer_chargement ||
-                                        commande.can_valider_chargement)
+                                        commande.can_valider_chargement ||
+                                        commande.can_valider_reception)
                                 "
                             />
                             <DropdownMenuItem
@@ -788,10 +745,10 @@ function stepLabel(idx: number, defaultLabel: string): string {
         </div>
 
         <div class="space-y-5 px-4 py-6 sm:px-6">
-            <!-- En-tête commande ─────────────────────────────────────────────── -->
+            <!-- En-tête distribution ──────────────────────────────────────────── -->
             <div class="hidden items-start justify-between gap-4 sm:flex">
                 <div class="flex items-start gap-4">
-                    <Link href="/backoffice/ventes">
+                    <Link href="/backoffice/distributions">
                         <Button
                             variant="ghost"
                             size="icon"
@@ -804,7 +761,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
                         <p
                             class="text-xs font-semibold tracking-widest text-muted-foreground uppercase"
                         >
-                            Détail commande
+                            Détail distribution
                         </p>
                         <h1 class="font-mono text-2xl font-bold tracking-wide">
                             {{ commande.reference }}
@@ -875,6 +832,16 @@ function stepLabel(idx: number, defaultLabel: string): string {
                     >
                         <CheckCircle class="mr-2 h-4 w-4" />
                         Valider le chargement
+                    </Button>
+
+                    <!-- Valider la réception (livraison_en_cours) -->
+                    <Button
+                        v-if="commande.can_valider_reception"
+                        size="sm"
+                        @click="receptionDialogVisible = true"
+                    >
+                        <CheckCircle class="mr-2 h-4 w-4" />
+                        Valider la réception
                     </Button>
 
                     <!-- Annuler -->
@@ -1145,11 +1112,17 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                 <ExternalLink class="h-3 w-3 shrink-0" />
                             </button>
                             <p class="mt-0.5 text-xs text-muted-foreground">
-                                {{ formatPhone(commande.livreur_telephone) }}
+                                {{
+                                    formatPhoneDisplay(
+                                        commande.livreur_telephone,
+                                    )
+                                }}
                             </p>
                         </div>
                         <div>
-                            <p class="text-xs text-muted-foreground">Client</p>
+                            <p class="text-xs text-muted-foreground">
+                                Distributeur
+                            </p>
                             <button
                                 v-if="commande.client_detail"
                                 class="mt-0.5 flex items-center gap-1 font-medium text-primary hover:underline focus:outline-none"
@@ -1164,7 +1137,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                 class="mt-0.5 text-xs text-muted-foreground"
                             >
                                 {{
-                                    formatPhone(
+                                    formatPhoneDisplay(
                                         commande.client_detail.telephone,
                                         commande.client_detail.code_phone_pays,
                                     )
@@ -1238,21 +1211,35 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                         Demandée
                                     </th>
                                     <th
-                                        v-if="showChargeeCol"
                                         class="px-4 py-2.5 text-center font-medium text-muted-foreground"
                                         style="width: 80px"
                                     >
                                         Chargée
                                     </th>
                                     <th
-                                        v-if="showChargeeCol"
                                         class="px-4 py-2.5 text-center font-medium text-muted-foreground"
                                         style="width: 70px"
                                     >
                                         Écart
                                     </th>
                                     <th
-                                        v-if="showChargeeCol"
+                                        class="px-4 py-2.5 text-left font-medium text-muted-foreground"
+                                    >
+                                        Motif d'écart
+                                    </th>
+                                    <th
+                                        class="px-4 py-2.5 text-center font-medium text-muted-foreground"
+                                        style="width: 80px"
+                                    >
+                                        Reçue
+                                    </th>
+                                    <th
+                                        class="px-4 py-2.5 text-center font-medium text-muted-foreground"
+                                        style="width: 70px"
+                                    >
+                                        Écart
+                                    </th>
+                                    <th
                                         class="px-4 py-2.5 text-left font-medium text-muted-foreground"
                                     >
                                         Motif d'écart
@@ -1286,13 +1273,11 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                         {{ ligne.quantite_demandee }}
                                     </td>
                                     <td
-                                        v-if="showChargeeCol"
                                         class="px-4 py-3 text-center tabular-nums"
                                     >
                                         {{ ligne.quantite_chargee ?? '—' }}
                                     </td>
                                     <td
-                                        v-if="showChargeeCol"
                                         class="px-4 py-3 text-center font-semibold tabular-nums"
                                         :class="
                                             ecartClass(ligne.ecart_chargement)
@@ -1300,10 +1285,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                     >
                                         {{ ecartLabel(ligne.ecart_chargement) }}
                                     </td>
-                                    <td
-                                        v-if="showChargeeCol"
-                                        class="px-4 py-3 text-sm"
-                                    >
+                                    <td class="px-4 py-3 text-sm">
                                         <span
                                             v-if="ligne.type_ecart_label"
                                             class="text-foreground"
@@ -1319,6 +1301,45 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                             class="mt-0.5 text-xs text-muted-foreground"
                                         >
                                             {{ ligne.commentaire_ecart }}
+                                        </p>
+                                    </td>
+                                    <td
+                                        class="px-4 py-3 text-center tabular-nums"
+                                    >
+                                        {{ ligne.quantite_livree ?? '—' }}
+                                    </td>
+                                    <td
+                                        class="px-4 py-3 text-center font-semibold tabular-nums"
+                                        :class="
+                                            ecartClass(ligne.ecart_livraison)
+                                        "
+                                    >
+                                        {{ ecartLabel(ligne.ecart_livraison) }}
+                                    </td>
+                                    <td class="px-4 py-3 text-sm">
+                                        <span
+                                            v-if="
+                                                ligne.type_ecart_reception_label
+                                            "
+                                            class="text-foreground"
+                                            >{{
+                                                ligne.type_ecart_reception_label
+                                            }}</span
+                                        >
+                                        <span
+                                            v-else
+                                            class="text-muted-foreground"
+                                            >—</span
+                                        >
+                                        <p
+                                            v-if="
+                                                ligne.commentaire_ecart_reception
+                                            "
+                                            class="mt-0.5 text-xs text-muted-foreground"
+                                        >
+                                            {{
+                                                ligne.commentaire_ecart_reception
+                                            }}
                                         </p>
                                     </td>
                                     <td
@@ -1339,7 +1360,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
                             <tfoot>
                                 <tr class="border-t bg-muted/20">
                                     <td
-                                        :colspan="chargeeEtEcartColspan"
+                                        colspan="9"
                                         class="px-4 py-3 text-right text-sm font-semibold text-muted-foreground"
                                     >
                                         {{ totalColumnLabel }}
@@ -1947,7 +1968,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
                         >
                         <span class="text-sm font-medium">
                             {{
-                                formatPhone(
+                                formatPhoneDisplay(
                                     commande.vehicule_detail
                                         .proprietaire_telephone,
                                     commande.vehicule_detail
@@ -2020,7 +2041,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
                         }}</span>
                         <span class="text-sm text-muted-foreground">
                             {{
-                                formatPhone(
+                                formatPhoneDisplay(
                                     commande.equipe_detail.chauffeur.telephone,
                                 )
                             }}
@@ -2043,7 +2064,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
                     >
                         <span class="text-sm font-medium">{{ conv.nom }}</span>
                         <span class="text-sm text-muted-foreground">{{
-                            formatPhone(conv.telephone)
+                            formatPhoneDisplay(conv.telephone)
                         }}</span>
                     </div>
                 </div>
@@ -2058,11 +2079,11 @@ function stepLabel(idx: number, defaultLabel: string): string {
             </template>
         </Dialog>
 
-        <!-- Dialog Client -->
+        <!-- Dialog Détail distributeur -->
         <Dialog
             v-model:visible="clientDialogVisible"
             modal
-            header="Détail client"
+            header="Détail distributeur"
             :style="{ width: '28rem' }"
         >
             <div class="space-y-3 px-1 py-2">
@@ -2079,7 +2100,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
                     <span class="text-sm text-muted-foreground">Téléphone</span>
                     <span class="text-sm font-medium">
                         {{
-                            formatPhone(
+                            formatPhoneDisplay(
                                 commande.client_detail.telephone,
                                 commande.client_detail.code_phone_pays,
                             )
@@ -2142,6 +2163,14 @@ function stepLabel(idx: number, defaultLabel: string): string {
         <!-- Dialog Chargement -->
         <ChargementDialog
             v-model:visible="chargementDialogVisible"
+            :commande-id="commande.id"
+            :lignes="commande.lignes"
+            :types-ecart="TYPES_ECART"
+        />
+
+        <!-- Dialog Réception -->
+        <ReceptionDialog
+            v-model:visible="receptionDialogVisible"
             :commande-id="commande.id"
             :lignes="commande.lignes"
             :types-ecart="TYPES_ECART"

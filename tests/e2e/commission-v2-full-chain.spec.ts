@@ -126,14 +126,15 @@ export async function configurerPartageVehicule(page: Page): Promise<void> {
     await expect(dialog.getByText(new RegExp(CATEGORIE_NOM, 'i'))).toBeVisible({
         timeout: 10_000,
     });
-    await expect(
-        dialog.getByText(
-            new RegExp(
-                `${montantPattern(LIVRAISON_MONTANT)}.*unité.*Livreur`,
-                'i',
-            ),
+    const categorieRow = dialog
+        .getByRole('row')
+        .filter({ hasText: new RegExp(CATEGORIE_NOM, 'i') });
+    await expect(categorieRow).toContainText(
+        new RegExp(
+            `${montantPattern(LIVRAISON_MONTANT)}\\s*GNF\\s*/\\s*${montantPattern(LIVRAISON_MONTANT)}\\s*GNF`,
+            'i',
         ),
-    ).toBeVisible();
+    );
 
     // Un seul chauffeur : l'enveloppe entière lui revient automatiquement (cf.
     // initPartagesParCategorie()) — plus aucun pourcentage, "Répartition complète"
