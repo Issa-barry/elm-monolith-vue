@@ -25,6 +25,19 @@ enum NatureOperation: string
     }
 
     /**
+     * Préfixe de référence métier (cf. App\Services\ReferenceNumeroService) — décision produit du
+     * 31/08/2026 : les anciennes commandes gardent leur référence `CMD-...` telle quelle, seules
+     * les nouvelles commandes créées après ce chantier reçoivent VTE-/DST-.
+     */
+    public function prefixeReference(): string
+    {
+        return match ($this) {
+            self::VENTE_STANDARD => 'VTE',
+            self::DISTRIBUTION_CLIENT => 'DST',
+        };
+    }
+
+    /**
      * DISTRIBUTION_CLIENT seulement si le client est un distributeur ET qu'un véhicule de flotte
      * assure la livraison — sans véhicule, aucune équipe à commissionner en distribution, la
      * commande reste une vente standard (au tarif distributeur, cf. PrixVenteNatureResolver).

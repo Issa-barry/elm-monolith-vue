@@ -5,15 +5,16 @@ import {
     configurerPartageVehicule,
     creerVenteEtEncaisser,
     montantPattern,
-} from './commission-v2-full-chain.spec';
+} from './commission-v2-helpers';
 import { loginAsElmV2Demo, selectOptionFromCombobox } from './helpers';
 
 /**
  * Parcours direct depuis Comptabilité > Commissions > Ventes, sans passer par le menu Périodes
  * (cf. décision produit du 29/08/2026 : le comptable ne doit plus avoir besoin de connaître une
- * référence de période pour traiter une commission). Réutilise exactement la mise en place de
- * commission-v2-full-chain.spec.ts (mêmes barèmes/partage/vente/encaissement) jusqu'à l'obtention
- * d'une commission "À valider", puis exerce les deux actions ajoutées sur cet écran :
+ * référence de période pour traiter une commission). Réutilise exactement la mise en place
+ * partagée avec commission-v2-full-chain.spec.ts (mêmes barèmes/partage/vente/encaissement,
+ * cf. commission-v2-helpers.ts) jusqu'à l'obtention d'une commission "À valider", puis exerce
+ * les deux actions ajoutées sur cet écran :
  *
  *   Valider directement (checkbox/bouton, sans écran Ajustement véhicule)
  *   Ajuster (drawer, motif obligatoire, montant théorique conservé)

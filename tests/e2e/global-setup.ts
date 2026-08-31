@@ -77,7 +77,7 @@ export default async function globalSetup(config: FullConfig) {
 /**
  * Crée un transfert logistique via l'UI, l'amène jusqu'au statut RECEPTION
  * et génère la commission (montant_par_pack = 200 GNF, pré-rempli par défaut).
- * Retourne la référence du transfert (ex: "TR-00001-AMR").
+ * Retourne la référence du transfert (ex: "TRF-310826-001").
  */
 async function createTransfertAndGenerateCommission(
     page: Page,
@@ -117,11 +117,13 @@ async function createTransfertAndGenerateCommission(
 
     await page.waitForURL(/\/logistique\/[a-z0-9]+$/, { timeout: 30_000 });
 
-    // Extract reference displayed as "N° transfert : TR-XXXXX-YYY"
+    // Extract reference displayed as "N° transfert : TRF-JJMMAA-NNN" (format
+    // PREFIXE-JJMMAA-NNN généralisé le 31/08/2026, cf. ReferenceNumeroService —
+    // remplace l'ancien "TR-XXXXX-YYY").
     const refElement = page.locator(':text("N° transfert")').first();
     await refElement.waitFor({ state: 'visible', timeout: 10_000 });
     const refText = (await refElement.textContent()) ?? '';
-    const refMatch = refText.match(/TR-[A-Z0-9-]+/i);
+    const refMatch = refText.match(/TRF-\d{6}-\d{3}/i);
     if (!refMatch) {
         throw new Error(
             `Cannot extract transfert reference from page text: "${refText}"`,
