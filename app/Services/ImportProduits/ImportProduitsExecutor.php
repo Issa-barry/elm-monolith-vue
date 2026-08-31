@@ -9,6 +9,7 @@ use App\Models\ProduitVariante;
 use App\Models\User;
 use App\Services\AuditLogService;
 use App\Services\ProduitService;
+use App\Services\ProduitSeuilAlerteService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
@@ -29,6 +30,7 @@ class ImportProduitsExecutor
         private readonly ImportProduitsParser $parser,
         private readonly ProduitService $produitService,
         private readonly AuditLogService $auditService,
+        private readonly ProduitSeuilAlerteService $seuilAlerteService,
     ) {}
 
     public function executer(ImportProduits $import, User $actor): array
@@ -105,10 +107,22 @@ class ImportProduitsExecutor
 
     private function creerLigne(array &$ligne, ImportProduits $import, User $actor, array &$compteurs): void
     {
+        $donnees = $ligne['data'];
+        $seuilPresent = array_key_exists('seuil_alerte_stock', $donnees);
+        $seuilValeur = $donnees['seuil_alerte_stock'] ?? null;
+        unset($donnees['seuil_alerte_stock']);
+
         $produit = $this->produitService->creer([
-            ...$ligne['data'],
+            ...$donnees,
             'organization_id' => $import->organization_id,
         ]);
+
+        // Le fichier ne porte qu'une seule valeur par produit : appliquée à tous les sites actifs
+        // de l'organisation (préserve le comportement historique "s'applique à tous les sites"
+        // de l'ancienne colonne produits.seuil_alerte_stock, cf. ProduitSeuilAlerteService).
+        if ($seuilPresent) {
+            $this->seuilAlerteService->definirPourTousLesSitesActifs($produit, $seuilValeur);
+        }
 
         $varianteDefaut = $produit->variantes->firstWhere('is_default', true) ?? $produit->variantes->first();
         $ligne['sku'] = $varianteDefaut?->sku;
@@ -135,7 +149,16 @@ class ImportProduitsExecutor
 
         $avant = $this->snapshot($produit, $varianteAvant);
 
-        $produit = $this->produitService->mettreAJourSimple($produit, $ligne['data']);
+        $donnees = $ligne['data'];
+        $seuilPresent = array_key_exists('seuil_alerte_stock', $donnees);
+        $seuilValeur = $donnees['seuil_alerte_stock'] ?? null;
+        unset($donnees['seuil_alerte_stock']);
+
+        $produit = $this->produitService->mettreAJourSimple($produit, $donnees);
+
+        if ($seuilPresent) {
+            $this->seuilAlerteService->definirPourTousLesSitesActifs($produit, $seuilValeur);
+        }
 
         $varianteApres = $produit->variantes->firstWhere('is_default', true) ?? $produit->variantes->first();
         $apres = $this->snapshot($produit, $varianteApres);
@@ -169,7 +192,11 @@ class ImportProduitsExecutor
             'prix_vente' => $variante?->prix_vente,
             'cout' => $variante?->cout,
             'alerte_stock_active' => $produit->alerte_stock_active,
-            'seuil_alerte_stock' => $produit->seuil_alerte_stock,
+            // Reflète le seuil réellement appliqué (par site, cf. ProduitSeuilAlerteService),
+            // pas l'ancienne colonne produits.seuil_alerte_stock (figée, plus jamais écrite) :
+            // valeur uniforme si tous les sites actifs partagent le même seuil spécifique, sinon
+            // absente du diff (mixte ou par défaut, pas de valeur unique pertinente à afficher).
+            'seuil_alerte_stock' => $this->seuilAlerteService->valeurUniformePourSitesActifs($produit),
         ], fn ($v) => $v !== null && $v !== '');
     }
 

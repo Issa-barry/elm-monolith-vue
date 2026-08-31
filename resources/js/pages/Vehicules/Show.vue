@@ -22,6 +22,7 @@ import {
     TriangleAlert,
     Users,
 } from 'lucide-vue-next';
+import SelectButton from 'primevue/selectbutton';
 import Toast from 'primevue/toast';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
@@ -131,7 +132,23 @@ const props = defineProps<{
     default_proprietaire_id: string | null;
     seuil_global_impayes: number;
     baremes_commission_categories: BaremeCommissionCategorie[];
+    processus_actif: 'vente' | 'distribution_client' | 'logistique_transfert';
+    processus_options: { value: string; label: string }[];
 }>();
+
+// Changer d'onglet recharge la page : les barèmes/partages sont résolus côté serveur pour le
+// processus demandé, jamais un fallback silencieux vers un autre (cf. Paramètres > Commissions,
+// même pattern). Le formulaire équipe encore ouvert est perdu au changement d'onglet.
+function onProcessusChange(code: string | null): void {
+    if (!code || code === props.processus_actif) {
+        return;
+    }
+    router.get(
+        `/backoffice/vehicules/${props.vehicule.id}`,
+        { processus: code },
+        { preserveScroll: true },
+    );
+}
 
 const { can } = usePermissions();
 const page = usePage();
@@ -654,11 +671,23 @@ function formatGNF(val: number): string {
                             v-if="equipe && vehicule.equipe_membres.length > 0"
                             class="mt-2 space-y-2"
                         >
-                            <p
-                                class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                            <div
+                                class="flex flex-wrap items-center justify-between gap-2"
                             >
-                                Barèmes de commission
-                            </p>
+                                <p
+                                    class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                                >
+                                    Barèmes de commission
+                                </p>
+                                <SelectButton
+                                    :model-value="processus_actif"
+                                    :options="processus_options"
+                                    option-label="label"
+                                    option-value="value"
+                                    class="text-xs"
+                                    @update:model-value="onProcessusChange"
+                                />
+                            </div>
                             <div
                                 v-if="
                                     baremes_commission_categories.length === 0
@@ -812,5 +841,7 @@ function formatGNF(val: number): string {
         :equipe="equipe"
         :proprietaires="proprietaires"
         :baremes-commission-categories="baremes_commission_categories"
+        :processus-actif="processus_actif"
+        :processus-options="processus_options"
     />
 </template>

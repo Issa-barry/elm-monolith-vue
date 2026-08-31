@@ -6,16 +6,22 @@ use App\Enums\StockStatut;
 use App\Models\Organization;
 use App\Models\Parametre;
 use App\Models\Produit;
+use App\Models\ProduitSeuilAlerte;
 use App\Models\ProduitType;
+use App\Models\Site;
+use App\Models\VarianteStock;
+use App\Services\ProduitService;
 use App\Services\StockStatutService;
 use Database\Seeders\ProduitTypeDefaultSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
- * Couvre la règle centrale du chantier "alerte stock" : le seuil vient du PRODUIT, la
- * quantité et l'état vivent au niveau VARIANTE × SITE — un stock confortable ailleurs
- * (autre variante, autre site, total organisation) ne doit jamais masquer une alerte locale.
+ * Couvre la règle centrale du chantier "alerte stock" (revue le 29/08/2026 — seuil par SITE) :
+ * le seuil vient du couple (PRODUIT, SITE), la quantité et l'état vivent au niveau
+ * VARIANTE × SITE — un stock confortable ailleurs (autre variante, autre site, total
+ * organisation) ne doit jamais masquer une alerte locale, et le seuil d'un site ne doit jamais
+ * s'appliquer à un autre site.
  */
 class StockStatutServiceTest extends TestCase
 {
@@ -78,23 +84,29 @@ class StockStatutServiceTest extends TestCase
         $this->assertSame(StockStatut::DISPONIBLE, $this->service->statutPour(5, 0, true));
     }
 
-    // ── seuilEffectif() : repli sur le seuil global de l'organisation ──────────
+    // ── seuilEffectifPourSite() : seuil du SITE, repli sur le seuil global ──────
 
-    public function test_seuil_effectif_utilise_le_seuil_produit_si_defini(): void
+    public function test_seuil_effectif_pour_site_utilise_le_seuil_specifique_de_ce_site_si_defini(): void
     {
         $org = Organization::factory()->create();
         ProduitTypeDefaultSeeder::seedPourOrganisation($org->id);
         $type = ProduitType::where('organization_id', $org->id)->where('code', 'materiel')->first();
+        $site = Site::create(['organization_id' => $org->id, 'nom' => 'Matoto', 'type' => 'depot', 'localisation' => 'Matoto']);
 
         $produit = Produit::create([
             'organization_id' => $org->id,
             'nom' => 'Produit test',
             'produit_type_id' => $type->id,
             'statut' => 'actif',
+        ]);
+        ProduitSeuilAlerte::create([
+            'organization_id' => $org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $site->id,
             'seuil_alerte_stock' => 5,
         ]);
 
-        $this->assertSame(5, $this->service->seuilEffectif($produit));
+        $this->assertSame(5, $this->service->seuilEffectifPourSite($produit, $site->id));
     }
 
     private function setSeuilGlobal(string $orgId, int $valeur): void
@@ -110,11 +122,12 @@ class StockStatutServiceTest extends TestCase
         ]);
     }
 
-    public function test_seuil_effectif_replie_sur_le_seuil_global_si_absent(): void
+    public function test_seuil_effectif_pour_site_replie_sur_le_seuil_global_si_aucun_specifique(): void
     {
         $org = Organization::factory()->create();
         ProduitTypeDefaultSeeder::seedPourOrganisation($org->id);
         $type = ProduitType::where('organization_id', $org->id)->where('code', 'materiel')->first();
+        $site = Site::create(['organization_id' => $org->id, 'nom' => 'Sonfonia', 'type' => 'depot', 'localisation' => 'Sonfonia']);
         $this->setSeuilGlobal($org->id, 20);
 
         $produit = Produit::create([
@@ -122,10 +135,36 @@ class StockStatutServiceTest extends TestCase
             'nom' => 'Produit sans seuil',
             'produit_type_id' => $type->id,
             'statut' => 'actif',
-            'seuil_alerte_stock' => null,
         ]);
 
-        $this->assertSame(20, $this->service->seuilEffectif($produit));
+        $this->assertSame(20, $this->service->seuilEffectifPourSite($produit, $site->id));
+    }
+
+    public function test_seuil_specifique_dun_site_ne_saplique_jamais_a_un_autre_site(): void
+    {
+        $org = Organization::factory()->create();
+        ProduitTypeDefaultSeeder::seedPourOrganisation($org->id);
+        $type = ProduitType::where('organization_id', $org->id)->where('code', 'materiel')->first();
+        $this->setSeuilGlobal($org->id, 10);
+        $matoto = Site::create(['organization_id' => $org->id, 'nom' => 'Matoto', 'type' => 'depot', 'localisation' => 'Matoto']);
+        $cba = Site::create(['organization_id' => $org->id, 'nom' => 'CBA', 'type' => 'depot', 'localisation' => 'CBA']);
+
+        $produit = Produit::create([
+            'organization_id' => $org->id,
+            'nom' => 'Produit multi-sites',
+            'produit_type_id' => $type->id,
+            'statut' => 'actif',
+        ]);
+        ProduitSeuilAlerte::create([
+            'organization_id' => $org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $matoto->id,
+            'seuil_alerte_stock' => 1000,
+        ]);
+
+        $this->assertSame(1000, $this->service->seuilEffectifPourSite($produit, $matoto->id));
+        // CBA n'a aucun seuil spécifique : repli sur le seuil global, jamais celui de Matoto.
+        $this->assertSame(10, $this->service->seuilEffectifPourSite($produit, $cba->id));
     }
 
     public function test_deux_organisations_ont_des_seuils_globaux_independants(): void
@@ -139,11 +178,55 @@ class StockStatutServiceTest extends TestCase
 
         $typeA = ProduitType::where('organization_id', $orgA->id)->where('code', 'materiel')->first();
         $typeB = ProduitType::where('organization_id', $orgB->id)->where('code', 'materiel')->first();
+        $siteA = Site::create(['organization_id' => $orgA->id, 'nom' => 'Site A', 'type' => 'depot', 'localisation' => 'A']);
+        $siteB = Site::create(['organization_id' => $orgB->id, 'nom' => 'Site B', 'type' => 'depot', 'localisation' => 'B']);
 
         $produitA = Produit::create(['organization_id' => $orgA->id, 'nom' => 'A', 'produit_type_id' => $typeA->id, 'statut' => 'actif']);
         $produitB = Produit::create(['organization_id' => $orgB->id, 'nom' => 'B', 'produit_type_id' => $typeB->id, 'statut' => 'actif']);
 
-        $this->assertSame(5, $this->service->seuilEffectif($produitA));
-        $this->assertSame(50, $this->service->seuilEffectif($produitB));
+        $this->assertSame(5, $this->service->seuilEffectifPourSite($produitA, $siteA->id));
+        $this->assertSame(50, $this->service->seuilEffectifPourSite($produitB, $siteB->id));
+    }
+
+    // ── compterAlertesPourOrganisation() : badge sidebar, seuil résolu par site ─
+
+    public function test_compter_alertes_pour_organisation_resout_le_seuil_du_bon_site(): void
+    {
+        $org = Organization::factory()->create();
+        ProduitTypeDefaultSeeder::seedPourOrganisation($org->id);
+        $type = ProduitType::where('organization_id', $org->id)->where('code', 'achat_vente')->firstOrFail();
+        $matoto = Site::create(['organization_id' => $org->id, 'nom' => 'Matoto', 'type' => 'depot', 'localisation' => 'Matoto']);
+        $cba = Site::create(['organization_id' => $org->id, 'nom' => 'CBA', 'type' => 'depot', 'localisation' => 'CBA']);
+
+        $produit = app(ProduitService::class)->creer([
+            'organization_id' => $org->id,
+            'nom' => 'Eau minérale',
+            'produit_type_id' => $type->id,
+            'statut' => 'actif',
+            'prix_achat' => 1000,
+            'prix_vente' => 1500,
+            'alerte_stock_active' => true,
+        ]);
+        $variante = $produit->variantePrincipale()->first();
+
+        ProduitSeuilAlerte::create([
+            'organization_id' => $org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $matoto->id,
+            'seuil_alerte_stock' => 1000,
+        ]);
+        // CBA n'a aucun seuil spécifique : repli sur le seuil global (10 par défaut).
+
+        // Même quantité (900) sur les deux sites, mais un seul doit compter comme "faible" :
+        // celui dont le seuil SPÉCIFIQUE (1000) dépasse la quantité — jamais celui de l'autre
+        // site (10, qui ne déclencherait rien pour 900).
+        VarianteStock::create(['organization_id' => $org->id, 'produit_variante_id' => $variante->id, 'site_id' => $matoto->id, 'qte_stock' => 900]);
+        VarianteStock::create(['organization_id' => $org->id, 'produit_variante_id' => $variante->id, 'site_id' => $cba->id, 'qte_stock' => 900]);
+
+        $resultat = $this->service->compterAlertesPourOrganisation($org->id);
+
+        $this->assertSame(0, $resultat['ruptures']);
+        $this->assertSame(1, $resultat['faibles']);
+        $this->assertSame(1, $resultat['total']);
     }
 }

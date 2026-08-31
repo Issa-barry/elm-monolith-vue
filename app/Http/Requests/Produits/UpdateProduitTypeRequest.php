@@ -46,6 +46,10 @@ class UpdateProduitTypeRequest extends FormRequest
             if (! $requis) {
                 $v->errors()->add('champ_prix_reference', 'Le champ de référence pour la marge doit faire partie des prix obligatoires de ce type.');
             }
+            $venteRequis = $this->has('prix_vente_requis') ? $this->boolean('prix_vente_requis') : (bool) $type->prix_vente_requis;
+            if (! $venteRequis) {
+                $v->errors()->add('champ_prix_reference', 'Le prix de vente doit être obligatoire pour ce type si un champ de référence de marge est défini.');
+            }
         });
     }
 

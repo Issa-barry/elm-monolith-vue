@@ -82,6 +82,8 @@ const props = defineProps<{
     filtre_telephone: string;
     filtre_statut: string;
     filtre_site_ids: string[];
+    filtre_processus: string;
+    processus_options: { value: string; label: string }[];
     selected_periode: string;
     periodes_disponibles: PeriodeOption[];
     periode_courante: string;
@@ -101,6 +103,13 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const filterFields = computed((): FilterField[] => [
     {
+        key: 'processus',
+        label: 'Processus',
+        type: 'select' as const,
+        inline: true,
+        options: props.processus_options,
+    },
+    {
         key: 'nom',
         label: 'Nom complet',
         type: 'text' as const,
@@ -117,7 +126,7 @@ const filterFields = computed((): FilterField[] => [
         label: 'Statut',
         type: 'select' as const,
         options: [
-            { value: 'creee', label: 'Créée — en attente de période' },
+            { value: 'creee', label: 'À valider' },
             { value: 'impaye', label: 'Impayé' },
             { value: 'partiel', label: 'Partiel' },
             { value: 'paye', label: 'Payé' },
@@ -140,6 +149,7 @@ const currentFilters = computed(() => ({
     telephone: props.filtre_telephone ?? '',
     statut: props.filtre_statut ?? '',
     periode: props.selected_periode ?? '',
+    processus: props.filtre_processus ?? 'vente',
 }));
 
 // Dialog paiement
@@ -213,6 +223,7 @@ function buildParams(): URLSearchParams {
     if (props.filtre_statut) params.set('statut', props.filtre_statut);
     if (props.filtre_nom) params.set('nom', props.filtre_nom);
     if (props.filtre_telephone) params.set('telephone', props.filtre_telephone);
+    if (props.filtre_processus) params.set('processus', props.filtre_processus);
     return params;
 }
 
@@ -249,14 +260,6 @@ const indexSummary = computed<CommissionIndexSummary>(() => ({
     remaining: props.kpis.solde_total,
     paid: props.kpis.total_verse,
 }));
-
-function statusValue(b: BeneficiaireRow): string {
-    return b.statut_global === 'creee' ? 'en_attente' : b.display_status;
-}
-
-function statusLabel(b: BeneficiaireRow): string {
-    return b.statut_global === 'creee' ? 'Partage à valider' : b.display_label;
-}
 
 function fmt(val: number | null | undefined) {
     return (
@@ -383,7 +386,7 @@ function fmtTel(tel: string | null | undefined): string {
                     <ClickableTableRow
                         v-for="b in beneficiaires"
                         :key="b.beneficiaire_id"
-                        :href="`/backoffice/comptabilite/commissions/proprietaires/${b.beneficiaire_id}`"
+                        :href="`/backoffice/comptabilite/commissions/proprietaires/${b.beneficiaire_id}?processus=${currentFilters.processus}`"
                         :aria-label="`Voir le détail de ${b.beneficiaire_nom}`"
                         class="group even:bg-muted/20"
                     >
@@ -477,8 +480,8 @@ function fmtTel(tel: string | null | undefined): string {
                         </td>
                         <td class="px-4 py-3">
                             <StatusDot
-                                :status="statusValue(b)"
-                                :label="statusLabel(b)"
+                                :status="b.display_status"
+                                :label="b.display_label"
                             />
                         </td>
                         <td
@@ -498,7 +501,7 @@ function fmtTel(tel: string | null | undefined): string {
                                 <DropdownMenuContent align="end">
                                     <DropdownMenuItem as-child>
                                         <Link
-                                            :href="`/backoffice/comptabilite/commissions/proprietaires/${b.beneficiaire_id}`"
+                                            :href="`/backoffice/comptabilite/commissions/proprietaires/${b.beneficiaire_id}?processus=${currentFilters.processus}`"
                                             class="flex w-full cursor-pointer items-center"
                                         >
                                             Détail

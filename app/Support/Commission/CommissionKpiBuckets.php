@@ -10,8 +10,14 @@ use Illuminate\Support\Collection;
  * Ventile un ensemble de CommissionEnveloppePart (V2) en 4 compartiments mutuellement exclusifs
  * qui se somment exactement au total généré — décision produit du 20/08/2026 (« visible ne veut
  * pas dire payable ») : une commission CREEE existe déjà en base et doit rester visible/comptée,
- * mais ne doit jamais entrer dans le montant réellement exigible tant que sa période n'est pas
- * validée.
+ * mais ne doit jamais être présentée comme *payable* tant que sa période n'est pas validée.
+ *
+ * Ces compartiments restent la source de vérité pour ce qui est *payable* (et donc pour le
+ * statut affiché, cf. $statutGlobal dans CommissionVenteController). Ils sont indépendants du
+ * *montant retenu courant* (net_a_payer/reste_a_payer, cf. CommissionVenteCalculatorService::
+ * calculerResume()) : depuis la décision produit du 29/08/2026, ce montant est calculé sur
+ * TOUTES les parts actives (CREEE incluse) — la validation conditionne le droit au paiement,
+ * jamais l'affichage du montant réel actuellement retenu.
  *
  * - total_genere       : Σ montant_a_payer, tous statuts sauf ANNULEE (une commission annulée
  *                         n'a jamais représenté de créance réelle — comportement déjà établi

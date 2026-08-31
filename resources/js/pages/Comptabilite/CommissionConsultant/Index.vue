@@ -53,6 +53,8 @@ const props = defineProps<{
     search: string;
     filtre_statut: string;
     filtre_consultant_id: string;
+    filtre_processus: string;
+    processus_options: { value: string; label: string }[];
     selected_periode: string;
     periodes_disponibles: PeriodeOption[];
     consultants_options: { value: string; label: string }[];
@@ -72,11 +74,18 @@ const search = ref(props.search ?? '');
 
 const filterFields = computed((): FilterField[] => [
     {
+        key: 'processus',
+        label: 'Processus',
+        type: 'select' as const,
+        inline: true,
+        options: props.processus_options,
+    },
+    {
         key: 'statut',
         label: 'Statut',
         type: 'select' as const,
         options: [
-            { value: 'creee', label: 'Créée' },
+            { value: 'creee', label: 'À valider' },
             { value: 'impaye', label: 'Impayé' },
             { value: 'partiel', label: 'Partiel' },
             { value: 'paye', label: 'Payé' },
@@ -105,6 +114,7 @@ const currentFilters = computed(() => ({
     statut: props.filtre_statut ?? '',
     periode: props.selected_periode ?? '',
     consultant_id: props.filtre_consultant_id ?? '',
+    processus: props.filtre_processus ?? 'vente',
 }));
 
 const showAudit = ref(false);
@@ -123,6 +133,7 @@ function buildParams(): URLSearchParams {
     if (props.filtre_statut) params.set('statut', props.filtre_statut);
     if (props.filtre_consultant_id)
         params.set('consultant_id', props.filtre_consultant_id);
+    if (props.filtre_processus) params.set('processus', props.filtre_processus);
     if (search.value) params.set('search', search.value);
     return params;
 }
@@ -256,7 +267,7 @@ function fmt(val: number | null | undefined) {
                     <ClickableTableRow
                         v-for="b in beneficiaires"
                         :key="b.beneficiaire_id"
-                        :href="`/backoffice/comptabilite/commissions/consultants/${b.beneficiaire_id}`"
+                        :href="`/backoffice/comptabilite/commissions/consultants/${b.beneficiaire_id}?processus=${currentFilters.processus}`"
                         :aria-label="`Voir le détail de ${b.beneficiaire_nom}`"
                         class="even:bg-muted/20"
                     >
@@ -321,7 +332,11 @@ function fmt(val: number | null | undefined) {
                         </td>
                         <td class="px-4 py-3">
                             <StatusDot
-                                :status="b.statut_global"
+                                :status="
+                                    b.statut_global === 'creee'
+                                        ? 'en_attente'
+                                        : b.statut_global
+                                "
                                 :label="b.statut_label"
                             />
                         </td>

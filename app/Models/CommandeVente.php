@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\CommissionGenerationStatut;
 use App\Enums\ModeTarification;
+use App\Enums\NatureOperation;
 use App\Enums\StatutCommandeVente;
 use App\Services\CommandeNumeroService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -32,6 +33,7 @@ class CommandeVente extends Model
         'total_commande',
         'mode_tarification_snapshot',
         'commission_eligible_snapshot',
+        'nature_operation',
         'statut',
         'motif_annulation',
         'annulee_at',
@@ -55,6 +57,7 @@ class CommandeVente extends Model
             'total_commande' => 'decimal:2',
             'mode_tarification_snapshot' => ModeTarification::class,
             'commission_eligible_snapshot' => 'boolean',
+            'nature_operation' => NatureOperation::class,
             'statut' => StatutCommandeVente::class,
             'annulee_at' => 'datetime',
             'a_charger_at' => 'datetime',

@@ -9,6 +9,7 @@ use App\Enums\CommissionGenerationDeclenchePar;
 use App\Enums\CommissionGenerationStatut;
 use App\Enums\ModeTarification;
 use App\Enums\MotifAnnulation;
+use App\Enums\NatureOperation;
 use App\Enums\PrixOrigine;
 use App\Enums\ProduitStatut;
 use App\Enums\StatutCommandeVente;
@@ -247,6 +248,13 @@ class CommandeVenteController extends Controller
             $query->whereHas('client', fn ($q) => $q->where('telephone', 'like', "%{$clientTel}%"));
         }
 
+        // Distribution : même liste, même contrôleur, filtrée par nom de route (fait serveur,
+        // jamais un paramètre modifiable côté client) — cf. routes/web.php.
+        $natureFiltree = $request->route()?->getName() === 'distributions.index'
+            ? NatureOperation::DISTRIBUTION_CLIENT
+            : NatureOperation::VENTE_STANDARD;
+        $query->where('nature_operation', $natureFiltree->value);
+
         $commandes = $query->get();
         $nonAnnulees = $commandes->filter(fn ($c) => ! $c->isAnnulee());
         $cloturees = $commandes->filter(fn ($c) => $c->isCloturee());
@@ -289,6 +297,8 @@ class CommandeVenteController extends Controller
         return Inertia::render('Ventes/Index', [
             'commandes' => $mapped->values(),
             'totaux' => $totaux,
+            'nature_filtree' => $natureFiltree->value,
+            'page_title' => $natureFiltree === NatureOperation::DISTRIBUTION_CLIENT ? 'Distribution' : 'Ventes',
             'periode' => $periode,
             'statuts_actifs' => $statuts,
             'statuts' => StatutCommandeVente::options(),
@@ -355,6 +365,7 @@ class CommandeVenteController extends Controller
         $data = $request->validate($this->commandeValidationRules(), $this->commandeValidationMessages());
 
         $this->ensureVehiculeOrClientSelected($data);
+        $this->ensureNatureOperationCoherente($data);
         $this->ensureQuantiteMatchesVehiculeCapacity($data);
         $client = $this->resolveClientForTarification($data['client_id'] ?? null);
         $this->enforcePrixVentePolicy($data, null, $client);
@@ -388,6 +399,8 @@ class CommandeVenteController extends Controller
                 'total_commande' => $totalCommande,
                 'mode_tarification_snapshot' => $context->modeTarification->value,
                 'commission_eligible_snapshot' => $context->commissionEligible,
+                'nature_operation' => $data['nature_operation']
+                    ?? NatureOperation::deriverParDefaut($client?->type, $data['vehicule_id'] ?? null)->value,
                 'created_by' => auth()->id(),
             ]);
 
@@ -489,6 +502,8 @@ class CommandeVenteController extends Controller
                 'mode_tarification_snapshot' => $commande->mode_tarification_snapshot?->value,
                 'mode_tarification_label' => $commande->mode_tarification_snapshot?->label(),
                 'commission_eligible_snapshot' => (bool) $commande->commission_eligible_snapshot,
+                'nature_operation' => $commande->nature_operation?->value,
+                'nature_operation_label' => $commande->nature_operation?->label(),
                 'vehicule_nom' => $commande->vehicule?->nom_vehicule,
                 'vehicule_detail' => $vehicule ? [
                     'nom' => $vehicule->nom_vehicule,
@@ -812,8 +827,16 @@ class CommandeVenteController extends Controller
             return null;
         }
 
+        // Route par nature_operation — jamais un CODE_VENTE codé en dur (correctif du
+        // 30/08/2026 : une commande distribution_client ne remontait jamais son état "à
+        // régulariser", puisque sa CommissionGenerationAttempt est rattachée au processus
+        // distribution_client, pas vente — l'alerte restait invisible dans l'UI).
+        $processusCode = $commande->nature_operation === NatureOperation::DISTRIBUTION_CLIENT
+            ? CommissionProcessus::CODE_DISTRIBUTION_CLIENT
+            : CommissionProcessus::CODE_VENTE;
+
         $processusId = CommissionProcessus::where('organization_id', $commande->organization_id)
-            ->where('code', CommissionProcessus::CODE_VENTE)
+            ->where('code', $processusCode)
             ->value('id');
 
         if (! $processusId) {
@@ -874,6 +897,7 @@ class CommandeVenteController extends Controller
             'statut' => $c->statut?->value,
             'statut_label' => $c->statut_label,
             'statut_color' => $c->statut?->color(),
+            'nature_operation' => $c->nature_operation?->value,
             'total_commande' => (float) $c->total_commande,
             'vehicule_nom' => $c->vehicule?->nom_vehicule,
             'vehicule_immatriculation' => $c->vehicule?->immatriculation,
@@ -913,6 +937,7 @@ class CommandeVenteController extends Controller
         return [
             'vehicule_id' => 'nullable|exists:vehicules,id',
             'client_id' => 'nullable|exists:clients,id',
+            'nature_operation' => ['nullable', Rule::in(NatureOperation::values())],
             // Véhicule partenaire facultatif — jamais un substitut à vehicule_id (flotte gérée),
             // cf. ClientVehicle. Doit appartenir au client sélectionné.
             'client_vehicule_id' => [
@@ -956,6 +981,21 @@ class CommandeVenteController extends Controller
             'vehicule_id' => 'Veuillez sélectionner un véhicule ou un client.',
             'client_id' => 'Veuillez sélectionner un véhicule ou un client.',
         ]);
+    }
+
+    /**
+     * Backend, source de vérité — le frontend désactive déjà l'option, mais la règle métier
+     * (distribution client = véhicule de livraison ELM obligatoire, aucune équipe sinon à
+     * commissionner) ne doit jamais reposer uniquement sur le formulaire.
+     */
+    private function ensureNatureOperationCoherente(array $data): void
+    {
+        if (($data['nature_operation'] ?? null) === NatureOperation::DISTRIBUTION_CLIENT->value
+            && empty($data['vehicule_id'])) {
+            throw ValidationException::withMessages([
+                'nature_operation' => 'Une distribution client nécessite un véhicule de livraison.',
+            ]);
+        }
     }
 
     private function ensureQuantiteMatchesVehiculeCapacity(array $data): void
@@ -1127,6 +1167,7 @@ class CommandeVenteController extends Controller
             'total_commande' => (float) $commande->total_commande,
             'mode_tarification_snapshot' => $commande->mode_tarification_snapshot?->value,
             'commission_eligible_snapshot' => (bool) $commande->commission_eligible_snapshot,
+            'nature_operation' => $commande->nature_operation?->value,
             'statut' => $commande->statut?->value,
             'lignes' => $commande->lignes->map(fn ($l) => [
                 'variante_id' => $l->variante_id,
@@ -1304,6 +1345,7 @@ class CommandeVenteController extends Controller
                 'id' => $v->id,
                 'nom_vehicule' => $v->nom_vehicule,
                 'immatriculation' => $v->immatriculation,
+                'type_vehicule_nom' => $v->typeVehicule?->nom,
                 // Plafonds par catégorie de produit (Sachet eau, Bouteille, ...), propres à ce
                 // véhicule — aucun héritage depuis le type, même calcul que le contrôle serveur
                 // (VehiculeCapaciteService::capacitesParCategorie), pour que le frontend affiche
@@ -1313,6 +1355,14 @@ class CommandeVenteController extends Controller
                 'livreur_telephone' => $v->equipe?->membres
                     ->firstWhere('role', 'chauffeur')
                     ?->livreur?->telephone,
+                'equipe_membres' => $v->equipe?->membres
+                    ->map(fn ($membre) => [
+                        'id' => $membre->id,
+                        'nom' => $membre->livreur?->libelleAffichage() ?? 'Livreur',
+                        'telephone' => $membre->livreur?->telephone,
+                        'role' => $membre->role,
+                    ])
+                    ->values() ?? [],
             ]);
     }
 

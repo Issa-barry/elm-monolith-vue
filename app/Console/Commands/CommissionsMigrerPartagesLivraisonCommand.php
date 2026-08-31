@@ -131,6 +131,7 @@ class CommissionsMigrerPartagesLivraisonCommand extends Command
 
                         EquipeLivraisonPartageCategorie::create([
                             'equipe_id' => $membre->equipe_id,
+                            'processus_id' => $membre->processus_id,
                             'categorie_id' => $membre->categorie_id,
                             'livreur_id' => $membre->livreur_id,
                             'part_pourcentage' => 0,

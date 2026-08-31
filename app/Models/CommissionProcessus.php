@@ -21,6 +21,8 @@ class CommissionProcessus extends Model
 
     public const CODE_VENTE = 'vente';
 
+    public const CODE_DISTRIBUTION_CLIENT = 'distribution_client';
+
     public const CODE_LOGISTIQUE_TRANSFERT = 'logistique_transfert';
 
     protected $table = 'commission_processus';

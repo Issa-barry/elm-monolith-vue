@@ -165,6 +165,8 @@ const props = defineProps<{
     can_update: boolean;
     can_generer_commission: boolean;
     can_valider_reception_admin: boolean;
+    commission_moteur_generique: boolean;
+    montant_defaut_commission_logistique_par_pack: number;
     activites: Activite[];
 }>();
 
@@ -504,7 +506,9 @@ const partLivreurTotal = computed(() => livreurTotals.value.net);
 
 const showValidationCommissionDialog = ref(false);
 const validationEtape = ref<'review' | 'montant'>('review');
-const montantParPack = ref<number>(200);
+const montantParPack = ref<number>(
+    props.montant_defaut_commission_logistique_par_pack,
+);
 const validationProcessing = ref(false);
 const validationErrors = ref<string[]>([]);
 
@@ -515,7 +519,8 @@ const totalCommissionPreview = computed(
 watch(showValidationCommissionDialog, (open) => {
     if (open) {
         validationEtape.value = 'review';
-        montantParPack.value = 200;
+        montantParPack.value =
+            props.montant_defaut_commission_logistique_par_pack;
         validationErrors.value = [];
     }
 });
@@ -525,7 +530,12 @@ function submitValiderAccord() {
     validationErrors.value = [];
     router.post(
         `/backoffice/logistique/${props.transfert.id}/validation-reception`,
-        { decision: 'accord', montant_par_pack: montantParPack.value },
+        {
+            decision: 'accord',
+            montant_par_pack: props.commission_moteur_generique
+                ? null
+                : montantParPack.value,
+        },
         {
             onSuccess: () => {
                 showValidationCommissionDialog.value = false;
@@ -1190,8 +1200,12 @@ function activiteDotClass(action: string): string {
                                 <p class="mt-1 text-xs">
                                     Un administrateur doit approuver cette
                                     réception pour que la commission soit
-                                    générée automatiquement (200 FG × packs
-                                    reçus).
+                                    générée automatiquement
+                                    {{
+                                        commission_moteur_generique
+                                            ? 'selon le barème configuré (Paramètres > Commissions).'
+                                            : `(${montant_defaut_commission_logistique_par_pack} FG × packs reçus).`
+                                    }}
                                 </p>
                             </div>
                         </div>
@@ -1751,7 +1765,15 @@ function activiteDotClass(action: string): string {
                         <ShieldX class="mr-1.5 h-3.5 w-3.5" />
                         Non, renvoyer pour correction
                     </Button>
-                    <Button size="sm" @click="validationEtape = 'montant'">
+                    <Button
+                        size="sm"
+                        :disabled="validationProcessing"
+                        @click="
+                            commission_moteur_generique
+                                ? submitValiderAccord()
+                                : (validationEtape = 'montant')
+                        "
+                    >
                         <ShieldCheck class="mr-1.5 h-3.5 w-3.5" />
                         Oui, générer la commission
                     </Button>

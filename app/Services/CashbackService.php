@@ -2,16 +2,48 @@
 
 namespace App\Services;
 
+use App\Enums\StatutDepense;
 use App\Models\CashbackSolde;
 use App\Models\CashbackTransaction;
 use App\Models\CashbackVersement;
 use App\Models\Client;
 use App\Models\CommandeVente;
+use App\Models\Depense;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
 class CashbackService
 {
+    /**
+     * Solde net encore versable au client. Les dépenses validées utilisent le flux commun
+     * Depense et sont déduites une seule fois du cumul des gains validés du client.
+     */
+    public function montantDisponibleClient(string $organizationId, string $clientId): int
+    {
+        $gainsValides = (int) CashbackTransaction::where('organization_id', $organizationId)
+            ->where('client_id', $clientId)
+            ->gains()
+            ->whereIn('statut', [
+                CashbackTransaction::STATUT_VALIDE,
+                CashbackTransaction::STATUT_PARTIEL,
+                CashbackTransaction::STATUT_VERSE,
+            ])
+            ->sum('montant');
+
+        $verse = (int) CashbackVersement::whereHas('transaction', fn ($query) => $query
+            ->where('organization_id', $organizationId)
+            ->where('client_id', $clientId))
+            ->sum('montant');
+
+        $depenses = (int) Depense::where('organization_id', $organizationId)
+            ->where('beneficiaire_type', 'client')
+            ->where('beneficiaire_id', $clientId)
+            ->where('statut', StatutDepense::VALIDE->value)
+            ->sum('montant');
+
+        return max(0, $gainsValides - $depenses - $verse);
+    }
+
     /**
      * Déclenché au paiement complet de la facture (EncaissementVenteController) — moment
      * inchangé (CASHBACK-006, cf. docs/cashback.md), seule la FORMULE change (décision produit
@@ -144,9 +176,29 @@ class CashbackService
         }
 
         DB::transaction(function () use ($transaction, $versePar, $montant, $modePaiement, $dateVersement, $note) {
+            $transactionVerrouillee = CashbackTransaction::whereKey($transaction->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (! $transactionVerrouillee->isVersable() || $montant > $transactionVerrouillee->montant_restant) {
+                throw new \InvalidArgumentException('Montant invalide.');
+            }
+
+            CashbackTransaction::where('organization_id', $transactionVerrouillee->organization_id)
+                ->where('client_id', $transactionVerrouillee->client_id)
+                ->lockForUpdate()
+                ->get(['id']);
+
+            if ($montant > $this->montantDisponibleClient(
+                $transactionVerrouillee->organization_id,
+                $transactionVerrouillee->client_id,
+            )) {
+                throw new \InvalidArgumentException('Le montant dépasse le cashback net disponible après déduction des dépenses validées.');
+            }
+
             // Crée le versement
             CashbackVersement::create([
-                'cashback_transaction_id' => $transaction->id,
+                'cashback_transaction_id' => $transactionVerrouillee->id,
                 'montant' => $montant,
                 'mode_paiement' => $modePaiement,
                 'date_versement' => $dateVersement,
@@ -155,19 +207,19 @@ class CashbackService
             ]);
 
             // Recalcule statut et montant_verse
-            $transaction->recalculStatut();
+            $transactionVerrouillee->recalculStatut();
 
             // Met à jour le solde si entièrement versé
-            if ($transaction->isVerse()) {
-                $transaction->update(['verse_par' => $versePar->id]);
+            if ($transactionVerrouillee->isVerse()) {
+                $transactionVerrouillee->update(['verse_par' => $versePar->id]);
 
-                CashbackSolde::where('organization_id', $transaction->organization_id)
-                    ->where('client_id', $transaction->client_id)
-                    ->decrement('cashback_en_attente', $transaction->montant);
+                CashbackSolde::where('organization_id', $transactionVerrouillee->organization_id)
+                    ->where('client_id', $transactionVerrouillee->client_id)
+                    ->decrement('cashback_en_attente', $transactionVerrouillee->montant);
 
-                CashbackSolde::where('organization_id', $transaction->organization_id)
-                    ->where('client_id', $transaction->client_id)
-                    ->increment('total_cashback_verse', $transaction->montant);
+                CashbackSolde::where('organization_id', $transactionVerrouillee->organization_id)
+                    ->where('client_id', $transactionVerrouillee->client_id)
+                    ->increment('total_cashback_verse', $transactionVerrouillee->montant);
             }
         });
     }

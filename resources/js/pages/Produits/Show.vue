@@ -35,6 +35,7 @@ interface SiteStock {
     site_code: string | null;
     site_nom: string | null;
     qte_stock: number;
+    seuil_effectif: number;
     statut: 'disponible' | 'stock_faible' | 'rupture';
     statut_label: string;
     updated_at: string | null;
@@ -47,6 +48,7 @@ interface VarianteStockDetail {
     site_code: string | null;
     site_nom: string | null;
     qte_stock: number;
+    seuil_effectif: number;
     statut: 'disponible' | 'stock_faible' | 'rupture';
     statut_label: string;
 }
@@ -109,8 +111,6 @@ interface Produit {
     cout: number | null;
     qte_stock: number | null;
     alerte_stock_active: boolean;
-    seuil_alerte_stock: number | null;
-    seuil_alerte_effectif: number;
     description: string | null;
     in_stock: boolean;
     is_low_stock: boolean;
@@ -499,31 +499,22 @@ const ajustements = props.mouvements.map((m) => ({
                     </div>
                     <div class="rounded-lg bg-muted/50 p-4 text-center">
                         <p class="mb-1 text-xs text-muted-foreground">
-                            {{
-                                produit.alerte_stock_active
-                                    ? "Seuil d'alerte"
-                                    : 'Alerte désactivée'
-                            }}
+                            Alerte de stock faible
                         </p>
                         <p
                             class="text-3xl font-bold text-foreground tabular-nums"
                         >
                             {{
                                 produit.alerte_stock_active
-                                    ? new Intl.NumberFormat('fr-FR').format(
-                                          produit.seuil_alerte_effectif,
-                                      )
-                                    : '—'
+                                    ? 'Activée'
+                                    : 'Désactivée'
                             }}
                         </p>
                         <p
-                            v-if="
-                                produit.alerte_stock_active &&
-                                produit.seuil_alerte_stock === null
-                            "
+                            v-if="produit.alerte_stock_active"
                             class="mt-1 text-[11px] text-muted-foreground"
                         >
-                            Seuil par défaut de l'organisation
+                            Seuil par agence — voir « Stock par agence »
                         </p>
                     </div>
                 </div>
@@ -552,6 +543,12 @@ const ajustements = props.mouvements.map((m) => ({
                                 </th>
                                 <th class="pr-4 pb-2 text-left font-medium">
                                     État
+                                </th>
+                                <th
+                                    v-if="produit.alerte_stock_active"
+                                    class="pr-4 pb-2 text-right font-medium"
+                                >
+                                    Seuil
                                 </th>
                                 <th class="pb-2 text-left font-medium">
                                     Dernière mise à jour
@@ -586,6 +583,12 @@ const ajustements = props.mouvements.map((m) => ({
                                         :status="s.statut"
                                         :label="s.statut_label"
                                     />
+                                </td>
+                                <td
+                                    v-if="produit.alerte_stock_active"
+                                    class="py-2.5 pr-4 text-right text-muted-foreground tabular-nums"
+                                >
+                                    {{ formatQte(s.seuil_effectif) }}
                                 </td>
                                 <td
                                     class="py-2.5 text-xs text-muted-foreground"

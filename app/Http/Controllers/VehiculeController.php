@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\CategorieVehicule;
 use App\Enums\CommissionScopeType;
 use App\Enums\CommissionUniteCalcul;
+use App\Http\Controllers\Settings\CommissionRegleController;
 use App\Models\Categorie;
 use App\Models\CommissionCibleType;
 use App\Models\CommissionProcessus;
@@ -256,9 +257,14 @@ class VehiculeController extends Controller
             ->with('success', 'Véhicule créé avec succès.');
     }
 
-    public function show(Vehicule $vehicule): Response
+    public function show(Request $request, Vehicule $vehicule): Response
     {
         $this->authorize('view', $vehicule);
+
+        $processusCode = $request->query('processus', CommissionProcessus::CODE_VENTE);
+        if (! in_array($processusCode, CommissionRegleController::processusCodesDisponibles(), true)) {
+            $processusCode = CommissionProcessus::CODE_VENTE;
+        }
 
         $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'equipe.membres.livreur', 'equipe.proprietaire', 'capacites.categorie']);
 
@@ -308,7 +314,9 @@ class VehiculeController extends Controller
                 'membres' => $membres,
                 // Partage Livraison PAR CATÉGORIE existant (V2) — clé par livreur_id,
                 // la popup résout elle-même l'index membre correspondant côté client.
-                'partages_categorie' => $this->partagesCategorieExistants($equipe->id),
+                // Scopé au processus actif : vente/distribution_client/logistique_transfert
+                // ont chacun leur propre partage, jamais un fallback silencieux entre eux.
+                'partages_categorie' => $this->partagesCategorieExistants($equipe->id, $vehicule->organization_id, $processusCode),
             ];
         }
 
@@ -323,7 +331,12 @@ class VehiculeController extends Controller
             // vérité utilisée à la fois par la popup équipe et par la fiche véhicule
             // (cf. décision AMOA post-Phase 2 : plus de montant global blended, un
             // barème par cible peut différer d'une catégorie à l'autre).
-            'baremes_commission_categories' => $this->baremesCommissionParCategorie($vehicule->organization_id, $vehicule->type_vehicule_id),
+            'baremes_commission_categories' => $this->baremesCommissionParCategorie($vehicule->organization_id, $vehicule->type_vehicule_id, $processusCode),
+            'processus_actif' => $processusCode,
+            'processus_options' => array_map(
+                fn (string $code) => ['value' => $code, 'label' => CommissionRegleController::processusLabel($code)],
+                CommissionRegleController::processusCodesDisponibles(),
+            ),
         ]);
     }
 
@@ -607,10 +620,10 @@ class VehiculeController extends Controller
      * fiche véhicule d'un Tricycle affichait le barème Livreur standard (300)
      * au lieu de son exception (250), menant à un partage équipe incohérent.
      */
-    private function baremesCommissionParCategorie(string $orgId, ?string $typeVehiculeId = null): array
+    private function baremesCommissionParCategorie(string $orgId, ?string $typeVehiculeId = null, string $processusCode = CommissionProcessus::CODE_VENTE): array
     {
         $processus = CommissionProcessus::where('organization_id', $orgId)
-            ->where('code', CommissionProcessus::CODE_VENTE)
+            ->where('code', $processusCode)
             ->first();
 
         if (! $processus) {
@@ -681,9 +694,18 @@ class VehiculeController extends Controller
      * membre_ordre ici puisque l'ordre peut légitimement différer d'un
      * chargement à l'autre).
      */
-    private function partagesCategorieExistants(string $equipeId): array
+    private function partagesCategorieExistants(string $equipeId, string $orgId, string $processusCode = CommissionProcessus::CODE_VENTE): array
     {
+        $processus = CommissionProcessus::where('organization_id', $orgId)
+            ->where('code', $processusCode)
+            ->first();
+
+        if (! $processus) {
+            return [];
+        }
+
         return EquipeLivraisonPartageCategorie::where('equipe_id', $equipeId)
+            ->where('processus_id', $processus->id)
             ->whereNull('effective_to')
             ->get()
             ->groupBy('categorie_id')
