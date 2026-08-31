@@ -196,6 +196,27 @@ class FactureVenteTest extends TestCase
             );
     }
 
+    /**
+     * Correctif du 30/08/2026 : total/nb_total étaient recalculés côté Vue à partir d'une
+     * recherche locale (facturesFiltrees) — supprimée pour respecter le standard UI (aucun champ
+     * de recherche hors DataFilters). Ces deux valeurs sont désormais calculées ici, une seule
+     * fois, sur le même périmètre que les autres compteurs (exclut ANNULEE).
+     */
+    public function test_totaux_total_et_nb_total_excluent_les_annulees(): void
+    {
+        $this->makeFacture(['montant_net' => 10000, 'statut_facture' => 'impayee']);
+        $this->makeFacture(['montant_net' => 4000, 'statut_facture' => 'partiel']);
+        $this->makeFacture(['montant_net' => 5000, 'statut_facture' => 'payee']);
+        $this->makeFacture(['montant_net' => 2000, 'statut_facture' => 'annulee']);
+
+        $this->actingAs($this->user)
+            ->get(route('factures.index', ['periode' => 'all']))
+            ->assertInertia(fn ($page) => $page
+                ->where('totaux.nb_total', 3)
+                ->where('totaux.total', 19000)
+            );
+    }
+
     public function test_statut_filter_partiel(): void
     {
         $this->makeFacture(['montant_net' => 10000, 'statut_facture' => 'impayee']);

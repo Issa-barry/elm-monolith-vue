@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Settings\CommissionRegleController;
-use App\Models\CommissionCibleType;
 use App\Models\CommissionProcessus;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivraisonPartageCategorie;
@@ -13,9 +12,9 @@ use App\Models\Personne;
 use App\Models\Proprietaire;
 use App\Models\Vehicule;
 use App\Models\VehiculeCapacite;
+use App\Services\Commission\CommissionPartageLivraisonCategorieChecker;
 use App\Services\Commission\CommissionPartageLivraisonValidator;
 use App\Services\Commission\CommissionProcessusDefaults;
-use App\Services\Commission\CommissionRegleResolver;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -441,9 +440,11 @@ class EquipeLivraisonController extends Controller
      * configurée" pour cette équipe, cf. CommissionEnveloppeGenerator qui
      * bloque alors sa génération).
      *
-     * Source unique de la règle (CommissionPartageLivraisonValidator), aussi
-     * rejouée par CommissionEnveloppeGenerator à la génération — jamais de
-     * formule dupliquée entre les deux points d'entrée.
+     * Source unique de la règle (CommissionPartageLivraisonValidator pour la validation de somme,
+     * CommissionPartageLivraisonCategorieChecker pour la résolution d'enveloppe), rejouée à
+     * l'identique par CommissionEnveloppeGenerator à la génération et par les garde-fous
+     * préventifs à la création d'une opération (CommandeVenteController,
+     * TransfertLogistiqueController) — jamais de formule dupliquée entre ces points d'entrée.
      */
     private function validatePartagesCategorie(
         array $partagesCategorie,
@@ -460,20 +461,13 @@ class EquipeLivraisonController extends Controller
             ->first();
 
         foreach ($partagesCategorie as $pc) {
-            $regle = $processus
-                ? CommissionRegleResolver::resolve(
-                    $orgId,
-                    $processus->id,
-                    CommissionCibleType::CODE_EQUIPE_LIVRAISON,
-                    null,
-                    null,
-                    $pc['categorie_id'],
-                    now(),
-                    $typeVehiculeId,
-                )
-                : null;
-
-            $enveloppe = (int) round((float) ($regle?->montant ?? 0));
+            $enveloppe = CommissionPartageLivraisonCategorieChecker::resoudreEnveloppe(
+                $orgId,
+                $processus?->id,
+                $pc['categorie_id'],
+                $typeVehiculeId,
+                now(),
+            );
 
             $membres = collect($pc['parts'])->map(fn (array $p) => (object) [
                 'beneficiaire_id' => $p['membre_ordre'],

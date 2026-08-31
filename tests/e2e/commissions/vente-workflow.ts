@@ -93,11 +93,15 @@ export async function configurerPartageEquipe(
     await expect(dialog.getByText(new RegExp(categorieNom, 'i'))).toBeVisible({
         timeout: 10_000,
     });
-    await expect(
-        dialog.getByText(
-            new RegExp(`${montantPattern(livraisonMontant)}.*unité.*Livreur`, 'i'),
+    const categorieRow = dialog
+        .getByRole('row')
+        .filter({ hasText: new RegExp(categorieNom, 'i') });
+    await expect(categorieRow).toContainText(
+        new RegExp(
+            `${montantPattern(livraisonMontant)}\\s*GNF\\s*/\\s*${montantPattern(livraisonMontant)}\\s*GNF`,
+            'i',
         ),
-    ).toBeVisible();
+    );
     await expect(dialog.getByText(/répartition complète/i)).toBeVisible({
         timeout: 5_000,
     });

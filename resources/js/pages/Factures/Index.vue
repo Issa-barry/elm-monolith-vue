@@ -63,6 +63,8 @@ interface FactureItem {
 }
 
 interface Totaux {
+    total: number;
+    nb_total: number;
     total_a_encaisser: number;
     nb_impayees: number;
     montant_impayees: number;
@@ -130,7 +132,6 @@ const filtres = [
     { value: 'annulee', label: 'Annulées' },
 ];
 
-const search = ref('');
 const mobileSearch = ref('');
 
 const filterBaseParams = computed(() => {
@@ -152,14 +153,28 @@ const filterValues = computed(() => ({
 }));
 
 const filterFields = computed<FilterField[]>(() => [
-    { key: 'periode', label: 'Période', type: 'select', options: periodes },
-    { key: 'statut', label: 'Statut', type: 'select', options: filtres },
+    {
+        key: 'statut',
+        label: 'Statut',
+        type: 'select',
+        options: filtres,
+        inline: true,
+    },
     {
         key: 'vehicule',
         label: 'Véhicule',
         type: 'text',
         placeholder: 'Nom ou immatriculation…',
+        inline: true,
     },
+    {
+        key: 'reference',
+        label: 'Référence',
+        type: 'text',
+        placeholder: 'FAC-…',
+        inline: true,
+    },
+    { key: 'periode', label: 'Période', type: 'select', options: periodes },
     {
         key: 'chauffeur',
         label: 'Chauffeur',
@@ -184,47 +199,12 @@ const filterFields = computed<FilterField[]>(() => [
         type: 'text',
         placeholder: 'Nom ou téléphone…',
     },
-    {
-        key: 'reference',
-        label: 'Référence',
-        type: 'text',
-        placeholder: 'FAC-…',
-    },
 ]);
 
-// ── Recherche locale (client-side, immédiate) ─────────────────────────────────
-
-const facturesFiltrees = computed(() => {
-    const q = search.value.toLowerCase().trim();
-    if (!q) return props.factures;
-    return props.factures.filter(
-        (f) =>
-            f.reference.toLowerCase().includes(q) ||
-            (f.vehicule_nom && f.vehicule_nom.toLowerCase().includes(q)) ||
-            (f.client_nom && f.client_nom.toLowerCase().includes(q)) ||
-            (f.site_nom && f.site_nom.toLowerCase().includes(q)),
-    );
-});
-
-// Totaux recalculés depuis le dataset filtré (inclut la recherche locale)
-const totauxFiltres = computed(() => {
-    const list = facturesFiltrees.value;
-    const impayees = list.filter((f) => f.statut_facture === 'impayee');
-    const payees = list.filter((f) => f.statut_facture === 'payee');
-    return {
-        total: list
-            .filter((f) => f.statut_facture !== 'annulee')
-            .reduce((s, f) => s + f.montant_net, 0),
-        nb_total: list.filter((f) => f.statut_facture !== 'annulee').length,
-        total_a_encaisser: list
-            .filter((f) => !['payee', 'annulee'].includes(f.statut_facture))
-            .reduce((sum, f) => sum + f.montant_restant, 0),
-        nb_impayees: impayees.length,
-        montant_impayees: impayees.reduce((s, f) => s + f.montant_restant, 0),
-        nb_payees: payees.length,
-        montant_payees: payees.reduce((s, f) => s + f.montant_net, 0),
-    };
-});
+// Les totaux affichés dans les cartes de synthèse viennent exclusivement de
+// props.totaux (calculés côté serveur sur le dataset déjà filtré par
+// DataFilters) — plus aucune recherche locale ne les recalcule, cf.
+// suppression du champ de recherche desktop fait maison ci-dessous.
 
 // ── Couleurs statut ───────────────────────────────────────────────────────────
 const statutColor: Record<string, string> = {
@@ -360,11 +340,11 @@ function _progressPercent(f: FactureItem): number {
                     <p
                         class="mt-1 text-lg font-bold text-foreground tabular-nums"
                     >
-                        {{ formatGNF(totauxFiltres.total) }}
+                        {{ formatGNF(totaux.total) }}
                     </p>
                     <p class="text-xs text-muted-foreground">
-                        {{ totauxFiltres.nb_total }} facture{{
-                            totauxFiltres.nb_total > 1 ? 's' : ''
+                        {{ totaux.nb_total }} facture{{
+                            totaux.nb_total > 1 ? 's' : ''
                         }}
                     </p>
                 </div>
@@ -375,7 +355,7 @@ function _progressPercent(f: FactureItem): number {
                     <p
                         class="mt-1 text-lg font-bold text-foreground tabular-nums"
                     >
-                        {{ formatGNF(totauxFiltres.total_a_encaisser) }}
+                        {{ formatGNF(totaux.total_a_encaisser) }}
                     </p>
                 </div>
                 <div class="rounded-xl border bg-card p-4 shadow-sm">
@@ -383,11 +363,11 @@ function _progressPercent(f: FactureItem): number {
                     <p
                         class="mt-1 text-lg font-bold text-foreground tabular-nums"
                     >
-                        {{ formatGNF(totauxFiltres.montant_impayees) }}
+                        {{ formatGNF(totaux.montant_impayees) }}
                     </p>
                     <p class="text-xs text-muted-foreground">
-                        {{ totauxFiltres.nb_impayees }} facture{{
-                            totauxFiltres.nb_impayees > 1 ? 's' : ''
+                        {{ totaux.nb_impayees }} facture{{
+                            totaux.nb_impayees > 1 ? 's' : ''
                         }}
                     </p>
                 </div>
@@ -396,11 +376,11 @@ function _progressPercent(f: FactureItem): number {
                     <p
                         class="mt-1 text-lg font-bold text-foreground tabular-nums"
                     >
-                        {{ formatGNF(totauxFiltres.montant_payees) }}
+                        {{ formatGNF(totaux.montant_payees) }}
                     </p>
                     <p class="text-xs text-muted-foreground">
-                        {{ totauxFiltres.nb_payees }} facture{{
-                            totauxFiltres.nb_payees > 1 ? 's' : ''
+                        {{ totaux.nb_payees }} facture{{
+                            totaux.nb_payees > 1 ? 's' : ''
                         }}
                     </p>
                 </div>
@@ -542,11 +522,11 @@ function _progressPercent(f: FactureItem): number {
                     <p
                         class="mt-2 text-2xl font-bold text-foreground tabular-nums"
                     >
-                        {{ formatGNF(totauxFiltres.total) }}
+                        {{ formatGNF(totaux.total) }}
                     </p>
                     <p class="mt-0.5 text-xs text-muted-foreground">
-                        {{ totauxFiltres.nb_total }} facture{{
-                            totauxFiltres.nb_total > 1 ? 's' : ''
+                        {{ totaux.nb_total }} facture{{
+                            totaux.nb_total > 1 ? 's' : ''
                         }}
                     </p>
                 </div>
@@ -558,7 +538,7 @@ function _progressPercent(f: FactureItem): number {
                     <p
                         class="mt-2 text-2xl font-bold text-foreground tabular-nums"
                     >
-                        {{ formatGNF(totauxFiltres.total_a_encaisser) }}
+                        {{ formatGNF(totaux.total_a_encaisser) }}
                     </p>
                 </div>
 
@@ -567,11 +547,11 @@ function _progressPercent(f: FactureItem): number {
                     <p
                         class="mt-2 text-2xl font-bold text-foreground tabular-nums"
                     >
-                        {{ formatGNF(totauxFiltres.montant_impayees) }}
+                        {{ formatGNF(totaux.montant_impayees) }}
                     </p>
                     <p class="mt-0.5 text-xs text-muted-foreground">
-                        {{ totauxFiltres.nb_impayees }} facture{{
-                            totauxFiltres.nb_impayees > 1 ? 's' : ''
+                        {{ totaux.nb_impayees }} facture{{
+                            totaux.nb_impayees > 1 ? 's' : ''
                         }}
                     </p>
                 </div>
@@ -581,28 +561,14 @@ function _progressPercent(f: FactureItem): number {
                     <p
                         class="mt-2 text-2xl font-bold text-foreground tabular-nums"
                     >
-                        {{ formatGNF(totauxFiltres.montant_payees) }}
+                        {{ formatGNF(totaux.montant_payees) }}
                     </p>
                     <p class="mt-0.5 text-xs text-muted-foreground">
-                        {{ totauxFiltres.nb_payees }} facture{{
-                            totauxFiltres.nb_payees > 1 ? 's' : ''
+                        {{ totaux.nb_payees }} facture{{
+                            totaux.nb_payees > 1 ? 's' : ''
                         }}
                     </p>
                 </div>
-            </div>
-
-            <!-- Recherche locale (client-side, immédiate) -->
-            <div class="relative">
-                <Search
-                    class="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                />
-                <input
-                    v-model="search"
-                    type="text"
-                    data-testid="search-input"
-                    placeholder="Rechercher (référence, véhicule, client…)"
-                    class="h-9 w-full max-w-sm rounded-md border border-input bg-background pr-3 pl-8 text-sm placeholder:text-muted-foreground focus:ring-1 focus:ring-ring focus:outline-none"
-                />
             </div>
 
             <!-- Filtres -->
@@ -610,15 +576,15 @@ function _progressPercent(f: FactureItem): number {
                 url="/backoffice/factures"
                 :base-params="filterBaseParams"
                 :values="filterValues"
-                :result-count="facturesFiltrees.length"
+                :result-count="factures.length"
                 :fields="filterFields"
             />
 
             <!-- Tableau -->
             <div class="overflow-hidden rounded-xl border bg-card">
                 <DataTable
-                    :value="facturesFiltrees"
-                    :paginator="facturesFiltrees.length > 20"
+                    :value="factures"
+                    :paginator="factures.length > 20"
                     :rows="20"
                     data-key="id"
                     striped-rows

@@ -419,6 +419,35 @@ class CommissionMoteurGeneriqueMultiProcessusTest extends TestCase
         $this->assertSame(1, FactureVente::where('commande_vente_id', $commande->id)->count());
     }
 
+    // ── 4bis. Page Détail séparée (backend commun, présentation Vue distincte) ──
+
+    /**
+     * Chantier du 31/08/2026 : même contrôleur/données pour les deux natures — seul le composant
+     * Inertia rendu par CommandeVenteController::show() diffère, choisi selon nature_operation
+     * (jamais par le nom de route lui-même : ventes.show et distributions.show pointent vers la
+     * même action et doivent rendre la même page pour une commande donnée).
+     */
+    /** @test */
+    public function le_show_rend_la_page_vue_dediee_selon_la_nature_de_operation(): void
+    {
+        $venteStandard = $this->creerCommande(NatureOperation::VENTE_STANDARD, 5);
+        $distribution = $this->creerCommande(NatureOperation::DISTRIBUTION_CLIENT, 5);
+
+        $this->actingAs($this->user)
+            ->get(route('ventes.show', $venteStandard))
+            ->assertInertia(fn (Assert $page) => $page->component('Ventes/Show'));
+
+        $this->actingAs($this->user)
+            ->get(route('distributions.show', $distribution))
+            ->assertInertia(fn (Assert $page) => $page->component('Distributions/Show'));
+
+        // Le nom de route ne pilote pas le choix du composant : ventes.show sur une distribution
+        // rend quand même Distributions/Show (seule nature_operation fait foi).
+        $this->actingAs($this->user)
+            ->get(route('ventes.show', $distribution))
+            ->assertInertia(fn (Assert $page) => $page->component('Distributions/Show'));
+    }
+
     /** @test */
     public function distribution_client_naccede_pas_a_livree_sans_validation_de_reception(): void
     {

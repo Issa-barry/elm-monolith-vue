@@ -176,12 +176,18 @@ class FactureVenteController extends Controller
                     ->all(),
             ]);
 
-        // Totaux pour les cartes de synthèse
+        // Totaux pour les cartes de synthèse — calculés une seule fois ici (jamais recalculés
+        // côté Vue à partir d'une recherche locale, cf. correctif du 30/08/2026 : la page ne
+        // doit exposer aucun filtre texte hors DataFilters, donc plus aucun sous-ensemble local
+        // à re-sommer).
+        $facturesActives = $factures->where('statut_facture', '!=', StatutFactureVente::ANNULEE->value);
         $impayees = $factures->where('statut_facture', StatutFactureVente::IMPAYEE->value);
         $partielles = $factures->where('statut_facture', StatutFactureVente::PARTIEL->value);
         $payees = $factures->where('statut_facture', StatutFactureVente::PAYEE->value);
 
         $totaux = [
+            'total' => $facturesActives->sum('montant_net'),
+            'nb_total' => $facturesActives->count(),
             'total_a_encaisser' => $factures
                 ->whereNotIn('statut_facture', [StatutFactureVente::PAYEE->value, StatutFactureVente::ANNULEE->value])
                 ->sum('montant_restant'),

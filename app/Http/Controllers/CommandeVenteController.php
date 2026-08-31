@@ -495,7 +495,13 @@ class CommandeVenteController extends Controller
             'details' => $a->details,
         ]);
 
-        return Inertia::render('Ventes/Show', [
+        // Backend commun, expérience UI séparée : même construction de données pour les deux
+        // natures, seul le composant Vue rendu diffère (présentation uniquement, cf. distributions.show).
+        $component = $commande->nature_operation === NatureOperation::DISTRIBUTION_CLIENT
+            ? 'Distributions/Show'
+            : 'Ventes/Show';
+
+        return Inertia::render($component, [
             'historiques' => $historiques,
             'activites' => $activites,
             'commande' => [
