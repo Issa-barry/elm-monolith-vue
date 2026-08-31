@@ -7,6 +7,7 @@ import CommissionGlobalFilters from '@/components/commission/CommissionGlobalFil
 import CommissionHistoryTable from '@/components/commission/CommissionHistoryTable.vue';
 import CommissionPaymentDialog from '@/components/commission/CommissionPaymentDialog.vue';
 import CommissionPaymentsTable from '@/components/commission/CommissionPaymentsTable.vue';
+import CommissionProcessusBreakdown from '@/components/commission/CommissionProcessusBreakdown.vue';
 import CommissionSummaryCards from '@/components/commission/CommissionSummaryCards.vue';
 import PeriodeStatusBanner from '@/components/commission/PeriodeStatusBanner.vue';
 import { useCommissionActiveFiltersSummary } from '@/composables/useCommissionActiveFiltersSummary';
@@ -20,6 +21,8 @@ import type {
     CommissionExpenseRow,
     CommissionGlobalFiltersValue,
     CommissionPaymentRow,
+    CommissionProcessusBreakdownRow,
+    CommissionProcessusOption,
     CommissionSummary,
     CommissionVehiculeInfo,
     ModePaiementOption,
@@ -47,6 +50,8 @@ const props = defineProps<{
     can_payer: boolean;
     payable: boolean;
     filtre_processus: string;
+    processus_options: CommissionProcessusOption[];
+    breakdown_par_processus: CommissionProcessusBreakdownRow[] | null;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -59,7 +64,10 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: props.livreur.nom, href: '' },
 ];
 
-const filters = ref<CommissionGlobalFiltersValue>({ ...props.filters });
+const filters = ref<CommissionGlobalFiltersValue>({
+    ...props.filters,
+    processus: props.filtre_processus,
+});
 
 const activeFiltersLabel = useCommissionActiveFiltersSummary({
     filters,
@@ -76,10 +84,10 @@ function reload(next: CommissionGlobalFiltersValue) {
             periode: next.periode || undefined,
             vehicule_id: next.vehicule_ids,
             site_ids: next.site_ids,
-            // Préserve le processus sélectionné depuis l'Index (Vente/Distribution client/
-            // Transfert logistique) — sinon tout changement de filtre ici (période, véhicule,
-            // agence) le perdrait silencieusement et retomberait sur le défaut "vente".
-            processus: props.filtre_processus || undefined,
+            // Le sélecteur de processus fait désormais partie de la barre de filtres — sa valeur
+            // vient de next (jamais rescellée sur le défaut de la page précédente) ; '' = tous les
+            // processus, envoyé comme undefined pour ne pas polluer l'URL.
+            processus: next.processus || undefined,
         },
         { preserveScroll: true, preserveState: true, replace: true },
     );
@@ -89,12 +97,12 @@ const activeTab = ref<CommissionDetailTab>('informations');
 const showPaiementDialog = ref(false);
 
 const PROCESSUS_LABELS: Record<string, string> = {
+    '': 'Livreur',
     vente: 'Livreur — vente',
     distribution_client: 'Livreur — distribution client',
     logistique_transfert: 'Livreur — transfert logistique',
 };
-const eyebrowLabel =
-    PROCESSUS_LABELS[props.filtre_processus] ?? 'Livreur — vente';
+const eyebrowLabel = PROCESSUS_LABELS[props.filtre_processus] ?? 'Livreur';
 </script>
 
 <template>
@@ -102,7 +110,11 @@ const eyebrowLabel =
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 sm:px-6">
             <CommissionDetailHeader
-                :back-href="`/backoffice/comptabilite/commissions/vente?processus=${filtre_processus}`"
+                :back-href="
+                    filtre_processus
+                        ? `/backoffice/comptabilite/commissions/vente?processus=${filtre_processus}`
+                        : '/backoffice/comptabilite/commissions/vente'
+                "
                 :eyebrow="eyebrowLabel"
                 :title="livreur.nom"
                 :telephone="livreur.telephone"
@@ -116,11 +128,17 @@ const eyebrowLabel =
 
             <CommissionSummaryCards :summary="commission_summary" />
 
+            <CommissionProcessusBreakdown
+                v-if="breakdown_par_processus"
+                :rows="breakdown_par_processus"
+            />
+
             <CommissionGlobalFilters
                 :filters="filters"
                 :periodes-disponibles="periodes_disponibles"
                 :vehicules-disponibles="vehicules_disponibles"
                 :agences-disponibles="agences_disponibles"
+                :processus-options="processus_options"
                 @change="reload"
             />
 

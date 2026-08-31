@@ -19,6 +19,13 @@ const totals = computed(() => ({
     montant: props.rows.reduce((sum, r) => sum + r.montant, 0),
     reste: props.rows.reduce((sum, r) => sum + r.reste, 0),
 }));
+
+// N'affiche la colonne Origine que si au moins une ligne la fournit — n'affecte donc jamais les
+// écrans Logistique/Propriétaire/Consultant/Site/Cashback/Salaire qui réutilisent ce même tableau
+// sans ventiler par processus.
+const hasProcessus = computed(() =>
+    props.rows.some((r) => !!r.processus_label),
+);
 </script>
 
 <template>
@@ -39,6 +46,12 @@ const totals = computed(() => ({
                     class="px-4 py-3 text-left font-medium text-muted-foreground"
                 >
                     Véhicule
+                </th>
+                <th
+                    v-if="hasProcessus"
+                    class="px-4 py-3 text-left font-medium text-muted-foreground"
+                >
+                    Origine
                 </th>
                 <th
                     class="px-4 py-3 text-right font-medium text-muted-foreground"
@@ -77,6 +90,12 @@ const totals = computed(() => ({
                         >{{ row.vehicule.immatriculation }}</span
                     >
                 </td>
+                <td
+                    v-if="hasProcessus"
+                    class="px-4 py-3 text-xs text-muted-foreground"
+                >
+                    {{ row.processus_label ?? '—' }}
+                </td>
                 <td class="px-4 py-3 text-right font-medium tabular-nums">
                     {{ formatGNF(row.montant) }}
                 </td>
@@ -96,7 +115,10 @@ const totals = computed(() => ({
         </tbody>
         <tfoot>
             <tr class="border-t-2 bg-muted/50 text-xs font-bold">
-                <td class="px-4 py-2.5 tracking-wide uppercase" colspan="3">
+                <td
+                    class="px-4 py-2.5 tracking-wide uppercase"
+                    :colspan="hasProcessus ? 4 : 3"
+                >
                     Total
                 </td>
                 <td class="px-4 py-2.5 text-right tabular-nums">
