@@ -121,18 +121,23 @@ unique plutôt qu'un mot de passe — **deux appels**, jamais un seul.
 ```
 
 ```json
-// 200
+// 200 (Nimba SMS configuré, cas par défaut depuis le 31/08/2026)
+{ "sent": true, "channel": "sms", "destination_masked": "+224 ••••••• 00", "cooldown_seconds": 30 }
+// 200 (repli email si Nimba indisponible/mal configuré)
 { "sent": true, "channel": "email", "destination_masked": "j***@gmail.com", "cooldown_seconds": 30 }
 ```
 
 - `channel` indique **par où** le code vient réellement d'être envoyé — utilisez-le
-  pour le message affiché ("Code envoyé par email à j***@...") plutôt que de
-  supposer un canal fixe. **Aujourd'hui, `channel` vaut toujours `"email"`** :
-  aucun fournisseur SMS/WhatsApp n'est encore branché côté serveur (cf. rapport
-  du 27/08/2026). Le jour où WhatsApp/SMS sera actif, cette même réponse
-  renverra `"whatsapp"` ou `"sms"` **sans aucun changement de contrat** — ne
-  codez jamais en dur `channel === 'email'` comme condition d'affichage,
-  traitez `channel` comme une valeur parmi `"email" | "sms" | "whatsapp"`.
+  pour le message affiché ("Code envoyé par SMS au +224 ••• •• 93") plutôt que
+  de supposer un canal fixe. **Depuis le 31/08/2026, `channel` vaut `"sms"`**
+  dès que le fournisseur Nimba SMS est configuré côté serveur (variables
+  `NIMBA_SMS_*`) — le téléphone étant toujours connu (c'est l'identifiant de
+  connexion), SMS est systématiquement choisi avant email pour ce parcours
+  (whatsapp n'est pas encore branché). `channel` ne redevient `"email"` que si
+  Nimba est indisponible/mal configuré (repli automatique, cf.
+  `App\Services\Otp\OtpChannelResolver`). Ne codez jamais en dur
+  `channel === 'email'` comme condition d'affichage, traitez `channel` comme
+  une valeur parmi `"email" | "sms" | "whatsapp"`.
 - `destination_masked` (ajouté le 27/08/2026, demande front) : la coordonnée
   **réellement utilisée** pour ce canal, **déjà masquée côté serveur**
   (`App\Services\Otp\OtpDestinationMasker`) — un email donne `"j*******@example.com"`

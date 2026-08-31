@@ -29,6 +29,13 @@ final class EmailOtpChannel implements OtpDeliveryChannel
         return OtpChannel::EMAIL;
     }
 
+    public function isAvailable(): bool
+    {
+        // Toujours vrai : l'email n'a pas de fournisseur/identifiants
+        // séparés à vérifier ici (cf. docblock App\Contracts\OtpDeliveryChannel).
+        return true;
+    }
+
     public function send(string $destination, string $code, OtpPurpose $purpose): void
     {
         Mail::to($destination)->send(new OtpCodeMail($code, $purpose));

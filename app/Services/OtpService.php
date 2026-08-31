@@ -158,6 +158,16 @@ class OtpService
     }
 
     /**
+     * Durée de vie (en minutes) d'un code généré — exposé pour que les canaux
+     * de transport (ex: SmsOtpChannel) puissent l'annoncer dans le message
+     * envoyé sans dupliquer cette valeur (single source of truth).
+     */
+    public function ttlMinutes(): int
+    {
+        return self::TTL_MINUTES;
+    }
+
+    /**
      * Indique si un nouveau code peut être demandé pour cet identifiant : ni avant le
      * délai anti-spam (30s), ni au-delà des plafonds horaire/journalier — tous
      * purposes confondus (cf. docblock de classe).

@@ -8,6 +8,7 @@ import type {
     CommissionVehiculeInfo,
     PeriodeOption,
 } from '@/types/commission';
+import { RotateCcw, SlidersHorizontal } from 'lucide-vue-next';
 import { computed } from 'vue';
 import CommissionPeriodSelect from './CommissionPeriodSelect.vue';
 import CommissionProcessusSelect from './CommissionProcessusSelect.vue';
@@ -90,52 +91,74 @@ function reset() {
 
 <template>
     <div
-        class="flex flex-col gap-2 rounded-xl border bg-card p-3 sm:flex-row sm:items-center sm:gap-3"
+        class="rounded-xl border bg-card p-3 shadow-sm"
         data-testid="commission-global-filters"
     >
-        <div class="w-full sm:w-64" data-testid="commission-filters-periode">
-            <CommissionPeriodSelect
-                :model-value="filters.periode"
-                :periodes-disponibles="periodesDisponibles"
-                @update:model-value="onPeriodeChange"
-            />
+        <div class="mb-2.5 flex items-center justify-between gap-3 px-0.5">
+            <p
+                class="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"
+            >
+                <SlidersHorizontal class="h-3.5 w-3.5" />
+                Affiner les résultats
+            </p>
+            <Button
+                v-if="hasActiveFilters"
+                variant="ghost"
+                size="sm"
+                class="h-7 px-2 text-xs"
+                data-testid="commission-filters-reset"
+                @click="reset"
+            >
+                <RotateCcw class="mr-1.5 h-3.5 w-3.5" />
+                Réinitialiser
+            </Button>
         </div>
-        <div data-testid="commission-filters-vehicule">
-            <CommissionVehiculeSelect
-                :model-value="filters.vehicule_ids"
-                :options="vehiculeOptions"
-                @update:model-value="onVehiculeChange"
-            />
-        </div>
-        <div class="w-full sm:w-64" data-testid="commission-filters-agence">
-            <FilterMultiSelect
-                :model-value="filters.site_ids"
-                :options="agenceOptions"
-                placeholder="Toutes les agences"
-                class="text-sm"
-                @update:model-value="onAgenceChange"
-            />
-        </div>
+
         <div
-            v-if="processusOptions && processusOptions.length"
-            class="w-full sm:w-56"
-            data-testid="commission-filters-processus"
+            class="grid grid-cols-1 gap-2 sm:grid-cols-2"
+            :class="
+                processusOptions && processusOptions.length
+                    ? 'xl:grid-cols-4'
+                    : 'xl:grid-cols-3'
+            "
         >
-            <CommissionProcessusSelect
-                :model-value="filters.processus ?? ''"
-                :options="processusOptions"
-                @update:model-value="onProcessusChange"
-            />
+            <div class="min-w-0" data-testid="commission-filters-periode">
+                <CommissionPeriodSelect
+                    :model-value="filters.periode"
+                    :periodes-disponibles="periodesDisponibles"
+                    class="sm:!w-full"
+                    @update:model-value="onPeriodeChange"
+                />
+            </div>
+            <div class="min-w-0" data-testid="commission-filters-vehicule">
+                <CommissionVehiculeSelect
+                    :model-value="filters.vehicule_ids"
+                    :options="vehiculeOptions"
+                    class="sm:!w-full"
+                    @update:model-value="onVehiculeChange"
+                />
+            </div>
+            <div class="min-w-0" data-testid="commission-filters-agence">
+                <FilterMultiSelect
+                    :model-value="filters.site_ids"
+                    :options="agenceOptions"
+                    placeholder="Toutes les agences"
+                    class="w-full text-sm"
+                    @update:model-value="onAgenceChange"
+                />
+            </div>
+            <div
+                v-if="processusOptions && processusOptions.length"
+                class="min-w-0"
+                data-testid="commission-filters-processus"
+            >
+                <CommissionProcessusSelect
+                    :model-value="filters.processus ?? ''"
+                    :options="processusOptions"
+                    class="sm:!w-full"
+                    @update:model-value="onProcessusChange"
+                />
+            </div>
         </div>
-        <Button
-            v-if="hasActiveFilters"
-            variant="ghost"
-            size="sm"
-            class="sm:ml-auto"
-            data-testid="commission-filters-reset"
-            @click="reset"
-        >
-            Réinitialiser
-        </Button>
     </div>
 </template>

@@ -37,6 +37,11 @@ class OtpPhoneVerificationChannelTest extends TestCase
                 return $this->c;
             }
 
+            public function isAvailable(): bool
+            {
+                return true;
+            }
+
             public function send(string $destination, string $code, OtpPurpose $purpose): void
             {
                 $this->sent[] = compact('destination', 'code', 'purpose');

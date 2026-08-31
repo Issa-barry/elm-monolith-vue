@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Contracts\SmsGateway;
 use App\Features\ModuleFeature;
 use App\Models\Client;
 use App\Models\CommandeVente;
@@ -13,6 +14,7 @@ use App\Models\Proprietaire;
 use App\Observers\BusinessProfileRoleObserver;
 use App\Observers\DepenseObserver;
 use App\Observers\VenteObserver;
+use App\Services\Sms\NimbaSmsGateway;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
@@ -31,7 +33,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Fournisseur SMS pour le canal OTP `sms` (App\Services\Otp\Channels\SmsOtpChannel)
+        // — cf. rapport du 27/08/2026 (canal vs fournisseur) et audit du
+        // 31/08/2026 (intégration Nimba SMS). Changer de fournisseur SMS =
+        // changer cette seule ligne, jamais SmsOtpChannel/OtpService/les
+        // contrôleurs.
+        $this->app->bind(SmsGateway::class, NimbaSmsGateway::class);
     }
 
     /**

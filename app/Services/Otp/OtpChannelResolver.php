@@ -33,15 +33,20 @@ final class OtpChannelResolver
      * Premier canal RÉELLEMENT disponible pour ce purpose ET ce destinataire
      * précis, dans l'ordre déclaré par `config('otp.purpose_channels')`.
      *
-     * "Disponible" est ici la conjonction de TROIS conditions — jamais
-     * seulement "configuré" (correctif du 27/08/2026, cf. rapport) :
+     * "Disponible" est ici la conjonction de QUATRE conditions — jamais
+     * seulement "configuré" (correctif du 27/08/2026, cf. rapport ; complété
+     * le 31/08/2026 lors de l'intégration Nimba SMS) :
      *   1. le canal fait partie de la liste souhaitée pour ce purpose ;
      *   2. une implémentation est réellement liée dans `config('otp.channels')` ;
      *   3. `$phone`/`$email` fournissent une coordonnée EXPLOITABLE pour ce
      *      canal précis (cf. `destinationFor()`) — un canal email configuré
      *      globalement mais sans email connu pour CE compte n'est pas
      *      disponible pour lui, et la résolution passe au canal suivant de
-     *      la liste plutôt que d'échouer inutilement.
+     *      la liste plutôt que d'échouer inutilement ;
+     *   4. le canal résolu se déclare lui-même réellement disponible
+     *      (`OtpDeliveryChannel::isAvailable()`) — ex: SMS déclaré dans
+     *      `config('otp.channels')` mais fournisseur (NimbaSmsGateway) sans
+     *      identifiants renseignés.
      *
      * `null` si aucun canal de la liste n'est disponible pour ce
      * destinataire — l'appelant doit alors refuser proprement, jamais
@@ -78,7 +83,20 @@ final class OtpChannelResolver
                 continue;
             }
 
-            return $this->resolve($channel);
+            $delivery = $this->resolve($channel);
+
+            // Ajouté lors de l'intégration Nimba SMS (audit du 31/08/2026) :
+            // "configuré" (classe déclarée dans config('otp.channels')) ne
+            // suffit plus — le canal doit aussi se déclarer RÉELLEMENT
+            // disponible (ex: SmsOtpChannel::isAvailable() délègue à
+            // NimbaSmsGateway::isConfigured()), sinon on continue vers le
+            // canal suivant plutôt que de choisir un canal qui échouera
+            // silencieusement à l'envoi.
+            if (! $delivery->isAvailable()) {
+                continue;
+            }
+
+            return $delivery;
         }
 
         return null;

@@ -1774,9 +1774,9 @@ function confirmerEtCreer() {
                                 <tr
                                     v-for="(ligne, index) in form.lignes"
                                     :key="index"
-                                    class="hover:bg-muted/10"
+                                    class="hover:bg-muted/10 [&>td]:!align-top"
                                 >
-                                    <td class="px-4 py-3">
+                                    <td class="px-4 py-3 align-top">
                                         <Dropdown
                                             :model-value="ligne.produit_id"
                                             @update:model-value="
@@ -1810,7 +1810,7 @@ function confirmerEtCreer() {
                                             }}
                                         </p>
                                     </td>
-                                    <td class="px-4 py-3">
+                                    <td class="px-4 py-3 align-top">
                                         <InputNumber
                                             :model-value="ligne.qte"
                                             @update:model-value="
@@ -1830,7 +1830,7 @@ function confirmerEtCreer() {
                                             input-class="w-full text-center"
                                         />
                                     </td>
-                                    <td class="px-4 py-3">
+                                    <td class="px-4 py-3 align-top">
                                         <InputNumber
                                             :model-value="ligneUnitPrice(ligne)"
                                             @update:model-value="

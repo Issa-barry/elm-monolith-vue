@@ -35,6 +35,21 @@ interface OtpDeliveryChannel
     public function channel(): OtpChannel;
 
     /**
+     * Le canal peut-il RÉELLEMENT transporter un code en ce moment — au-delà
+     * du simple fait d'être déclaré dans `config('otp.channels')` ? Permet à
+     * `OtpChannelResolver::firstAvailableFor()` de sauter un canal dont le
+     * fournisseur sous-jacent n'a pas ses identifiants renseignés (ex: SMS
+     * déclaré mais `NimbaSmsGateway::isConfigured()` faux) plutôt que de le
+     * choisir puis échouer silencieusement à l'envoi (cf. audit du
+     * 31/08/2026, intégration Nimba SMS). `EmailOtpChannel` retourne toujours
+     * `true` — l'email n'a pas de configuration séparée à vérifier ici ; un
+     * échec SMTP reste une panne opérationnelle, jamais un défaut de
+     * configuration à anticiper (il continue de remonter en erreur, comme
+     * avant ce correctif).
+     */
+    public function isAvailable(): bool;
+
+    /**
      * Envoie le code au destinataire donné — un email pour `EmailOtpChannel`,
      * un numéro E.164 pour un futur canal SMS/WhatsApp. Ne doit jamais changer
      * la logique de génération/validation du code : seul le transport varie
