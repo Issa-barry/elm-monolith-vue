@@ -21,6 +21,7 @@ use App\Models\User;
 use App\Models\Vehicule;
 use App\Models\VehiculeFrais;
 use App\Services\Commission\CommissionPartageLivraisonValidator;
+use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\DerogationImpayesService;
 use App\Services\ImageService;
 use App\Services\VehiculeCapaciteService;
@@ -263,9 +264,24 @@ class VehiculeController extends Controller
     {
         $this->authorize('view', $vehicule);
 
-        $processusCode = $request->query('processus', CommissionProcessus::CODE_VENTE);
-        if (! in_array($processusCode, CommissionRegleController::processusCodesDisponibles(), true)) {
-            $processusCode = CommissionProcessus::CODE_VENTE;
+        // "Processus disponible" ≠ "processus obligatoire" (révisé le 31/08/2026) : un véhicule
+        // Vente-only n'a jamais Distribution client/Transfert logistique à configurer, et
+        // inversement un véhicule Logistique-only n'a jamais Vente — cf.
+        // CommissionProcessusDefaults::codesApplicablesPourVehicule(), source unique partagée avec
+        // EquipeLivraisonController. Un véhicule sans aucun usage actif (cas transitoire) retombe
+        // sur la liste complète pour ne jamais afficher un écran cassé — aucun partage n'y sera de
+        // toute façon jamais exigé (CommissionPartageLivraisonCategorieChecker reste la garde réelle).
+        $codesApplicables = CommissionProcessusDefaults::codesApplicablesPourVehicule(
+            $vehicule,
+            CommissionRegleController::processusCodesDisponibles(),
+        );
+        if (empty($codesApplicables)) {
+            $codesApplicables = CommissionRegleController::processusCodesDisponibles();
+        }
+
+        $processusCode = $request->query('processus', $codesApplicables[0]);
+        if (! in_array($processusCode, $codesApplicables, true)) {
+            $processusCode = $codesApplicables[0];
         }
 
         $vehicule->load(['typeVehicule', 'site', 'proprietaire', 'equipe.membres.livreur', 'equipe.proprietaire', 'capacites.categorie']);
@@ -335,12 +351,16 @@ class VehiculeController extends Controller
             // barème par cible peut différer d'une catégorie à l'autre).
             'baremes_commission_categories' => $this->baremesCommissionParCategorie($vehicule->organization_id, $vehicule->type_vehicule_id, $processusCode),
             'statuts_partage_commission' => $equipe
-                ? $this->statutsPartageCommission($equipe->id, $vehicule->organization_id, $vehicule->type_vehicule_id)
+                ? $this->statutsPartageCommission($equipe->id, $vehicule->organization_id, $vehicule->type_vehicule_id, $codesApplicables)
                 : [],
             'processus_actif' => $processusCode,
+            // Filtré aux processus applicables à cet usage véhicule : un onglet/une colonne
+            // "Distribution client" ou "Transfert logistique" n'a jamais de sens pour un véhicule
+            // Vente-only, ni "Vente" pour un véhicule Logistique-only (cf.
+            // CommissionProcessusDefaults::codesApplicablesPourVehicule()).
             'processus_options' => array_map(
                 fn (string $code) => ['value' => $code, 'label' => CommissionRegleController::processusLabel($code)],
-                CommissionRegleController::processusCodesDisponibles(),
+                $codesApplicables,
             ),
         ]);
     }
@@ -726,13 +746,17 @@ class VehiculeController extends Controller
     }
 
     /**
-     * État du partage Livreur pour chaque catégorie et chaque processus.
-     * « fait » signifie que les montants fixes actifs passent la même validation
-     * stricte que celle utilisée lors de l'enregistrement et de la génération.
+     * État du partage Livreur pour chaque catégorie et chaque processus APPLICABLE à l'usage du
+     * véhicule ($codesApplicables, cf. show()) — un processus que le véhicule n'est pas autorisé à
+     * exercer n'apparaît jamais ici, jamais comme « à faire » (révisé le 31/08/2026). « fait »
+     * signifie que les montants fixes actifs passent la même validation stricte que celle
+     * utilisée lors de l'enregistrement et de la génération.
+     *
+     * @param  array<int, string>  $codesApplicables
      */
-    private function statutsPartageCommission(string $equipeId, string $orgId, ?string $typeVehiculeId): array
+    private function statutsPartageCommission(string $equipeId, string $orgId, ?string $typeVehiculeId, array $codesApplicables): array
     {
-        $codes = CommissionRegleController::processusCodesDisponibles();
+        $codes = $codesApplicables;
         $processus = CommissionProcessus::where('organization_id', $orgId)
             ->whereIn('code', $codes)
             ->get()

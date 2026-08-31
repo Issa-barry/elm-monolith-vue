@@ -61,7 +61,7 @@ class EquipeLivraisonController extends Controller
         $proprietaireId = $vehiculeSelectionne?->proprietaire_id;
         $nomVehicule = $vehiculeSelectionne?->nom_vehicule ?? '';
 
-        $data = $request->validate($this->rules($request, $orgId, null), $this->messages());
+        $data = $request->validate($this->rules($request, $orgId, null, $vehiculeSelectionne), $this->messages());
         $this->validatePartagesCategorie(
             $data['partages_categorie'] ?? [],
             $orgId,
@@ -125,7 +125,7 @@ class EquipeLivraisonController extends Controller
         $oldVehiculeId = $equipes_livraison->vehicule_id;
         $nomVehicule = $vehiculeSelectionne?->nom_vehicule ?? '';
 
-        $data = $request->validate($this->rules($request, $orgId, $equipes_livraison->id), $this->messages());
+        $data = $request->validate($this->rules($request, $orgId, $equipes_livraison->id, $vehiculeSelectionne), $this->messages());
         $this->validatePartagesCategorie(
             $data['partages_categorie'] ?? [],
             $orgId,
@@ -195,14 +195,27 @@ class EquipeLivraisonController extends Controller
 
     // ── Règles de validation, par moteur ─────────────────────────────────────
 
-    private function rules(Request $request, string $orgId, ?string $excludeEquipeId): array
+    private function rules(Request $request, string $orgId, ?string $excludeEquipeId, ?Vehicule $vehiculeSelectionne): array
     {
+        // "Processus disponible" ≠ "processus obligatoire" (révisé le 31/08/2026) : un partage ne
+        // peut être enregistré que pour un processus que l'USAGE du véhicule autorise réellement
+        // (livraison_vente pour vente, livraison_logistique pour distribution_client/
+        // logistique_transfert) — jamais uniquement filtré côté UI, une requête forgée avec
+        // processus_code=logistique_transfert sur un véhicule Vente-only doit être rejetée ici même
+        // (cf. CommissionProcessusDefaults::codesApplicablesPourVehicule(), source unique partagée
+        // avec VehiculeController). Si le véhicule n'est pas encore résolu (vehicule_id invalide),
+        // la liste complète reste la whitelist : l'erreur pertinente remonte via la règle
+        // vehicule_id ci-dessous, jamais un faux positif sur processus_code.
+        $codesApplicables = $vehiculeSelectionne
+            ? CommissionProcessusDefaults::codesApplicablesPourVehicule($vehiculeSelectionne, CommissionRegleController::processusCodesDisponibles())
+            : CommissionRegleController::processusCodesDisponibles();
+
         return [
             'is_active' => 'boolean',
             // Détermine quel partage (vente / distribution_client / logistique_transfert) cette
             // soumission remplace — jamais un fallback implicite vers vente. Chaque processus a
             // ses propres montants fixes pour la même équipe/catégorie (cf. syncPartagesCategorie()).
-            'processus_code' => ['required', Rule::in(CommissionRegleController::processusCodesDisponibles())],
+            'processus_code' => ['required', Rule::in($codesApplicables)],
             'vehicule_id' => [
                 'required', 'string',
                 Rule::exists('vehicules', 'id')->where('organization_id', $orgId)->whereNull('deleted_at'),
@@ -575,7 +588,7 @@ class EquipeLivraisonController extends Controller
     {
         return [
             'processus_code.required' => 'Le processus (Vente / Distribution client / Transfert logistique) est obligatoire.',
-            'processus_code.in' => 'Processus invalide.',
+            'processus_code.in' => "Ce processus n'est pas applicable aux usages de ce véhicule.",
             'vehicule_id.required' => 'Le véhicule est obligatoire.',
             'vehicule_id.exists' => 'Le véhicule sélectionné est introuvable.',
             'vehicule_id.unique' => 'Ce véhicule est déjà affecté à une autre équipe.',

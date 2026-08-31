@@ -72,14 +72,57 @@ final class OtpChannelResolver
     {
         $channels = config("otp.purpose_channels.{$purpose->value}", []);
 
-        foreach ($channels as $channelValue) {
+        return $this->firstAvailableAmong($channels, $phone, $email)['delivery'] ?? null;
+    }
+
+    /**
+     * Canal de REPLI explicite à utiliser si `$chosen` (le canal retenu par
+     * `firstAvailableFor()` pour ce même purpose/destinataire) échoue APRÈS
+     * avoir été choisi — ex: SMS jugé "disponible" (identifiants Nimba
+     * présents) mais l'appel réel échoue (panne fournisseur, solde
+     * insuffisant, timeout...). Ajouté le 31/08/2026 (audit intégration
+     * Nimba SMS, point 2) : avant ce correctif, aucun mécanisme ne
+     * retransportait réellement le code par un autre canal dans ce cas — le
+     * client recevait `channel: "sms"` sans qu'aucun SMS n'arrive jamais.
+     *
+     * Retourne le premier canal RÉELLEMENT disponible dans la même liste
+     * ordonnée `purpose_channels`, après `$chosen` — jamais recalculé
+     * ailleurs, jamais un canal qui régénérerait un nouveau code (le MÊME
+     * code est retransporté par l'appelant, cf. `OtpFallbackTarget` et
+     * `SendSmsOtpJob`). `null` si aucun canal suivant n'est disponible (rien
+     * à faire de plus qu'à journaliser l'échec).
+     *
+     * Reste un calcul explicite, appelé une seule fois par l'appelant AU
+     * MOMENT de la résolution primaire (jamais un effet de bord de
+     * `firstAvailableFor()` elle-même, cf. son docblock) : c'est la
+     * "décision produit explicite à construire à part" que ce docblock
+     * annonçait déjà.
+     */
+    public function fallbackFor(OtpChannel $chosen, OtpPurpose $purpose, ?string $phone, ?string $email): ?OtpFallbackTarget
+    {
+        $channels = config("otp.purpose_channels.{$purpose->value}", []);
+        $afterChosen = array_slice($channels, array_search($chosen->value, $channels, true) + 1);
+
+        $found = $this->firstAvailableAmong($afterChosen, $phone, $email);
+
+        return $found === null ? null : new OtpFallbackTarget($found['channel'], $found['destination']);
+    }
+
+    /**
+     * @param  list<string>  $channelValues  Valeurs brutes de App\Enums\OtpChannel, dans l'ordre à essayer.
+     * @return array{delivery: OtpDeliveryChannel, channel: OtpChannel, destination: string}|null
+     */
+    private function firstAvailableAmong(array $channelValues, ?string $phone, ?string $email): ?array
+    {
+        foreach ($channelValues as $channelValue) {
             $channel = OtpChannel::tryFrom($channelValue);
 
             if ($channel === null || ! $this->isConfigured($channel)) {
                 continue;
             }
 
-            if ($this->destinationFor($channel, $phone, $email) === null) {
+            $destination = $this->destinationFor($channel, $phone, $email);
+            if ($destination === null) {
                 continue;
             }
 
@@ -96,7 +139,7 @@ final class OtpChannelResolver
                 continue;
             }
 
-            return $delivery;
+            return ['delivery' => $delivery, 'channel' => $channel, 'destination' => $destination];
         }
 
         return null;

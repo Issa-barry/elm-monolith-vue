@@ -7,6 +7,7 @@ use App\Contracts\SmsGateway;
 use App\Enums\OtpChannel;
 use App\Enums\OtpPurpose;
 use App\Jobs\SendSmsOtpJob;
+use App\Services\Otp\OtpFallbackTarget;
 use App\Services\OtpService;
 
 /**
@@ -51,11 +52,16 @@ final class SmsOtpChannel implements OtpDeliveryChannel
      * Ne bloque jamais la requête HTTP sur l'appel réseau fournisseur (cf.
      * docblock `OtpDeliveryChannel::send()`) : l'envoi réel est délégué à
      * `SendSmsOtpJob`, qui résout lui-même son `SmsGateway` à l'exécution.
+     *
+     * `$fallback` (cf. `OtpChannelResolver::fallbackFor()`) est transmis tel
+     * quel au job : si l'appel Nimba échoue réellement (panne, solde
+     * insuffisant, sender name refusé, timeout...), le job retransporte le
+     * MÊME `$code` par ce canal de repli — jamais recalculé/deviné ici.
      */
-    public function send(string $destination, string $code, OtpPurpose $purpose): void
+    public function send(string $destination, string $code, OtpPurpose $purpose, ?OtpFallbackTarget $fallback = null): void
     {
         $message = "Votre code Eau La Maman est : {$code}. Il expire dans {$this->otp->ttlMinutes()} minutes.";
 
-        SendSmsOtpJob::dispatch($destination, $message);
+        SendSmsOtpJob::dispatch($destination, $message, $code, $purpose, $fallback);
     }
 }

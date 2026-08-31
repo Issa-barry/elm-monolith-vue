@@ -4,6 +4,7 @@ namespace App\Contracts;
 
 use App\Enums\OtpChannel;
 use App\Enums\OtpPurpose;
+use App\Services\Otp\OtpFallbackTarget;
 
 /**
  * Contrat de transport d'un code OTP — une implémentation par CANAL métier
@@ -56,6 +57,16 @@ interface OtpDeliveryChannel
      * d'un canal à l'autre (cf. rapport, point 11 — le même challenge doit
      * pouvoir être retransporté sur un autre canal en cas de fallback, jamais
      * régénéré).
+     *
+     * `$fallback` (ajouté le 31/08/2026, audit intégration Nimba SMS) : canal
+     * de repli EXPLICITE à utiliser si CET envoi échoue réellement (calculé
+     * une seule fois par `OtpChannelResolver::fallbackFor()`, jamais par
+     * l'implémentation elle-même). Une implémentation synchrone dont l'échec
+     * remonte déjà en exception (`EmailOtpChannel`) peut l'ignorer sans
+     * risque — ses appelants savent déjà que l'envoi a échoué. Une
+     * implémentation asynchrone (`SmsOtpChannel`) doit le transmettre au job
+     * qui exécute l'appel réseau réel, pour retransporter le MÊME code par ce
+     * canal si l'envoi primaire échoue.
      */
-    public function send(string $destination, string $code, OtpPurpose $purpose): void;
+    public function send(string $destination, string $code, OtpPurpose $purpose, ?OtpFallbackTarget $fallback = null): void;
 }

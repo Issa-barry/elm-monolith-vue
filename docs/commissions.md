@@ -139,10 +139,29 @@ la répartition d'équipe restent une seule implémentation, partagée par `Comm
   même catégorie.
 - `EquipeLivraisonController::store()`/`update()` exigent `processus_code` (whitelist des 3 codes,
   `Settings\CommissionRegleController::processusCodesDisponibles()`) — aucun repli implicite.
-- `VehiculeController::show()` (barèmes + partages affichés) et `Vehicules/Show.vue` /
-  `EquipeStepperModal.vue` (configuration) portent un sélecteur `SelectButton` Processus
-  (`?processus=...`) — chaque onglet affiche/édite exclusivement le partage de ce processus, les
-  autres restant inchangés.
+- **« Processus disponible » ≠ « processus obligatoire »** (révisé le 31/08/2026, incident : la
+  fiche d'un Tricycle Vente-only affichait Distribution client comme « à faire », alors qu'aucune
+  donnée métier ne l'autorise à exercer ce processus). Les processus pertinents pour un véhicule
+  dépendent de ses usages, jamais d'une liste fixe à 3 : `vente` ↔ `livraison_vente = true` ;
+  `distribution_client` et `logistique_transfert` ↔ `livraison_logistique = true` (source unique :
+  `CommissionProcessusDefaults::codesApplicablesPourVehicule()`).
+  - `EquipeLivraisonController::rules()` restreint le whitelist `processus_code` à ce sous-ensemble
+    — une requête forgée avec un `processus_code` non applicable à l'usage du véhicule est rejetée
+    (422), jamais uniquement filtrée côté UI.
+  - `VehiculeController::show()` filtre `processus_options` (tabs) et `statuts_partage_commission`
+    au même sous-ensemble : un processus non applicable n'apparaît ni comme onglet, ni comme
+    colonne « à faire »/« non requis » dans le tableau des commissions par catégorie — il
+    disparaît simplement de l'écran, plutôt qu'un badge trompeur.
+  - Un changement d'usage (ex: un véhicule Vente-only devient mixte) ne supprime ni ne clôture
+    jamais un partage déjà enregistré pour un processus redevenu/devenu non applicable — la ligne
+    reste en base, simplement non affichée/non exigée tant que l'usage correspondant est désactivé.
+- `Settings\CommissionRegleController` (Paramètres > Commissions, écran de configuration globale
+  de l'organisation) n'est PAS concerné par ce filtrage : ses 3 onglets restent toujours tous
+  visibles, un barème pouvant légitimement être préparé pour un processus avant même qu'un
+  véhicule compatible existe.
+- `Vehicules/Show.vue` / `EquipeStepperModal.vue` (configuration) portent un sélecteur
+  `SelectButton` Processus (`?processus=...`), alimenté par `processus_options` — chaque onglet
+  affiche/édite exclusivement le partage de ce processus, les autres restant inchangés.
 - Si aucun partage n'existe pour le processus demandé au moment de la génération, la commission
   Livreur correspondante est marquée « À régulariser » (jamais un montant à 0 silencieux, jamais un
   repli sur le partage d'un autre processus) — cf. `CommissionMoteurGeneriqueMultiProcessusTest::

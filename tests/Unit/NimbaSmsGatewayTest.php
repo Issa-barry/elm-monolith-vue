@@ -68,9 +68,12 @@ class NimbaSmsGatewayTest extends TestCase
             return $request->url() === 'https://api.nimbasms.com/v1/messages'
                 && $request->method() === 'POST'
                 && $auth === $expectedAuth
-                && $request->data()['to'] === '+224620000701'
+                // Contrat Nimba : `to` est TOUJOURS un tableau (1 à 30 chaînes),
+                // même pour un seul destinataire — jamais une valeur scalaire.
+                && $request->data()['to'] === ['+224620000701']
                 && $request->data()['sender_name'] === 'EAULAMAMAN'
-                && $request->data()['message'] === 'Votre code Eau La Maman est : 123456. Il expire dans 10 minutes.';
+                && $request->data()['message'] === 'Votre code Eau La Maman est : 123456. Il expire dans 10 minutes.'
+                && $request->data()['channel'] === 'sms';
         });
     }
 
@@ -84,7 +87,7 @@ class NimbaSmsGatewayTest extends TestCase
         Http::assertSentCount(1);
     }
 
-    public function test_send_throws_on_non_2xx_nimba_response(): void
+    public function test_send_throws_on_402_insufficient_balance(): void
     {
         $this->configureNimba();
         Http::fake(['api.nimbasms.com/*' => Http::response(['error' => 'Solde insuffisant'], 402)]);
@@ -92,6 +95,36 @@ class NimbaSmsGatewayTest extends TestCase
         $this->expectException(NimbaSmsException::class);
 
         $this->gateway()->send('+224620000703', 'Votre code Eau La Maman est : 222222. Il expire dans 10 minutes.');
+    }
+
+    public function test_send_throws_on_429_rate_limited(): void
+    {
+        $this->configureNimba();
+        Http::fake(['api.nimbasms.com/*' => Http::response(['error' => 'Too many requests'], 429)]);
+
+        $this->expectException(NimbaSmsException::class);
+
+        $this->gateway()->send('+224620000706', 'Votre code Eau La Maman est : 555555. Il expire dans 10 minutes.');
+    }
+
+    public function test_send_throws_on_500_server_error(): void
+    {
+        $this->configureNimba();
+        Http::fake(['api.nimbasms.com/*' => Http::response(['error' => 'Internal error'], 500)]);
+
+        $this->expectException(NimbaSmsException::class);
+
+        $this->gateway()->send('+224620000707', 'Votre code Eau La Maman est : 666666. Il expire dans 10 minutes.');
+    }
+
+    public function test_send_throws_on_sender_name_rejected(): void
+    {
+        $this->configureNimba();
+        Http::fake(['api.nimbasms.com/*' => Http::response(['error' => 'Sender name non validé'], 400)]);
+
+        $this->expectException(NimbaSmsException::class);
+
+        $this->gateway()->send('+224620000708', 'Votre code Eau La Maman est : 777777. Il expire dans 10 minutes.');
     }
 
     public function test_send_throws_on_connection_timeout(): void

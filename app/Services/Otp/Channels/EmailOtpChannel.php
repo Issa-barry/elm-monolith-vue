@@ -6,6 +6,7 @@ use App\Contracts\OtpDeliveryChannel;
 use App\Enums\OtpChannel;
 use App\Enums\OtpPurpose;
 use App\Mail\OtpCodeMail;
+use App\Services\Otp\OtpFallbackTarget;
 use Illuminate\Support\Facades\Mail;
 
 /**
@@ -36,8 +37,10 @@ final class EmailOtpChannel implements OtpDeliveryChannel
         return true;
     }
 
-    public function send(string $destination, string $code, OtpPurpose $purpose): void
+    public function send(string $destination, string $code, OtpPurpose $purpose, ?OtpFallbackTarget $fallback = null): void
     {
+        // $fallback ignoré : envoi synchrone, un échec remonte déjà en
+        // exception à l'appelant (cf. docblock App\Contracts\OtpDeliveryChannel::send()).
         Mail::to($destination)->send(new OtpCodeMail($code, $purpose));
     }
 }

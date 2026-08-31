@@ -25,6 +25,12 @@ use Illuminate\Support\Facades\Log;
  * max, fallback multi-canal en retransportant le MÊME code) : l'utiliser
  * dupliquerait cette logique dans un système externe qu'on ne contrôle pas.
  *
+ * Corps JSON, `to` en TABLEAU de 1 à 30 chaînes (corrigé le 31/08/2026 après
+ * relecture du contrat OpenAPI public de Nimba — même un envoi à un seul
+ * destinataire s'exprime `"to": ["+224..."]`, jamais une chaîne scalaire) :
+ * concorde aussi avec `nimbasms-firebase` (`to: ['+224...']`) et la
+ * signature `to: List[str]` du SDK Python officiel.
+ *
  * Authentification : Service ID + Secret Token en HTTP Basic Auth construite
  * ici via Http::withBasicAuth() — jamais un en-tête Authorization stocké ou
  * fourni séparément par l'appelant.
@@ -63,19 +69,19 @@ class NimbaSmsGateway implements SmsGateway
                 (string) config('services.nimba_sms.service_id'),
                 (string) config('services.nimba_sms.secret_token'),
             )
-                ->asForm()
                 ->timeout(self::TIMEOUT_SECONDS)
                 ->post(self::BASE_URL.'/v1/messages', [
-                    // Un seul destinataire par envoi OTP — envoyé comme
-                    // valeur scalaire plutôt qu'un tableau indexé `to[0]=`
-                    // (encodage `http_build_query` par défaut de Laravel/PHP,
-                    // jamais confirmé côté Nimba) : c'est exactement
-                    // l'encodage produit par le SDK officiel Python
-                    // (`requests`, doseq) pour une liste à un seul élément,
-                    // cf. audit du 31/08/2026.
-                    'to' => $phoneNumber,
+                    // Toujours un tableau, même pour un seul destinataire OTP
+                    // (contrat Nimba : `to` accepte de 1 à 30 chaînes) — cf.
+                    // docblock de classe.
+                    'to' => [$phoneNumber],
                     'sender_name' => config('services.nimba_sms.sender_name'),
                     'message' => $message,
+                    // Sélecteur de canal PROPRE à Nimba (sms/whatsapp côté
+                    // Nimba) — sans lien avec App\Enums\OtpChannel, simple
+                    // coïncidence de vocabulaire ; ce gateway n'envoie jamais
+                    // rien d'autre que du SMS.
+                    'channel' => 'sms',
                 ]);
         } catch (ConnectionException $e) {
             Log::error('Nimba SMS : erreur réseau ou timeout', [

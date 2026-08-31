@@ -44,7 +44,7 @@ class VehiculeBaremesCommissionCategoriesTest extends TestCase
         $this->initOrgAndUser(['vehicules.read']);
     }
 
-    private function makeVehicule(): Vehicule
+    private function makeVehicule(array $overrides = []): Vehicule
     {
         $typeVehicule = TypeVehicule::factory()->create(['organization_id' => $this->org->id]);
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
@@ -59,6 +59,7 @@ class VehiculeBaremesCommissionCategoriesTest extends TestCase
             'type_vehicule_id' => $typeVehicule->id,
             'proprietaire_id' => $proprietaire->id,
             'site_id' => $site->id,
+            ...$overrides,
         ]);
     }
 
@@ -210,7 +211,17 @@ class VehiculeBaremesCommissionCategoriesTest extends TestCase
             );
     }
 
-    /** @test */
+    /**
+     * Véhicule volontairement MIXTE (livraison_vente ET livraison_logistique) : les trois
+     * processus sont donc tous applicables et cette assertion teste bien la logique
+     * "à faire/fait/non_requis" par CATÉGORIE/bareme, orthogonale à l'applicabilité par USAGE
+     * couverte par VehiculeProcessusApplicablesParUsageTest (révisé le 31/08/2026 — un véhicule
+     * Vente-only par défaut, cf. VehiculeFactory, n'aurait plus jamais distribution_client/
+     * logistique_transfert dans statuts_partage_commission, cf. incident fiche ALARBA où un
+     * Tricycle Vente-only affichait "Distribution : à faire").
+     *
+     * @test
+     */
     public function expose_le_statut_du_partage_pour_chaque_processus(): void
     {
         $vente = $this->activerV2();
@@ -240,7 +251,7 @@ class VehiculeBaremesCommissionCategoriesTest extends TestCase
         $this->creerRegle($distribution, CommissionCibleType::CODE_EQUIPE_LIVRAISON, 300, $categorie->id);
         $this->creerRegle($transfert, CommissionCibleType::CODE_PROPRIETAIRE, 100, $categorie->id);
 
-        $vehicule = $this->makeVehicule();
+        $vehicule = $this->makeVehicule(['livraison_vente' => true, 'livraison_logistique' => true]);
         $equipe = EquipeLivraison::create([
             'organization_id' => $this->org->id,
             'vehicule_id' => $vehicule->id,

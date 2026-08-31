@@ -27,7 +27,7 @@ class ReferenceNumeroService
      * @return array{0: string, 1: int} [$reference, $numero]
      *
      * @throws \OverflowException si la limite journalière de 999 références est atteinte pour ce
-     *         couple organisation/préfixe
+     *                            couple organisation/préfixe
      */
     public function generer(string $organizationId, string $prefixe): array
     {

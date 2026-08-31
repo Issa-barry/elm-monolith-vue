@@ -7,6 +7,7 @@ use App\Enums\OtpChannel;
 use App\Enums\OtpPurpose;
 use App\Jobs\SendSmsOtpJob;
 use App\Services\Otp\Channels\SmsOtpChannel;
+use App\Services\Otp\OtpFallbackTarget;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
@@ -62,10 +63,31 @@ class SmsOtpChannelTest extends TestCase
         Queue::assertPushed(SendSmsOtpJob::class, function (SendSmsOtpJob $job) {
             $phone = (fn () => $this->phoneNumber)->call($job);
             $message = (fn () => $this->message)->call($job);
+            $code = (fn () => $this->code)->call($job);
+            $purpose = (fn () => $this->purpose)->call($job);
+            $fallback = (fn () => $this->fallback)->call($job);
 
             return $phone === '+224620000710'
                 && str_contains($message, '123456')
-                && str_contains($message, '10 minutes');
+                && str_contains($message, '10 minutes')
+                && $code === '123456'
+                && $purpose === OtpPurpose::LOGIN
+                && $fallback === null;
+        });
+    }
+
+    public function test_send_forwards_the_fallback_target_to_the_job(): void
+    {
+        Queue::fake();
+        $this->app->instance(SmsGateway::class, $this->fakeGateway(true));
+        $fallback = new OtpFallbackTarget(OtpChannel::EMAIL, 'client@example.com');
+
+        app(SmsOtpChannel::class)->send('+224620000711', '654321', OtpPurpose::LOGIN, $fallback);
+
+        Queue::assertPushed(SendSmsOtpJob::class, function (SendSmsOtpJob $job) use ($fallback) {
+            $forwarded = (fn () => $this->fallback)->call($job);
+
+            return $forwarded === $fallback;
         });
     }
 }
