@@ -14,6 +14,8 @@ import { Label } from '@/components/ui/label';
 import { useTicketPrint } from '@/composables/useTicketPrint';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatGNF, formatPhoneDisplay } from '@/lib/utils';
+import ChargementDialog from '@/pages/Ventes/partials/ChargementDialog.vue';
+import ReceptionDialog from '@/pages/Ventes/partials/ReceptionDialog.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import {
@@ -40,8 +42,6 @@ import Select from 'primevue/select';
 import Textarea from 'primevue/textarea';
 import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
-import ChargementDialog from '@/pages/Ventes/partials/ChargementDialog.vue';
-import ReceptionDialog from '@/pages/Ventes/partials/ReceptionDialog.vue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 // Page dédiée à nature_operation = 'distribution_client' (cf. CommandeVenteController::show()).
@@ -1112,7 +1112,11 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                 <ExternalLink class="h-3 w-3 shrink-0" />
                             </button>
                             <p class="mt-0.5 text-xs text-muted-foreground">
-                                {{ formatPhoneDisplay(commande.livreur_telephone) }}
+                                {{
+                                    formatPhoneDisplay(
+                                        commande.livreur_telephone,
+                                    )
+                                }}
                             </p>
                         </div>
                         <div>
@@ -1306,26 +1310,36 @@ function stepLabel(idx: number, defaultLabel: string): string {
                                     </td>
                                     <td
                                         class="px-4 py-3 text-center font-semibold tabular-nums"
-                                        :class="ecartClass(ligne.ecart_livraison)"
+                                        :class="
+                                            ecartClass(ligne.ecart_livraison)
+                                        "
                                     >
                                         {{ ecartLabel(ligne.ecart_livraison) }}
                                     </td>
                                     <td class="px-4 py-3 text-sm">
                                         <span
-                                            v-if="ligne.type_ecart_reception_label"
+                                            v-if="
+                                                ligne.type_ecart_reception_label
+                                            "
                                             class="text-foreground"
                                             >{{
                                                 ligne.type_ecart_reception_label
                                             }}</span
                                         >
-                                        <span v-else class="text-muted-foreground"
+                                        <span
+                                            v-else
+                                            class="text-muted-foreground"
                                             >—</span
                                         >
                                         <p
-                                            v-if="ligne.commentaire_ecart_reception"
+                                            v-if="
+                                                ligne.commentaire_ecart_reception
+                                            "
                                             class="mt-0.5 text-xs text-muted-foreground"
                                         >
-                                            {{ ligne.commentaire_ecart_reception }}
+                                            {{
+                                                ligne.commentaire_ecart_reception
+                                            }}
                                         </p>
                                     </td>
                                     <td

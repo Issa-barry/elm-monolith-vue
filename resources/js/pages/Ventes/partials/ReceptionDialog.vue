@@ -138,10 +138,10 @@ function submit(): void {
         @hide="dialogErrors = []"
     >
         <p class="mb-4 text-sm text-muted-foreground">
-            Renseignez les quantités effectivement acceptées par le
-            distributeur et les écarts constatés. La facture sera recalculée
-            sur la base de ces quantités — le client n'est jamais facturé
-            au-delà de ce qu'il a accepté.
+            Renseignez les quantités effectivement acceptées par le distributeur
+            et les écarts constatés. La facture sera recalculée sur la base de
+            ces quantités — le client n'est jamais facturé au-delà de ce qu'il a
+            accepté.
         </p>
         <div
             v-if="dialogErrors.length"
@@ -219,9 +219,7 @@ function submit(): void {
                     </td>
                     <td class="px-2 py-3">
                         <Dropdown
-                            v-model="
-                                receptionLignes[idx].type_ecart_reception
-                            "
+                            v-model="receptionLignes[idx].type_ecart_reception"
                             :options="typesEcart"
                             option-label="label"
                             option-value="value"
