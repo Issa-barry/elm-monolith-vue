@@ -61,8 +61,17 @@ class PdvCheckoutService
                 $data['client_id'] ?? null,
             );
 
-            $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null);
             $client = ! empty($data['client_id']) ? Client::query()->select(['id', 'type'])->find($data['client_id']) : null;
+            // Chargé une fois ici (organisation vérifiée) — sert à la fois à dériver
+            // nature_operation (DISTRIBUTION_CLIENT exige livraison_logistique=true, jamais la
+            // seule présence d'un véhicule, cf. NatureOperation::deriverParDefaut()) et à calculer
+            // l'éligibilité aux commissions selon la nature réellement résolue ci-dessous.
+            $vehiculePourNature = ! empty($data['vehicule_id'])
+                ? Vehicule::query()->where('organization_id', $user->organization_id)->find($data['vehicule_id'])
+                : null;
+            $natureOperation = NatureOperation::deriverParDefaut($client?->type, $vehiculePourNature);
+
+            $context = VehiculeCommandeContextResolver::resolve($data['vehicule_id'] ?? null, $data['client_id'] ?? null, $natureOperation);
             [$lignesData, $total, $stockTrackedVarianteIds, $autoriseVenteStockNegatif] = $this->buildLignes($data['lignes'], $user->organization_id, (string) $siteId, $context->modeTarification, $context->categorieTarifaireVehicule, $client);
 
             $commande = CommandeVente::create([
@@ -74,7 +83,7 @@ class PdvCheckoutService
                 'total_commande' => $total,
                 'mode_tarification_snapshot' => $context->modeTarification->value,
                 'commission_eligible_snapshot' => $context->commissionEligible,
-                'nature_operation' => NatureOperation::deriverParDefaut($client?->type, $data['vehicule_id'] ?? null)->value,
+                'nature_operation' => $natureOperation->value,
                 'statut' => StatutCommandeVente::LIVRAISON_EN_COURS,
                 'validated_at' => now(),
                 'created_by' => $user->id,

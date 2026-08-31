@@ -10,12 +10,39 @@ même principe de barème dynamique au transfert logistique interne.
 - **COMM-001** — Une `CommandeVente` porte une `nature_operation` (`vente_standard` ou
   `distribution_client`), figée à la création, jamais recalculée si le client change de type
   ensuite.
-- **COMM-002** — Défaut : `distribution_client` uniquement si `client.type = distributeur` **ET**
-  un véhicule de flotte est rattaché. Un distributeur sans véhicule ELM (retrait sur site) reste
-  `vente_standard`, au tarif distributeur, sans commission de distribution. L'utilisateur peut
-  modifier ce choix par défaut avant l'enregistrement.
-- **COMM-003** — `nature_operation = distribution_client` exige un véhicule — contrôlé côté
-  backend, jamais uniquement par le formulaire (`CommandeVenteController::ensureNatureOperationCoherente()`).
+- **COMM-002** (révisée le 31/08/2026 — la version précédente ne conditionnait le défaut qu'à « un
+  véhicule de flotte rattaché », sans distinguer son usage) — Défaut : `distribution_client`
+  uniquement si `client.type = distributeur` **ET** le véhicule rattaché est autorisé pour la
+  logistique (`vehicule.livraison_logistique = true`). Un distributeur sans véhicule ELM (retrait
+  sur site) ou avec un véhicule vente-seulement reste `vente_standard`, au tarif distributeur, sans
+  commission de distribution (`App\Enums\NatureOperation::deriverParDefaut()`, seule source de
+  vérité). L'utilisateur peut modifier ce choix par défaut avant l'enregistrement, sous réserve de
+  COMM-003.
+- **COMM-003** (révisée le 31/08/2026 — verrouillage métier/backend d'une distribution client,
+  cf. `tests/Feature/DistributionClientVehiculeLogistiqueTest.php`) — `nature_operation =
+  distribution_client` exige, contrôlé côté backend (jamais uniquement par le formulaire, requête
+  forgée incluse) :
+  - un véhicule (`vehicule_id` non vide) ;
+  - appartenant à la même organisation, actif (`is_active`) ;
+  - autorisé pour la logistique (`livraison_logistique = true`) — un véhicule vente-seulement est
+    refusé même si sa capacité suffirait ;
+  - livreur obligatoire : le véhicule doit avoir une `EquipeLivraison` active portant au moins un
+    chauffeur actif (`role = chauffeur` dans le pivot `equipe_livreurs`) — il n'existe pas de champ
+    `livreur_id` sur `CommandeVente`, le livreur est entièrement dérivé de l'équipe du véhicule.
+
+  Toute violation renvoie une `ValidationException` (422) sur `nature_operation` ou `vehicule_id`
+  selon le cas (`CommandeVenteController::ensureNatureOperationCoherente()`), appelée à la fois
+  depuis `store()` et `update()` — deux points d'entrée indépendants, aucun ne suppose que l'autre a
+  déjà protégé la donnée. `vente_standard` n'est soumise à aucune de ces exigences.
+
+  Côté UI (`Ventes/Create.vue`), la liste de véhicules proposée à la saisie dépend du **type de
+  client** (jamais de `nature_operation`, pour éviter une dépendance circulaire tant qu'aucun
+  véhicule n'est choisi) : un client `distributeur` ne voit que les véhicules logistiques
+  (prop `vehicules_distribution`, résolue par `CommandeVenteController::vehiculesLogistiques()`) ;
+  les autres types voient la liste vente-only historique (`vehicules`, inchangée). Un véhicule déjà
+  sélectionné qui quitte le pool courant (changement de type de client, ou retour arrière) est
+  désélectionné automatiquement (`useDistributionVehiculePool.ts`) plutôt que laissé affiché mais
+  invalide. `Ventes/Edit.vue` n'est pas concerné par ce chantier (source de véhicules inchangée).
 - **COMM-004** (révisée le 30/08/2026 — la version précédente de cette règle affirmait l'inverse :
   workflow strictement identique entre les deux natures) — `distribution_client` est un hybride
   vente/logistique : commercialement une vente à part entière (même `CommandeVente`/`FactureVente`,

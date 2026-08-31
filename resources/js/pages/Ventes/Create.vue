@@ -2,6 +2,10 @@
 import StatusDot from '@/components/StatusDot.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import {
+    poolVehiculesPourClient,
+    vehiculeEstDansPool,
+} from '@/composables/useDistributionVehiculePool';
 import { usePermissions } from '@/composables/usePermissions';
 import { useVehiculeCommandeTarification } from '@/composables/useVehiculeCommandeTarification';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -158,6 +162,11 @@ interface LigneForm {
 const props = defineProps<{
     produits: ProduitOption[];
     vehicules: VehiculeOption[];
+    // Pool séparé : uniquement des véhicules autorisés pour l'usage logistique
+    // (Vehicule::livraison_logistique = true) — jamais fusionné à `vehicules` ci-dessus, qui ne
+    // contient que des véhicules autorisés pour la vente (cf. règle métier distribution client
+    // du 31/08/2026, CommandeVenteController::vehiculesLogistiques()).
+    vehicules_distribution: VehiculeOption[];
     clients: ClientOption[];
     user_site: UserSite;
     can_modifier_qte: boolean;
@@ -199,16 +208,41 @@ const vehiculeSuggests = ref<VehiculeOption[]>([]);
 const vehiculeSolvabilite = ref<SolvabiliteResult | null>(null);
 const vehiculeSolvabiliteLoading = ref(false);
 
+// Pool proposé à la saisie — règle métier distribution client du 31/08/2026 : dès qu'un client
+// DISTRIBUTEUR est sélectionné, seuls les véhicules autorisés pour la logistique doivent être
+// proposables (jamais un filtre visuel sur la liste complète, qui la rendrait confuse — une
+// liste réellement filtrée). Piloté par le TYPE de client, jamais par nature_operation
+// elle-même : un distributeur sans véhicule reste vente_standard (retrait sur site), la nature
+// finale ne bascule qu'une fois un véhicule du pool distribution effectivement choisi (cf.
+// useVehiculeCommandeTarification::natureOperationParDefaut, inchangée).
+const vehiculesDisponibles = computed<VehiculeOption[]>(() =>
+    poolVehiculesPourClient(
+        clientSelected.value?.type,
+        props.vehicules,
+        props.vehicules_distribution,
+    ),
+);
+
+// Union des deux pools — sert uniquement à résoudre PAR ID le véhicule déjà sélectionné (capacité,
+// tarification, affichage), indépendamment du pool actuellement proposé à la saisie : un
+// changement de type de client ne doit jamais faire disparaître à tort les infos du véhicule
+// encore sélectionné avant que le watcher de désélection (plus bas) n'ait eu la main.
+const vehiculesPourLookup = computed<VehiculeOption[]>(() => [
+    ...props.vehicules,
+    ...props.vehicules_distribution,
+]);
+
 function searchVehicule(event: { query: string }) {
     const q = event.query.toLowerCase().trim();
+    const pool = vehiculesDisponibles.value;
     vehiculeSuggests.value = q
-        ? props.vehicules.filter(
+        ? pool.filter(
               (v) =>
                   v.nom_vehicule.toLowerCase().includes(q) ||
                   v.immatriculation.toLowerCase().includes(q) ||
                   (v.livreur_nom && v.livreur_nom.toLowerCase().includes(q)),
           )
-        : [...props.vehicules];
+        : [...pool];
 }
 
 /**
@@ -259,6 +293,17 @@ function onVehiculeClear() {
     recomputeAllTotals();
 }
 
+// Désélection automatique du véhicule dès qu'il quitte le pool proposé — couvre les deux sens :
+// passage à un client DISTRIBUTEUR alors qu'un véhicule vente-seulement était déjà choisi, ET
+// retour à un client non-distributeur alors qu'un véhicule logistique-seulement était choisi (le
+// pool "vente" ne le contient pas non plus). Un véhicule présent dans les deux pools reste
+// sélectionné dans les deux cas.
+watch(vehiculesDisponibles, (pool) => {
+    if (!vehiculeEstDansPool(form.vehicule_id, pool)) {
+        onVehiculeClear();
+    }
+});
+
 // Pré-remplit la quantité de l'unique ligne à la capacité du véhicule POUR LA CATÉGORIE DU
 // PRODUIT déjà choisi sur cette ligne — seulement s'il n'y a qu'une seule ligne avec un produit
 // sélectionné (sinon ambigu : quelle ligne recevrait le plafond ?). Cible la capacité de la
@@ -301,7 +346,7 @@ function applyVehiculeCapacityOnSingleLine(vehicule: VehiculeOption | null) {
 // miroir d'affichage.
 const { modeTarification, commissionEligible, natureOperationParDefaut } =
     useVehiculeCommandeTarification(
-        () => props.vehicules,
+        () => vehiculesPourLookup.value,
         () => form.vehicule_id,
         () => props.clients,
         () => form.client_id,
@@ -571,7 +616,7 @@ const vehiculeSelectionne = computed(() => {
         return null;
     }
 
-    return props.vehicules.find((v) => v.id === form.vehicule_id) ?? null;
+    return vehiculesPourLookup.value.find((v) => v.id === form.vehicule_id) ?? null;
 });
 
 // Plafonds par groupe de capacité du véhicule sélectionné (Sachets, Bouteilles, ...) — vide si
@@ -692,12 +737,23 @@ const commandeBloquee = computed(() =>
 );
 
 // ── Validation locale ────────────────────────────────────────────────────────
+// Distribution client = livreur obligatoire (règle métier du 31/08/2026). Aucun champ
+// "livreur_id" n'existe sur la commande : le livreur est dérivé de l'équipe du véhicule
+// (cf. CommandeVenteController::ensureNatureOperationCoherente, source de vérité backend) — ici
+// on ne fait que refléter cette dérivation via livreur_nom, déjà résolu côté serveur.
+const livreurManquantPourDistribution = computed(
+    () =>
+        form.nature_operation === 'distribution_client' &&
+        !vehiculeSelectionne.value?.livreur_nom,
+);
+
 const canSubmit = computed(
     () =>
         (form.vehicule_id !== null || form.client_id !== null) &&
         totalGeneral.value > 0 &&
         capaciteVehiculeConforme.value &&
         !commandeBloquee.value &&
+        !livreurManquantPourDistribution.value &&
         !form.processing,
 );
 
@@ -876,6 +932,26 @@ function confirmerEtCreer() {
                                 class="mt-1 text-xs text-destructive"
                             >
                                 {{ form.errors.vehicule_id }}
+                            </p>
+                            <!-- Blocages réels (rule 10 CLAUDE.md : DANGER/rouge réservé à une
+                            opération effectivement empêchée) — jamais affichés ensemble, la liste
+                            vide rendant le second message sans objet. -->
+                            <p
+                                v-else-if="
+                                    clientSelected?.type === 'distributeur' &&
+                                    vehiculesDisponibles.length === 0
+                                "
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                Aucun véhicule autorisé pour la distribution
+                                n'est disponible.
+                            </p>
+                            <p
+                                v-else-if="livreurManquantPourDistribution"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                Ce véhicule n'a aucun livreur actif assigné —
+                                la distribution nécessite un livreur.
                             </p>
 
                             <!-- Solvabilité véhicule — n'est le facteur de blocage QUE si aucun

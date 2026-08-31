@@ -2,6 +2,8 @@
 
 namespace App\Enums;
 
+use App\Models\Vehicule;
+
 /**
  * Nature commerciale d'une CommandeVente — figée à la création, jamais recalculée si le client
  * change de type ensuite (cf. deriverParDefaut(), seule source de vérité de la dérivation, appelée
@@ -9,7 +11,9 @@ namespace App\Enums;
  *
  * Distincte de ClientType : un client DISTRIBUTEUR retirant lui-même sa commande sans véhicule de
  * flotte reste VENTE_STANDARD (aucune équipe de livraison à commissionner) — la nature dépend du
- * type de client ET de la présence d'un véhicule, jamais du seul type de client.
+ * type de client ET de la présence d'un véhicule AUTORISÉ POUR LA LOGISTIQUE (décision produit du
+ * 31/08/2026 — un véhicule vente-only ne fait jamais basculer en distribution), jamais du seul
+ * type de client.
  */
 enum NatureOperation: string
 {
@@ -38,13 +42,16 @@ enum NatureOperation: string
     }
 
     /**
-     * DISTRIBUTION_CLIENT seulement si le client est un distributeur ET qu'un véhicule de flotte
-     * assure la livraison — sans véhicule, aucune équipe à commissionner en distribution, la
-     * commande reste une vente standard (au tarif distributeur, cf. PrixVenteNatureResolver).
+     * DISTRIBUTION_CLIENT seulement si le client est un distributeur ET qu'un véhicule
+     * effectivement autorisé pour la logistique (`Vehicule::livraison_logistique = true`)
+     * assure la livraison — sans véhicule, ou avec un véhicule vente-only, aucune équipe de
+     * livraison ELM à commissionner en distribution, la commande reste une vente standard (au
+     * tarif distributeur, cf. PrixVenteNatureResolver). Révisé le 31/08/2026 : vérifiait
+     * auparavant seulement la présence d'un véhicule, quel que soit son usage autorisé.
      */
-    public static function deriverParDefaut(?ClientType $clientType, ?string $vehiculeId): self
+    public static function deriverParDefaut(?ClientType $clientType, ?Vehicule $vehicule): self
     {
-        return $clientType === ClientType::DISTRIBUTEUR && $vehiculeId !== null
+        return $clientType === ClientType::DISTRIBUTEUR && (bool) $vehicule?->livraison_logistique
             ? self::DISTRIBUTION_CLIENT
             : self::VENTE_STANDARD;
     }
