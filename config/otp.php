@@ -2,6 +2,7 @@
 
 use App\Enums\OtpPurpose;
 use App\Services\Otp\Channels\EmailOtpChannel;
+use App\Services\Otp\Channels\SmsOtpChannel;
 
 return [
     /*
@@ -12,36 +13,40 @@ return [
 
     /*
      * Canaux OTP réellement ACTIVABLES, par valeur de App\Enums\OtpChannel —
-     * cf. App\Services\Otp\OtpChannelResolver. Seul `email` est câblé
-     * aujourd'hui (App\Services\Otp\Channels\EmailOtpChannel).
+     * cf. App\Services\Otp\OtpChannelResolver.
      *
-     * `SmsOtpChannel` (App\Services\Otp\Channels\SmsOtpChannel) existe déjà —
-     * c'est le CANAL, jamais un fournisseur. Il délègue à un contrat
-     * `App\Contracts\SmsGateway`, qu'aucune classe n'implémente encore
-     * (aucun fournisseur SMS configuré). Activer un vrai fournisseur SMS
-     * (NimbaSMS, LengoSMS, Twilio...) demande DEUX étapes, jamais une seule
-     * ligne ici :
-     *   1. Créer ex. NimbaSmsGateway implements App\Contracts\SmsGateway,
-     *      et le lier dans un ServiceProvider :
-     *      $this->app->bind(SmsGateway::class, NimbaSmsGateway::class);
-     *   2. Décommenter la ligne 'sms' ci-dessous — jamais y mettre
-     *      directement NimbaSmsGateway::class, toujours SmsOtpChannel::class
-     *      (qui résout lui-même son SmsGateway via le conteneur).
+     * `email` (App\Services\Otp\Channels\EmailOtpChannel) et `sms`
+     * (App\Services\Otp\Channels\SmsOtpChannel, fournisseur Nimba SMS —
+     * App\Services\Sms\NimbaSmsGateway lié dans AppServiceProvider, cf. audit
+     * du 31/08/2026) sont câblés. Ces classes sont des CANAUX, jamais un
+     * fournisseur — SmsOtpChannel délègue à `App\Contracts\SmsGateway`,
+     * résolu via le conteneur. `NIMBA_SMS_SERVICE_ID`/`NIMBA_SMS_SECRET_TOKEN`/
+     * `NIMBA_SMS_SENDER_NAME` absents ou vides = canal SMS silencieusement
+     * indisponible (SmsOtpChannel::isAvailable()), la résolution retombe sur
+     * le canal suivant de `purpose_channels` plutôt que d'échouer.
      *
-     * 'sms' => \App\Services\Otp\Channels\SmsOtpChannel::class,
+     * Changer de fournisseur SMS (Nimba -> LengoSMS, Twilio...) = changer
+     * uniquement la liaison `SmsGateway` dans AppServiceProvider, jamais
+     * cette ligne ni SmsOtpChannel/OtpService/les contrôleurs.
+     *
      * 'whatsapp' => \App\Services\Otp\Channels\WhatsAppOtpChannel::class,
      */
     'channels' => [
         'email' => EmailOtpChannel::class,
+        'sms' => SmsOtpChannel::class,
     ],
 
     /*
      * Pour chaque purpose (App\Enums\OtpPurpose), liste ORDONNÉE des canaux
      * souhaités — OtpChannelResolver::firstAvailableFor() retient le premier
-     * réellement configuré ci-dessus dans `channels`. Les canaux sms/whatsapp
-     * listés ici pour `login`/`phone_verification`/`password_reset` sont
-     * aspirationnels : ils deviendront actifs le jour où `channels` les
-     * déclarera, sans qu'il faille toucher cette matrice.
+     * réellement DISPONIBLE ci-dessous (déclaré dans `channels` + fournisseur
+     * configuré, cf. isAvailable()). `sms` est câblé depuis le 31/08/2026
+     * (Nimba) : pour `login`/`phone_verification`, il devient le canal
+     * réellement utilisé dès que Nimba est configuré (whatsapp ne l'est
+     * jamais encore) — le téléphone étant toujours connu (c'est l'identifiant
+     * de connexion), sans qu'il faille toucher cette matrice. `whatsapp`
+     * reste aspirationnel : il deviendra actif le jour où `channels` le
+     * déclarera.
      */
     'purpose_channels' => [
         OtpPurpose::LOGIN->value => ['whatsapp', 'sms', 'email'],

@@ -586,10 +586,13 @@ function fmtTel(tel: string | null | undefined): string {
                     </tr>
                 </thead>
                 <tbody class="divide-y">
+                    <!-- Ne force pas ?processus=vente : la fiche détail affiche par défaut la
+                         situation TOUS PROCESSUS confondus du bénéficiaire (décision produit du
+                         31/08/2026), même en arrivant depuis cet écran "Commission vente". -->
                     <ClickableTableRow
                         v-for="b in beneficiaires"
                         :key="b.beneficiaire_id"
-                        :href="`/backoffice/comptabilite/commissions/vente/livreurs/${b.beneficiaire_id}?processus=${currentFilters.processus}`"
+                        :href="`/backoffice/comptabilite/commissions/vente/livreurs/${b.beneficiaire_id}`"
                         :aria-label="`Voir le détail de ${b.beneficiaire_nom}`"
                         class="group even:bg-muted/20"
                     >
@@ -738,7 +741,7 @@ function fmtTel(tel: string | null | undefined): string {
                                 <DropdownMenuContent align="end">
                                     <DropdownMenuItem as-child>
                                         <Link
-                                            :href="`/backoffice/comptabilite/commissions/vente/livreurs/${b.beneficiaire_id}?processus=${currentFilters.processus}`"
+                                            :href="`/backoffice/comptabilite/commissions/vente/livreurs/${b.beneficiaire_id}`"
                                             class="flex w-full cursor-pointer items-center"
                                         >
                                             Détail

@@ -9,22 +9,51 @@ use Illuminate\Http\JsonResponse;
 
 class ScanCommandeController extends Controller
 {
+    /**
+     * VTE-/DST- = nouvelles commandes (cf. NatureOperation::prefixeReference()) ; CMD- =
+     * référence émise avant le chantier du 31/08/2026, jamais renommée, toujours reconnue.
+     */
+    private const COMMANDE_PREFIXES = ['VTE-', 'DST-', 'CMD-'];
+
+    /** TRF- = nouveaux transferts ; TR- = référence émise avant le 31/08/2026. */
+    private const TRANSFERT_PREFIXES = ['TRF-', 'TR-'];
+
     public function __invoke(string $reference): JsonResponse
     {
         $ref = strtoupper(trim($reference));
+        // Depuis le chantier "références par processus" (31/08/2026), la séquence de
+        // ReferenceNumeroService est scopée par organisation : deux organisations peuvent
+        // légitimement porter EXACTEMENT la même référence (ex: VTE-310826-001 pour l'une ET
+        // l'autre). Une recherche par reference seule n'est donc plus seulement une faille
+        // multi-tenant — elle devient fonctionnellement ambiguë et peut retourner la commande
+        // de la mauvaise organisation. Toujours filtrer par organization_id de l'utilisateur
+        // authentifié, sur les deux générations de préfixes (legacy comprise).
+        $organizationId = auth()->user()->organization_id;
 
-        if (str_starts_with($ref, 'CMD-')) {
-            return $this->scanCommande($ref);
+        if ($this->startsWithAny($ref, self::COMMANDE_PREFIXES)) {
+            return $this->scanCommande($ref, $organizationId);
         }
 
-        if (str_starts_with($ref, 'TR-')) {
-            return $this->scanTransfert($ref);
+        if ($this->startsWithAny($ref, self::TRANSFERT_PREFIXES)) {
+            return $this->scanTransfert($ref, $organizationId);
         }
 
         return response()->json(['message' => 'Référence non reconnue.'], 404);
     }
 
-    private function scanCommande(string $reference): JsonResponse
+    /** @param  list<string>  $prefixes */
+    private function startsWithAny(string $ref, array $prefixes): bool
+    {
+        foreach ($prefixes as $prefixe) {
+            if (str_starts_with($ref, $prefixe)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function scanCommande(string $reference, string $organizationId): JsonResponse
     {
         $commande = CommandeVente::with([
             'site:id,nom',
@@ -32,7 +61,7 @@ class ScanCommandeController extends Controller
             'vehicule.equipe:id,vehicule_id',
             'client:id,nom,prenom,telephone,adresse,quartier,ville',
             'lignes:id,commande_vente_id,quantite_demandee',
-        ])->where('reference', $reference)->first();
+        ])->where('reference', $reference)->where('organization_id', $organizationId)->first();
 
         if (! $commande) {
             return response()->json(['message' => 'Commande introuvable.'], 404);
@@ -65,7 +94,7 @@ class ScanCommandeController extends Controller
         ]);
     }
 
-    private function scanTransfert(string $reference): JsonResponse
+    private function scanTransfert(string $reference, string $organizationId): JsonResponse
     {
         $transfert = TransfertLogistique::with([
             'siteSource:id,nom',
@@ -73,7 +102,7 @@ class ScanCommandeController extends Controller
             'vehicule:id,nom_vehicule,immatriculation',
             'equipeLivraison:id,vehicule_id', 'equipeLivraison.vehicule:id,nom_vehicule',
             'lignes',
-        ])->where('reference', $reference)->first();
+        ])->where('reference', $reference)->where('organization_id', $organizationId)->first();
 
         if (! $transfert) {
             return response()->json(['message' => 'Transfert introuvable.'], 404);

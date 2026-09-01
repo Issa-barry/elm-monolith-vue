@@ -325,13 +325,22 @@ class CommissionVenteController extends Controller
         // apparaît dans historiqueCommandes avec son propre statut ("Créée"), mais n'entre
         // jamais dans $resume (calculé sur $filteredPartsPourResume, qui l'exclut explicitement
         // plus bas) — jamais mélangée aux montants déjà éligibles au paiement.
-        $filtreProcessus = $this->scalarInput($request, 'processus') ?: CommissionProcessus::CODE_VENTE;
-        $allPartsQuery = CommissionEnveloppePart::with(['enveloppe.source.site', 'enveloppe.source.vehicule'])
+        //
+        // Contrairement à index() (écran "Commission vente", vente par défaut), une fiche
+        // bénéficiaire affiche par défaut la situation TOUS PROCESSUS confondus (décision
+        // produit du 31/08/2026, cf. docs/commissions.md) : on regarde la situation financière
+        // globale de la personne, pas seulement son activité de vente. Un filtre explicite
+        // (sélecteur de la page) permet de revenir à un processus précis.
+        $filtreProcessus = $this->scalarInput($request, 'processus');
+        $allPartsQuery = CommissionEnveloppePart::with(['enveloppe.source.site', 'enveloppe.source.vehicule', 'enveloppe.processus'])
             ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_LIVREUR)
             ->where('beneficiaire_id', $livreurId)
             ->whereHas('enveloppe', fn ($q) => $q->where('organization_id', $orgId))
             ->orderByDesc('enveloppe_id');
-        $allParts = CommissionProcessusFilter::appliquer($allPartsQuery, $filtreProcessus)->get();
+        $allPartsTousProcessus = $allPartsQuery->get();
+        $allParts = $filtreProcessus === ''
+            ? $allPartsTousProcessus
+            : $allPartsTousProcessus->filter(fn (CommissionEnveloppePart $p) => $p->enveloppe?->processus?->code === $filtreProcessus)->values();
 
         $periodeCourante = PeriodeComptableService::periodeCouranteLivreur();
         $filters = CommissionDetailFilters::fromRequest($request, $periodeCourante);
@@ -356,26 +365,22 @@ class CommissionVenteController extends Controller
 
         $agencesDisponibles = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
 
-        $filteredParts = $allParts->filter(function (CommissionEnveloppePart $p) use ($periodeFilter, $vehiculeIds, $siteIds) {
-            $source = $p->enveloppe?->source;
+        // $filteredPartsTousProcessus sert à la fois de base pour $filteredParts (filtré ensuite
+        // par processus si demandé) et pour breakdownParProcessus() ci-dessous : la même
+        // prédicate période/véhicule/agence est appliquée une seule fois, jamais dupliquée.
+        $filteredPartsTousProcessus = $allPartsTousProcessus
+            ->filter(fn (CommissionEnveloppePart $p) => $this->partMatchesFilters($p, $periodeFilter, $vehiculeIds, $siteIds))
+            ->values();
+        $filteredParts = $filtreProcessus === ''
+            ? $filteredPartsTousProcessus
+            : $filteredPartsTousProcessus->filter(fn (CommissionEnveloppePart $p) => $p->enveloppe?->processus?->code === $filtreProcessus)->values();
 
-            if ($periodeFilter !== '') {
-                $earnedAt = $p->enveloppe?->earned_at;
-                if (! $earnedAt || PeriodeComptableService::codeForLivreur(Carbon::parse($earnedAt)) !== $periodeFilter) {
-                    return false;
-                }
-            }
-
-            if (! empty($vehiculeIds) && ! in_array($source?->vehicule_id, $vehiculeIds, true)) {
-                return false;
-            }
-
-            if (! empty($siteIds) && ! in_array($source?->site_id, $siteIds, true)) {
-                return false;
-            }
-
-            return true;
-        });
+        // Répartition Vente/Distribution/Transfert affichée uniquement en vue "Tous les
+        // processus" — inutile (et redondante) une fois un processus précis sélectionné, où tout
+        // ce qui est affiché appartient déjà à ce seul processus.
+        $breakdownParProcessus = $filtreProcessus === ''
+            ? $this->breakdownParProcessus($filteredPartsTousProcessus)
+            : null;
 
         $fraisDepenses = CommissionVenteCalculatorService::fraisDepenseLivreur(
             $orgId,
@@ -481,6 +486,11 @@ class CommissionVenteController extends Controller
                     'statut_dot_class' => $first->statut instanceof StatutCommission ? $first->statut->dotClass() : 'bg-zinc-400 dark:bg-zinc-500',
                     'periode' => $periodeCode,
                     'periode_label' => $periodeCode ? PeriodeComptableService::labelForCode($periodeCode) : null,
+                    // Origine (Vente/Distribution client/Transfert logistique) : toujours exposée,
+                    // même en vue "Tous les processus" — jamais de montants mélangés sans
+                    // indication (cf. docs/commissions.md).
+                    'processus' => $enveloppe?->processus?->code,
+                    'processus_label' => CommissionProcessusFilter::labelFor($enveloppe?->processus?->code),
                 ];
             })
             ->values();
@@ -561,7 +571,8 @@ class CommissionVenteController extends Controller
             'commission_details' => $historiqueCommandes,
             'payments' => $historiquePaiements,
             'filtre_processus' => $filtreProcessus,
-            'processus_options' => CommissionProcessusFilter::options(),
+            'processus_options' => CommissionProcessusFilter::optionsAvecTous(),
+            'breakdown_par_processus' => $breakdownParProcessus,
             'expenses' => $expenses,
             'modes_paiement' => ModePaiement::options(),
             'periode_courante' => $periodeCourante,
@@ -587,6 +598,60 @@ class CommissionVenteController extends Controller
             'agences_disponibles' => $agencesDisponibles,
             'can_payer' => false,
         ]);
+    }
+
+    /**
+     * Prédicat période/véhicule/agence partagé entre $filteredParts (éventuellement restreint à
+     * un processus) et $filteredPartsTousProcessus (base de breakdownParProcessus()) — écrit une
+     * seule fois pour éviter toute divergence entre les deux.
+     */
+    private function partMatchesFilters(CommissionEnveloppePart $part, string $periodeFilter, array $vehiculeIds, array $siteIds): bool
+    {
+        $source = $part->enveloppe?->source;
+
+        if ($periodeFilter !== '') {
+            $earnedAt = $part->enveloppe?->earned_at;
+            if (! $earnedAt || PeriodeComptableService::codeForLivreur(Carbon::parse($earnedAt)) !== $periodeFilter) {
+                return false;
+            }
+        }
+
+        if (! empty($vehiculeIds) && ! in_array($source?->vehicule_id, $vehiculeIds, true)) {
+            return false;
+        }
+
+        if (! empty($siteIds) && ! in_array($source?->site_id, $siteIds, true)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Répartition Vente / Distribution client / Transfert logistique du total généré, affichée
+     * sur la fiche bénéficiaire en vue "Tous les processus" (cf. docs/commissions.md). Les 3
+     * codes sont toujours renvoyés (même à 0) pour un affichage stable ; leur somme est
+     * exactement égale au total_genere consolidé (CommissionKpiBuckets::calculer() appliqué à la
+     * même partition des parts, jamais un recalcul indépendant) — aucune commission perdue.
+     *
+     * @param  Collection<int, CommissionEnveloppePart>  $parts
+     * @return array<int, array{code:string,label:string,total_genere:float}>
+     */
+    private function breakdownParProcessus(Collection $parts): array
+    {
+        return collect(CommissionProcessusFilter::options())
+            ->map(function (array $option) use ($parts) {
+                $partsDuProcessus = $parts->filter(
+                    fn (CommissionEnveloppePart $p) => $p->enveloppe?->processus?->code === $option['value']
+                );
+
+                return [
+                    'code' => $option['value'],
+                    'label' => $option['label'],
+                    'total_genere' => CommissionKpiBuckets::calculer($partsDuProcessus)['total_genere'],
+                ];
+            })
+            ->all();
     }
 
     private function buildSiteGroups(Collection $rows): array

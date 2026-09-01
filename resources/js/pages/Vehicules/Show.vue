@@ -11,14 +11,17 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
     ArrowLeft,
+    ArrowLeftRight,
     Car,
     CheckCircle,
     CircleHelp,
     ExternalLink,
+    PackageCheck,
     Pencil,
     Plus,
     Receipt,
     Settings,
+    ShoppingCart,
     TriangleAlert,
     Users,
 } from 'lucide-vue-next';
@@ -28,6 +31,7 @@ import { useToast } from 'primevue/usetoast';
 import { computed, ref } from 'vue';
 
 interface EquipeMembre {
+    livreur_id: string | null;
     livreur_nom: string | null;
     telephone: string | null;
     taux_commission: number;
@@ -124,6 +128,8 @@ interface BaremeCommissionCategorie {
     montant_livraison: number;
 }
 
+type StatutPartageCommission = 'fait' | 'a_faire' | 'non_requis';
+
 const props = defineProps<{
     vehicule: VehiculeData;
     depenses: DepenseRow[];
@@ -132,13 +138,17 @@ const props = defineProps<{
     default_proprietaire_id: string | null;
     seuil_global_impayes: number;
     baremes_commission_categories: BaremeCommissionCategorie[];
+    statuts_partage_commission: Record<
+        string,
+        Record<string, StatutPartageCommission>
+    >;
     processus_actif: 'vente' | 'distribution_client' | 'logistique_transfert';
     processus_options: { value: string; label: string }[];
 }>();
 
-// Changer d'onglet recharge la page : les barèmes/partages sont résolus côté serveur pour le
-// processus demandé, jamais un fallback silencieux vers un autre (cf. Paramètres > Commissions,
-// même pattern). Le formulaire équipe encore ouvert est perdu au changement d'onglet.
+// Les barèmes/partages restent résolus côté serveur pour le processus demandé, mais l'état
+// local de la fiche doit être conservé : changer Vente/Distribution/Transfert ne doit jamais
+// renvoyer l'utilisateur vers l'onglet Informations ni déplacer sa position dans la page.
 function onProcessusChange(code: string | null): void {
     if (!code || code === props.processus_actif) {
         return;
@@ -146,8 +156,32 @@ function onProcessusChange(code: string | null): void {
     router.get(
         `/backoffice/vehicules/${props.vehicule.id}`,
         { processus: code },
-        { preserveScroll: true },
+        {
+            preserveScroll: true,
+            preserveState: true,
+            replace: true,
+        },
     );
+}
+
+function statutPartage(
+    categorieId: string,
+    processusCode: string,
+): StatutPartageCommission {
+    return (
+        props.statuts_partage_commission[categorieId]?.[processusCode] ??
+        'non_requis'
+    );
+}
+
+function libelleColonnePartage(processusCode: string): string {
+    const labels: Record<string, string> = {
+        vente: 'Partage vente',
+        distribution_client: 'Partage distribution',
+        logistique_transfert: 'Partage transfert',
+    };
+
+    return labels[processusCode] ?? 'Partage';
 }
 
 const { can } = usePermissions();
@@ -174,6 +208,44 @@ const showStepperModal = ref(false);
 const flashSuccess = computed(
     () => (page.props as { flash?: { success?: string } }).flash?.success,
 );
+
+const processusActifLabel = computed(
+    () =>
+        props.processus_options.find(
+            (option) => option.value === props.processus_actif,
+        )?.label ?? props.processus_actif,
+);
+
+const partageProcessusConfigure = computed(() =>
+    Boolean(
+        props.equipe?.partages_categorie.some(
+            (categorie) => categorie.parts.length > 0,
+        ),
+    ),
+);
+
+function partsCommissionMembre(livreurId: string | null) {
+    if (!livreurId || !props.equipe) return [];
+
+    return props.equipe.partages_categorie.flatMap((partageCategorie) => {
+        const part = partageCategorie.parts.find(
+            (partage) => partage.livreur_id === livreurId,
+        );
+        if (!part) return [];
+
+        const categorie = props.baremes_commission_categories.find(
+            (bareme) => bareme.categorie_id === partageCategorie.categorie_id,
+        );
+
+        return [
+            {
+                categorie:
+                    categorie?.categorie_nom ?? 'Catégorie non disponible',
+                montant: part.montant_unitaire,
+            },
+        ];
+    });
+}
 
 const activeTab = ref<'informations' | 'equipe' | 'depenses'>('informations');
 
@@ -591,7 +663,57 @@ function formatGNF(val: number): string {
                         </Button>
                     </div>
 
-                    <div class="space-y-3">
+                    <div class="space-y-5">
+                        <div
+                            class="flex flex-col gap-3 rounded-lg border bg-muted/20 px-3 py-2.5 lg:flex-row lg:items-center lg:justify-between"
+                        >
+                            <div>
+                                <p class="text-sm font-medium text-foreground">
+                                    Processus affiché
+                                </p>
+                                <p class="text-xs text-muted-foreground">
+                                    Met à jour les parts de l'équipe et les
+                                    commissions par catégorie.
+                                </p>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <SelectButton
+                                    :model-value="processus_actif"
+                                    :options="processus_options"
+                                    option-label="label"
+                                    option-value="value"
+                                    class="w-max [&_.p-togglebutton]:h-10 [&_.p-togglebutton]:px-4"
+                                    @update:model-value="onProcessusChange"
+                                >
+                                    <template #option="slotProps">
+                                        <span
+                                            class="flex items-center gap-2 whitespace-nowrap"
+                                        >
+                                            <ShoppingCart
+                                                v-if="
+                                                    slotProps.option.value ===
+                                                    'vente'
+                                                "
+                                                class="h-4 w-4"
+                                            />
+                                            <PackageCheck
+                                                v-else-if="
+                                                    slotProps.option.value ===
+                                                    'distribution_client'
+                                                "
+                                                class="h-4 w-4"
+                                            />
+                                            <ArrowLeftRight
+                                                v-else
+                                                class="h-4 w-4"
+                                            />
+                                            {{ slotProps.option.label }}
+                                        </span>
+                                    </template>
+                                </SelectButton>
+                            </div>
+                        </div>
+
                         <div
                             v-if="vehicule.equipe_membres.length === 0"
                             class="rounded-lg border border-dashed py-10 text-center"
@@ -602,11 +724,14 @@ function formatGNF(val: number): string {
                         </div>
 
                         <div v-else class="overflow-x-auto rounded-lg border">
-                            <table class="w-full table-fixed text-sm">
+                            <table
+                                class="w-full min-w-[820px] table-fixed text-sm"
+                            >
                                 <colgroup>
-                                    <col class="w-1/3" />
-                                    <col class="w-1/3" />
-                                    <col class="w-1/3" />
+                                    <col class="w-[26%]" />
+                                    <col class="w-[24%]" />
+                                    <col class="w-[16%]" />
+                                    <col class="w-[34%]" />
                                 </colgroup>
                                 <thead
                                     class="bg-muted/30 text-left text-muted-foreground"
@@ -620,6 +745,9 @@ function formatGNF(val: number): string {
                                         </th>
                                         <th class="px-4 py-3 font-medium">
                                             Rôle
+                                        </th>
+                                        <th class="px-4 py-3 font-medium">
+                                            Part — {{ processusActifLabel }}
                                         </th>
                                     </tr>
                                 </thead>
@@ -657,6 +785,58 @@ function formatGNF(val: number): string {
                                                 >{{ m.role }}</span
                                             >
                                         </td>
+                                        <td class="px-4 py-3">
+                                            <span
+                                                v-if="
+                                                    !partageProcessusConfigure
+                                                "
+                                                class="inline-flex items-center gap-1.5 text-xs font-medium text-orange-600"
+                                            >
+                                                <TriangleAlert
+                                                    class="h-3.5 w-3.5 shrink-0"
+                                                />
+                                                Partage à faire
+                                            </span>
+                                            <div
+                                                v-else-if="
+                                                    partsCommissionMembre(
+                                                        m.livreur_id,
+                                                    ).length > 0
+                                                "
+                                                class="space-y-1"
+                                            >
+                                                <p
+                                                    v-for="part in partsCommissionMembre(
+                                                        m.livreur_id,
+                                                    )"
+                                                    :key="part.categorie"
+                                                    class="flex items-baseline justify-between gap-3 text-xs"
+                                                >
+                                                    <span
+                                                        class="truncate text-muted-foreground"
+                                                        :title="part.categorie"
+                                                    >
+                                                        {{ part.categorie }}
+                                                    </span>
+                                                    <span
+                                                        class="shrink-0 font-mono font-semibold text-foreground tabular-nums"
+                                                    >
+                                                        {{
+                                                            formatGNF(
+                                                                part.montant,
+                                                            )
+                                                        }}
+                                                        / unité
+                                                    </span>
+                                                </p>
+                                            </div>
+                                            <span
+                                                v-else
+                                                class="text-xs text-muted-foreground"
+                                            >
+                                                Aucune part
+                                            </span>
+                                        </td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -669,25 +849,13 @@ function formatGNF(val: number): string {
                              Même source que la popup équipe (baremes_commission_categories). -->
                         <div
                             v-if="equipe && vehicule.equipe_membres.length > 0"
-                            class="mt-2 space-y-2"
+                            class="space-y-2"
                         >
-                            <div
-                                class="flex flex-wrap items-center justify-between gap-2"
+                            <p
+                                class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
                             >
-                                <p
-                                    class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
-                                >
-                                    Barèmes de commission
-                                </p>
-                                <SelectButton
-                                    :model-value="processus_actif"
-                                    :options="processus_options"
-                                    option-label="label"
-                                    option-value="value"
-                                    class="text-xs"
-                                    @update:model-value="onProcessusChange"
-                                />
-                            </div>
+                                Commissions par catégorie
+                            </p>
                             <div
                                 v-if="
                                     baremes_commission_categories.length === 0
@@ -698,39 +866,123 @@ function formatGNF(val: number): string {
                                 véhicule.
                             </div>
                             <div
-                                v-for="cat in baremes_commission_categories"
-                                :key="cat.categorie_id"
-                                class="rounded-lg border bg-muted/30 p-3"
+                                v-else
+                                class="overflow-x-auto rounded-lg border"
                             >
-                                <p
-                                    class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                                <table
+                                    class="w-full min-w-[900px] text-left text-xs"
                                 >
-                                    {{ cat.categorie_nom }}
-                                </p>
-                                <div
-                                    class="mt-1 flex flex-wrap gap-x-6 gap-y-1"
-                                >
-                                    <p class="text-xs text-primary">
-                                        Propriétaire :
-                                        <span class="font-mono font-semibold">
-                                            {{
-                                                formatGNF(
-                                                    cat.montant_proprietaire,
-                                                )
-                                            }} </span
-                                        >/ unité
-                                    </p>
-                                    <p class="text-xs text-muted-foreground">
-                                        Livraison :
-                                        <span
-                                            class="font-mono font-semibold text-foreground"
+                                    <thead
+                                        class="border-b bg-muted/40 text-muted-foreground"
+                                    >
+                                        <tr>
+                                            <th class="px-4 py-3 font-medium">
+                                                Catégorie
+                                            </th>
+                                            <th class="px-4 py-3 font-medium">
+                                                Part propriétaire
+                                            </th>
+                                            <th class="px-4 py-3 font-medium">
+                                                Part équipe de livraison
+                                            </th>
+                                            <th
+                                                v-for="option in processus_options"
+                                                :key="option.value"
+                                                class="px-4 py-3 font-medium"
+                                            >
+                                                {{
+                                                    libelleColonnePartage(
+                                                        option.value,
+                                                    )
+                                                }}
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y">
+                                        <tr
+                                            v-for="cat in baremes_commission_categories"
+                                            :key="cat.categorie_id"
+                                            class="hover:bg-muted/20"
                                         >
-                                            {{
-                                                formatGNF(cat.montant_livraison)
-                                            }} </span
-                                        >/ unité
-                                    </p>
-                                </div>
+                                            <td
+                                                class="px-4 py-3 font-semibold text-foreground"
+                                            >
+                                                {{ cat.categorie_nom }}
+                                            </td>
+                                            <td
+                                                class="px-4 py-3 font-mono font-semibold text-primary tabular-nums"
+                                            >
+                                                {{
+                                                    formatGNF(
+                                                        cat.montant_proprietaire,
+                                                    )
+                                                }}
+                                                <span
+                                                    class="font-sans font-normal text-muted-foreground"
+                                                >
+                                                    / unité</span
+                                                >
+                                            </td>
+                                            <td
+                                                class="px-4 py-3 font-mono font-semibold text-foreground tabular-nums"
+                                            >
+                                                {{
+                                                    formatGNF(
+                                                        cat.montant_livraison,
+                                                    )
+                                                }}
+                                                <span
+                                                    class="font-sans font-normal text-muted-foreground"
+                                                >
+                                                    / unité</span
+                                                >
+                                            </td>
+                                            <td
+                                                v-for="option in processus_options"
+                                                :key="option.value"
+                                                class="px-4 py-3"
+                                            >
+                                                <span
+                                                    v-if="
+                                                        statutPartage(
+                                                            cat.categorie_id,
+                                                            option.value,
+                                                        ) === 'fait'
+                                                    "
+                                                    class="inline-flex items-center gap-1.5 font-medium text-emerald-600"
+                                                >
+                                                    <CheckCircle
+                                                        class="h-3.5 w-3.5"
+                                                    />
+                                                    Fait
+                                                </span>
+                                                <span
+                                                    v-else-if="
+                                                        statutPartage(
+                                                            cat.categorie_id,
+                                                            option.value,
+                                                        ) === 'a_faire'
+                                                    "
+                                                    class="inline-flex items-center gap-1.5 font-medium text-orange-600"
+                                                >
+                                                    <TriangleAlert
+                                                        class="h-3.5 w-3.5"
+                                                    />
+                                                    À faire
+                                                </span>
+                                                <span
+                                                    v-else
+                                                    class="inline-flex items-center gap-1.5 text-muted-foreground"
+                                                >
+                                                    <CircleHelp
+                                                        class="h-3.5 w-3.5"
+                                                    />
+                                                    Non requis
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>

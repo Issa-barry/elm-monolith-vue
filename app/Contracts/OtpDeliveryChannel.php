@@ -4,6 +4,7 @@ namespace App\Contracts;
 
 use App\Enums\OtpChannel;
 use App\Enums\OtpPurpose;
+use App\Services\Otp\OtpFallbackTarget;
 
 /**
  * Contrat de transport d'un code OTP — une implémentation par CANAL métier
@@ -35,12 +36,37 @@ interface OtpDeliveryChannel
     public function channel(): OtpChannel;
 
     /**
+     * Le canal peut-il RÉELLEMENT transporter un code en ce moment — au-delà
+     * du simple fait d'être déclaré dans `config('otp.channels')` ? Permet à
+     * `OtpChannelResolver::firstAvailableFor()` de sauter un canal dont le
+     * fournisseur sous-jacent n'a pas ses identifiants renseignés (ex: SMS
+     * déclaré mais `NimbaSmsGateway::isConfigured()` faux) plutôt que de le
+     * choisir puis échouer silencieusement à l'envoi (cf. audit du
+     * 31/08/2026, intégration Nimba SMS). `EmailOtpChannel` retourne toujours
+     * `true` — l'email n'a pas de configuration séparée à vérifier ici ; un
+     * échec SMTP reste une panne opérationnelle, jamais un défaut de
+     * configuration à anticiper (il continue de remonter en erreur, comme
+     * avant ce correctif).
+     */
+    public function isAvailable(): bool;
+
+    /**
      * Envoie le code au destinataire donné — un email pour `EmailOtpChannel`,
      * un numéro E.164 pour un futur canal SMS/WhatsApp. Ne doit jamais changer
      * la logique de génération/validation du code : seul le transport varie
      * d'un canal à l'autre (cf. rapport, point 11 — le même challenge doit
      * pouvoir être retransporté sur un autre canal en cas de fallback, jamais
      * régénéré).
+     *
+     * `$fallback` (ajouté le 31/08/2026, audit intégration Nimba SMS) : canal
+     * de repli EXPLICITE à utiliser si CET envoi échoue réellement (calculé
+     * une seule fois par `OtpChannelResolver::fallbackFor()`, jamais par
+     * l'implémentation elle-même). Une implémentation synchrone dont l'échec
+     * remonte déjà en exception (`EmailOtpChannel`) peut l'ignorer sans
+     * risque — ses appelants savent déjà que l'envoi a échoué. Une
+     * implémentation asynchrone (`SmsOtpChannel`) doit le transmettre au job
+     * qui exécute l'appel réseau réel, pour retransporter le MÊME code par ce
+     * canal si l'envoi primaire échoue.
      */
-    public function send(string $destination, string $code, OtpPurpose $purpose): void;
+    public function send(string $destination, string $code, OtpPurpose $purpose, ?OtpFallbackTarget $fallback = null): void;
 }

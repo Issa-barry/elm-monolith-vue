@@ -7,6 +7,7 @@ use App\Enums\StatutTransfert;
 use App\Enums\TypeEcartLogistique;
 use App\Jobs\NotifierLivreursTransfertJob;
 use App\Models\CommissionLogistique;
+use App\Models\CommissionProcessus;
 use App\Models\EquipeLivraison;
 use App\Models\Parametre;
 use App\Models\Produit;
@@ -14,11 +15,13 @@ use App\Models\ProduitVariante;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
 use App\Models\Vehicule;
+use App\Services\Commission\CommissionPartageLivraisonCategorieChecker;
 use App\Services\CommissionTriggerService;
 use App\Services\TransfertActiviteService;
 use App\Services\VehiculeCapaciteService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -318,6 +321,7 @@ class TransfertLogistiqueController extends Controller
         }
 
         $this->ensureQuantiteMatchesVehiculeCapacity($data);
+        $this->ensurePartageLivraisonCategorieConfigure($data, $orgId);
 
         $transfert = DB::transaction(function () use ($data, $orgId) {
             $transfert = TransfertLogistique::create([
@@ -709,6 +713,53 @@ class TransfertLogistiqueController extends Controller
         }
 
         $this->vehiculeCapaciteService->verifier($vehicule, $data['lignes'] ?? [], 'quantite_demandee', false);
+    }
+
+    /**
+     * Garde-fou préventif, symétrique à CommandeVenteController::ensurePartageLivraisonCategorieConfigure()
+     * — réduit le risque qu'un transfert apparaisse chargé/réceptionné mais reste bloqué "à
+     * régulariser" faute de partage Livreur configuré pour une catégorie transférée (cf. incident
+     * CMD-300826-007, 30/08/2026, même famille de problème côté vente). Uniquement pour les
+     * organisations déjà migrées vers le moteur générique (CommissionTriggerService::
+     * estMigreVersMoteurGenerique()) : les autres utilisent encore l'ancien
+     * CommissionLogistiqueService, qui n'a jamais utilisé EquipeLivraisonPartageCategorie — leur
+     * imposer ce garde-fou serait un frein injustifié. La configuration de partage peut encore
+     * changer entre cette création et la génération réelle (chargement validé/réception) — ce
+     * contrôle réduit le risque, il ne l'élimine pas.
+     */
+    private function ensurePartageLivraisonCategorieConfigure(array $data, string $orgId): void
+    {
+        if (! CommissionTriggerService::estMigreVersMoteurGenerique($orgId)) {
+            return;
+        }
+
+        $vehicule = Vehicule::query()->with('equipe')->find($data['vehicule_id'] ?? null);
+        if (! $vehicule || ! $vehicule->equipe) {
+            return;
+        }
+
+        $categorieIds = CommissionPartageLivraisonCategorieChecker::categorieIdsDepuisLignes($data['lignes'] ?? []);
+
+        $manquantes = CommissionPartageLivraisonCategorieChecker::categoriesManquantes(
+            $orgId,
+            $vehicule->equipe->id,
+            CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT,
+            $vehicule->type_vehicule_id,
+            $categorieIds,
+            Carbon::today(),
+        );
+
+        if ($manquantes->isEmpty()) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'vehicule_id' => sprintf(
+                'Le véhicule %s n\'a pas de partage de commission configuré pour le processus « Transfert logistique » sur : %s. Configurez la répartition de l\'équipe avant de continuer.',
+                $vehicule->nom_vehicule,
+                $manquantes->pluck('nom')->implode(', '),
+            ),
+        ]);
     }
 
     /**

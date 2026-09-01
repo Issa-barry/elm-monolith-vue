@@ -116,6 +116,14 @@ class CommissionEnveloppeGenerator
     {
         $commande->loadMissing(['lignes.variante.produit.categorie', 'vehicule.equipe.membres.livreur', 'vehicule.proprietaire', 'site']);
 
+        // distribution_client se calcule sur les quantités réellement RÉCEPTIONNÉES
+        // (quantite_livree), jamais chargées — la validation de réception est son unique
+        // déclencheur (cf. CommissionTriggerService::onReceptionDistributionValidee()), décision
+        // produit du 30/08/2026 qui révise COMM-004. vente_standard reste inchangée.
+        $quantiteField = $commande->nature_operation === NatureOperation::DISTRIBUTION_CLIENT
+            ? 'quantite_livree'
+            : 'quantite_chargee';
+
         return new CommissionOperationContext(
             organizationId: $commande->organization_id,
             sourceType: CommandeVente::class,
@@ -126,7 +134,7 @@ class CommissionEnveloppeGenerator
             site: $commande->site,
             earnedAt: Carbon::today(),
             sourceLigneType: CommandeVenteLigne::class,
-            quantiteField: 'quantite_chargee',
+            quantiteField: $quantiteField,
             lignes: $commande->lignes,
         );
     }
@@ -494,27 +502,22 @@ class CommissionEnveloppeGenerator
                     }
 
                     // Barème Livreur résolu au niveau CATÉGORIE uniquement (jamais variante/
-                    // produit) : le partage entre livreurs n'a lui-même jamais été défini plus
-                    // finement qu'une catégorie (cf. EquipeLivraisonPartageCategorie) — même
-                    // résolution que celle utilisée pour valider la config à la sauvegarde de
-                    // l'équipe (EquipeLivraisonController::validatePartagesCategorie), pour
-                    // garantir que l'enveloppe validée à la saisie et l'enveloppe utilisée à la
-                    // génération sont toujours identiques. Une éventuelle règle plus spécifique
-                    // (variante/produit) sur une ligne de cette catégorie n'est donc pas prise en
-                    // compte ici, contrairement aux autres cibles — limite assumée, cohérente
-                    // avec le fait que le partage Livreur n'existe jamais à un grain plus fin.
-                    $regleCategorie = CommissionRegleResolver::resolve(
+                    // produit) — cf. CommissionPartageLivraisonCategorieChecker, source unique
+                    // partagée avec EquipeLivraisonController::validatePartagesCategorie et les
+                    // garde-fous préventifs à la création (CommandeVenteController,
+                    // TransfertLogistiqueController), pour garantir que "enveloppe" et "partage
+                    // manquant" signifient toujours la même chose partout. Une éventuelle règle
+                    // plus spécifique (variante/produit) sur une ligne de cette catégorie n'est
+                    // donc pas prise en compte ici, contrairement aux autres cibles — limite
+                    // assumée, cohérente avec le fait que le partage Livreur n'existe jamais à un
+                    // grain plus fin.
+                    $enveloppeUnitaire = CommissionPartageLivraisonCategorieChecker::resoudreEnveloppe(
                         $ctx->organizationId,
                         $processus->id,
-                        $cibleCode,
-                        null,
-                        null,
                         $categorieId,
-                        $earnedAt,
                         $vehicule->type_vehicule_id,
+                        $earnedAt,
                     );
-
-                    $enveloppeUnitaire = (int) round((float) ($regleCategorie?->montant ?? 0));
 
                     // Barème Livreur configuré à 0 pour cette catégorie : valeur métier valide
                     // ("aucune commission à distribuer"), jamais un partage à exiger ni une
@@ -525,11 +528,12 @@ class CommissionEnveloppeGenerator
 
                     $quantiteCategorie = (int) $contribsCategorie->sum('quantite');
 
-                    $partages = EquipeLivraisonPartageCategorie::where('processus_id', $processus->id)
-                        ->where('equipe_id', $vehicule->equipe->id)
-                        ->where('categorie_id', $categorieId)
-                        ->actifA($earnedAt)
-                        ->get();
+                    $partages = CommissionPartageLivraisonCategorieChecker::partagesActifs(
+                        $processus->id,
+                        $vehicule->equipe->id,
+                        $categorieId,
+                        $earnedAt,
+                    );
 
                     if ($partages->isEmpty()) {
                         $erreurs[] = "Cible {$cibleCode} : partage non configuré pour cette équipe sur la catégorie {$categorieId} — à régulariser.";

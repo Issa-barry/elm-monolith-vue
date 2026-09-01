@@ -242,7 +242,7 @@ const filterFields: FilterField[] = [
         key: 'numero_commande',
         label: 'N° commande',
         type: 'text',
-        placeholder: 'CMD-…',
+        placeholder: 'VTE-…, DST-…',
         inline: true,
     },
 ];

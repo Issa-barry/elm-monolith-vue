@@ -215,7 +215,37 @@ export async function loginAsElmV2Demo(page: Page): Promise<void> {
                 .getByRole('button', { name: /se connecter/i })
                 .first();
             await expect(submitButton).toBeEnabled({ timeout: 10_000 });
-            await submitButton.click();
+
+            // Contrairement à `login()`, ce compte n'a pas de numéro de repli : le
+            // seul moyen d'éviter le throttle `login` (5/min par téléphone+IP, cf.
+            // FortifyServiceProvider::configureRateLimiting) est d'attendre la fin de
+            // la fenêtre avant de retenter avec le MÊME numéro. Sans cette détection,
+            // un simple 429 (page HTML brute "Too Many Requests", jamais transformée
+            // en erreur Inertia — cf. LockoutResponse, jamais atteint par le pipeline
+            // Fortify actuel) laisse `not.toHaveURL(/login/)` échouer en silence après
+            // 15s, et les 3 tentatives ci-dessous n'attendent que 0.5-1.5s : elles
+            // retombent toutes dans la même fenêtre de 60s et épuisent le budget de
+            // retries pour rien (cause confirmée des échecs CI en cascade sur les
+            // specs commission-* qui appellent toutes ce helper).
+            const [response] = await Promise.all([
+                page.waitForResponse(
+                    (r) =>
+                        r.url().includes('/login') &&
+                        r.request().method() === 'POST',
+                    { timeout: 15_000 },
+                ),
+                submitButton.click(),
+            ]);
+
+            if (response.status() === 429) {
+                const retryAfterSeconds =
+                    Number(response.headers()['retry-after']) || 60;
+                await page.waitForTimeout((retryAfterSeconds + 1) * 1000);
+                throw new Error(
+                    `Rate limited (429) on /login POST, waited ${retryAfterSeconds}s before retrying.`,
+                );
+            }
+
             await expect(page).not.toHaveURL(/\/login(?:\?.*)?$/, {
                 timeout: 15_000,
             });
@@ -709,14 +739,22 @@ export async function cleanupRowsByPrefix(
     await login(page);
     await page.goto(route);
 
-    const searchInput = await getVisibleSearchInput(page);
-    await searchInput.fill(prefix);
-    await searchInput.press('Enter');
-    await page.waitForLoadState('networkidle');
-
     const guard = new RegExp(escapeRegExp(prefix), 'i');
 
     for (let i = 0; i < 6; i++) {
+        // Récupéré à CHAQUE itération (jamais réutilisé d'un tour à l'autre) : sur les
+        // pages migrées vers DataFilters trigger-only, `getVisibleSearchInput` doit
+        // rouvrir le drawer Filtres — un `Locator` scopé au drawer capturé une seule
+        // fois avant la boucle redevient invisible dès que la suppression précédente
+        // recharge la page (le drawer se referme), et un `.fill()` sans timeout dessus
+        // attend alors indéfiniment, bloqué jusqu'au timeout du hook `afterEach` (cause
+        // confirmée des shards E2E CI qui expiraient silencieusement, cf. historique de
+        // réactivation de la suite complète).
+        const searchInput = await getVisibleSearchInput(page);
+        await searchInput.fill(prefix);
+        await searchInput.press('Enter');
+        await page.waitForLoadState('networkidle');
+
         const row = page
             .locator('tbody tr:has(button)', { hasText: guard })
             .first();
@@ -747,9 +785,6 @@ export async function cleanupRowsByPrefix(
             break;
         }
 
-        await page.waitForLoadState('networkidle');
-        await searchInput.fill(prefix);
-        await searchInput.press('Enter');
         await page.waitForLoadState('networkidle');
     }
 }

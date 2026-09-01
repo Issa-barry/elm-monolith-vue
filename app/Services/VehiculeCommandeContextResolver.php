@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\ClientType;
 use App\Enums\ModeTarification;
+use App\Enums\NatureOperation;
 use App\Models\Client;
 use App\Models\Vehicule;
 
@@ -17,7 +18,11 @@ use App\Models\Vehicule;
  * Règle métier (cf. analyse du modèle véhicules/partenaires/commissions) :
  *  - un véhicule de flotte gérée (toute ligne présente dans `vehicules`, quelle que soit sa
  *    catégorie INTERNE/PARTENAIRE) facture toujours au prix de vente plein, et n'est éligible
- *    aux commissions que s'il est autorisé `livraison_vente` ;
+ *    aux commissions que s'il est autorisé pour l'usage réellement concerné par l'opération
+ *    (`livraison_vente` pour une vente standard, `livraison_logistique` pour une distribution
+ *    client — révisé le 31/08/2026 : un véhicule logistique-only n'a `livraison_vente` jamais à
+ *    true, sans quoi une distribution utilisant un tel véhicule perdrait silencieusement toute
+ *    éligibilité aux commissions, cf. CommissionEnveloppeGenerator::genererPourCommandeVente()) ;
  *  - une vente sans véhicule de flotte pour un client EXTERNE facture à prix usine, jamais
  *    de commission (aucun véhicule de flotte impliqué) ;
  *  - une vente sans véhicule de flotte pour un client Revendeur ou Distributeur facture au prix
@@ -30,17 +35,21 @@ use App\Models\Vehicule;
  */
 class VehiculeCommandeContextResolver
 {
-    public static function resolve(?string $vehiculeId, ?string $clientId = null): VehiculeCommandeContext
+    public static function resolve(?string $vehiculeId, ?string $clientId = null, ?NatureOperation $natureOperation = null): VehiculeCommandeContext
     {
         if ($vehiculeId) {
             $vehicule = Vehicule::query()
-                ->select(['id', 'livraison_vente', 'type_vehicule_id'])
+                ->select(['id', 'livraison_vente', 'livraison_logistique', 'type_vehicule_id'])
                 ->with('typeVehicule:id,categorie_tarifaire')
                 ->find($vehiculeId);
 
+            $commissionEligible = $natureOperation === NatureOperation::DISTRIBUTION_CLIENT
+                ? (bool) $vehicule?->livraison_logistique
+                : (bool) ($vehicule?->livraison_vente ?? true);
+
             return new VehiculeCommandeContext(
                 ModeTarification::PRIX_VENTE,
-                (bool) ($vehicule?->livraison_vente ?? true),
+                $commissionEligible,
                 $vehicule?->typeVehicule?->categorie_tarifaire,
             );
         }

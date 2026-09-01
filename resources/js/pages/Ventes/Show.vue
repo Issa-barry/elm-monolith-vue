@@ -88,7 +88,6 @@ interface LigneCommande {
     produit_nom: string | null;
     quantite_demandee: number;
     quantite_chargee: number | null;
-    quantite_livree: number | null;
     type_ecart: string | null;
     type_ecart_label: string | null;
     commentaire_ecart: string | null;
@@ -560,6 +559,9 @@ function submitEncaisser() {
 const showChargeeCol = computed(
     () => !props.commande.is_brouillon && !props.commande.is_a_charger,
 );
+const chargeeEtEcartColspan = computed(
+    () => 2 + (showChargeeCol.value ? 3 : 0) + 1,
+);
 
 // ── Prix affiché — "Prix appliqué" par ligne (cf. Ventes/Create.vue) : des lignes d'une même
 // commande peuvent relever de politiques de prix différentes (ex: un produit fabricable au
@@ -660,10 +662,9 @@ function connectorIsActive(idx: number): boolean {
     return idx < currentStepIdx.value;
 }
 
-// L'étape "Commissions" (idx 5) doit rester visuellement en anomalie tant que
-// la dernière tentative de génération a échoué — jamais confondue avec "en
-// cours" (bleu) ou "faite" (vert), cf. incident CMD-230826-004 où cet état
-// n'était visible nulle part.
+// L'étape "Commissions" doit rester visuellement en anomalie tant que la dernière tentative de
+// génération a échoué — jamais confondue avec "en cours" (bleu) ou "faite" (vert), cf. incident
+// CMD-230826-004 où cet état n'était visible nulle part.
 const COMMISSIONS_STEP_IDX = 5;
 const commissionsEnErreur = computed(
     () => props.commission_generation_statut?.value === 'erreur',
@@ -915,13 +916,17 @@ function stepLabel(idx: number, defaultLabel: string): string {
                             <div
                                 :class="[
                                     'flex h-9 w-9 items-center justify-center rounded-full transition-all',
-                                    idx === 5 && commissionsEnErreur
+                                    idx === COMMISSIONS_STEP_IDX &&
+                                    commissionsEnErreur
                                         ? 'bg-red-500 text-white shadow-sm'
                                         : stepState(idx) === 'done'
                                           ? 'bg-emerald-500 text-white shadow-sm'
                                           : '',
                                     stepState(idx) === 'current' &&
-                                    !(idx === 5 && commissionsEnErreur)
+                                    !(
+                                        idx === COMMISSIONS_STEP_IDX &&
+                                        commissionsEnErreur
+                                    )
                                         ? 'bg-blue-600 text-white shadow-md ring-4 ring-blue-100 dark:ring-blue-900/50'
                                         : '',
                                     stepState(idx) === 'future'
@@ -934,13 +939,17 @@ function stepLabel(idx: number, defaultLabel: string): string {
                             <span
                                 :class="[
                                     'mt-1.5 text-center text-[11px] leading-tight font-medium',
-                                    idx === 5 && commissionsEnErreur
+                                    idx === COMMISSIONS_STEP_IDX &&
+                                    commissionsEnErreur
                                         ? 'text-red-600 dark:text-red-400'
                                         : stepState(idx) === 'current'
                                           ? 'text-blue-600 dark:text-blue-400'
                                           : '',
                                     stepState(idx) === 'done' &&
-                                    !(idx === 5 && commissionsEnErreur)
+                                    !(
+                                        idx === COMMISSIONS_STEP_IDX &&
+                                        commissionsEnErreur
+                                    )
                                         ? 'text-emerald-600 dark:text-emerald-400'
                                         : '',
                                     stepState(idx) === 'future'
@@ -1330,7 +1339,7 @@ function stepLabel(idx: number, defaultLabel: string): string {
                             <tfoot>
                                 <tr class="border-t bg-muted/20">
                                     <td
-                                        :colspan="showChargeeCol ? 6 : 3"
+                                        :colspan="chargeeEtEcartColspan"
                                         class="px-4 py-3 text-right text-sm font-semibold text-muted-foreground"
                                     >
                                         {{ totalColumnLabel }}

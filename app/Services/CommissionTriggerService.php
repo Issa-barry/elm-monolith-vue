@@ -6,6 +6,7 @@ use App\Enums\BaseCalculLogistique;
 use App\Enums\CommissionActivationStatut;
 use App\Enums\DeclencheurCommissionLogistique;
 use App\Enums\DeclencheurCommissionVente;
+use App\Enums\NatureOperation;
 use App\Enums\StatutCommission;
 use App\Models\CommandeVente;
 use App\Models\CommissionLogistique;
@@ -46,6 +47,11 @@ class CommissionTriggerService
      * CommandeVenteService::validerChargement()), une fois les quantités
      * réellement chargées connues.
      *
+     * Réservé à vente_standard (décision produit du 30/08/2026) : distribution_client ne génère
+     * jamais de commission au chargement, quel que soit le déclencheur configuré pour
+     * l'organisation — sa commission naît exclusivement à la validation de réception, cf.
+     * onReceptionDistributionValidee().
+     *
      * Sous CHARGEMENT_VALIDE : génère la commission maintenant, en CREEE, sur
      * la base des quantités chargées.
      *
@@ -55,6 +61,10 @@ class CommissionTriggerService
      */
     public static function onChargementValide(CommandeVente $commande): void
     {
+        if ($commande->nature_operation === NatureOperation::DISTRIBUTION_CLIENT) {
+            return;
+        }
+
         if (self::declencheurVente($commande->organization_id) !== DeclencheurCommissionVente::CHARGEMENT_VALIDE) {
             return;
         }
@@ -75,11 +85,19 @@ class CommissionTriggerService
      *
      * Sous CHARGEMENT_VALIDE : ne fait rien, la commission existe déjà depuis
      * le chargement.
+     *
+     * Réservé à vente_standard, comme onChargementValide() : l'encaissement d'une facture de
+     * distribution ne déclenche jamais sa commission, même sous FACTURE_ENCAISSEE — seule la
+     * réception validée le fait (décision produit du 30/08/2026).
      */
     public static function onFactureVenteEncaissee(FactureVente $facture): void
     {
         $commande = $facture->commande;
         if (! $commande) {
+            return;
+        }
+
+        if ($commande->nature_operation === NatureOperation::DISTRIBUTION_CLIENT) {
             return;
         }
 
@@ -113,6 +131,10 @@ class CommissionTriggerService
             return;
         }
 
+        if ($commande->nature_operation === NatureOperation::DISTRIBUTION_CLIENT) {
+            return;
+        }
+
         if (self::declencheurVente($commande->organization_id) !== DeclencheurCommissionVente::FACTURE_ENCAISSEE) {
             return;
         }
@@ -126,6 +148,25 @@ class CommissionTriggerService
                 $commission->update(['statut' => StatutCommission::ANNULEE->value]);
             }
         }
+    }
+
+    /**
+     * Appelé à la validation réelle de la réception d'une distribution (cf.
+     * CommandeVenteService::validerReceptionDistribution()) — UNIQUE déclencheur de commission
+     * pour distribution_client (décision produit du 30/08/2026), jamais conditionné au paramètre
+     * organisation Parametre::getDeclencheurCommissionVente() qui ne régit plus que
+     * vente_standard : la réception est la seule confirmation que la mission de distribution a
+     * réellement eu lieu, contrairement au chargement (simple départ du véhicule) ou à
+     * l'encaissement (simple paiement, indépendant de la livraison effective). Génère sur la base
+     * des quantités réellement reçues (quantite_livree), jamais chargées — cf.
+     * CommissionEnveloppeGenerator::contexteDepuisCommandeVente().
+     */
+    public static function onReceptionDistributionValidee(CommandeVente $commande): void
+    {
+        CommissionEnveloppeGenerator::genererPourCommandeVente(
+            $commande,
+            declencheurUserId: auth()->id(),
+        );
     }
 
     /**
