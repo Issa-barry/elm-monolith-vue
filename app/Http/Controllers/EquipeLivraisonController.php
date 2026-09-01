@@ -212,9 +212,11 @@ class EquipeLivraisonController extends Controller
 
         return [
             'is_active' => 'boolean',
-            // Détermine quel partage (vente / distribution_client / logistique_transfert) cette
-            // soumission remplace — jamais un fallback implicite vers vente. Chaque processus a
-            // ses propres montants fixes pour la même équipe/catégorie (cf. syncPartagesCategorie()).
+            // Détermine quel partage (vente / logistique_transfert, cf.
+            // CommissionRegleController::processusCodesDisponibles() — distribution_client n'est
+            // plus un processus configurable depuis le 01/09/2026) cette soumission remplace —
+            // jamais un fallback implicite vers vente. Chaque processus a ses propres montants
+            // fixes pour la même équipe/catégorie (cf. syncPartagesCategorie()).
             'processus_code' => ['required', Rule::in($codesApplicables)],
             'vehicule_id' => [
                 'required', 'string',

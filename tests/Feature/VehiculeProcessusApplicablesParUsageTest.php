@@ -29,7 +29,12 @@ use Tests\TestCase;
  * métier ne l'autorise à exercer ce processus). Les processus réellement pertinents pour un
  * véhicule dépendent de ses usages :
  *  - livraison_vente = true  → processus `vente` applicable ;
- *  - livraison_logistique = true → `distribution_client` ET `logistique_transfert` applicables.
+ *  - livraison_logistique = true → `logistique_transfert` applicable.
+ *
+ * Révisé le 01/09/2026 (décision produit) : `distribution_client` n'est PLUS un processus
+ * configurable, quel que soit l'usage du véhicule — une distribution utilise désormais le même
+ * barème que `logistique_transfert` (cf. CommissionEnveloppeGenerator::genererPourCommandeVente()).
+ * Il n'existe donc plus que 2 processus configurables au maximum pour un même véhicule, jamais 3.
  *
  * Source unique du mapping : CommissionProcessusDefaults::codesApplicablesPourVehicule(),
  * consommée à la fois par VehiculeController::show() (onglets/statuts de la fiche véhicule) et
@@ -123,7 +128,7 @@ class VehiculeProcessusApplicablesParUsageTest extends TestCase
     }
 
     /** @test */
-    public function logistique_uniquement_expose_distribution_et_transfert_mais_pas_vente(): void
+    public function logistique_uniquement_expose_seulement_le_processus_logistique_transfert(): void
     {
         $vehicule = $this->makeVehicule(['livraison_vente' => false, 'livraison_logistique' => true]);
 
@@ -131,24 +136,26 @@ class VehiculeProcessusApplicablesParUsageTest extends TestCase
             ->get(route('vehicules.show', $vehicule))
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Vehicules/Show')
-                ->has('processus_options', 2)
-                ->where('processus_options.0.value', CommissionProcessus::CODE_DISTRIBUTION_CLIENT)
-                ->where('processus_options.1.value', CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT)
-                // Vente non applicable : jamais l'onglet actif par défaut pour ce véhicule.
-                ->where('processus_actif', CommissionProcessus::CODE_DISTRIBUTION_CLIENT)
+                ->has('processus_options', 1)
+                ->where('processus_options.0.value', CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT)
+                ->where('processus_actif', CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT)
             );
     }
 
     /** @test */
-    public function vehicule_mixte_expose_les_trois_processus(): void
+    public function vehicule_mixte_expose_vente_et_logistique_transfert(): void
     {
+        // Plus jamais 3 processus depuis le 01/09/2026 : distribution_client n'est plus
+        // configurable, même pour le véhicule le plus polyvalent (vente + logistique).
         $vehicule = $this->makeVehicule(['livraison_vente' => true, 'livraison_logistique' => true]);
 
         $this->actingAs($this->user)
             ->get(route('vehicules.show', $vehicule))
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Vehicules/Show')
-                ->has('processus_options', 3)
+                ->has('processus_options', 2)
+                ->where('processus_options.0.value', CommissionProcessus::CODE_VENTE)
+                ->where('processus_options.1.value', CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT)
             );
     }
 
@@ -224,7 +231,7 @@ class VehiculeProcessusApplicablesParUsageTest extends TestCase
     }
 
     /** @test */
-    public function refuse_processus_code_logistique_pour_un_vehicule_vente_uniquement(): void
+    public function refuse_processus_code_distribution_pour_un_vehicule_vente_uniquement(): void
     {
         $vehicule = $this->makeVehicule(['livraison_vente' => true, 'livraison_logistique' => false]);
 
@@ -245,13 +252,30 @@ class VehiculeProcessusApplicablesParUsageTest extends TestCase
             ->assertSessionHasErrors('processus_code');
     }
 
+    /**
+     * Décision produit du 01/09/2026 : distribution_client n'est plus jamais acceptable comme
+     * processus_code, même pour le véhicule le plus favorable (logistique-only, qui aurait
+     * pourtant accepté ce code avant cette date).
+     */
     /** @test */
-    public function accepte_processus_code_distribution_pour_un_vehicule_logistique_uniquement(): void
+    public function refuse_processus_code_distribution_meme_pour_un_vehicule_logistique_uniquement(): void
     {
         $vehicule = $this->makeVehicule(['livraison_vente' => false, 'livraison_logistique' => true]);
 
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $this->validPayload($vehicule, CommissionProcessus::CODE_DISTRIBUTION_CLIENT))
+            ->assertSessionHasErrors('processus_code');
+
+        $this->assertDatabaseMissing('equipes_livraison', ['vehicule_id' => $vehicule->id]);
+    }
+
+    /** @test */
+    public function accepte_processus_code_logistique_transfert_pour_un_vehicule_logistique_uniquement(): void
+    {
+        $vehicule = $this->makeVehicule(['livraison_vente' => false, 'livraison_logistique' => true]);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($vehicule, CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT))
             ->assertRedirectContains('/backoffice/vehicules/');
 
         $this->assertDatabaseHas('equipes_livraison', ['vehicule_id' => $vehicule->id]);
@@ -295,13 +319,13 @@ class VehiculeProcessusApplicablesParUsageTest extends TestCase
             ->get(route('vehicules.show', $vehicule))
             ->assertInertia(fn (Assert $page) => $page->has('processus_options', 1));
 
-        // Le véhicule devient mixte : distribution_client/logistique_transfert deviennent
-        // applicables — sans qu'aucune migration ni suppression ne soit nécessaire.
+        // Le véhicule devient mixte : logistique_transfert devient applicable — sans qu'aucune
+        // migration ni suppression ne soit nécessaire.
         $vehicule->update(['livraison_logistique' => true]);
 
         $this->actingAs($this->user)
             ->get(route('vehicules.show', $vehicule))
-            ->assertInertia(fn (Assert $page) => $page->has('processus_options', 3));
+            ->assertInertia(fn (Assert $page) => $page->has('processus_options', 2));
 
         // Le partage Vente déjà enregistré reste intact, jamais implicitement clos ou supprimé
         // par le seul changement d'usage du véhicule.

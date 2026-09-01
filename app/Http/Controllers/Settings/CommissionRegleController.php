@@ -53,12 +53,26 @@ class CommissionRegleController extends Controller
         return to_route('settings.commissions.index');
     }
 
-    /** @return array<string> */
+    /**
+     * Whitelist des processus CONFIGURABLES/ROUTABLES pour toute NOUVELLE opération — source
+     * unique consommée par la validation `processus_code` (StoreCommissionConfigurationRequest,
+     * EquipeLivraisonController::rules()), les onglets Paramètres > Commissions et la fiche
+     * véhicule (VehiculeController::show()).
+     *
+     * CODE_DISTRIBUTION_CLIENT volontairement absent depuis le 01/09/2026 (décision produit) :
+     * une distribution client utilise désormais le même barème que le transfert logistique
+     * (CODE_LOGISTIQUE_TRANSFERT), il n'y a plus de configuration séparée à proposer. Les
+     * CommissionEnveloppe/CommissionRegle/EquipeLivraisonPartageCategorie déjà rattachées à
+     * CODE_DISTRIBUTION_CLIENT restent en base et lisibles (jamais migrées) — seul le REPORTING
+     * historique (App\Support\Commission\CommissionProcessusFilter, volontairement distinct de
+     * cette liste) continue de les distinguer, pour ne jamais fausser un total déjà généré.
+     *
+     * @return array<string>
+     */
     public static function processusCodesDisponibles(): array
     {
         return [
             CommissionProcessus::CODE_VENTE,
-            CommissionProcessus::CODE_DISTRIBUTION_CLIENT,
             CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT,
         ];
     }
@@ -67,8 +81,11 @@ class CommissionRegleController extends Controller
     {
         return match ($code) {
             CommissionProcessus::CODE_VENTE => 'Ventes',
-            CommissionProcessus::CODE_DISTRIBUTION_CLIENT => 'Distributions clients',
             CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT => 'Transferts logistiques',
+            // Legacy : CODE_DISTRIBUTION_CLIENT n'est plus dans processusCodesDisponibles()
+            // depuis le 01/09/2026, mais un CommissionProcessus historique portant ce code
+            // peut encore être résolu ailleurs (reporting) — jamais une chaîne technique brute.
+            CommissionProcessus::CODE_DISTRIBUTION_CLIENT => 'Distribution client (historique)',
             default => $code,
         };
     }

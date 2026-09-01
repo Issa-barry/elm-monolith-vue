@@ -69,10 +69,31 @@ même principe de barème dynamique au transfert logistique interne.
     ne régit plus que `vente_standard`) — calculée sur `quantite_livree`, jamais `quantite_chargee`
     (cf. `CommissionEnveloppeGenerator::contexteDepuisCommandeVente()`,
     `CommissionTriggerService::onReceptionDistributionValidee()`).
-- **COMM-005** — La commission d'une commande est routée vers le processus `vente` ou
-  `distribution_client` selon `nature_operation`, avec des barèmes (`CommissionRegle`)
-  totalement indépendants — un même produit/catégorie peut avoir un montant différent en vente et
-  en distribution.
+- **COMM-005** (révisée le 01/09/2026 — la version précédente affirmait l'inverse : un barème
+  `distribution_client` totalement indépendant de la logistique) — La commission d'une commande
+  est routée vers le processus `vente` ou `logistique_transfert` selon `nature_operation` — une
+  distribution client utilise **le même barème que le transfert logistique interne**, jamais un
+  processus dédié. Décision produit explicite : le métier confirme que les commissions
+  logistiques s'appliquent uniformément aux opérations de distribution et de transfert, il n'y a
+  plus de configuration séparée à maintenir en parallèle.
+  - `CommissionProcessus::CODE_DISTRIBUTION_CLIENT` reste défini dans le code (legacy) et en base
+    pour toute organisation l'ayant déjà utilisé, mais n'est plus jamais résolu par aucun
+    appelant — ni pour la génération (`CommissionEnveloppeGenerator::genererPourCommandeVente()`),
+    ni pour la configuration (`Settings\CommissionRegleController::processusCodesDisponibles()`
+    ne le liste plus), ni pour la fiche véhicule (`VehiculeController::show()`). Les
+    `CommissionEnveloppe`/`CommissionRegle`/`EquipeLivraisonPartageCategorie` déjà générées sous
+    ce code avant le 01/09/2026 restent en base, inchangées et lisibles — **aucune migration**,
+    seul le routage des NOUVELLES opérations a changé.
+  - Seul le reporting historique (`App\Support\Commission\CommissionProcessusFilter`, utilisé par
+    les écrans Comptabilité) continue de distinguer `distribution_client` des deux autres codes,
+    pour que le detail par processus d'une période antérieure au 01/09/2026 reste réconciliable
+    avec son total déjà généré — ne jamais aligner ce filtre sur `processusCodesDisponibles()`.
+  - Conséquence opérationnelle à valider par le métier pour toute organisation ayant déjà
+    configuré des montants **différents** entre "Distribution client" et "Transferts
+    logistiques" avant le 01/09/2026 : le montant réellement appliqué à une NOUVELLE distribution
+    change (il devient celui du barème logistique) — ce n'est pas un bug, c'est l'objet même de
+    cette révision, mais l'organisation concernée doit vérifier que son barème logistique reflète
+    bien le montant qu'elle souhaite désormais pour ses distributions.
 - **COMM-006** — Le transfert logistique interne (usine → dépôt ELM) ne porte jamais de client ni
   de facture, quelle que soit sa commission — `TransfertLogistique` reste inchangé dans son
   fonctionnement de stock.
