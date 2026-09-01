@@ -212,8 +212,11 @@ async function soumettreEtConfirmer(page: Page): Promise<void> {
         .first()
         .click();
 
-    const confirmerEtCreerBtn = page.getByRole('button', {
-        name: /confirmer et créer/i,
+    // Libellé dynamique ("Créer la commande"/"Créer la distribution", cf.
+    // Create.vue::confirmationActionLabel), scopé au dialog (régression E2E corrigée le
+    // 31/08/2026 — "Confirmer et créer" n'existe plus depuis son introduction).
+    const confirmerEtCreerBtn = page.getByRole('dialog').getByRole('button', {
+        name: /créer la (commande|distribution)/i,
     });
     await expect(confirmerEtCreerBtn).toBeVisible({ timeout: 10_000 });
     await confirmerEtCreerBtn.click();

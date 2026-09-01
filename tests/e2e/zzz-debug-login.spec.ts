@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { test } from '@playwright/test';
 import { fillLoginIdentifier } from './helpers';
 
 test('debug login phone composition', async ({ page }) => {

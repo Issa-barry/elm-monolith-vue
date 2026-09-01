@@ -45,7 +45,11 @@ export async function creerCommande(
     await expect(submitCreate).toBeEnabled({ timeout: 10_000 });
     await submitCreate.click();
 
-    const confirmerEtCreerBtn = page.getByRole('button', { name: /confirmer et créer/i });
+    // Libellé dynamique ("Créer la commande"/"Créer la distribution", cf.
+    // Create.vue::confirmationActionLabel), scopé au dialog (régression E2E corrigée le 31/08/2026).
+    const confirmerEtCreerBtn = page
+        .getByRole('dialog')
+        .getByRole('button', { name: /créer la (commande|distribution)/i });
     await expect(confirmerEtCreerBtn).toBeVisible({ timeout: 10_000 });
     await confirmerEtCreerBtn.click();
     await expect(page).toHaveURL(/\/ventes\/(?!create)[a-z0-9]+$/, { timeout: 30_000 });

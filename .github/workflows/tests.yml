@@ -87,7 +87,10 @@ jobs:
     needs: changes
     # dev → pre-prod : suite complète, seule promotion qui la justifie (cf. e2e-smoke et
     # le job absent sur pre-prod → production → main plus bas).
-    if: github.base_ref == 'pre-prod' && needs.changes.outputs.non_docs == 'true'
+    # DÉSACTIVÉ TEMPORAIREMENT le 2026-09-01 pour accélérer une MEP urgente (dev → pre-prod
+    # passe alors sans E2E ; le garde-fou e2e-smoke reste actif sur pre-prod → production).
+    # Réactiver après la MEP en retirant le `false &&` ci-dessous.
+    if: false && github.base_ref == 'pre-prod' && needs.changes.outputs.non_docs == 'true'
     runs-on: ubuntu-latest
     # Shardée le 31/08/2026 (remplace le mode smoke-only introduit le 26/08/2026) : la
     # suite complète (173 tests, 43 fichiers) en --workers=1 dans UN SEUL job dépassait

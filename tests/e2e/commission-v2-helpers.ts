@@ -159,8 +159,12 @@ export async function creerVenteEtEncaisser(page: Page): Promise<void> {
     await expect(submitCreate).toBeEnabled({ timeout: 10_000 });
     await submitCreate.click();
 
-    const confirmerEtCreerBtn = page.getByRole('button', {
-        name: /confirmer et créer/i,
+    // Libellé dynamique ("Créer la commande"/"Créer la distribution", cf.
+    // Create.vue::confirmationActionLabel) — "Confirmer et créer" n'existe plus depuis son
+    // introduction ; scopé au dialog car le bouton de soumission du formulaire sous-jacent
+    // porte désormais le même libellé (régression E2E corrigée le 31/08/2026).
+    const confirmerEtCreerBtn = page.getByRole('dialog').getByRole('button', {
+        name: /créer la (commande|distribution)/i,
     });
     await expect(confirmerEtCreerBtn).toBeVisible({ timeout: 10_000 });
     await confirmerEtCreerBtn.click();

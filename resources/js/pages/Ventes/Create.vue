@@ -293,17 +293,6 @@ function onVehiculeClear() {
     recomputeAllTotals();
 }
 
-// Désélection automatique du véhicule dès qu'il quitte le pool proposé — couvre les deux sens :
-// passage à un client DISTRIBUTEUR alors qu'un véhicule vente-seulement était déjà choisi, ET
-// retour à un client non-distributeur alors qu'un véhicule logistique-seulement était choisi (le
-// pool "vente" ne le contient pas non plus). Un véhicule présent dans les deux pools reste
-// sélectionné dans les deux cas.
-watch(vehiculesDisponibles, (pool) => {
-    if (!vehiculeEstDansPool(form.vehicule_id, pool)) {
-        onVehiculeClear();
-    }
-});
-
 // Pré-remplit la quantité de l'unique ligne à la capacité du véhicule POUR LA CATÉGORIE DU
 // PRODUIT déjà choisi sur cette ligne — seulement s'il n'y a qu'une seule ligne avec un produit
 // sélectionné (sinon ambigu : quelle ligne recevrait le plafond ?). Cible la capacité de la
@@ -461,6 +450,20 @@ const clientSelected = ref<ClientOption | null>(null);
 const clientSuggests = ref<ClientOption[]>([]);
 const clientSolvabilite = ref<SolvabiliteResult | null>(null);
 const clientSolvabiliteLoading = ref(false);
+
+// Désélection automatique du véhicule dès qu'il quitte le pool proposé — couvre les deux sens :
+// passage à un client DISTRIBUTEUR alors qu'un véhicule vente-seulement était déjà choisi, ET
+// retour à un client non-distributeur alors qu'un véhicule logistique-seulement était choisi (le
+// pool "vente" ne le contient pas non plus). Un véhicule présent dans les deux pools reste
+// sélectionné dans les deux cas. Placé ICI (après clientSelected, jamais avant) : watch() lit la
+// valeur courante de sa source dès son appel, même sans { immediate: true } — la déclarer plus
+// haut, avant clientSelected, provoquait un ReferenceError (TDZ) qui cassait le montage de toute
+// la page /ventes/create (incident E2E facture-flow.spec.ts du 31/08/2026, cf. post-mortem).
+watch(vehiculesDisponibles, (pool) => {
+    if (!vehiculeEstDansPool(form.vehicule_id, pool)) {
+        onVehiculeClear();
+    }
+});
 
 function searchClient(event: { query: string }) {
     const q = event.query.toLowerCase().trim();
