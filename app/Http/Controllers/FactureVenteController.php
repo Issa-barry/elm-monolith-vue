@@ -80,7 +80,10 @@ class FactureVenteController extends Controller
             'week' => $query->whereBetween('created_at', [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()]),
             'month' => $query->whereYear('created_at', Carbon::now()->year)
                 ->whereMonth('created_at', Carbon::now()->month),
-            default => null, // 'all' : pas de filtre date
+            // 'tout' : jamais 'all' côté frontend (cf. Factures/Index.vue) — DataFilters
+            // traiterait 'all' comme une sentinelle générique et l'omettrait de la requête,
+            // ce qui ferait retomber ce paramètre absent sur le défaut 'month' ci-dessus.
+            default => null,
         };
 
         if ($statut !== 'tous') {

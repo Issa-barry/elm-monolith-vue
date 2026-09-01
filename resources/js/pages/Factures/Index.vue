@@ -117,11 +117,16 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Factures', href: '/backoffice/factures' },
 ];
 
+// "Tout" ne doit JAMAIS valoir 'all' (ni 'tous'/'') : DataFilters.vue traite ces valeurs comme
+// des sentinelles génériques "aucune sélection" et les retire silencieusement de la requête
+// (cf. DataFilters::SENTINELS) — un choix qui, pour ce champ, ferait retomber le backend sur son
+// défaut 'month' au lieu de lever le filtre de date (régression corrigée le 01/09/2026 : "Tout"
+// n'affichait jamais rien au-delà du mois courant).
 const periodes = [
     { value: 'today', label: "Aujourd'hui" },
     { value: 'week', label: 'Cette semaine' },
     { value: 'month', label: 'Ce mois' },
-    { value: 'all', label: 'Tout' },
+    { value: 'tout', label: 'Tout' },
 ];
 
 const filtres = [
