@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Contracts\OtpDeliveryChannel;
 use App\Enums\OtpPurpose;
+use App\Services\Otp\OtpFallbackTarget;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
@@ -136,17 +137,26 @@ class OtpService
      * ex: un email de secours) peuvent différer — c'est exactement le cas
      * "canal temporaire" (purpose=phone_verification ou login, transporté par
      * email en attendant un fournisseur SMS/WhatsApp).
+     *
+     * `$fallback` (ajouté le 31/08/2026, audit intégration Nimba SMS) : canal
+     * de repli EXPLICITE — cf. `OtpChannelResolver::fallbackFor()` — que
+     * `$channel` peut utiliser si son envoi échoue réellement APRÈS avoir été
+     * choisi (ex: SMS jugé disponible mais Nimba en panne au moment de
+     * l'envoi). Simplement transmis à `OtpDeliveryChannel::send()` ; seul
+     * `SmsOtpChannel` s'en sert aujourd'hui (email est synchrone, ses échecs
+     * remontent déjà en erreur sans avoir besoin d'un repli différé).
      */
     public function generateAndSend(
         string $identifier,
         OtpPurpose $purpose,
         OtpDeliveryChannel $channel,
         string $destination,
-        ?string $context = null
+        ?string $context = null,
+        ?OtpFallbackTarget $fallback = null,
     ): string {
         $code = $this->generate($identifier, $purpose, $context);
 
-        $channel->send($destination, $code, $purpose);
+        $channel->send($destination, $code, $purpose, $fallback);
 
         return $code;
     }
@@ -155,6 +165,16 @@ class OtpService
     public function resendCooldownSeconds(): int
     {
         return self::RESEND_COOLDOWN_SECONDS;
+    }
+
+    /**
+     * Durée de vie (en minutes) d'un code généré — exposé pour que les canaux
+     * de transport (ex: SmsOtpChannel) puissent l'annoncer dans le message
+     * envoyé sans dupliquer cette valeur (single source of truth).
+     */
+    public function ttlMinutes(): int
+    {
+        return self::TTL_MINUTES;
     }
 
     /**

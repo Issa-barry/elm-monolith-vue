@@ -450,12 +450,13 @@ test('vente client sous le seuil autorisée, la même dette dépassant un seuil 
         .first()
         .click();
 
-    // La soumission ouvre un dialog de confirmation — cliquer "Confirmer et créer" (cf.
+    // La soumission ouvre un dialog de confirmation — cliquer le bouton final (cf.
     // facture-flow.spec.ts) : sans ce clic, form.post() ne part jamais et l'URL reste sur
     // "/ventes/create", ce que le regex ci-dessous matcherait quand même à tort ("create"
-    // est alphanumérique) si on ne l'excluait pas explicitement.
-    const confirmerEtCreerBtn = page.getByRole('button', {
-        name: /confirmer et créer/i,
+    // est alphanumérique) si on ne l'excluait pas explicitement. Scopé au dialog : le bouton
+    // de soumission du formulaire sous-jacent porte désormais le même libellé.
+    const confirmerEtCreerBtn = page.getByRole('dialog').getByRole('button', {
+        name: /créer la (commande|distribution)/i,
     });
     await expect(confirmerEtCreerBtn).toBeVisible({ timeout: 10_000 });
     await confirmerEtCreerBtn.click();
@@ -615,8 +616,10 @@ test('un véhicule dont la commande précédente na reçu aucun paiement bloque 
     await expect(submit1).toBeEnabled({ timeout: 10_000 });
     await submit1.click();
 
-    const confirmerEtCreerBtn = page.getByRole('button', {
-        name: /confirmer et créer/i,
+    // Libellé dynamique ("Créer la commande"/"Créer la distribution"), scopé au dialog
+    // (régression E2E corrigée le 31/08/2026, cf. plus haut dans ce fichier).
+    const confirmerEtCreerBtn = page.getByRole('dialog').getByRole('button', {
+        name: /créer la (commande|distribution)/i,
     });
     await expect(confirmerEtCreerBtn).toBeVisible({ timeout: 10_000 });
     await confirmerEtCreerBtn.click();

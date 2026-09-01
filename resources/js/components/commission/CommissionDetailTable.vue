@@ -29,108 +29,116 @@ const hasProcessus = computed(() =>
 </script>
 
 <template>
-    <table v-if="props.rows.length > 0" class="w-full text-sm">
-        <thead>
-            <tr class="border-b bg-muted/40">
-                <th
-                    class="px-4 py-3 text-left font-medium text-muted-foreground"
-                >
-                    Référence
-                </th>
-                <th
-                    class="px-4 py-3 text-left font-medium text-muted-foreground"
-                >
-                    Date
-                </th>
-                <th
-                    class="px-4 py-3 text-left font-medium text-muted-foreground"
-                >
-                    Véhicule
-                </th>
-                <th
-                    v-if="hasProcessus"
-                    class="px-4 py-3 text-left font-medium text-muted-foreground"
-                >
-                    Origine
-                </th>
-                <th
-                    class="px-4 py-3 text-right font-medium text-muted-foreground"
-                >
-                    Montant
-                </th>
-                <th
-                    class="px-4 py-3 text-right font-medium text-muted-foreground"
-                >
-                    Reste
-                </th>
-                <th
-                    class="px-4 py-3 text-left font-medium text-muted-foreground"
-                >
-                    Statut
-                </th>
-            </tr>
-        </thead>
-        <tbody class="divide-y">
-            <tr
-                v-for="row in props.rows"
-                :key="row.id ?? row.commission_id"
-                class="hover:bg-muted/10"
-            >
-                <td class="px-4 py-3 font-mono text-xs">
-                    {{ row.reference ?? '—' }}
-                </td>
-                <td class="px-4 py-3 text-xs text-muted-foreground">
-                    {{ row.date ?? '—' }}
-                </td>
-                <td class="px-4 py-3 text-xs text-muted-foreground">
-                    {{ row.vehicule?.nom ?? '—' }}
-                    <span
-                        v-if="row.vehicule?.immatriculation"
-                        class="block text-muted-foreground/70"
-                        >{{ row.vehicule.immatriculation }}</span
+    <div v-if="props.rows.length > 0" class="overflow-x-auto">
+        <table class="w-full min-w-[820px] text-sm">
+            <thead>
+                <tr class="border-b bg-muted/40">
+                    <th
+                        class="px-4 py-3 text-left font-medium text-muted-foreground"
                     >
-                </td>
-                <td
-                    v-if="hasProcessus"
-                    class="px-4 py-3 text-xs text-muted-foreground"
+                        Référence
+                    </th>
+                    <th
+                        class="px-4 py-3 text-left font-medium text-muted-foreground"
+                    >
+                        Date
+                    </th>
+                    <th
+                        class="px-4 py-3 text-left font-medium text-muted-foreground"
+                    >
+                        Véhicule
+                    </th>
+                    <th
+                        v-if="hasProcessus"
+                        class="px-4 py-3 text-left font-medium text-muted-foreground"
+                    >
+                        Origine
+                    </th>
+                    <th
+                        class="px-4 py-3 text-right font-medium text-muted-foreground"
+                    >
+                        Montant
+                    </th>
+                    <th
+                        class="px-4 py-3 text-right font-medium text-muted-foreground"
+                    >
+                        Reste
+                    </th>
+                    <th
+                        class="px-4 py-3 text-left font-medium text-muted-foreground"
+                    >
+                        Statut
+                    </th>
+                </tr>
+            </thead>
+            <tbody class="divide-y">
+                <tr
+                    v-for="row in props.rows"
+                    :key="row.id ?? row.commission_id"
+                    class="transition-colors hover:bg-muted/20"
                 >
-                    {{ row.processus_label ?? '—' }}
-                </td>
-                <td class="px-4 py-3 text-right font-medium tabular-nums">
-                    {{ formatGNF(row.montant) }}
-                </td>
-                <td class="px-4 py-3 text-right tabular-nums">
-                    {{ formatGNF(row.reste) }}
-                </td>
-                <td class="px-4 py-3">
-                    <StatusDot
-                        v-if="row.statut"
-                        :label="row.statut"
-                        :dot-class="row.statut_dot_class ?? undefined"
-                        class="text-xs text-muted-foreground"
-                    />
-                    <span v-else>—</span>
-                </td>
-            </tr>
-        </tbody>
-        <tfoot>
-            <tr class="border-t-2 bg-muted/50 text-xs font-bold">
-                <td
-                    class="px-4 py-2.5 tracking-wide uppercase"
-                    :colspan="hasProcessus ? 4 : 3"
-                >
-                    Total
-                </td>
-                <td class="px-4 py-2.5 text-right tabular-nums">
-                    {{ formatGNF(totals.montant) }}
-                </td>
-                <td class="px-4 py-2.5 text-right tabular-nums">
-                    {{ formatGNF(totals.reste) }}
-                </td>
-                <td></td>
-            </tr>
-        </tfoot>
-    </table>
+                    <td class="px-4 py-3 font-mono text-xs whitespace-nowrap">
+                        {{ row.reference ?? '—' }}
+                    </td>
+                    <td
+                        class="px-4 py-3 text-xs whitespace-nowrap text-muted-foreground"
+                    >
+                        {{ row.date ?? '—' }}
+                    </td>
+                    <td class="px-4 py-3 text-xs text-muted-foreground">
+                        {{ row.vehicule?.nom ?? '—' }}
+                        <span
+                            v-if="row.vehicule?.immatriculation"
+                            class="block text-muted-foreground/70"
+                            >{{ row.vehicule.immatriculation }}</span
+                        >
+                    </td>
+                    <td
+                        v-if="hasProcessus"
+                        class="px-4 py-3 text-xs text-muted-foreground"
+                    >
+                        {{ row.processus_label ?? '—' }}
+                    </td>
+                    <td
+                        class="px-4 py-3 text-right font-semibold whitespace-nowrap tabular-nums"
+                    >
+                        {{ formatGNF(row.montant) }}
+                    </td>
+                    <td
+                        class="px-4 py-3 text-right whitespace-nowrap tabular-nums"
+                    >
+                        {{ formatGNF(row.reste) }}
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap">
+                        <StatusDot
+                            v-if="row.statut"
+                            :label="row.statut"
+                            :dot-class="row.statut_dot_class ?? undefined"
+                            class="text-xs text-muted-foreground"
+                        />
+                        <span v-else>—</span>
+                    </td>
+                </tr>
+            </tbody>
+            <tfoot>
+                <tr class="border-t-2 bg-muted/50 text-xs font-bold">
+                    <td
+                        class="px-4 py-2.5 tracking-wide uppercase"
+                        :colspan="hasProcessus ? 4 : 3"
+                    >
+                        Total
+                    </td>
+                    <td class="px-4 py-2.5 text-right tabular-nums">
+                        {{ formatGNF(totals.montant) }}
+                    </td>
+                    <td class="px-4 py-2.5 text-right tabular-nums">
+                        {{ formatGNF(totals.reste) }}
+                    </td>
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
     <div
         v-else
         class="flex flex-col items-center gap-3 py-12 text-muted-foreground"

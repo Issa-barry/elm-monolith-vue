@@ -121,18 +121,23 @@ unique plutôt qu'un mot de passe — **deux appels**, jamais un seul.
 ```
 
 ```json
-// 200
+// 200 (Nimba SMS configuré, cas par défaut depuis le 31/08/2026)
+{ "sent": true, "channel": "sms", "destination_masked": "+224 ••••••• 00", "cooldown_seconds": 30 }
+// 200 (repli email si Nimba indisponible/mal configuré)
 { "sent": true, "channel": "email", "destination_masked": "j***@gmail.com", "cooldown_seconds": 30 }
 ```
 
 - `channel` indique **par où** le code vient réellement d'être envoyé — utilisez-le
-  pour le message affiché ("Code envoyé par email à j***@...") plutôt que de
-  supposer un canal fixe. **Aujourd'hui, `channel` vaut toujours `"email"`** :
-  aucun fournisseur SMS/WhatsApp n'est encore branché côté serveur (cf. rapport
-  du 27/08/2026). Le jour où WhatsApp/SMS sera actif, cette même réponse
-  renverra `"whatsapp"` ou `"sms"` **sans aucun changement de contrat** — ne
-  codez jamais en dur `channel === 'email'` comme condition d'affichage,
-  traitez `channel` comme une valeur parmi `"email" | "sms" | "whatsapp"`.
+  pour le message affiché ("Code envoyé par SMS au +224 ••• •• 93") plutôt que
+  de supposer un canal fixe. **Depuis le 31/08/2026, `channel` vaut `"sms"`**
+  dès que le fournisseur Nimba SMS est configuré côté serveur (variables
+  `NIMBA_SMS_*`) — le téléphone étant toujours connu (c'est l'identifiant de
+  connexion), SMS est systématiquement choisi avant email pour ce parcours
+  (whatsapp n'est pas encore branché). `channel` ne redevient `"email"` que si
+  Nimba est indisponible/mal configuré (repli automatique, cf.
+  `App\Services\Otp\OtpChannelResolver`). Ne codez jamais en dur
+  `channel === 'email'` comme condition d'affichage, traitez `channel` comme
+  une valeur parmi `"email" | "sms" | "whatsapp"`.
 - `destination_masked` (ajouté le 27/08/2026, demande front) : la coordonnée
   **réellement utilisée** pour ce canal, **déjà masquée côté serveur**
   (`App\Services\Otp\OtpDestinationMasker`) — un email donne `"j*******@example.com"`
@@ -634,10 +639,17 @@ d'opérations sur une seule période demandée.
 
 ### `GET /v1/mobile/livraisons/scan/{reference}`
 
-Résout une référence scannée (QR) — préfixe `CMD-` = commande de vente, `TR-` =
-transfert logistique. `404` si référence non reconnue ou introuvable. Pas de
-garde de rôle explicite (`auth:sanctum` seul) — la donnée retournée dépend
-uniquement de l'existence de la référence, pas d'un filtre par propriétaire.
+Résout une référence scannée (QR). Depuis le 31/08/2026, le préfixe dépend du processus
+d'origine (cf. `docs/references-metier.md`) : `VTE-`/`DST-`/legacy `CMD-` = commande de vente
+(vente standard ou distribution client), `TRF-`/legacy `TR-` = transfert logistique — les
+anciennes références ne sont jamais renommées et restent reconnues indéfiniment. `404` si
+préfixe non reconnu ou référence introuvable **ou appartenant à une autre organisation**. Pas de
+garde de rôle explicite (`auth:sanctum` seul), mais la recherche est systématiquement filtrée par
+`organization_id` de l'utilisateur authentifié, sur les deux méthodes privées — corrigé le
+31/08/2026 : la numérotation scopée par organisation (cf. `docs/references-metier.md`) rend deux
+organisations capables de porter *exactement* la même référence (ex: `VTE-310826-001` pour l'une
+ET l'autre), ce qui aurait sinon rendu une recherche non scopée fonctionnellement ambiguë (retour
+possible des données d'une autre organisation), pas seulement un défaut d'isolation préexistant.
 
 ---
 

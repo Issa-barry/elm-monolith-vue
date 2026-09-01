@@ -66,13 +66,14 @@ class CommandeVentePartageLivraisonRequisTest extends TestCase
         );
     }
 
-    private function makeVehiculeAvecEquipe(bool $livraisonVente = true): Vehicule
+    private function makeVehiculeAvecEquipe(bool $livraisonVente = true, bool $livraisonLogistique = false): Vehicule
     {
         $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'proprietaire_id' => $proprietaire->id,
             'livraison_vente' => $livraisonVente,
+            'livraison_logistique' => $livraisonLogistique,
         ]);
 
         EquipeLivraison::create([
@@ -83,6 +84,24 @@ class CommandeVentePartageLivraisonRequisTest extends TestCase
         ]);
 
         return $vehicule->fresh();
+    }
+
+    /**
+     * Satisfait uniquement le garde-fou logistique de ensureNatureOperationCoherente()
+     * (véhicule autorisé + livreur actif assigné), sans jamais créer de partage — utilisé par
+     * les tests qui veulent isoler le garde-fou de partage testé par ce fichier de celui, distinct,
+     * de l'usage logistique (cf. CommandeVenteController::ensureNatureOperationCoherente()).
+     */
+    private function assignChauffeurActif(Vehicule $vehicule): void
+    {
+        $livreur = Livreur::factory()->create(['organization_id' => $this->org->id, 'is_active' => true]);
+
+        EquipeLivreur::create([
+            'equipe_id' => $vehicule->equipe->id,
+            'livreur_id' => $livreur->id,
+            'role' => 'chauffeur',
+            'ordre' => 0,
+        ]);
     }
 
     private function creerRegleEquipeLivraison(string $processusCode, int $montant): CommissionRegle
@@ -171,7 +190,8 @@ class CommandeVentePartageLivraisonRequisTest extends TestCase
 
     public function test_store_bloque_si_partage_manquant_pour_distribution_client(): void
     {
-        $vehicule = $this->makeVehiculeAvecEquipe();
+        $vehicule = $this->makeVehiculeAvecEquipe(livraisonLogistique: true);
+        $this->assignChauffeurActif($vehicule);
         $client = Client::factory()->create(['organization_id' => $this->org->id, 'type' => 'distributeur']);
         $this->creerRegleEquipeLivraison(CommissionProcessus::CODE_DISTRIBUTION_CLIENT, 200);
         $produit = $this->makeProduit();
@@ -190,7 +210,7 @@ class CommandeVentePartageLivraisonRequisTest extends TestCase
 
     public function test_store_autorise_si_partage_configure_pour_distribution_client(): void
     {
-        $vehicule = $this->makeVehiculeAvecEquipe();
+        $vehicule = $this->makeVehiculeAvecEquipe(livraisonLogistique: true);
         $client = Client::factory()->create(['organization_id' => $this->org->id, 'type' => 'distributeur']);
         $this->creerRegleEquipeLivraison(CommissionProcessus::CODE_DISTRIBUTION_CLIENT, 200);
         $this->definirPartage($vehicule, CommissionProcessus::CODE_DISTRIBUTION_CLIENT, $this->categorie);
@@ -215,7 +235,7 @@ class CommandeVentePartageLivraisonRequisTest extends TestCase
      */
     public function test_store_bloque_distribution_meme_si_seul_le_partage_vente_existe(): void
     {
-        $vehicule = $this->makeVehiculeAvecEquipe();
+        $vehicule = $this->makeVehiculeAvecEquipe(livraisonLogistique: true);
         $client = Client::factory()->create(['organization_id' => $this->org->id, 'type' => 'distributeur']);
         $this->creerRegleEquipeLivraison(CommissionProcessus::CODE_VENTE, 200);
         $this->definirPartage($vehicule, CommissionProcessus::CODE_VENTE, $this->categorie);

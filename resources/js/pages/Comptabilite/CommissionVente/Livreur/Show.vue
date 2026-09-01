@@ -108,7 +108,7 @@ const eyebrowLabel = PROCESSUS_LABELS[props.filtre_processus] ?? 'Livreur';
 <template>
     <Head :title="`Commission vente — ${livreur.nom}`" />
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 sm:px-6">
+        <div class="mx-auto w-full max-w-7xl space-y-5 px-4 py-5 sm:px-6">
             <CommissionDetailHeader
                 :back-href="
                     filtre_processus
@@ -155,18 +155,24 @@ const eyebrowLabel = PROCESSUS_LABELS[props.filtre_processus] ?? 'Livreur';
                     class="overflow-hidden rounded-xl border bg-card shadow-sm"
                 >
                     <div
-                        class="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3"
+                        class="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3.5"
                     >
-                        <div class="flex items-center gap-2">
-                            <h2
-                                class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
-                            >
+                        <div>
+                            <h2 class="text-sm font-semibold text-foreground">
                                 Détail par commande
                             </h2>
+                            <p class="mt-0.5 text-xs text-muted-foreground">
+                                Commissions correspondant aux filtres actifs
+                            </p>
+                        </div>
+                        <div class="flex items-center gap-2">
                             <span
-                                class="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
-                                >{{ commission_details.length }}</span
+                                class="rounded-full bg-muted px-2 py-1 text-xs font-medium text-muted-foreground"
                             >
+                                {{ commission_details.length }} commande{{
+                                    commission_details.length > 1 ? 's' : ''
+                                }}
+                            </span>
                         </div>
                     </div>
                     <CommissionDetailTable :rows="commission_details" />

@@ -42,9 +42,13 @@ test('commande -> confirmation -> chargement -> encaissement facture -> visible 
     await expect(submitCreate).toBeEnabled({ timeout: 10_000 });
     await submitCreate.click();
 
-    // La soumission ouvre un dialog de confirmation — cliquer "Confirmer et créer"
-    const confirmerEtCreerBtn = page.getByRole('button', {
-        name: /confirmer et créer/i,
+    // La soumission ouvre un dialog de confirmation — cliquer le bouton final ("Créer la
+    // commande" en vente standard, "Créer la distribution" pour une distribution client, cf.
+    // Create.vue::confirmationActionLabel — le libellé "Confirmer et créer" n'existe plus
+    // depuis son introduction, régression E2E corrigée le 31/08/2026). Scopé au dialog : le
+    // bouton de soumission du formulaire sous-jacent porte désormais le même libellé.
+    const confirmerEtCreerBtn = page.getByRole('dialog').getByRole('button', {
+        name: /créer la (commande|distribution)/i,
     });
     await expect(confirmerEtCreerBtn).toBeVisible({ timeout: 10_000 });
     await confirmerEtCreerBtn.click();
