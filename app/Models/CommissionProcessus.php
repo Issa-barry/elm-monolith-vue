@@ -21,6 +21,15 @@ class CommissionProcessus extends Model
 
     public const CODE_VENTE = 'vente';
 
+    /**
+     * Legacy depuis le 01/09/2026 : plus jamais routé pour une NOUVELLE commission (une
+     * distribution client utilise désormais CODE_LOGISTIQUE_TRANSFERT, cf.
+     * CommissionEnveloppeGenerator::genererPourCommandeVente()) — conservé uniquement pour que
+     * les CommissionEnveloppe/CommissionRegle/EquipeLivraisonPartageCategorie déjà générées sous
+     * ce code restent lisibles (jamais migrées). Absent de
+     * Settings\CommissionRegleController::processusCodesDisponibles(), toujours présent dans
+     * App\Support\Commission\CommissionProcessusFilter (reporting historique).
+     */
     public const CODE_DISTRIBUTION_CLIENT = 'distribution_client';
 
     public const CODE_LOGISTIQUE_TRANSFERT = 'logistique_transfert';

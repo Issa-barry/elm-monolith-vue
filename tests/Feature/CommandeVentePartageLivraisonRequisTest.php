@@ -187,13 +187,17 @@ class CommandeVentePartageLivraisonRequisTest extends TestCase
     }
 
     // ── Processus distribution client ────────────────────────────────────────
+    // Révisé le 01/09/2026 : une distribution client route désormais vers
+    // CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT (jamais CODE_DISTRIBUTION_CLIENT, devenu
+    // legacy) — le barème/partage à satisfaire pour débloquer la création est donc le même que
+    // celui d'un transfert logistique, cf. CommandeVenteController::ensurePartageLivraisonCategorieConfigure().
 
     public function test_store_bloque_si_partage_manquant_pour_distribution_client(): void
     {
         $vehicule = $this->makeVehiculeAvecEquipe(livraisonLogistique: true);
         $this->assignChauffeurActif($vehicule);
         $client = Client::factory()->create(['organization_id' => $this->org->id, 'type' => 'distributeur']);
-        $this->creerRegleEquipeLivraison(CommissionProcessus::CODE_DISTRIBUTION_CLIENT, 200);
+        $this->creerRegleEquipeLivraison(CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT, 200);
         $produit = $this->makeProduit();
 
         $this->postVentes([
@@ -212,8 +216,8 @@ class CommandeVentePartageLivraisonRequisTest extends TestCase
     {
         $vehicule = $this->makeVehiculeAvecEquipe(livraisonLogistique: true);
         $client = Client::factory()->create(['organization_id' => $this->org->id, 'type' => 'distributeur']);
-        $this->creerRegleEquipeLivraison(CommissionProcessus::CODE_DISTRIBUTION_CLIENT, 200);
-        $this->definirPartage($vehicule, CommissionProcessus::CODE_DISTRIBUTION_CLIENT, $this->categorie);
+        $this->creerRegleEquipeLivraison(CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT, 200);
+        $this->definirPartage($vehicule, CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT, $this->categorie);
         $produit = $this->makeProduit();
 
         $this->postVentes([
@@ -229,9 +233,12 @@ class CommandeVentePartageLivraisonRequisTest extends TestCase
     }
 
     /**
-     * Régression directe de l'incident : un partage configuré pour "vente" ne couvre jamais
-     * "distribution_client" — chaque processus a son propre partage (cf. migration du
-     * 30/08/2026, add_processus_id_to_equipe_livraison_partages_categorie_table).
+     * Régression directe de l'incident CMD-300826-007 : un partage configuré pour "vente" ne
+     * couvre jamais une distribution — chaque processus a son propre partage (cf. migration du
+     * 30/08/2026, add_processus_id_to_equipe_livraison_partages_categorie_table). Depuis le
+     * 01/09/2026, "le processus d'une distribution" signifie CODE_LOGISTIQUE_TRANSFERT — la
+     * seconde règle créée ici est donc celle-là, plus CODE_DISTRIBUTION_CLIENT (qui ne bloque
+     * plus jamais rien, n'étant plus jamais résolu par aucun appelant).
      */
     public function test_store_bloque_distribution_meme_si_seul_le_partage_vente_existe(): void
     {
@@ -239,7 +246,7 @@ class CommandeVentePartageLivraisonRequisTest extends TestCase
         $client = Client::factory()->create(['organization_id' => $this->org->id, 'type' => 'distributeur']);
         $this->creerRegleEquipeLivraison(CommissionProcessus::CODE_VENTE, 200);
         $this->definirPartage($vehicule, CommissionProcessus::CODE_VENTE, $this->categorie);
-        $this->creerRegleEquipeLivraison(CommissionProcessus::CODE_DISTRIBUTION_CLIENT, 200);
+        $this->creerRegleEquipeLivraison(CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT, 200);
         $produit = $this->makeProduit();
 
         $this->postVentes([
@@ -250,6 +257,34 @@ class CommandeVentePartageLivraisonRequisTest extends TestCase
                 ['produit_id' => $produit->id, 'qte' => 5, 'prix_vente' => 5000],
             ],
         ])->assertSessionHasErrors('vehicule_id');
+    }
+
+    /**
+     * Cœur de la décision produit du 01/09/2026 : le même partage/barème CODE_LOGISTIQUE_TRANSFERT
+     * débloque indifféremment une distribution client ET couvrirait un transfert logistique — il
+     * n'existe plus de configuration séparée "Distribution client" à maintenir en parallèle.
+     */
+    public function test_le_meme_partage_logistique_debloque_distribution_sans_configuration_separee(): void
+    {
+        $vehicule = $this->makeVehiculeAvecEquipe(livraisonLogistique: true);
+        $client = Client::factory()->create(['organization_id' => $this->org->id, 'type' => 'distributeur']);
+        // Un seul barème/partage configuré, sous le processus "Transferts logistiques" — jamais
+        // sous un processus "Distribution client" dédié, qui n'existe plus dans
+        // Settings\CommissionRegleController::processusCodesDisponibles().
+        $this->creerRegleEquipeLivraison(CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT, 200);
+        $this->definirPartage($vehicule, CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT, $this->categorie);
+        $produit = $this->makeProduit();
+
+        $this->postVentes([
+            'vehicule_id' => $vehicule->id,
+            'client_id' => $client->id,
+            'nature_operation' => NatureOperation::DISTRIBUTION_CLIENT->value,
+            'lignes' => [
+                ['produit_id' => $produit->id, 'qte' => 5, 'prix_vente' => 5000],
+            ],
+        ])->assertSessionDoesntHaveErrors();
+
+        $this->assertDatabaseHas('commandes_ventes', ['vehicule_id' => $vehicule->id]);
     }
 
     // ── Enveloppe à 0 : jamais bloquant (décision AMOA #4) ───────────────────

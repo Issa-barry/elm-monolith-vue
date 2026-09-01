@@ -22,6 +22,7 @@ import {
     ArrowLeft,
     CheckCircle,
     ChevronRight,
+    CircleAlert,
     HandCoins,
     History,
     MoreHorizontal,
@@ -464,6 +465,29 @@ function confirmDelete(c: Commande) {
                 <div v-else class="w-8" />
             </div>
 
+            <div
+                v-if="can('ventes.create') && !can_creer_commande"
+                role="status"
+                class="mx-4 mt-3 flex items-start gap-2.5 rounded-xl border border-amber-200/80 bg-amber-50/80 px-3 py-2.5 text-amber-900 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"
+            >
+                <span
+                    class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                >
+                    <CircleAlert class="h-4 w-4" />
+                </span>
+                <div>
+                    <p class="text-xs font-semibold">
+                        Création de commande indisponible
+                    </p>
+                    <p
+                        class="mt-0.5 text-xs leading-5 text-amber-800/85 dark:text-amber-200/85"
+                    >
+                        Aucun produit vendable n'est disponible pour votre
+                        agence. Réapprovisionnez le stock pour continuer.
+                    </p>
+                </div>
+            </div>
+
             <!-- KPI cards -->
             <div class="grid grid-cols-3 gap-3 p-4">
                 <div class="rounded-xl border bg-card p-4 shadow-sm">
@@ -594,6 +618,20 @@ function confirmDelete(c: Commande) {
                     <Plus class="mr-2 h-4 w-4" />
                     Créer la première commande
                 </Button>
+                <div
+                    v-if="can('ventes.create') && !can_creer_commande"
+                    role="status"
+                    class="flex max-w-sm items-start gap-2.5 rounded-xl border border-amber-200/80 bg-amber-50/80 p-3 text-left text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"
+                >
+                    <CircleAlert
+                        class="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300"
+                    />
+                    <p class="text-xs leading-5">
+                        Aucun produit vendable n'est disponible pour votre
+                        agence. Réapprovisionnez le stock pour créer une
+                        commande.
+                    </p>
+                </div>
             </div>
         </div>
 
@@ -609,38 +647,65 @@ function confirmDelete(c: Commande) {
                         Suivi et encaissement des commandes.
                     </p>
                 </div>
-                <ListPageActions>
-                    <template #filters>
-                        <DataFilters
-                            trigger-only
-                            url="/backoffice/ventes"
-                            :base-params="{ periode: 'all' }"
-                            :values="filterValues"
-                            :sites="sites"
-                            :result-count="commandesFiltrees.length"
-                            :fields="filterFields"
-                        />
-                    </template>
-                    <template #primary>
-                        <Link
-                            v-if="can('ventes.create') && can_creer_commande"
-                            href="/backoffice/ventes/create"
-                        >
-                            <Button>
+                <div class="flex flex-col items-end gap-2">
+                    <ListPageActions>
+                        <template #filters>
+                            <DataFilters
+                                trigger-only
+                                url="/backoffice/ventes"
+                                :base-params="{ periode: 'all' }"
+                                :values="filterValues"
+                                :sites="sites"
+                                :result-count="commandesFiltrees.length"
+                                :fields="filterFields"
+                            />
+                        </template>
+                        <template #primary>
+                            <Link
+                                v-if="
+                                    can('ventes.create') && can_creer_commande
+                                "
+                                href="/backoffice/ventes/create"
+                            >
+                                <Button>
+                                    <Plus class="mr-2 h-4 w-4" />
+                                    Nouvelle commande
+                                </Button>
+                            </Link>
+                            <Button
+                                v-else-if="can('ventes.create')"
+                                disabled
+                                v-tooltip.left="raison_blocage_commande"
+                            >
                                 <Plus class="mr-2 h-4 w-4" />
                                 Nouvelle commande
                             </Button>
-                        </Link>
-                        <Button
-                            v-else-if="can('ventes.create')"
-                            disabled
-                            v-tooltip.left="raison_blocage_commande"
+                        </template>
+                    </ListPageActions>
+                    <div
+                        v-if="can('ventes.create') && !can_creer_commande"
+                        role="status"
+                        class="flex max-w-md items-start gap-2.5 rounded-xl border border-amber-200/80 bg-amber-50/80 p-3 text-left text-amber-900 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"
+                    >
+                        <span
+                            class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300"
                         >
-                            <Plus class="mr-2 h-4 w-4" />
-                            Nouvelle commande
-                        </Button>
-                    </template>
-                </ListPageActions>
+                            <CircleAlert class="h-4 w-4" />
+                        </span>
+                        <div>
+                            <p class="text-xs font-semibold">
+                                Création de commande indisponible
+                            </p>
+                            <p
+                                class="mt-0.5 text-xs leading-5 text-amber-800/85 dark:text-amber-200/85"
+                            >
+                                Aucun produit vendable n'est disponible pour
+                                votre agence. Réapprovisionnez le stock pour
+                                continuer.
+                            </p>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- KPI cards -->
@@ -967,6 +1032,22 @@ function confirmDelete(c: Commande) {
                                 <Plus class="mr-2 h-4 w-4" />
                                 Créer la première commande
                             </Button>
+                            <div
+                                v-if="
+                                    can('ventes.create') && !can_creer_commande
+                                "
+                                role="status"
+                                class="flex max-w-sm items-start gap-2.5 rounded-xl border border-amber-200/80 bg-amber-50/80 p-3 text-left text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"
+                            >
+                                <CircleAlert
+                                    class="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300"
+                                />
+                                <p class="text-xs leading-5">
+                                    Aucun produit vendable n'est disponible pour
+                                    votre agence. Réapprovisionnez le stock pour
+                                    créer une commande.
+                                </p>
+                            </div>
                         </div>
                     </template>
                 </DataTable>

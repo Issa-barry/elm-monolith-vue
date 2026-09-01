@@ -212,19 +212,24 @@ class VehiculeBaremesCommissionCategoriesTest extends TestCase
     }
 
     /**
-     * Véhicule volontairement MIXTE (livraison_vente ET livraison_logistique) : les trois
-     * processus sont donc tous applicables et cette assertion teste bien la logique
-     * "à faire/fait/non_requis" par CATÉGORIE/bareme, orthogonale à l'applicabilité par USAGE
-     * couverte par VehiculeProcessusApplicablesParUsageTest (révisé le 31/08/2026 — un véhicule
-     * Vente-only par défaut, cf. VehiculeFactory, n'aurait plus jamais distribution_client/
-     * logistique_transfert dans statuts_partage_commission, cf. incident fiche ALARBA où un
-     * Tricycle Vente-only affichait "Distribution : à faire").
+     * Véhicule volontairement MIXTE (livraison_vente ET livraison_logistique) : les processus
+     * réellement configurables (vente, logistique_transfert — cf.
+     * Settings\CommissionRegleController::processusCodesDisponibles(), distribution_client n'en
+     * fait plus partie depuis le 01/09/2026) sont donc tous applicables, et cette assertion teste
+     * bien la logique "à faire/fait" par CATÉGORIE/bareme, orthogonale à l'applicabilité par
+     * USAGE couverte par VehiculeProcessusApplicablesParUsageTest. distribution_client, même
+     * explicitement configuré ci-dessous avec un barème positif, ne doit JAMAIS apparaître dans
+     * statuts_partage_commission (incident fiche ALARBA du 31/08/2026, puis décision produit du
+     * 01/09/2026 qui rend ce processus legacy pour toute organisation, pas seulement Vente-only).
      *
      * @test
      */
     public function expose_le_statut_du_partage_pour_chaque_processus(): void
     {
         $vente = $this->activerV2();
+        // Processus legacy toujours créable en base (ex: import historique) mais jamais résolu
+        // par aucun appelant depuis le 01/09/2026 — configuré ici pour prouver qu'il n'apparaît
+        // jamais, même avec un barème positif qui aurait autrefois produit "à faire".
         $distribution = CommissionProcessus::create([
             'organization_id' => $this->org->id,
             'code' => CommissionProcessus::CODE_DISTRIBUTION_CLIENT,
@@ -249,7 +254,7 @@ class VehiculeBaremesCommissionCategoriesTest extends TestCase
         ]);
         $this->creerRegle($vente, CommissionCibleType::CODE_EQUIPE_LIVRAISON, 250, $categorie->id);
         $this->creerRegle($distribution, CommissionCibleType::CODE_EQUIPE_LIVRAISON, 300, $categorie->id);
-        $this->creerRegle($transfert, CommissionCibleType::CODE_PROPRIETAIRE, 100, $categorie->id);
+        $this->creerRegle($transfert, CommissionCibleType::CODE_EQUIPE_LIVRAISON, 400, $categorie->id);
 
         $vehicule = $this->makeVehicule(['livraison_vente' => true, 'livraison_logistique' => true]);
         $equipe = EquipeLivraison::create([
@@ -281,8 +286,12 @@ class VehiculeBaremesCommissionCategoriesTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->where('vehicule.equipe_membres.0.livreur_id', $livreur->id)
                 ->where("statuts_partage_commission.{$categorie->id}.vente", 'fait')
-                ->where("statuts_partage_commission.{$categorie->id}.distribution_client", 'a_faire')
-                ->where("statuts_partage_commission.{$categorie->id}.logistique_transfert", 'non_requis')
+                ->where("statuts_partage_commission.{$categorie->id}.logistique_transfert", 'a_faire')
+                // distribution_client n'est jamais dans codesApplicablesPourVehicule(), même
+                // configuré avec un barème positif ci-dessus : sa clé est absente, jamais "à
+                // faire" ni "non_requis".
+                ->missing("statuts_partage_commission.{$categorie->id}.distribution_client")
+                ->has('processus_options', 2)
             );
     }
 }

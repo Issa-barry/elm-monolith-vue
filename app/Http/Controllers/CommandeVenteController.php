@@ -863,10 +863,13 @@ class CommandeVenteController extends Controller
 
         // Route par nature_operation — jamais un CODE_VENTE codé en dur (correctif du
         // 30/08/2026 : une commande distribution_client ne remontait jamais son état "à
-        // régulariser", puisque sa CommissionGenerationAttempt est rattachée au processus
-        // distribution_client, pas vente — l'alerte restait invisible dans l'UI).
+        // régulariser", puisque sa CommissionGenerationAttempt est rattachée à un autre
+        // processus que vente). Distribution → CODE_LOGISTIQUE_TRANSFERT depuis le 01/09/2026
+        // (cf. CommissionEnveloppeGenerator::genererPourCommandeVente()), jamais
+        // CODE_DISTRIBUTION_CLIENT — sinon cette recherche viserait un processus qui ne reçoit
+        // plus aucune tentative depuis cette date.
         $processusCode = $commande->nature_operation === NatureOperation::DISTRIBUTION_CLIENT
-            ? CommissionProcessus::CODE_DISTRIBUTION_CLIENT
+            ? CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT
             : CommissionProcessus::CODE_VENTE;
 
         $processusId = CommissionProcessus::where('organization_id', $commande->organization_id)
@@ -1154,8 +1157,12 @@ class CommandeVenteController extends Controller
             return;
         }
 
+        // Distribution → CODE_LOGISTIQUE_TRANSFERT depuis le 01/09/2026, jamais
+        // CODE_DISTRIBUTION_CLIENT — doit refléter exactement le routage réel du générateur
+        // (CommissionEnveloppeGenerator::genererPourCommandeVente()), sinon ce garde-fou
+        // préventif validerait un partage qui ne sera jamais celui réellement consommé.
         $processusCode = $natureOperation === NatureOperation::DISTRIBUTION_CLIENT
-            ? CommissionProcessus::CODE_DISTRIBUTION_CLIENT
+            ? CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT
             : CommissionProcessus::CODE_VENTE;
 
         $categorieIds = CommissionPartageLivraisonCategorieChecker::categorieIdsDepuisLignes($lignes);
