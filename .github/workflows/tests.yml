@@ -54,8 +54,13 @@ jobs:
       - name: Run PHPUnit with coverage
         run: ./vendor/bin/phpunit --coverage-clover coverage/clover.xml
 
+      # continue-on-error : cette étape ne fait qu'archiver le rapport de coverage, elle
+      # n'a pas vocation à faire échouer le gate PHPUnit. Le backend d'upload d'artifacts
+      # de GitHub Actions a des pannes ponctuelles (timeout réseau sur CreateArtifact,
+      # cf. run #427 du 2026-09-01) sans rapport avec l'état des tests.
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: coverage
           path: coverage/clover.xml
