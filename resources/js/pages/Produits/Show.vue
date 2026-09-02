@@ -310,22 +310,22 @@ const ajustements = props.mouvements.map((m) => ({
         </div>
 
         <div
-            class="mx-auto w-full max-w-7xl space-y-5 px-4 py-5 sm:px-6 sm:py-6"
+            class="mx-auto w-full max-w-7xl space-y-4 px-4 py-4 sm:space-y-5 sm:px-6 sm:py-6"
         >
             <!-- ─── En-tête inspiré du Checkout Form Apollo ─── -->
             <section
-                class="relative overflow-hidden rounded-2xl border border-border/60 bg-muted/25 px-5 py-6 sm:px-8 sm:py-8 lg:min-h-[220px] lg:pr-[25rem]"
+                class="relative overflow-hidden rounded-xl border border-border/60 bg-muted/25 px-4 py-5 sm:rounded-2xl sm:px-8 sm:py-8 lg:min-h-[220px] lg:pr-[25rem]"
             >
                 <Link
                     href="/backoffice/produits"
-                    class="inline-flex items-center gap-2 text-sm font-semibold transition-colors hover:text-primary"
+                    class="hidden items-center gap-2 text-sm font-semibold transition-colors hover:text-primary sm:inline-flex"
                 >
                     <ArrowLeft class="h-4 w-4" />
                     Produit
                 </Link>
 
                 <h1
-                    class="mt-7 max-w-3xl text-3xl leading-tight font-semibold tracking-tight sm:text-4xl"
+                    class="max-w-3xl text-[1.75rem] leading-tight font-semibold tracking-tight sm:mt-7 sm:text-4xl"
                 >
                     {{ produit.nom }}
                 </h1>
@@ -336,11 +336,13 @@ const ajustements = props.mouvements.map((m) => ({
                     </span>
                 </p>
 
-                <div class="mt-6 flex flex-wrap items-center gap-2">
+                <div
+                    class="mt-5 grid grid-cols-2 gap-2 sm:mt-6 sm:flex sm:flex-wrap sm:items-center"
+                >
                     <Button
                         variant="outline"
                         size="sm"
-                        class="h-9 rounded-lg bg-background px-3.5"
+                        class="h-9 w-full rounded-lg bg-background px-3 sm:w-auto sm:px-3.5"
                         @click="showHistoriqueModal = true"
                     >
                         <History class="mr-1.5 h-4 w-4" />
@@ -350,7 +352,7 @@ const ajustements = props.mouvements.map((m) => ({
                         v-if="can_ajuster_stock && produit.has_stock"
                         variant="outline"
                         size="sm"
-                        class="h-9 rounded-lg bg-background px-3.5"
+                        class="h-9 w-full rounded-lg bg-background px-3 sm:w-auto sm:px-3.5"
                         @click="showStockModal = true"
                     >
                         <Sliders class="mr-1.5 h-4 w-4" />
@@ -362,11 +364,12 @@ const ajustements = props.mouvements.map((m) => ({
                             produit.variantes.length > 1
                         "
                         :href="`/backoffice/produits/${produit.id}/variantes`"
+                        class="col-span-2 sm:w-auto"
                     >
                         <Button
                             variant="outline"
                             size="sm"
-                            class="h-9 rounded-lg bg-background px-3.5"
+                            class="h-9 w-full rounded-lg bg-background px-3.5 sm:w-auto"
                         >
                             <Layers class="mr-1.5 h-4 w-4" />
                             Gérer les variantes
@@ -375,6 +378,7 @@ const ajustements = props.mouvements.map((m) => ({
                     <Link
                         v-if="can('produits.update')"
                         :href="`/backoffice/produits/${produit.id}/edit`"
+                        class="hidden sm:block"
                     >
                         <Button size="sm" class="h-9 rounded-lg px-4">
                             <Pencil class="mr-1.5 h-4 w-4" />
@@ -385,17 +389,17 @@ const ajustements = props.mouvements.map((m) => ({
             </section>
 
             <div
-                class="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-8"
+                class="grid items-start gap-4 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-8"
             >
                 <!-- ─── Panneau produit, à droite comme dans Apollo ─── -->
                 <aside
                     class="relative z-10 order-first lg:order-last lg:-mt-64"
                 >
                     <section
-                        class="overflow-hidden rounded-[1.5rem] border border-border/60 bg-card p-5 shadow-xl shadow-black/5"
+                        class="overflow-hidden rounded-xl border border-border/60 bg-card p-4 shadow-none sm:rounded-[1.5rem] sm:p-5 sm:shadow-xl sm:shadow-black/5"
                     >
                         <div
-                            class="relative aspect-[4/3] overflow-hidden rounded-2xl border border-border/60 bg-[#d6d4d4]"
+                            class="relative aspect-[4/3] overflow-hidden rounded-lg border border-border/60 bg-[#d6d4d4] sm:rounded-2xl"
                         >
                             <img
                                 v-if="produit.image_url"
@@ -502,7 +506,7 @@ const ajustements = props.mouvements.map((m) => ({
                             produit.has_stock &&
                             produit.stocks_par_site.length > 0
                         "
-                        class="overflow-hidden rounded-2xl border border-border/70 bg-card p-5 shadow-sm sm:p-6"
+                        class="overflow-hidden rounded-xl border border-border/70 bg-card p-4 shadow-none sm:rounded-2xl sm:p-6 sm:shadow-sm"
                     >
                         <div
                             class="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
@@ -659,7 +663,7 @@ const ajustements = props.mouvements.map((m) => ({
                             produit.variantes.length > 1 &&
                             produit.variante_stocks_detail.length > 0
                         "
-                        class="overflow-hidden rounded-2xl border border-border/70 bg-card p-5 shadow-sm sm:p-6"
+                        class="overflow-hidden rounded-xl border border-border/70 bg-card p-4 shadow-none sm:rounded-2xl sm:p-6 sm:shadow-sm"
                     >
                         <h2
                             class="mb-4 flex items-center gap-2 text-sm font-semibold"
@@ -736,7 +740,7 @@ const ajustements = props.mouvements.map((m) => ({
 
                     <!-- ─── Prix ─── -->
                     <div
-                        class="overflow-hidden rounded-2xl border border-border/50 bg-muted/30 p-5 sm:p-6"
+                        class="overflow-hidden rounded-xl border border-border/50 bg-muted/30 p-4 sm:rounded-2xl sm:p-6"
                     >
                         <h2
                             class="mb-4 flex items-center gap-2 text-sm font-semibold"
@@ -854,7 +858,7 @@ const ajustements = props.mouvements.map((m) => ({
 
                     <!-- ─── Photos ─── -->
                     <div
-                        class="overflow-hidden rounded-2xl border border-border/70 bg-card p-5 shadow-sm sm:p-6"
+                        class="overflow-hidden rounded-xl border border-border/70 bg-card p-4 shadow-none sm:rounded-2xl sm:p-6 sm:shadow-sm"
                     >
                         <h2
                             class="mb-4 flex items-center gap-2 text-sm font-semibold"
@@ -872,7 +876,7 @@ const ajustements = props.mouvements.map((m) => ({
                     <!-- ─── Variantes ─── -->
                     <div
                         v-if="produit.variantes.length > 1"
-                        class="overflow-hidden rounded-2xl border border-border/70 bg-card p-5 shadow-sm sm:p-6"
+                        class="overflow-hidden rounded-xl border border-border/70 bg-card p-4 shadow-none sm:rounded-2xl sm:p-6 sm:shadow-sm"
                     >
                         <h2
                             class="mb-4 flex items-center gap-2 text-sm font-semibold"
@@ -902,7 +906,7 @@ const ajustements = props.mouvements.map((m) => ({
 
                     <!-- ─── Informations complémentaires ─── -->
                     <div
-                        class="overflow-hidden rounded-2xl border border-border/70 bg-card p-5 shadow-sm sm:p-6"
+                        class="overflow-hidden rounded-xl border border-border/70 bg-card p-4 shadow-none sm:rounded-2xl sm:p-6 sm:shadow-sm"
                     >
                         <h2 class="mb-5 text-sm font-semibold">
                             Informations complémentaires
