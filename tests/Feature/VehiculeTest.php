@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Models\Vehicule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\Feature\Concerns\HasAdminSetup;
@@ -1671,5 +1672,54 @@ class VehiculeTest extends TestCase
 
         $this->assertTrue(Vehicule::livraisonVente()->whereKey($vehicule->id)->exists());
         $this->assertTrue(Vehicule::livraisonLogistique()->whereKey($vehicule->id)->exists());
+    }
+
+    // ── export() — "Exporter les véhicules" (listing en lecture seule, cf. VehiculeListExport) ──
+
+    public function test_export_retourne_un_xlsx_avec_le_vehicule_de_lorganisation(): void
+    {
+        $vehicule = $this->makeVehicule($this->org, true, false);
+
+        $response = $this->actingAs($this->user)->get(route('vehicules.export'));
+        $response->assertStatus(200);
+
+        $tmpPath = tempnam(sys_get_temp_dir(), 'export_vehicules_test').'.xlsx';
+        file_put_contents($tmpPath, $response->streamedContent());
+        $spreadsheet = IOFactory::load($tmpPath);
+        $sheet = $spreadsheet->getSheetByName('vehicules');
+        $this->assertNotNull($sheet);
+
+        $tableau = $sheet->toArray(null, true, true, false);
+        $entetes = $tableau[0];
+        $this->assertContains('Véhicule', $entetes);
+        $this->assertContains('Immatriculation', $entetes);
+        $this->assertContains('Statut', $entetes);
+
+        $indexImmat = array_search('Immatriculation', $entetes, true);
+        $immatriculations = array_column(array_slice($tableau, 1), $indexImmat);
+        $this->assertContains($vehicule->immatriculation, $immatriculations);
+
+        @unlink($tmpPath);
+    }
+
+    public function test_export_exclut_les_vehicules_dune_autre_organisation(): void
+    {
+        $this->makeVehicule($this->org, true, false);
+        $otherOrg = Organization::factory()->create();
+        $vehiculeAutreOrg = $this->makeVehicule($otherOrg, true, false);
+
+        $response = $this->actingAs($this->user)->get(route('vehicules.export'));
+
+        $tmpPath = tempnam(sys_get_temp_dir(), 'export_vehicules_test').'.xlsx';
+        file_put_contents($tmpPath, $response->streamedContent());
+        $spreadsheet = IOFactory::load($tmpPath);
+        $tableau = $spreadsheet->getSheetByName('vehicules')->toArray(null, true, true, false);
+        $entetes = $tableau[0];
+        $indexImmat = array_search('Immatriculation', $entetes, true);
+        $immatriculations = array_column(array_slice($tableau, 1), $indexImmat);
+
+        $this->assertNotContains($vehiculeAutreOrg->immatriculation, $immatriculations);
+
+        @unlink($tmpPath);
     }
 }

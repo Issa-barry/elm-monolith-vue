@@ -95,6 +95,9 @@ const categoryRoutes: Record<string, (id: string) => string> = {
     factures: (_id) => `/backoffice/factures`,
     vehicules: (id) => `/backoffice/vehicules/${id}`,
     proprietaires: (id) => `/backoffice/proprietaires/${id}`,
+    // Fiche livreur : route self-view (livreurs.show) hors préfixe /backoffice,
+    // aussi accessible au staff avec la permission livreurs.read (cf. LivreurPolicy::view()).
+    livreurs: (id) => `/livreurs/${id}`,
 };
 
 function navigateTo(category: string, id: string) {

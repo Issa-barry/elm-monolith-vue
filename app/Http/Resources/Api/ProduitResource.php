@@ -41,7 +41,9 @@ class ProduitResource extends JsonResource
      * Alerte de stock faible activée pour le site par défaut de l'utilisateur authentifié — la
      * configuration se règle désormais PAR SITE (cf. ProduitSeuilAlerteService, 01/09/2026) :
      * false si l'utilisateur n'a aucun site (aucune configuration résolvable, jamais active par
-     * défaut), même convention que seuilAlerteEffectifPourRequete() ci-dessus.
+     * défaut), même convention que seuilAlerteEffectifPourRequete() ci-dessus. Requiert AUSSI la
+     * disponibilité (cf. StockStatutService::disponiblePourSite(), 02/09/2026) : un site non
+     * disponible n'a jamais d'alerte active, quelle que soit la configuration `actif` en base.
      */
     private function alerteActivePourRequete(Request $request): bool
     {
@@ -51,7 +53,10 @@ class ProduitResource extends JsonResource
             return false;
         }
 
-        return app(StockStatutService::class)->alerteActivePourSite($this->resource, (string) $site->id);
+        $stockStatutService = app(StockStatutService::class);
+
+        return $stockStatutService->disponiblePourSite($this->resource, (string) $site->id)
+            && $stockStatutService->alerteActivePourSite($this->resource, (string) $site->id);
     }
 
     public function toArray(Request $request): array

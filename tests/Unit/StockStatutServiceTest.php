@@ -35,12 +35,15 @@ class StockStatutServiceTest extends TestCase
         $this->service = app(StockStatutService::class);
     }
 
-    // ── statutPour() : la règle pure ────────────────────────────────────────────
+    // ── statutPour() : la règle PURE — ne connaît ni l'alerte ni la disponibilité ─
+    // Décision du 02/09/2026 après-midi (en remplacement d'une confusion introduite puis
+    // corrigée le jour même) : le stock physique reste réel, toujours. Ce n'est JAMAIS
+    // statutPour() qui décide si un état doit être notifié/compté — cf. disponiblePourSite()/
+    // alerteActivePourSite() ci-dessous, appliquées séparément par les appelants.
 
     public function test_qte_zero_est_toujours_une_rupture(): void
     {
-        $this->assertSame(StockStatut::RUPTURE, $this->service->statutPour(0, 10, true));
-        $this->assertSame(StockStatut::RUPTURE, $this->service->statutPour(0, 10, false));
+        $this->assertSame(StockStatut::RUPTURE, $this->service->statutPour(0, 10));
     }
 
     /**
@@ -49,39 +52,30 @@ class StockStatutServiceTest extends TestCase
      * la même valeur affichée artificiellement comme 0 (cf. MouvementStockService::appliquer(),
      * qui n'applique plus de clamp).
      */
-    public function test_qte_negative_est_stock_negatif_jamais_rupture(): void
+    public function test_qte_negative_est_toujours_stock_negatif_jamais_rupture(): void
     {
-        $this->assertSame(StockStatut::STOCK_NEGATIF, $this->service->statutPour(-1, 10, true));
-        $this->assertSame(StockStatut::STOCK_NEGATIF, $this->service->statutPour(-250, 10, false));
-        $this->assertNotSame(StockStatut::RUPTURE, $this->service->statutPour(-1, 10, true));
+        $this->assertSame(StockStatut::STOCK_NEGATIF, $this->service->statutPour(-1, 10));
+        $this->assertNotSame(StockStatut::RUPTURE, $this->service->statutPour(-1, 10));
     }
 
-    public function test_rupture_est_independante_du_choix_alerte(): void
+    public function test_stock_faible_des_que_la_quantite_est_sous_le_seuil(): void
     {
-        // La rupture est un fait de disponibilité, pas une préférence de notification —
-        // elle reste vraie même si l'utilisateur a choisi de ne pas être alerté.
-        $this->assertSame(StockStatut::RUPTURE, $this->service->statutPour(0, 10, false));
-    }
-
-    public function test_stock_faible_seulement_si_alerte_active(): void
-    {
-        $this->assertSame(StockStatut::STOCK_FAIBLE, $this->service->statutPour(5, 10, true));
-        $this->assertSame(StockStatut::DISPONIBLE, $this->service->statutPour(5, 10, false));
+        $this->assertSame(StockStatut::STOCK_FAIBLE, $this->service->statutPour(5, 10));
     }
 
     public function test_qte_egale_au_seuil_est_stock_faible(): void
     {
-        $this->assertSame(StockStatut::STOCK_FAIBLE, $this->service->statutPour(10, 10, true));
+        $this->assertSame(StockStatut::STOCK_FAIBLE, $this->service->statutPour(10, 10));
     }
 
     public function test_qte_strictement_superieure_au_seuil_est_disponible(): void
     {
-        $this->assertSame(StockStatut::DISPONIBLE, $this->service->statutPour(11, 10, true));
+        $this->assertSame(StockStatut::DISPONIBLE, $this->service->statutPour(11, 10));
     }
 
     public function test_seuil_zero_desactive_le_stock_faible(): void
     {
-        $this->assertSame(StockStatut::DISPONIBLE, $this->service->statutPour(5, 0, true));
+        $this->assertSame(StockStatut::DISPONIBLE, $this->service->statutPour(5, 0));
     }
 
     // ── seuilEffectifPourSite() : seuil du SITE, repli sur le seuil global ──────
@@ -241,6 +235,56 @@ class StockStatutServiceTest extends TestCase
         $this->assertFalse($this->service->alerteActivePourSite($produit, $site->id));
     }
 
+    // ── disponiblePourSite() : disponibilité par SITE, défaut VRAI ──────────────
+    // Notion INDÉPENDANTE de alerteActivePourSite() (cf. StockStatutService, décision du
+    // 02/09/2026 après-midi) : à l'inverse de l'alerte, l'absence de ligne signifie DISPONIBLE
+    // (mode "Tous les sites" par défaut), jamais indisponible par défaut.
+
+    public function test_disponible_pour_site_est_vraie_en_absence_de_ligne(): void
+    {
+        $org = Organization::factory()->create();
+        ProduitTypeDefaultSeeder::seedPourOrganisation($org->id);
+        $type = ProduitType::where('organization_id', $org->id)->where('code', 'materiel')->first();
+        $site = Site::create(['organization_id' => $org->id, 'nom' => 'Sonfonia', 'type' => 'depot', 'localisation' => 'Sonfonia']);
+
+        $produit = Produit::create([
+            'organization_id' => $org->id,
+            'nom' => 'Produit jamais configuré',
+            'produit_type_id' => $type->id,
+            'statut' => 'actif',
+        ]);
+
+        // Aucune ligne produit_seuils_alerte pour ce site : disponible par défaut (mode "Tous
+        // les sites"), à l'inverse de alerteActivePourSite() qui défaut à faux.
+        $this->assertTrue($this->service->disponiblePourSite($produit, $site->id));
+    }
+
+    public function test_disponible_pour_site_est_fausse_quand_explicitement_restreinte(): void
+    {
+        $org = Organization::factory()->create();
+        ProduitTypeDefaultSeeder::seedPourOrganisation($org->id);
+        $type = ProduitType::where('organization_id', $org->id)->where('code', 'materiel')->first();
+        $cba = Site::create(['organization_id' => $org->id, 'nom' => 'CBA', 'type' => 'depot', 'localisation' => 'CBA']);
+        $cimenterie = Site::create(['organization_id' => $org->id, 'nom' => 'Cimenterie', 'type' => 'depot', 'localisation' => 'Cimenterie']);
+
+        $produit = Produit::create([
+            'organization_id' => $org->id,
+            'nom' => 'Pack 25 sachets',
+            'produit_type_id' => $type->id,
+            'statut' => 'actif',
+        ]);
+        ProduitSeuilAlerte::create([
+            'organization_id' => $org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $cimenterie->id,
+            'disponible' => false,
+        ]);
+
+        $this->assertFalse($this->service->disponiblePourSite($produit, $cimenterie->id));
+        // CBA n'a aucune ligne : reste disponible, jamais affecté par la restriction de Cimenterie.
+        $this->assertTrue($this->service->disponiblePourSite($produit, $cba->id));
+    }
+
     public function test_deux_organisations_ont_des_seuils_globaux_independants(): void
     {
         $orgA = Organization::factory()->create();
@@ -302,5 +346,83 @@ class StockStatutServiceTest extends TestCase
         $this->assertSame(0, $resultat['ruptures']);
         $this->assertSame(1, $resultat['faibles']);
         $this->assertSame(1, $resultat['total']);
+    }
+
+    /**
+     * Régression 02/09/2026 (signalée en production) : le compteur sidebar comptait une rupture
+     * réelle (quantité 0) même sur un site sans alerte active pour ce produit — la rupture était
+     * comptée indépendamment de l'activation, en dur dans la requête SQL de cette méthode.
+     */
+    public function test_compter_alertes_pour_organisation_ignore_un_site_hors_du_systeme_dalerte(): void
+    {
+        $org = Organization::factory()->create();
+        ProduitTypeDefaultSeeder::seedPourOrganisation($org->id);
+        $type = ProduitType::where('organization_id', $org->id)->where('code', 'achat_vente')->firstOrFail();
+        $cimenterie = Site::create(['organization_id' => $org->id, 'nom' => 'Cimenterie', 'type' => 'depot', 'localisation' => 'Cimenterie']);
+
+        $produit = app(ProduitService::class)->creer([
+            'organization_id' => $org->id,
+            'nom' => 'Pack Bouteille de 1500ml',
+            'produit_type_id' => $type->id,
+            'statut' => 'actif',
+            'prix_achat' => 1000,
+            'prix_vente' => 1500,
+        ]);
+        $variante = $produit->variantePrincipale()->first();
+
+        ProduitSeuilAlerte::create([
+            'organization_id' => $org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $cimenterie->id,
+            'actif' => false,
+            'seuil_alerte_stock' => 666,
+        ]);
+
+        VarianteStock::create(['organization_id' => $org->id, 'produit_variante_id' => $variante->id, 'site_id' => $cimenterie->id, 'qte_stock' => 0]);
+
+        $resultat = $this->service->compterAlertesPourOrganisation($org->id);
+
+        $this->assertSame(0, $resultat['ruptures']);
+        $this->assertSame(0, $resultat['faibles']);
+        $this->assertSame(0, $resultat['total']);
+    }
+
+    /**
+     * Garde INDÉPENDANTE de la précédente : un site DISPONIBLE=faux n'est jamais compté même
+     * avec l'alerte active et une rupture réelle — cf. décision du 02/09/2026 (disponibilité et
+     * alerte sont deux filtres distincts, tous deux requis).
+     */
+    public function test_compter_alertes_pour_organisation_ignore_un_site_non_disponible_meme_avec_alerte_active(): void
+    {
+        $org = Organization::factory()->create();
+        ProduitTypeDefaultSeeder::seedPourOrganisation($org->id);
+        $type = ProduitType::where('organization_id', $org->id)->where('code', 'achat_vente')->firstOrFail();
+        $cimenterie = Site::create(['organization_id' => $org->id, 'nom' => 'Cimenterie', 'type' => 'depot', 'localisation' => 'Cimenterie']);
+
+        $produit = app(ProduitService::class)->creer([
+            'organization_id' => $org->id,
+            'nom' => 'Pack 25 sachets',
+            'produit_type_id' => $type->id,
+            'statut' => 'actif',
+            'prix_achat' => 1000,
+            'prix_vente' => 1500,
+        ]);
+        $variante = $produit->variantePrincipale()->first();
+
+        ProduitSeuilAlerte::create([
+            'organization_id' => $org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $cimenterie->id,
+            'disponible' => false,
+            'actif' => true,
+            'seuil_alerte_stock' => 10,
+        ]);
+
+        VarianteStock::create(['organization_id' => $org->id, 'produit_variante_id' => $variante->id, 'site_id' => $cimenterie->id, 'qte_stock' => 0]);
+
+        $resultat = $this->service->compterAlertesPourOrganisation($org->id);
+
+        $this->assertSame(0, $resultat['ruptures']);
+        $this->assertSame(0, $resultat['total']);
     }
 }

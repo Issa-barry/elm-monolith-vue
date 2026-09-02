@@ -216,6 +216,52 @@ class GlobalSearchTest extends TestCase
         }
     }
 
+    // ── livreurs provider (nom_complet = vraie colonne, telephone = proxy Personne) ───────
+
+    public function test_livreurs_provider_finds_by_nom_complet_et_telephone(): void
+    {
+        $user = $this->makeStaffUser(['livreurs.read']);
+        Sanctum::actingAs($user, ['*']);
+
+        $livreur = Livreur::factory()->create([
+            'organization_id' => $this->org->id,
+            'nom_complet' => 'Camara Ya Moussa',
+        ]);
+        $livreur->personne->update([
+            'telephone' => '+224622603462',
+            'telephone_normalise' => '224622603462',
+        ]);
+
+        foreach (['Ya Moussa', 'Camara', '3462'] as $q) {
+            $items = $this->getJson(route('api.search.global', ['q' => $q, 'categories' => ['livreurs']]))
+                ->assertOk()
+                ->json('results.livreurs.items');
+
+            $this->assertCount(1, $items, "recherche « {$q} » devrait trouver le livreur");
+            $this->assertSame($livreur->id, $items[0]['id']);
+            $this->assertSame('Camara Ya Moussa', $items[0]['title']);
+            $this->assertSame('+224622603462', $items[0]['subtitle']);
+        }
+    }
+
+    public function test_livreurs_provider_est_scope_a_lorganisation(): void
+    {
+        $user = $this->makeStaffUser(['livreurs.read']);
+        Sanctum::actingAs($user, ['*']);
+
+        Livreur::factory()->create(['organization_id' => $this->org->id, 'nom_complet' => 'Diallo Org']);
+
+        $otherOrg = Organization::factory()->create();
+        Livreur::factory()->create(['organization_id' => $otherOrg->id, 'nom_complet' => 'Diallo Autre']);
+
+        $items = $this->getJson(route('api.search.global', ['q' => 'Diallo', 'categories' => ['livreurs']]))
+            ->assertOk()
+            ->json('results.livreurs.items');
+
+        $this->assertCount(1, $items);
+        $this->assertSame('Diallo Org', $items[0]['title']);
+    }
+
     // ── categories filter ─────────────────────────────────────────────────────
 
     public function test_categories_filter_restricts_to_requested_providers(): void

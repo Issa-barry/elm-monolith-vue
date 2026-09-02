@@ -18,12 +18,14 @@ use Tests\Feature\Concerns\HasOrgAndUser;
 use Tests\TestCase;
 
 /**
- * Fiche produit > Alerte de stock faible par AGENCE (chantier 29/08/2026 pour le seuil, étendu le
- * 01/09/2026 à l'ACTIVATION elle-même) : un produit peut n'être géré que dans certains sites —
- * l'activation ("être alerté ?") ET le seuil se règlent indépendamment pour chaque site actif de
- * l'organisation, avec repli sur le seuil global de l'organisation quand aucun seuil spécifique
- * n'est défini sur un site actif. Couvre le formulaire web (ProduitController::edit()/update()) et
- * le contrôle du stock avec le bon site_id.
+ * Fiche produit > Disponibilité et Alerte de stock faible par AGENCE — deux notions
+ * INDÉPENDANTES (chantier 29/08/2026 pour le seuil, étendu le 01/09/2026 à l'activation, puis
+ * scindé le 02/09/2026 après-midi entre DISPONIBILITÉ et ALERTE, cf. StockStatutService) :
+ *   - Disponibilité ("ce produit est-il vendu sur ce site ?") — défaut VRAI partout ;
+ *   - Alerte ("faut-il notifier ?") — défaut FAUX, avec seuil par site.
+ * Un site non disponible n'a jamais de rupture "métier" ; un site disponible mais sans alerte
+ * affiche son état réel sans jamais notifier. Couvre le formulaire web
+ * (ProduitController::edit()/update()) et le contrôle du stock avec le bon site_id.
  */
 class ProduitSeuilAlerteSiteTest extends TestCase
 {
@@ -103,6 +105,82 @@ class ProduitSeuilAlerteSiteTest extends TestCase
 
         $siteIds = collect($props['sites'])->pluck('id')->map(fn ($id) => (string) $id)->all();
         $this->assertNotContains((string) $inactif->id, $siteIds);
+    }
+
+    public function test_edit_expose_la_disponibilite_deja_enregistree(): void
+    {
+        $produit = $this->makeProduit();
+        ProduitSeuilAlerte::create([
+            'organization_id' => $this->org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $this->matoto->id,
+            'disponible' => false,
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('produits.edit', $produit));
+        $props = $response->original->getData()['page']['props'];
+
+        $this->assertFalse($props['seuilsAlerteSite'][$this->matoto->id]['disponible']);
+        // CBA n'a aucune ligne : disponible par défaut, absent de la collection.
+        $this->assertArrayNotHasKey((string) $this->cba->id, $props['seuilsAlerteSite']);
+    }
+
+    // ── update() : disponibilité, indépendante de l'alerte ───────────────────
+
+    public function test_update_mode_selection_restreint_le_produit_aux_sites_coches(): void
+    {
+        $lambanyi = Site::create(['organization_id' => $this->org->id, 'nom' => 'Lambanyi', 'type' => 'depot', 'localisation' => 'Lambanyi']);
+        $produit = $this->makeProduit();
+
+        $this->actingAs($this->user)
+            ->put(route('produits.update', $produit), array_merge(
+                $this->updatePayload($produit, []),
+                ['disponibilite_mode' => 'selection', 'sites_disponibles' => [$this->cba->id]],
+            ))
+            ->assertSessionDoesntHaveErrors();
+
+        $service = app(StockStatutService::class);
+        $produit = $produit->fresh()->load('seuilsAlerte');
+        $this->assertTrue($service->disponiblePourSite($produit, $this->cba->id));
+        $this->assertFalse($service->disponiblePourSite($produit, $this->matoto->id));
+        $this->assertFalse($service->disponiblePourSite($produit, $lambanyi->id));
+    }
+
+    public function test_update_mode_tous_leve_toute_restriction_de_disponibilite(): void
+    {
+        $produit = $this->makeProduit();
+        ProduitSeuilAlerte::create([
+            'organization_id' => $this->org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $this->matoto->id,
+            'disponible' => false,
+        ]);
+
+        $this->actingAs($this->user)
+            ->put(route('produits.update', $produit), array_merge(
+                $this->updatePayload($produit, []),
+                ['disponibilite_mode' => 'tous'],
+            ));
+
+        $this->assertTrue(app(StockStatutService::class)->disponiblePourSite($produit->fresh()->load('seuilsAlerte'), $this->matoto->id));
+    }
+
+    public function test_update_sans_disponibilite_mode_ne_touche_pas_la_disponibilite_existante(): void
+    {
+        $produit = $this->makeProduit();
+        ProduitSeuilAlerte::create([
+            'organization_id' => $this->org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $this->matoto->id,
+            'disponible' => false,
+        ]);
+
+        // Payload SANS disponibilite_mode (champ absent) : une modification qui ne touche pas
+        // cette section ne doit rien altérer.
+        $this->actingAs($this->user)
+            ->put(route('produits.update', $produit), $this->updatePayload($produit, []));
+
+        $this->assertFalse(app(StockStatutService::class)->disponiblePourSite($produit->fresh()->load('seuilsAlerte'), $this->matoto->id));
     }
 
     // ── update() : activation + seuil, indépendants par site ────────────────
@@ -293,12 +371,18 @@ class ProduitSeuilAlerteSiteTest extends TestCase
         $this->assertSame(StockStatut::DISPONIBLE->value, $stocksParSite[$this->cba->id]['statut']);
     }
 
-    public function test_un_site_desactive_ne_genere_jamais_dalerte_meme_avec_un_stock_tres_faible(): void
+    /**
+     * Décision produit du 02/09/2026 après-midi (en remplacement d'une confusion introduite puis
+     * corrigée le jour même) : désactiver l'ALERTE d'un site DISPONIBLE ne doit JAMAIS masquer
+     * son état physique réel — "le stock physique reste réel". Seules les notifications/badges
+     * d'alerte sont supprimés ; la page Stock / fiche produit continuent d'afficher l'état réel.
+     */
+    public function test_alerte_desactivee_naffiche_jamais_de_badge_mais_le_stock_reel_reste_visible(): void
     {
         $type = ProduitType::where('organization_id', $this->org->id)->where('code', 'achat_vente')->firstOrFail();
         $produit = app(ProduitService::class)->creer([
             'organization_id' => $this->org->id,
-            'nom' => 'Produit non géré à Lambanyi',
+            'nom' => 'Produit non surveillé à Lambanyi',
             'produit_type_id' => $type->id,
             'statut' => 'actif',
             'prix_achat' => 1000,
@@ -313,9 +397,8 @@ class ProduitSeuilAlerteSiteTest extends TestCase
                 ['site_id' => $lambanyi->id, 'actif' => false, 'seuil' => null],
             ]));
 
-        // Stock quasi nul (1 unité, très en dessous de tout seuil raisonnable) sur le site
-        // désactivé : toujours aucune alerte "stock faible" (la rupture, elle, reste calculée
-        // indépendamment — cf. STOCK-ALERTE-004 — mais ce n'est pas ce qui est testé ici).
+        // Stock quasi nul (1 unité) sur les deux sites — Lambanyi reste DISPONIBLE (jamais
+        // restreint), seule son alerte est désactivée.
         VarianteStock::create(['organization_id' => $this->org->id, 'produit_variante_id' => $variante->id, 'site_id' => $lambanyi->id, 'qte_stock' => 1]);
         VarianteStock::create(['organization_id' => $this->org->id, 'produit_variante_id' => $variante->id, 'site_id' => $this->cba->id, 'qte_stock' => 1]);
 
@@ -323,8 +406,127 @@ class ProduitSeuilAlerteSiteTest extends TestCase
         $props = $response->original->getData()['page']['props'];
         $stocksParSite = collect($props['produit']['stocks_par_site'])->keyBy('site_id');
 
-        $this->assertSame(StockStatut::DISPONIBLE->value, $stocksParSite[$lambanyi->id]['statut']);
+        // Stock réel affiché des DEUX côtés (1 <= seuil de 10/50 → Stock faible) — Lambanyi
+        // n'est PAS forcé à "Disponible" simplement parce que son alerte est coupée.
+        $this->assertSame(StockStatut::STOCK_FAIBLE->value, $stocksParSite[$lambanyi->id]['statut']);
+        $this->assertTrue($stocksParSite[$lambanyi->id]['disponible_sur_site']);
+        $this->assertFalse($stocksParSite[$lambanyi->id]['alerte_active']);
         $this->assertSame(StockStatut::STOCK_FAIBLE->value, $stocksParSite[$this->cba->id]['statut']);
+        // Le badge d'en-tête "Stock faible" reste vrai grâce à CBA (alerte active) — Lambanyi
+        // n'y contribue jamais (son alerte est désactivée), mais ne l'invalide pas non plus.
+        $this->assertTrue($props['produit']['is_low_stock']);
+    }
+
+    /**
+     * Régression 02/09/2026 (signalée en production) : un produit en rupture totale (0 unité)
+     * sur un site dont l'alerte est désactivée déclenchait quand même un email — corrigé en
+     * conditionnant la notification à l'alerte ET à la disponibilité (jamais à un statut
+     * artificiellement forcé à Disponible, cf. test précédent).
+     */
+    public function test_alerte_desactivee_naffiche_jamais_de_badge_meme_a_quantite_nulle(): void
+    {
+        $type = ProduitType::where('organization_id', $this->org->id)->where('code', 'achat_vente')->firstOrFail();
+        $produit = app(ProduitService::class)->creer([
+            'organization_id' => $this->org->id,
+            'nom' => 'Pack Bouteille de 1500ml',
+            'produit_type_id' => $type->id,
+            'statut' => 'actif',
+            'prix_achat' => 1000,
+            'prix_vente' => 1500,
+        ]);
+        $variante = $produit->variantePrincipale()->first();
+        $cimenterie = Site::create(['organization_id' => $this->org->id, 'nom' => 'Cimenterie', 'type' => 'depot', 'localisation' => 'Cimenterie']);
+
+        $this->actingAs($this->user)
+            ->put(route('produits.update', $produit), $this->updatePayload($produit, [
+                ['site_id' => $cimenterie->id, 'actif' => false, 'seuil' => null],
+            ]));
+
+        VarianteStock::create(['organization_id' => $this->org->id, 'produit_variante_id' => $variante->id, 'site_id' => $cimenterie->id, 'qte_stock' => 0]);
+
+        $response = $this->actingAs($this->user)->get(route('produits.show', $produit));
+        $props = $response->original->getData()['page']['props'];
+        $stocksParSite = collect($props['produit']['stocks_par_site'])->keyBy('site_id');
+
+        // Cimenterie n'a jamais été restreinte en disponibilité : son état réel (Rupture) reste
+        // affiché sur la page — seul le badge d'en-tête (alerte) est supprimé, faute d'alerte
+        // active pour ce site.
+        $this->assertSame(StockStatut::RUPTURE->value, $stocksParSite[$cimenterie->id]['statut']);
+        $this->assertTrue($stocksParSite[$cimenterie->id]['disponible_sur_site']);
+        $this->assertFalse($props['produit']['is_out_of_stock']);
+    }
+
+    /**
+     * Un site marqué NON DISPONIBLE (cf. section "Disponibilité" du formulaire) n'a, lui,
+     * jamais de rupture "métier" à afficher, quel que soit son stock physique — distinct du test
+     * précédent, où le site reste disponible mais sans alerte.
+     */
+    public function test_un_site_non_disponible_naffiche_jamais_rupture_meme_a_quantite_nulle(): void
+    {
+        $type = ProduitType::where('organization_id', $this->org->id)->where('code', 'achat_vente')->firstOrFail();
+        $produit = app(ProduitService::class)->creer([
+            'organization_id' => $this->org->id,
+            'nom' => 'Pack Bouteille de 1500ml',
+            'produit_type_id' => $type->id,
+            'statut' => 'actif',
+            'prix_achat' => 1000,
+            'prix_vente' => 1500,
+        ]);
+        $variante = $produit->variantePrincipale()->first();
+        $cimenterie = Site::create(['organization_id' => $this->org->id, 'nom' => 'Cimenterie', 'type' => 'depot', 'localisation' => 'Cimenterie']);
+
+        $this->actingAs($this->user)
+            ->put(route('produits.update', $produit), array_merge(
+                $this->updatePayload($produit, []),
+                ['disponibilite_mode' => 'selection', 'sites_disponibles' => [$this->cba->id, $this->matoto->id]],
+            ));
+
+        VarianteStock::create(['organization_id' => $this->org->id, 'produit_variante_id' => $variante->id, 'site_id' => $cimenterie->id, 'qte_stock' => 0]);
+
+        $response = $this->actingAs($this->user)->get(route('produits.show', $produit));
+        $props = $response->original->getData()['page']['props'];
+        $stocksParSite = collect($props['produit']['stocks_par_site'])->keyBy('site_id');
+
+        // Cimenterie non disponible : le frontend doit afficher "Non disponible" (pas le statut
+        // coloré) — is_out_of_stock reste faux, aucune notification possible.
+        $this->assertFalse($stocksParSite[$cimenterie->id]['disponible_sur_site']);
+        $this->assertFalse($props['produit']['is_out_of_stock']);
+    }
+
+    /**
+     * Même scénario que le test précédent, mais sur la liste Produits (bannière "Rupture de
+     * stock" + badge par ligne) — ProduitController::index() calculait auparavant is_out_of_stock
+     * via un raccourci sur la seule quantité brute (`$s->qte_stock <= 0`), sans jamais consulter
+     * la disponibilité par site.
+     */
+    public function test_la_liste_produits_naffiche_pas_rupture_pour_un_site_non_disponible(): void
+    {
+        $type = ProduitType::where('organization_id', $this->org->id)->where('code', 'achat_vente')->firstOrFail();
+        $produit = app(ProduitService::class)->creer([
+            'organization_id' => $this->org->id,
+            'nom' => 'Pack Bouteille de 1500ml',
+            'produit_type_id' => $type->id,
+            'statut' => 'actif',
+            'prix_achat' => 1000,
+            'prix_vente' => 1500,
+        ]);
+        $variante = $produit->variantePrincipale()->first();
+        $cimenterie = Site::create(['organization_id' => $this->org->id, 'nom' => 'Cimenterie', 'type' => 'depot', 'localisation' => 'Cimenterie']);
+
+        $this->actingAs($this->user)
+            ->put(route('produits.update', $produit), array_merge(
+                $this->updatePayload($produit, []),
+                ['disponibilite_mode' => 'selection', 'sites_disponibles' => [$this->cba->id, $this->matoto->id]],
+            ));
+
+        VarianteStock::create(['organization_id' => $this->org->id, 'produit_variante_id' => $variante->id, 'site_id' => $cimenterie->id, 'qte_stock' => 0]);
+
+        $response = $this->actingAs($this->user)->get(route('produits.index'));
+        $props = $response->original->getData()['page']['props'];
+        $ligne = collect($props['produits'])->firstWhere('id', $produit->id);
+
+        $this->assertFalse($ligne['is_out_of_stock']);
+        $this->assertTrue($ligne['in_stock']);
     }
 
     public function test_la_configuration_par_site_reste_appliquee_apres_une_nouvelle_modification_du_produit(): void
