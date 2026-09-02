@@ -13,8 +13,10 @@ use App\Models\Proprietaire;
 use App\Models\Site;
 use App\Models\TypeVehicule;
 use App\Models\Vehicule;
+use App\Services\ImportFlotte\Normalizers\CapaciteColonneResolver;
 use App\Services\ImportFlotte\Normalizers\CountryNormalizer;
 use App\Services\ImportFlotte\Normalizers\ImportTextNormalizer;
+use App\Services\ImportFlotte\Normalizers\ImportValeurNormalizer;
 use App\Services\ImportFlotte\Normalizers\PhoneNormalizer;
 use App\Services\ImportFlotte\Normalizers\ReferenceValueResolver;
 use App\Traits\PhoneHandlerTrait;
@@ -586,51 +588,7 @@ class ImportFlotteParser
      */
     private function resoudreColonnesCapacite(array $entetes, string $orgId): array
     {
-        $prefixe = self::CAPACITE_COLONNE_PREFIXE;
-        $longueurPrefixe = mb_strlen($prefixe);
-
-        $colonnes = [];
-        $referencesVues = [];
-        $referencesEnDoublon = [];
-
-        foreach ($entetes as $entete) {
-            if (mb_strtolower(mb_substr($entete, 0, $longueurPrefixe)) !== $prefixe) {
-                continue;
-            }
-
-            $reference = mb_strtoupper(trim(mb_substr($entete, $longueurPrefixe)), 'UTF-8');
-            if ($reference === '') {
-                continue;
-            }
-
-            if (isset($referencesVues[$reference])) {
-                $referencesEnDoublon[$reference] = true;
-            }
-            $referencesVues[$reference] = true;
-
-            $colonnes[] = ['cle' => $entete, 'reference' => $reference];
-        }
-
-        if (! empty($referencesEnDoublon)) {
-            return [
-                'colonnes' => [],
-                'erreur_doublon' => 'Colonnes de capacité en doublon pour la référence '
-                    .implode(', ', array_map(fn ($r) => "\"{$r}\"", array_keys($referencesEnDoublon)))
-                    .' — une seule colonne "capacite__<REFERENCE>" par catégorie est autorisée.',
-            ];
-        }
-
-        $categoriesParReference = Categorie::where('organization_id', $orgId)
-            ->whereIn('reference', array_column($colonnes, 'reference'))
-            ->get()
-            ->keyBy('reference');
-
-        foreach ($colonnes as &$colonne) {
-            $colonne['categorie'] = $categoriesParReference->get($colonne['reference']);
-        }
-        unset($colonne);
-
-        return ['colonnes' => $colonnes, 'erreur_doublon' => null];
+        return CapaciteColonneResolver::resoudre($entetes, $orgId, self::CAPACITE_COLONNE_PREFIXE);
     }
 
     /**
@@ -1209,15 +1167,7 @@ class ImportFlotteParser
      */
     private function toCapaciteOrNull(mixed $valeur): array
     {
-        $brut = trim((string) ($valeur ?? ''));
-        if ($brut === '') {
-            return [null, null];
-        }
-        if (! is_numeric($brut) || (int) $brut != $brut || (int) $brut < 1 || (int) $brut > 99999) {
-            return [null, "\"{$brut}\" (entier entre 1 et 99999 attendu)."];
-        }
-
-        return [(int) $brut, null];
+        return ImportValeurNormalizer::toEntierOuNull($valeur);
     }
 
     private function normaliserImmatriculation(string $valeur): string
@@ -1237,39 +1187,6 @@ class ImportFlotteParser
      */
     private function toUsageBool(mixed $valeur, bool $valeurParDefaut): array
     {
-        if ($valeur === null || $valeur === '') {
-            return [$valeurParDefaut, null];
-        }
-
-        $bool = $this->toBool($valeur);
-        if ($bool === null) {
-            return [$valeurParDefaut, sprintf(
-                '"%s" non reconnu (attendu : oui/non, yes/no, 1/0, true/false).',
-                trim((string) $valeur)
-            )];
-        }
-
-        return [$bool, null];
-    }
-
-    private function toBool(mixed $valeur): ?bool
-    {
-        if ($valeur === null || $valeur === '') {
-            return null;
-        }
-        // PhpSpreadsheet peut retourner un booléen PHP natif pour une cellule Excel de
-        // type booléen (formatData désactivé ou cellule sans format d'affichage) — sans ce
-        // cas, (string) false ci-dessous donnerait "" et ferait passer un "non"/"faux"
-        // légitime pour une valeur non reconnue.
-        if (is_bool($valeur)) {
-            return $valeur;
-        }
-        $v = ImportTextNormalizer::normalize((string) $valeur);
-
-        return match ($v) {
-            'oui', 'true', '1', 'vrai', 'yes', 'x' => true,
-            'non', 'false', '0', 'faux', 'no' => false,
-            default => null,
-        };
+        return ImportValeurNormalizer::toBoolAvecDefaut($valeur, $valeurParDefaut);
     }
 }

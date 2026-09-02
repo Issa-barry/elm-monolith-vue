@@ -8,23 +8,71 @@ use App\Models\Site;
 use Illuminate\Support\Collection;
 
 /**
- * Gère la configuration de l'alerte de stock faible (actif + seuil spécifique) par SITE pour un
- * produit — remplace l'ancien choix global produits.alerte_stock_active et l'ancien seuil unique
- * produits.seuil_alerte_stock (les deux conservés en base à titre historique, plus jamais écrits
- * par le code applicatif). Absence de ligne pour un couple produit/site = alerte INACTIVE sur ce
- * site (cf. StockStatutService::alerteActivePourSite(), seule lectrice avec
- * seuilEffectifPourSite() pour le calcul de l'état de stock).
+ * Gère la configuration par SITE d'un produit — deux notions INDÉPENDANTES, cf. docblock
+ * StockStatutService :
+ *   - DISPONIBILITÉ (`disponible`) : ce produit est-il vendu/géré sur ce site ? Défaut TRUE.
+ *   - ALERTE (`actif` + `seuil_alerte_stock`) : faut-il surveiller/notifier ce couple ? Défaut
+ *     FALSE.
+ * Remplace l'ancien choix global produits.alerte_stock_active et l'ancien seuil unique
+ * produits.seuil_alerte_stock (conservés en base à titre historique, plus jamais écrits par le
+ * code applicatif).
  */
 class ProduitSeuilAlerteService
 {
-    /** @return Collection<string, array{actif: bool, seuil: int|null}> config indexée par site_id */
+    /** @return Collection<string, array{disponible: bool, actif: bool, seuil: int|null}> config indexée par site_id */
     public function pourProduit(Produit $produit): Collection
     {
         return ProduitSeuilAlerte::where('produit_id', $produit->id)
             ->get()
             ->mapWithKeys(fn (ProduitSeuilAlerte $p) => [
-                (string) $p->site_id => ['actif' => $p->actif, 'seuil' => $p->seuil_alerte_stock],
+                (string) $p->site_id => ['disponible' => $p->disponible, 'actif' => $p->actif, 'seuil' => $p->seuil_alerte_stock],
             ]);
+    }
+
+    /**
+     * Définit la DISPONIBILITÉ d'un produit pour UN site — indépendant de l'alerte, ne touche
+     * jamais `actif`/`seuil_alerte_stock`. Rendre disponible ($disponible = true) ne crée une
+     * ligne que si une autre config (alerte) existe déjà pour ce site — le défaut de la colonne
+     * (true) couvre déjà tout site sans ligne, inutile de créer des lignes pour "tous les sites".
+     * Rendre indisponible crée/modifie la ligne avec `disponible = false`.
+     */
+    public function definirDisponibilite(Produit $produit, string $siteId, bool $disponible): void
+    {
+        if ($disponible) {
+            ProduitSeuilAlerte::where('produit_id', $produit->id)
+                ->where('site_id', $siteId)
+                ->update(['disponible' => true]);
+
+            return;
+        }
+
+        ProduitSeuilAlerte::updateOrCreate(
+            ['produit_id' => $produit->id, 'site_id' => $siteId],
+            ['organization_id' => $produit->organization_id, 'disponible' => false],
+        );
+    }
+
+    /**
+     * Applique le mode "Tous les sites" ($siteIdsDisponibles = null, aucune restriction — replie
+     * sur le défaut de colonne) ou "Sites sélectionnés" ($siteIdsDisponibles = liste des sites
+     * disponibles, tous les AUTRES sites actifs de l'organisation deviennent indisponibles) —
+     * seul point d'écriture utilisé par le formulaire web (section "Disponibilité").
+     *
+     * @param  string[]|null  $siteIdsDisponibles
+     */
+    public function definirDisponibilitePourSites(Produit $produit, ?array $siteIdsDisponibles): void
+    {
+        if ($siteIdsDisponibles === null) {
+            ProduitSeuilAlerte::where('produit_id', $produit->id)->update(['disponible' => true]);
+
+            return;
+        }
+
+        $siteIds = Site::where('organization_id', $produit->organization_id)->actives()->pluck('id');
+
+        foreach ($siteIds as $siteId) {
+            $this->definirDisponibilite($produit, (string) $siteId, in_array((string) $siteId, $siteIdsDisponibles, true));
+        }
     }
 
     /**

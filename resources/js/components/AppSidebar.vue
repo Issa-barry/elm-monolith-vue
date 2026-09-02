@@ -21,7 +21,6 @@ import {
     Calculator,
     Car,
     Contact,
-    Handshake,
     Layers,
     LayoutGrid,
     Package,
@@ -121,6 +120,10 @@ const mainNavItems = computed((): NavItem[] => {
     if (canSee('ventes.read', 'ventes')) {
         const ventesSubItems = [
             { title: 'Commandes', href: '/backoffice/ventes' },
+            {
+                title: 'Distribution',
+                href: '/backoffice/distributions',
+            },
         ];
         if (moduleActive('pdv')) {
             ventesSubItems.push({ title: 'PDV', href: '/backoffice/pdv' });
@@ -134,12 +137,6 @@ const mainNavItems = computed((): NavItem[] => {
             href: '/backoffice/ventes',
             icon: ShoppingCart,
             items: ventesSubItems,
-            group: 'Commercial',
-        });
-        items.push({
-            title: 'Distribution',
-            href: '/backoffice/distributions',
-            icon: Handshake,
             group: 'Commercial',
         });
     }

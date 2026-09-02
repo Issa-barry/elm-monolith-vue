@@ -103,10 +103,10 @@ class StockAlerteMultiVarianteSiteTest extends TestCase
         $this->assertSame(15, $service->seuilEffectifPourSite($produit, $this->matoto->id));
         $this->assertSame(10, $service->seuilEffectifPourSite($produit, $this->sonfonia->id));
 
-        $this->assertSame(StockStatut::DISPONIBLE, $service->statutPour(20, 15, true), 'Blanche @ Matoto (seuil 15)');
-        $this->assertSame(StockStatut::STOCK_FAIBLE, $service->statutPour(15, 15, true), 'Noire @ Matoto (seuil 15)');
-        $this->assertSame(StockStatut::STOCK_FAIBLE, $service->statutPour(8, 10, true), 'Blanche @ Sonfonia (seuil 10, défaut organisation)');
-        $this->assertSame(StockStatut::DISPONIBLE, $service->statutPour(30, 10, true), 'Noire @ Sonfonia (seuil 10, défaut organisation)');
+        $this->assertSame(StockStatut::DISPONIBLE, $service->statutPour(20, 15), 'Blanche @ Matoto (seuil 15)');
+        $this->assertSame(StockStatut::STOCK_FAIBLE, $service->statutPour(15, 15), 'Noire @ Matoto (seuil 15)');
+        $this->assertSame(StockStatut::STOCK_FAIBLE, $service->statutPour(8, 10), 'Blanche @ Sonfonia (seuil 10, défaut organisation)');
+        $this->assertSame(StockStatut::DISPONIBLE, $service->statutPour(30, 10), 'Noire @ Sonfonia (seuil 10, défaut organisation)');
     }
 
     public function test_le_seuil_specifique_dun_site_ne_saplique_jamais_a_un_autre_site(): void
@@ -148,16 +148,61 @@ class StockAlerteMultiVarianteSiteTest extends TestCase
         $this->assertSame(2, $nombre);
     }
 
-    public function test_desactiver_un_site_supprime_le_stock_faible_mais_garde_la_rupture(): void
+    /**
+     * Décision du 02/09/2026 après-midi : désactiver l'ALERTE d'un site ne change JAMAIS son
+     * état physique réel (statutPour() est une fonction pure) — seul le drapeau alerte_active
+     * exposé par detailParVarianteEtSite() bascule, pour que les appelants (notifications,
+     * badges) sachent ne jamais compter ce site, sans jamais mentir sur le stock réel.
+     */
+    public function test_desactiver_lalerte_dun_site_ne_change_jamais_son_etat_physique_reel(): void
     {
         app(ProduitSeuilAlerteService::class)->definir($this->produit, $this->matoto->id, false, null);
 
         $service = app(StockStatutService::class);
-        $this->assertFalse($service->alerteActivePourSite($this->produit->fresh(), $this->matoto->id));
-        // Stock faible : disparaît sur ce site puisque l'alerte y est désormais désactivée.
-        $this->assertSame(StockStatut::DISPONIBLE, $service->statutPour(10, 10, false));
-        // Rupture : reste vraie quoi qu'il arrive (fait de disponibilité, pas une préférence).
-        $this->assertSame(StockStatut::RUPTURE, $service->statutPour(0, 10, false));
+        $produit = $this->produit->fresh(['produitType', 'variantes.stocks', 'seuilsAlerte']);
+        $this->assertFalse($service->alerteActivePourSite($produit, $this->matoto->id));
+
+        // statutPour() reste pur : la quantité/le seuil seuls décident, jamais l'alerte.
+        $this->assertSame(StockStatut::STOCK_FAIBLE, $service->statutPour(10, 10));
+        $this->assertSame(StockStatut::RUPTURE, $service->statutPour(0, 10));
+
+        // Noire@Matoto (15 unités, seuil 15) : état réel Stock faible conservé, alerte_active
+        // basculée à faux — jamais l'inverse.
+        $detail = $service->detailParVarianteEtSite($produit);
+        $noireMatoto = $detail->first(fn (array $d) => $d['site_id'] === $this->matoto->id && $d['qte_stock'] === 15);
+        $this->assertSame(StockStatut::STOCK_FAIBLE->value, $noireMatoto['statut']);
+        $this->assertTrue($noireMatoto['disponible_sur_site']);
+        $this->assertFalse($noireMatoto['alerte_active']);
+
+        // nombreAlertesPourProduit() (badge) ne compte plus ce site désactivé : 1 seule alerte
+        // reste (Blanche@Sonfonia), pas 2.
+        $this->assertSame(1, $service->nombreAlertesPourProduit($produit));
+    }
+
+    /**
+     * Garde INDÉPENDANTE de la précédente : rendre Matoto NON DISPONIBLE (plutôt que juste sans
+     * alerte) masque son état réel derrière "Non disponible" pour le frontend, sans jamais
+     * altérer le calcul physique lui-même.
+     */
+    public function test_rendre_un_site_non_disponible_est_independant_de_lalerte(): void
+    {
+        app(ProduitSeuilAlerteService::class)->definirDisponibilite($this->produit, $this->matoto->id, false);
+
+        $service = app(StockStatutService::class);
+        $produit = $this->produit->fresh(['produitType', 'variantes.stocks', 'seuilsAlerte']);
+
+        // Matoto reste avec son alerte active (definie dans setUp()) — seule la disponibilité
+        // change, indépendamment.
+        $this->assertTrue($service->alerteActivePourSite($produit, $this->matoto->id));
+        $this->assertFalse($service->disponiblePourSite($produit, $this->matoto->id));
+
+        $detail = $service->detailParVarianteEtSite($produit);
+        $noireMatoto = $detail->first(fn (array $d) => $d['site_id'] === $this->matoto->id && $d['qte_stock'] === 15);
+        $this->assertSame(StockStatut::STOCK_FAIBLE->value, $noireMatoto['statut']);
+        $this->assertFalse($noireMatoto['disponible_sur_site']);
+
+        // nombreAlertesPourProduit() (badge) ignore aussi ce site non disponible.
+        $this->assertSame(1, $service->nombreAlertesPourProduit($produit));
     }
 
     public function test_produit_sans_stock_gere_najoute_jamais_dalerte(): void

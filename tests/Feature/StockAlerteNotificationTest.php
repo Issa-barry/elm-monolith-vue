@@ -11,6 +11,7 @@ use App\Models\VarianteStock;
 use App\Notifications\StockAlerteNotification;
 use App\Services\MouvementStockService;
 use App\Services\ProduitSeuilAlerteService;
+use App\Services\StockStatutService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Spatie\Permission\Models\Role;
@@ -135,25 +136,22 @@ class StockAlerteNotificationTest extends TestCase
         Notification::assertSentTo($admin, StockAlerteNotification::class);
     }
 
-    public function test_rupture_alerte_meme_si_alerte_stock_active_est_desactivee_sur_le_produit(): void
+    public function test_aucune_alerte_de_rupture_si_le_site_est_hors_du_systeme_dalerte(): void
     {
         Notification::fake();
 
         $admin = $this->makeDestinataire('admin_entreprise');
-        // alerte_stock_active = false : STOCK-ALERTE-004, la rupture reste un fait de
-        // disponibilité toujours calculé, indépendant du choix "être alerté".
+        // Décision du 02/09/2026 (en remplacement de STOCK-ALERTE-004 précédente) : un site sans
+        // alerte active pour ce produit est entièrement hors du système d'alerte, y compris pour
+        // la rupture réelle — plus aucun email, même à quantité 0.
         $varianteId = $this->seedProduitEtStock(qte: 5, alerteActive: false, seuil: 10);
 
         MouvementStockService::appliquer($varianteId, $this->siteAlerte->id, $this->org->id, 'sortie', 5); // 5 → 0
 
-        Notification::assertSentTo(
-            $admin,
-            StockAlerteNotification::class,
-            fn ($n) => $n->toArray($admin)['statut'] === StockStatut::RUPTURE->value,
-        );
+        Notification::assertNothingSentTo($admin);
     }
 
-    public function test_pas_dalerte_stock_faible_si_alerte_stock_active_est_desactivee_sur_le_produit(): void
+    public function test_pas_dalerte_stock_faible_si_le_site_est_hors_du_systeme_dalerte(): void
     {
         Notification::fake();
 
@@ -161,6 +159,36 @@ class StockAlerteNotificationTest extends TestCase
         $varianteId = $this->seedProduitEtStock(qte: 20, alerteActive: false, seuil: 10);
 
         MouvementStockService::appliquer($varianteId, $this->siteAlerte->id, $this->org->id, 'sortie', 15); // 20 → 5, reste > 0
+
+        Notification::assertNothingSentTo($admin);
+    }
+
+    /**
+     * Garde INDÉPENDANTE de la précédente : même avec l'ALERTE active et un seuil configuré, un
+     * site NON DISPONIBLE pour ce produit n'envoie jamais cette notification — décision du
+     * 02/09/2026 après-midi (disponibilité et alerte sont deux filtres distincts, tous deux
+     * requis, cf. StockStatutService).
+     */
+    public function test_aucune_alerte_si_le_site_nest_pas_disponible_pour_ce_produit(): void
+    {
+        Notification::fake();
+
+        $admin = $this->makeDestinataire('admin_entreprise');
+        $produit = $this->makeProduitAvecVariante($this->org, ['nom' => 'Bidon 20L']);
+        $varianteId = $produit->variantePrincipale()->first()->id;
+
+        VarianteStock::updateOrCreate(
+            ['produit_variante_id' => $varianteId, 'site_id' => $this->siteAlerte->id],
+            ['organization_id' => $this->org->id, 'qte_stock' => 5],
+        );
+
+        $seuilAlerteService = app(ProduitSeuilAlerteService::class);
+        $seuilAlerteService->definir($produit, $this->siteAlerte->id, true, 10);
+        $seuilAlerteService->definirDisponibilite($produit, $this->siteAlerte->id, false);
+
+        $this->assertFalse(app(StockStatutService::class)->disponiblePourSite($produit->fresh()->load('seuilsAlerte'), $this->siteAlerte->id));
+
+        MouvementStockService::appliquer($varianteId, $this->siteAlerte->id, $this->org->id, 'sortie', 5); // 5 → 0
 
         Notification::assertNothingSentTo($admin);
     }

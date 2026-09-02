@@ -167,7 +167,9 @@ function formatQte(val: number | null | undefined): string {
         v-model:visible="localVisible"
         modal
         :header="title ?? 'Historique'"
-        :style="{ width: '820px' }"
+        :style="{ width: 'min(1120px, 94vw)' }"
+        :breakpoints="{ '640px': '100vw' }"
+        :content-style="{ maxHeight: '76vh', overflow: 'auto' }"
         :draggable="false"
     >
         <div
@@ -208,28 +210,36 @@ function formatQte(val: number | null | undefined): string {
                         Aucun ajustement de stock enregistré.
                     </div>
                     <template v-else>
-                        <div class="flex items-center gap-2 pt-2">
-                            <label
-                                for="historique-motif-filter"
-                                class="text-xs font-medium text-muted-foreground"
-                            >
-                                Motif
-                            </label>
-                            <Dropdown
-                                v-model="selectedMotif"
-                                input-id="historique-motif-filter"
-                                :options="motifSelectOptions"
-                                option-label="label"
-                                option-value="value"
-                                class="w-56"
-                                :pt="{
-                                    root: {
-                                        'data-testid':
-                                            'historique-motif-filter',
-                                    },
-                                }"
-                                @change="onMotifChange"
-                            />
+                        <div
+                            class="flex flex-col gap-2 pt-3 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                            <p class="text-xs text-muted-foreground">
+                                {{ ajustementsFiltres.length }} mouvement(s)
+                                affiché(s)
+                            </p>
+                            <div class="flex items-center gap-2">
+                                <label
+                                    for="historique-motif-filter"
+                                    class="text-xs font-medium text-muted-foreground"
+                                >
+                                    Motif
+                                </label>
+                                <Dropdown
+                                    v-model="selectedMotif"
+                                    input-id="historique-motif-filter"
+                                    :options="motifSelectOptions"
+                                    option-label="label"
+                                    option-value="value"
+                                    class="w-full sm:w-64"
+                                    :pt="{
+                                        root: {
+                                            'data-testid':
+                                                'historique-motif-filter',
+                                        },
+                                    }"
+                                    @change="onMotifChange"
+                                />
+                            </div>
                         </div>
 
                         <div
@@ -238,43 +248,48 @@ function formatQte(val: number | null | undefined): string {
                         >
                             Aucun mouvement pour ce motif.
                         </div>
-                        <div v-else class="overflow-x-auto pt-2">
-                            <table class="w-full text-sm">
-                                <thead>
+                        <div
+                            v-else
+                            class="mt-4 overflow-x-auto rounded-xl border border-border/70"
+                        >
+                            <table class="w-full min-w-[900px] text-sm">
+                                <thead class="bg-muted/30">
                                     <tr
                                         class="border-b text-xs text-muted-foreground"
                                     >
                                         <th
-                                            class="pr-4 pb-2 text-left font-medium"
+                                            class="px-4 py-3 text-left font-medium"
                                         >
                                             Date
                                         </th>
                                         <th
-                                            class="pr-4 pb-2 text-left font-medium"
+                                            class="px-4 py-3 text-left font-medium"
                                         >
                                             Site
                                         </th>
                                         <th
-                                            class="pr-4 pb-2 text-left font-medium"
+                                            class="px-4 py-3 text-left font-medium"
                                         >
                                             Par
                                         </th>
                                         <th
-                                            class="pr-4 pb-2 text-center font-medium"
+                                            class="px-4 py-3 text-center font-medium"
                                         >
                                             Action
                                         </th>
                                         <th
-                                            class="pr-4 pb-2 text-right font-medium"
+                                            class="px-4 py-3 text-right font-medium"
                                         >
                                             Avant
                                         </th>
                                         <th
-                                            class="pr-4 pb-2 text-right font-medium"
+                                            class="px-4 py-3 text-right font-medium"
                                         >
                                             Après
                                         </th>
-                                        <th class="pb-2 text-left font-medium">
+                                        <th
+                                            class="px-4 py-3 text-left font-medium"
+                                        >
                                             Motif
                                         </th>
                                     </tr>
@@ -283,14 +298,14 @@ function formatQte(val: number | null | undefined): string {
                                     <tr
                                         v-for="m in ajustementsFiltres"
                                         :key="m.id"
-                                        class="group"
+                                        class="group transition-colors hover:bg-muted/20"
                                     >
                                         <td
-                                            class="py-2 pr-4 font-mono text-xs whitespace-nowrap text-muted-foreground"
+                                            class="px-4 py-3 font-mono text-xs whitespace-nowrap text-muted-foreground"
                                         >
                                             {{ m.created_at }}
                                         </td>
-                                        <td class="py-2 pr-4 text-xs">
+                                        <td class="px-4 py-3 text-xs">
                                             <span
                                                 v-if="m.site_code || m.site_nom"
                                                 class="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-xs font-medium text-muted-foreground"
@@ -303,10 +318,10 @@ function formatQte(val: number | null | undefined): string {
                                                 >—</span
                                             >
                                         </td>
-                                        <td class="py-2 pr-4 text-xs">
+                                        <td class="px-4 py-3 text-xs">
                                             {{ m.createur_nom || '—' }}
                                         </td>
-                                        <td class="py-2 pr-4 text-center">
+                                        <td class="px-4 py-3 text-center">
                                             <span
                                                 v-if="m.is_initial"
                                                 class="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-950/30 dark:text-blue-400"
@@ -329,17 +344,17 @@ function formatQte(val: number | null | undefined): string {
                                             </span>
                                         </td>
                                         <td
-                                            class="py-2 pr-4 text-right text-muted-foreground tabular-nums"
+                                            class="px-4 py-3 text-right text-muted-foreground tabular-nums"
                                         >
                                             {{ formatQte(m.stock_avant) }}
                                         </td>
                                         <td
-                                            class="py-2 pr-4 text-right font-semibold tabular-nums"
+                                            class="px-4 py-3 text-right font-semibold tabular-nums"
                                         >
                                             {{ formatQte(m.stock_apres) }}
                                         </td>
                                         <td
-                                            class="py-2 text-xs text-muted-foreground"
+                                            class="px-4 py-3 text-xs text-muted-foreground"
                                         >
                                             {{ m.motif_label || '—' }}
                                         </td>

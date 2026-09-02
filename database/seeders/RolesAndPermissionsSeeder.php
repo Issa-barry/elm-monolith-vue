@@ -77,6 +77,9 @@ class RolesAndPermissionsSeeder extends Seeder
         // — Import flotte (propriétaires + véhicules + livreurs) —
         Permission::firstOrCreate(['name' => 'imports-flotte.create']);
         Permission::firstOrCreate(['name' => 'imports-flotte.read']);
+        // — Import véhicules (mise à jour en masse — site, capacités, usages ; jamais de création) —
+        Permission::firstOrCreate(['name' => 'imports-vehicules-maj.create']);
+        Permission::firstOrCreate(['name' => 'imports-vehicules-maj.read']);
         // — Import produits (création + mise à jour en masse) —
         Permission::firstOrCreate(['name' => 'imports-produits.create']);
         Permission::firstOrCreate(['name' => 'imports-produits.read']);
@@ -158,6 +161,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'imports-flotte.create',    'imports-flotte.read',
             // Véhicules
             'vehicules.create',         'vehicules.read',         'vehicules.update',         'vehicules.delete',
+            'imports-vehicules-maj.create', 'imports-vehicules-maj.read',
             'type-vehicules.create',    'type-vehicules.read',    'type-vehicules.update',    'type-vehicules.delete',
             'equipes-livraison.create', 'equipes-livraison.read', 'equipes-livraison.update', 'equipes-livraison.delete',
             'sites.create',             'sites.read',             'sites.update',             'sites.delete',
@@ -221,6 +225,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'pieces-identite.read',     'pieces-identite.download',
             // Véhicules
             'vehicules.create',         'vehicules.read',         'vehicules.update',
+            'imports-vehicules-maj.create', 'imports-vehicules-maj.read',
             'type-vehicules.create',    'type-vehicules.read',    'type-vehicules.update',
             'equipes-livraison.create', 'equipes-livraison.read', 'equipes-livraison.update',
             'sites.create',             'sites.read',             'sites.update',

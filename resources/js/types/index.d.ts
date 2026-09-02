@@ -38,7 +38,9 @@ export type StandalonePermission =
     | 'imports-flotte.create'
     | 'imports-flotte.read'
     | 'imports-produits.create'
-    | 'imports-produits.read';
+    | 'imports-produits.read'
+    | 'imports-vehicules-maj.create'
+    | 'imports-vehicules-maj.read';
 export type PermissionKey = `${Resource}.${CrudAction}` | StandalonePermission;
 export type PermissionsMap = Partial<Record<PermissionKey, boolean>>;
 export type AppRole =
