@@ -654,7 +654,10 @@ class EquipeLivraisonTest extends TestCase
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule->id]))
             ->assertRedirectContains('/backoffice/vehicules/');
 
-        // Même livreur (+224620000001) dans une autre équipe
+        // Même livreur (+224620000001) dans une autre équipe — le message doit identifier ce
+        // livreur (nom complet) et son véhicule actuel, pour que l'utilisateur sache de qui il
+        // s'agit et où le retirer avant de le réaffecter ici (cf.
+        // EquipeLivraisonController::validateMembresExclusivite()).
         $vehicule2 = $this->makeVehicule();
         $this->actingAs($this->user)
             ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
@@ -668,7 +671,9 @@ class EquipeLivraisonTest extends TestCase
                     'ordre' => 0,
                 ]],
             ]))
-            ->assertSessionHasErrors('membres.0.telephone');
+            ->assertSessionHasErrors([
+                'membres.0.telephone' => "Ce numéro appartient à Mamadou Diallo (déjà affecté au véhicule \"{$vehicule->nom_vehicule}\").",
+            ]);
     }
 
     public function test_update_autorise_membres_deja_dans_meme_equipe(): void

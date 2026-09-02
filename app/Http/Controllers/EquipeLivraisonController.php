@@ -643,18 +643,23 @@ class EquipeLivraisonController extends Controller
                 continue;
             }
 
-            $affecteAutreEquipeActive = EquipeLivreur::query()
+            // Chargée avec son véhicule pour un message d'erreur exploitable — sans ce contexte,
+            // l'utilisateur ne peut pas savoir de qui il s'agit ni où corriger (retirer le membre
+            // de son équipe actuelle) avant de le réaffecter ici.
+            $autreEquipeLivreur = EquipeLivreur::query()
                 ->where('livreur_id', $livreur->id)
                 ->whereHas('equipe', fn ($q) => $q
                     ->where('organization_id', $orgId)
                     ->whereNull('deleted_at')
                 )
                 ->when($equipeIdCourant !== null, fn ($q) => $q->where('equipe_id', '<>', $equipeIdCourant))
-                ->exists();
+                ->with('equipe.vehicule')
+                ->first();
 
-            if ($affecteAutreEquipeActive) {
+            if ($autreEquipeLivreur) {
+                $vehiculeNom = $autreEquipeLivreur->equipe?->vehicule?->nom_vehicule ?? 'véhicule inconnu';
                 throw ValidationException::withMessages([
-                    "membres.{$index}.telephone" => 'Ce livreur est déjà affecté à une autre équipe.',
+                    "membres.{$index}.telephone" => "Ce numéro appartient à {$livreur->nom_complet} (déjà affecté au véhicule \"{$vehiculeNom}\").",
                 ]);
             }
         }
