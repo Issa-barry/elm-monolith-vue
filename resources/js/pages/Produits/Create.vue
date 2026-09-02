@@ -88,7 +88,11 @@ const form = useForm({
     prix_vente: null as number | null,
     prix_achat: null as number | null,
     cout: null as number | null,
-    seuils_site: [] as { site_id: string; actif: boolean; seuil: number | null }[],
+    seuils_site: [] as {
+        site_id: string;
+        actif: boolean;
+        seuil: number | null;
+    }[],
     description: null as string | null,
     images: [] as File[],
     options: [] as {
@@ -109,17 +113,17 @@ function submit() {
     <AppLayout :breadcrumbs="breadcrumbs" :hide-mobile-header="true">
         <!-- ─── Header mobile ─── -->
         <div
-            class="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur-sm sm:hidden"
+            class="border-border/60 bg-background/95 sticky top-0 z-20 border-b backdrop-blur-sm sm:hidden"
         >
             <div class="relative flex items-center justify-center px-4 py-3">
                 <Link
                     href="/backoffice/produits"
-                    class="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-transform active:scale-95"
+                    class="bg-muted text-muted-foreground absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-transform active:scale-95"
                 >
                     <ArrowLeft class="h-4 w-4" />
                 </Link>
                 <div class="text-center">
-                    <h1 class="text-[17px] leading-tight font-semibold">
+                    <h1 class="text-[17px] font-semibold leading-tight">
                         Nouveau produit
                     </h1>
                 </div>
@@ -127,11 +131,11 @@ function submit() {
         </div>
 
         <!-- ─── Header desktop ─── -->
-        <div class="mx-auto hidden max-w-4xl px-6 pt-6 pb-0 sm:block">
+        <div class="mx-auto hidden max-w-4xl px-6 pb-0 pt-6 sm:block">
             <h1 class="text-2xl font-semibold tracking-tight">
                 Nouveau produit
             </h1>
-            <p class="mt-1 text-sm text-muted-foreground">
+            <p class="text-muted-foreground mt-1 text-sm">
                 Ajoutez un produit au catalogue de votre organisation.
             </p>
         </div>
@@ -158,7 +162,7 @@ function submit() {
 
         <!-- ─── Footer sticky mobile ─── -->
         <div
-            class="fixed right-0 bottom-0 left-0 z-30 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur-sm sm:hidden"
+            class="border-border/60 bg-background/95 fixed bottom-0 left-0 right-0 z-30 border-t px-4 py-3 backdrop-blur-sm sm:hidden"
         >
             <button
                 type="submit"
@@ -166,7 +170,7 @@ function submit() {
                 :disabled="
                     form.processing || !(produitFormRef?.canSubmit ?? true)
                 "
-                class="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-transform active:scale-[0.98] disabled:opacity-60"
+                class="bg-primary text-primary-foreground flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold shadow-sm transition-transform active:scale-[0.98] disabled:opacity-60"
             >
                 <Spinner v-if="form.processing" class="h-4 w-4" />
                 <Save v-else class="h-4 w-4" />
