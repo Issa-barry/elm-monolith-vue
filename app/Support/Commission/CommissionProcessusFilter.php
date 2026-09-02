@@ -10,6 +10,15 @@ use Illuminate\Database\Eloquent\Builder;
  * de reporting Comptabilité qui interrogent CommissionEnveloppePart — jamais appliqué à la
  * machinerie de paiement/période (PeriodeCalculatorService, CommissionEnveloppePartAllocationService),
  * qui doit au contraire toujours unir tous les processus (cf. docs/commissions.md).
+ *
+ * Garde volontairement les 3 codes, y compris distribution_client, alors que
+ * Settings\CommissionRegleController::processusCodesDisponibles() (routage/configuration de
+ * NOUVELLES opérations, depuis le 01/09/2026) n'en propose plus que 2 : ce filtre sert à
+ * REPORTER des CommissionEnveloppe déjà générées, dont certaines restent historiquement
+ * rattachées à distribution_client. Comptabilite\CommissionVenteController::breakdownParProcessus()
+ * répartit le total déjà généré sur exactement ces options — en retirer une ferait disparaître
+ * silencieusement sa part du total affiché (aucune commission perdue en base, mais une
+ * réconciliation visuellement fausse). Ne jamais aligner cette liste sur processusCodesDisponibles().
  */
 class CommissionProcessusFilter
 {

@@ -57,6 +57,54 @@ class CommissionRegleControllerTest extends TestCase
             ->assertRedirect('/settings/commissions');
     }
 
+    /**
+     * Décision produit du 01/09/2026 : il n'existe plus que 2 onglets configurables (Ventes,
+     * Transferts logistiques) — "Distributions clients" n'est plus une configuration séparée, une
+     * distribution utilisant désormais le barème logistique (cf.
+     * CommissionEnveloppeGenerator::genererPourCommandeVente()).
+     */
+    /** @test */
+    public function nexpose_plus_donglet_distribution_client_separe(): void
+    {
+        $this->actingAs($this->user)
+            ->get('/settings/commissions')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('processus_options', 2)
+                ->where('processus_options.0.value', CommissionProcessus::CODE_VENTE)
+                ->where('processus_options.1.value', CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT)
+            );
+    }
+
+    /** @test */
+    public function refuse_processus_code_distribution_client_a_lenregistrement_dune_configuration(): void
+    {
+        $categorie = Categorie::create(['organization_id' => $this->org->id, 'nom' => 'Sachets', 'statut' => 'actif']);
+
+        $this->actingAs($this->user)
+            ->post('/settings/commissions/configuration', [
+                'processus_code' => CommissionProcessus::CODE_DISTRIBUTION_CLIENT,
+                'lignes' => [[
+                    'categorie_id' => $categorie->id,
+                    'beneficiaires' => [],
+                ]],
+            ])
+            ->assertSessionHasErrors('processus_code');
+    }
+
+    /**
+     * Une URL déjà partagée avec ?processus=distribution_client (avant le 01/09/2026) ne doit
+     * jamais casser l'écran — repli silencieux sur "vente", jamais une page blanche.
+     */
+    /** @test */
+    public function une_ancienne_url_processus_distribution_client_retombe_sur_vente(): void
+    {
+        $this->actingAs($this->user)
+            ->get('/settings/commissions?processus=distribution_client')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->where('processus_actif', CommissionProcessus::CODE_VENTE));
+    }
+
     /** @test */
     public function enregistre_atomiquement_le_consultant_et_les_montants_dune_categorie(): void
     {

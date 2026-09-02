@@ -59,8 +59,17 @@ class CommissionEnveloppeGenerator
      * Résout un CommissionRegle PAR_UNITE_VENDUE par ligne de commande
      * (variante > produit > catégorie exacte > globale, décision AMOA #3),
      * agrège en une seule enveloppe par cible (décision AMOA #6). Le processus
-     * (vente ou distribution_client) est déterminé par CommandeVente::nature_operation,
+     * (vente ou logistique_transfert) est déterminé par CommandeVente::nature_operation,
      * figé à la création de la commande — jamais recalculé ici.
+     *
+     * Révisé le 01/09/2026 (décision produit) : une distribution client route désormais vers
+     * CODE_LOGISTIQUE_TRANSFERT, jamais vers un processus CODE_DISTRIBUTION_CLIENT dédié — le
+     * métier confirme que le barème logistique s'applique uniformément aux opérations de
+     * distribution ET de transfert interne, il n'y a plus de configuration séparée à maintenir.
+     * CODE_DISTRIBUTION_CLIENT reste défini (App\Models\CommissionProcessus) uniquement pour
+     * les CommissionEnveloppe/CommissionRegle/EquipeLivraisonPartageCategorie déjà générées avant
+     * cette date — jamais recalculées, jamais migrées, toujours lisibles telles quelles (cf.
+     * CommissionProcessusFilter, qui les garde distinctement filtrables en reporting).
      */
     public static function genererPourCommandeVente(
         CommandeVente $commande,
@@ -77,7 +86,7 @@ class CommissionEnveloppeGenerator
         }
 
         $processusCode = $commande->nature_operation === NatureOperation::DISTRIBUTION_CLIENT
-            ? CommissionProcessus::CODE_DISTRIBUTION_CLIENT
+            ? CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT
             : CommissionProcessus::CODE_VENTE;
 
         $ctx = self::contexteDepuisCommandeVente($commande);
