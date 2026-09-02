@@ -52,9 +52,9 @@ class UpdateProduitRequest extends FormRequest
             'prix_vente' => ['nullable', 'integer', 'min:0'],
             'prix_achat' => ['nullable', 'integer', 'min:0'],
             'cout' => ['nullable', 'integer', 'min:0'],
-            'alerte_stock_active' => ['boolean'],
-            // Le seuil se règle désormais PAR SITE (cf. ProduitSeuilAlerteService), uniquement
-            // depuis le formulaire web (fiche produit > Modifier) : non exposé ici.
+            // L'activation de l'alerte ET le seuil se règlent désormais PAR SITE (cf.
+            // ProduitSeuilAlerteService), uniquement depuis le formulaire web (fiche produit >
+            // Modifier) : non exposés ici.
             'description' => ['nullable', 'string'],
             'images' => ['nullable', 'array'],
             'images.*' => ['image', 'max:2048'],
@@ -83,8 +83,6 @@ class UpdateProduitRequest extends FormRequest
             'prix_achat.min' => 'Le prix d\'achat ne peut pas être négatif.',
             'cout.integer' => 'Le coût doit être un nombre entier.',
             'cout.min' => 'Le coût ne peut pas être négatif.',
-            'alerte_stock_active.required' => 'Indiquez si vous souhaitez être alerté en cas de stock faible.',
-            'alerte_stock_active.boolean' => 'Le champ alerte doit être vrai ou faux.',
             'images.*.image' => 'Le fichier doit être une image.',
             'images.*.max' => 'Chaque image ne peut pas dépasser 2 Mo.',
         ];

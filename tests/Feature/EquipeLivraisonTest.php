@@ -340,6 +340,148 @@ class EquipeLivraisonTest extends TestCase
             ->assertSessionHasErrors('membres.0.telephone');
     }
 
+    public function test_store_echoue_si_chauffeur_sans_telephone(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($proprietaire->id);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'vehicule_id' => $vehicule->id,
+                'membres' => [[
+                    'livreur_id' => null,
+                    'nom_complet' => 'Mamadou Diallo',
+                    'telephone' => null,
+                    'role' => 'chauffeur',
+                    'ordre' => 0,
+                ]],
+            ]))
+            ->assertSessionHasErrors('membres.0.telephone');
+    }
+
+    public function test_store_autorise_convoyeur_sans_telephone(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($proprietaire->id);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'vehicule_id' => $vehicule->id,
+                'membres' => [[
+                    'livreur_id' => null,
+                    'nom_complet' => 'Fofana',
+                    'telephone' => null,
+                    'role' => 'convoyeur',
+                    'ordre' => 0,
+                ]],
+            ]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $this->assertDatabaseHas('livreurs', ['organization_id' => $this->org->id, 'nom_complet' => 'Fofana']);
+        $this->assertDatabaseHas('personnes', ['organization_id' => $this->org->id, 'telephone_normalise' => null]);
+    }
+
+    public function test_store_autorise_plusieurs_convoyeurs_sans_telephone(): void
+    {
+        // Le téléphone facultatif d'un convoyeur ne doit jamais déclencher le
+        // contrôle "numéro déjà utilisé" entre deux membres qui n'en ont
+        // simplement aucun (NULL n'est jamais un doublon).
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($proprietaire->id);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'vehicule_id' => $vehicule->id,
+                'membres' => [
+                    [
+                        'livreur_id' => null,
+                        'nom_complet' => 'Chauffeur Principal',
+                        'telephone' => '+224620000001',
+                        'role' => 'chauffeur',
+                        'ordre' => 0,
+                    ],
+                    [
+                        'livreur_id' => null,
+                        'nom_complet' => 'Convoyeur Un',
+                        'telephone' => null,
+                        'role' => 'convoyeur',
+                        'ordre' => 1,
+                    ],
+                    [
+                        'livreur_id' => null,
+                        'nom_complet' => 'Convoyeur Deux',
+                        'telephone' => null,
+                        'role' => 'convoyeur',
+                        'ordre' => 2,
+                    ],
+                ],
+            ]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $livreurs = Livreur::where('organization_id', $this->org->id)->with('personne')->get();
+        $this->assertCount(3, $livreurs);
+        $this->assertSame(3, $livreurs->pluck('personne_id')->unique()->count());
+
+        $convoyeurs = $livreurs->filter(fn (Livreur $l) => str_starts_with((string) $l->nom_complet, 'Convoyeur'));
+        $this->assertCount(2, $convoyeurs);
+        $convoyeurs->each(fn (Livreur $l) => $this->assertNull($l->personne->telephone_normalise));
+    }
+
+    public function test_update_echoue_proprement_si_telephone_deja_detenu_par_autre_membre_de_la_meme_equipe(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule($proprietaire->id);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, [
+                'vehicule_id' => $vehicule->id,
+                'membres' => [
+                    [
+                        'livreur_id' => null,
+                        'nom_complet' => 'Doumbouya Ibrahima',
+                        'telephone' => '+224613200558',
+                        'role' => 'chauffeur',
+                        'ordre' => 0,
+                    ],
+                    [
+                        'livreur_id' => null,
+                        'nom_complet' => 'Sidibé Mamadou',
+                        'telephone' => '+224620000009',
+                        'role' => 'chauffeur',
+                        'ordre' => 1,
+                    ],
+                ],
+            ]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $equipe = EquipeLivraison::where('organization_id', $this->org->id)->first();
+        $sidibe = Livreur::whereHas('personne', fn ($q) => $q->where('telephone_normalise', '224620000009'))->firstOrFail();
+
+        // Reproduction de l'incident Sentry PHP-LARAVEL-66 : Doumbouya n'est plus
+        // soumis dans cette édition (retiré de l'équipe) mais son livreur/personne
+        // existe toujours en base, rattaché à cette même équipe. Donner son
+        // téléphone à Sidibé — un AUTRE membre — doit échouer en 422 propre,
+        // jamais planter en 500 sur la contrainte unique personnes.telephone_normalise.
+        $this->actingAs($this->user)
+            ->patch(route('equipes-livraison.update', $equipe), $this->validPayload($proprietaire->id, [
+                'vehicule_id' => $vehicule->id,
+                'membres' => [[
+                    'livreur_id' => $sidibe->id,
+                    'nom_complet' => 'Sidibé Mamadou',
+                    'telephone' => '+224613200558',
+                    'role' => 'chauffeur',
+                    'ordre' => 0,
+                ]],
+            ]))
+            ->assertSessionHasErrors('membres.0.telephone');
+
+        // Transaction annulée : le téléphone d'origine de Sidibé est intact.
+        $this->assertDatabaseHas('personnes', [
+            'id' => $sidibe->personne_id,
+            'telephone_normalise' => '224620000009',
+        ]);
+    }
+
     public function test_store_derive_toujours_le_proprietaire_depuis_le_vehicule(): void
     {
         // Le propriétaire de l'équipe n'est jamais celui envoyé par le client : il est

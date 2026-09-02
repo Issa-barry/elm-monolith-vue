@@ -10,6 +10,7 @@ use App\Models\ProduitType;
 use App\Models\Site;
 use App\Models\VarianteStock;
 use App\Services\ProduitService;
+use App\Services\ProduitSeuilAlerteService;
 use App\Services\StockStatutService;
 use Database\Seeders\ProduitTypeDefaultSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -61,19 +62,28 @@ class StockAlerteMultiVarianteSiteTest extends TestCase
             'statut' => 'actif',
             'prix_achat' => 200000,
             'prix_vente' => 350000,
-            'alerte_stock_active' => true,
             'options' => [
                 ['nom' => 'Couleur', 'valeurs' => ['Blanche', 'Noire']],
             ],
         ]);
 
-        // Seuil spécifique UNIQUEMENT à Matoto — Sonfonia n'a aucune ligne, donc repli sur le
-        // seuil global de l'organisation (10 par défaut, cf. Parametre::getSeuilStockFaible()).
+        // Alerte activée sur les DEUX sites (choix explicite indépendant par site, cf.
+        // ProduitSeuilAlerteService) — seuil spécifique UNIQUEMENT à Matoto, Sonfonia reste sans
+        // seuil spécifique donc replie sur le seuil global de l'organisation (10 par défaut, cf.
+        // Parametre::getSeuilStockFaible()).
         ProduitSeuilAlerte::create([
             'organization_id' => $this->org->id,
             'produit_id' => $this->produit->id,
             'site_id' => $this->matoto->id,
+            'actif' => true,
             'seuil_alerte_stock' => 15,
+        ]);
+        ProduitSeuilAlerte::create([
+            'organization_id' => $this->org->id,
+            'produit_id' => $this->produit->id,
+            'site_id' => $this->sonfonia->id,
+            'actif' => true,
+            'seuil_alerte_stock' => null,
         ]);
 
         $blanche = $this->produit->variantes->firstWhere('libelle', 'Blanche');
@@ -138,12 +148,13 @@ class StockAlerteMultiVarianteSiteTest extends TestCase
         $this->assertSame(2, $nombre);
     }
 
-    public function test_desactiver_alerte_stock_active_supprime_le_stock_faible_mais_garde_la_rupture(): void
+    public function test_desactiver_un_site_supprime_le_stock_faible_mais_garde_la_rupture(): void
     {
-        $this->produit->update(['alerte_stock_active' => false]);
+        app(ProduitSeuilAlerteService::class)->definir($this->produit, $this->matoto->id, false, null);
 
         $service = app(StockStatutService::class);
-        // Stock faible : disparaît si l'utilisateur a choisi de ne pas être alerté.
+        $this->assertFalse($service->alerteActivePourSite($this->produit->fresh(), $this->matoto->id));
+        // Stock faible : disparaît sur ce site puisque l'alerte y est désormais désactivée.
         $this->assertSame(StockStatut::DISPONIBLE, $service->statutPour(10, 10, false));
         // Rupture : reste vraie quoi qu'il arrive (fait de disponibilité, pas une préférence).
         $this->assertSame(StockStatut::RUPTURE, $service->statutPour(0, 10, false));
@@ -157,8 +168,11 @@ class StockAlerteMultiVarianteSiteTest extends TestCase
             'nom' => 'Prestation conseil',
             'produit_type_id' => $typeService->id,
             'statut' => 'actif',
-            'alerte_stock_active' => true, // même si activé, un type sans stock ne peut jamais alerter
         ]);
+        // Même si l'alerte était activée sur ce site, un type sans stock ne peut jamais alerter
+        // (cf. StockStatutService::statutPourVarianteStock(), court-circuité avant toute lecture
+        // de la configuration d'alerte).
+        app(ProduitSeuilAlerteService::class)->definir($produitService, $this->matoto->id, true, 5);
 
         $statut = app(StockStatutService::class)->statutPourVarianteStock(
             $produitService->fresh(['produitType']),

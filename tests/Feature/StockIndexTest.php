@@ -12,6 +12,7 @@ use App\Models\ProduitVariante;
 use App\Models\Site;
 use App\Models\User;
 use App\Models\VarianteStock;
+use App\Services\ProduitSeuilAlerteService;
 use Database\Seeders\ProduitTypeDefaultSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -69,15 +70,16 @@ class StockIndexTest extends TestCase
     {
         $produit = $this->makeProduitAvecVariante($this->organization, [
             'nom' => 'Bidon premium',
-            'alerte_stock_active' => true,
         ], ['sku' => 'BIDON-001']);
-        // Seuil spécifique PAR SITE (remplace l'ancien seuil unique produits.seuil_alerte_stock,
-        // désormais historique/figé) — ici uniquement sur Agence Alpha, cf. StockStatutService::
+        // Activation ET seuil PAR SITE (remplacent les anciennes colonnes globales
+        // produits.alerte_stock_active/seuil_alerte_stock, désormais historiques/figées) — ici
+        // uniquement sur Agence Alpha, cf. StockStatutService::alerteActivePourSite()/
         // seuilEffectifPourSite().
         ProduitSeuilAlerte::create([
             'organization_id' => $this->organization->id,
             'produit_id' => $produit->id,
             'site_id' => $this->siteA->id,
+            'actif' => true,
             'seuil_alerte_stock' => 5,
         ]);
         $variante = $produit->variantePrincipale()->first();
@@ -123,9 +125,8 @@ class StockIndexTest extends TestCase
         $produit = $this->makeProduitAvecVariante($this->organization, [
             'nom' => 'Eau minérale',
             'categorie_id' => $categorie->id,
-            'alerte_stock_active' => true,
-            'seuil_alerte_stock' => 10,
         ], ['sku' => 'EAU-FILTRE-001']);
+        app(ProduitSeuilAlerteService::class)->definir($produit, $this->siteA->id, true, 10);
         $this->stock($produit->variantePrincipale()->first(), $this->siteA, 5);
 
         $autre = $this->makeProduitAvecVariante($this->organization, [

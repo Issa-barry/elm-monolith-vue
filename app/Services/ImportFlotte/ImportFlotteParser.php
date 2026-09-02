@@ -66,11 +66,11 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
  * véhicule déjà existant (immatriculation déjà en base), une colonne vide reprend la
  * valeur déjà enregistrée plutôt que de la remettre à "non" — un import ne doit jamais
  * effacer silencieusement un usage déjà configuré. Ceci dit, l'exécuteur
- * (ImportFlotteExecutor) ne réécrit de toute façon aucun champ d'un véhicule déjà
- * existant (sauf la capacité, seule exception délibérée — voir son docblock de classe) :
- * cette ligne ne sert alors que d'ancrage pour ses livreurs/son équipe, comme
- * documenté plus haut — le repli ci-dessus ne fait que garder l'aperçu cohérent avec ce
- * qui sera réellement appliqué.
+ * (ImportFlotteExecutor) ne réécrit de toute façon les champs d'un véhicule déjà
+ * existant que pour la capacité et le site (exceptions délibérées — voir son docblock de
+ * classe) : pour tout le reste (dont les usages), cette ligne ne sert que d'ancrage pour
+ * ses livreurs/son équipe, comme documenté plus haut — le repli ci-dessus ne fait que
+ * garder l'aperçu cohérent avec ce qui sera réellement appliqué.
  *
  * Capacité (colonnes dynamiques "capacite__<REFERENCE>", ex: "capacite__BOUTEILLE_DEAU") : une
  * valeur saisie devient une capacité maximale propre à ce véhicule dans vehicule_capacites,

@@ -10,20 +10,48 @@ use Illuminate\Http\Resources\Json\JsonResource;
 class ProduitResource extends JsonResource
 {
     /**
-     * Seuil effectif pour le site par défaut de l'utilisateur authentifié (ou son premier site
-     * s'il n'a pas de site par défaut) — repli sur le seuil global de l'organisation si aucun
-     * site n'est associé à l'utilisateur.
+     * Site par défaut de l'utilisateur authentifié (ou son premier site s'il n'a pas de site par
+     * défaut), null s'il n'a aucun site — utilisé par seuilAlerteEffectifPourRequete() et
+     * alerteActivePourRequete() ci-dessous, l'API n'ayant pas de contexte de site explicite par
+     * requête (cf. docs/stock-alertes.md).
+     */
+    private function sitePourRequete(Request $request): ?object
+    {
+        $user = $request->user();
+
+        return $user?->sites()->wherePivot('is_default', true)->first() ?? $user?->sites()->first();
+    }
+
+    /**
+     * Seuil effectif pour le site par défaut de l'utilisateur authentifié — repli sur le seuil
+     * global de l'organisation si aucun site n'est associé à l'utilisateur.
      */
     private function seuilAlerteEffectifPourRequete(Request $request): int
     {
-        $user = $request->user();
-        $site = $user?->sites()->wherePivot('is_default', true)->first() ?? $user?->sites()->first();
+        $site = $this->sitePourRequete($request);
 
         if ($site === null) {
             return Parametre::getSeuilStockFaible((string) $this->organization_id);
         }
 
         return app(StockStatutService::class)->seuilEffectifPourSite($this->resource, (string) $site->id);
+    }
+
+    /**
+     * Alerte de stock faible activée pour le site par défaut de l'utilisateur authentifié — la
+     * configuration se règle désormais PAR SITE (cf. ProduitSeuilAlerteService, 01/09/2026) :
+     * false si l'utilisateur n'a aucun site (aucune configuration résolvable, jamais active par
+     * défaut), même convention que seuilAlerteEffectifPourRequete() ci-dessus.
+     */
+    private function alerteActivePourRequete(Request $request): bool
+    {
+        $site = $this->sitePourRequete($request);
+
+        if ($site === null) {
+            return false;
+        }
+
+        return app(StockStatutService::class)->alerteActivePourSite($this->resource, (string) $site->id);
     }
 
     public function toArray(Request $request): array
@@ -57,12 +85,12 @@ class ProduitResource extends JsonResource
             'prix_achat' => $variante?->prix_achat,
             'cout' => $variante?->cout,
             'qte_stock' => $this->qte_stock,
-            'alerte_stock_active' => $this->alerte_stock_active,
-            // Seuil résolu pour le site PAR DÉFAUT de l'utilisateur qui consulte l'API (même
+            // Résolus pour le site PAR DÉFAUT de l'utilisateur qui consulte l'API (même
             // résolution que ProduitController@ajusterStock côté API) — repli sur le seuil
-            // global de l'organisation si l'utilisateur n'a aucun site. Le seuil se règle
-            // désormais par site (cf. ProduitSeuilAlerteService) : sans site précis, aucune
-            // valeur unique n'a de sens pour tous les sites de l'organisation.
+            // global / false si l'utilisateur n'a aucun site. L'activation ET le seuil se
+            // règlent désormais par site (cf. ProduitSeuilAlerteService) : sans site précis,
+            // aucune valeur unique n'a de sens pour tous les sites de l'organisation.
+            'alerte_stock_active' => $this->alerteActivePourRequete($request),
             'seuil_alerte_effectif' => $this->seuilAlerteEffectifPourRequete($request),
             'description' => $this->description,
             'image_url' => $this->image_url,

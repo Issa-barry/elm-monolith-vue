@@ -259,7 +259,15 @@ function validateStep1(): boolean {
             m._errors.role = 'Rôle requis';
             valid = false;
         }
-        if (!m.telephone || !/^\d{9}$/.test(m.telephone)) {
+
+        // Téléphone obligatoire pour un chauffeur ; facultatif pour un convoyeur
+        // (cf. EquipeLivraisonController::rules() — incident Sentry PHP-LARAVEL-66).
+        if (!m.telephone) {
+            if (m.role === 'chauffeur') {
+                m._errors.telephone = '9 chiffres requis';
+                valid = false;
+            }
+        } else if (!/^\d{9}$/.test(m.telephone)) {
             m._errors.telephone = '9 chiffres requis';
             valid = false;
         } else if (phones.has(m.telephone)) {
@@ -432,6 +440,7 @@ function formatGNF(val: number | null): string {
 
 function formatPhone(local: string): string {
     const d = local.replace(/\D/g, '');
+    if (!d) return '—';
     return `+224 ${d.slice(0, 3)} ${d.slice(3, 5)} ${d.slice(5, 7)} ${d.slice(7)}`;
 }
 
@@ -465,7 +474,7 @@ function buildPayload() {
         membres: membres.value.map((m, i) => ({
             livreur_id: m.livreur_id ?? null,
             nom_complet: m.nom_complet.trim() || null,
-            telephone: `${GUINEA_PREFIX}${m.telephone}`,
+            telephone: m.telephone ? `${GUINEA_PREFIX}${m.telephone}` : null,
             role: m.role,
             ordre: i,
         })),
@@ -657,7 +666,10 @@ const hasStep1Errors = computed(() =>
                         >
                             <th class="w-36 px-3 py-2.5">Rôle *</th>
                             <th class="px-3 py-2.5">Nom complet ou surnom</th>
-                            <th class="w-52 px-3 py-2.5">Téléphone *</th>
+                            <th class="w-52 px-3 py-2.5">
+                                Téléphone
+                                <span class="font-normal text-muted-foreground/70">(obligatoire pour un chauffeur)</span>
+                            </th>
                             <th class="w-10 px-3 py-2.5"></th>
                         </tr>
                     </thead>
@@ -726,7 +738,11 @@ const hasStep1Errors = computed(() =>
                                         inputmode="numeric"
                                         maxlength="9"
                                         :value="m.telephone"
-                                        placeholder="9 chiffres"
+                                        :placeholder="
+                                            m.role === 'convoyeur'
+                                                ? '9 chiffres (optionnel)'
+                                                : '9 chiffres'
+                                        "
                                         class="min-w-0 flex-1 bg-background px-2 text-sm outline-none placeholder:text-muted-foreground"
                                         :data-testid="`telephone-${i}`"
                                         @input="onPhoneInput($event, i)"

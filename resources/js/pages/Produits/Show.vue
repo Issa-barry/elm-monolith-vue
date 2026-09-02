@@ -36,6 +36,7 @@ interface SiteStock {
     site_nom: string | null;
     qte_stock: number;
     seuil_effectif: number;
+    alerte_active: boolean;
     statut: 'disponible' | 'stock_faible' | 'rupture';
     statut_label: string;
     updated_at: string | null;
@@ -49,6 +50,7 @@ interface VarianteStockDetail {
     site_nom: string | null;
     qte_stock: number;
     seuil_effectif: number;
+    alerte_active: boolean;
     statut: 'disponible' | 'stock_faible' | 'rupture';
     statut_label: string;
 }
@@ -110,7 +112,8 @@ interface Produit {
     prix_achat: number | null;
     cout: number | null;
     qte_stock: number | null;
-    alerte_stock_active: boolean;
+    nombre_sites_alerte_active: number;
+    nombre_sites_stock: number;
     description: string | null;
     in_stock: boolean;
     is_low_stock: boolean;
@@ -504,17 +507,12 @@ const ajustements = props.mouvements.map((m) => ({
                         <p
                             class="text-3xl font-bold text-foreground tabular-nums"
                         >
-                            {{
-                                produit.alerte_stock_active
-                                    ? 'Activée'
-                                    : 'Désactivée'
+                            {{ produit.nombre_sites_alerte_active }}/{{
+                                produit.nombre_sites_stock
                             }}
                         </p>
-                        <p
-                            v-if="produit.alerte_stock_active"
-                            class="mt-1 text-[11px] text-muted-foreground"
-                        >
-                            Seuil par agence — voir « Stock par agence »
+                        <p class="mt-1 text-[11px] text-muted-foreground">
+                            Agence(s) activée(s) — voir « Stock par agence »
                         </p>
                     </div>
                 </div>
@@ -544,10 +542,10 @@ const ajustements = props.mouvements.map((m) => ({
                                 <th class="pr-4 pb-2 text-left font-medium">
                                     État
                                 </th>
-                                <th
-                                    v-if="produit.alerte_stock_active"
-                                    class="pr-4 pb-2 text-right font-medium"
-                                >
+                                <th class="pr-4 pb-2 text-left font-medium">
+                                    Alerte
+                                </th>
+                                <th class="pr-4 pb-2 text-right font-medium">
                                     Seuil
                                 </th>
                                 <th class="pb-2 text-left font-medium">
@@ -585,10 +583,23 @@ const ajustements = props.mouvements.map((m) => ({
                                     />
                                 </td>
                                 <td
-                                    v-if="produit.alerte_stock_active"
+                                    class="py-2.5 pr-4 text-xs"
+                                    :class="
+                                        s.alerte_active
+                                            ? 'text-foreground'
+                                            : 'text-muted-foreground'
+                                    "
+                                >
+                                    {{ s.alerte_active ? 'Activée' : '—' }}
+                                </td>
+                                <td
                                     class="py-2.5 pr-4 text-right text-muted-foreground tabular-nums"
                                 >
-                                    {{ formatQte(s.seuil_effectif) }}
+                                    {{
+                                        s.alerte_active
+                                            ? formatQte(s.seuil_effectif)
+                                            : '—'
+                                    }}
                                 </td>
                                 <td
                                     class="py-2.5 text-xs text-muted-foreground"
