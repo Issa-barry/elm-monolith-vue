@@ -86,7 +86,6 @@ interface ProduitData {
     prix_vente: number | null;
     prix_achat: number | null;
     cout: number | null;
-    alerte_stock_active: boolean;
     description: string | null;
     image_url: string | null;
     variantes_count: number;
@@ -102,7 +101,7 @@ const props = defineProps<{
     limites: Limites;
     seuilOrganisationDefaut: number;
     sites: SiteOption[];
-    seuilsAlerteSite: Record<string, number>;
+    seuilsAlerteSite: Record<string, { actif: boolean; seuil: number | null }>;
 }>();
 
 const showVarianteModal = ref(false);
@@ -150,10 +149,10 @@ const form = useForm({
     prix_vente: props.produit.prix_vente,
     prix_achat: props.produit.prix_achat,
     cout: props.produit.cout,
-    alerte_stock_active: props.produit.alerte_stock_active,
     seuils_site: props.sites.map((s) => ({
         site_id: s.id,
-        seuil: props.seuilsAlerteSite[s.id] ?? null,
+        actif: props.seuilsAlerteSite[s.id]?.actif ?? false,
+        seuil: props.seuilsAlerteSite[s.id]?.seuil ?? null,
     })),
     description: props.produit.description,
     images: [] as File[],

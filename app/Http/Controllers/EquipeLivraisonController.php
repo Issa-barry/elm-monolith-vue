@@ -15,6 +15,7 @@ use App\Models\VehiculeCapacite;
 use App\Services\Commission\CommissionPartageLivraisonCategorieChecker;
 use App\Services\Commission\CommissionPartageLivraisonValidator;
 use App\Services\Commission\CommissionProcessusDefaults;
+use Illuminate\Contracts\Validation\ImplicitRule;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -226,7 +227,50 @@ class EquipeLivraisonController extends Controller
             'membres' => 'required|array|min:1',
             'membres.*.livreur_id' => 'nullable|string',
             'membres.*.nom_complet' => 'nullable|string|max:150',
-            'membres.*.telephone' => ['required', 'string', 'regex:/^\+224\d{9}$/'],
+            // Téléphone obligatoire et unique pour un chauffeur (identifie le
+            // responsable légal du trajet) ; facultatif pour un convoyeur, qui
+            // n'en possède pas toujours — cf. incident Sentry PHP-LARAVEL-66 :
+            // rendre le champ obligatoire pour tous forçait la saisie de numéros
+            // fictifs/réutilisés pour les convoyeurs sans téléphone, provoquant
+            // des collisions avec de vrais numéros déjà enregistrés. Quand il est
+            // renseigné, le format et l'unicité restent vérifiés pour tous les rôles
+            // (cf. validateMembresExclusivite()).
+            'membres.*.telephone' => [
+                'nullable', 'string', 'regex:/^\+224\d{9}$/',
+                // Rule "implicite" (ImplicitRule) : indispensable pour qu'elle
+                // s'exécute même quand la valeur est vide — Laravel n'invoque
+                // par défaut aucune règle non-implicite sur un champ nullable
+                // resté null (cf. Validator::presentOrRuleIsImplicit()), ce qui
+                // laisserait passer un chauffeur sans téléphone. ImplicitRule
+                // n'expose que l'ancienne signature passes()/message() (pas
+                // ValidationRule::validate()) dans cette version de Laravel.
+                new class($request) implements ImplicitRule
+                {
+                    private string $errorMessage = '';
+
+                    public function __construct(private Request $request) {}
+
+                    public function passes($attribute, $value)
+                    {
+                        if (! preg_match('/^membres\.(\d+)\.telephone$/', $attribute, $m)) {
+                            return true;
+                        }
+                        $role = $this->request->input("membres.{$m[1]}.role");
+                        if ($role === 'chauffeur' && ($value === null || $value === '')) {
+                            $this->errorMessage = 'Le téléphone est obligatoire pour un chauffeur.';
+
+                            return false;
+                        }
+
+                        return true;
+                    }
+
+                    public function message()
+                    {
+                        return $this->errorMessage;
+                    }
+                },
+            ],
             'membres.*.role' => ['required', Rule::in(['chauffeur', 'convoyeur'])],
             'membres.*.taux_commission_logistique' => 'nullable|numeric|min:0|max:100',
             'membres.*.ordre' => 'nullable|integer|min:0',
@@ -405,6 +449,12 @@ class EquipeLivraisonController extends Controller
         $nomComplet = isset($m['nom_complet']) ? trim((string) $m['nom_complet']) : '';
         $nomComplet = $nomComplet !== '' ? $nomComplet : $designationParDefaut;
 
+        // Un convoyeur peut ne pas avoir de téléphone (cf. rules()) — telephone_normalise
+        // reste alors NULL, ce que l'index unique (organization_id, telephone_normalise)
+        // autorise en plusieurs exemplaires (NULL n'est jamais égal à NULL en SQL).
+        $telephone = ! empty($m['telephone']) ? $m['telephone'] : null;
+        $telephoneNormalise = $telephone !== null ? Personne::normaliserTelephone($telephone) : null;
+
         if (! empty($m['livreur_id'])) {
             $livreur = Livreur::where('id', $m['livreur_id'])
                 ->where('organization_id', $orgId)
@@ -412,14 +462,14 @@ class EquipeLivraisonController extends Controller
 
             $livreur->update(['nom_complet' => $nomComplet]);
             $livreur->personne->update([
-                'telephone' => $m['telephone'],
-                'telephone_normalise' => Personne::normaliserTelephone($m['telephone']),
+                'telephone' => $telephone,
+                'telephone_normalise' => $telephoneNormalise,
             ]);
 
             return $livreur;
         }
 
-        $personne = Personne::resoudreOuCreer($orgId, ['telephone' => $m['telephone']]);
+        $personne = Personne::resoudreOuCreer($orgId, ['telephone' => $telephone]);
 
         return Livreur::firstOrCreate(
             ['personne_id' => $personne->id, 'organization_id' => $orgId],
@@ -546,11 +596,33 @@ class EquipeLivraisonController extends Controller
     }
 
     /**
-     * Vérifie qu'aucun livreur n'est déjà membre d'une autre équipe active.
+     * Vérifie, pour chaque membre dont le téléphone est renseigné, l'absence de
+     * conflit avec un AUTRE livreur de l'organisation. Deux scénarios distincts :
+     *
+     * 1. `livreur_id` explicite (membre déjà identifié, cf. resolveOrCreateLivreur())
+     *    dont le téléphone soumis appartient à un AUTRE livreur trouvé en base :
+     *    conflit d'IDENTITÉ direct, peu importe l'équipe — le téléphone identifie
+     *    un livreur de façon unique par organisation (contrainte
+     *    personnes_organization_id_telephone_normalise_unique). Avant correctif
+     *    (incident Sentry PHP-LARAVEL-66), ce cas n'était détecté que si l'autre
+     *    livreur appartenait à une équipe DIFFÉRENTE de celle en cours d'édition
+     *    (exclusion par équipe) : un membre pouvait donc se voir attribuer le
+     *    téléphone d'un autre membre de la MÊME équipe sans être bloqué ici, et la
+     *    contrainte SQL explosait en 500 au lieu d'un 422 propre.
+     *
+     * 2. `livreur_id` absent (nouveau membre, ou membre ré-identifié uniquement
+     *    par téléphone — resolveOrCreateLivreur() réutilise alors la Personne/le
+     *    Livreur existant, aucun risque de collision) : seule règle réellement
+     *    applicable, un livreur ne peut pas être emprunté à une équipe active
+     *    DIFFÉRENTE de celle en cours d'édition (double affectation interdite).
      */
     private function validateMembresExclusivite(array $membres, string $orgId, ?string $equipeIdCourant = null): void
     {
         foreach ($membres as $index => $m) {
+            if (empty($m['telephone'])) {
+                continue;
+            }
+
             $livreur = Livreur::where('organization_id', $orgId)
                 ->whereHas('personne', fn ($q) => $q->where('telephone_normalise', Personne::normaliserTelephone($m['telephone'])))
                 ->first();
@@ -559,20 +631,35 @@ class EquipeLivraisonController extends Controller
                 continue;
             }
 
-            $query = EquipeLivreur::query()
+            $livreurIdSoumis = $m['livreur_id'] ?? null;
+
+            if ($livreurIdSoumis !== null) {
+                if ($livreurIdSoumis !== $livreur->id) {
+                    throw ValidationException::withMessages([
+                        "membres.{$index}.telephone" => 'Ce numéro de téléphone est déjà utilisé par un autre livreur.',
+                    ]);
+                }
+
+                continue;
+            }
+
+            // Chargée avec son véhicule pour un message d'erreur exploitable — sans ce contexte,
+            // l'utilisateur ne peut pas savoir de qui il s'agit ni où corriger (retirer le membre
+            // de son équipe actuelle) avant de le réaffecter ici.
+            $autreEquipeLivreur = EquipeLivreur::query()
                 ->where('livreur_id', $livreur->id)
                 ->whereHas('equipe', fn ($q) => $q
                     ->where('organization_id', $orgId)
                     ->whereNull('deleted_at')
-                );
+                )
+                ->when($equipeIdCourant !== null, fn ($q) => $q->where('equipe_id', '<>', $equipeIdCourant))
+                ->with('equipe.vehicule')
+                ->first();
 
-            if ($equipeIdCourant !== null) {
-                $query->where('equipe_id', '<>', $equipeIdCourant);
-            }
-
-            if ($query->exists()) {
+            if ($autreEquipeLivreur) {
+                $vehiculeNom = $autreEquipeLivreur->equipe?->vehicule?->nom_vehicule ?? 'véhicule inconnu';
                 throw ValidationException::withMessages([
-                    "membres.{$index}.telephone" => 'Ce livreur est déjà affecté à une autre équipe.',
+                    "membres.{$index}.telephone" => "Ce numéro appartient à {$livreur->nom_complet} (déjà affecté au véhicule \"{$vehiculeNom}\").",
                 ]);
             }
         }
@@ -580,7 +667,14 @@ class EquipeLivraisonController extends Controller
 
     private function validateUniquePhones(array $membres): void
     {
-        $phones = array_map('trim', array_column($membres, 'telephone'));
+        // Les convoyeurs sans téléphone (champ facultatif) ne comptent jamais
+        // comme un doublon entre eux — seuls les numéros réellement renseignés
+        // doivent être uniques dans la soumission.
+        $phones = array_filter(array_map(
+            fn (array $m) => trim((string) ($m['telephone'] ?? '')),
+            $membres
+        ), fn (string $t) => $t !== '');
+
         if (count($phones) !== count(array_unique($phones))) {
             abort(422, 'Deux membres ne peuvent pas avoir le même numéro de téléphone.');
         }
@@ -600,7 +694,6 @@ class EquipeLivraisonController extends Controller
             'membres.required' => "L'équipe doit avoir au moins un membre.",
             'membres.min' => "L'équipe doit avoir au moins un membre.",
             'membres.*.nom_complet.max' => 'Le nom complet ou surnom ne doit pas dépasser 150 caractères.',
-            'membres.*.telephone.required' => 'Le téléphone du livreur est obligatoire.',
             'membres.*.telephone.regex' => 'Le téléphone doit être au format guinéen (+224 suivi de 9 chiffres).',
             'membres.*.role.required' => 'Le rôle est obligatoire.',
             'membres.*.role.in' => 'Le rôle doit être chauffeur ou convoyeur.',

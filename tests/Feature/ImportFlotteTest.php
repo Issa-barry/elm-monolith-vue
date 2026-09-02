@@ -426,10 +426,11 @@ class ImportFlotteTest extends TestCase
     }
 
     /**
-     * Un véhicule déjà en base (immatriculation déjà connue) n'est jamais réécrit par
-     * l'import (cf. ImportFlotteExecutor::executerGroupe(), qui ne fait que réutiliser son
-     * id) — une colonne d'usage vide sur une ligne "vehicules" qui sert d'ancrage à des
-     * livreurs supplémentaires ne doit donc jamais désactiver un usage déjà configuré.
+     * Un véhicule déjà en base (immatriculation déjà connue) n'est jamais réécrit sur ses usages
+     * par l'import (cf. ImportFlotteExecutor::executerGroupe(), qui ne fait que réutiliser son id
+     * — seuls la capacité et le site font exception, voir tests dédiés) — une colonne d'usage
+     * vide sur une ligne "vehicules" qui sert d'ancrage à des livreurs supplémentaires ne doit
+     * donc jamais désactiver un usage déjà configuré.
      */
     public function test_confirm_ne_modifie_pas_les_usages_dun_vehicule_deja_existant(): void
     {
@@ -451,6 +452,33 @@ class ImportFlotteTest extends TestCase
         $vehiculeExistant->refresh();
         $this->assertTrue($vehiculeExistant->livraison_vente);
         $this->assertTrue($vehiculeExistant->livraison_logistique);
+    }
+
+    /**
+     * Contrairement au reste d'une ligne "véhicule déjà existant" (simple ancrage, jamais
+     * modifié — cf. test ci-dessus), le site EST mis à jour — un véhicule peut changer de site
+     * d'affectation entre deux imports, et une ré-importation doit pouvoir le refléter (cf.
+     * ImportFlotteExecutor::executerGroupe()).
+     */
+    public function test_confirm_met_a_jour_le_site_dun_vehicule_deja_existant(): void
+    {
+        $autreSite = Site::create(['organization_id' => $this->org->id, 'nom' => 'Kaloum', 'type' => 'depot']);
+        $vehiculeExistant = Vehicule::factory()->create([
+            'organization_id' => $this->org->id,
+            'immatriculation' => 'RC-1234-A',
+            'type_vehicule_id' => $this->type->id,
+            'site_id' => $autreSite->id,
+        ]);
+
+        // ligneVehicule() envoie 'vehicule_site' => 'Matoto' ($this->site), différent du site
+        // actuel du véhicule (Kaloum).
+        $import = $this->importerVehiculeEtChauffeur();
+
+        $this->actingAs($this->user)
+            ->post(route('imports-flotte.confirm', $import))
+            ->assertRedirect(route('imports-flotte.show', $import));
+
+        $this->assertSame($this->site->id, $vehiculeExistant->fresh()->site_id);
     }
 
     /** L'aperçu (avant confirmation) reste cohérent avec ce qui sera réellement appliqué. */
