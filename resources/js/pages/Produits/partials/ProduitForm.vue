@@ -521,9 +521,9 @@ const depasseLimiteVariantes = computed(
         @submit.prevent="emit('submit')"
     >
         <!-- Section : Identification ──────────────────────────────────────── -->
-        <div class="bg-card rounded-xl border p-4 shadow-sm sm:p-6">
+        <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
-                class="text-muted-foreground mb-4 text-xs font-semibold uppercase tracking-wider sm:mb-5"
+                class="mb-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
             >
                 Identification
             </h3>
@@ -551,7 +551,7 @@ const depasseLimiteVariantes = computed(
                     />
                     <p
                         v-if="errors.produit_type_id"
-                        class="text-destructive mt-1 text-xs"
+                        class="mt-1 text-xs text-destructive"
                     >
                         {{ errors.produit_type_id }}
                     </p>
@@ -576,7 +576,7 @@ const depasseLimiteVariantes = computed(
                     />
                     <p
                         v-if="errors.statut"
-                        class="text-destructive mt-1 text-xs"
+                        class="mt-1 text-xs text-destructive"
                     >
                         {{ errors.statut }}
                     </p>
@@ -600,7 +600,7 @@ const depasseLimiteVariantes = computed(
                         class="w-full"
                         :class="{ 'p-invalid': errors.nom }"
                     />
-                    <p v-if="errors.nom" class="text-destructive mt-1 text-xs">
+                    <p v-if="errors.nom" class="mt-1 text-xs text-destructive">
                         {{ errors.nom }}
                     </p>
                 </div>
@@ -621,11 +621,11 @@ const depasseLimiteVariantes = computed(
                     />
                     <p
                         v-if="errors.categorie_id"
-                        class="text-destructive mt-1 text-xs"
+                        class="mt-1 text-xs text-destructive"
                     >
                         {{ errors.categorie_id }}
                     </p>
-                    <p v-else class="text-muted-foreground mt-1 text-xs">
+                    <p v-else class="mt-1 text-xs text-muted-foreground">
                         Sert aussi de référence pour le contrôle de capacité
                         véhicule (Véhicules &gt; capacités par catégorie).
                     </p>
@@ -647,7 +647,7 @@ const depasseLimiteVariantes = computed(
                     />
                     <p
                         v-if="errors.fournisseur_id"
-                        class="text-destructive mt-1 text-xs"
+                        class="mt-1 text-xs text-destructive"
                     >
                         {{ errors.fournisseur_id }}
                     </p>
@@ -657,7 +657,7 @@ const depasseLimiteVariantes = computed(
                 <div v-if="currentSku">
                     <Label class="mb-1.5 block">Référence</Label>
                     <div
-                        class="bg-muted/40 text-muted-foreground flex h-10 w-full select-all items-center rounded-md border px-3 font-mono text-sm tracking-widest"
+                        class="flex h-10 w-full items-center rounded-md border bg-muted/40 px-3 font-mono text-sm tracking-widest text-muted-foreground select-all"
                     >
                         {{ currentSku }}
                     </div>
@@ -682,7 +682,7 @@ const depasseLimiteVariantes = computed(
                     />
                     <p
                         v-if="errors.code_barres"
-                        class="text-destructive mt-1 text-xs"
+                        class="mt-1 text-xs text-destructive"
                     >
                         {{ errors.code_barres }}
                     </p>
@@ -693,11 +693,11 @@ const depasseLimiteVariantes = computed(
         <!-- Section : Options & variantes ─────────────────────────────────── -->
         <div
             v-if="allowDeclinaisons"
-            class="bg-card rounded-xl border p-4 shadow-sm sm:p-6"
+            class="rounded-xl border bg-card p-4 shadow-sm sm:p-6"
         >
             <div class="mb-4 flex items-center justify-between sm:mb-5">
                 <h3
-                    class="text-muted-foreground text-xs font-semibold uppercase tracking-wider"
+                    class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
                 >
                     Options &amp; variantes
                 </h3>
@@ -716,7 +716,7 @@ const depasseLimiteVariantes = computed(
             </div>
 
             <template v-if="!hasDeclinaisons">
-                <p class="text-muted-foreground text-sm">
+                <p class="text-sm text-muted-foreground">
                     Produit simple, sans variante — couleur, taille, etc. Cochez
                     la case ci-dessus pour définir des options (ex : Couleur,
                     Taille) et générer les combinaisons automatiquement.
@@ -727,7 +727,7 @@ const depasseLimiteVariantes = computed(
                 <div
                     v-for="(option, i) in form.options"
                     :key="i"
-                    class="bg-muted/20 rounded-lg border p-3 sm:p-4"
+                    class="rounded-lg border bg-muted/20 p-3 sm:p-4"
                 >
                     <div class="mb-3 flex items-center gap-2">
                         <div class="flex-1">
@@ -741,7 +741,7 @@ const depasseLimiteVariantes = computed(
                         <button
                             type="button"
                             @click="removeOption(i)"
-                            class="text-muted-foreground hover:bg-destructive/10 hover:text-destructive inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md transition-colors"
+                            class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                             aria-label="Supprimer l'option"
                         >
                             <X class="h-4 w-4" />
@@ -749,7 +749,7 @@ const depasseLimiteVariantes = computed(
                     </div>
                     <p
                         v-if="errors[`options.${i}.nom`]"
-                        class="text-destructive mb-2 text-xs"
+                        class="mb-2 text-xs text-destructive"
                     >
                         {{ errors[`options.${i}.nom`] }}
                     </p>
@@ -759,7 +759,7 @@ const depasseLimiteVariantes = computed(
                             <label
                                 v-for="valeur in valeursProposees(i)"
                                 :key="valeur"
-                                class="bg-background flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm"
+                                class="flex cursor-pointer items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-sm"
                                 :class="{
                                     'border-primary bg-primary/5':
                                         option.valeurs.includes(valeur),
@@ -801,7 +801,7 @@ const depasseLimiteVariantes = computed(
                             </Button>
                         </div>
 
-                        <p class="text-muted-foreground mt-2 text-xs">
+                        <p class="mt-2 text-xs text-muted-foreground">
                             {{ option.valeurs.length }}
                             <template v-if="limites">
                                 / {{ limites.max_valeurs_option }}</template
@@ -810,12 +810,12 @@ const depasseLimiteVariantes = computed(
                         </p>
                         <p
                             v-if="errors[`options.${i}.valeurs`]"
-                            class="text-destructive text-xs"
+                            class="text-xs text-destructive"
                         >
                             {{ errors[`options.${i}.valeurs`] }}
                         </p>
                     </template>
-                    <p v-else class="text-muted-foreground text-xs">
+                    <p v-else class="text-xs text-muted-foreground">
                         Choisissez une option ci-dessus pour proposer ses
                         valeurs (ex : Noir, Blanc, Rouge…).
                     </p>
@@ -836,7 +836,7 @@ const depasseLimiteVariantes = computed(
                 </Button>
 
                 <div
-                    class="bg-muted/40 flex items-start gap-2 rounded-lg p-3 text-sm"
+                    class="flex items-start gap-2 rounded-lg bg-muted/40 p-3 text-sm"
                     :class="{
                         'bg-destructive/10 text-destructive':
                             depasseLimiteVariantes,
@@ -858,7 +858,7 @@ const depasseLimiteVariantes = computed(
                         variantes.
                     </span>
                 </div>
-                <p v-if="errors.options" class="text-destructive text-xs">
+                <p v-if="errors.options" class="text-xs text-destructive">
                     {{ errors.options }}
                 </p>
             </div>
@@ -867,15 +867,15 @@ const depasseLimiteVariantes = computed(
         <!-- Variantes existantes (édition d'un produit déjà décliné) ───────── -->
         <div
             v-else-if="existingVariantes.length > 1"
-            class="bg-card rounded-xl border p-4 shadow-sm sm:p-6"
+            class="rounded-xl border bg-card p-4 shadow-sm sm:p-6"
         >
             <h3
-                class="text-muted-foreground mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider"
+                class="mb-1 flex items-center gap-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase"
             >
                 <Layers class="h-4 w-4" />
                 Variantes ({{ existingVariantes.length }})
             </h3>
-            <p class="text-muted-foreground mb-4 text-xs">
+            <p class="mb-4 text-xs text-muted-foreground">
                 Prix et statut se gèrent individuellement par variante — les
                 champs de tarification ci-dessous ne s'appliquent qu'à la
                 variante par défaut.
@@ -893,16 +893,16 @@ const depasseLimiteVariantes = computed(
         </div>
 
         <!-- Section : Tarification ───────────────────────────────────────── -->
-        <div class="bg-card rounded-xl border p-4 shadow-sm sm:p-6">
+        <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
-                class="text-muted-foreground mb-4 text-xs font-semibold uppercase tracking-wider sm:mb-5"
+                class="mb-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
             >
                 Tarification
                 <span class="text-xs font-normal normal-case">(GNF)</span>
             </h3>
             <p
                 v-if="hasDeclinaisons"
-                class="text-muted-foreground -mt-2 mb-4 text-xs"
+                class="-mt-2 mb-4 text-xs text-muted-foreground"
             >
                 Appliqué aux {{ totalVariantes || '' }} variantes générées —
                 ajustable ensuite individuellement.
@@ -952,7 +952,7 @@ const depasseLimiteVariantes = computed(
                     />
                     <p
                         v-if="errors.prix_usine"
-                        class="text-destructive mt-1 text-xs"
+                        class="mt-1 text-xs text-destructive"
                     >
                         {{ errors.prix_usine }}
                     </p>
@@ -986,7 +986,7 @@ const depasseLimiteVariantes = computed(
                     />
                     <p
                         v-if="errors.prix_usine_tricycle"
-                        class="text-destructive mt-1 text-xs"
+                        class="mt-1 text-xs text-destructive"
                     >
                         {{ errors.prix_usine_tricycle }}
                     </p>
@@ -1024,7 +1024,7 @@ const depasseLimiteVariantes = computed(
                     />
                     <p
                         v-if="errors.prix_vente"
-                        class="text-destructive mt-1 text-xs"
+                        class="mt-1 text-xs text-destructive"
                     >
                         {{ errors.prix_vente }}
                     </p>
@@ -1062,7 +1062,7 @@ const depasseLimiteVariantes = computed(
                     />
                     <p
                         v-if="errors.prix_achat"
-                        class="text-destructive mt-1 text-xs"
+                        class="mt-1 text-xs text-destructive"
                     >
                         {{ errors.prix_achat }}
                     </p>
@@ -1090,11 +1090,11 @@ const depasseLimiteVariantes = computed(
             <!-- Tarification par nature de client — fabricable uniquement ─────────── -->
             <div v-if="isFabricable" class="mt-4 border-t pt-4 sm:mt-5 sm:pt-5">
                 <h4
-                    class="text-muted-foreground mb-1 text-xs font-semibold uppercase tracking-wider"
+                    class="mb-1 text-xs font-semibold tracking-wider text-muted-foreground uppercase"
                 >
                     Tarification clients
                 </h4>
-                <p class="text-muted-foreground mb-3 text-xs">
+                <p class="mb-3 text-xs text-muted-foreground">
                     Remplace le prix de vente selon la nature du client.
                 </p>
                 <div
@@ -1128,7 +1128,7 @@ const depasseLimiteVariantes = computed(
                         />
                         <p
                             v-if="errors.prix_externe"
-                            class="text-destructive mt-1 text-xs"
+                            class="mt-1 text-xs text-destructive"
                         >
                             {{ errors.prix_externe }}
                         </p>
@@ -1162,7 +1162,7 @@ const depasseLimiteVariantes = computed(
                         />
                         <p
                             v-if="errors.prix_distributeur"
-                            class="text-destructive mt-1 text-xs"
+                            class="mt-1 text-xs text-destructive"
                         >
                             {{ errors.prix_distributeur }}
                         </p>
@@ -1196,7 +1196,7 @@ const depasseLimiteVariantes = computed(
                         />
                         <p
                             v-if="errors.prix_revendeur"
-                            class="text-destructive mt-1 text-xs"
+                            class="mt-1 text-xs text-destructive"
                         >
                             {{ errors.prix_revendeur }}
                         </p>
@@ -1259,7 +1259,7 @@ const depasseLimiteVariantes = computed(
                         margeCommissionAutresVehicules !== null ||
                         margeCommissionTricycle !== null
                     "
-                    class="text-muted-foreground flex flex-wrap gap-x-3 gap-y-1"
+                    class="flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground"
                 >
                     <span>Marge commission —</span>
                     <span v-if="margeCommissionAutresVehicules !== null">
@@ -1278,10 +1278,10 @@ const depasseLimiteVariantes = computed(
         <!-- Section : Stock ───────────────────────────────────────────────── -->
         <div
             v-if="typeHasStock"
-            class="bg-card rounded-xl border p-4 shadow-sm sm:p-6"
+            class="rounded-xl border bg-card p-4 shadow-sm sm:p-6"
         >
             <h3
-                class="text-muted-foreground mb-4 text-xs font-semibold uppercase tracking-wider sm:mb-5"
+                class="mb-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
             >
                 Alerte de stock faible
             </h3>
@@ -1293,7 +1293,7 @@ const depasseLimiteVariantes = computed(
                  explicite par site (jamais une case cochée automatiquement). -->
             <div class="space-y-4">
                 <template v-if="sites.length > 0">
-                    <p class="text-muted-foreground text-xs">
+                    <p class="text-xs text-muted-foreground">
                         Activez l'alerte agence par agence. Une agence non
                         concernée par ce produit peut rester désactivée — aucune
                         alerte n'y sera jamais générée.
@@ -1358,14 +1358,14 @@ const depasseLimiteVariantes = computed(
                                     />
                                     <span
                                         v-if="seuilPourSite(site.id) === null"
-                                        class="text-muted-foreground w-24 text-[11px]"
+                                        class="w-24 text-[11px] text-muted-foreground"
                                     >
                                         Défaut : {{ seuilOrganisationDefaut }}
                                     </span>
                                 </div>
                                 <span
                                     v-else
-                                    class="text-muted-foreground text-[11px]"
+                                    class="text-[11px] text-muted-foreground"
                                 >
                                     Aucune alerte pour cette agence
                                 </span>
@@ -1373,7 +1373,7 @@ const depasseLimiteVariantes = computed(
                         </div>
                     </div>
                 </template>
-                <p v-else class="text-muted-foreground text-xs">
+                <p v-else class="text-xs text-muted-foreground">
                     L'alerte de stock faible se configure agence par agence,
                     disponible après la création du produit.
                 </p>
@@ -1381,9 +1381,9 @@ const depasseLimiteVariantes = computed(
         </div>
 
         <!-- Section : Image ──────────────────────────────────────────────── -->
-        <div class="bg-card rounded-xl border p-4 shadow-sm sm:p-6">
+        <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
-                class="text-muted-foreground mb-4 text-xs font-semibold uppercase tracking-wider sm:mb-5"
+                class="mb-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
             >
                 Image du produit
             </h3>
@@ -1393,7 +1393,7 @@ const depasseLimiteVariantes = computed(
             >
                 <!-- Prévisualisation -->
                 <div
-                    class="bg-muted/40 flex h-28 w-28 shrink-0 items-center justify-center self-center overflow-hidden rounded-xl border-2 border-dashed sm:h-36 sm:w-36 sm:self-start"
+                    class="flex h-28 w-28 shrink-0 items-center justify-center self-center overflow-hidden rounded-xl border-2 border-dashed bg-muted/40 sm:h-36 sm:w-36 sm:self-start"
                 >
                     <img
                         v-if="displayImage"
@@ -1401,12 +1401,12 @@ const depasseLimiteVariantes = computed(
                         alt="Aperçu"
                         class="h-full w-full object-cover"
                     />
-                    <Image v-else class="text-muted-foreground/40 h-10 w-10" />
+                    <Image v-else class="h-10 w-10 text-muted-foreground/40" />
                 </div>
 
                 <!-- Actions -->
                 <div class="flex flex-col gap-3">
-                    <Label class="text-muted-foreground block text-sm">
+                    <Label class="block text-sm text-muted-foreground">
                         Formats acceptés : JPG, PNG, WEBP — max 2 Mo
                     </Label>
                     <div class="flex flex-wrap items-center gap-2">
@@ -1418,7 +1418,7 @@ const depasseLimiteVariantes = computed(
                                 @change="onImageChange"
                             />
                             <span
-                                class="bg-background hover:bg-muted inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium shadow-sm transition-colors"
+                                class="inline-flex items-center gap-1.5 rounded-md border bg-background px-3 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-muted"
                             >
                                 <Image class="h-4 w-4" />
                                 Choisir une image
@@ -1428,13 +1428,13 @@ const depasseLimiteVariantes = computed(
                             v-if="displayImage"
                             type="button"
                             @click="removeImage"
-                            class="text-destructive hover:bg-destructive/10 inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm transition-colors"
+                            class="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10"
                         >
                             <X class="h-4 w-4" />
                             Supprimer
                         </button>
                     </div>
-                    <p v-if="errors.image" class="text-destructive text-xs">
+                    <p v-if="errors.image" class="text-xs text-destructive">
                         {{ errors.image }}
                     </p>
                 </div>
@@ -1442,9 +1442,9 @@ const depasseLimiteVariantes = computed(
         </div>
 
         <!-- Section : Description ────────────────────────────────────────── -->
-        <div class="bg-card rounded-xl border p-4 shadow-sm sm:p-6">
+        <div class="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
             <h3
-                class="text-muted-foreground mb-4 text-xs font-semibold uppercase tracking-wider sm:mb-5"
+                class="mb-4 text-xs font-semibold tracking-wider text-muted-foreground uppercase sm:mb-5"
             >
                 Description
             </h3>

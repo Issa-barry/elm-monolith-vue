@@ -535,7 +535,7 @@ const hasStep1Errors = computed(() =>
         append-to="body"
         :closable="false"
     >
-        <p class="text-muted-foreground text-sm">
+        <p class="text-sm text-muted-foreground">
             Vos modifications seront perdues.
         </p>
         <template #footer>
@@ -595,7 +595,7 @@ const hasStep1Errors = computed(() =>
                         class="hidden text-sm sm:inline"
                         :class="
                             step === n
-                                ? 'text-foreground font-medium'
+                                ? 'font-medium text-foreground'
                                 : 'text-muted-foreground'
                         "
                     >
@@ -608,24 +608,24 @@ const hasStep1Errors = computed(() =>
                         }}
                     </span>
                 </div>
-                <div v-if="n < 3" class="bg-border h-px flex-1" />
+                <div v-if="n < 3" class="h-px flex-1 bg-border" />
             </template>
         </div>
 
         <div
             v-if="step === 2"
-            class="border-primary/15 bg-primary/5 mb-4 flex items-start gap-3 rounded-lg border px-4 py-3"
+            class="mb-4 flex items-start gap-3 rounded-lg border border-primary/15 bg-primary/5 px-4 py-3"
         >
-            <Info class="text-primary mt-0.5 h-4 w-4 shrink-0" />
+            <Info class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
             <div>
-                <p class="text-foreground text-sm font-semibold">
+                <p class="text-sm font-semibold text-foreground">
                     Répartition —
                     {{
                         processusOptions.find((o) => o.value === processusActif)
                             ?.label ?? processusActif
                     }}
                 </p>
-                <p class="text-muted-foreground mt-0.5 text-xs leading-5">
+                <p class="mt-0.5 text-xs leading-5 text-muted-foreground">
                     Attribuez entièrement l'enveloppe Livreur de chaque
                     catégorie. Les autres processus conservent leur propre
                     répartition.
@@ -636,15 +636,15 @@ const hasStep1Errors = computed(() =>
         <!-- Erreurs serveur -->
         <div
             v-if="Object.keys(serverErrors).length > 0"
-            class="border-destructive/30 bg-destructive/5 text-destructive mb-4 rounded-lg border px-4 py-3 text-sm"
+            class="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
         >
             <p v-for="(msg, key) in serverErrors" :key="key">{{ msg }}</p>
         </div>
 
         <!-- ── Étape 1 : Membres ─────────────────────────────────────────────── -->
         <div v-if="step === 1" class="space-y-4">
-            <p v-if="membres.length > 0" class="text-muted-foreground text-sm">
-                <span class="text-foreground font-medium">{{
+            <p v-if="membres.length > 0" class="text-sm text-muted-foreground">
+                <span class="font-medium text-foreground">{{
                     membres.length
                 }}</span>
                 membre{{ membres.length !== 1 ? 's' : '' }}
@@ -652,7 +652,7 @@ const hasStep1Errors = computed(() =>
 
             <div
                 v-if="membres.length === 0"
-                class="text-muted-foreground rounded-lg border border-dashed py-12 text-center text-sm"
+                class="rounded-lg border border-dashed py-12 text-center text-sm text-muted-foreground"
             >
                 Aucun membre. Cliquez sur « + Ajouter un membre » ci-dessous
                 pour commencer.
@@ -662,14 +662,14 @@ const hasStep1Errors = computed(() =>
                 <table class="w-full min-w-[680px] text-sm">
                     <thead>
                         <tr
-                            class="bg-muted/40 text-muted-foreground border-b text-left text-xs font-medium"
+                            class="border-b bg-muted/40 text-left text-xs font-medium text-muted-foreground"
                         >
                             <th class="w-36 px-3 py-2.5">Rôle *</th>
                             <th class="px-3 py-2.5">Nom complet ou surnom</th>
                             <th class="w-52 px-3 py-2.5">
                                 Téléphone
                                 <span
-                                    class="text-muted-foreground/70 font-normal"
+                                    class="font-normal text-muted-foreground/70"
                                     >(obligatoire pour un chauffeur)</span
                                 >
                             </th>
@@ -698,7 +698,7 @@ const hasStep1Errors = computed(() =>
                                 />
                                 <p
                                     v-if="m._errors.role"
-                                    class="text-destructive mt-1 text-xs"
+                                    class="mt-1 text-xs text-destructive"
                                 >
                                     {{ m._errors.role }}
                                 </p>
@@ -726,7 +726,7 @@ const hasStep1Errors = computed(() =>
                                     "
                                 >
                                     <span
-                                        class="bg-muted text-muted-foreground flex shrink-0 select-none items-center gap-1 border-r px-2 text-xs"
+                                        class="flex shrink-0 items-center gap-1 border-r bg-muted px-2 text-xs text-muted-foreground select-none"
                                     >
                                         <img
                                             src="https://flagcdn.com/16x12/gn.png"
@@ -746,7 +746,7 @@ const hasStep1Errors = computed(() =>
                                                 ? '9 chiffres (optionnel)'
                                                 : '9 chiffres'
                                         "
-                                        class="bg-background placeholder:text-muted-foreground min-w-0 flex-1 px-2 text-sm outline-none"
+                                        class="min-w-0 flex-1 bg-background px-2 text-sm outline-none placeholder:text-muted-foreground"
                                         :data-testid="`telephone-${i}`"
                                         @input="onPhoneInput($event, i)"
                                         @keydown="handlePhoneKeydown"
@@ -754,7 +754,7 @@ const hasStep1Errors = computed(() =>
                                 </div>
                                 <p
                                     v-if="m._errors.telephone"
-                                    class="text-destructive mt-1 text-xs"
+                                    class="mt-1 text-xs text-destructive"
                                 >
                                     {{ m._errors.telephone }}
                                 </p>
@@ -764,7 +764,7 @@ const hasStep1Errors = computed(() =>
                             <td class="px-3 py-2">
                                 <button
                                     type="button"
-                                    class="text-muted-foreground hover:bg-destructive/10 hover:text-destructive mt-0.5 flex h-8 w-8 items-center justify-center rounded-md"
+                                    class="mt-0.5 flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                                     @click="removeLigne(i)"
                                 >
                                     <Trash2 class="h-4 w-4" />
@@ -775,7 +775,7 @@ const hasStep1Errors = computed(() =>
                 </table>
             </div>
 
-            <p v-if="hasStep1Errors" class="text-destructive text-xs">
+            <p v-if="hasStep1Errors" class="text-xs text-destructive">
                 Corrigez les erreurs dans le tableau avant de continuer.
             </p>
         </div>
@@ -789,18 +789,18 @@ const hasStep1Errors = computed(() =>
                  cette catégorie (rien à partager sinon). -->
             <div
                 v-if="baremesCommissionCategories.length === 0"
-                class="text-muted-foreground rounded-lg border border-dashed py-8 text-center text-sm"
+                class="rounded-lg border border-dashed py-8 text-center text-sm text-muted-foreground"
             >
                 Aucun barème de commission actif pour ce véhicule (Propriétaire
                 et Livreur à 0 GNF ou non configurés dans Paramètres →
                 Commissions).
             </div>
 
-            <div v-else class="bg-background overflow-x-auto rounded-lg border">
+            <div v-else class="overflow-x-auto rounded-lg border bg-background">
                 <table class="w-full min-w-[760px] text-sm">
                     <thead>
                         <tr
-                            class="bg-muted/40 text-muted-foreground border-b text-left text-xs font-medium"
+                            class="border-b bg-muted/40 text-left text-xs font-medium text-muted-foreground"
                         >
                             <th class="w-[18%] px-4 py-3">Catégorie</th>
                             <th class="w-[22%] px-4 py-3">Part propriétaire</th>
@@ -817,7 +817,7 @@ const hasStep1Errors = computed(() =>
                             class="align-top"
                         >
                             <td class="px-4 py-4">
-                                <p class="text-foreground font-semibold">
+                                <p class="font-semibold text-foreground">
                                     {{ cat.categorie_nom }}
                                 </p>
                             </td>
@@ -831,7 +831,7 @@ const hasStep1Errors = computed(() =>
                                         / unité
                                     </p>
                                     <p
-                                        class="text-muted-foreground mt-1 truncate text-xs"
+                                        class="mt-1 truncate text-xs text-muted-foreground"
                                     >
                                         {{ proprietaireNom }}
                                     </p>
@@ -844,7 +844,7 @@ const hasStep1Errors = computed(() =>
                             <td class="px-4 py-3">
                                 <p
                                     v-if="cat.montant_livraison <= 0"
-                                    class="text-muted-foreground py-1 text-xs"
+                                    class="py-1 text-xs text-muted-foreground"
                                 >
                                     Aucune répartition nécessaire
                                 </p>
@@ -891,7 +891,7 @@ const hasStep1Errors = computed(() =>
 
                             <td class="px-4 py-4">
                                 <template v-if="cat.montant_livraison > 0">
-                                    <p class="text-muted-foreground text-xs">
+                                    <p class="text-xs text-muted-foreground">
                                         Attribué
                                     </p>
                                     <p
@@ -905,7 +905,7 @@ const hasStep1Errors = computed(() =>
                                             )
                                         }}
                                         <span
-                                            class="text-muted-foreground font-normal"
+                                            class="font-normal text-muted-foreground"
                                         >
                                             /
                                             {{
@@ -977,23 +977,23 @@ const hasStep1Errors = computed(() =>
         <!-- ── Étape 3 : Récapitulatif ──────────────────────────────────────── -->
         <div v-else-if="step === 3" class="space-y-4">
             <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <div class="bg-muted/30 rounded-lg border p-3">
+                <div class="rounded-lg border bg-muted/30 p-3">
                     <p
-                        class="text-muted-foreground text-xs font-medium uppercase tracking-wider"
+                        class="text-xs font-medium tracking-wider text-muted-foreground uppercase"
                     >
                         Véhicule
                     </p>
                     <p class="mt-1 text-sm font-semibold">
                         {{ vehicule.nom_vehicule }}
                     </p>
-                    <p class="text-muted-foreground font-mono text-xs">
+                    <p class="font-mono text-xs text-muted-foreground">
                         {{ vehicule.immatriculation }}
                     </p>
                 </div>
 
-                <div class="bg-muted/30 rounded-lg border p-3">
+                <div class="rounded-lg border bg-muted/30 p-3">
                     <p
-                        class="text-muted-foreground text-xs font-medium uppercase tracking-wider"
+                        class="text-xs font-medium tracking-wider text-muted-foreground uppercase"
                     >
                         Catégories
                     </p>
@@ -1008,27 +1008,27 @@ const hasStep1Errors = computed(() =>
                 :key="cat.categorie_id"
                 class="overflow-hidden rounded-lg border"
             >
-                <div class="bg-muted/30 border-b px-4 py-2.5">
+                <div class="border-b bg-muted/30 px-4 py-2.5">
                     <p
-                        class="text-muted-foreground text-xs font-semibold uppercase tracking-wider"
+                        class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
                     >
                         {{ cat.categorie_nom }}
                     </p>
                     <p
                         v-if="hasProprietaire"
-                        class="text-primary mt-0.5 text-xs font-medium"
+                        class="mt-0.5 text-xs font-medium text-primary"
                     >
                         Propriétaire : {{ formatGNF(cat.montant_proprietaire) }}
                         / unité
                     </p>
-                    <p class="text-muted-foreground mt-0.5 text-xs font-medium">
+                    <p class="mt-0.5 text-xs font-medium text-muted-foreground">
                         Livreur : {{ formatGNF(cat.montant_livraison) }} / unité
                     </p>
                 </div>
                 <table v-if="cat.montant_livraison > 0" class="w-full text-sm">
                     <thead>
                         <tr
-                            class="text-muted-foreground border-b text-left text-xs"
+                            class="border-b text-left text-xs text-muted-foreground"
                         >
                             <th class="px-4 py-2 font-medium">Membre</th>
                             <th class="px-4 py-2 font-medium">Téléphone</th>
@@ -1047,7 +1047,7 @@ const hasStep1Errors = computed(() =>
                                 }}
                             </td>
                             <td
-                                class="text-muted-foreground px-4 py-2.5 font-mono text-xs"
+                                class="px-4 py-2.5 font-mono text-xs text-muted-foreground"
                             >
                                 {{ formatPhone(m.telephone) }}
                             </td>
@@ -1059,7 +1059,7 @@ const hasStep1Errors = computed(() =>
                         </tr>
                     </tbody>
                 </table>
-                <p v-else class="text-muted-foreground px-4 py-2.5 text-xs">
+                <p v-else class="px-4 py-2.5 text-xs text-muted-foreground">
                     Aucune répartition livreurs pour cette catégorie.
                 </p>
             </div>
