@@ -275,8 +275,8 @@ Route::prefix('backoffice')->group(function () {
 
             // Import de mise à jour en masse (site, capacités, usages) — doit être avant
             // Route::resource('vehicules') pour la même raison que "propositions" ci-dessus :
-            // sinon vehicules/{vehicule} intercepterait vehicules/imports-maj et
-            // vehicules/export-maj. Entièrement séparé de l'import flotte (création) —
+            // sinon vehicules/{vehicule} intercepterait vehicules/imports-maj, vehicules/export
+            // et vehicules/export-maj. Entièrement séparé de l'import flotte (création) —
             // cf. ImportVehiculesMajController.
             Route::prefix('vehicules/imports-maj')->name('vehicules.imports-maj.')->group(function () {
                 Route::get('/', [ImportVehiculesMajController::class, 'index'])->name('index');
@@ -286,6 +286,7 @@ Route::prefix('backoffice')->group(function () {
                 Route::post('/{importVehiculesMaj}/confirmer', [ImportVehiculesMajController::class, 'confirm'])->name('confirm');
                 Route::post('/{importVehiculesMaj}/relancer', [ImportVehiculesMajController::class, 'retry'])->name('retry');
             });
+            Route::get('vehicules/export', [VehiculeController::class, 'export'])->name('vehicules.export');
             Route::get('vehicules/export-maj', [VehiculeController::class, 'exportMaj'])->name('vehicules.export-maj');
 
             Route::resource('type-vehicules', TypeVehiculeController::class)->except(['show']);

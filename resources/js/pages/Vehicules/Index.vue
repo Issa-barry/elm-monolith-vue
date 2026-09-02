@@ -466,6 +466,49 @@ function confirmDelete(v: Vehicule) {
                     <template
                         v-if="
                             can('imports-flotte.create') ||
+                            can('imports-vehicules-maj.create')
+                        "
+                        #export
+                    >
+                        <DropdownMenu>
+                            <DropdownMenuTrigger as-child>
+                                <Button variant="outline">
+                                    <Download class="mr-2 h-4 w-4" />
+                                    Exporter
+                                    <ChevronDown class="ml-2 h-3.5 w-3.5" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" class="w-64">
+                                <DropdownMenuItem
+                                    v-if="can('imports-flotte.create')"
+                                    as-child
+                                >
+                                    <a
+                                        href="/backoffice/vehicules/export"
+                                        class="flex w-full items-center gap-2"
+                                    >
+                                        <Download class="h-4 w-4" />
+                                        Exporter les véhicules
+                                    </a>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    v-if="can('imports-vehicules-maj.create')"
+                                    as-child
+                                >
+                                    <a
+                                        href="/backoffice/vehicules/export-maj"
+                                        class="flex w-full items-center gap-2"
+                                    >
+                                        <Download class="h-4 w-4" />
+                                        Exporter pour mise à jour
+                                    </a>
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </template>
+                    <template
+                        v-if="
+                            can('imports-flotte.create') ||
                             can('imports-vehicules-maj.create') ||
                             can('imports-vehicules-maj.read')
                         "
@@ -489,7 +532,19 @@ function confirmDelete(v: Vehicule) {
                                         class="flex w-full items-center gap-2"
                                     >
                                         <Upload class="h-4 w-4" />
-                                        Importer une nouvelle flotte
+                                        Créer des véhicules
+                                    </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    v-if="can('imports-vehicules-maj.create')"
+                                    as-child
+                                >
+                                    <Link
+                                        href="/backoffice/vehicules/imports-maj/nouveau"
+                                        class="flex w-full items-center gap-2"
+                                    >
+                                        <Upload class="h-4 w-4" />
+                                        Mettre à jour des véhicules
                                     </Link>
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
@@ -505,36 +560,8 @@ function confirmDelete(v: Vehicule) {
                                     </a>
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator
-                                    v-if="
-                                        can('imports-flotte.create') &&
-                                        (can('imports-vehicules-maj.create') ||
-                                            can('imports-vehicules-maj.read'))
-                                    "
+                                    v-if="can('imports-vehicules-maj.read')"
                                 />
-                                <DropdownMenuItem
-                                    v-if="can('imports-vehicules-maj.create')"
-                                    as-child
-                                >
-                                    <a
-                                        href="/backoffice/vehicules/export-maj"
-                                        class="flex w-full items-center gap-2"
-                                    >
-                                        <Download class="h-4 w-4" />
-                                        Exporter pour mise à jour
-                                    </a>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                    v-if="can('imports-vehicules-maj.create')"
-                                    as-child
-                                >
-                                    <Link
-                                        href="/backoffice/vehicules/imports-maj/nouveau"
-                                        class="flex w-full items-center gap-2"
-                                    >
-                                        <Upload class="h-4 w-4" />
-                                        Mettre à jour les véhicules
-                                    </Link>
-                                </DropdownMenuItem>
                                 <DropdownMenuItem
                                     v-if="can('imports-vehicules-maj.read')"
                                     as-child

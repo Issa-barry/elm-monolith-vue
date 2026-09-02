@@ -1,11 +1,19 @@
 # Import de mise à jour en masse des véhicules
 
-Workflow (page Véhicules, menu **Importer**) :
+Workflow (page Véhicules, boutons **Exporter** et **Importer**) :
 
 ```text
-Véhicules → Exporter pour mise à jour → modifier le fichier Excel
-          → Mettre à jour les véhicules → aperçu → confirmer
+Véhicules → Exporter ▾ Exporter pour mise à jour → modifier le fichier Excel
+          → Importer ▾ Mettre à jour des véhicules → aperçu → confirmer
 ```
+
+> Les deux permissions `imports-vehicules-maj.create`/`.read` doivent exister dans la table
+> `permissions` pour que ces actions apparaissent dans les menus — ce sont des permissions
+> Spatie standard, créées par `RolesAndPermissionsSeeder` (`firstOrCreate`, idempotent). Sur un
+> environnement où ce seeder n'a pas encore été (ré)exécuté depuis l'ajout de la fonctionnalité,
+> le bouton reste invisible même pour `super_admin` — pas un bug applicatif, un oubli de
+> déploiement. Toujours vérifier `php artisan db:seed --class=RolesAndPermissionsSeeder` après une
+> mise à jour qui ajoute des permissions.
 
 Entièrement **séparé** de l'import flotte (`ImportFlotteController`/`ImportFlotteParser`, cf.
 `docs/references-metier.md` pour le reste du domaine véhicules) : ce chemin ne crée **jamais**
@@ -55,6 +63,12 @@ l'import de création.
   pour l'import produits, `imports-vehicules-maj.read` seul ne permet jamais de déclencher une
   confirmation — `vehicules.update` ne gouverne pas non plus ce droit, qui reste exclusivement
   `imports-vehicules-maj.create` (cf. `ImportVehiculesMajPolicy::confirm()`).
+
+> À ne pas confondre avec **« Exporter les véhicules »** (`VehiculeController::export()` →
+> `VehiculeListExport`, à côté dans le même menu **Exporter**) : un instantané en lecture seule
+> de la liste (mêmes colonnes que l'écran), jamais réimportable — pas de convention
+> `capacite__<REFERENCE>`, colonnes de consultation (propriétaire, équipe, statut) absentes du
+> gabarit de mise à jour ci-dessus.
 
 ## Fichiers clés
 

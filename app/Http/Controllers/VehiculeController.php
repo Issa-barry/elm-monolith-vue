@@ -26,6 +26,7 @@ use App\Services\DerogationImpayesService;
 use App\Services\ImageService;
 use App\Services\ImportVehiculesMaj\ExportVehiculesMajExport;
 use App\Services\VehiculeCapaciteService;
+use App\Services\Vehicules\VehiculeListExport;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -163,6 +164,27 @@ class VehiculeController extends Controller
         return Inertia::render('Vehicules/Index', [
             'vehicules' => $vehicules,
         ]);
+    }
+
+    /**
+     * Export "Exporter les véhicules" — instantané en lecture seule de la liste (mêmes colonnes
+     * que Vehicules/Index.vue), jamais réimportable — à ne pas confondre avec exportMaj()
+     * ci-dessous ("Exporter pour mise à jour"), qui produit un gabarit réimportable restreint aux
+     * seuls champs modifiables.
+     */
+    public function export()
+    {
+        $this->authorize('viewAny', Vehicule::class);
+
+        $vehicules = Vehicule::with(['typeVehicule', 'site', 'proprietaire', 'equipe.membres.livreur', 'capacites.categorie'])
+            ->where('organization_id', auth()->user()->organization_id)
+            ->orderBy('nom_vehicule')
+            ->get();
+
+        return Excel::download(
+            new VehiculeListExport($vehicules),
+            'vehicules-'.now()->format('Y-m-d').'.xlsx'
+        );
     }
 
     /**
