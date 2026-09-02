@@ -125,7 +125,12 @@ class MouvementStockService
      * pour ce couple produit × site — jamais à chaque mouvement tant que le produit reste sous le
      * seuil (cf. docblock StockAlerteNotification). Toujours envoyée à TOUS les administrateurs
      * de l'organisation, sans restriction d'agence (décision produit 30/08/2026) — jamais
-     * seulement ceux rattachés au site concerné.
+     * seulement ceux rattachés au site concerné. Un site NON DISPONIBLE pour ce produit (cf.
+     * StockStatutService::disponiblePourSite()) n'a aucune rupture "métier" possible, et un site
+     * disponible mais SANS ALERTE active (cf. alerteActivePourSite()) n'envoie jamais cet email
+     * — dans les deux cas, quel que soit le statut physique réel (décision du 02/09/2026,
+     * révisée l'après-midi même : disponibilité et alerte sont deux gardes INDÉPENDANTES ici,
+     * jamais mélangées dans statutPour() lui-même, qui reste une fonction pure).
      *
      * Ne doit JAMAIS interrompre le mouvement de stock ni l'opération métier appelante : toute
      * erreur (mail indisponible, etc.) est avalée et journalisée, même garantie que
@@ -152,11 +157,18 @@ class MouvementStockService
 
         try {
             $stockStatutService = app(StockStatutService::class);
-            $seuil = $stockStatutService->seuilEffectifPourSite($produit, $siteId);
-            $alerteActive = $stockStatutService->alerteActivePourSite($produit, $siteId);
 
-            $statutAvant = $stockStatutService->statutPour($stockAvant - $qteReservee, $seuil, $alerteActive);
-            $statutApres = $stockStatutService->statutPour($stockApres - $qteReservee, $seuil, $alerteActive);
+            // Deux gardes INDÉPENDANTES, jamais fusionnées dans statutPour() (cf. docblock
+            // ci-dessus) : un site non disponible ou sans alerte n'envoie jamais d'email, quel
+            // que soit son statut physique réel.
+            if (! $stockStatutService->disponiblePourSite($produit, $siteId) || ! $stockStatutService->alerteActivePourSite($produit, $siteId)) {
+                return;
+            }
+
+            $seuil = $stockStatutService->seuilEffectifPourSite($produit, $siteId);
+
+            $statutAvant = $stockStatutService->statutPour($stockAvant - $qteReservee, $seuil);
+            $statutApres = $stockStatutService->statutPour($stockApres - $qteReservee, $seuil);
 
             $etaitEnAlerte = $statutAvant !== StockStatut::DISPONIBLE;
             $estEnAlerte = $statutApres !== StockStatut::DISPONIBLE;

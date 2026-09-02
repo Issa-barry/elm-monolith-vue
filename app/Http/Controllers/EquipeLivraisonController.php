@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Settings\CommissionRegleController;
+use App\Models\Categorie;
 use App\Models\CommissionProcessus;
 use App\Models\EquipeLivraison;
 use App\Models\EquipeLivraisonPartageCategorie;
@@ -16,8 +17,10 @@ use App\Services\Commission\CommissionPartageLivraisonCategorieChecker;
 use App\Services\Commission\CommissionPartageLivraisonValidator;
 use App\Services\Commission\CommissionProcessusDefaults;
 use Illuminate\Contracts\Validation\ImplicitRule;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -192,6 +195,373 @@ class EquipeLivraisonController extends Controller
 
         return redirect()->route('equipes-livraison.index')
             ->with('success', 'Équipe supprimée.');
+    }
+
+    // ── Transfert de véhicule d'un livreur (changement d'équipe) ─────────────────
+    //
+    // Un livreur ne peut appartenir qu'à une seule équipe active (contrainte DB
+    // equipe_livreurs.livreur_id unique) — "changer de véhicule" est donc un
+    // déplacement entre deux équipes, jamais un simple champ à éditer. Règle métier
+    // (décision AMOA, 02/09/2026) : le partage de commission par catégorie doit être
+    // OBLIGATOIREMENT refait des deux côtés (départ ET arrivée), jamais repris
+    // automatiquement de l'ancienne équipe — et l'opération est tout ou rien (un seul
+    // commit final, cf. transferer()) : abandonner le wizard en cours de route ne
+    // laisse aucune trace, le véhicule cible ne devient actif qu'au moment où le
+    // transfert est effectivement validé.
+
+    /**
+     * Données du wizard de transfert — équipe de départ (catégories/processus à
+     * re-répartir, membres restants) + liste des véhicules cibles possibles.
+     */
+    public function transfertDonnees(Livreur $livreur): JsonResponse
+    {
+        $orgId = auth()->user()->organization_id;
+        abort_unless($livreur->organization_id === $orgId, 404);
+
+        $membreActuel = EquipeLivreur::where('livreur_id', $livreur->id)
+            ->whereHas('equipe', fn ($q) => $q->where('organization_id', $orgId)->whereNull('deleted_at'))
+            ->with('equipe.vehicule')
+            ->first();
+
+        abort_if(! $membreActuel, 422, "Ce livreur n'appartient à aucune équipe active.");
+
+        $equipeDepart = $membreActuel->equipe;
+        $this->authorize('update', $equipeDepart);
+
+        $vehiculeDepart = $equipeDepart->vehicule;
+        $seraDissoute = EquipeLivreur::where('equipe_id', $equipeDepart->id)->count() <= 1;
+
+        $codesApplicables = CommissionProcessusDefaults::codesApplicablesPourVehicule(
+            $vehiculeDepart, CommissionRegleController::processusCodesDisponibles(),
+        );
+
+        return response()->json([
+            'livreur' => [
+                'id' => $livreur->id,
+                'nom_complet' => $livreur->nom_complet,
+                'role_actuel' => $membreActuel->role,
+                'taux_commission_logistique_actuel' => $membreActuel->taux_commission_logistique !== null
+                    ? (float) $membreActuel->taux_commission_logistique
+                    : null,
+            ],
+            'equipe_depart' => [
+                'id' => $equipeDepart->id,
+                'vehicule_id' => $vehiculeDepart->id,
+                'vehicule_nom' => $vehiculeDepart->nom_vehicule,
+                'vehicule_immatriculation' => $vehiculeDepart->immatriculation,
+                'sera_dissoute' => $seraDissoute,
+                'membres_restants' => $seraDissoute ? [] : $this->membresAffichage($equipeDepart->id, $livreur->id),
+                'partages' => $seraDissoute ? [] : $this->categoriesAvecPartageActif($equipeDepart, $codesApplicables),
+            ],
+            'vehicules_options' => Vehicule::with('equipe.membres')
+                ->where('organization_id', $orgId)
+                ->whereNull('deleted_at')
+                ->where('id', '<>', $vehiculeDepart->id)
+                ->orderBy('nom_vehicule')
+                ->get()
+                ->map(fn (Vehicule $v) => [
+                    'id' => $v->id,
+                    'nom_vehicule' => $v->nom_vehicule,
+                    'immatriculation' => $v->immatriculation,
+                    'a_une_equipe' => (bool) $v->equipe,
+                    'nb_membres' => $v->equipe ? $v->equipe->membres->count() : 0,
+                ])
+                ->values(),
+        ]);
+    }
+
+    /**
+     * Données du wizard de transfert — équipe d'arrivée pour le véhicule cible choisi à
+     * l'étape 1 : catégories/processus déjà configurés (à re-répartir) ou équipe
+     * inexistante (nouvelle équipe créée à la volée, rien à re-répartir).
+     */
+    public function transfertDonneesArrivee(Livreur $livreur, Vehicule $vehicule): JsonResponse
+    {
+        $orgId = auth()->user()->organization_id;
+        abort_unless($livreur->organization_id === $orgId && $vehicule->organization_id === $orgId, 404);
+
+        $equipeArrivee = $vehicule->equipe;
+
+        if (! $equipeArrivee) {
+            $this->authorize('create', EquipeLivraison::class);
+
+            return response()->json(['nouvelle_equipe' => true, 'membres_actuels' => [], 'partages' => []]);
+        }
+
+        $this->authorize('update', $equipeArrivee);
+
+        $codesApplicables = CommissionProcessusDefaults::codesApplicablesPourVehicule(
+            $vehicule, CommissionRegleController::processusCodesDisponibles(),
+        );
+
+        return response()->json([
+            'nouvelle_equipe' => false,
+            'equipe_id' => $equipeArrivee->id,
+            'membres_actuels' => $this->membresAffichage($equipeArrivee->id, null),
+            'partages' => $this->categoriesAvecPartageActif($equipeArrivee, $codesApplicables),
+        ]);
+    }
+
+    /**
+     * Exécute le transfert dans une seule transaction : rien n'est écrit tant que les
+     * répartitions départ ET arrivée n'ont pas été validées — cf. commentaire de section.
+     */
+    public function transferer(Request $request, Livreur $livreur): RedirectResponse
+    {
+        $orgId = auth()->user()->organization_id;
+        abort_unless($livreur->organization_id === $orgId, 404);
+
+        $codesDisponibles = CommissionRegleController::processusCodesDisponibles();
+
+        $data = $request->validate([
+            'nouveau_vehicule_id' => [
+                'required', 'string',
+                Rule::exists('vehicules', 'id')->where('organization_id', $orgId)->whereNull('deleted_at'),
+            ],
+            'role' => ['required', Rule::in(['chauffeur', 'convoyeur'])],
+            'taux_commission_logistique' => 'nullable|numeric|min:0|max:100',
+            'partages_depart' => 'nullable|array',
+            'partages_depart.*.processus_code' => ['required', Rule::in($codesDisponibles)],
+            'partages_depart.*.categorie_id' => [
+                'required', 'string',
+                Rule::exists('categories', 'id')->where('organization_id', $orgId),
+            ],
+            'partages_depart.*.parts' => 'required|array|min:1',
+            'partages_depart.*.parts.*.livreur_id' => ['required', 'string'],
+            'partages_depart.*.parts.*.montant_unitaire' => 'required|integer|min:0',
+            'partages_arrivee' => 'nullable|array',
+            'partages_arrivee.*.processus_code' => ['required', Rule::in($codesDisponibles)],
+            'partages_arrivee.*.categorie_id' => [
+                'required', 'string',
+                Rule::exists('categories', 'id')->where('organization_id', $orgId),
+            ],
+            'partages_arrivee.*.parts' => 'required|array|min:1',
+            'partages_arrivee.*.parts.*.livreur_id' => ['required', 'string'],
+            'partages_arrivee.*.parts.*.montant_unitaire' => 'required|integer|min:0',
+        ], [
+            'nouveau_vehicule_id.required' => 'Le véhicule cible est obligatoire.',
+            'nouveau_vehicule_id.exists' => 'Le véhicule sélectionné est introuvable.',
+            'role.required' => 'Le rôle est obligatoire.',
+            'role.in' => 'Le rôle doit être chauffeur ou convoyeur.',
+            'partages_depart.*.parts.*.montant_unitaire.integer' => 'Le montant doit être un entier GNF, sans décimales.',
+            'partages_arrivee.*.parts.*.montant_unitaire.integer' => 'Le montant doit être un entier GNF, sans décimales.',
+        ]);
+
+        $membreActuel = EquipeLivreur::where('livreur_id', $livreur->id)
+            ->whereHas('equipe', fn ($q) => $q->where('organization_id', $orgId)->whereNull('deleted_at'))
+            ->with('equipe.vehicule')
+            ->first();
+        abort_if(! $membreActuel, 422, "Ce livreur n'appartient à aucune équipe active.");
+
+        $equipeDepart = $membreActuel->equipe;
+        $vehiculeCible = Vehicule::where('organization_id', $orgId)->whereNull('deleted_at')->findOrFail($data['nouveau_vehicule_id']);
+
+        abort_if($equipeDepart->vehicule_id === $vehiculeCible->id, 422, 'Le véhicule sélectionné est déjà celui de ce livreur.');
+
+        $this->authorize('update', $equipeDepart);
+
+        $equipeArriveeExistante = $vehiculeCible->equipe;
+        $creeNouvelleEquipe = ! $equipeArriveeExistante;
+
+        if ($creeNouvelleEquipe) {
+            $this->authorize('create', EquipeLivraison::class);
+        } else {
+            $this->authorize('update', $equipeArriveeExistante);
+        }
+
+        $departSeraVide = EquipeLivreur::where('equipe_id', $equipeDepart->id)->count() <= 1;
+
+        // Validation métier (somme exacte par catégorie/processus) AVANT toute écriture —
+        // même séquencement que store()/update() : jamais de validation métier après le
+        // début d'une transaction.
+        $partagesDepartParProcessus = $departSeraVide ? collect() : collect($data['partages_depart'] ?? [])->groupBy('processus_code');
+        foreach ($partagesDepartParProcessus as $processusCode => $partages) {
+            $this->validatePartagesCategorie(
+                $this->normaliserPartagesPourSync($partages),
+                $orgId,
+                $equipeDepart->vehicule->type_vehicule_id,
+                $processusCode,
+            );
+        }
+
+        $partagesArriveeParProcessus = $creeNouvelleEquipe ? collect() : collect($data['partages_arrivee'] ?? [])->groupBy('processus_code');
+        foreach ($partagesArriveeParProcessus as $processusCode => $partages) {
+            $this->validatePartagesCategorie(
+                $this->normaliserPartagesPourSync($partages),
+                $orgId,
+                $vehiculeCible->type_vehicule_id,
+                $processusCode,
+            );
+        }
+
+        DB::transaction(function () use (
+            $data, $orgId, $livreur, $membreActuel, $equipeDepart, $vehiculeCible,
+            $creeNouvelleEquipe, $equipeArriveeExistante, $departSeraVide,
+            $partagesDepartParProcessus, $partagesArriveeParProcessus,
+        ) {
+            // Verrou anti-concurrence : la ligne pivot n'a pas pu être déplacée entre
+            // l'affichage du wizard et cette soumission.
+            $ligne = EquipeLivreur::where('id', $membreActuel->id)->lockForUpdate()->first();
+            abort_if(! $ligne || $ligne->equipe_id !== $equipeDepart->id, 409, 'Ce livreur a déjà été déplacé entre-temps, merci de réessayer.');
+
+            $ligne->delete();
+
+            if ($departSeraVide) {
+                Vehicule::whereKey($equipeDepart->vehicule_id)->update(['is_active' => false]);
+                $equipeDepart->delete();
+            } else {
+                foreach ($partagesDepartParProcessus as $processusCode => $partages) {
+                    $this->syncPartagesCategorie(
+                        $equipeDepart->id,
+                        $this->normaliserPartagesPourSync($partages),
+                        $this->livreurIdParOrdreIdentite($partages),
+                        $orgId,
+                        $processusCode,
+                    );
+                }
+            }
+
+            if ($creeNouvelleEquipe) {
+                $equipeArrivee = EquipeLivraison::create([
+                    'organization_id' => $orgId,
+                    'vehicule_id' => $vehiculeCible->id,
+                    'proprietaire_id' => $vehiculeCible->proprietaire_id,
+                    'is_active' => true,
+                ]);
+                $ordre = 0;
+            } else {
+                $equipeArrivee = $equipeArriveeExistante;
+                $ordre = ((int) EquipeLivreur::where('equipe_id', $equipeArrivee->id)->max('ordre')) + 1;
+            }
+
+            EquipeLivreur::create([
+                'equipe_id' => $equipeArrivee->id,
+                'livreur_id' => $livreur->id,
+                'role' => $data['role'],
+                'taux_commission_logistique' => $data['taux_commission_logistique'] ?? $membreActuel->taux_commission_logistique,
+                'ordre' => $ordre,
+            ]);
+
+            foreach ($partagesArriveeParProcessus as $processusCode => $partages) {
+                $this->syncPartagesCategorie(
+                    $equipeArrivee->id,
+                    $this->normaliserPartagesPourSync($partages),
+                    $this->livreurIdParOrdreIdentite($partages),
+                    $orgId,
+                    $processusCode,
+                );
+            }
+
+            Vehicule::whereKey($vehiculeCible->id)->update(['is_active' => true]);
+        });
+
+        return redirect()->route('vehicules.show', $vehiculeCible->id)
+            ->with('success', 'Véhicule changé avec succès.');
+    }
+
+    /**
+     * Roster affiché sur un écran de re-répartition — membres actuels de l'équipe, en
+     * excluant éventuellement un livreur ($exclureLivreurId, le livreur en cours de
+     * transfert côté équipe de départ). Jamais de montant ici : les écrans de transfert
+     * démarrent toujours à 0 pour forcer une décision explicite (cf. commentaire de
+     * section — pas de reprise automatique de l'ancien partage).
+     */
+    private function membresAffichage(string $equipeId, ?string $exclureLivreurId): array
+    {
+        return EquipeLivreur::where('equipe_id', $equipeId)
+            ->when($exclureLivreurId, fn ($q) => $q->where('livreur_id', '<>', $exclureLivreurId))
+            ->with('livreur')
+            ->orderBy('ordre')
+            ->get()
+            ->map(fn (EquipeLivreur $m) => [
+                'livreur_id' => $m->livreur_id,
+                'nom_complet' => $m->livreur?->nom_complet,
+                'role' => $m->role,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Catégories ayant, pour cette équipe, un partage actif sur au moins un processus
+     * applicable au véhicule — un jeu d'écrans de re-répartition à afficher par processus.
+     * Une catégorie/processus jamais configuré n'apparaît jamais ici (reste "non
+     * configuré", cf. docblock EquipeLivraisonPartageCategorie) : le transfert ne force
+     * jamais à configurer ce qui ne l'était pas avant.
+     *
+     * @param  array<int, string>  $codesApplicables
+     */
+    private function categoriesAvecPartageActif(EquipeLivraison $equipe, array $codesApplicables): array
+    {
+        $orgId = $equipe->organization_id;
+        $typeVehiculeId = $equipe->vehicule?->type_vehicule_id;
+
+        $processusParCode = CommissionProcessus::where('organization_id', $orgId)
+            ->whereIn('code', $codesApplicables)
+            ->get()
+            ->keyBy('code');
+
+        $result = [];
+        foreach ($codesApplicables as $code) {
+            $processus = $processusParCode->get($code);
+            if (! $processus) {
+                continue;
+            }
+
+            $categorieIds = EquipeLivraisonPartageCategorie::where('equipe_id', $equipe->id)
+                ->where('processus_id', $processus->id)
+                ->whereNull('effective_to')
+                ->distinct()
+                ->pluck('categorie_id');
+
+            if ($categorieIds->isEmpty()) {
+                continue;
+            }
+
+            $categories = Categorie::whereIn('id', $categorieIds)->get()->keyBy('id');
+
+            $result[] = [
+                'processus_code' => $code,
+                'processus_label' => CommissionRegleController::processusLabel($code),
+                'categories' => $categorieIds->map(fn (string $categorieId) => [
+                    'categorie_id' => $categorieId,
+                    'categorie_nom' => $categories->get($categorieId)?->nom,
+                    'enveloppe' => CommissionPartageLivraisonCategorieChecker::resoudreEnveloppe(
+                        $orgId, $processus->id, $categorieId, $typeVehiculeId, now(),
+                    ),
+                ])->values()->all(),
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * Convertit le payload du wizard de transfert (parts identifiées par `livreur_id`,
+     * tous des livreurs déjà résolus — jamais de nouveau membre créé ici) vers la forme
+     * attendue par validatePartagesCategorie()/syncPartagesCategorie() (parts identifiées
+     * par `membre_ordre`) — le `livreur_id` sert directement de clé, cf.
+     * livreurIdParOrdreIdentite() ci-dessous, sans toucher à ces deux méthodes partagées
+     * avec store()/update().
+     */
+    private function normaliserPartagesPourSync(Collection $partagesGroupProcessus): array
+    {
+        return $partagesGroupProcessus->map(fn (array $pc) => [
+            'categorie_id' => $pc['categorie_id'],
+            'parts' => collect($pc['parts'])->map(fn (array $p) => [
+                'membre_ordre' => $p['livreur_id'],
+                'montant_unitaire' => $p['montant_unitaire'],
+            ])->all(),
+        ])->values()->all();
+    }
+
+    private function livreurIdParOrdreIdentite(Collection $partagesGroupProcessus): array
+    {
+        return $partagesGroupProcessus
+            ->flatMap(fn (array $pc) => collect($pc['parts'])->pluck('livreur_id'))
+            ->unique()
+            ->mapWithKeys(fn (string $id) => [$id => $id])
+            ->all();
     }
 
     // ── Règles de validation, par moteur ─────────────────────────────────────
@@ -597,24 +967,28 @@ class EquipeLivraisonController extends Controller
 
     /**
      * Vérifie, pour chaque membre dont le téléphone est renseigné, l'absence de
-     * conflit avec un AUTRE livreur de l'organisation. Deux scénarios distincts :
+     * conflit avec une AUTRE Personne de l'organisation. Deux scénarios distincts :
      *
-     * 1. `livreur_id` explicite (membre déjà identifié, cf. resolveOrCreateLivreur())
-     *    dont le téléphone soumis appartient à un AUTRE livreur trouvé en base :
-     *    conflit d'IDENTITÉ direct, peu importe l'équipe — le téléphone identifie
-     *    un livreur de façon unique par organisation (contrainte
-     *    personnes_organization_id_telephone_normalise_unique). Avant correctif
-     *    (incident Sentry PHP-LARAVEL-66), ce cas n'était détecté que si l'autre
-     *    livreur appartenait à une équipe DIFFÉRENTE de celle en cours d'édition
-     *    (exclusion par équipe) : un membre pouvait donc se voir attribuer le
-     *    téléphone d'un autre membre de la MÊME équipe sans être bloqué ici, et la
-     *    contrainte SQL explosait en 500 au lieu d'un 422 propre.
+     * 1. `livreur_id` explicite (membre déjà identifié — resolveOrCreateLivreur() réécrit alors
+     *    directement le téléphone de SA PROPRE Personne) dont le téléphone soumis appartient à
+     *    une AUTRE Personne déjà en base : conflit d'IDENTITÉ direct, peu importe l'équipe ET
+     *    peu importe le rôle de cette autre Personne (Livreur, mais aussi Proprietaire, Employe,
+     *    User, Client...) — le téléphone est unique par organisation sur TOUTE la table
+     *    `personnes` (contrainte personnes_organization_id_telephone_normalise_unique), jamais
+     *    seulement entre livreurs. Avant un premier correctif (incident Sentry PHP-LARAVEL-66),
+     *    ce cas n'était détecté que si l'autre livreur appartenait à une équipe DIFFÉRENTE ; le
+     *    correctif avait ensuite limité la recherche du conflit à la seule table `livreurs`
+     *    (`Livreur::where(...)`), ce qui laissait passer un conflit avec un autre rôle — ou avec
+     *    un Livreur supprimé dont la Personne reste active — jusqu'à la mise à jour SQL, qui
+     *    explosait alors en 500 au lieu d'un 422 propre (même incident, réapparu en prod le
+     *    2026-09-02 pour cette raison précise).
      *
-     * 2. `livreur_id` absent (nouveau membre, ou membre ré-identifié uniquement
-     *    par téléphone — resolveOrCreateLivreur() réutilise alors la Personne/le
-     *    Livreur existant, aucun risque de collision) : seule règle réellement
-     *    applicable, un livreur ne peut pas être emprunté à une équipe active
-     *    DIFFÉRENTE de celle en cours d'édition (double affectation interdite).
+     * 2. `livreur_id` absent (nouveau membre, ou membre ré-identifié uniquement par téléphone —
+     *    resolveOrCreateLivreur() réutilise alors la Personne existante via
+     *    Personne::resoudreOuCreer(), aucun risque de collision SQL même si cette Personne porte
+     *    déjà un autre rôle, cf. docblock de Personne sur le multi-rôle) : seule règle réellement
+     *    applicable, un Livreur ne peut pas être emprunté à une équipe active DIFFÉRENTE de
+     *    celle en cours d'édition (double affectation interdite).
      */
     private function validateMembresExclusivite(array $membres, string $orgId, ?string $equipeIdCourant = null): void
     {
@@ -623,46 +997,115 @@ class EquipeLivraisonController extends Controller
                 continue;
             }
 
-            $livreur = Livreur::where('organization_id', $orgId)
-                ->whereHas('personne', fn ($q) => $q->where('telephone_normalise', Personne::normaliserTelephone($m['telephone'])))
-                ->first();
+            $message = $this->detecterConflitTelephone($m['telephone'], $orgId, $m['livreur_id'] ?? null, $equipeIdCourant);
 
-            if (! $livreur) {
-                continue;
-            }
-
-            $livreurIdSoumis = $m['livreur_id'] ?? null;
-
-            if ($livreurIdSoumis !== null) {
-                if ($livreurIdSoumis !== $livreur->id) {
-                    throw ValidationException::withMessages([
-                        "membres.{$index}.telephone" => 'Ce numéro de téléphone est déjà utilisé par un autre livreur.',
-                    ]);
-                }
-
-                continue;
-            }
-
-            // Chargée avec son véhicule pour un message d'erreur exploitable — sans ce contexte,
-            // l'utilisateur ne peut pas savoir de qui il s'agit ni où corriger (retirer le membre
-            // de son équipe actuelle) avant de le réaffecter ici.
-            $autreEquipeLivreur = EquipeLivreur::query()
-                ->where('livreur_id', $livreur->id)
-                ->whereHas('equipe', fn ($q) => $q
-                    ->where('organization_id', $orgId)
-                    ->whereNull('deleted_at')
-                )
-                ->when($equipeIdCourant !== null, fn ($q) => $q->where('equipe_id', '<>', $equipeIdCourant))
-                ->with('equipe.vehicule')
-                ->first();
-
-            if ($autreEquipeLivreur) {
-                $vehiculeNom = $autreEquipeLivreur->equipe?->vehicule?->nom_vehicule ?? 'véhicule inconnu';
-                throw ValidationException::withMessages([
-                    "membres.{$index}.telephone" => "Ce numéro appartient à {$livreur->nom_complet} (déjà affecté au véhicule \"{$vehiculeNom}\").",
-                ]);
+            if ($message !== null) {
+                throw ValidationException::withMessages(["membres.{$index}.telephone" => $message]);
             }
         }
+    }
+
+    /**
+     * Détecte un conflit de téléphone pour UN membre — logique unique partagée entre la
+     * validation de soumission (validateMembresExclusivite, ci-dessus) et le contrôle live
+     * pendant la saisie (verifierTelephone) : les deux points d'entrée ne doivent jamais
+     * diverger (cf. incident Sentry PHP-LARAVEL-66). Retourne le message d'erreur à afficher,
+     * ou null si aucun conflit.
+     */
+    private function detecterConflitTelephone(
+        string $telephone,
+        string $orgId,
+        ?string $livreurIdSoumis,
+        ?string $equipeIdCourant,
+    ): ?string {
+        $personneConflit = Personne::where('organization_id', $orgId)
+            ->where('telephone_normalise', Personne::normaliserTelephone($telephone))
+            ->first();
+
+        if (! $personneConflit) {
+            return null;
+        }
+
+        if ($livreurIdSoumis !== null) {
+            $livreurActuel = Livreur::where('id', $livreurIdSoumis)->where('organization_id', $orgId)->first();
+
+            // Le conflit désigne en réalité la propre Personne du membre édité (numéro
+            // inchangé, ou reconfirmé) : rien à signaler.
+            if ($livreurActuel && $personneConflit->id === $livreurActuel->personne_id) {
+                return null;
+            }
+
+            return $personneConflit->livreur
+                ? "Ce numéro appartient à {$personneConflit->livreur->nom_complet}."
+                : "Ce numéro de téléphone est déjà utilisé par un autre contact de l'organisation.";
+        }
+
+        // Scénario 2 : seul un conflit avec un Livreur (pas un autre rôle, cf. docblock ci-dessus)
+        // affecté à une autre équipe active est bloquant.
+        $livreur = $personneConflit->livreur;
+        if (! $livreur) {
+            return null;
+        }
+
+        // Chargée avec son véhicule pour un message d'erreur exploitable — sans ce contexte,
+        // l'utilisateur ne peut pas savoir de qui il s'agit ni où corriger (retirer le membre
+        // de son équipe actuelle) avant de le réaffecter ici. L'immatriculation lève
+        // l'ambiguïté quand plusieurs véhicules portent un nom proche.
+        $autreEquipeLivreur = EquipeLivreur::query()
+            ->where('livreur_id', $livreur->id)
+            ->whereHas('equipe', fn ($q) => $q
+                ->where('organization_id', $orgId)
+                ->whereNull('deleted_at')
+            )
+            ->when($equipeIdCourant !== null, fn ($q) => $q->where('equipe_id', '<>', $equipeIdCourant))
+            ->with('equipe.vehicule')
+            ->first();
+
+        if (! $autreEquipeLivreur) {
+            return null;
+        }
+
+        $vehicule = $autreEquipeLivreur->equipe?->vehicule;
+        $vehiculeLabel = match (true) {
+            $vehicule === null => 'véhicule inconnu',
+            (bool) $vehicule->immatriculation => "{$vehicule->nom_vehicule} ({$vehicule->immatriculation})",
+            default => $vehicule->nom_vehicule,
+        };
+
+        return "Ce numéro appartient à {$livreur->nom_complet} (déjà affecté au véhicule \"{$vehiculeLabel}\").";
+    }
+
+    /**
+     * Vérification live d'un numéro pendant la saisie (avant soumission) — même règle que
+     * detecterConflitTelephone(), appelée par le stepper (EquipeStepperModal.vue) au blur d'un
+     * champ téléphone, pour signaler le conflit "en amont" plutôt qu'après un aller-retour
+     * complet du formulaire (steps 2/3 + soumission).
+     */
+    public function verifierTelephone(Request $request): JsonResponse
+    {
+        $user = auth()->user();
+        abort_unless(
+            $user->can('equipes-livraison.create') || $user->can('equipes-livraison.update'),
+            403,
+        );
+
+        $data = $request->validate([
+            'telephone' => ['required', 'string', 'regex:/^\+224\d{9}$/'],
+            'livreur_id' => ['nullable', 'string'],
+            'equipe_id' => ['nullable', 'string'],
+        ]);
+
+        $message = $this->detecterConflitTelephone(
+            $data['telephone'],
+            $user->organization_id,
+            $data['livreur_id'] ?? null,
+            $data['equipe_id'] ?? null,
+        );
+
+        return response()->json([
+            'conflict' => $message !== null,
+            'message' => $message,
+        ]);
     }
 
     private function validateUniquePhones(array $membres): void

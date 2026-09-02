@@ -184,6 +184,75 @@ class ProduitSeuilAlerteServiceTest extends TestCase
         $this->assertDatabaseMissing('produit_seuils_alerte', ['produit_id' => $this->produit->id, 'site_id' => $this->cba->id]);
     }
 
+    // ── definirDisponibilite()/definirDisponibilitePourSites() : indépendant de l'alerte ──
+
+    public function test_pour_produit_est_vide_donc_disponible_partout_par_defaut(): void
+    {
+        // Aucune ligne du tout : disponiblePourSite() (StockStatutService) renverrait TRUE pour
+        // n'importe quel site, à l'inverse de l'alerte qui défaut à FALSE.
+        $this->assertTrue($this->service->pourProduit($this->produit)->isEmpty());
+    }
+
+    public function test_definir_disponibilite_a_false_cree_une_ligne_meme_sans_config_alerte(): void
+    {
+        $this->service->definirDisponibilite($this->produit, $this->cba->id, false);
+
+        $this->assertDatabaseHas('produit_seuils_alerte', [
+            'produit_id' => $this->produit->id,
+            'site_id' => $this->cba->id,
+            'disponible' => false,
+        ]);
+    }
+
+    public function test_definir_disponibilite_a_true_ne_cree_aucune_ligne_si_rien_dautre_nexiste(): void
+    {
+        // Le défaut de colonne (true) couvre déjà ce cas : inutile de créer une ligne pour
+        // "tous les sites".
+        $this->service->definirDisponibilite($this->produit, $this->cba->id, true);
+
+        $this->assertDatabaseMissing('produit_seuils_alerte', [
+            'produit_id' => $this->produit->id,
+            'site_id' => $this->cba->id,
+        ]);
+    }
+
+    public function test_definir_disponibilite_ne_touche_jamais_lalerte_deja_configuree(): void
+    {
+        $this->service->definir($this->produit, $this->cba->id, true, 300);
+
+        $this->service->definirDisponibilite($this->produit, $this->cba->id, false);
+
+        $this->assertDatabaseHas('produit_seuils_alerte', [
+            'produit_id' => $this->produit->id,
+            'site_id' => $this->cba->id,
+            'disponible' => false,
+            'actif' => true,
+            'seuil_alerte_stock' => 300,
+        ]);
+    }
+
+    public function test_definir_disponibilite_pour_sites_mode_tous_leve_toute_restriction(): void
+    {
+        $this->service->definirDisponibilite($this->produit, $this->cba->id, false);
+        $this->service->definirDisponibilite($this->produit, $this->matoto->id, false);
+
+        $this->service->definirDisponibilitePourSites($this->produit, null);
+
+        $this->assertDatabaseHas('produit_seuils_alerte', ['produit_id' => $this->produit->id, 'site_id' => $this->cba->id, 'disponible' => true]);
+        $this->assertDatabaseHas('produit_seuils_alerte', ['produit_id' => $this->produit->id, 'site_id' => $this->matoto->id, 'disponible' => true]);
+    }
+
+    public function test_definir_disponibilite_pour_sites_mode_selection_restreint_les_autres_sites(): void
+    {
+        // Matoto coché disponible (le défaut de colonne couvre déjà ce cas, aucune ligne créée),
+        // CBA absent de la sélection → devient explicitement indisponible.
+        $this->service->definirDisponibilitePourSites($this->produit, [(string) $this->matoto->id]);
+
+        $this->assertDatabaseMissing('produit_seuils_alerte', ['produit_id' => $this->produit->id, 'site_id' => $this->matoto->id]);
+        $this->assertDatabaseHas('produit_seuils_alerte', ['produit_id' => $this->produit->id, 'site_id' => $this->cba->id, 'disponible' => false]);
+        $this->assertFalse($this->service->pourProduit($this->produit)->get((string) $this->cba->id)['disponible']);
+    }
+
     // ── valeurUniformePourSitesActifs() : audit d'import uniquement ──────────
 
     public function test_valeur_uniforme_retourne_la_valeur_si_tous_les_sites_actifs_correspondent(): void

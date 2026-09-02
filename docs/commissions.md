@@ -223,28 +223,92 @@ la répartition d'équipe restent une seule implémentation, partagée par `Comm
     convoyeurs sans téléphone personnel se voyaient attribuer des numéros fictifs ou réutilisés
     pour satisfaire la validation, ce qui provoquait des collisions avec de vrais numéros déjà
     enregistrés (cf. incident ci-dessous).
-- **Incident Sentry PHP-LARAVEL-66** (production, 01/09/2026) : `UniqueConstraintViolationException`
-  sur `personnes_organization_id_telephone_normalise_unique` lors de la mise à jour d'une équipe.
-  Cause racine, dans `EquipeLivraisonController::validateMembresExclusivite()` — le garde-fou
-  n'excluait du contrôle « déjà affecté à une autre équipe » que l'ÉQUIPE en cours d'édition
-  (`equipe_id <> $equipeIdCourant`), jamais le LIVREUR édité lui-même. Un membre identifié par
-  `livreur_id` pouvait donc se voir attribuer, dans la même soumission, le numéro d'un AUTRE membre
-  de la MÊME équipe (ou de tout autre livreur non affecté à une équipe active) sans être bloqué en
-  amont — la requête `UPDATE personnes SET telephone_normalise = ...` finissait alors en violation
-  de contrainte SQL brute (500), au lieu d'un 422 propre.
-  - Correctif : le contrôle distingue désormais deux cas — (1) `livreur_id` explicite dont le
-    téléphone soumis appartient à un AUTRE livreur trouvé en base → conflit d'identité direct,
-    **peu importe l'équipe** (message « Ce numéro de téléphone est déjà utilisé par un autre
-    livreur. ») ; (2) `livreur_id` absent (nouveau membre, ou membre ré-identifié uniquement par
-    téléphone — `resolveOrCreateLivreur()` réutilise alors la Personne/le Livreur existant, aucun
-    risque de collision) → seule règle applicable : le livreur trouvé ne doit pas être déjà affecté
-    à une équipe active **différente** de celle en cours d'édition (message « Ce livreur est déjà
-    affecté à une autre équipe. », double affectation interdite).
+- **Incident Sentry PHP-LARAVEL-66** (production, 01/09/2026, réapparu le 02/09/2026) :
+  `UniqueConstraintViolationException` sur `personnes_organization_id_telephone_normalise_unique`
+  lors de la mise à jour d'une équipe. Cause racine, dans
+  `EquipeLivraisonController::detecterConflitTelephone()` (logique historiquement inline dans
+  `validateMembresExclusivite()`) — le garde-fou n'excluait du contrôle « déjà affecté à une autre
+  équipe » que l'ÉQUIPE en cours d'édition (`equipe_id <> $equipeIdCourant`), jamais le LIVREUR édité
+  lui-même. Un membre identifié par `livreur_id` pouvait donc se voir attribuer, dans la même
+  soumission, le numéro d'un AUTRE membre de la MÊME équipe (ou de tout autre livreur non affecté à
+  une équipe active) sans être bloqué en amont — la requête `UPDATE personnes SET
+  telephone_normalise = ...` finissait alors en violation de contrainte SQL brute (500), au lieu
+  d'un 422 propre.
+  - Premier correctif (01/09/2026) limité à la seule table `livreurs` (`Livreur::where(...)`),
+    laissant passer un conflit avec un numéro déjà détenu par une Personne d'un AUTRE rôle
+    (Propriétaire, Employé, User, Client...) — le téléphone est unique par organisation sur TOUTE la
+    table `personnes`, jamais seulement entre livreurs. Réapparu en production le 02/09/2026 pour
+    cette raison précise (numéro déjà détenu par un Propriétaire).
+  - Correctif définitif : la recherche du conflit porte sur `Personne` (pas `Livreur`), puis
+    distingue deux cas — (1) `livreur_id` explicite (membre déjà identifié) dont le téléphone soumis
+    appartient à une AUTRE Personne déjà en base → conflit d'identité direct, **peu importe l'équipe
+    ET peu importe le rôle de cette autre Personne** (message « Ce numéro appartient à {nom du
+    livreur trouvé}. » si cette Personne est elle-même un livreur, sinon « Ce numéro de téléphone
+    est déjà utilisé par un autre contact de l'organisation. ») ; (2) `livreur_id` absent (nouveau
+    membre, ou membre ré-identifié uniquement par téléphone — `resolveOrCreateLivreur()` réutilise
+    alors la Personne existante via `Personne::resoudreOuCreer()`, aucun risque de collision SQL) →
+    seule règle applicable : le Livreur trouvé ne doit pas être déjà affecté à une équipe active
+    **différente** de celle en cours d'édition (message « Ce numéro appartient à {nom du livreur}
+    (déjà affecté au véhicule "{nom du véhicule} ({immatriculation})"). », double affectation
+    interdite — l'immatriculation lève l'ambiguïté quand plusieurs véhicules portent un nom proche).
+  - **Contrôle live côté formulaire** (révisé le 02/09/2026) : ce conflit n'est plus découvert
+    seulement à la soumission finale du stepper (`EquipeStepperModal.vue`), après que l'utilisateur
+    a déjà rempli les étapes 2/3 — `GET equipes-livraison/verifier-telephone`
+    (`EquipeLivraisonController::verifierTelephone()`, réservée aux permissions
+    `equipes-livraison.create`/`.update`) rejoue exactement `detecterConflitTelephone()` (source
+    unique, jamais de logique dupliquée entre validation finale et contrôle live) et est appelée au
+    blur de chaque champ téléphone (avec un filet de sécurité si le debounce n'a pas eu le temps de
+    se déclencher). Le bouton « Suivant » de l'étape 1 reste désactivé tant qu'une vérification est
+    en cours ou qu'un conflit est signalé — le problème est donc réglé **en amont**, avant même
+    d'atteindre l'étape de répartition.
   - Tests de non-régression : `EquipeLivraisonTest::
-    test_update_echoue_proprement_si_telephone_deja_detenu_par_autre_membre_de_la_meme_equipe`
-    (reproduit l'incident) et `test_store_echoue_si_chauffeur_sans_telephone` /
-    `test_store_autorise_convoyeur_sans_telephone` / `test_store_autorise_plusieurs_convoyeurs_sans_telephone`
-    (règle chauffeur/convoyeur).
+    test_update_echoue_proprement_si_telephone_deja_detenu_par_autre_membre_de_la_meme_equipe`,
+    `test_update_echoue_proprement_si_telephone_deja_detenu_par_un_proprietaire` (réapparition du
+    02/09/2026), `test_verifier_telephone_signale_conflit_avec_livreur_autre_equipe` /
+    `test_verifier_telephone_sans_conflit` / `test_verifier_telephone_ignore_le_conflit_avec_soi_meme`
+    / `test_verifier_telephone_refuse_sans_permission` (contrôle live), et
+    `test_store_echoue_si_chauffeur_sans_telephone` / `test_store_autorise_convoyeur_sans_telephone`
+    / `test_store_autorise_plusieurs_convoyeurs_sans_telephone` (règle chauffeur/convoyeur).
+
+## Transfert de véhicule d'un livreur (changement d'équipe) — décision AMOA du 02/09/2026
+
+Un livreur n'appartient qu'à une seule équipe active à la fois (contrainte DB
+`equipe_livreurs.livreur_id` unique), elle-même rattachée à un seul véhicule
+(`equipes_livraison.vehicule_id` unique). « Changer de véhicule » déplace donc le livreur
+d'une équipe à une autre — jusqu'ici, cela obligeait à rouvrir le stepper de l'équipe de
+départ (retirer le membre, tout re-soumettre) puis celui de l'équipe d'arrivée (l'ajouter,
+tout re-soumettre), sans lien entre les deux opérations.
+
+`EquipeLivraisonController::transferer()` (routes `equipes-livraison/transfert-livreur/{livreur}`)
+exécute ce déplacement comme une opération unique :
+
+- **Répartition obligatoirement refaite des deux côtés, jamais reprise automatiquement.**
+  Le partage étant par catégorie ET par processus (Vente / Transfert logistique, cf. section
+  ci-dessus), le transfert boucle sur **chaque processus ayant un partage actif** pour l'équipe
+  concernée — un véhicule avec `livraison_vente` et `livraison_logistique` actifs simultanément
+  exige donc de refaire les deux, pas un seul écran générique. Un processus jamais configuré pour
+  l'équipe reste "non configuré" (même règle que partout ailleurs) : le transfert ne force jamais
+  à configurer ce qui ne l'était pas avant.
+- **Équipe de départ vidée par le transfert** (le livreur en était le dernier membre) : dissoute
+  automatiquement (soft-delete + désactivation du véhicule, même code que `destroy()`), aucune
+  répartition n'est demandée dans ce cas.
+- **Équipe d'arrivée inexistante** (véhicule cible sans équipe) : créée à la volée avec le seul
+  livreur transféré, sans forcer de partage (même logique que ci-dessus).
+- **Une seule transaction DB, commit unique** : rien n'est écrit en base tant que les
+  répartitions départ ET arrivée n'ont pas été validées (`CommissionPartageLivraisonValidator`,
+  même contrôle strict que `store()`/`update()`). Abandonner le wizard en cours de route ne laisse
+  donc aucune trace — le véhicule cible n'est activé qu'au moment où le transfert est
+  effectivement validé. Un modèle en deux temps (déplacement immédiat + véhicule désactivé en
+  attendant la configuration du partage) a été envisagé puis écarté : il aurait réintroduit
+  exactement l'état intermédiaire incohérent que le commit unique évite.
+- Réutilise directement `validatePartagesCategorie()`/`syncPartagesCategorie()` (aucune logique
+  de partage dupliquée) — les parts du payload de transfert sont identifiées par `livreur_id`
+  (tous des livreurs déjà résolus, jamais de nouveau membre créé par ce flux) au lieu de
+  `membre_ordre`, converties en interne avant d'appeler ces deux méthodes partagées avec
+  `store()`/`update()`.
+- Tests : `EquipeLivraisonTransfertLivreurTest` (transfert simple, dissolution de l'équipe de
+  départ, création d'équipe à l'arrivée, double processus Vente + Logistique, rollback total si
+  une répartition est invalide, permission).
 
 ## Reporting Comptabilité — cloisonnement par processus
 

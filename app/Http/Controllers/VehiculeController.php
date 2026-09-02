@@ -24,6 +24,7 @@ use App\Services\Commission\CommissionPartageLivraisonValidator;
 use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\DerogationImpayesService;
 use App\Services\ImageService;
+use App\Services\ImportVehiculesMaj\ExportVehiculesMajExport;
 use App\Services\VehiculeCapaciteService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -34,6 +35,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
 
 class VehiculeController extends Controller
 {
@@ -161,6 +163,35 @@ class VehiculeController extends Controller
         return Inertia::render('Vehicules/Index', [
             'vehicules' => $vehicules,
         ]);
+    }
+
+    /**
+     * Export "Exporter pour mise à jour" — une ligne par véhicule de l'organisation, préremplie
+     * avec son état réel (site, capacités, usages), destinée à être réimportée telle quelle via
+     * ImportVehiculesMajController après modification des seules colonnes autorisées. Gardée sur
+     * ce contrôleur (et non ImportVehiculesMajController) car c'est un export de l'état courant
+     * des véhicules, symétrique de l'action "Exporter" déjà présente sur d'autres pages de
+     * liste — jamais un import flotte : ces deux imports/exports restent des chemins séparés.
+     */
+    public function exportMaj()
+    {
+        $this->authorize('viewAny', Vehicule::class);
+
+        $orgId = auth()->user()->organization_id;
+
+        $vehicules = Vehicule::with(['site', 'capacites'])
+            ->where('organization_id', $orgId)
+            ->orderBy('nom_vehicule')
+            ->get();
+
+        $categories = Categorie::where('organization_id', $orgId)
+            ->orderBy('nom')
+            ->get();
+
+        return Excel::download(
+            new ExportVehiculesMajExport($vehicules, $categories),
+            'export-vehicules-maj.xlsx'
+        );
     }
 
     public function create(Request $request): Response|RedirectResponse

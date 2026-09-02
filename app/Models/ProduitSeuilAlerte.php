@@ -7,14 +7,25 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * Configuration de l'alerte de stock faible pour un COUPLE (produit, site) — cf. migrations
- * create_produit_seuils_alerte_table (29/08/2026) et add_actif_to_produit_seuils_alerte_table
- * (01/09/2026). Absence de ligne pour un site = alerte INACTIVE sur ce site, jamais implicite
- * (cf. StockStatutService::alerteActivePourSite()) — un produit non concerné par un site (ex. non
- * vendu dans cette agence) ne doit générer aucune alerte tant qu'un administrateur ne l'a pas
- * explicitement activée pour CE site. `seuil_alerte_stock` reste nullable même quand `actif` est
- * vrai : absent = repli sur le seuil global de l'organisation (Parametre::getSeuilStockFaible()),
- * jamais 0 implicite (cf. StockStatutService::seuilEffectifPourSite()).
+ * Configuration d'un produit pour un COUPLE (produit, site) — deux notions INDÉPENDANTES
+ * cohabitent sur la même ligne, cf. migrations create_produit_seuils_alerte_table (29/08/2026),
+ * add_actif_to_produit_seuils_alerte_table (01/09/2026) et
+ * add_disponible_to_produit_seuils_alerte_table (02/09/2026 après-midi) :
+ *
+ *   - `disponible` — DISPONIBILITÉ : ce produit est-il vendu/géré sur ce site ? Défaut TRUE :
+ *     disponible PARTOUT tant qu'aucune restriction explicite n'a été enregistrée (mode "Tous
+ *     les sites"). Un site non disponible n'affiche jamais de rupture "métier" ni ne génère
+ *     d'alerte, quel que soit son stock physique (cf. StockStatutService::disponiblePourSite()).
+ *   - `actif` — ALERTE : faut-il surveiller/notifier ce couple ? Défaut FALSE, jamais implicite
+ *     (cf. StockStatutService::alerteActivePourSite()) — un site DISPONIBLE mais sans alerte
+ *     affiche quand même son état réel (le stock physique reste réel), simplement sans
+ *     notification/email.
+ *   - `seuil_alerte_stock` — seuil spécifique, nullable même quand `actif` est vrai : absent =
+ *     repli sur le seuil global de l'organisation (Parametre::getSeuilStockFaible()), jamais 0
+ *     implicite (cf. StockStatutService::seuilEffectifPourSite()).
+ *
+ * Ces trois champs s'écrivent indépendamment (cf. ProduitSeuilAlerteService::definir()/
+ * definirDisponibilite()) : modifier l'un ne doit jamais écraser silencieusement les autres.
  */
 class ProduitSeuilAlerte extends Model
 {
@@ -28,11 +39,13 @@ class ProduitSeuilAlerte extends Model
         'organization_id',
         'produit_id',
         'site_id',
+        'disponible',
         'actif',
         'seuil_alerte_stock',
     ];
 
     protected $casts = [
+        'disponible' => 'boolean',
         'actif' => 'boolean',
         'seuil_alerte_stock' => 'integer',
     ];

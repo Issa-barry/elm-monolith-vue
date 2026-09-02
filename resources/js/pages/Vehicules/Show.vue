@@ -7,6 +7,7 @@ import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatPhoneDisplay } from '@/lib/utils';
 import EquipeStepperModal from '@/pages/Vehicules/partials/EquipeStepperModal.vue';
+import TransfertVehiculeDialog from '@/pages/Vehicules/partials/TransfertVehiculeDialog.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
@@ -205,6 +206,13 @@ function editerDepense(d: DepenseRow) {
     router.visit(`/backoffice/depenses/${d.id}/edit`);
 }
 const showStepperModal = ref(false);
+const showTransfertDialog = ref(false);
+const livreurATransferer = ref<string | null>(null);
+function ouvrirTransfert(livreurId: string | null) {
+    if (!livreurId) return;
+    livreurATransferer.value = livreurId;
+    showTransfertDialog.value = true;
+}
 const flashSuccess = computed(
     () => (page.props as { flash?: { success?: string } }).flash?.success,
 );
@@ -728,10 +736,11 @@ function formatGNF(val: number): string {
                                 class="w-full min-w-[820px] table-fixed text-sm"
                             >
                                 <colgroup>
-                                    <col class="w-[26%]" />
-                                    <col class="w-[24%]" />
+                                    <col class="w-[22%]" />
+                                    <col class="w-[20%]" />
+                                    <col class="w-[14%]" />
+                                    <col class="w-[28%]" />
                                     <col class="w-[16%]" />
-                                    <col class="w-[34%]" />
                                 </colgroup>
                                 <thead
                                     class="bg-muted/30 text-left text-muted-foreground"
@@ -748,6 +757,9 @@ function formatGNF(val: number): string {
                                         </th>
                                         <th class="px-4 py-3 font-medium">
                                             Part — {{ processusActifLabel }}
+                                        </th>
+                                        <th class="px-4 py-3 font-medium">
+                                            Actions
                                         </th>
                                     </tr>
                                 </thead>
@@ -836,6 +848,28 @@ function formatGNF(val: number): string {
                                             >
                                                 Aucune part
                                             </span>
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <Button
+                                                v-if="
+                                                    can(
+                                                        'equipes-livraison.update',
+                                                    ) && m.livreur_id
+                                                "
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                @click="
+                                                    ouvrirTransfert(
+                                                        m.livreur_id,
+                                                    )
+                                                "
+                                            >
+                                                <ArrowLeftRight
+                                                    class="mr-1.5 h-3.5 w-3.5"
+                                                />
+                                                Changer de véhicule
+                                            </Button>
                                         </td>
                                     </tr>
                                 </tbody>
@@ -1095,5 +1129,11 @@ function formatGNF(val: number): string {
         :baremes-commission-categories="baremes_commission_categories"
         :processus-actif="processus_actif"
         :processus-options="processus_options"
+    />
+
+    <TransfertVehiculeDialog
+        v-if="livreurATransferer"
+        v-model:visible="showTransfertDialog"
+        :livreur-id="livreurATransferer"
     />
 </template>

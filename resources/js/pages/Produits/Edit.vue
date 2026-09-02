@@ -101,7 +101,10 @@ const props = defineProps<{
     limites: Limites;
     seuilOrganisationDefaut: number;
     sites: SiteOption[];
-    seuilsAlerteSite: Record<string, { actif: boolean; seuil: number | null }>;
+    seuilsAlerteSite: Record<
+        string,
+        { disponible: boolean; actif: boolean; seuil: number | null }
+    >;
 }>();
 
 const showVarianteModal = ref(false);
@@ -134,6 +137,18 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: props.produit.nom, href: '#' },
 ];
 
+// Disponibilité — indépendante de l'alerte (cf. ProduitForm.vue) : mode "selection" dès qu'au
+// moins un site actif est explicitement marqué non disponible, "tous" sinon (comportement par
+// défaut, aucune restriction).
+const sitesNonDisponibles = props.sites.filter(
+    (s) => props.seuilsAlerteSite[s.id]?.disponible === false,
+);
+const disponibiliteModeInitial: 'tous' | 'selection' =
+    sitesNonDisponibles.length > 0 ? 'selection' : 'tous';
+const sitesDisponiblesInitial = props.sites
+    .filter((s) => props.seuilsAlerteSite[s.id]?.disponible !== false)
+    .map((s) => s.id);
+
 const form = useForm({
     nom: props.produit.nom,
     categorie_id: props.produit.categorie_id,
@@ -149,6 +164,8 @@ const form = useForm({
     prix_vente: props.produit.prix_vente,
     prix_achat: props.produit.prix_achat,
     cout: props.produit.cout,
+    disponibilite_mode: disponibiliteModeInitial,
+    sites_disponibles: sitesDisponiblesInitial,
     seuils_site: props.sites.map((s) => ({
         site_id: s.id,
         actif: props.seuilsAlerteSite[s.id]?.actif ?? false,

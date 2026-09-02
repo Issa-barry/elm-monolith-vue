@@ -48,6 +48,7 @@ use App\Http\Controllers\FactureVenteController;
 use App\Http\Controllers\FonctionRhController;
 use App\Http\Controllers\FournisseurController;
 use App\Http\Controllers\ImportProduitsController;
+use App\Http\Controllers\ImportVehiculesMajController;
 use App\Http\Controllers\InstallWizardController;
 use App\Http\Controllers\LivreurController;
 use App\Http\Controllers\MediaController;
@@ -272,6 +273,21 @@ Route::prefix('backoffice')->group(function () {
                 Route::post('/{propositionVehicule}/valider', [PropositionVehiculeController::class, 'valider'])->name('valider');
             });
 
+            // Import de mise à jour en masse (site, capacités, usages) — doit être avant
+            // Route::resource('vehicules') pour la même raison que "propositions" ci-dessus :
+            // sinon vehicules/{vehicule} intercepterait vehicules/imports-maj et
+            // vehicules/export-maj. Entièrement séparé de l'import flotte (création) —
+            // cf. ImportVehiculesMajController.
+            Route::prefix('vehicules/imports-maj')->name('vehicules.imports-maj.')->group(function () {
+                Route::get('/', [ImportVehiculesMajController::class, 'index'])->name('index');
+                Route::get('/nouveau', [ImportVehiculesMajController::class, 'create'])->name('create');
+                Route::post('/', [ImportVehiculesMajController::class, 'store'])->name('store');
+                Route::get('/{importVehiculesMaj}', [ImportVehiculesMajController::class, 'show'])->name('show');
+                Route::post('/{importVehiculesMaj}/confirmer', [ImportVehiculesMajController::class, 'confirm'])->name('confirm');
+                Route::post('/{importVehiculesMaj}/relancer', [ImportVehiculesMajController::class, 'retry'])->name('retry');
+            });
+            Route::get('vehicules/export-maj', [VehiculeController::class, 'exportMaj'])->name('vehicules.export-maj');
+
             Route::resource('type-vehicules', TypeVehiculeController::class)->except(['show']);
             Route::resource('vehicules', VehiculeController::class);
             Route::patch('vehicules/{vehicule}/derogation-impayes', [VehiculeController::class, 'updateDerogation'])->name('vehicules.derogation-impayes.update');
@@ -302,6 +318,21 @@ Route::prefix('backoffice')->group(function () {
             Route::patch('livreurs/{livreur}/toggle', [LivreurController::class, 'toggle'])->name('livreurs.toggle');
             Route::patch('livreurs/{livreur}/approuver', [LivreurController::class, 'approuver'])->name('livreurs.approuver');
             Route::delete('livreurs/{livreur}', [LivreurController::class, 'destroy'])->name('livreurs.destroy');
+
+            // Déclarée avant le resource() : sinon "verifier-telephone" est capturé par
+            // equipes-livraison/{equipes_livraison} (route "show") et tente une résolution
+            // de modèle avec cette chaîne comme identifiant.
+            Route::get('equipes-livraison/verifier-telephone', [EquipeLivraisonController::class, 'verifierTelephone'])
+                ->name('equipes-livraison.verifier-telephone');
+
+            // Transfert de véhicule d'un livreur (changement d'équipe) — déclarées avant le
+            // resource() pour la même raison que verifier-telephone ci-dessus.
+            Route::get('equipes-livraison/transfert-livreur/{livreur}', [EquipeLivraisonController::class, 'transfertDonnees'])
+                ->name('equipes-livraison.transfert.donnees');
+            Route::get('equipes-livraison/transfert-livreur/{livreur}/vehicule/{vehicule}', [EquipeLivraisonController::class, 'transfertDonneesArrivee'])
+                ->name('equipes-livraison.transfert.donnees-arrivee');
+            Route::post('equipes-livraison/transfert-livreur/{livreur}', [EquipeLivraisonController::class, 'transferer'])
+                ->name('equipes-livraison.transfert.store');
 
             Route::resource('equipes-livraison', EquipeLivraisonController::class)
                 ->only(['index', 'store', 'show', 'update', 'destroy']);

@@ -24,6 +24,7 @@ import {
     ChevronDown,
     Download,
     Eye,
+    History,
     MoreVertical,
     Pencil,
     Search,
@@ -462,7 +463,14 @@ function confirmDelete(v: Vehicule) {
                     </p>
                 </div>
                 <ListPageActions>
-                    <template v-if="can('imports-flotte.create')" #import>
+                    <template
+                        v-if="
+                            can('imports-flotte.create') ||
+                            can('imports-vehicules-maj.create') ||
+                            can('imports-vehicules-maj.read')
+                        "
+                        #import
+                    >
                         <DropdownMenu>
                             <DropdownMenuTrigger as-child>
                                 <Button variant="outline">
@@ -471,17 +479,23 @@ function confirmDelete(v: Vehicule) {
                                     <ChevronDown class="ml-2 h-3.5 w-3.5" />
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" class="w-56">
-                                <DropdownMenuItem as-child>
+                            <DropdownMenuContent align="end" class="w-64">
+                                <DropdownMenuItem
+                                    v-if="can('imports-flotte.create')"
+                                    as-child
+                                >
                                     <Link
                                         href="/settings/imports-flotte/nouveau"
                                         class="flex w-full items-center gap-2"
                                     >
                                         <Upload class="h-4 w-4" />
-                                        Importer
+                                        Importer une nouvelle flotte
                                     </Link>
                                 </DropdownMenuItem>
-                                <DropdownMenuItem as-child>
+                                <DropdownMenuItem
+                                    v-if="can('imports-flotte.create')"
+                                    as-child
+                                >
                                     <a
                                         href="/settings/imports-flotte/modele"
                                         class="flex w-full items-center gap-2"
@@ -489,6 +503,49 @@ function confirmDelete(v: Vehicule) {
                                         <Download class="h-4 w-4" />
                                         Télécharger le modèle
                                     </a>
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator
+                                    v-if="
+                                        can('imports-flotte.create') &&
+                                        (can('imports-vehicules-maj.create') ||
+                                            can('imports-vehicules-maj.read'))
+                                    "
+                                />
+                                <DropdownMenuItem
+                                    v-if="can('imports-vehicules-maj.create')"
+                                    as-child
+                                >
+                                    <a
+                                        href="/backoffice/vehicules/export-maj"
+                                        class="flex w-full items-center gap-2"
+                                    >
+                                        <Download class="h-4 w-4" />
+                                        Exporter pour mise à jour
+                                    </a>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    v-if="can('imports-vehicules-maj.create')"
+                                    as-child
+                                >
+                                    <Link
+                                        href="/backoffice/vehicules/imports-maj/nouveau"
+                                        class="flex w-full items-center gap-2"
+                                    >
+                                        <Upload class="h-4 w-4" />
+                                        Mettre à jour les véhicules
+                                    </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    v-if="can('imports-vehicules-maj.read')"
+                                    as-child
+                                >
+                                    <Link
+                                        href="/backoffice/vehicules/imports-maj"
+                                        class="flex w-full items-center gap-2"
+                                    >
+                                        <History class="h-4 w-4" />
+                                        Historique des mises à jour
+                                    </Link>
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>

@@ -89,9 +89,14 @@ class StockController extends Controller
         // conservée en base à titre historique) : le seuil de Matoto ne doit jamais servir à
         // contrôler le stock de CBA.
         $seuil = 'COALESCE(psa.seuil_alerte_stock, ?)';
-        // Activation résolue PAR SITE elle aussi (cf. StockStatutService::alerteActivePourSite())
-        // — jamais l'ancienne colonne p.alerte_stock_active (choix global, historique) : absence
-        // de ligne psa (leftJoin) = alerte inactive sur ce site, jamais implicite.
+        // DISPONIBILITÉ résolue PAR SITE (cf. StockStatutService::disponiblePourSite()) — défaut
+        // VRAI (absence de ligne psa = disponible partout, mode "Tous les sites") : un site non
+        // disponible n'a aucune rupture "métier" possible, quel que soit son stock physique.
+        $disponible = 'COALESCE(psa.disponible, 1)';
+        // ALERTE résolue PAR SITE (cf. StockStatutService::alerteActivePourSite()) — défaut FAUX,
+        // jamais implicite. N'intervient PAS dans le statut affiché ici (page opérationnelle : le
+        // stock réel reste affiché même sans alerte active) ni dans les filtres ci-dessous —
+        // uniquement exposée par ligne pour un éventuel affichage.
         $alerteActive = 'COALESCE(psa.actif, 0)';
 
         $query = DB::table('produit_variantes as pv')
@@ -136,6 +141,7 @@ class StockController extends Controller
             ->selectRaw("{$physique} as qte_physique")
             ->selectRaw("{$reserve} as qte_reservee")
             ->selectRaw("{$seuil} as seuil_effectif", [$seuilOrganisation])
+            ->selectRaw("{$disponible} as disponible_sur_site")
             ->selectRaw("{$alerteActive} as alerte_active");
 
         if ($filters['search'] !== '') {
@@ -149,19 +155,29 @@ class StockController extends Controller
             $query->where('p.categorie_id', $filters['categorie_id']);
         }
 
+        // Décision du 02/09/2026 (révisée l'après-midi même : disponibilité et alerte sont deux
+        // notions INDÉPENDANTES, jamais mélangées dans le statut lui-même) : un site NON
+        // DISPONIBLE pour ce produit n'a aucune rupture "métier" possible, quelle que soit sa
+        // quantité réelle — {$disponible} = 1 gouverne les quatre filtres de statut. L'ALERTE,
+        // elle, n'intervient PAS ici : cette page reste opérationnelle, le stock réel s'affiche
+        // même sur un site sans alerte active (seules les notifications/badges d'alerte ailleurs
+        // dans l'app sont conditionnés par l'alerte, cf. StockStatutService).
         match ($filters['stock_statut']) {
-            StockStatut::STOCK_NEGATIF->value => $query->whereRaw("{$quantite} < 0"),
-            StockStatut::RUPTURE->value => $query->whereRaw("{$quantite} = 0"),
+            StockStatut::STOCK_NEGATIF->value => $query
+                ->whereRaw("{$disponible} = 1")
+                ->whereRaw("{$quantite} < 0"),
+            StockStatut::RUPTURE->value => $query
+                ->whereRaw("{$disponible} = 1")
+                ->whereRaw("{$quantite} = 0"),
             StockStatut::STOCK_FAIBLE->value => $query
-                ->whereRaw("{$alerteActive} = 1")
+                ->whereRaw("{$disponible} = 1")
                 ->whereRaw("{$quantite} > 0")
                 ->whereRaw("{$seuil} > 0", [$seuilOrganisation])
                 ->whereRaw("{$quantite} <= {$seuil}", [$seuilOrganisation]),
-            StockStatut::DISPONIBLE->value => $query->where(function (Builder $q) use ($quantite, $seuil, $seuilOrganisation, $alerteActive) {
-                $q->whereRaw("{$quantite} > {$seuil}", [$seuilOrganisation])
-                    ->orWhereRaw("{$alerteActive} = 0")
-                    ->orWhereRaw("{$seuil} <= 0", [$seuilOrganisation]);
-            })->whereRaw("{$quantite} > 0"),
+            StockStatut::DISPONIBLE->value => $query
+                ->whereRaw("{$disponible} = 1")
+                ->whereRaw("{$quantite} > 0")
+                ->whereRaw("({$seuil} <= 0 OR {$quantite} > {$seuil})", [$seuilOrganisation]),
             default => null,
         };
 
@@ -202,11 +218,13 @@ class StockController extends Controller
             // L'état (Rupture / Stock faible / Disponible) se base sur le DISPONIBLE — jamais le
             // physique brut : un stock physique positif mais entièrement réservé par des
             // commandes confirmées n'est plus vendable, il ne doit donc jamais afficher
-            // « Disponible » (cf. commentaire de stockQuery()).
+            // « Disponible » (cf. commentaire de stockQuery()). Fonction PURE (statutPour()) : le
+            // stock physique reste réel, jamais masqué par la disponibilité/l'alerte — cf.
+            // `disponible_sur_site` ci-dessous, exposé séparément pour l'affichage "Non
+            // disponible".
             $statut = $this->stockStatutService->statutPour(
                 (int) $row->qte_disponible,
                 (int) $row->seuil_effectif,
-                (bool) $row->alerte_active,
             );
             $dernierMouvement = $derniersMouvements->get($row->variante_id.'|'.$row->site_id);
 
@@ -231,6 +249,7 @@ class StockController extends Controller
                 'qte_bloquee' => null,
                 'qte_entrante' => null,
                 'seuil_effectif' => (int) $row->seuil_effectif,
+                'disponible_sur_site' => (bool) $row->disponible_sur_site,
                 'statut' => $statut->value,
                 'statut_label' => $statut->label(),
                 'dernier_mouvement' => $dernierMouvement ? [

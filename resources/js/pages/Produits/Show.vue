@@ -6,22 +6,14 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/vue3';
 import {
-    AlertTriangle,
-    ArrowDown,
     ArrowLeft,
-    ArrowUp,
-    Building2,
-    Factory,
     History,
     Image,
     Layers,
     Package,
     Pencil,
-    ShoppingCart,
     Sliders,
     Tag,
-    TrendingDown,
-    Warehouse,
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import AjusterStockModal from './partials/AjusterStockModal.vue';
@@ -36,8 +28,9 @@ interface SiteStock {
     site_nom: string | null;
     qte_stock: number;
     seuil_effectif: number;
+    disponible_sur_site: boolean;
     alerte_active: boolean;
-    statut: 'disponible' | 'stock_faible' | 'rupture';
+    statut: 'disponible' | 'stock_faible' | 'rupture' | 'stock_negatif';
     statut_label: string;
     updated_at: string | null;
 }
@@ -50,8 +43,9 @@ interface VarianteStockDetail {
     site_nom: string | null;
     qte_stock: number;
     seuil_effectif: number;
+    disponible_sur_site: boolean;
     alerte_active: boolean;
-    statut: 'disponible' | 'stock_faible' | 'rupture';
+    statut: 'disponible' | 'stock_faible' | 'rupture' | 'stock_negatif';
     statut_label: string;
 }
 
@@ -88,6 +82,10 @@ interface Media {
 interface Produit {
     id: string;
     nom: string;
+    categorie: {
+        id: string;
+        nom: string;
+    } | null;
     fournisseur: {
         id: string;
         nom_complet: string;
@@ -193,6 +191,13 @@ const varianteEnEdition = ref<Variante | null>(null);
 const prixUsineRequis = computed(() => props.produit.prix_usine_requis);
 const prixAchatApplicable = computed(() => props.produit.achetable);
 const prixVenteApplicable = computed(() => props.produit.vendable);
+const valeurStockVendable = computed(() => {
+    if (!props.produit.vendable || props.produit.prix_vente === null) {
+        return null;
+    }
+
+    return (props.produit.qte_stock ?? 0) * props.produit.prix_vente;
+});
 
 function editerVariante(variante: Variante) {
     varianteEnEdition.value = variante;
@@ -207,7 +212,14 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 function formatPrice(val: number | null): string {
     if (val === null || val === undefined) return '—';
-    return new Intl.NumberFormat('fr-FR').format(val) + ' GNF';
+    const montant = new Intl.NumberFormat('fr-FR', {
+        useGrouping: true,
+        maximumFractionDigits: 0,
+    })
+        .format(val)
+        .replace(/\u202f/g, '\u00a0');
+
+    return `${montant}\u00a0GNF`;
 }
 
 function formatQte(val: number | null | undefined): string {
@@ -242,7 +254,9 @@ function stockColorClass(produit: Produit): string {
 }
 
 function siteStockColor(s: SiteStock): string {
-    if (s.statut === 'rupture') return 'text-destructive';
+    if (!s.disponible_sur_site) return 'text-muted-foreground';
+    if (s.statut === 'rupture' || s.statut === 'stock_negatif')
+        return 'text-destructive';
     if (s.statut === 'stock_faible') return 'text-amber-600';
     return 'text-emerald-600';
 }
@@ -295,47 +309,51 @@ const ajustements = props.mouvements.map((m) => ({
             </div>
         </div>
 
-        <div class="mx-auto w-full max-w-[60rem] space-y-6 p-4 sm:p-6">
-            <!-- ─── Header desktop ─── -->
-            <div class="hidden items-start justify-between sm:flex">
-                <div class="flex items-center gap-3">
-                    <Link href="/backoffice/produits">
-                        <Button variant="ghost" size="icon" class="h-9 w-9">
-                            <ArrowLeft class="h-4 w-4" />
-                        </Button>
-                    </Link>
-                    <div>
-                        <p
-                            class="text-xs font-medium tracking-widest text-muted-foreground uppercase"
-                        >
-                            Produit
-                        </p>
-                        <h1
-                            class="mt-0.5 text-2xl font-semibold tracking-tight"
-                        >
-                            {{ produit.nom }}
-                        </h1>
-                        <p
-                            class="mt-0.5 font-mono text-sm text-muted-foreground"
-                        >
-                            {{ produit.sku || '—' }}
-                        </p>
-                    </div>
-                </div>
-                <div class="flex items-center gap-2">
+        <div
+            class="mx-auto w-full max-w-7xl space-y-5 px-4 py-5 sm:px-6 sm:py-6"
+        >
+            <!-- ─── En-tête inspiré du Checkout Form Apollo ─── -->
+            <section
+                class="relative overflow-hidden rounded-2xl border border-border/60 bg-muted/25 px-5 py-6 sm:px-8 sm:py-8 lg:min-h-[220px] lg:pr-[25rem]"
+            >
+                <Link
+                    href="/backoffice/produits"
+                    class="inline-flex items-center gap-2 text-sm font-semibold transition-colors hover:text-primary"
+                >
+                    <ArrowLeft class="h-4 w-4" />
+                    Produit
+                </Link>
+
+                <h1
+                    class="mt-7 max-w-3xl text-3xl leading-tight font-semibold tracking-tight sm:text-4xl"
+                >
+                    {{ produit.nom }}
+                </h1>
+                <p class="mt-2 text-sm text-muted-foreground">
+                    Référence
+                    <span class="ml-1 font-mono font-semibold text-emerald-600">
+                        {{ produit.sku || '—' }}
+                    </span>
+                </p>
+
+                <div class="mt-6 flex flex-wrap items-center gap-2">
                     <Button
                         variant="outline"
+                        size="sm"
+                        class="h-9 rounded-lg bg-background px-3.5"
                         @click="showHistoriqueModal = true"
                     >
-                        <History class="mr-2 h-4 w-4" />
+                        <History class="mr-1.5 h-4 w-4" />
                         Historique
                     </Button>
                     <Button
                         v-if="can_ajuster_stock && produit.has_stock"
                         variant="outline"
+                        size="sm"
+                        class="h-9 rounded-lg bg-background px-3.5"
                         @click="showStockModal = true"
                     >
-                        <Sliders class="mr-2 h-4 w-4" />
+                        <Sliders class="mr-1.5 h-4 w-4" />
                         Ajuster le stock
                     </Button>
                     <Link
@@ -345,8 +363,12 @@ const ajustements = props.mouvements.map((m) => ({
                         "
                         :href="`/backoffice/produits/${produit.id}/variantes`"
                     >
-                        <Button variant="outline">
-                            <Layers class="mr-2 h-4 w-4" />
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            class="h-9 rounded-lg bg-background px-3.5"
+                        >
+                            <Layers class="mr-1.5 h-4 w-4" />
                             Gérer les variantes
                         </Button>
                     </Link>
@@ -354,664 +376,580 @@ const ajustements = props.mouvements.map((m) => ({
                         v-if="can('produits.update')"
                         :href="`/backoffice/produits/${produit.id}/edit`"
                     >
-                        <Button>
-                            <Pencil class="mr-2 h-4 w-4" />
+                        <Button size="sm" class="h-9 rounded-lg px-4">
+                            <Pencil class="mr-1.5 h-4 w-4" />
                             Modifier
                         </Button>
                     </Link>
                 </div>
-            </div>
+            </section>
 
-            <!-- ─── Image + infos principales ─── -->
-            <div class="flex gap-5 rounded-xl border bg-card p-5">
-                <div
-                    class="h-24 w-24 shrink-0 overflow-hidden rounded-xl border bg-muted sm:h-32 sm:w-32"
+            <div
+                class="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-8"
+            >
+                <!-- ─── Panneau produit, à droite comme dans Apollo ─── -->
+                <aside
+                    class="relative z-10 order-first lg:order-last lg:-mt-64"
                 >
-                    <img
-                        v-if="produit.image_url"
-                        :src="produit.image_url"
-                        :alt="produit.nom"
-                        class="h-full w-full object-cover"
-                    />
-                    <div
-                        v-else
-                        class="flex h-full w-full items-center justify-center"
+                    <section
+                        class="overflow-hidden rounded-[1.5rem] border border-border/60 bg-card p-5 shadow-xl shadow-black/5"
                     >
-                        <Package class="h-10 w-10 text-muted-foreground/30" />
-                    </div>
-                </div>
-
-                <div class="flex min-w-0 flex-1 flex-col justify-between gap-3">
-                    <div class="sm:hidden">
-                        <div class="flex items-center gap-1.5">
-                            <span class="text-lg leading-tight font-semibold">{{
-                                produit.nom
-                            }}</span>
-                            <AlertTriangle
-                                v-if="produit.is_out_of_stock"
-                                class="h-4 w-4 shrink-0 text-red-500"
-                            />
-                            <AlertTriangle
-                                v-else-if="produit.is_low_stock"
-                                class="h-4 w-4 shrink-0 text-amber-500"
-                            />
-                        </div>
-                        <span class="font-mono text-xs text-muted-foreground">{{
-                            produit.sku || '—'
-                        }}</span>
-                    </div>
-
-                    <div class="flex flex-wrap items-center gap-2">
-                        <StatusDot
-                            :label="produit.statut_label"
-                            :dot-class="
-                                produit.statut === 'actif'
-                                    ? 'bg-emerald-500'
-                                    : produit.statut === 'inactif'
-                                      ? 'bg-zinc-400 dark:bg-zinc-500'
-                                      : 'bg-orange-400'
-                            "
-                        />
-                        <span
-                            class="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium text-muted-foreground"
+                        <div
+                            class="relative aspect-[4/3] overflow-hidden rounded-2xl border border-border/60 bg-[#d6d4d4]"
                         >
-                            <Layers class="h-3 w-3" />
-                            {{ produit.type_nom || '—' }}
-                        </span>
-                        <StatusDot
-                            v-if="produit.is_out_of_stock"
-                            status="rupture"
-                            :label="`Rupture — ${produit.nombre_alertes_stock} site(s)`"
-                        />
-                        <StatusDot
-                            v-else-if="produit.is_low_stock"
-                            status="stock_faible"
-                            :label="`Stock faible — ${produit.nombre_alertes_stock} alerte(s)`"
-                        />
-                    </div>
+                            <img
+                                v-if="produit.image_url"
+                                :src="produit.image_url"
+                                :alt="produit.nom"
+                                class="relative z-10 h-full w-full object-contain p-2"
+                            />
+                            <div
+                                v-else
+                                class="flex h-full w-full flex-col items-center justify-center text-muted-foreground"
+                            >
+                                <Package class="h-12 w-12 opacity-25" />
+                                <span class="mt-2 text-xs"
+                                    >Aucune photo principale</span
+                                >
+                            </div>
+                        </div>
 
-                    <div class="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-                        <div>
-                            <span class="text-xs text-muted-foreground"
-                                >Référence</span
+                        <div class="mt-5 divide-y divide-border/60">
+                            <div
+                                class="flex items-center justify-between gap-4 py-3"
                             >
-                            <p class="font-mono font-semibold">
-                                {{ produit.sku || '—' }}
-                            </p>
-                        </div>
-                        <div>
-                            <span class="text-xs text-muted-foreground"
-                                >Code-barres</span
+                                <span class="text-sm text-muted-foreground"
+                                    >Statut</span
+                                >
+                                <StatusDot
+                                    :status="produit.statut"
+                                    :label="produit.statut_label"
+                                    size="sm"
+                                />
+                            </div>
+                            <div
+                                class="flex items-center justify-between gap-4 py-3"
                             >
-                            <p class="font-mono font-semibold">
-                                {{ produit.code_barres || '—' }}
-                            </p>
-                        </div>
-                        <div class="col-span-2">
-                            <span class="text-xs text-muted-foreground"
-                                >Fournisseur</span
+                                <span class="text-sm text-muted-foreground"
+                                    >Catégorie</span
+                                >
+                                <span class="text-right text-sm font-medium">
+                                    {{ produit.categorie?.nom || '—' }}
+                                </span>
+                            </div>
+                            <div
+                                class="flex items-center justify-between gap-4 py-3"
                             >
-                            <p class="font-semibold">
-                                {{ produit.fournisseur?.nom_complet || '—' }}
+                                <span class="text-sm text-muted-foreground"
+                                    >Type</span
+                                >
+                                <span class="text-right text-sm font-medium">
+                                    {{ produit.type_nom || '—' }}
+                                </span>
+                            </div>
+                            <div
+                                class="flex items-center justify-between gap-4 py-3"
+                            >
+                                <span class="text-sm text-muted-foreground"
+                                    >Code-barres</span
+                                >
                                 <span
-                                    v-if="produit.fournisseur?.phone"
-                                    class="font-normal text-muted-foreground"
-                                    >— {{ produit.fournisseur.phone }}</span
+                                    class="text-right font-mono text-sm font-medium"
                                 >
+                                    {{ produit.code_barres || '—' }}
+                                </span>
+                            </div>
+                            <div
+                                class="flex items-start justify-between gap-4 py-3"
+                            >
+                                <span class="text-sm text-muted-foreground"
+                                    >Fournisseur</span
+                                >
+                                <span class="text-right text-sm font-medium">
+                                    {{
+                                        produit.fournisseur?.nom_complet || '—'
+                                    }}
+                                    <small
+                                        v-if="produit.fournisseur?.phone"
+                                        class="mt-0.5 block font-normal text-muted-foreground"
+                                    >
+                                        {{ produit.fournisseur.phone }}
+                                    </small>
+                                </span>
+                            </div>
+                        </div>
+
+                        <div
+                            v-if="valeurStockVendable !== null"
+                            class="mt-5 rounded-xl bg-primary px-5 py-4 text-center text-primary-foreground"
+                        >
+                            <p class="text-xs font-medium opacity-85">
+                                Valeur du stock vendable
+                            </p>
+                            <p
+                                class="mt-1.5 text-xl leading-none font-bold tracking-tight whitespace-nowrap tabular-nums sm:text-2xl"
+                            >
+                                {{ formatPrice(valeurStockVendable) }}
                             </p>
                         </div>
-                    </div>
-                </div>
-            </div>
+                    </section>
+                </aside>
 
-            <!-- ─── Stock global ─── -->
-            <div v-if="produit.has_stock" class="rounded-xl border bg-card p-5">
-                <h2
-                    class="mb-4 flex items-center gap-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase"
-                >
-                    <Warehouse class="h-4 w-4" />
-                    Stock total
-                </h2>
-                <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                    <div class="rounded-lg bg-muted/50 p-4 text-center">
-                        <p class="mb-1 text-xs text-muted-foreground">
-                            Quantité totale
-                        </p>
-                        <p
-                            class="text-3xl font-bold tabular-nums"
-                            :class="stockColorClass(produit)"
-                        >
-                            {{
-                                new Intl.NumberFormat('fr-FR').format(
-                                    produit.qte_stock ?? 0,
-                                )
-                            }}
-                        </p>
-                        <div
-                            v-if="produit.is_out_of_stock"
-                            class="mt-1 flex items-center justify-center gap-1 text-xs text-destructive"
-                        >
-                            <AlertTriangle class="h-3 w-3" /> Rupture
-                        </div>
-                        <div
-                            v-else-if="produit.is_low_stock"
-                            class="mt-1 flex items-center justify-center gap-1 text-xs text-amber-600"
-                        >
-                            <AlertTriangle class="h-3 w-3" /> Stock faible
-                        </div>
-                    </div>
-                    <div class="rounded-lg bg-muted/50 p-4 text-center">
-                        <p class="mb-1 text-xs text-muted-foreground">
-                            Alerte de stock faible
-                        </p>
-                        <p
-                            class="text-3xl font-bold text-foreground tabular-nums"
-                        >
-                            {{ produit.nombre_sites_alerte_active }}/{{
-                                produit.nombre_sites_stock
-                            }}
-                        </p>
-                        <p class="mt-1 text-[11px] text-muted-foreground">
-                            Agence(s) activée(s) — voir « Stock par agence »
-                        </p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ─── Stock par agence ─── -->
-            <div
-                v-if="produit.has_stock && produit.stocks_par_site.length > 0"
-                class="rounded-xl border bg-card p-5"
-            >
-                <h2
-                    class="mb-4 flex items-center gap-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase"
-                >
-                    <Building2 class="h-4 w-4" />
-                    Stock par agence
-                </h2>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr class="border-b text-xs text-muted-foreground">
-                                <th class="pr-4 pb-2 text-left font-medium">
-                                    Site
-                                </th>
-                                <th class="pr-4 pb-2 text-right font-medium">
-                                    Stock
-                                </th>
-                                <th class="pr-4 pb-2 text-left font-medium">
-                                    État
-                                </th>
-                                <th class="pr-4 pb-2 text-left font-medium">
-                                    Alerte
-                                </th>
-                                <th class="pr-4 pb-2 text-right font-medium">
-                                    Seuil
-                                </th>
-                                <th class="pb-2 text-left font-medium">
-                                    Dernière mise à jour
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-border/50">
-                            <tr
-                                v-for="s in produit.stocks_par_site"
-                                :key="s.site_id"
-                            >
-                                <td class="py-2.5 pr-4">
-                                    <div class="flex items-center gap-2">
-                                        <span
-                                            class="rounded bg-muted px-1.5 py-0.5 font-mono text-xs font-semibold text-muted-foreground"
-                                        >
-                                            {{ s.site_code ?? '?' }}
-                                        </span>
-                                        <span class="text-sm font-medium">{{
-                                            s.site_nom ?? '—'
-                                        }}</span>
-                                    </div>
-                                </td>
-                                <td
-                                    class="py-2.5 pr-4 text-right font-semibold tabular-nums"
-                                    :class="siteStockColor(s)"
-                                >
-                                    {{ formatQte(s.qte_stock) }}
-                                </td>
-                                <td class="py-2.5 pr-4">
-                                    <StatusDot
-                                        :status="s.statut"
-                                        :label="s.statut_label"
-                                    />
-                                </td>
-                                <td
-                                    class="py-2.5 pr-4 text-xs"
-                                    :class="
-                                        s.alerte_active
-                                            ? 'text-foreground'
-                                            : 'text-muted-foreground'
-                                    "
-                                >
-                                    {{ s.alerte_active ? 'Activée' : '—' }}
-                                </td>
-                                <td
-                                    class="py-2.5 pr-4 text-right text-muted-foreground tabular-nums"
-                                >
-                                    {{
-                                        s.alerte_active
-                                            ? formatQte(s.seuil_effectif)
-                                            : '—'
-                                    }}
-                                </td>
-                                <td
-                                    class="py-2.5 text-xs text-muted-foreground"
-                                >
-                                    {{ formatDateShort(s.updated_at) }}
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- ─── Détail par variante × site ─── -->
-            <!-- Un stock élevé sur une variante/un site ne doit jamais masquer une alerte
-                 locale ailleurs (cf. décision produit) : ce détail montre précisément où se
-                 trouve le problème plutôt que le seul agrégat par agence ci-dessus. -->
-            <div
-                v-if="
-                    produit.has_stock &&
-                    produit.variantes.length > 1 &&
-                    produit.variante_stocks_detail.length > 0
-                "
-                class="rounded-xl border bg-card p-5"
-            >
-                <h2
-                    class="mb-4 flex items-center gap-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase"
-                >
-                    <Layers class="h-4 w-4" />
-                    Détail par variante
-                </h2>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr class="border-b text-xs text-muted-foreground">
-                                <th class="pr-4 pb-2 text-left font-medium">
-                                    Variante
-                                </th>
-                                <th class="pr-4 pb-2 text-left font-medium">
-                                    Site
-                                </th>
-                                <th class="pr-4 pb-2 text-right font-medium">
-                                    Stock
-                                </th>
-                                <th class="pb-2 text-left font-medium">État</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-border/50">
-                            <tr
-                                v-for="d in produit.variante_stocks_detail"
-                                :key="`${d.variante_id}-${d.site_id}`"
-                            >
-                                <td class="py-2.5 pr-4 font-medium">
-                                    {{ d.variante_libelle || 'Par défaut' }}
-                                </td>
-                                <td class="py-2.5 pr-4 text-muted-foreground">
-                                    {{ d.site_code ?? d.site_nom ?? '—' }}
-                                </td>
-                                <td
-                                    class="py-2.5 pr-4 text-right font-semibold tabular-nums"
-                                >
-                                    {{ formatQte(d.qte_stock) }}
-                                </td>
-                                <td class="py-2.5">
-                                    <StatusDot
-                                        :status="d.statut"
-                                        :label="d.statut_label"
-                                    />
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- ─── Prix ─── -->
-            <div class="rounded-xl border bg-card p-5">
-                <h2
-                    class="mb-4 flex items-center gap-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase"
-                >
-                    <Tag class="h-4 w-4" />
-                    Tarification
-                </h2>
-                <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                    <div
-                        v-if="produit.prix_vente !== null"
-                        class="rounded-lg bg-muted/50 p-4"
-                    >
-                        <div class="mb-1 flex items-center gap-1.5">
-                            <ShoppingCart
-                                class="h-3.5 w-3.5 text-muted-foreground"
-                            />
-                            <span class="text-xs text-muted-foreground"
-                                >Prix de vente</span
-                            >
-                        </div>
-                        <p class="text-base font-semibold">
-                            {{ formatPrice(produit.prix_vente) }}
-                        </p>
-                    </div>
-                    <div
-                        v-if="produit.prix_achat !== null"
-                        class="rounded-lg bg-muted/50 p-4"
-                    >
-                        <div class="mb-1 flex items-center gap-1.5">
-                            <TrendingDown
-                                class="h-3.5 w-3.5 text-muted-foreground"
-                            />
-                            <span class="text-xs text-muted-foreground"
-                                >Prix d'achat</span
-                            >
-                        </div>
-                        <p class="text-base font-semibold">
-                            {{ formatPrice(produit.prix_achat) }}
-                        </p>
-                    </div>
-                    <div
-                        v-if="produit.prix_usine !== null"
-                        class="rounded-lg bg-muted/50 p-4"
-                    >
-                        <div class="mb-1 flex items-center gap-1.5">
-                            <Factory
-                                class="h-3.5 w-3.5 text-muted-foreground"
-                            />
-                            <span class="text-xs text-muted-foreground"
-                                >Prix usine — Tous véhicules</span
-                            >
-                        </div>
-                        <p class="text-base font-semibold">
-                            {{ formatPrice(produit.prix_usine) }}
-                        </p>
-                    </div>
-                    <div
-                        v-if="produit.prix_usine_tricycle !== null"
-                        class="rounded-lg bg-muted/50 p-4"
-                    >
-                        <div class="mb-1 flex items-center gap-1.5">
-                            <Factory
-                                class="h-3.5 w-3.5 text-muted-foreground"
-                            />
-                            <span class="text-xs text-muted-foreground"
-                                >Prix usine — Tricycle</span
-                            >
-                        </div>
-                        <p class="text-base font-semibold">
-                            {{ formatPrice(produit.prix_usine_tricycle) }}
-                        </p>
-                    </div>
-                    <div
-                        v-if="produit.prix_externe !== null"
-                        class="rounded-lg bg-muted/50 p-4"
-                    >
-                        <div class="mb-1 flex items-center gap-1.5">
-                            <span class="text-xs text-muted-foreground"
-                                >Prix externe</span
-                            >
-                        </div>
-                        <p class="text-base font-semibold">
-                            {{ formatPrice(produit.prix_externe) }}
-                        </p>
-                    </div>
-                    <div
-                        v-if="produit.prix_distributeur !== null"
-                        class="rounded-lg bg-muted/50 p-4"
-                    >
-                        <div class="mb-1 flex items-center gap-1.5">
-                            <span class="text-xs text-muted-foreground"
-                                >Prix distributeur</span
-                            >
-                        </div>
-                        <p class="text-base font-semibold">
-                            {{ formatPrice(produit.prix_distributeur) }}
-                        </p>
-                    </div>
-                    <div
-                        v-if="produit.prix_revendeur !== null"
-                        class="rounded-lg bg-muted/50 p-4"
-                    >
-                        <div class="mb-1 flex items-center gap-1.5">
-                            <span class="text-xs text-muted-foreground"
-                                >Prix revendeur</span
-                            >
-                        </div>
-                        <p class="text-base font-semibold">
-                            {{ formatPrice(produit.prix_revendeur) }}
-                        </p>
-                    </div>
-                    <div
-                        v-if="produit.cout !== null"
-                        class="rounded-lg bg-muted/50 p-4"
-                    >
-                        <div class="mb-1 flex items-center gap-1.5">
-                            <span class="text-xs text-muted-foreground"
-                                >Coût</span
-                            >
-                        </div>
-                        <p class="text-base font-semibold">
-                            {{ formatPrice(produit.cout) }}
-                        </p>
-                    </div>
+                <main class="order-last min-w-0 space-y-5 lg:order-first">
+                    <!-- ─── Stock par agence ─── -->
                     <div
                         v-if="
-                            produit.prix_vente === null &&
-                            produit.prix_achat === null &&
-                            produit.prix_usine === null &&
-                            produit.prix_externe === null &&
-                            produit.prix_revendeur === null &&
-                            produit.prix_distributeur === null &&
-                            produit.cout === null
+                            produit.has_stock &&
+                            produit.stocks_par_site.length > 0
                         "
-                        class="col-span-2 py-4 text-center text-sm text-muted-foreground sm:col-span-4"
+                        class="overflow-hidden rounded-2xl border border-border/70 bg-card p-5 shadow-sm sm:p-6"
                     >
-                        Aucun tarif renseigné
+                        <div
+                            class="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
+                        >
+                            <div>
+                                <h2 class="text-sm font-semibold">
+                                    Stock par agence
+                                </h2>
+                                <p class="mt-1 text-xs text-muted-foreground">
+                                    Disponibilité et seuil pour chaque agence
+                                </p>
+                            </div>
+                            <div v-if="produit.has_stock" class="sm:text-right">
+                                <p
+                                    class="text-2xl font-semibold tracking-tight tabular-nums"
+                                    :class="stockColorClass(produit)"
+                                >
+                                    {{ formatQte(produit.qte_stock ?? 0) }}
+                                    <span
+                                        class="text-sm font-medium text-muted-foreground"
+                                        >unités</span
+                                    >
+                                </p>
+                                <p class="mt-1 text-xs text-muted-foreground">
+                                    {{ produit.nombre_sites_stock }}
+                                    {{
+                                        produit.nombre_sites_stock > 1
+                                            ? 'agences'
+                                            : 'agence'
+                                    }}
+                                    ·
+                                    <span
+                                        :class="{
+                                            'font-medium text-amber-600':
+                                                produit.nombre_alertes_stock >
+                                                0,
+                                        }"
+                                    >
+                                        {{ produit.nombre_alertes_stock }}
+                                        {{
+                                            produit.nombre_alertes_stock > 1
+                                                ? 'alertes'
+                                                : 'alerte'
+                                        }}
+                                    </span>
+                                </p>
+                            </div>
+                        </div>
+                        <div
+                            class="overflow-x-auto rounded-xl border border-border/60"
+                        >
+                            <table class="w-full text-sm">
+                                <thead class="bg-muted/30">
+                                    <tr
+                                        class="border-b text-xs text-muted-foreground"
+                                    >
+                                        <th
+                                            class="px-4 py-3 text-left font-medium"
+                                        >
+                                            Agence
+                                        </th>
+                                        <th
+                                            class="px-4 py-3 text-right font-medium"
+                                        >
+                                            Stock
+                                        </th>
+                                        <th
+                                            class="px-4 py-3 text-left font-medium"
+                                        >
+                                            État
+                                        </th>
+                                        <th
+                                            class="px-4 py-3 text-right font-medium"
+                                        >
+                                            Seuil
+                                        </th>
+                                        <th
+                                            class="px-4 py-3 text-left font-medium"
+                                        >
+                                            Dernière mise à jour
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-border/50">
+                                    <tr
+                                        v-for="s in produit.stocks_par_site"
+                                        :key="s.site_id"
+                                        class="transition-colors hover:bg-muted/20"
+                                    >
+                                        <td class="px-4 py-3">
+                                            <div
+                                                class="flex items-center gap-2"
+                                            >
+                                                <span
+                                                    class="rounded bg-muted px-1.5 py-0.5 font-mono text-xs font-semibold text-muted-foreground"
+                                                >
+                                                    {{ s.site_code ?? '?' }}
+                                                </span>
+                                                <span
+                                                    class="text-sm font-medium"
+                                                    >{{
+                                                        s.site_nom ?? '—'
+                                                    }}</span
+                                                >
+                                            </div>
+                                        </td>
+                                        <td
+                                            class="px-4 py-3 text-right font-semibold tabular-nums"
+                                            :class="siteStockColor(s)"
+                                        >
+                                            {{ formatQte(s.qte_stock) }}
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <StatusDot
+                                                v-if="s.disponible_sur_site"
+                                                :status="s.statut"
+                                                :label="s.statut_label"
+                                            />
+                                            <StatusDot
+                                                v-else
+                                                label="Non disponible"
+                                                dot-class="bg-zinc-400 dark:bg-zinc-500"
+                                            />
+                                        </td>
+                                        <td
+                                            class="px-4 py-3 text-right text-muted-foreground tabular-nums"
+                                        >
+                                            {{
+                                                s.disponible_sur_site
+                                                    ? formatQte(
+                                                          s.seuil_effectif,
+                                                      )
+                                                    : '—'
+                                            }}
+                                        </td>
+                                        <td
+                                            class="px-4 py-3 text-xs whitespace-nowrap text-muted-foreground"
+                                        >
+                                            {{ formatDateShort(s.updated_at) }}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                </div>
-            </div>
 
-            <!-- ─── Photos ─── -->
-            <div class="rounded-xl border bg-card p-5">
-                <h2
-                    class="mb-4 flex items-center gap-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase"
-                >
-                    <Image class="h-4 w-4" />
-                    Photos
-                </h2>
-                <GalerieMedias
-                    :produit-id="produit.id"
-                    :medias="produit.medias"
-                    :max-photos="limites.max_photos_produit"
-                />
-            </div>
-
-            <!-- ─── Variantes ─── -->
-            <div
-                v-if="produit.variantes.length > 1"
-                class="rounded-xl border bg-card p-5"
-            >
-                <h2
-                    class="mb-4 flex items-center gap-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase"
-                >
-                    <Layers class="h-4 w-4" />
-                    Variantes
-                    <span
-                        class="font-normal text-muted-foreground/70 normal-case"
-                        >({{ produit.variantes.length }})</span
+                    <!-- ─── Détail par variante × site ─── -->
+                    <!-- Un stock élevé sur une variante/un site ne doit jamais masquer une alerte
+                 locale ailleurs (cf. décision produit) : ce détail montre précisément où se
+                 trouve le problème plutôt que le seul agrégat par agence ci-dessus. -->
+                    <div
+                        v-if="
+                            produit.has_stock &&
+                            produit.variantes.length > 1 &&
+                            produit.variante_stocks_detail.length > 0
+                        "
+                        class="overflow-hidden rounded-2xl border border-border/70 bg-card p-5 shadow-sm sm:p-6"
                     >
-                </h2>
-                <VariantesGroupees
-                    :variantes="produit.variantes"
-                    :editable="can('produits.update')"
-                    :medias="produit.medias"
-                    :produit-id="produit.id"
-                    @edit-variante="
-                        (v) =>
-                            editerVariante(
-                                produit.variantes.find((pv) => pv.id === v.id)!,
-                            )
-                    "
-                />
-            </div>
-
-            <!-- ─── Description ─── -->
-            <div
-                v-if="produit.description"
-                class="rounded-xl border bg-card p-5"
-            >
-                <h2
-                    class="mb-3 text-sm font-semibold tracking-wide text-muted-foreground uppercase"
-                >
-                    Description
-                </h2>
-                <div
-                    class="prose prose-sm max-w-none text-sm leading-relaxed text-foreground/80"
-                    v-html="produit.description"
-                />
-            </div>
-
-            <!-- ─── Méta ─── -->
-            <div class="rounded-xl border bg-card p-5">
-                <h2
-                    class="mb-4 text-sm font-semibold tracking-wide text-muted-foreground uppercase"
-                >
-                    Informations
-                </h2>
-                <div class="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
-                    <div>
-                        <span class="text-xs text-muted-foreground"
-                            >Créé le</span
+                        <h2
+                            class="mb-4 flex items-center gap-2 text-sm font-semibold"
                         >
-                        <p class="font-medium">
-                            {{ formatDate(produit.created_at) }}
-                        </p>
+                            <Layers class="h-4 w-4 text-muted-foreground" />
+                            Détail par variante
+                        </h2>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr
+                                        class="border-b text-xs text-muted-foreground"
+                                    >
+                                        <th
+                                            class="pr-4 pb-2 text-left font-medium"
+                                        >
+                                            Variante
+                                        </th>
+                                        <th
+                                            class="pr-4 pb-2 text-left font-medium"
+                                        >
+                                            Site
+                                        </th>
+                                        <th
+                                            class="pr-4 pb-2 text-right font-medium"
+                                        >
+                                            Stock
+                                        </th>
+                                        <th class="pb-2 text-left font-medium">
+                                            État
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-border/50">
+                                    <tr
+                                        v-for="d in produit.variante_stocks_detail"
+                                        :key="`${d.variante_id}-${d.site_id}`"
+                                    >
+                                        <td class="py-2.5 pr-4 font-medium">
+                                            {{
+                                                d.variante_libelle ||
+                                                'Par défaut'
+                                            }}
+                                        </td>
+                                        <td
+                                            class="py-2.5 pr-4 text-muted-foreground"
+                                        >
+                                            {{
+                                                d.site_code ?? d.site_nom ?? '—'
+                                            }}
+                                        </td>
+                                        <td
+                                            class="py-2.5 pr-4 text-right font-semibold tabular-nums"
+                                        >
+                                            {{ formatQte(d.qte_stock) }}
+                                        </td>
+                                        <td class="py-2.5">
+                                            <StatusDot
+                                                v-if="d.disponible_sur_site"
+                                                :status="d.statut"
+                                                :label="d.statut_label"
+                                            />
+                                            <StatusDot
+                                                v-else
+                                                label="Non disponible"
+                                                dot-class="bg-zinc-400 dark:bg-zinc-500"
+                                            />
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                    <div>
-                        <span class="text-xs text-muted-foreground"
-                            >Mis à jour le</span
+
+                    <!-- ─── Prix ─── -->
+                    <div
+                        class="overflow-hidden rounded-2xl border border-border/50 bg-muted/30 p-5 sm:p-6"
+                    >
+                        <h2
+                            class="mb-4 flex items-center gap-2 text-sm font-semibold"
                         >
-                        <p class="font-medium">
-                            {{ formatDate(produit.updated_at) }}
-                        </p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ─── Mouvements de stock ─── -->
-            <div v-if="produit.has_stock" class="rounded-xl border bg-card p-5">
-                <h2
-                    class="mb-4 flex items-center gap-2 text-sm font-semibold tracking-wide text-muted-foreground uppercase"
-                >
-                    <History class="h-4 w-4" />
-                    Mouvements de stock récents
-                </h2>
-
-                <div
-                    v-if="mouvements.length === 0"
-                    class="py-6 text-center text-sm text-muted-foreground"
-                >
-                    Aucun mouvement de stock enregistré.
-                </div>
-
-                <div v-else class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr class="border-b text-xs text-muted-foreground">
-                                <th class="w-36 pb-2 text-left font-medium">
-                                    Date &amp; heure
-                                </th>
-                                <th class="w-28 pb-2 text-left font-medium">
-                                    Site
-                                </th>
-                                <th class="w-40 pb-2 text-left font-medium">
-                                    Par
-                                </th>
-                                <th class="w-28 pb-2 text-center font-medium">
-                                    Action
-                                </th>
-                                <th class="w-24 pb-2 text-right font-medium">
-                                    Avant
-                                </th>
-                                <th class="w-24 pb-2 text-right font-medium">
-                                    Après
-                                </th>
-                                <th class="pb-2 pl-6 text-left font-medium">
-                                    Motif
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-border/50">
-                            <tr
-                                v-for="m in mouvements"
-                                :key="m.id"
-                                class="group"
+                            <Tag class="h-4 w-4 text-muted-foreground" />
+                            Tarification
+                        </h2>
+                        <dl
+                            class="grid gap-x-10 text-sm md:grid-cols-2 [&_dd]:text-[15px] [&_dd]:tracking-tight [&_dd]:whitespace-nowrap [&>div]:border-b [&>div]:border-border/60"
+                        >
+                            <div
+                                v-if="produit.prix_vente !== null"
+                                class="flex items-center justify-between gap-6 py-3"
                             >
-                                <td
-                                    class="w-36 py-2.5 pr-4 font-mono text-xs text-muted-foreground"
+                                <dt class="text-muted-foreground">
+                                    Prix de vente
+                                </dt>
+                                <dd class="font-semibold tabular-nums">
+                                    {{ formatPrice(produit.prix_vente) }}
+                                </dd>
+                            </div>
+                            <div
+                                v-if="produit.prix_achat !== null"
+                                class="flex items-center justify-between gap-6 py-3"
+                            >
+                                <dt class="text-muted-foreground">
+                                    Prix d’achat
+                                </dt>
+                                <dd class="font-semibold tabular-nums">
+                                    {{ formatPrice(produit.prix_achat) }}
+                                </dd>
+                            </div>
+                            <div
+                                v-if="produit.prix_usine !== null"
+                                class="flex items-center justify-between gap-6 py-3"
+                            >
+                                <dt class="text-muted-foreground">
+                                    Prix usine — Tous véhicules
+                                </dt>
+                                <dd class="font-semibold tabular-nums">
+                                    {{ formatPrice(produit.prix_usine) }}
+                                </dd>
+                            </div>
+                            <div
+                                v-if="produit.prix_usine_tricycle !== null"
+                                class="flex items-center justify-between gap-6 py-3"
+                            >
+                                <dt class="text-muted-foreground">
+                                    Prix usine — Tricycle
+                                </dt>
+                                <dd class="font-semibold tabular-nums">
+                                    {{
+                                        formatPrice(produit.prix_usine_tricycle)
+                                    }}
+                                </dd>
+                            </div>
+                            <div
+                                v-if="produit.prix_externe !== null"
+                                class="flex items-center justify-between gap-6 py-3"
+                            >
+                                <dt class="text-muted-foreground">
+                                    Prix externe
+                                </dt>
+                                <dd class="font-semibold tabular-nums">
+                                    {{ formatPrice(produit.prix_externe) }}
+                                </dd>
+                            </div>
+                            <div
+                                v-if="produit.prix_distributeur !== null"
+                                class="flex items-center justify-between gap-6 py-3"
+                            >
+                                <dt class="text-muted-foreground">
+                                    Prix distributeur
+                                </dt>
+                                <dd class="font-semibold tabular-nums">
+                                    {{ formatPrice(produit.prix_distributeur) }}
+                                </dd>
+                            </div>
+                            <div
+                                v-if="produit.prix_revendeur !== null"
+                                class="flex items-center justify-between gap-6 py-3"
+                            >
+                                <dt class="text-muted-foreground">
+                                    Prix revendeur
+                                </dt>
+                                <dd class="font-semibold tabular-nums">
+                                    {{ formatPrice(produit.prix_revendeur) }}
+                                </dd>
+                            </div>
+                            <div
+                                v-if="produit.cout !== null"
+                                class="flex items-center justify-between gap-6 py-3"
+                            >
+                                <dt class="text-muted-foreground">Coût</dt>
+                                <dd class="font-semibold tabular-nums">
+                                    {{ formatPrice(produit.cout) }}
+                                </dd>
+                            </div>
+                            <div
+                                v-if="
+                                    produit.prix_vente === null &&
+                                    produit.prix_achat === null &&
+                                    produit.prix_usine === null &&
+                                    produit.prix_externe === null &&
+                                    produit.prix_revendeur === null &&
+                                    produit.prix_distributeur === null &&
+                                    produit.cout === null
+                                "
+                                class="py-6 text-center text-sm text-muted-foreground md:col-span-2"
+                            >
+                                Aucun tarif renseigné
+                            </div>
+                        </dl>
+                    </div>
+
+                    <!-- ─── Photos ─── -->
+                    <div
+                        class="overflow-hidden rounded-2xl border border-border/70 bg-card p-5 shadow-sm sm:p-6"
+                    >
+                        <h2
+                            class="mb-4 flex items-center gap-2 text-sm font-semibold"
+                        >
+                            <Image class="h-4 w-4 text-muted-foreground" />
+                            Photos
+                        </h2>
+                        <GalerieMedias
+                            :produit-id="produit.id"
+                            :medias="produit.medias"
+                            :max-photos="limites.max_photos_produit"
+                        />
+                    </div>
+
+                    <!-- ─── Variantes ─── -->
+                    <div
+                        v-if="produit.variantes.length > 1"
+                        class="overflow-hidden rounded-2xl border border-border/70 bg-card p-5 shadow-sm sm:p-6"
+                    >
+                        <h2
+                            class="mb-4 flex items-center gap-2 text-sm font-semibold"
+                        >
+                            <Layers class="h-4 w-4 text-muted-foreground" />
+                            Variantes
+                            <span
+                                class="font-normal text-muted-foreground/70 normal-case"
+                                >({{ produit.variantes.length }})</span
+                            >
+                        </h2>
+                        <VariantesGroupees
+                            :variantes="produit.variantes"
+                            :editable="can('produits.update')"
+                            :medias="produit.medias"
+                            :produit-id="produit.id"
+                            @edit-variante="
+                                (v) =>
+                                    editerVariante(
+                                        produit.variantes.find(
+                                            (pv) => pv.id === v.id,
+                                        )!,
+                                    )
+                            "
+                        />
+                    </div>
+
+                    <!-- ─── Informations complémentaires ─── -->
+                    <div
+                        class="overflow-hidden rounded-2xl border border-border/70 bg-card p-5 shadow-sm sm:p-6"
+                    >
+                        <h2 class="mb-5 text-sm font-semibold">
+                            Informations complémentaires
+                        </h2>
+                        <div
+                            class="grid gap-6"
+                            :class="{
+                                'lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.6fr)]':
+                                    produit.description,
+                            }"
+                        >
+                            <section
+                                v-if="produit.description"
+                                class="lg:border-r lg:border-border/60 lg:pr-8"
+                            >
+                                <h3
+                                    class="mb-2 text-xs font-medium text-muted-foreground"
                                 >
-                                    {{ formatDateShort(m.created_at) }}
-                                </td>
-                                <td class="w-28 py-2.5 pr-4">
-                                    <span
-                                        v-if="m.site_code || m.site_nom"
-                                        class="rounded bg-muted px-1.5 py-0.5 font-mono text-xs font-medium text-muted-foreground"
-                                    >
-                                        {{ m.site_code ?? m.site_nom }}
+                                    Description
+                                </h3>
+                                <div
+                                    class="prose prose-sm max-w-none text-sm leading-relaxed text-foreground/80"
+                                    v-html="produit.description"
+                                />
+                            </section>
+
+                            <div class="grid gap-4 text-sm sm:grid-cols-2">
+                                <div>
+                                    <span class="text-xs text-muted-foreground">
+                                        Créé le
                                     </span>
-                                    <span v-else class="text-muted-foreground"
-                                        >—</span
-                                    >
-                                </td>
-                                <td class="w-40 py-2.5 pr-4">
-                                    {{ m.createur_nom || '—' }}
-                                </td>
-                                <td class="w-28 py-2.5 pr-4 text-center">
-                                    <span
-                                        v-if="m.is_initial"
-                                        class="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-950/30 dark:text-blue-400"
-                                    >
-                                        {{ m.quantite }}
+                                    <p class="mt-1 font-medium">
+                                        {{ formatDate(produit.created_at) }}
+                                    </p>
+                                </div>
+                                <div>
+                                    <span class="text-xs text-muted-foreground">
+                                        Mis à jour le
                                     </span>
-                                    <span
-                                        v-else-if="m.type === 'entree'"
-                                        class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"
-                                    >
-                                        <ArrowUp class="h-3 w-3" />
-                                        +{{ m.quantite }}
-                                    </span>
-                                    <span
-                                        v-else
-                                        class="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-950/30 dark:text-red-400"
-                                    >
-                                        <ArrowDown class="h-3 w-3" />
-                                        -{{ m.quantite }}
-                                    </span>
-                                </td>
-                                <td
-                                    class="w-24 py-2.5 pr-4 text-right text-muted-foreground tabular-nums"
-                                >
-                                    {{ formatQte(m.stock_avant) }}
-                                </td>
-                                <td
-                                    class="w-24 py-2.5 pr-4 text-right font-semibold tabular-nums"
-                                >
-                                    {{ formatQte(m.stock_apres) }}
-                                </td>
-                                <td
-                                    class="py-2.5 pl-6 text-xs text-muted-foreground"
-                                >
-                                    {{ m.motif_label || '—' }}
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+                                    <p class="mt-1 font-medium">
+                                        {{ formatDate(produit.updated_at) }}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </main>
             </div>
         </div>
 

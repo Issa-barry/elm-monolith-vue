@@ -73,6 +73,12 @@ interface MembreLigne {
     montant_par_pack: number;
     ordre: number;
     _errors: Partial<Record<'role' | 'telephone', string>>;
+    // Résultat du contrôle live (verifierTelephone) pour la valeur ACTUELLE de telephone —
+    // undefined : jamais vérifié depuis la dernière modification, null : vérifié sans conflit,
+    // string : vérifié, message de conflit à afficher. Remis à undefined à chaque frappe
+    // (onPhoneInput) pour ne jamais garder un verdict obsolète.
+    _serverConflict?: string | null;
+    _phoneChecking?: boolean;
 }
 
 /** Barème Propriétaire ET Livraison résolus pour une
@@ -216,6 +222,9 @@ function addLigne() {
 
 function removeLigne(idx: number) {
     markChanged();
+    // Les index changent après le splice : toute vérification en attente porterait sur la
+    // mauvaise ligne, on annule tout plutôt que de tenter un réalignement.
+    Object.values(phoneCheckTimers).forEach((t) => clearTimeout(t));
     membres.value.splice(idx, 1);
     membres.value.forEach((m, i) => (m.ordre = i));
 }
@@ -247,7 +256,93 @@ function onPhoneInput(e: Event, idx: number) {
     const local = raw.slice(0, 9);
     membres.value[idx].telephone = local;
     (e.target as HTMLInputElement).value = local;
+
+    // Le numéro a changé : le dernier verdict serveur (le cas échéant) ne s'applique plus.
+    // _phoneChecking est aussi remis à false ici — une requête encore en vol pour l'ANCIENNE
+    // valeur se sait obsolète (garde phoneAtCallTime dans checkTelephoneConflict) et ne le
+    // remettra pas à true à sa résolution ; sans ce reset, raccourcir un numéro déjà à 9
+    // chiffres pendant une vérification en cours bloquerait "Suivant" indéfiniment.
+    membres.value[idx]._serverConflict = undefined;
+    membres.value[idx]._phoneChecking = false;
+    delete membres.value[idx]._errors.telephone;
+    scheduleTelephoneCheck(idx);
 }
+
+function onPhoneBlur(idx: number) {
+    clearTimeout(phoneCheckTimers[idx]);
+    void checkTelephoneConflict(idx);
+}
+
+// ── Contrôle live du téléphone (avant "Suivant") ───────────────────────────
+// Le conflit (numéro déjà affecté à un autre livreur/personne, cf.
+// EquipeLivraisonController::detecterConflitTelephone()) ne doit plus être découvert
+// seulement à la soumission finale (steps 2/3 déjà remplis) : on le vérifie au blur du
+// champ, avec un filet de sécurité (goToStep2) pour tout numéro jamais encore vérifié.
+const phoneCheckTimers: Record<number, ReturnType<typeof setTimeout>> = {};
+
+function scheduleTelephoneCheck(idx: number) {
+    clearTimeout(phoneCheckTimers[idx]);
+    phoneCheckTimers[idx] = setTimeout(() => {
+        void checkTelephoneConflict(idx);
+    }, 600);
+}
+
+async function checkTelephoneConflict(idx: number): Promise<void> {
+    const m = membres.value[idx];
+    // Convoyeur sans numéro : rien à vérifier, le champ reste facultatif (cf.
+    // EquipeLivraisonController::rules()). Format incomplet : le contrôle local suffit.
+    if (!m || !/^\d{9}$/.test(m.telephone)) return;
+
+    const phoneAtCallTime = m.telephone;
+    membres.value[idx]._phoneChecking = true;
+
+    try {
+        const params = new URLSearchParams({
+            telephone: `${GUINEA_PREFIX}${phoneAtCallTime}`,
+        });
+        if (m.livreur_id) params.set('livreur_id', m.livreur_id);
+        if (props.equipe?.id) params.set('equipe_id', props.equipe.id);
+
+        const res = await fetch(
+            `/backoffice/equipes-livraison/verifier-telephone?${params.toString()}`,
+            {
+                headers: {
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            },
+        );
+
+        // Le numéro a changé pendant l'appel réseau : cette réponse est obsolète, on l'ignore
+        // pour ne jamais afficher un verdict qui ne correspond plus à la valeur affichée.
+        if (membres.value[idx]?.telephone !== phoneAtCallTime) return;
+
+        if (res.ok) {
+            const data = await res.json();
+            membres.value[idx]._serverConflict = data.conflict
+                ? ((data.message as string | null) ??
+                  'Ce numéro est déjà utilisé.')
+                : null;
+            if (data.conflict) {
+                membres.value[idx]._errors.telephone = membres.value[idx]
+                    ._serverConflict as string;
+            } else {
+                delete membres.value[idx]._errors.telephone;
+            }
+        }
+    } catch {
+        // Vérification live indisponible (réseau) : le garde-fou serveur final (submit())
+        // reste actif, jamais de blocage silencieux ici.
+    } finally {
+        if (membres.value[idx]?.telephone === phoneAtCallTime) {
+            membres.value[idx]._phoneChecking = false;
+        }
+    }
+}
+
+const hasPendingPhoneCheck = computed(() =>
+    membres.value.some((m) => m._phoneChecking),
+);
 
 function validateStep1(): boolean {
     const phones = new Set<string>();
@@ -273,6 +368,12 @@ function validateStep1(): boolean {
         } else if (phones.has(m.telephone)) {
             m._errors.telephone = 'Numéro déjà utilisé';
             valid = false;
+        } else if (m._serverConflict) {
+            // Conflit détecté par le contrôle live (checkTelephoneConflict) — doit lui aussi
+            // bloquer le passage à l'étape 2, pas seulement s'afficher.
+            m._errors.telephone = m._serverConflict;
+            valid = false;
+            phones.add(m.telephone);
         } else {
             phones.add(m.telephone);
         }
@@ -281,7 +382,19 @@ function validateStep1(): boolean {
     return valid && membres.value.length > 0;
 }
 
-function goToStep2() {
+async function goToStep2() {
+    // Filet de sécurité : force la vérification de tout numéro complet jamais encore
+    // contrôlé côté serveur (ex: l'utilisateur presse "Suivant" avant la fin du debounce
+    // du blur) — "Suivant" ne doit jamais s'appuyer sur un numéro non vérifié (cf. incident
+    // Sentry PHP-LARAVEL-66, réapparu en prod le 2026-09-02).
+    await Promise.all(
+        membres.value.map((m, i) =>
+            /^\d{9}$/.test(m.telephone) && m._serverConflict === undefined
+                ? checkTelephoneConflict(i)
+                : Promise.resolve(),
+        ),
+    );
+
     if (!validateStep1()) return;
     markChanged();
     initPartagesParCategorie();
@@ -750,11 +863,19 @@ const hasStep1Errors = computed(() =>
                                         :data-testid="`telephone-${i}`"
                                         @input="onPhoneInput($event, i)"
                                         @keydown="handlePhoneKeydown"
+                                        @blur="onPhoneBlur(i)"
                                     />
                                 </div>
                                 <p
-                                    v-if="m._errors.telephone"
+                                    v-if="m._phoneChecking"
+                                    class="mt-1 text-xs text-muted-foreground"
+                                >
+                                    Vérification…
+                                </p>
+                                <p
+                                    v-else-if="m._errors.telephone"
                                     class="mt-1 text-xs text-destructive"
+                                    :data-testid="`telephone-error-${i}`"
                                 >
                                     {{ m._errors.telephone }}
                                 </p>
@@ -1095,11 +1216,16 @@ const hasStep1Errors = computed(() =>
                     v-if="step === 1"
                     type="button"
                     size="sm"
-                    :disabled="membres.length === 0"
+                    :disabled="membres.length === 0 || hasPendingPhoneCheck"
                     @click="goToStep2"
                 >
-                    Suivant
-                    <ChevronRight class="ml-1 h-4 w-4" />
+                    <template v-if="hasPendingPhoneCheck">
+                        Vérification…
+                    </template>
+                    <template v-else>
+                        Suivant
+                        <ChevronRight class="ml-1 h-4 w-4" />
+                    </template>
                 </Button>
 
                 <Button

@@ -482,6 +482,49 @@ class EquipeLivraisonTest extends TestCase
         ]);
     }
 
+    /**
+     * Reproduction de l'incident Sentry PHP-LARAVEL-66 réapparu en prod le 2026-09-02 : le
+     * téléphone donné à un membre déjà identifié (livreur_id) appartenait cette fois à un
+     * PROPRIÉTAIRE, pas à un autre livreur — la vérification (limitée à Livreur::where(...))
+     * laissait passer ce cas jusqu'à la mise à jour SQL de la Personne du livreur, qui plantait
+     * en 500 sur personnes_organization_id_telephone_normalise_unique (contrainte partagée par
+     * tous les rôles de Personne, pas seulement Livreur). Doit échouer en 422 propre.
+     */
+    public function test_update_echoue_proprement_si_telephone_deja_detenu_par_un_proprietaire(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $autreProprietaire = Proprietaire::factory()->create([
+            'organization_id' => $this->org->id,
+            'telephone' => '+224699999999',
+        ]);
+        $vehicule = $this->makeVehicule($proprietaire->id);
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule->id]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $equipe = EquipeLivraison::where('organization_id', $this->org->id)->first();
+        $livreur = Livreur::whereHas('personne', fn ($q) => $q->where('telephone_normalise', '224620000001'))->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->patch(route('equipes-livraison.update', $equipe), $this->validPayload($proprietaire->id, [
+                'vehicule_id' => $vehicule->id,
+                'membres' => [[
+                    'livreur_id' => $livreur->id,
+                    'nom_complet' => 'Mamadou Diallo',
+                    'telephone' => '+224699999999',
+                    'role' => 'chauffeur',
+                    'ordre' => 0,
+                ]],
+            ]))
+            ->assertSessionHasErrors('membres.0.telephone');
+
+        // Transaction annulée : le téléphone d'origine du livreur est intact, celui du
+        // propriétaire aussi.
+        $this->assertDatabaseHas('personnes', ['id' => $livreur->personne_id, 'telephone_normalise' => '224620000001']);
+        $this->assertDatabaseHas('personnes', ['id' => $autreProprietaire->personne_id, 'telephone_normalise' => '224699999999']);
+    }
+
     public function test_store_derive_toujours_le_proprietaire_depuis_le_vehicule(): void
     {
         // Le propriétaire de l'équipe n'est jamais celui envoyé par le client : il est
@@ -672,8 +715,74 @@ class EquipeLivraisonTest extends TestCase
                 ]],
             ]))
             ->assertSessionHasErrors([
-                'membres.0.telephone' => "Ce numéro appartient à Mamadou Diallo (déjà affecté au véhicule \"{$vehicule->nom_vehicule}\").",
+                'membres.0.telephone' => "Ce numéro appartient à Mamadou Diallo (déjà affecté au véhicule \"{$vehicule->nom_vehicule} ({$vehicule->immatriculation})\").",
             ]);
+    }
+
+    /**
+     * Contrôle live appelé par EquipeStepperModal.vue au blur du champ téléphone — même
+     * règle que test_store_fails_si_livreur_deja_dans_autre_equipe ci-dessus, mais sans
+     * passer par la soumission complète du formulaire (steps 2/3), pour signaler le conflit
+     * "en amont" pendant la saisie plutôt qu'après un aller-retour complet.
+     */
+    public function test_verifier_telephone_signale_conflit_avec_livreur_autre_equipe(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule();
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule->id]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $response = $this->actingAs($this->user)
+            ->getJson(route('equipes-livraison.verifier-telephone', ['telephone' => '+224620000001']))
+            ->assertOk();
+
+        $response->assertJson([
+            'conflict' => true,
+            'message' => "Ce numéro appartient à Mamadou Diallo (déjà affecté au véhicule \"{$vehicule->nom_vehicule} ({$vehicule->immatriculation})\").",
+        ]);
+    }
+
+    public function test_verifier_telephone_sans_conflit(): void
+    {
+        $this->actingAs($this->user)
+            ->getJson(route('equipes-livraison.verifier-telephone', ['telephone' => '+224699999999']))
+            ->assertOk()
+            ->assertJson(['conflict' => false, 'message' => null]);
+    }
+
+    /**
+     * Un membre déjà identifié (livreur_id) qui reconfirme son propre numéro ne doit jamais
+     * être signalé en conflit avec lui-même (cf. detecterConflitTelephone()).
+     */
+    public function test_verifier_telephone_ignore_le_conflit_avec_soi_meme(): void
+    {
+        $proprietaire = Proprietaire::factory()->create(['organization_id' => $this->org->id]);
+        $vehicule = $this->makeVehicule();
+
+        $this->actingAs($this->user)
+            ->post(route('equipes-livraison.store'), $this->validPayload($proprietaire->id, ['vehicule_id' => $vehicule->id]))
+            ->assertRedirectContains('/backoffice/vehicules/');
+
+        $livreur = Livreur::whereHas('personne', fn ($q) => $q->where('telephone_normalise', '224620000001'))->firstOrFail();
+
+        $this->actingAs($this->user)
+            ->getJson(route('equipes-livraison.verifier-telephone', [
+                'telephone' => '+224620000001',
+                'livreur_id' => $livreur->id,
+            ]))
+            ->assertOk()
+            ->assertJson(['conflict' => false, 'message' => null]);
+    }
+
+    public function test_verifier_telephone_refuse_sans_permission(): void
+    {
+        $this->initOrgAndUser([]);
+
+        $this->actingAs($this->user)
+            ->getJson(route('equipes-livraison.verifier-telephone', ['telephone' => '+224699999999']))
+            ->assertForbidden();
     }
 
     public function test_update_autorise_membres_deja_dans_meme_equipe(): void

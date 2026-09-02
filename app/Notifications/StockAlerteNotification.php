@@ -8,10 +8,15 @@ use Illuminate\Notifications\Notification;
 
 /**
  * Alerte envoyée aux administrateurs (super_admin/admin_entreprise) de l'organisation quand un
- * couple PRODUIT × SITE franchit un seuil d'alerte de stock — Stock faible (activation + seuil
- * configurés par site, cf. StockStatutService::alerteActivePourSite()/seuilEffectifPourSite())
- * ou Rupture/Stock négatif (fait de disponibilité, toujours calculé indépendamment de
- * l'activation de l'alerte, cf. docs/stock-alertes.md STOCK-ALERTE-004).
+ * couple PRODUIT × SITE franchit un seuil d'alerte de stock — Stock faible, Rupture ou Stock
+ * négatif. Deux gardes INDÉPENDANTES doivent être vraies pour que cette notification parte (cf.
+ * StockStatutService::disponiblePourSite()/alerteActivePourSite(), docs/stock-alertes.md
+ * STOCK-ALERTE-004/007) : le site doit être DISPONIBLE pour ce produit (sinon aucune rupture
+ * "métier" n'existe) ET avoir l'ALERTE active (sinon le statut réel s'affiche sans jamais
+ * notifier). `statutPour()` lui-même reste une fonction PURE (qte/seuil uniquement) — ces deux
+ * gardes sont appliquées par l'appelant (MouvementStockService), jamais mélangées dans le calcul
+ * du statut (décision du 02/09/2026 après-midi, en remplacement d'une confusion introduite puis
+ * corrigée le jour même).
  *
  * Déclenchée UNE SEULE FOIS par franchissement (transition Disponible → Faible/Rupture), jamais
  * à chaque mouvement tant que le produit reste sous le seuil — cf.
