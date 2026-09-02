@@ -8,10 +8,10 @@ use Illuminate\Notifications\Notification;
 
 /**
  * Alerte envoyée aux administrateurs (super_admin/admin_entreprise) de l'organisation quand un
- * couple PRODUIT × SITE franchit un seuil d'alerte de stock — Stock faible (seuil configuré,
- * cf. StockStatutService::seuilEffectifPourSite()) ou Rupture/Stock négatif (fait de
- * disponibilité, toujours calculé indépendamment de `alerte_stock_active`, cf. docs/stock-
- * alertes.md STOCK-ALERTE-004).
+ * couple PRODUIT × SITE franchit un seuil d'alerte de stock — Stock faible (activation + seuil
+ * configurés par site, cf. StockStatutService::alerteActivePourSite()/seuilEffectifPourSite())
+ * ou Rupture/Stock négatif (fait de disponibilité, toujours calculé indépendamment de
+ * l'activation de l'alerte, cf. docs/stock-alertes.md STOCK-ALERTE-004).
  *
  * Déclenchée UNE SEULE FOIS par franchissement (transition Disponible → Faible/Rupture), jamais
  * à chaque mouvement tant que le produit reste sous le seuil — cf.

@@ -38,9 +38,10 @@ class ProduitService
      * Crée un produit + sa/ses variante(s) en une transaction. Point d'entrée unique partagé
      * par les controllers Web et API (élimine la duplication de logique constatée avant refonte).
      *
-     * $donnees attend les champs produits (nom/produit_type_id/statut/categorie_id/description,
-     * seuil_alerte_stock/alerte_stock_active), les champs de CHAMPS_VARIANTE_CREATION, et
-     * optionnellement 'options' => [['nom'=>..,'valeurs'=>[..]], ...].
+     * $donnees attend les champs produits (nom/produit_type_id/statut/categorie_id/description),
+     * les champs de CHAMPS_VARIANTE_CREATION, et optionnellement 'options' => [['nom'=>..,
+     * 'valeurs'=>[..]], ...]. L'alerte de stock faible (activation + seuil) ne se configure plus
+     * ici : elle se règle PAR SITE via ProduitSeuilAlerteService, après création du produit.
      */
     public function creer(array $donnees): Produit
     {

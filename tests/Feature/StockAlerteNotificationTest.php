@@ -63,7 +63,6 @@ class StockAlerteNotificationTest extends TestCase
     {
         $produit = $this->makeProduitAvecVariante($this->org, [
             'nom' => 'Bidon 20L',
-            'alerte_stock_active' => $alerteActive,
         ]);
         $varianteId = $produit->variantePrincipale()->first()->id;
 
@@ -72,7 +71,7 @@ class StockAlerteNotificationTest extends TestCase
             ['organization_id' => $this->org->id, 'qte_stock' => $qte],
         );
 
-        app(ProduitSeuilAlerteService::class)->definir($produit, $this->siteAlerte->id, $seuil);
+        app(ProduitSeuilAlerteService::class)->definir($produit, $this->siteAlerte->id, $alerteActive, $seuil);
 
         return $varianteId;
     }

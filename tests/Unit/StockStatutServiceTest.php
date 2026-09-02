@@ -167,6 +167,80 @@ class StockStatutServiceTest extends TestCase
         $this->assertSame(10, $this->service->seuilEffectifPourSite($produit, $cba->id));
     }
 
+    // ── alerteActivePourSite() : activation par SITE, jamais implicite ──────────
+
+    public function test_alerte_active_pour_site_est_fausse_en_absence_de_ligne(): void
+    {
+        $org = Organization::factory()->create();
+        ProduitTypeDefaultSeeder::seedPourOrganisation($org->id);
+        $type = ProduitType::where('organization_id', $org->id)->where('code', 'materiel')->first();
+        $site = Site::create(['organization_id' => $org->id, 'nom' => 'Lambanyi', 'type' => 'depot', 'localisation' => 'Lambanyi']);
+
+        $produit = Produit::create([
+            'organization_id' => $org->id,
+            'nom' => 'Produit non concerné par ce site',
+            'produit_type_id' => $type->id,
+            'statut' => 'actif',
+        ]);
+
+        // Aucune ligne produit_seuils_alerte pour ce site : jamais actif par défaut, même si un
+        // seuil spécifique existe sur un AUTRE site du même produit (cf. test suivant).
+        $this->assertFalse($this->service->alerteActivePourSite($produit, $site->id));
+    }
+
+    public function test_alerte_active_pour_site_est_vraie_quand_explicitement_activee(): void
+    {
+        $org = Organization::factory()->create();
+        ProduitTypeDefaultSeeder::seedPourOrganisation($org->id);
+        $type = ProduitType::where('organization_id', $org->id)->where('code', 'materiel')->first();
+        $cba = Site::create(['organization_id' => $org->id, 'nom' => 'CBA', 'type' => 'depot', 'localisation' => 'CBA']);
+        $lambanyi = Site::create(['organization_id' => $org->id, 'nom' => 'Lambanyi', 'type' => 'depot', 'localisation' => 'Lambanyi']);
+
+        $produit = Produit::create([
+            'organization_id' => $org->id,
+            'nom' => 'Produit multi-sites',
+            'produit_type_id' => $type->id,
+            'statut' => 'actif',
+        ]);
+        ProduitSeuilAlerte::create([
+            'organization_id' => $org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $cba->id,
+            'actif' => true,
+            'seuil_alerte_stock' => 50,
+        ]);
+
+        $this->assertTrue($this->service->alerteActivePourSite($produit, $cba->id));
+        // Lambanyi n'a aucune ligne : jamais actif par ricochet parce que CBA l'est.
+        $this->assertFalse($this->service->alerteActivePourSite($produit, $lambanyi->id));
+    }
+
+    public function test_alerte_active_pour_site_est_fausse_pour_une_ligne_explicitement_desactivee(): void
+    {
+        $org = Organization::factory()->create();
+        ProduitTypeDefaultSeeder::seedPourOrganisation($org->id);
+        $type = ProduitType::where('organization_id', $org->id)->where('code', 'materiel')->first();
+        $site = Site::create(['organization_id' => $org->id, 'nom' => 'Gomboyah', 'type' => 'depot', 'localisation' => 'Gomboyah']);
+
+        $produit = Produit::create([
+            'organization_id' => $org->id,
+            'nom' => 'Produit désactivé sur ce site',
+            'produit_type_id' => $type->id,
+            'statut' => 'actif',
+        ]);
+        // Un seuil spécifique existe (configuré puis désactivé) mais actif=false : reste inactif,
+        // même avec une ligne présente en base (cf. ProduitSeuilAlerteService::definir()).
+        ProduitSeuilAlerte::create([
+            'organization_id' => $org->id,
+            'produit_id' => $produit->id,
+            'site_id' => $site->id,
+            'actif' => false,
+            'seuil_alerte_stock' => 20,
+        ]);
+
+        $this->assertFalse($this->service->alerteActivePourSite($produit, $site->id));
+    }
+
     public function test_deux_organisations_ont_des_seuils_globaux_independants(): void
     {
         $orgA = Organization::factory()->create();
@@ -205,7 +279,6 @@ class StockStatutServiceTest extends TestCase
             'statut' => 'actif',
             'prix_achat' => 1000,
             'prix_vente' => 1500,
-            'alerte_stock_active' => true,
         ]);
         $variante = $produit->variantePrincipale()->first();
 
@@ -213,6 +286,7 @@ class StockStatutServiceTest extends TestCase
             'organization_id' => $org->id,
             'produit_id' => $produit->id,
             'site_id' => $matoto->id,
+            'actif' => true,
             'seuil_alerte_stock' => 1000,
         ]);
         // CBA n'a aucun seuil spécifique : repli sur le seuil global (10 par défaut).

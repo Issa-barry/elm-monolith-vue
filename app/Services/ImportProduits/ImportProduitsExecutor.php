@@ -110,19 +110,22 @@ class ImportProduitsExecutor
         $donnees = $ligne['data'];
         $seuilPresent = array_key_exists('seuil_alerte_stock', $donnees);
         $seuilValeur = $donnees['seuil_alerte_stock'] ?? null;
-        unset($donnees['seuil_alerte_stock']);
+        $alerteActive = (bool) ($donnees['alerte_stock_active'] ?? false);
+        unset($donnees['seuil_alerte_stock'], $donnees['alerte_stock_active']);
 
         $produit = $this->produitService->creer([
             ...$donnees,
             'organization_id' => $import->organization_id,
         ]);
 
-        // Le fichier ne porte qu'une seule valeur par produit : appliquée à tous les sites actifs
-        // de l'organisation (préserve le comportement historique "s'applique à tous les sites"
-        // de l'ancienne colonne produits.seuil_alerte_stock, cf. ProduitSeuilAlerteService).
-        if ($seuilPresent) {
-            $this->seuilAlerteService->definirPourTousLesSitesActifs($produit, $seuilValeur);
-        }
+        // Le fichier ne porte qu'une seule valeur (activation + seuil) par produit : appliquée à
+        // tous les sites actifs de l'organisation (préserve le comportement historique
+        // "s'applique à tous les sites" des anciennes colonnes produits.alerte_stock_active /
+        // seuil_alerte_stock, cf. ProduitSeuilAlerteService). `alerte_stock_active` est
+        // obligatoire à la création (cf. ImportProduitsParser) : toujours appliqué, même à false
+        // (désactive explicitement tous les sites plutôt que de laisser une configuration
+        // implicite).
+        $this->seuilAlerteService->definirPourTousLesSitesActifs($produit, $alerteActive, $seuilPresent ? $seuilValeur : null);
 
         $varianteDefaut = $produit->variantes->firstWhere('is_default', true) ?? $produit->variantes->first();
         $ligne['sku'] = $varianteDefaut?->sku;
@@ -152,12 +155,23 @@ class ImportProduitsExecutor
         $donnees = $ligne['data'];
         $seuilPresent = array_key_exists('seuil_alerte_stock', $donnees);
         $seuilValeur = $donnees['seuil_alerte_stock'] ?? null;
-        unset($donnees['seuil_alerte_stock']);
+        $alertePresente = array_key_exists('alerte_stock_active', $donnees);
+        $alerteActive = (bool) ($donnees['alerte_stock_active'] ?? false);
+        unset($donnees['seuil_alerte_stock'], $donnees['alerte_stock_active']);
 
         $produit = $this->produitService->mettreAJourSimple($produit, $donnees);
 
-        if ($seuilPresent) {
-            $this->seuilAlerteService->definirPourTousLesSitesActifs($produit, $seuilValeur);
+        // Une mise à jour peut omettre `alerte_stock_active` et/ou `seuil_alerte_stock` (colonnes
+        // non obligatoires hors création, cf. ImportProduitsParser) : chaque colonne absente de
+        // la ligne laisse la configuration par site existante inchangée sur cet aspect, pour ne
+        // jamais effacer un seuil déjà défini via le formulaire web en ne touchant qu'à
+        // l'activation (ou l'inverse).
+        if ($alertePresente && $seuilPresent) {
+            $this->seuilAlerteService->definirPourTousLesSitesActifs($produit, $alerteActive, $seuilValeur);
+        } elseif ($alertePresente) {
+            $this->seuilAlerteService->activerPourTousLesSitesActifs($produit, $alerteActive);
+        } elseif ($seuilPresent) {
+            $this->seuilAlerteService->definirSeuilSeulPourTousLesSitesActifs($produit, $seuilValeur);
         }
 
         $varianteApres = $produit->variantes->firstWhere('is_default', true) ?? $produit->variantes->first();
@@ -191,7 +205,6 @@ class ImportProduitsExecutor
             'prix_usine_tricycle' => $variante?->prix_usine_tricycle,
             'prix_vente' => $variante?->prix_vente,
             'cout' => $variante?->cout,
-            'alerte_stock_active' => $produit->alerte_stock_active,
             // Reflète le seuil réellement appliqué (par site, cf. ProduitSeuilAlerteService),
             // pas l'ancienne colonne produits.seuil_alerte_stock (figée, plus jamais écrite) :
             // valeur uniforme si tous les sites actifs partagent le même seuil spécifique, sinon

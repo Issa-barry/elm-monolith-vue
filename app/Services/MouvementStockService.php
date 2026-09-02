@@ -153,7 +153,7 @@ class MouvementStockService
         try {
             $stockStatutService = app(StockStatutService::class);
             $seuil = $stockStatutService->seuilEffectifPourSite($produit, $siteId);
-            $alerteActive = (bool) $produit->alerte_stock_active;
+            $alerteActive = $stockStatutService->alerteActivePourSite($produit, $siteId);
 
             $statutAvant = $stockStatutService->statutPour($stockAvant - $qteReservee, $seuil, $alerteActive);
             $statutApres = $stockStatutService->statutPour($stockApres - $qteReservee, $seuil, $alerteActive);

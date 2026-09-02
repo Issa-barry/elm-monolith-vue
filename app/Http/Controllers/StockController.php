@@ -89,6 +89,10 @@ class StockController extends Controller
         // conservée en base à titre historique) : le seuil de Matoto ne doit jamais servir à
         // contrôler le stock de CBA.
         $seuil = 'COALESCE(psa.seuil_alerte_stock, ?)';
+        // Activation résolue PAR SITE elle aussi (cf. StockStatutService::alerteActivePourSite())
+        // — jamais l'ancienne colonne p.alerte_stock_active (choix global, historique) : absence
+        // de ligne psa (leftJoin) = alerte inactive sur ce site, jamais implicite.
+        $alerteActive = 'COALESCE(psa.actif, 0)';
 
         $query = DB::table('produit_variantes as pv')
             ->join('produits as p', 'p.id', '=', 'pv.produit_id')
@@ -120,7 +124,6 @@ class StockController extends Controller
                 'p.nom as produit_nom',
                 'p.categorie_id',
                 'c.nom as categorie_nom',
-                'p.alerte_stock_active',
                 'pv.id as variante_id',
                 'pv.sku',
                 'pv.is_default',
@@ -132,7 +135,8 @@ class StockController extends Controller
             ->selectRaw("{$quantite} as qte_disponible")
             ->selectRaw("{$physique} as qte_physique")
             ->selectRaw("{$reserve} as qte_reservee")
-            ->selectRaw("{$seuil} as seuil_effectif", [$seuilOrganisation]);
+            ->selectRaw("{$seuil} as seuil_effectif", [$seuilOrganisation])
+            ->selectRaw("{$alerteActive} as alerte_active");
 
         if ($filters['search'] !== '') {
             $search = $filters['search'];
@@ -149,13 +153,13 @@ class StockController extends Controller
             StockStatut::STOCK_NEGATIF->value => $query->whereRaw("{$quantite} < 0"),
             StockStatut::RUPTURE->value => $query->whereRaw("{$quantite} = 0"),
             StockStatut::STOCK_FAIBLE->value => $query
-                ->where('p.alerte_stock_active', true)
+                ->whereRaw("{$alerteActive} = 1")
                 ->whereRaw("{$quantite} > 0")
                 ->whereRaw("{$seuil} > 0", [$seuilOrganisation])
                 ->whereRaw("{$quantite} <= {$seuil}", [$seuilOrganisation]),
-            StockStatut::DISPONIBLE->value => $query->where(function (Builder $q) use ($quantite, $seuil, $seuilOrganisation) {
+            StockStatut::DISPONIBLE->value => $query->where(function (Builder $q) use ($quantite, $seuil, $seuilOrganisation, $alerteActive) {
                 $q->whereRaw("{$quantite} > {$seuil}", [$seuilOrganisation])
-                    ->orWhere('p.alerte_stock_active', false)
+                    ->orWhereRaw("{$alerteActive} = 0")
                     ->orWhereRaw("{$seuil} <= 0", [$seuilOrganisation]);
             })->whereRaw("{$quantite} > 0"),
             default => null,
@@ -202,7 +206,7 @@ class StockController extends Controller
             $statut = $this->stockStatutService->statutPour(
                 (int) $row->qte_disponible,
                 (int) $row->seuil_effectif,
-                (bool) $row->alerte_stock_active,
+                (bool) $row->alerte_active,
             );
             $dernierMouvement = $derniersMouvements->get($row->variante_id.'|'.$row->site_id);
 

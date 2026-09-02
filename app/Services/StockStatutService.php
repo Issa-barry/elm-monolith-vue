@@ -15,28 +15,36 @@ use Illuminate\Support\Facades\DB;
  * constatées avant refonte (Produit::getIsLowStockAttribute() d'un côté, logique réécrite
  * inline dans ProduitController@index de l'autre, avec des résultats parfois différents).
  *
- * Règle métier actée pour ELM (revue le 29/08/2026 — seuil par SITE, cf. ProduitSeuilAlerte) :
- *   - le SEUIL est configuré par COUPLE (produit, site) — table produit_seuils_alerte — avec
- *     repli sur parametres.seuil_stock_faible de l'organisation si aucune ligne n'existe pour ce
- *     site. L'ancienne colonne produits.seuil_alerte_stock (seuil unique appliqué à tous les
- *     sites) est conservée en base à titre historique mais n'est plus jamais lue ici ;
+ * Règle métier actée pour ELM (revue le 01/09/2026 — actif ET seuil par SITE, cf.
+ * ProduitSeuilAlerte) :
+ *   - l'ACTIVATION ("être alerté si stock faible ?") ET le SEUIL sont configurés par COUPLE
+ *     (produit, site) — table produit_seuils_alerte. Absence de ligne pour un site = alerte
+ *     INACTIVE sur ce site, jamais implicite : un produit non concerné par un site (ex. non
+ *     vendu dans cette agence) ne génère aucune alerte tant qu'un administrateur ne l'a pas
+ *     explicitement activée pour CE site. Le seuil, lui, replie sur parametres.seuil_stock_faible
+ *     de l'organisation si aucune valeur spécifique n'est renseignée sur une ligne active.
+ *     Les anciennes colonnes produits.alerte_stock_active/seuil_alerte_stock (choix global
+ *     appliqué à tous les sites) sont conservées en base à titre historique mais ne sont plus
+ *     jamais lues ici ;
  *   - la QUANTITE vit au niveau VARIANTE × SITE (variante_stocks.qte_stock) ;
- *   - l'ETAT est calculé pour chaque couple VARIANTE × SITE, avec le seuil DE CE SITE, jamais
- *     sur un total agrégé — un stock élevé sur une variante ou un site ne doit jamais masquer un
- *     stock faible ailleurs, et le seuil de Matoto ne doit jamais servir à contrôler le stock de
- *     CBA.
+ *   - l'ETAT est calculé pour chaque couple VARIANTE × SITE, avec l'activation ET le seuil DE CE
+ *     SITE, jamais sur un total agrégé ni la configuration d'un autre site — un stock élevé sur
+ *     une variante ou un site ne doit jamais masquer un stock faible ailleurs, et Matoto ne doit
+ *     jamais servir à contrôler CBA.
  *
  * RUPTURE est toujours calculée dès lors que le type du produit gère du stock, indépendamment
  * du choix "être alerté si stock faible" : c'est un fait de disponibilité (comme "Épuisé" chez
- * Shopify), pas une préférence de notification. STOCK_FAIBLE n'est calculée que si
- * `produit.alerte_stock_active` est vrai — c'est le choix explicite de l'utilisateur, jamais
- * une case cochée automatiquement.
+ * Shopify), pas une préférence de notification. STOCK_FAIBLE n'est calculée que si l'alerte est
+ * active POUR CE SITE — c'est le choix explicite de l'utilisateur, jamais une case cochée
+ * automatiquement.
  */
 class StockStatutService
 {
     /**
      * Seuil effectif d'un produit POUR UN SITE donné : seuil spécifique produit/site s'il existe,
-     * sinon seuil global de l'organisation. Ne lit jamais le seuil d'un autre site.
+     * sinon seuil global de l'organisation. Ne lit jamais le seuil d'un autre site. Reste
+     * calculable même si le site n'a pas l'alerte active (utile pour l'affichage) — c'est
+     * alerteActivePourSite() qui gouverne si ce seuil est effectivement exploité.
      */
     public function seuilEffectifPourSite(Produit $produit, string $siteId): int
     {
@@ -47,6 +55,20 @@ class StockStatutService
         $specifique = $seuils->firstWhere('site_id', $siteId)?->seuil_alerte_stock;
 
         return $specifique ?? Parametre::getSeuilStockFaible((string) $produit->organization_id);
+    }
+
+    /**
+     * L'alerte de stock faible est-elle active pour ce produit SUR CE SITE ? Absence de ligne
+     * produit_seuils_alerte pour ce couple = inactive, jamais implicitement active (cf. docblock
+     * de la classe) — ne lit jamais l'activation d'un autre site.
+     */
+    public function alerteActivePourSite(Produit $produit, string $siteId): bool
+    {
+        $seuils = $produit->relationLoaded('seuilsAlerte')
+            ? $produit->seuilsAlerte
+            : $produit->seuilsAlerte()->get();
+
+        return (bool) ($seuils->firstWhere('site_id', $siteId)?->actif ?? false);
     }
 
     public function statutPour(int $qte, int $seuil, bool $alerteActive): StockStatut
@@ -77,8 +99,9 @@ class StockStatutService
         // vendable, jamais affiché "Disponible" (même règle que StockController::stockQuery()).
         $disponible = $varianteStock->qte_stock - $varianteStock->qte_reservee;
         $seuil = $this->seuilEffectifPourSite($produit, $varianteStock->site_id);
+        $alerteActive = $this->alerteActivePourSite($produit, $varianteStock->site_id);
 
-        return $this->statutPour($disponible, $seuil, (bool) $produit->alerte_stock_active);
+        return $this->statutPour($disponible, $seuil, $alerteActive);
     }
 
     /**
@@ -92,16 +115,16 @@ class StockStatutService
      */
     public function detailParVarianteEtSite(Produit $produit): Collection
     {
-        $alerteActive = (bool) $produit->alerte_stock_active;
         $gereStock = (bool) $produit->produitType?->gere_stock;
 
         return $produit->variantes->flatMap(
-            fn ($variante) => $variante->stocks->map(function (VarianteStock $vs) use ($variante, $produit, $alerteActive, $gereStock) {
+            fn ($variante) => $variante->stocks->map(function (VarianteStock $vs) use ($variante, $produit, $gereStock) {
                 // Disponible = physique − engagé (cf. statutPourVarianteStock()) : l'État se
                 // base toujours sur cette quantité, jamais le physique brut qte_stock (conservé
                 // ci-dessous pour l'affichage détaillé, mais plus pour le calcul de l'état).
                 $disponible = $vs->qte_stock - $vs->qte_reservee;
                 $seuil = $this->seuilEffectifPourSite($produit, $vs->site_id);
+                $alerteActive = $this->alerteActivePourSite($produit, $vs->site_id);
                 $statut = $gereStock ? $this->statutPour($disponible, $seuil, $alerteActive) : StockStatut::DISPONIBLE;
 
                 return [
@@ -156,7 +179,7 @@ class StockStatutService
             ->where('pt.gere_stock', true)
             ->whereNull('p.deleted_at')
             ->whereNull('pv.deleted_at')
-            ->select('psa.seuil_alerte_stock as seuil_specifique', 'p.alerte_stock_active')
+            ->select('psa.seuil_alerte_stock as seuil_specifique', 'psa.actif as site_alerte_active')
             ->selectRaw('(vs.qte_stock - COALESCE(vs.qte_reservee, 0)) as qte_disponible')
             ->get();
 
@@ -171,10 +194,11 @@ class StockStatutService
 
                 continue;
             }
-            // Seuil du SITE de cette ligne (psa filtré sur vs.site_id ci-dessus), jamais celui
-            // d'un autre site du même produit.
+            // Activation ET seuil du SITE de cette ligne (psa filtré sur vs.site_id ci-dessus),
+            // jamais ceux d'un autre site du même produit. Absence de ligne (leftJoin) = alerte
+            // inactive sur ce site, jamais implicitement active.
             $seuil = $row->seuil_specifique ?? $seuilOrg;
-            if ($row->alerte_stock_active && $seuil > 0 && $row->qte_disponible <= $seuil) {
+            if ($row->site_alerte_active && $seuil > 0 && $row->qte_disponible <= $seuil) {
                 $faibles++;
             }
         }

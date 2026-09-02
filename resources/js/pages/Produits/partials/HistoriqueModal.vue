@@ -129,7 +129,6 @@ const FIELD_LABELS: Record<string, string> = {
     cout: 'Coût',
     qte_stock: 'Stock',
     seuil_alerte_stock: "Seuil d'alerte",
-    alerte_stock_active: 'Alerte stock faible activée',
     description: 'Description',
     code_barres: 'Code-barres',
     fournisseur: 'Fournisseur',
@@ -137,7 +136,6 @@ const FIELD_LABELS: Record<string, string> = {
 
 function formatVal(key: string, val: unknown): string {
     if (val === null || val === undefined) return '—';
-    if (key === 'alerte_stock_active') return val ? 'Oui' : 'Non';
     if (['prix_vente', 'prix_achat', 'prix_usine', 'cout'].includes(key))
         return new Intl.NumberFormat('fr-FR').format(Number(val)) + ' GNF';
     if (['qte_stock', 'seuil_alerte_stock'].includes(key))
