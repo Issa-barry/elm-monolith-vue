@@ -649,23 +649,32 @@ class CommissionMoteurGeneriqueMultiProcessusTest extends TestCase
         $this->assertSame($stockAvantReception, $stockApresReception);
     }
 
-    // ── 5/6. Transfert logistique : exclusivité mutuelle legacy / générique ──
+    // ── 5/6. Transfert logistique : moteur générique exclusif (legacy retiré le 03/09/2026) ──
 
+    /**
+     * Décision produit du 03/09/2026 : le moteur générique est le SEUL moteur de commission
+     * logistique — retrait de CommissionTriggerService::estMigreVersMoteurGenerique() et de
+     * l'ancien CommissionLogistiqueService, vérifié sans aucun solde `commission_logistique_parts`
+     * restant en production. Même sans qu'aucune CommissionRegle n'ait jamais été configurée pour
+     * logistique_transfert (absence de règle = 0 pour chaque cible, décision AMOA #4 — aucune
+     * cible ne se résout donc, aucune CommissionEnveloppe n'est créée), la table `commissions_logistiques`
+     * doit rester vide : aucun repli sur l'ancien moteur legacy ne doit jamais se produire.
+     */
     /** @test */
-    public function transfert_non_migre_utilise_uniquement_le_moteur_legacy(): void
+    public function transfert_najamais_de_repli_sur_le_legacy_meme_sans_regle_configuree(): void
     {
         Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::CHARGEMENT_VALIDE);
-        // Pas de règle logistique_transfert configurée => organisation non migrée.
+        // Volontairement : aucune CommissionRegle créée pour logistique_transfert.
 
         $transfert = $this->makeTransfert(qteChargee: 100);
         $this->actingAs($this->user);
         TransfertLogistiqueService::avancerStatut($transfert);
 
-        $this->assertDatabaseHas('commissions_logistiques', ['transfert_logistique_id' => $transfert->id]);
+        $this->assertDatabaseMissing('commissions_logistiques', ['transfert_logistique_id' => $transfert->id]);
         $this->assertSame(
             0,
             CommissionEnveloppe::where('source_type', TransfertLogistique::class)->where('source_id', $transfert->id)->count(),
-            'Une organisation non migrée ne doit jamais produire de CommissionEnveloppe pour un transfert.'
+            'Aucune cible ne peut se résoudre sans CommissionRegle (absence de règle = 0, décision AMOA #4) — aucune CommissionEnveloppe attendue, mais surtout aucun repli sur le legacy.'
         );
     }
 

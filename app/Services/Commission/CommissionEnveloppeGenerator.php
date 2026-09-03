@@ -39,9 +39,10 @@ use Throwable;
 
 /**
  * Moteur unique de génération d'enveloppes de commission — vente (standard ou distribution
- * client), et transfert logistique pour les organisations migrées vers ce moteur générique (cf.
- * CommissionTriggerService::estMigreVersMoteurGenerique()). Chaque méthode publique ouvre sa
- * PROPRE transaction, isolée, et n'échoue jamais de façon à faire annuler l'opération appelante :
+ * client) et transfert logistique, pour toute organisation (moteur unique depuis le
+ * 03/09/2026, cf. CommissionTriggerService — la bascule par organisation a été retirée).
+ * Chaque méthode publique ouvre sa PROPRE transaction, isolée, et n'échoue jamais de façon à
+ * faire annuler l'opération appelante :
  * toute erreur est interceptée et tracée dans commission_generation_attempts, jamais relancée vers
  * l'appelant. Cette isolation rend l'appel sans risque même imbriqué dans la transaction métier
  * déclenchante (chargement, encaissement...) — appelé en tout dernier, une fois toutes les
@@ -98,10 +99,9 @@ class CommissionEnveloppeGenerator
     }
 
     /**
-     * Génère la commission d'un transfert logistique via le moteur générique — uniquement pour
-     * les organisations ayant activé le processus logistique_transfert (cf.
-     * CommissionTriggerService::estMigreVersMoteurGenerique()) ; sinon l'ancien moteur
-     * (CommissionLogistiqueService) reste seul appelé. $champQuantite ('quantite_chargee' ou
+     * Génère la commission d'un transfert logistique via le moteur générique — le seul moteur
+     * de commission logistique depuis le 03/09/2026 (retrait de la bascule par organisation
+     * et de l'ancien CommissionLogistiqueService). $champQuantite ('quantite_chargee' ou
      * 'quantite_recue') est décidé par l'appelant selon le déclencheur configuré pour
      * l'organisation, jamais ici.
      */

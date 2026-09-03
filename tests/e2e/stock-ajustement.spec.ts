@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { login, randomDigits, registerCleanup } from './helpers';
 
 const E2E_STOCK_PREFIX = 'E2ESTK-';
@@ -11,26 +11,35 @@ test.beforeEach(async ({ page }) => {
     await login(page);
 });
 
-test('ajuster stock depuis la liste — augmenter', async ({ page }) => {
-    await page.goto('/backoffice/produits');
-    await expect(page).toHaveURL(/\/produits$/);
+/**
+ * L'action « Ajuster le stock » directement depuis la liste Produits a été retirée le
+ * 24/08/2026 (redondante avec la page Stock, cf. produit-voir-le-stock.spec.ts) — le
+ * point d'entrée courant pour ajuster un couple variante × site est le bouton « Ajuster »
+ * d'une ligne de Produits/Stock/Index.vue (visible seulement si row.can_ajuster).
+ */
+async function goToStockPage(page: Page): Promise<void> {
+    await page.goto('/backoffice/produits/stock');
+    await expect(page).toHaveURL(/\/produits\/stock$/);
+}
 
-    // Find a product that has a stock (any row)
-    const firstStockRow = page
-        .locator('tbody tr')
-        .filter({
-            hasNot: page.locator('td:has(.text-muted-foreground:text-is("—"))'),
-        })
-        .first();
+function adjustableRows(page: Page) {
+    return page
+        .locator('[data-testid="stock-table"] tbody tr')
+        .filter({ has: page.locator('[data-testid="stock-adjust-button"]') });
+}
 
-    // Open action menu
-    await firstStockRow.locator('button').last().click();
-
-    const adjustItem = page.getByRole('menuitem', {
-        name: /ajuster le stock/i,
+/** Une ligne avec un stock physique déjà non nul — nécessaire pour tester "diminuer". */
+function adjustableRowsWithStock(page: Page) {
+    return adjustableRows(page).filter({
+        hasNot: page.locator('td:nth-child(3):text-is("0")'),
     });
-    await expect(adjustItem).toBeVisible({ timeout: 5_000 });
-    await adjustItem.click();
+}
+
+test('ajuster stock depuis la liste — augmenter', async ({ page }) => {
+    await goToStockPage(page);
+
+    const firstStockRow = adjustableRows(page).first();
+    await firstStockRow.locator('[data-testid="stock-adjust-button"]').click();
 
     // Modal opens
     const dialog = page
@@ -42,10 +51,8 @@ test('ajuster stock depuis la liste — augmenter', async ({ page }) => {
     const stockText = await dialog.locator('.text-2xl').first().innerText();
     const _stockAvant = parseInt(stockText.trim(), 10);
 
-    // Select a site first (required before entering quantity)
-    const siteSelect = dialog.locator('[data-testid="stock-site-select"]');
-    await siteSelect.click();
-    await page.locator('[role="option"]').first().click();
+    // Le site est déjà verrouillé (une seule agence possible depuis cette ligne) —
+    // pas de sélecteur de site à renseigner ici, contrairement à l'ancien flux.
 
     // Fill "augmenter"
     const augInput = dialog.locator(
@@ -65,39 +72,20 @@ test('ajuster stock depuis la liste — augmenter', async ({ page }) => {
     await expect(dialog).toBeHidden({ timeout: 10_000 });
 
     // Navigate back to reload stock
-    await page.goto('/backoffice/produits');
-    await expect(page).toHaveURL(/\/produits$/);
+    await goToStockPage(page);
 });
 
 test('ajuster stock depuis la liste — diminuer', async ({ page }) => {
-    await page.goto('/backoffice/produits');
-    await expect(page).toHaveURL(/\/produits$/);
+    await goToStockPage(page);
 
-    // Find a product with non-zero stock
-    const firstStockRow = page
-        .locator('tbody tr')
-        .filter({
-            hasNot: page.locator('td:has(.text-muted-foreground:text-is("—"))'),
-        })
-        .first();
-
-    await firstStockRow.locator('button').last().click();
-
-    const adjustItem = page.getByRole('menuitem', {
-        name: /ajuster le stock/i,
-    });
-    await expect(adjustItem).toBeVisible({ timeout: 5_000 });
-    await adjustItem.click();
+    // Find a product that already has stock (needed to diminish without going negative).
+    const firstStockRow = adjustableRowsWithStock(page).first();
+    await firstStockRow.locator('[data-testid="stock-adjust-button"]').click();
 
     const dialog = page
         .locator('[role="dialog"]')
         .filter({ hasText: /ajuster le stock/i });
     await expect(dialog).toBeVisible({ timeout: 10_000 });
-
-    // Select a site first (required before entering quantity)
-    const siteSelect = dialog.locator('[data-testid="stock-site-select"]');
-    await siteSelect.click();
-    await page.locator('[role="option"]').first().click();
 
     const dimInput = dialog.locator(
         '[data-testid="stock-diminuer-input"] input',
@@ -162,27 +150,15 @@ test('ajuster stock depuis la fiche produit', async ({ page }) => {
 test('ajuster stock — remplir un champ efface lautre (exclusion mutuelle)', async ({
     page,
 }) => {
-    await page.goto('/backoffice/produits');
-    await expect(page).toHaveURL(/\/produits$/);
+    await goToStockPage(page);
 
-    const firstStockRow = page.locator('tbody tr').first();
-    await firstStockRow.locator('button').last().click();
-
-    const adjustItem = page.getByRole('menuitem', {
-        name: /ajuster le stock/i,
-    });
-    await expect(adjustItem).toBeVisible({ timeout: 5_000 });
-    await adjustItem.click();
+    const firstStockRow = adjustableRows(page).first();
+    await firstStockRow.locator('[data-testid="stock-adjust-button"]').click();
 
     const dialog = page
         .locator('[role="dialog"]')
         .filter({ hasText: /ajuster le stock/i });
     await expect(dialog).toBeVisible({ timeout: 10_000 });
-
-    // Select a site first (required before entering quantity)
-    const siteSelect = dialog.locator('[data-testid="stock-site-select"]');
-    await siteSelect.click();
-    await page.locator('[role="option"]').first().click();
 
     const augInput = dialog.locator(
         '[data-testid="stock-augmenter-input"] input',
@@ -209,17 +185,10 @@ test('ajuster stock — remplir un champ efface lautre (exclusion mutuelle)', as
 test('ajuster stock — bouton Valider désactivé si aucun champ renseigne', async ({
     page,
 }) => {
-    await page.goto('/backoffice/produits');
-    await expect(page).toHaveURL(/\/produits$/);
+    await goToStockPage(page);
 
-    const firstRow = page.locator('tbody tr').first();
-    await firstRow.locator('button').last().click();
-
-    const adjustItem = page.getByRole('menuitem', {
-        name: /ajuster le stock/i,
-    });
-    await expect(adjustItem).toBeVisible({ timeout: 5_000 });
-    await adjustItem.click();
+    const firstRow = adjustableRows(page).first();
+    await firstRow.locator('[data-testid="stock-adjust-button"]').click();
 
     const dialog = page
         .locator('[role="dialog"]')
@@ -236,33 +205,15 @@ test('ajuster stock — bouton Valider désactivé si aucun champ renseigne', as
 test('ajuster stock — bouton Valider reste désactivé tant que le motif nest pas renseigné', async ({
     page,
 }) => {
-    await page.goto('/backoffice/produits');
-    await expect(page).toHaveURL(/\/produits$/);
+    await goToStockPage(page);
 
-    const firstStockRow = page
-        .locator('tbody tr')
-        .filter({
-            hasNot: page.locator('td:has(.text-muted-foreground:text-is("—"))'),
-        })
-        .first();
-
-    await firstStockRow.locator('button').last().click();
-    const adjustItem = page.getByRole('menuitem', {
-        name: /ajuster le stock/i,
-    });
-    await expect(adjustItem).toBeVisible({ timeout: 5_000 });
-    await adjustItem.click();
+    const firstStockRow = adjustableRows(page).first();
+    await firstStockRow.locator('[data-testid="stock-adjust-button"]').click();
 
     const dialog = page
         .locator('[role="dialog"]')
         .filter({ hasText: /ajuster le stock/i });
     await expect(dialog).toBeVisible({ timeout: 10_000 });
-
-    const siteSelect = dialog.locator('[data-testid="stock-site-select"]');
-    if (await siteSelect.isVisible({ timeout: 2_000 }).catch(() => false)) {
-        await siteSelect.click();
-        await page.locator('[role="option"]').first().click();
-    }
 
     const validateBtn = dialog.locator('[data-testid="stock-submit-button"]');
 

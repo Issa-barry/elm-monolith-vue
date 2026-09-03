@@ -2,15 +2,11 @@
 
 namespace App\Services;
 
-use App\Enums\BaseCalculLogistique;
-use App\Enums\CommissionActivationStatut;
 use App\Enums\DeclencheurCommissionLogistique;
 use App\Enums\DeclencheurCommissionVente;
 use App\Enums\NatureOperation;
 use App\Enums\StatutCommission;
 use App\Models\CommandeVente;
-use App\Models\CommissionLogistique;
-use App\Models\CommissionProcessus;
 use App\Models\FactureVente;
 use App\Models\Parametre;
 use App\Models\TransfertLogistique;
@@ -24,15 +20,15 @@ use App\Services\Commission\CommissionEnveloppeGenerator;
  *
  * Le déclencheur ne choisit QUE le moment de naissance de la commission,
  * jamais son statut initial : dans tous les cas elle naît CREEE (cf.
- * CommissionEnveloppeGenerator / CommissionLogistiqueService) et ne devient
- * IMPAYE(E) qu'à la validation de la période de paiement qui la couvre (cf.
+ * CommissionEnveloppeGenerator) et ne devient IMPAYE(E) qu'à la validation de
+ * la période de paiement qui la couvre (cf.
  * CommissionAdjustmentService::activerCommissionsCreees()).
  *
  * Ne recalcule jamais rien elle-même : délègue systématiquement à
- * CommissionEnveloppeGenerator / CommissionLogistiqueService, seules sources de
- * vérité du calcul (barèmes, parts). Chaque méthode est idempotente par
- * construction, via l'idempotence déjà portée par ces générateurs (existence
- * check + contrainte unique BDD sur source_id / transfert_logistique_id).
+ * CommissionEnveloppeGenerator, seule source de vérité du calcul (barèmes,
+ * parts). Chaque méthode est idempotente par construction, via l'idempotence
+ * déjà portée par ce générateur (existence check + contrainte unique BDD sur
+ * source_id).
  *
  * Changer le paramètre d'une organisation n'affecte jamais les commissions déjà
  * générées : chaque méthode n'agit que sur l'événement en cours, jamais
@@ -216,66 +212,43 @@ class CommissionTriggerService
             return;
         }
 
-        if (self::estMigreVersMoteurGenerique($transfert->organization_id)) {
-            CommissionEnveloppeGenerator::genererPourTransfertLogistique(
-                $transfert,
-                'quantite_chargee',
-                declencheurUserId: auth()->id(),
-            );
-
-            return;
-        }
-
-        CommissionLogistiqueService::genererDepuisChargement($transfert);
+        CommissionEnveloppeGenerator::genererPourTransfertLogistique(
+            $transfert,
+            'quantite_chargee',
+            declencheurUserId: auth()->id(),
+        );
     }
 
     /**
      * Appelé à la validation admin réelle de la réception (« accord ») — les deux
-     * points d'entrée existants : ReceptionValidationAdminController::store()
-     * (backoffice web, montant par pack saisi par l'admin) et
-     * Api\Backoffice\Logistique\ValidationAdminController::handleAccord() (montant
-     * automatique 200 FG/pack, cf. CommissionLogistiqueService::genererAutomatique()).
+     * points d'entrée existants : ReceptionValidationAdminController::store() (backoffice web) et
+     * Api\Backoffice\Logistique\ValidationAdminController::handleAccord() (API mobile).
      *
-     * Sous RECEPTION_EFFECTUEE : génère la commission maintenant, sur la base de la
-     * quantité réellement reçue — $montantParPack si fourni (saisie admin), sinon
-     * le montant automatique historique.
+     * Sous RECEPTION_EFFECTUEE : génère la commission maintenant, sur la base de la quantité
+     * réellement reçue, montant résolu par CommissionRegle (Paramètres > Commissions >
+     * Transferts logistiques).
      *
      * Sous CHARGEMENT_VALIDE : ne fait rien, la commission existe déjà depuis le
-     * départ du transfert — retourne null.
+     * départ du transfert.
+     *
+     * Décision produit du 03/09/2026 : le moteur générique (CommissionEnveloppeGenerator) est
+     * désormais le SEUL moteur de commission logistique — l'ancien CommissionLogistiqueService et
+     * la bascule par organisation (estMigreVersMoteurGenerique(), retirée) sont abandonnés après
+     * vérification en production qu'aucun solde `commission_logistique_parts` n'existait plus. La
+     * saisie manuelle d'un montant par pack n'a donc plus de sens et n'est plus acceptée par ce
+     * point d'entrée (cf. ReceptionValidationAdminController).
      */
-    public static function onTransfertReceptionEffectuee(TransfertLogistique $transfert, ?float $montantParPack = null): ?CommissionLogistique
+    public static function onTransfertReceptionEffectuee(TransfertLogistique $transfert): void
     {
         if (self::declencheurLogistique($transfert->organization_id) !== DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE) {
-            return null;
+            return;
         }
 
-        // Moteur générique : le montant est désormais résolu par CommissionRegle (Paramètres >
-        // Commissions > Transferts logistiques), une saisie manuelle par transfert n'a plus de
-        // sens et est ignorée — cf. ReceptionValidationAdminController, dont le champ devient
-        // conditionnel à cette même migration.
-        if (self::estMigreVersMoteurGenerique($transfert->organization_id)) {
-            CommissionEnveloppeGenerator::genererPourTransfertLogistique(
-                $transfert,
-                'quantite_recue',
-                declencheurUserId: auth()->id(),
-            );
-
-            return null;
-        }
-
-        if ($montantParPack !== null) {
-            $transfert->loadMissing('lignes');
-            $quantiteRecue = (int) $transfert->lignes->sum('quantite_recue');
-
-            return CommissionLogistiqueService::genererPourTransfert(
-                $transfert,
-                BaseCalculLogistique::PAR_PACK->value,
-                $montantParPack,
-                $quantiteRecue > 0 ? $quantiteRecue : 0,
-            );
-        }
-
-        return CommissionLogistiqueService::genererAutomatique($transfert);
+        CommissionEnveloppeGenerator::genererPourTransfertLogistique(
+            $transfert,
+            'quantite_recue',
+            declencheurUserId: auth()->id(),
+        );
     }
 
     // ── Lecture politique organisation ───────────────────────────────────────
@@ -288,21 +261,5 @@ class CommissionTriggerService
     private static function declencheurLogistique(string $organizationId): DeclencheurCommissionLogistique
     {
         return Parametre::getDeclencheurCommissionLogistique($organizationId);
-    }
-
-    /**
-     * Bascule par organisation, jamais globale : une organisation passe au moteur générique dès
-     * qu'elle enregistre sa première règle dans Paramètres > Commissions > Transferts logistiques
-     * (le processus passe alors ACTIF, cf. Settings\CommissionRegleController — même mécanisme que
-     * pour la vente). Tant qu'aucune règle n'a été configurée, l'ancien moteur
-     * (CommissionLogistiqueService) reste seul appelé — aucune migration ni recalcul de l'historique
-     * déjà généré, qui reste consultable et payable tel quel indéfiniment.
-     */
-    public static function estMigreVersMoteurGenerique(string $organizationId): bool
-    {
-        return CommissionProcessus::where('organization_id', $organizationId)
-            ->where('code', CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT)
-            ->where('statut', CommissionActivationStatut::ACTIF->value)
-            ->exists();
     }
 }

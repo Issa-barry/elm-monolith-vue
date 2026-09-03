@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\BaseCalculLogistique;
 use App\Enums\StatutTransfert;
 use App\Enums\TypeEcartLogistique;
 use App\Jobs\NotifierLivreursTransfertJob;
@@ -10,14 +9,12 @@ use App\Models\CommissionEnveloppe;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionProcessus;
 use App\Models\EquipeLivraison;
-use App\Models\Parametre;
 use App\Models\Produit;
 use App\Models\ProduitVariante;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
 use App\Models\Vehicule;
 use App\Services\Commission\CommissionPartageLivraisonCategorieChecker;
-use App\Services\CommissionTriggerService;
 use App\Services\TransfertActiviteService;
 use App\Services\VehiculeCapaciteService;
 use Illuminate\Http\RedirectResponse;
@@ -416,16 +413,12 @@ class TransfertLogistiqueController extends Controller
             'contexte' => $contexte,
             'statuts' => StatutTransfert::options(),
             'types_ecart' => TypeEcartLogistique::options(),
-            'bases_calcul' => BaseCalculLogistique::options(),
             'can_avancer' => $user->can('avancerStatut', $transfert_logistique),
             'can_valider_reception' => $user->can('validerReception', $transfert_logistique),
             'can_annuler' => $user->can('annuler', $transfert_logistique),
             'can_update' => $user->can('update', $transfert_logistique),
-            'can_generer_commission' => $user->can('genererCommission', $transfert_logistique),
             'can_verser_commission' => $user->can('verserCommission', $transfert_logistique),
             'can_valider_reception_admin' => $user->can('validerReceptionAdmin', $transfert_logistique),
-            'commission_moteur_generique' => CommissionTriggerService::estMigreVersMoteurGenerique($transfert_logistique->organization_id),
-            'montant_defaut_commission_logistique_par_pack' => Parametre::getMontantDefautCommissionLogistiquePack($transfert_logistique->organization_id),
             'activites' => $transfert_logistique->activites->map(fn ($a) => [
                 'id' => $a->id,
                 'action' => $a->action,
@@ -647,13 +640,13 @@ class TransfertLogistiqueController extends Controller
             $base['commission'] = null;
         }
 
-        // Moteur générique (organisation migrée, cf. commission_moteur_generique) : la commission
-        // n'est JAMAIS écrite dans $t->commission (relation vers l'ancien CommissionLogistique) —
-        // elle vit dans CommissionEnveloppe/CommissionEnveloppePart, générée par
-        // CommissionEnveloppeGenerator::genererPourTransfertLogistique(). Sans ce bloc, l'onglet
-        // "Commission logistique" affichait indéfiniment "en attente de validation admin" même
-        // après une génération réussie, la case ci-dessus restant toujours null pour ces
-        // organisations (régression constatée le 02/09/2026, cf. incident production).
+        // Moteur générique (seul moteur depuis le 03/09/2026) : la commission n'est JAMAIS écrite
+        // dans $t->commission (relation vers l'ancien CommissionLogistique, table conservée vide
+        // pour l'historique) — elle vit dans CommissionEnveloppe/CommissionEnveloppePart, générée
+        // par CommissionEnveloppeGenerator::genererPourTransfertLogistique(). Sans ce bloc,
+        // l'onglet "Commission logistique" affichait indéfiniment "en attente de validation
+        // admin" même après une génération réussie, la case ci-dessus restant toujours null
+        // (régression constatée le 02/09/2026, cf. incident production).
         $enveloppesGeneriques = CommissionEnveloppe::where('source_type', TransfertLogistique::class)
             ->where('source_id', $t->id)
             ->get();
@@ -733,20 +726,14 @@ class TransfertLogistiqueController extends Controller
      * Garde-fou préventif, symétrique à CommandeVenteController::ensurePartageLivraisonCategorieConfigure()
      * — réduit le risque qu'un transfert apparaisse chargé/réceptionné mais reste bloqué "à
      * régulariser" faute de partage Livreur configuré pour une catégorie transférée (cf. incident
-     * CMD-300826-007, 30/08/2026, même famille de problème côté vente). Uniquement pour les
-     * organisations déjà migrées vers le moteur générique (CommissionTriggerService::
-     * estMigreVersMoteurGenerique()) : les autres utilisent encore l'ancien
-     * CommissionLogistiqueService, qui n'a jamais utilisé EquipeLivraisonPartageCategorie — leur
-     * imposer ce garde-fou serait un frein injustifié. La configuration de partage peut encore
+     * CMD-300826-007, 30/08/2026, même famille de problème côté vente). S'applique désormais à
+     * toute organisation (moteur générique devenu le seul moteur, décision du 03/09/2026) — plus
+     * de garde conditionnel à un état "migré/non migré". La configuration de partage peut encore
      * changer entre cette création et la génération réelle (chargement validé/réception) — ce
      * contrôle réduit le risque, il ne l'élimine pas.
      */
     private function ensurePartageLivraisonCategorieConfigure(array $data, string $orgId): void
     {
-        if (! CommissionTriggerService::estMigreVersMoteurGenerique($orgId)) {
-            return;
-        }
-
         $vehicule = Vehicule::query()->with('equipe')->find($data['vehicule_id'] ?? null);
         if (! $vehicule || ! $vehicule->equipe) {
             return;

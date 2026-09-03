@@ -390,6 +390,16 @@ async function createClientInApp(
         .first();
     await selectOptionFromCombobox(page, paysCombo, /guin(?!.*bissau)/i);
 
+    // Nature du client — défaut "Revendeur" depuis la migration
+    // migrate_client_type_standard_to_revendeur (28/08/2026) : ce type rend le cashback actif
+    // ET son montant par pack obligatoires (cf. ClientForm.vue::isRevendeur), ce dont ce test
+    // n'a rien à faire. "Externe" reste facultatif sur les deux, donc plus simple ici.
+    const natureCombo = page
+        .locator('#client-form')
+        .getByRole('combobox')
+        .nth(1);
+    await selectOptionFromCombobox(page, natureCombo, /^externe$/i);
+
     await page.locator('#telephone').fill(tel);
     await page
         .locator('#client-form button[type="submit"]:visible')

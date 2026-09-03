@@ -108,11 +108,16 @@ même principe de barème dynamique au transfert logistique interne.
 - **COMM-006** — Le transfert logistique interne (usine → dépôt ELM) ne porte jamais de client ni
   de facture, quelle que soit sa commission — `TransfertLogistique` reste inchangé dans son
   fonctionnement de stock.
-- **COMM-007** — La bascule du transfert logistique vers le moteur générique de commission est
-  **par organisation**, jamais globale : une organisation reste sur l'ancien moteur
-  (`CommissionLogistiqueService`) tant qu'elle n'a configuré aucune règle dans Paramètres >
-  Commissions > Transferts logistiques. Aucune migration ni recalcul de l'historique déjà généré,
-  qui reste consultable et payable indéfiniment sous son ancien schéma.
+- **COMM-007** (révisée le 03/09/2026 — la version précédente décrivait une bascule PAR
+  ORGANISATION, retirée depuis) — Le moteur générique (`CommissionEnveloppeGenerator`) est
+  désormais le SEUL moteur de commission logistique, pour toute organisation, sans exception.
+  `CommissionTriggerService::estMigreVersMoteurGenerique()` et les méthodes de génération de
+  `CommissionLogistiqueService` (`genererPourTransfert`/`genererAutomatique`/`genererDepuisChargement`)
+  ont été retirés après vérification directe en production (`commission_logistique_parts` :
+  0 ligne, aucun solde restant) qu'aucune commission legacy n'était en attente de paiement. Les
+  tables `commissions_logistiques`/`commission_logistique_parts`/`versements_commission_logistique`
+  ne reçoivent donc plus jamais de nouvelle ligne — conservées uniquement pour un éventuel
+  historique antérieur (cf. section Historique/héritage).
 
 ## Modèle
 
@@ -151,26 +156,40 @@ la répartition d'équipe restent une seule implémentation, partagée par `Comm
 | `equipe_livraison_partages_categorie.processus_id` | Ajouté par [`add_processus_id_to_equipe_livraison_partages_categorie_table`](../database/migrations/2026_08_30_090100_add_processus_id_to_equipe_livraison_partages_categorie_table.php) — le partage GNF fixe entre livreurs d'une équipe peut désormais différer par processus sur la même catégorie. |
 | `App\Services\Commission\CommissionOperationContext` | Contexte générique consommé par le générateur. |
 | `App\Services\Commission\CommissionProcessusDefaults` | Valeurs par défaut (libellé/déclencheur/ancrage) par code processus — évite la duplication entre le générateur, le contrôleur de paramétrage et les services équipe. |
-| `App\Services\CommissionTriggerService::estMigreVersMoteurGenerique()` | Bascule par organisation pour le transfert logistique. |
 | `App\Services\Commission\CommissionPartageLivraisonCategorieChecker` | Source unique de la résolution "enveloppe équipe_livraison > 0 + partage actif ?" — partagée par le générateur, la validation de saisie de l'équipe et les garde-fous préventifs à la création (voir ci-dessous). |
 | Paramètres > Commissions (`Settings\CommissionRegleController`) | Un seul écran, 2 onglets (`?processus=vente\|logistique_transfert`) — `distribution_client` reste un processus réel côté génération/reporting mais sans onglet dédié, cf. COMM-005 (repli automatique du barème sur `logistique_transfert` tant qu'il n'a pas sa propre configuration). |
 | `Commercial > Ventes` / `Commercial > Distribution` | Même liste (`CommandeVenteController::index()`), filtrée par nom de route (`ventes.index` / `distributions.index`), jamais un paramètre modifiable côté client. |
 
 ## Historique / héritage
 
-- Le moteur logistique legacy (`CommissionLogistique`/`CommissionLogistiquePart`,
-  `CommissionLogistiqueService`) reste pleinement fonctionnel (génération, ajustement, paiement)
-  pour toute organisation non migrée, et pour l'historique des organisations migrées.
-- Le montant par défaut du moteur legacy (`200 GNF/pack`) est configurable par organisation
-  (`Parametre::getMontantDefautCommissionLogistiquePack()`, Paramètres > Ventes) — remplace la
-  valeur auparavant codée en dur, sans changer le comportement par défaut.
-- `Comptabilite\CommissionLogistiqueController` (écran historique dédié aux transferts) reste
-  structurellement legacy-only : il n'interroge que `CommissionLogistique`/`CommissionLogistiquePart`,
-  jamais `CommissionEnveloppePart`. Pour une organisation migrée, cet écran cesse simplement de
-  recevoir de nouvelles lignes (comportement voulu, cf. COMM-007) — les commissions de transfert
-  générées après bascule apparaissent désormais dans les écrans Commission vente/sites/
-  propriétaires/consultants (cible Livreur/Site/Propriétaire/Consultant), via le sélecteur
-  Processus décrit ci-dessous.
+- Depuis le 03/09/2026 (cf. COMM-007), le moteur logistique legacy (`CommissionLogistique`/
+  `CommissionLogistiquePart`, `CommissionLogistiqueService`) ne génère plus AUCUNE nouvelle
+  commission — vérifié sans solde restant en production avant ce retrait. `CommissionLogistiqueService`
+  ne survit que pour son unique méthode `verser()` (paiement d'un éventuel solde déjà existant) ;
+  ses méthodes de génération ont été supprimées avec le switch.
+- `Comptabilite\CommissionLogistiqueController` (écran Comptabilité > Commissions > Logistique)
+  reste en place mais n'interroge que `CommissionLogistique`/`CommissionLogistiquePart`, jamais
+  `CommissionEnveloppePart` — il ne recevra donc plus jamais de nouvelle ligne pour aucune
+  organisation. Conservé volontairement (pas de suppression de table dans cette PR, cf. plan de
+  retrait) : à retirer dans une PR séparée une fois confirmé qu'aucune organisation n'a de solde
+  historique à régler via cet écran. Toutes les commissions de transfert logistique, désormais et
+  pour toujours, apparaissent dans les écrans Commission vente/sites/propriétaires/consultants
+  (cible Livreur/Site/Propriétaire/Consultant), via le sélecteur Processus décrit ci-dessous.
+- Deux contrôleurs orphelins (aucune route ou aucun appelant frontend restant) ont été supprimés
+  le 03/09/2026 dans le cadre de ce retrait : `App\Http\Controllers\CommissionLogistiqueController`
+  (génération manuelle d'une commission par transfert, route `logistique/{transfert}/commission` —
+  la dernière brèche capable de créer une ligne legacy après le retrait du switch) et
+  `App\Http\Controllers\CommissionLogistiqueValidationController` (stub sans route enregistrée).
+  Le formulaire frontend correspondant (`Logistique/Show.vue`, dialog "Générer la commission")
+  était déjà mort (aucun bouton ne l'ouvrait) et a été retiré avec elles. Le champ `montant_par_pack`
+  (saisie manuelle admin à la validation de réception) a également été retiré de
+  `ReceptionValidationAdminController`/`Api\Backoffice\Logistique\ValidationAdminController` : le
+  montant est désormais TOUJOURS résolu par `CommissionRegle`, plus aucune saisie manuelle par
+  transfert n'est possible.
+- Le paramètre `montant_defaut_commission_logistique_par_pack` (Paramètres > Ventes,
+  `Parametre::getMontantDefautCommissionLogistiquePack()`) reste exposé dans les Paramètres mais
+  n'est plus lu par aucun code de génération — laissé en l'état (hors périmètre de ce retrait),
+  puisqu'il s'agit d'un champ de configuration UI distinct, pas d'un mécanisme de génération.
 
 ## Partage Livreur par processus (équipe véhicule)
 
@@ -223,9 +242,9 @@ la répartition d'équipe restent une seule implémentation, partagée par `Comm
   sur le processus résolu, via `CommissionPartageLivraisonCategorieChecker`. Ce contrôle :
   - rejoue exactement la même résolution que la génération (même enveloppe, même notion de
     partage actif) — jamais une règle divergente ;
-  - ne s'applique jamais à une vente sans véhicule, à un véhicule non éligible aux commissions
-    (`livraison_vente = false`), ni — côté transfert — à une organisation non migrée vers le
-    moteur générique (`CommissionTriggerService::estMigreVersMoteurGenerique()`) ;
+  - ne s'applique jamais à une vente sans véhicule, ni à un véhicule non éligible aux commissions
+    (`livraison_vente = false`) — s'applique en revanche à toute organisation côté transfert
+    depuis le 03/09/2026 (retrait de la bascule par organisation, cf. COMM-007) ;
   - reste un contrôle **préventif**, pas une garantie : le filet de sécurité de la génération
     (ci-dessus) reste seul responsable au moment réel de la génération, la configuration pouvant
     encore changer entre la création et le déclencheur (chargement/encaissement/réception).

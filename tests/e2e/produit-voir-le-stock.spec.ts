@@ -33,8 +33,13 @@ async function creerProduitAvecStock(
     await typeCombobox.click();
     await page.getByRole('option', { name: /fabricable/i }).click();
 
+    // Chaque champ InputNumber doit être "blurré" individuellement : PrimeVue InputNumber ne
+    // committe la valeur dans le v-model qu'au blur, jamais sur le simple événement "input" de
+    // .fill() (cf. produit-flow.spec.ts et stock-ajustement.spec.ts, même piège documenté).
     await page.locator('#prix_usine').fill('15000');
+    await page.locator('#prix_usine').blur();
     await page.locator('#prix_usine_tricycle').fill('15000');
+    await page.locator('#prix_usine_tricycle').blur();
     await page.locator('#prix_vente').fill('20000');
     await page.locator('#prix_vente').blur();
 

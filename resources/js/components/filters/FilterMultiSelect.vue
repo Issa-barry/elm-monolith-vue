@@ -25,7 +25,12 @@ const props = withDefaults(
         // single-select) est masqué.
         singleSelect?: boolean;
     }>(),
-    { placeholder: 'Tous', disabled: false, emptyMeansAll: false, singleSelect: false },
+    {
+        placeholder: 'Tous',
+        disabled: false,
+        emptyMeansAll: false,
+        singleSelect: false,
+    },
 );
 
 const model = defineModel<(string | number)[]>({ default: () => [] });

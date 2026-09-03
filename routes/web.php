@@ -16,7 +16,6 @@ use App\Http\Controllers\ClientVehicleController;
 use App\Http\Controllers\CommandeAchatController;
 use App\Http\Controllers\CommandeVenteController;
 use App\Http\Controllers\CommandeVenteStatutController;
-use App\Http\Controllers\CommissionLogistiqueController;
 use App\Http\Controllers\CommissionPaymentController;
 use App\Http\Controllers\CommissionVehiculeController;
 use App\Http\Controllers\Comptabilite\CommissionAjustementController;
@@ -699,10 +698,6 @@ Route::prefix('backoffice')->group(function () {
             Route::post('logistique/commissions/vehicules/{vehicule}/paiements', [CommissionPaymentController::class, 'store'])
                 ->name('logistique.commissions.paiements.store');
 
-            // Rétro-compat : accès direct par commission (page transfert Show)
-            Route::get('logistique/commissions/detail/{commission_logistique}', [CommissionLogistiqueController::class, 'show'])
-                ->name('logistique.commissions.show');
-
             Route::get('logistique/creer', [TransfertLogistiqueController::class, 'create'])->name('logistique.create');
             Route::post('logistique', [TransfertLogistiqueController::class, 'store'])->name('logistique.store');
             Route::get('logistique/{transfert_logistique}', [TransfertLogistiqueController::class, 'show'])->name('logistique.show');
@@ -716,9 +711,6 @@ Route::prefix('backoffice')->group(function () {
 
             // Validation admin de la réception (génère la commission automatiquement)
             Route::post('logistique/{transfert_logistique}/validation-reception', [ReceptionValidationAdminController::class, 'store'])->name('logistique.validation-reception.store');
-
-            // Commission logistique (accès direct, backward compat)
-            Route::post('logistique/{transfert_logistique}/commission', [CommissionLogistiqueController::class, 'store'])->name('logistique.commission.store');
 
             // Versements de parts de commission
             Route::post('commissions-logistique/parts/{part}/versements', [VersementCommissionLogistiqueController::class, 'store'])
