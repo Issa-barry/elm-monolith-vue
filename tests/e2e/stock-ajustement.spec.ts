@@ -308,10 +308,17 @@ test('ajustement de stock — isolation entre deux agences distinctes', async ({
     }
 
     function siteStockValue(siteName: string) {
+        // Depuis le refactor layout de Produits/Show.vue (commit 5b4dee6a, 02/09/2026), le
+        // titre "Stock par agence" est enveloppé dans un <div> supplémentaire (sans table,
+        // pour l'aligner en flex à côté du bloc "X unités") — .last() sur les seuls divs
+        // contenant le heading matchait donc ce petit wrapper au lieu de la carte. On exige
+        // en plus la présence du <table> : ça exprime ce qu'on cherche réellement (le bloc
+        // qui contient le tableau), sans dépendre d'une classe CSS précise.
         const section = page
             .locator('div', {
                 has: page.getByRole('heading', { name: /stock par agence/i }),
             })
+            .filter({ has: page.locator('table') })
             .last();
         return section
             .locator('tbody tr', { hasText: siteName })

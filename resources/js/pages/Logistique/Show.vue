@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/AppLayout.vue';
 import ReceptionDialog from '@/pages/Logistique/partials/ReceptionDialog.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     ArrowRight,
@@ -1481,7 +1481,6 @@ function activiteDotClass(action: string): string {
             :lignes="transfert.lignes"
             :types-ecart="types_ecart"
         />
-
 
         <!-- ══ Dialog : Générer commission (validation admin) ══════════════ -->
         <Dialog
