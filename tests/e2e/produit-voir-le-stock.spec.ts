@@ -38,6 +38,15 @@ async function creerProduitAvecStock(
     await page.locator('#prix_vente').fill('20000');
     await page.locator('#prix_vente').blur();
 
+    // Tarification par nature de client — obligatoire pour un produit fabricable (cf.
+    // ProduitService::raisonIncoherencePrix() côté serveur, seule source de vérité).
+    await page.locator('#prix_externe').fill('20000');
+    await page.locator('#prix_externe').blur();
+    await page.locator('#prix_revendeur').fill('18000');
+    await page.locator('#prix_revendeur').blur();
+    await page.locator('#prix_distributeur').fill('17000');
+    await page.locator('#prix_distributeur').blur();
+
     await page.getByRole('button', { name: /^enregistrer$/i }).click();
     await expect(page).toHaveURL(/\/produits\/[^/]+$/, { timeout: 20_000 });
 
