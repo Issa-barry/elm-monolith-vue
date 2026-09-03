@@ -81,6 +81,8 @@ interface BeneficiaireRow extends StatutCommissionResolu {
     payable?: number;
     /** Parts encore CREEE de ce bénéficiaire — plan de travail des actions Ajuster/Valider. */
     creee_parts: CreeePart[];
+    /** Toujours présent, même filtré sur un seul processus — provenance jamais masquée. */
+    processus_labels: string[];
 }
 
 interface PeriodeOption {
@@ -105,7 +107,7 @@ const props = defineProps<{
     search: string;
     filtre_statut: string;
     filtre_site_ids: string[];
-    filtre_processus: string;
+    filtre_processus: string[];
     processus_options: { value: string; label: string }[];
     selected_periode: string;
     periodes_disponibles: PeriodeOption[];
@@ -131,7 +133,7 @@ const filterFields = computed((): FilterField[] => [
     {
         key: 'processus',
         label: 'Processus',
-        type: 'select' as const,
+        type: 'multi-select' as const,
         inline: true,
         options: props.processus_options,
     },
@@ -161,7 +163,9 @@ const currentFilters = computed(() => ({
     site_ids: props.filtre_site_ids ?? [],
     statut: props.filtre_statut ?? '',
     periode: props.selected_periode ?? '',
-    processus: props.filtre_processus ?? 'vente',
+    // Aucune sélection = "Tous les processus" (décision produit du 02/09/2026) — jamais un
+    // repli implicite sur 'vente'.
+    processus: props.filtre_processus ?? [],
 }));
 
 // Dialog paiement
@@ -225,6 +229,9 @@ function buildParams(): URLSearchParams {
         params.append('site_ids[]', id);
     }
     if (props.filtre_statut) params.set('statut', props.filtre_statut);
+    for (const code of props.filtre_processus ?? []) {
+        params.append('processus[]', code);
+    }
     if (search.value) params.set('search', search.value);
     return params;
 }
@@ -500,7 +507,7 @@ function fmtTel(tel: string | null | undefined): string {
                 </div>
             </template>
 
-            <table class="w-full min-w-[1460px] text-sm">
+            <table class="w-full min-w-[1620px] text-sm">
                 <thead>
                     <tr class="border-b bg-muted/50">
                         <th
@@ -531,6 +538,12 @@ function fmtTel(tel: string | null | undefined): string {
                             class="px-4 py-3 text-left font-semibold text-foreground/70"
                         >
                             Agence
+                        </th>
+                        <th
+                            scope="col"
+                            class="px-4 py-3 text-left font-semibold text-foreground/70"
+                        >
+                            Processus
                         </th>
                         <th
                             scope="col"
@@ -667,6 +680,23 @@ function fmtTel(tel: string | null | undefined): string {
                             >
                                 <Building2 class="h-3.5 w-3.5 shrink-0" />
                                 <span>{{ b.agence }}</span>
+                            </div>
+                            <span v-else class="text-xs text-muted-foreground"
+                                >—</span
+                            >
+                        </td>
+                        <td class="px-4 py-3" @click.stop>
+                            <div
+                                v-if="b.processus_labels.length"
+                                class="flex flex-wrap gap-1"
+                            >
+                                <span
+                                    v-for="label in b.processus_labels"
+                                    :key="label"
+                                    class="rounded-full bg-muted px-2 py-0.5 text-xs font-medium whitespace-nowrap text-muted-foreground"
+                                >
+                                    {{ label }}
+                                </span>
                             </div>
                             <span v-else class="text-xs text-muted-foreground"
                                 >—</span

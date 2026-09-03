@@ -36,6 +36,8 @@ interface BeneficiaireRow {
     total_genere: number;
     en_attente_periode: number;
     payable: number;
+    /** Toujours présent, même filtré sur un seul processus — provenance jamais masquée. */
+    processus_labels: string[];
 }
 
 interface PeriodeOption {
@@ -56,7 +58,7 @@ const props = defineProps<{
     filtre_site_ids: string[];
     filtre_categorie_id: string;
     filtre_site_type: string;
-    filtre_processus: string;
+    filtre_processus: string[];
     processus_options: { value: string; label: string }[];
     selected_periode: string;
     periodes_disponibles: PeriodeOption[];
@@ -81,7 +83,7 @@ const filterFields = computed((): FilterField[] => [
     {
         key: 'processus',
         label: 'Processus',
-        type: 'select' as const,
+        type: 'multi-select' as const,
         inline: true,
         options: props.processus_options,
     },
@@ -125,7 +127,9 @@ const currentFilters = computed(() => ({
     periode: props.selected_periode ?? '',
     categorie_id: props.filtre_categorie_id ?? '',
     site_type: props.filtre_site_type ?? '',
-    processus: props.filtre_processus ?? 'vente',
+    // Aucune sélection = "Tous les processus" (décision produit du 02/09/2026) — jamais un
+    // repli implicite sur 'vente'.
+    processus: props.filtre_processus ?? [],
 }));
 
 const showAudit = ref(false);
@@ -148,7 +152,9 @@ function buildParams(): URLSearchParams {
     if (props.filtre_categorie_id)
         params.set('categorie_id', props.filtre_categorie_id);
     if (props.filtre_site_type) params.set('site_type', props.filtre_site_type);
-    if (props.filtre_processus) params.set('processus', props.filtre_processus);
+    for (const code of props.filtre_processus ?? []) {
+        params.append('processus[]', code);
+    }
     if (search.value) params.set('search', search.value);
     return params;
 }
@@ -213,7 +219,7 @@ function fmt(val: number | null | undefined) {
             @export-excel="exportExcel"
             @export-pdf="exportPdf"
         >
-            <table class="w-full min-w-[1320px] text-sm">
+            <table class="w-full min-w-[1480px] text-sm">
                 <thead>
                     <tr class="border-b bg-muted/50">
                         <th
@@ -233,6 +239,12 @@ function fmt(val: number | null | undefined) {
                             class="px-4 py-3 text-left font-semibold text-foreground/70"
                         >
                             Catégories
+                        </th>
+                        <th
+                            scope="col"
+                            class="px-4 py-3 text-left font-semibold text-foreground/70"
+                        >
+                            Processus
                         </th>
                         <th
                             scope="col"
@@ -285,10 +297,13 @@ function fmt(val: number | null | undefined) {
                     </tr>
                 </thead>
                 <tbody class="divide-y">
+                    <!-- Ne transmet jamais le(s) processus coché(s) sur l'Index : la fiche détail
+                         garde son propre filtre indépendant (même pattern que
+                         Comptabilite/CommissionVente/Index.vue). -->
                     <ClickableTableRow
                         v-for="b in beneficiaires"
                         :key="b.beneficiaire_id"
-                        :href="`/backoffice/comptabilite/commissions/sites/${b.beneficiaire_id}?processus=${currentFilters.processus}`"
+                        :href="`/backoffice/comptabilite/commissions/sites/${b.beneficiaire_id}`"
                         :aria-label="`Voir le détail de ${b.beneficiaire_nom}`"
                         class="even:bg-muted/20"
                     >
@@ -321,6 +336,23 @@ function fmt(val: number | null | undefined) {
                             class="max-w-[220px] px-4 py-3 text-xs text-muted-foreground"
                         >
                             {{ b.categories.join(', ') || '—' }}
+                        </td>
+                        <td class="px-4 py-3">
+                            <div
+                                v-if="b.processus_labels.length"
+                                class="flex flex-wrap gap-1"
+                            >
+                                <span
+                                    v-for="label in b.processus_labels"
+                                    :key="label"
+                                    class="rounded-full bg-muted px-2 py-0.5 text-xs font-medium whitespace-nowrap text-muted-foreground"
+                                >
+                                    {{ label }}
+                                </span>
+                            </div>
+                            <span v-else class="text-xs text-muted-foreground"
+                                >—</span
+                            >
                         </td>
                         <td
                             class="px-4 py-3 text-right whitespace-nowrap text-foreground/80 tabular-nums"

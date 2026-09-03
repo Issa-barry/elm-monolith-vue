@@ -9,7 +9,6 @@ use App\Enums\StatutDepense;
 use App\Enums\TypePeriodePaiement;
 use App\Http\Controllers\Controller;
 use App\Models\CommissionEnveloppePart;
-use App\Models\CommissionProcessus;
 use App\Models\Depense;
 use App\Models\Livreur;
 use App\Models\Organization;
@@ -74,10 +73,13 @@ class CommissionVenteController extends Controller
         if ($filtrePeriode !== '' && ! preg_match('/^\d{4}-\d{2}-(P1|P2|M)$/', $filtrePeriode)) {
             $filtrePeriode = '';
         }
-        // Cet écran s'appelle "Commission vente" : par défaut, il ne montre que le processus
-        // vente — jamais un mélange silencieux avec distribution_client/logistique_transfert
-        // (cf. docs/commissions.md). Explicitement changeable via le filtre.
-        $filtreProcessus = $this->scalarInput($request, 'processus') ?: CommissionProcessus::CODE_VENTE;
+        // Décision produit du 02/09/2026 (révise ce commentaire) : plus de repli implicite sur
+        // "vente" — aucune sélection = "Tous les processus" (jamais un mélange silencieusement
+        // réduit à un seul), plusieurs processus cochés s'unissent (cf. docs/commissions.md et
+        // CommissionProcessusFilter). Chaque ligne du détail affiche sa provenance via une colonne
+        // "Processus" dédiée (cf. breakdownParProcessus() côté fiche bénéficiaire pour l'équivalent
+        // consolidé par bénéficiaire unique).
+        $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
 
         $isAdmin = $user->isAdmin();
         $sites = Site::where('organization_id', $orgId)->orderBy('nom')->get(['id', 'nom']);
@@ -242,6 +244,9 @@ class CommissionVenteController extends Controller
                 'en_attente_periode' => $buckets['en_attente_periode'],
                 'payable' => $buckets['payable'],
                 'creee_parts' => $creeeParts,
+                // Toujours exposé, même filtré sur un seul processus (décision produit du
+                // 02/09/2026) : la provenance reste visible sans devoir rouvrir le filtre.
+                'processus_labels' => CommissionProcessusFilter::labelsPresents($parts),
                 ...$resolved,
             ];
         })->values();
@@ -702,7 +707,7 @@ class CommissionVenteController extends Controller
         $isAdmin = $user->isAdmin();
         $filtrePeriode = $this->scalarInput($request, 'periode');
         $filtreStatut = $this->scalarInput($request, 'statut');
-        $filtreProcessus = $this->scalarInput($request, 'processus') ?: CommissionProcessus::CODE_VENTE;
+        $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
         $search = trim((string) $request->input('search', ''));
         $filtreSiteIds = $isAdmin
             ? array_values(array_filter((array) $request->input('site_ids', [])))
@@ -754,7 +759,7 @@ class CommissionVenteController extends Controller
         $isAdmin = $user->isAdmin();
         $filtrePeriode = $this->scalarInput($request, 'periode');
         $filtreStatut = $this->scalarInput($request, 'statut');
-        $filtreProcessus = $this->scalarInput($request, 'processus') ?: CommissionProcessus::CODE_VENTE;
+        $filtreProcessus = CommissionProcessusFilter::normaliserCodes($request->input('processus', []));
         $search = trim((string) $request->input('search', ''));
         $filtreSiteIds = $isAdmin
             ? array_values(array_filter((array) $request->input('site_ids', [])))
@@ -787,8 +792,11 @@ class CommissionVenteController extends Controller
         return $pdf->download('commissions-vente-'.now()->format('Y-m-d').'.pdf');
     }
 
-    /** @param  array<int, string>  $filtreSiteIds */
-    private function loadPartsForExport(string $orgId, string $filtrePeriode, array $filtreSiteIds = [], string $filtreProcessus = CommissionProcessus::CODE_VENTE): Collection
+    /**
+     * @param  array<int, string>  $filtreSiteIds
+     * @param  array<int, string>  $filtreProcessus
+     */
+    private function loadPartsForExport(string $orgId, string $filtrePeriode, array $filtreSiteIds = [], array $filtreProcessus = []): Collection
     {
         $query = CommissionEnveloppePart::with([
             'enveloppe.source.site:id,nom',

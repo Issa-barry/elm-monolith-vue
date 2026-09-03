@@ -6,6 +6,7 @@ use App\Enums\BaseCalculLogistique;
 use App\Enums\StatutTransfert;
 use App\Enums\TypeEcartLogistique;
 use App\Jobs\NotifierLivreursTransfertJob;
+use App\Models\CommissionEnveloppe;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionProcessus;
 use App\Models\EquipeLivraison;
@@ -645,6 +646,19 @@ class TransfertLogistiqueController extends Controller
         } else {
             $base['commission'] = null;
         }
+
+        // Moteur générique (organisation migrée, cf. commission_moteur_generique) : la commission
+        // n'est JAMAIS écrite dans $t->commission (relation vers l'ancien CommissionLogistique) —
+        // elle vit dans CommissionEnveloppe/CommissionEnveloppePart, générée par
+        // CommissionEnveloppeGenerator::genererPourTransfertLogistique(). Sans ce bloc, l'onglet
+        // "Commission logistique" affichait indéfiniment "en attente de validation admin" même
+        // après une génération réussie, la case ci-dessus restant toujours null pour ces
+        // organisations (régression constatée le 02/09/2026, cf. incident production).
+        $enveloppesGeneriques = CommissionEnveloppe::where('source_type', TransfertLogistique::class)
+            ->where('source_id', $t->id)
+            ->get();
+        $base['commission_generique_genere'] = $enveloppesGeneriques->isNotEmpty();
+        $base['commission_generique_montant_total'] = (float) $enveloppesGeneriques->sum('montant_total');
 
         return $base;
     }

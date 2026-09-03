@@ -126,6 +126,11 @@ interface Transfert {
     validation_motif: string | null;
     lignes: Ligne[];
     commission: Commission | null;
+    // Moteur générique (organisation migrée) : la commission n'est jamais écrite dans `commission`
+    // ci-dessus (relation legacy CommissionLogistique) — cf.
+    // TransfertLogistiqueController::mapTransfertDetail(), incident du 02/09/2026.
+    commission_generique_genere: boolean;
+    commission_generique_montant_total: number;
     is_brouillon: boolean;
     is_cloture: boolean;
     is_terminal: boolean;
@@ -1150,9 +1155,41 @@ function activiteDotClass(action: string): string {
                                 !transfert.commission
                             "
                         >
+                            <!-- Moteur générique : commission déjà générée (n'est jamais écrite
+                            dans transfert.commission, cf. TypeScript ci-dessus) — sans ce bloc,
+                            cet onglet affichait "en attente" indéfiniment même après succès. -->
+                            <div
+                                v-if="transfert.commission_generique_genere"
+                                class="m-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-800 dark:bg-emerald-950/30"
+                            >
+                                <div
+                                    class="flex items-center gap-2 text-emerald-700 dark:text-emerald-400"
+                                >
+                                    <CheckCircle2 class="h-4 w-4 shrink-0" />
+                                    <span class="text-sm font-semibold"
+                                        >Commission générée</span
+                                    >
+                                </div>
+                                <p
+                                    class="mt-1 text-xs text-emerald-700 dark:text-emerald-400"
+                                >
+                                    {{
+                                        formatGNF(
+                                            transfert.commission_generique_montant_total,
+                                        )
+                                    }}
+                                    au total, selon le barème configuré
+                                    (Paramètres > Commissions > Transferts
+                                    logistiques). Détail par bénéficiaire
+                                    disponible dans Comptabilité > Commissions
+                                    (filtre Processus = "Transferts
+                                    logistiques").
+                                </p>
+                            </div>
+
                             <!-- Refus -->
                             <div
-                                v-if="
+                                v-else-if="
                                     transfert.validation_reception === 'refus'
                                 "
                                 class="m-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-950/30"

@@ -59,13 +59,16 @@ class CommissionRegleController extends Controller
      * EquipeLivraisonController::rules()), les onglets Paramètres > Commissions et la fiche
      * véhicule (VehiculeController::show()).
      *
-     * CODE_DISTRIBUTION_CLIENT volontairement absent depuis le 01/09/2026 (décision produit) :
-     * une distribution client utilise désormais le même barème que le transfert logistique
-     * (CODE_LOGISTIQUE_TRANSFERT), il n'y a plus de configuration séparée à proposer. Les
-     * CommissionEnveloppe/CommissionRegle/EquipeLivraisonPartageCategorie déjà rattachées à
-     * CODE_DISTRIBUTION_CLIENT restent en base et lisibles (jamais migrées) — seul le REPORTING
-     * historique (App\Support\Commission\CommissionProcessusFilter, volontairement distinct de
-     * cette liste) continue de les distinguer, pour ne jamais fausser un total déjà généré.
+     * CODE_DISTRIBUTION_CLIENT volontairement absent (décision produit du 02/09/2026) : processus
+     * métier réel et courant (chaque distribution génère toujours une CommissionEnveloppe qui LUI
+     * est rattachée, pour un reporting distinct de la vente), mais sans onglet de configuration
+     * dédié — tant qu'aucune CommissionRegle active ne lui est propre, son barème est résolu par
+     * repli automatique sur celui de CODE_LOGISTIQUE_TRANSFERT (cf.
+     * CommissionProcessusDefaults::processusResolutionBareme()). Le jour où le métier veut un
+     * barème distribution divergent, il suffit d'ajouter ce code ici et de le configurer — aucun
+     * changement de code de résolution nécessaire. Le REPORTING (App\Support\Commission\
+     * CommissionProcessusFilter, volontairement distinct de cette liste) continue de le distinguer
+     * dans tous les cas, configuré ou non.
      *
      * @return array<string>
      */
@@ -82,10 +85,9 @@ class CommissionRegleController extends Controller
         return match ($code) {
             CommissionProcessus::CODE_VENTE => 'Ventes',
             CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT => 'Transferts logistiques',
-            // Legacy : CODE_DISTRIBUTION_CLIENT n'est plus dans processusCodesDisponibles()
-            // depuis le 01/09/2026, mais un CommissionProcessus historique portant ce code
-            // peut encore être résolu ailleurs (reporting) — jamais une chaîne technique brute.
-            CommissionProcessus::CODE_DISTRIBUTION_CLIENT => 'Distribution client (historique)',
+            // Processus réel et courant (reporting), sans onglet de configuration dédié tant que
+            // son barème reste hérité de CODE_LOGISTIQUE_TRANSFERT — cf. processusCodesDisponibles().
+            CommissionProcessus::CODE_DISTRIBUTION_CLIENT => 'Distribution client',
             default => $code,
         };
     }

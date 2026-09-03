@@ -31,6 +31,7 @@ use App\Services\CommandeVenteActiviteService;
 use App\Services\CommandeVenteService;
 use App\Services\Commission\CommissionEnveloppeGenerator;
 use App\Services\Commission\CommissionPartageLivraisonCategorieChecker;
+use App\Services\Commission\CommissionProcessusDefaults;
 use App\Services\PrixUsineResolver;
 use App\Services\PrixVenteNatureResolver;
 use App\Services\SolvabiliteService;
@@ -863,13 +864,13 @@ class CommandeVenteController extends Controller
 
         // Route par nature_operation — jamais un CODE_VENTE codé en dur (correctif du
         // 30/08/2026 : une commande distribution_client ne remontait jamais son état "à
-        // régulariser", puisque sa CommissionGenerationAttempt est rattachée à un autre
-        // processus que vente). Distribution → CODE_LOGISTIQUE_TRANSFERT depuis le 01/09/2026
-        // (cf. CommissionEnveloppeGenerator::genererPourCommandeVente()), jamais
-        // CODE_DISTRIBUTION_CLIENT — sinon cette recherche viserait un processus qui ne reçoit
-        // plus aucune tentative depuis cette date.
+        // régulariser", puisque sa CommissionGenerationAttempt est rattachée au processus
+        // distribution_client, pas vente). CommissionEnveloppeGenerator::executerAvecTentative()
+        // tague toujours l'attempt avec le processus D'IDENTITÉ (jamais celui de résolution du
+        // barème, cf. décision produit du 02/09/2026) — CODE_DISTRIBUTION_CLIENT reste donc le
+        // bon code ici, que son barème soit propre ou hérité de logistique_transfert.
         $processusCode = $commande->nature_operation === NatureOperation::DISTRIBUTION_CLIENT
-            ? CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT
+            ? CommissionProcessus::CODE_DISTRIBUTION_CLIENT
             : CommissionProcessus::CODE_VENTE;
 
         $processusId = CommissionProcessus::where('organization_id', $commande->organization_id)
@@ -1157,20 +1158,28 @@ class CommandeVenteController extends Controller
             return;
         }
 
-        // Distribution → CODE_LOGISTIQUE_TRANSFERT depuis le 01/09/2026, jamais
-        // CODE_DISTRIBUTION_CLIENT — doit refléter exactement le routage réel du générateur
-        // (CommissionEnveloppeGenerator::genererPourCommandeVente()), sinon ce garde-fou
-        // préventif validerait un partage qui ne sera jamais celui réellement consommé.
-        $processusCode = $natureOperation === NatureOperation::DISTRIBUTION_CLIENT
-            ? CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT
+        // L'identité (distribution_client/vente) reste toujours celle de la commande — c'est elle
+        // qui sera écrite sur la CommissionEnveloppe générée. Le garde-fou doit en revanche vérifier
+        // le barème RÉELLEMENT consommé par le générateur, qui peut différer de l'identité (cf.
+        // CommissionProcessusDefaults::processusResolutionBareme(), décision produit du 02/09/2026 :
+        // distribution_client retombe sur le barème de logistique_transfert tant qu'il n'a pas sa
+        // propre CommissionRegle active). Sans cette résolution identique à celle du générateur
+        // (CommissionEnveloppeGenerator::genererPourCommandeVente()), ce contrôle préventif pourrait
+        // valider un partage qui ne sera jamais celui réellement consommé, ou en exiger un que le
+        // générateur ne lira jamais.
+        $organizationId = auth()->user()->organization_id;
+        $identiteCode = $natureOperation === NatureOperation::DISTRIBUTION_CLIENT
+            ? CommissionProcessus::CODE_DISTRIBUTION_CLIENT
             : CommissionProcessus::CODE_VENTE;
+        $processusIdentite = CommissionProcessusDefaults::resoudreOuCreer($organizationId, $identiteCode);
+        $processusBareme = CommissionProcessusDefaults::processusResolutionBareme($processusIdentite);
 
         $categorieIds = CommissionPartageLivraisonCategorieChecker::categorieIdsDepuisLignes($lignes);
 
         $manquantes = CommissionPartageLivraisonCategorieChecker::categoriesManquantes(
-            auth()->user()->organization_id,
+            $organizationId,
             $vehicule->equipe->id,
-            $processusCode,
+            $processusBareme->code,
             $vehicule->type_vehicule_id,
             $categorieIds,
             Carbon::today(),
