@@ -559,9 +559,7 @@ function confirmDelete(c: Client) {
                                 "
                                 class="text-muted-foreground tabular-nums"
                             >
-                                {{
-                                    formatGNF(data.cashback_montant_par_pack)
-                                }}
+                                {{ formatGNF(data.cashback_montant_par_pack) }}
                                 / pack
                             </span>
                             <span v-else class="text-muted-foreground">-</span>
