@@ -28,6 +28,7 @@ interface RoleConfig {
     peut_valider: boolean;
     perimetre: 'toutes_agences' | 'son_agence' | 'agences_selectionnees';
     sites: string[];
+    plafond_validation: number | null;
 }
 
 const props = defineProps<{
@@ -40,6 +41,11 @@ const toast = useToast();
 // ── Droits de validation ──────────────────────────────────────────────────────
 
 const ADMIN_ROLES = ['super_admin', 'admin_entreprise'];
+// Seul Super Admin reste sans plafond de montant. Admin Entreprise garde son
+// accès automatique (permission + agences, cf. ADMIN_ROLES ci-dessus) mais
+// doit désormais configurer un plafond comme n'importe quel rôle actif —
+// décision produit 04/09/2026 (cf. docs/depenses-validation.md, DEPVAL-001).
+const UNLIMITED_ROLES = ['super_admin'];
 
 const droitsForm = ref<RoleConfig[]>(
     props.config.map((c) => ({ ...c, sites: [...c.sites] })),
@@ -64,6 +70,10 @@ function isAdminRole(roleName: string): boolean {
     return ADMIN_ROLES.includes(roleName);
 }
 
+function isUnlimitedRole(roleName: string): boolean {
+    return UNLIMITED_ROLES.includes(roleName);
+}
+
 const nonAdminRows = () =>
     droitsForm.value.filter((r) => !isAdminRole(r.role_name));
 
@@ -84,13 +94,58 @@ function toggleColumn() {
             (r) => r.role_name === entry.role_name,
         )!;
         real.peut_valider = state !== 'all';
-        if (state === 'all') real.sites = [];
+        if (state === 'all') {
+            real.sites = [];
+            real.plafond_validation = null;
+            plafondDisplay.value[real.role_name] = '';
+        }
     });
 }
 
 function toggle(entry: RoleConfig) {
     entry.peut_valider = !entry.peut_valider;
-    if (!entry.peut_valider) entry.sites = [];
+    if (!entry.peut_valider) {
+        entry.sites = [];
+        entry.plafond_validation = null;
+        plafondDisplay.value[entry.role_name] = '';
+    }
+}
+
+// ── Plafond de validation ─────────────────────────────────────────────────────
+// Même pattern de saisie que #seuil-impayes-input (settings/Ventes.vue) : input
+// texte avec formatage milliers manuel plutôt que PrimeVue InputNumber, dont le
+// groupement de milliers n'est jamais activé ailleurs dans le projet.
+
+function formatMontant(val: number | null): string {
+    return val !== null && val > 0
+        ? new Intl.NumberFormat('fr-FR').format(val)
+        : '';
+}
+
+const plafondDisplay = ref<Record<string, string>>(
+    Object.fromEntries(
+        droitsForm.value.map((r) => [
+            r.role_name,
+            formatMontant(r.plafond_validation),
+        ]),
+    ),
+);
+
+function onPlafondInput(entry: RoleConfig, e: Event) {
+    const raw = (e.target as HTMLInputElement).value.replace(/\D/g, '');
+    entry.plafond_validation = raw ? parseInt(raw, 10) : null;
+}
+
+function onPlafondFocus(entry: RoleConfig) {
+    plafondDisplay.value[entry.role_name] = entry.plafond_validation
+        ? String(entry.plafond_validation)
+        : '';
+}
+
+function onPlafondBlur(entry: RoleConfig) {
+    plafondDisplay.value[entry.role_name] = formatMontant(
+        entry.plafond_validation,
+    );
 }
 
 const expandedPortee = ref<Set<string>>(new Set());
@@ -147,6 +202,16 @@ function saveDroits() {
                     severity: 'success',
                     summary: 'Droits de validation mis à jour',
                     life: 3000,
+                });
+            },
+            onError: (errors) => {
+                toast.add({
+                    severity: 'error',
+                    summary: 'Enregistrement impossible',
+                    detail:
+                        Object.values(errors)[0] ??
+                        'Les droits de validation n’ont pas pu être enregistrés.',
+                    life: 7000,
                 });
             },
             onFinish: () => (savingDroits.value = false),
@@ -258,6 +323,15 @@ function saveDroits() {
                                     </th>
                                     <th
                                         class="px-6 py-4 text-left"
+                                        style="min-width: 200px"
+                                    >
+                                        <span
+                                            class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
+                                            >Plafond de validation</span
+                                        >
+                                    </th>
+                                    <th
+                                        class="px-6 py-4 text-left"
                                         style="min-width: 220px"
                                     >
                                         <span
@@ -319,7 +393,7 @@ function saveDroits() {
                                                     >
                                                     <p
                                                         v-if="
-                                                            isAdminRole(
+                                                            isUnlimitedRole(
                                                                 entry.role_name,
                                                             )
                                                         "
@@ -327,6 +401,18 @@ function saveDroits() {
                                                     >
                                                         Accès complet
                                                         automatique
+                                                    </p>
+                                                    <p
+                                                        v-else-if="
+                                                            isAdminRole(
+                                                                entry.role_name,
+                                                            )
+                                                        "
+                                                        class="text-xs text-muted-foreground"
+                                                    >
+                                                        Accès automatique,
+                                                        plafond de validation
+                                                        applicable
                                                     </p>
                                                 </div>
                                             </div>
@@ -363,6 +449,57 @@ function saveDroits() {
                                                     />
                                                 </button>
                                             </div>
+                                        </td>
+                                        <!-- Plafond de validation -->
+                                        <td class="px-6 py-4">
+                                            <div
+                                                v-if="
+                                                    isUnlimitedRole(
+                                                        entry.role_name,
+                                                    )
+                                                "
+                                                class="text-xs text-muted-foreground italic"
+                                            >
+                                                Sans limite
+                                            </div>
+                                            <div
+                                                v-else-if="
+                                                    entry.peut_valider ||
+                                                    isAdminRole(entry.role_name)
+                                                "
+                                                class="relative w-40"
+                                            >
+                                                <input
+                                                    type="text"
+                                                    inputmode="numeric"
+                                                    :value="
+                                                        plafondDisplay[
+                                                            entry.role_name
+                                                        ]
+                                                    "
+                                                    placeholder="0"
+                                                    class="w-full rounded-md border bg-background py-1.5 pr-11 pl-2 text-right text-sm font-medium tabular-nums shadow-sm focus:ring-2 focus:ring-ring focus:outline-none"
+                                                    @input="
+                                                        onPlafondInput(
+                                                            entry,
+                                                            $event,
+                                                        )
+                                                    "
+                                                    @focus="
+                                                        onPlafondFocus(entry)
+                                                    "
+                                                    @blur="onPlafondBlur(entry)"
+                                                />
+                                                <span
+                                                    class="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs font-medium text-muted-foreground"
+                                                    >GNF</span
+                                                >
+                                            </div>
+                                            <span
+                                                v-else
+                                                class="text-xs text-muted-foreground/40"
+                                                >—</span
+                                            >
                                         </td>
                                         <!-- Portée -->
                                         <td class="px-6 py-4">
@@ -418,7 +555,7 @@ function saveDroits() {
                                         :key="entry.role_name + '-portee'"
                                         class="border-b bg-muted/5"
                                     >
-                                        <td colspan="3" class="px-8 py-4">
+                                        <td colspan="4" class="px-8 py-4">
                                             <div class="space-y-3">
                                                 <div
                                                     class="flex flex-wrap gap-2"

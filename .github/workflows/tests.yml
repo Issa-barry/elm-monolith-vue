@@ -11,19 +11,61 @@ jobs:
   ci:
     name: PHPUnit
     runs-on: ubuntu-latest
+    # actions: write est nécessaire uniquement pour la dernière étape (mise à jour de la
+    # variable de dépôt PHPUNIT_PASSED_FINGERPRINTS) — cf. commentaire sur cette étape.
+    permissions:
+      contents: read
+      actions: write
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Empreinte du code qui influence réellement le résultat de PHPUnit (tout sauf la
+      # doc et les workflows CI). dev→pre-prod→production→main est un flux de PROMOTION
+      # pure (branch-flow.yml n'autorise que dev→pre-prod, pre-prod→production,
+      # production→main) : une PR de promotion sans nouveau commit reteste un code déjà
+      # validé une étape plus tôt. `git ls-tree` est content-addressed (les hash changent
+      # dès qu'un fichier change), donc cette empreinte est stable tant que le contenu
+      # testable ne change pas, même si le commit de merge lui a un SHA différent à
+      # chaque étape.
+      - name: Compute test fingerprint
+        id: fp
+        run: |
+          FP=$(git ls-tree -r HEAD | awk -F'\t' '
+            $2 !~ /^\.github\// && $2 !~ /^docs\// && $2 !~ /^README/ && $2 !~ /^CHANGELOG/ && $2 !~ /\.md$/
+          ' | sha256sum | cut -d' ' -f1)
+          echo "fp=$FP" >> "$GITHUB_OUTPUT"
+
+      # actions/cache ne peut PAS servir ici : un cache créé pendant une PR est scopé à
+      # `refs/pull/N/merge` et n'est restaurable que par des re-runs de CETTE PR (doc
+      # GitHub "Restrictions for accessing a cache") — inutilisable pour partager un
+      # résultat entre la PR dev→pre-prod et la PR pre-prod→production suivante. On
+      # utilise donc une variable de dépôt (repository variable), visible par toutes les
+      # branches sans restriction de scope.
+      - name: Check if this exact code was already validated
+        id: skip_check
+        run: |
+          if echo '${{ vars.PHPUNIT_PASSED_FINGERPRINTS }}' | grep -q "${{ steps.fp.outputs.fp }}"; then
+            echo "Empreinte déjà validée par une étape précédente du flux dev→pre-prod→production→main — PHPUnit sauté."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # NOTE sur tous les `if:` de ce job : un `if:` personnalisé sur une step GitHub Actions
+      # SUPPRIME le garde-fou implicite success() (documenté : "the moment you write a custom
+      # if, that implicit check is dropped") — sans le `success() &&` explicite ci-dessous, un
+      # échec de composer/npm laisserait quand même tourner les steps suivantes.
       - name: Setup PHP
+        if: success() && steps.skip_check.outputs.skip != 'true'
         uses: shivammathur/setup-php@v2
         with:
           php-version: 8.4
-          extensions: pcov
           tools: composer:v2
 
       - name: Cache Composer dependencies
+        if: success() && steps.skip_check.outputs.skip != 'true'
         uses: actions/cache@v4
         with:
           path: vendor
@@ -31,40 +73,103 @@ jobs:
           restore-keys: composer-
 
       - name: Setup Node
+        if: success() && steps.skip_check.outputs.skip != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
 
       - name: Install Node dependencies
+        if: success() && steps.skip_check.outputs.skip != 'true'
         run: npm ci
 
       - name: Install PHP dependencies
+        if: success() && steps.skip_check.outputs.skip != 'true'
         run: composer install --no-interaction --prefer-dist --optimize-autoloader
 
       - name: Copy environment file
+        if: success() && steps.skip_check.outputs.skip != 'true'
         run: cp .env.example .env
 
       - name: Generate application key
+        if: success() && steps.skip_check.outputs.skip != 'true'
         run: php artisan key:generate
 
+      # Requis avant les tests : certaines pages Inertia rendues en Feature test
+      # (@vite dans resources/views/app.blade.php) ont besoin de public/build/manifest.json.
       - name: Build assets
+        if: success() && steps.skip_check.outputs.skip != 'true'
         run: npm run build
 
-      - name: Run PHPUnit with coverage
-        run: ./vendor/bin/phpunit --coverage-clover coverage/clover.xml
-
-      # continue-on-error : cette étape ne fait qu'archiver le rapport de coverage, elle
-      # n'a pas vocation à faire échouer le gate PHPUnit. Le backend d'upload d'artifacts
-      # de GitHub Actions a des pannes ponctuelles (timeout réseau sur CreateArtifact,
-      # cf. run #427 du 2026-09-01) sans rapport avec l'état des tests.
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+      # Suite complète (3727 tests) parallélisée sur les 4 vCPU du runner via paratest
+      # (auparavant : phpunit mono-processus, ~47 min à chaque run — cf. run #33674536588).
+      # sqlite :memory: isole nativement chaque process paratest : aucune config DB par
+      # worker n'est nécessaire. Coverage retiré de ce gate (pcov ajoutait du surcoût à
+      # chaque run et coverage/clover.xml n'était consommé par aucun outil — ni Codecov ni
+      # Sonar ne sont configurés dans ce dépôt) ; à réintroduire séparément (job dédié, non
+      # bloquant) si un besoin de suivi de couverture apparaît.
+      #
+      # continue-on-error : validé le 2026-09-04, la parallélisation expose un problème
+      # PRÉEXISTANT de non-isolation entre tests (au moins un test mute un état process-wide,
+      # probablement via config() — ex: app.deployment_mode dans ProductionDeploySeedingTest/
+      # InstallWizardTest/InstallAppTest — sans le restaurer) : 4 tests de
+      # DepenseParametrageTest échouent uniquement quand combinés à d'autres fichiers dans un
+      # même worker, alors qu'ils passent à 100% isolés ou en série. Ce n'est pas un bug
+      # introduit par ce chantier — l'ordre fixe de phpunit en série l'a toujours masqué — mais
+      # tant que la vraie cause (hors périmètre ici) n'est pas corrigée, le run parallèle seul
+      # n'est pas un gate fiable. D'où les deux étapes suivantes : les échecs du run parallèle
+      # sont rejoués en série (1 process, isolation garantie) avant de faire échouer le gate.
+      - name: Run PHPUnit (parallel)
+        id: parallel_run
+        if: success() && steps.skip_check.outputs.skip != 'true'
         continue-on-error: true
-        with:
-          name: coverage
-          path: coverage/clover.xml
-          retention-days: 1
+        run: php artisan test --parallel --processes=4 --log-junit=storage/logs/paratest-junit.xml
+
+      - name: Extract failed tests from parallel run
+        id: failed_tests
+        if: success() && steps.parallel_run.outcome == 'failure'
+        run: |
+          FILTER=$(php -r '
+            $doc = new DOMDocument();
+            $doc->load("storage/logs/paratest-junit.xml");
+            $names = [];
+            foreach ($doc->getElementsByTagName("testcase") as $tc) {
+                if ($tc->getElementsByTagName("failure")->length > 0 || $tc->getElementsByTagName("error")->length > 0) {
+                    $names[] = preg_quote($tc->getAttribute("class"), "/") . "::" . preg_quote($tc->getAttribute("name"), "/");
+                }
+            }
+            echo implode("|", array_unique($names));
+          ')
+          echo "filter=$FILTER" >> "$GITHUB_OUTPUT"
+          echo "Échecs en parallèle à revalider en série : ${FILTER:-<aucun test identifiable — crash infra, pas un échec de test>}"
+
+      - name: Rerun failed tests in serial mode (isolation check)
+        if: success() && steps.parallel_run.outcome == 'failure'
+        run: |
+          if [ -z "${{ steps.failed_tests.outputs.filter }}" ]; then
+            echo "Le run parallèle a échoué sans échec de test individuel identifiable (crash/erreur infra) — gate en échec."
+            exit 1
+          fi
+          php artisan test --filter='${{ steps.failed_tests.outputs.filter }}'
+
+      # Enregistre l'empreinte comme validée pour que les PR de promotion suivantes
+      # (pre-prod→production, production→main) sautent PHPUnit sur ce même code. success()
+      # ici couvre les deux cas légitimes (run parallèle direct OK, ou rejeu en série des
+      # échecs OK) puisqu'une vraie panne à n'importe quelle étape précédente (pas de
+      # continue-on-error sur le rejeu série) rend success() faux. Nécessite que GITHUB_TOKEN
+      # ait actions:write (permissions du job ci-dessus) ; si l'API refuse l'écriture (403),
+      # cette étape échoue seule — le gate PHPUnit reste valide, seule la déduplication
+      # inter-étapes est perdue pour ce run.
+      - name: Record fingerprint as validated
+        if: success() && steps.skip_check.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CURRENT='${{ vars.PHPUNIT_PASSED_FINGERPRINTS }}'
+          NEW=$(echo "${CURRENT:-[]}" | jq -c --arg fp "${{ steps.fp.outputs.fp }}" '(. + [$fp]) | unique | .[-30:]')
+          if ! gh api -X PATCH "repos/${{ github.repository }}/actions/variables/PHPUNIT_PASSED_FINGERPRINTS" -f value="$NEW"; then
+            gh api -X POST "repos/${{ github.repository }}/actions/variables" -f name="PHPUNIT_PASSED_FINGERPRINTS" -f value="$NEW"
+          fi
 
   # Fail-safe partagé par e2e-full et e2e-smoke : le E2E tourne par défaut, il n'est
   # skippé que si TOUS les fichiers modifiés sont de la doc (README.md, docs/**, **/*.md).

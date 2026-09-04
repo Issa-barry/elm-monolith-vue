@@ -38,6 +38,9 @@ class DepenseParametrageController extends Controller
             'peut_valider' => (bool) ($droits->get($role->name)?->peut_valider ?? false),
             'perimetre' => $droits->get($role->name)?->perimetre ?? 'toutes_agences',
             'sites' => $droits->get($role->name)?->sites ?? [],
+            'plafond_validation' => $droits->get($role->name)?->plafond_validation !== null
+                ? (float) $droits->get($role->name)->plafond_validation
+                : null,
         ]);
 
         return Inertia::render('settings/DepenseParametrage', [
@@ -53,6 +56,22 @@ class DepenseParametrageController extends Controller
         $orgId = auth()->user()->organization_id;
         $siteIds = Site::where('organization_id', $orgId)->pluck('id')->all();
 
+        // Admin Entreprise garde un accès automatique (permission de validation,
+        // périmètre d'agences — cf. DroitCreationDepenseService::peutValiderSurSite())
+        // mais est désormais soumis au plafond de montant comme n'importe quel
+        // rôle (seul Super Admin reste illimité, décision produit 04/09/2026,
+        // cf. docs/depenses-validation.md). On force donc peut_valider=true pour
+        // sa ligne avant validation, indépendamment de ce qu'envoie le
+        // frontend, pour que le plafond lui soit imposé comme obligatoire
+        // ci-dessous et que la ligne reste trouvable par droitValidationPour().
+        $config = $request->input('config', []);
+        foreach ($config as $i => $item) {
+            if (($item['role_name'] ?? null) === 'admin_entreprise') {
+                $config[$i]['peut_valider'] = true;
+            }
+        }
+        $request->merge(['config' => $config]);
+
         $validated = $request->validate([
             'config' => ['array'],
             'config.*.role_name' => ['required', 'string'],
@@ -60,6 +79,12 @@ class DepenseParametrageController extends Controller
             'config.*.perimetre' => ['required', Rule::in(['toutes_agences', 'son_agence', 'agences_selectionnees'])],
             'config.*.sites' => ['array'],
             'config.*.sites.*' => ['string', Rule::in($siteIds)],
+            // Obligatoire dès que peut_valider est actif (donc toujours pour
+            // Admin Entreprise, cf. coercition ci-dessus). Super Admin et les
+            // rôles sans droit de validation restent sans plafond (null).
+            'config.*.plafond_validation' => ['nullable', 'numeric', 'min:0', 'required_if:config.*.peut_valider,true'],
+        ], [
+            'config.*.plafond_validation.required_if' => 'Le plafond de validation est obligatoire pour un rôle autorisé à valider.',
         ]);
 
         foreach ($validated['config'] ?? [] as $item) {
@@ -73,6 +98,7 @@ class DepenseParametrageController extends Controller
                     'perimetre' => $item['perimetre'],
                     'sites' => $sites,
                     'peut_valider' => $item['peut_valider'],
+                    'plafond_validation' => $item['peut_valider'] ? $item['plafond_validation'] : null,
                 ]
             );
         }

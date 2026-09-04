@@ -18,12 +18,14 @@ class DroitCreationDepense extends Model
         'sites',
         'is_actif',
         'peut_valider',
+        'plafond_validation',
     ];
 
     protected $casts = [
         'sites' => 'array',
         'is_actif' => 'boolean',
         'peut_valider' => 'boolean',
+        'plafond_validation' => 'decimal:2',
     ];
 
     public function isToutesAgences(): bool
