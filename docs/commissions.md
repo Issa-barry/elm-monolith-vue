@@ -219,8 +219,22 @@ la répartition d'équipe restent une seule implémentation, partagée par `Comm
   toujours `livreurParts`/`aggregateParts` depuis `transfert.commission?.parts`, donc reste vide
   pour toute commission générée après le 03/09/2026 — seuls le badge et le libellé du stepper
   ci-dessus ont été raccordés au nouveau moteur. La commission reste consultable en détail via
-  Commission vente (filtre Processus = Transfert logistique) ; ce point nécessite son propre
-  chantier de migration vers `CommissionEnveloppePart`.
+  Commissions des livreurs (filtre Processus = Transfert logistique) ; ce point nécessite son
+  propre chantier de migration vers `CommissionEnveloppePart`.
+- **04/09/2026** — Le sous-menu `Comptabilité > Commissions > Logistique` a été retiré de la
+  navigation (`AppSidebar.vue`) : l'écran `Comptabilite\CommissionVenteController` (route
+  `commissions/vente`, inchangée) est renommé `Livreurs` dans le menu et devient le point d'entrée
+  unique pour consulter les commissions d'un livreur, tous processus confondus (Vente/Distribution
+  client/Transfert logistique, cf. section Reporting ci-dessous) — libellés alignés en conséquence
+  (`CommissionVente/Index.vue` : "Commissions des livreurs" ; `CommissionVente/Livreur/Show.vue` :
+  breadcrumb "Commissions des livreurs"). `Comptabilite\CommissionLogistiqueController` (écran
+  historique décrit ci-dessus) n'est pas modifié — routes, contrôleur et pages Vue inchangés,
+  tables toujours vérifiées à 0 ligne (`commission_logistique_parts`/`commissions_logistiques`/
+  `versements_commission_logistique`) — mais n'a plus aucun point d'entrée dans l'UI, exactement la
+  situation qui a justifié le retrait complet de `CommissionVehiculeController` le même jour
+  ci-dessus. Il reste donc, comme documenté plus haut, candidat à la PR de retrait séparée
+  (suppression contrôleur/routes/pages/tests) une fois cette absence de solde reconfirmée avant
+  suppression effective.
 
 ## Partage Livreur par processus (équipe véhicule)
 

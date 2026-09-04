@@ -55,7 +55,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
     { title: 'Comptabilité' },
     {
-        title: 'Commission vente',
+        title: 'Commissions des livreurs',
         href: '/backoffice/comptabilite/commissions/vente',
     },
     { title: props.livreur.nom, href: '' },
@@ -103,7 +103,7 @@ const eyebrowLabel = PROCESSUS_LABELS[props.filtre_processus] ?? 'Livreur';
 </script>
 
 <template>
-    <Head :title="`Commission vente — ${livreur.nom}`" />
+    <Head :title="`Commission livreur — ${livreur.nom}`" />
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-7xl space-y-5 px-4 py-5 sm:px-6">
             <CommissionDetailHeader

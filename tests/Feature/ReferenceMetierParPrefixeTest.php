@@ -103,6 +103,11 @@ class ReferenceMetierParPrefixeTest extends TestCase
             ['nom' => 'Sachet Transfert', 'categorie_id' => $this->defaultCategorie()->id],
             ['prix_vente' => 1000],
         );
+        // Correctif du 04/09/2026 (TransfertLogistiqueService::verifierDisponibiliteLignes()
+        // désormais appelée dès store()) : un transfert exige un stock suffisant sur le site
+        // source, jamais assoupli par Parametre::setVentesAutoriserStockNegatif() (réservé aux
+        // ventes) — cf. docblock de la méthode.
+        $this->seedVarianteStockSuffisant($produit->variantePrincipale()->first(), $this->defaultSite);
         $vehicule = Vehicule::factory()->create([
             'organization_id' => $this->org->id,
             'livraison_logistique' => true,

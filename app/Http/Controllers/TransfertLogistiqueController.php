@@ -14,6 +14,7 @@ use App\Models\Produit;
 use App\Models\ProduitVariante;
 use App\Models\Site;
 use App\Models\TransfertLogistique;
+use App\Models\VarianteStock;
 use App\Models\Vehicule;
 use App\Services\Commission\CommissionPartageLivraisonCategorieChecker;
 use App\Services\TransfertActiviteService;
@@ -262,10 +263,7 @@ class TransfertLogistiqueController extends Controller
                 ->get()
                 ->sortBy(fn ($e) => $e->vehicule?->nom_vehicule)
                 ->values(),
-            'produits' => Produit::where('organization_id', $orgId)
-                ->select('id', 'nom', 'categorie_id')
-                ->orderBy('nom')
-                ->get(),
+            'produits' => $this->produitsAvecStock($orgId),
         ]);
     }
 
@@ -489,7 +487,7 @@ class TransfertLogistiqueController extends Controller
                 ->get()
                 ->sortBy(fn ($e) => $e->vehicule?->nom_vehicule)
                 ->values(),
-            'produits' => Produit::where('organization_id', $orgId)->select('id', 'nom', 'categorie_id')->orderBy('nom')->get(),
+            'produits' => $this->produitsAvecStock($orgId),
         ]);
     }
 
@@ -866,6 +864,59 @@ class TransfertLogistiqueController extends Controller
                 $manquantes->pluck('nom')->implode(', '),
             ),
         ]);
+    }
+
+    /**
+     * Produits proposés au formulaire de transfert (create()/edit()), enrichis du stock
+     * disponible PAR SITE (04/09/2026) — le formulaire ne propose qu'un sélecteur de produit
+     * (pas encore de variante, cf. resolveVariante() ci-dessous), donc le stock est calculé sur
+     * la variante par défaut/unique, même résolution que resolveVariante(). Contrairement au
+     * dropdown vente (CommandeVenteController::produitsActifs()), TOUS les sites de
+     * l'organisation sont renvoyés en une fois (pas seulement le site source courant) : le site
+     * source peut changer côté client (sélecteur admin, cf. Logistique/Create.vue) sans
+     * round-trip serveur, jamais un stock par défaut implicite pour un site non encore choisi.
+     * Même formule que MouvementStockService::quantiteDisponible() (qte_stock − qte_reservee),
+     * appliquée en bulk ici pour éviter un N+1 par (produit, site) — même pattern que
+     * CommandeVenteController::produitsActifs(). Un produit non géré en stock (type service)
+     * n'est jamais plafonné (gere_stock=false, aucune entrée stocks_par_site) : Logistique/
+     * Create.vue doit le traiter comme toujours disponible, à l'image de
+     * TransfertLogistiqueService::verifierDisponibiliteLignes() qui l'ignore côté serveur.
+     *
+     * @return array<int, array{id: string, nom: string, categorie_id: ?string, gere_stock: bool, stocks_par_site: array<string, int>}>
+     */
+    private function produitsAvecStock(string $orgId): array
+    {
+        $produits = Produit::where('organization_id', $orgId)
+            ->with(['variantes', 'produitType'])
+            ->orderBy('nom')
+            ->get();
+
+        $varianteIdParProduit = $produits->mapWithKeys(
+            fn (Produit $p) => [$p->id => ($p->variantes->firstWhere('is_default', true) ?? $p->variantes->first())?->id]
+        );
+        $stocksParVariante = VarianteStock::whereIn('produit_variante_id', $varianteIdParProduit->filter()->values())
+            ->get(['produit_variante_id', 'site_id', 'qte_stock', 'qte_reservee'])
+            ->groupBy('produit_variante_id');
+
+        return $produits->map(function (Produit $p) use ($varianteIdParProduit, $stocksParVariante) {
+            $gereStock = (bool) $p->produitType?->gere_stock;
+            $varianteId = $varianteIdParProduit->get($p->id);
+
+            $stocksParSite = [];
+            if ($gereStock && $varianteId) {
+                foreach ($stocksParVariante->get($varianteId, collect()) as $s) {
+                    $stocksParSite[(string) $s->site_id] = (int) $s->qte_stock - (int) $s->qte_reservee;
+                }
+            }
+
+            return [
+                'id' => $p->id,
+                'nom' => $p->nom,
+                'categorie_id' => $p->categorie_id,
+                'gere_stock' => $gereStock,
+                'stocks_par_site' => $stocksParSite,
+            ];
+        })->values()->all();
     }
 
     /**

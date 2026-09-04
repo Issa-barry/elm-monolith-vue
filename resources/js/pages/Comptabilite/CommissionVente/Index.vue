@@ -122,7 +122,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Tableau de bord', href: '/backoffice/dashboard' },
     { title: 'Comptabilité' },
     {
-        title: 'Commissions des livreurs sur les ventes',
+        title: 'Commissions des livreurs',
         href: '/backoffice/comptabilite/commissions/vente',
     },
 ];
@@ -448,10 +448,10 @@ function fmtTel(tel: string | null | undefined): string {
 </script>
 
 <template>
-    <Head title="Commissions des livreurs sur les ventes — Comptabilité" />
+    <Head title="Commissions des livreurs — Comptabilité" />
     <AppLayout :breadcrumbs="breadcrumbs">
         <CommissionIndexLayout
-            title="Commissions des livreurs sur les ventes"
+            title="Commissions des livreurs"
             :entity-count="kpis.nb_livreurs"
             entity-label="livreur"
             :period-label="periodContextLabel"
