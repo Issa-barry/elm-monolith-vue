@@ -672,9 +672,7 @@ function submit() {
                                     >
                                         <td class="px-4 py-3">
                                             <Dropdown
-                                                v-model="
-                                                    produitSelected[index]
-                                                "
+                                                v-model="produitSelected[index]"
                                                 :options="produits"
                                                 option-label="nom"
                                                 :option-disabled="

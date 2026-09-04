@@ -46,6 +46,7 @@ class ClientController extends Controller
                 'type' => $c->type->value,
                 'type_label' => $c->type->label(),
                 'cashback_eligible' => $c->cashback_eligible,
+                'cashback_montant_par_pack' => $c->cashback_montant_par_pack,
             ]);
 
         return Inertia::render('Clients/Index', [

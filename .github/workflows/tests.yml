@@ -11,11 +11,12 @@ jobs:
   ci:
     name: PHPUnit
     runs-on: ubuntu-latest
-    # actions: write est nécessaire uniquement pour la dernière étape (mise à jour de la
-    # variable de dépôt PHPUNIT_PASSED_FINGERPRINTS) — cf. commentaire sur cette étape.
+    # contents: read suffit : la dernière étape (mise à jour de la variable de dépôt
+    # PHPUNIT_PASSED_FINGERPRINTS) utilise un PAT dédié (secret PHPUNIT_FP_PAT), pas
+    # GITHUB_TOKEN — cf. commentaire sur cette étape pour pourquoi actions: write ne
+    # suffirait pas.
     permissions:
       contents: read
-      actions: write
 
     steps:
       - name: Checkout
@@ -156,14 +157,24 @@ jobs:
       # (pre-prod→production, production→main) sautent PHPUnit sur ce même code. success()
       # ici couvre les deux cas légitimes (run parallèle direct OK, ou rejeu en série des
       # échecs OK) puisqu'une vraie panne à n'importe quelle étape précédente (pas de
-      # continue-on-error sur le rejeu série) rend success() faux. Nécessite que GITHUB_TOKEN
-      # ait actions:write (permissions du job ci-dessus) ; si l'API refuse l'écriture (403),
-      # cette étape échoue seule — le gate PHPUnit reste valide, seule la déduplication
-      # inter-étapes est perdue pour ce run.
+      # continue-on-error sur le rejeu série) rend success() faux.
+      #
+      # continue-on-error : garde-fou de robustesse. Cette étape a échoué en continu le
+      # 2026-09-04 (run #33915634101, 403 "Resource not accessible by integration") tant
+      # qu'elle utilisait GITHUB_TOKEN : l'API REST "repos/.../actions/variables" exclut
+      # délibérément ce token, même avec `actions: write` déclaré et
+      # default_workflow_permissions=write au niveau du dépôt — seul un PAT (ou une GitHub
+      # App dédiée) peut écrire une variable de dépôt. D'où PHPUNIT_FP_PAT ci-dessous : un
+      # fine-grained PAT scopé à ce repo avec la permission "Variables: write" (à créer
+      # dans Settings > Developer settings > Personal access tokens, puis à stocker comme
+      # secret de dépôt). continue-on-error reste en place au cas où ce PAT expire ou est
+      # révoqué : dans ce cas, seule la déduplication inter-étapes est perdue pour ce run,
+      # pas le gate PHPUnit lui-même (les tests ont déjà tourné à l'étape précédente).
       - name: Record fingerprint as validated
         if: success() && steps.skip_check.outputs.skip != 'true'
+        continue-on-error: true
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PHPUNIT_FP_PAT }}
         run: |
           CURRENT='${{ vars.PHPUNIT_PASSED_FINGERPRINTS }}'
           NEW=$(echo "${CURRENT:-[]}" | jq -c --arg fp "${{ steps.fp.outputs.fp }}" '(. + [$fp]) | unique | .[-30:]')

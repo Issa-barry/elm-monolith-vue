@@ -934,11 +934,11 @@ class TransfertLogistiqueController extends Controller
      * Create.vue doit le traiter comme toujours disponible, à l'image de
      * TransfertLogistiqueService::verifierDisponibiliteLignes() qui l'ignore côté serveur.
      *
-     * Éligibilité (04/09/2026) : ACTIF + type géré en stock (produitType.gere_stock=true).
-     * Volontairement PLUS LARGE que le filtre `vendable=true` de Ventes::produitsActifs() — un
-     * transfert déplace du stock physique entre sites, donc une matière première ou du matériel
-     * (vendable=false mais gere_stock=true) doit rester transférable ; seul le type `service`
-     * (gere_stock=false, jamais stocké) n'a physiquement rien à transférer.
+     * Éligibilité (04/09/2026) : ACTIF + produitType.code === 'fabricable' uniquement. Un
+     * transfert logistique déplace le produit fini entre sites (dépôt → point de vente) ; le
+     * matériel, la matière de production et les produits Achat/Vente ne transitent pas par ce
+     * circuit (décision confirmée le 04/09/2026, revient sur l'élargissement à tout
+     * gere_stock=true tenté plus tôt le même jour).
      *
      * @return array<int, array{id: string, nom: string, categorie_id: ?string, gere_stock: bool, stocks_par_site: array<string, int>}>
      */
@@ -946,7 +946,7 @@ class TransfertLogistiqueController extends Controller
     {
         $produits = Produit::where('organization_id', $orgId)
             ->where('statut', ProduitStatut::ACTIF)
-            ->whereHas('produitType', fn ($q) => $q->where('gere_stock', true))
+            ->whereHas('produitType', fn ($q) => $q->where('code', 'fabricable'))
             ->with(['variantes', 'produitType'])
             ->orderBy('nom')
             ->get();

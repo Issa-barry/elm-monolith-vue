@@ -32,9 +32,9 @@ use Tests\TestCase;
  *
  * Couvre aussi l'éligibilité au sélecteur (04/09/2026) : `produitsAvecStock()` ne proposait
  * auparavant AUCUN filtre (tout produit de l'organisation, y compris archivé ou de type
- * `service`). Filtre désormais sur ACTIF + produitType.gere_stock=true — volontairement plus
- * large que `vendable=true` (utilisé par CommandeVenteController::produitsActifs() pour
- * Ventes) car un transfert déplace du stock physique, pas seulement des produits revendables.
+ * `service`). Filtre désormais sur ACTIF + produitType.code === 'fabricable' uniquement — un
+ * transfert logistique déplace le produit fini entre sites, le matériel/la matière de
+ * production/les produits Achat-Vente ne transitent pas par ce circuit.
  */
 class TransfertLogistiqueProduitsStockParSiteTest extends TestCase
 {
@@ -103,7 +103,7 @@ class TransfertLogistiqueProduitsStockParSiteTest extends TestCase
 
     public function test_stock_disponible_du_site_source_est_expose_par_produit(): void
     {
-        $produit = $this->makeProduitAvecVariante($this->org, ['nom' => 'Pack Bouteille 1500ml', 'type' => 'materiel']);
+        $produit = $this->makeProduitAvecVariante($this->org, ['nom' => 'Pack Bouteille 1500ml', 'type' => 'fabricable']);
         VarianteStock::create([
             'organization_id' => $this->org->id,
             'produit_variante_id' => $produit->variantePrincipale()->first()->id,
@@ -121,7 +121,7 @@ class TransfertLogistiqueProduitsStockParSiteTest extends TestCase
 
     public function test_reservation_est_deduite_du_stock_physique(): void
     {
-        $produit = $this->makeProduitAvecVariante($this->org, ['nom' => 'Pack Réservé', 'type' => 'materiel']);
+        $produit = $this->makeProduitAvecVariante($this->org, ['nom' => 'Pack Réservé', 'type' => 'fabricable']);
         VarianteStock::create([
             'organization_id' => $this->org->id,
             'produit_variante_id' => $produit->variantePrincipale()->first()->id,
@@ -137,7 +137,7 @@ class TransfertLogistiqueProduitsStockParSiteTest extends TestCase
 
     public function test_produit_sans_ligne_de_stock_sur_le_site_napparait_pas_dans_stocks_par_site(): void
     {
-        $this->makeProduitAvecVariante($this->org, ['nom' => 'Jamais Stocké', 'type' => 'materiel']);
+        $this->makeProduitAvecVariante($this->org, ['nom' => 'Jamais Stocké', 'type' => 'fabricable']);
 
         $ligne = $this->trouverProduit($this->produitsProp(), 'Jamais Stocké');
 
@@ -148,7 +148,7 @@ class TransfertLogistiqueProduitsStockParSiteTest extends TestCase
 
     public function test_le_stock_du_site_destination_najamais_pris_en_compte_pour_le_site_source(): void
     {
-        $produit = $this->makeProduitAvecVariante($this->org, ['nom' => 'Pack Multi-Site', 'type' => 'materiel']);
+        $produit = $this->makeProduitAvecVariante($this->org, ['nom' => 'Pack Multi-Site', 'type' => 'fabricable']);
         $variante = $produit->variantePrincipale()->first();
         // Stock confortable à destination, nul à la source : le site source doit rester
         // indisponible, jamais "débloqué" par le stock d'un autre site.
@@ -169,11 +169,6 @@ class TransfertLogistiqueProduitsStockParSiteTest extends TestCase
 
     public function test_produit_de_type_service_nest_pas_propose_au_transfert(): void
     {
-        // Règle métier du 04/09/2026 : un transfert déplace du stock physique, donc seuls les
-        // types gérés en stock (produitType.gere_stock=true) sont éligibles — un type `service`
-        // (gere_stock=false) n'a physiquement rien à transférer et ne doit plus apparaître dans
-        // le sélecteur, contrairement à `materiel`/`matiere_production` (gere_stock=true mais
-        // vendable=false) qui restent transférables même s'ils ne sont pas vendables en Ventes.
         $produit = $this->makeProduitAvecVariante($this->org, ['nom' => 'Prestation Livraison', 'type' => 'service']);
         VarianteStock::create([
             'organization_id' => $this->org->id,
@@ -191,7 +186,7 @@ class TransfertLogistiqueProduitsStockParSiteTest extends TestCase
     {
         $this->makeProduitAvecVariante($this->org, [
             'nom' => 'Ancien Pack',
-            'type' => 'materiel',
+            'type' => 'fabricable',
             'statut' => 'archive',
         ]);
 
@@ -200,30 +195,36 @@ class TransfertLogistiqueProduitsStockParSiteTest extends TestCase
         $this->assertNull($ligne);
     }
 
-    public function test_produit_matiere_production_non_vendable_reste_transferable(): void
+    /**
+     * Règle confirmée le 04/09/2026 (revient sur un élargissement à tout produitType.gere_stock=true
+     * tenté plus tôt le même jour) : seul le type `fabricable` est éligible au transfert
+     * logistique — matériel, matière de production et Achat/Vente sont gérés en stock mais ne
+     * transitent pas par ce circuit (dépôt → point de vente), même s'ils ne sont pas vendables
+     * en Ventes (`vendable=false`).
+     */
+    public function test_produit_materiel_matiere_production_et_achat_vente_ne_sont_pas_proposes_au_transfert(): void
     {
-        // matiere_production : gere_stock=true, vendable=false — non vendable en Ventes mais
-        // doit rester transférable entre sites (cf. décision du 04/09/2026, contrairement au
-        // filtre `vendable=true` utilisé par CommandeVenteController::produitsActifs()).
-        $produit = $this->makeProduitAvecVariante($this->org, ['nom' => 'Préforme PET', 'type' => 'matiere_production']);
-        VarianteStock::create([
-            'organization_id' => $this->org->id,
-            'produit_variante_id' => $produit->variantePrincipale()->first()->id,
-            'site_id' => $this->siteSource->id,
-            'qte_stock' => 50,
-        ]);
+        foreach (['materiel', 'matiere_production', 'achat_vente'] as $type) {
+            $produit = $this->makeProduitAvecVariante($this->org, ['nom' => "Produit {$type}", 'type' => $type]);
+            VarianteStock::create([
+                'organization_id' => $this->org->id,
+                'produit_variante_id' => $produit->variantePrincipale()->first()->id,
+                'site_id' => $this->siteSource->id,
+                'qte_stock' => 50,
+            ]);
+        }
 
-        $ligne = $this->trouverProduit($this->produitsProp(), 'Préforme PET');
+        $produits = $this->produitsProp();
 
-        $this->assertNotNull($ligne);
-        $this->assertTrue($ligne['gere_stock']);
-        $this->assertSame(50, $ligne['stocks_par_site'][(string) $this->siteSource->id]);
+        foreach (['materiel', 'matiere_production', 'achat_vente'] as $type) {
+            $this->assertNull($this->trouverProduit($produits, "Produit {$type}"), "Le type {$type} ne doit pas être proposé au transfert.");
+        }
     }
 
     public function test_isolation_entre_organisations(): void
     {
         $orgB = Organization::factory()->create();
-        $produitB = $this->makeProduitAvecVariante($orgB, ['nom' => 'Produit Org B', 'type' => 'materiel']);
+        $produitB = $this->makeProduitAvecVariante($orgB, ['nom' => 'Produit Org B', 'type' => 'fabricable']);
         VarianteStock::create([
             'organization_id' => $orgB->id,
             'produit_variante_id' => $produitB->variantePrincipale()->first()->id,
@@ -238,7 +239,7 @@ class TransfertLogistiqueProduitsStockParSiteTest extends TestCase
 
     public function test_edit_expose_aussi_les_stocks_par_site(): void
     {
-        $produit = $this->makeProduitAvecVariante($this->org, ['nom' => 'Pack Edition', 'type' => 'materiel']);
+        $produit = $this->makeProduitAvecVariante($this->org, ['nom' => 'Pack Edition', 'type' => 'fabricable']);
         VarianteStock::create([
             'organization_id' => $this->org->id,
             'produit_variante_id' => $produit->variantePrincipale()->first()->id,
