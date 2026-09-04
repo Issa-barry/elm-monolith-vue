@@ -210,7 +210,8 @@ const currentStepIdx = computed(() => {
     // commission_generique_genere (moteur CommissionEnveloppe, seul moteur depuis le
     // 03/09/2026) — remplace l'ancien test sur `commission` (relation legacy jamais peuplée
     // pour une commission générée après cette date, cf. TypeScript ci-dessus).
-    if (statut === 'reception' && props.transfert.commission_generique_genere) return 4;
+    if (statut === 'reception' && props.transfert.commission_generique_genere)
+        return 4;
     const map: Record<string, number> = {
         brouillon: 0,
         chargement: 1,
@@ -226,7 +227,8 @@ const commissionStepState = computed((): 'done' | 'current' | 'future' => {
     const s = props.transfert.statut;
     if (s !== 'reception' && s !== 'cloture') return 'future';
     if (!props.transfert.commission_generique_genere) return 'future';
-    if (s === 'cloture' || props.transfert.commission_statut === 'paye') return 'done';
+    if (s === 'cloture' || props.transfert.commission_statut === 'paye')
+        return 'done';
     return 'current';
 });
 

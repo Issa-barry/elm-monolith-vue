@@ -5,6 +5,16 @@ const PREFIX = 'E2EVOIRSTOCK';
 
 test.setTimeout(120_000);
 
+// Les deux tests de ce fichier partagent le même PREFIX pour le cleanup (registerCleanup
+// ci-dessous supprime, après CHAQUE test, toutes les lignes dont le nom commence par ce
+// préfixe). Avec `fullyParallel: true` (playwright.config.ts), Playwright peut sinon exécuter
+// ces deux tests concurremment sur des workers distincts : si le premier termine (et déclenche
+// son cleanup) pendant que le second est encore en train de créer ses produits, le cleanup du
+// premier supprime les produits du second en cours de test (repro CI confirmée : recherche du
+// produit tout juste créé retombant sur "0 produits" en aval). Mode serial = les deux tests
+// s'exécutent toujours l'un après l'autre sur le même worker, jamais en concurrence.
+test.describe.configure({ mode: 'serial' });
+
 registerCleanup('/backoffice/produits', PREFIX);
 
 test.beforeEach(async ({ page }) => {
@@ -130,6 +140,20 @@ test('le menu Produits propose « Voir le stock » et plus « Ajuster le stock �
     const searchInput = await getVisibleSearchInput(page);
     await searchInput.fill(productName);
     await searchInput.press('Enter');
+    // `waitForLoadState('networkidle')` seul est une course perdue d'avance ici : le champ
+    // "Rechercher" du drawer Filtres déclenche `applyFilters()` (router.get Inertia) sur
+    // @keydown.enter, mais l'appel réseau ne part qu'au tick suivant — `networkidle` peut donc
+    // se résoudre avant même que la requête ne démarre (repro CI confirmée par trace Playwright :
+    // ~19ms d'écart entre le press('Enter') et un networkidle déjà résolu). Le test cliquait
+    // alors sur une ligne encore issue de la liste NON filtrée, dont le DropdownMenu tout juste
+    // ouvert se faisait détruire par le remount complet du composant page (router.get sans
+    // `preserveState`) quand la réponse filtrée arrivait enfin — d'où « voir le stock »
+    // introuvable. On attend un signal réel de fin de navigation : l'URL ne reflète le paramètre
+    // `search` qu'une fois la visite Inertia effectivement terminée (replace history post-réponse).
+    await page.waitForURL(
+        (url) => url.searchParams.get('search') === productName,
+        { timeout: 15_000 },
+    );
     await page.waitForLoadState('networkidle');
 
     const productRow = page
@@ -165,6 +189,20 @@ test('« Voir le stock » ouvre la page Stock filtrée sur ce produit, sans les 
     const searchInput = await getVisibleSearchInput(page);
     await searchInput.fill(productName);
     await searchInput.press('Enter');
+    // `waitForLoadState('networkidle')` seul est une course perdue d'avance ici : le champ
+    // "Rechercher" du drawer Filtres déclenche `applyFilters()` (router.get Inertia) sur
+    // @keydown.enter, mais l'appel réseau ne part qu'au tick suivant — `networkidle` peut donc
+    // se résoudre avant même que la requête ne démarre (repro CI confirmée par trace Playwright :
+    // ~19ms d'écart entre le press('Enter') et un networkidle déjà résolu). Le test cliquait
+    // alors sur une ligne encore issue de la liste NON filtrée, dont le DropdownMenu tout juste
+    // ouvert se faisait détruire par le remount complet du composant page (router.get sans
+    // `preserveState`) quand la réponse filtrée arrivait enfin — d'où « voir le stock »
+    // introuvable. On attend un signal réel de fin de navigation : l'URL ne reflète le paramètre
+    // `search` qu'une fois la visite Inertia effectivement terminée (replace history post-réponse).
+    await page.waitForURL(
+        (url) => url.searchParams.get('search') === productName,
+        { timeout: 15_000 },
+    );
     await page.waitForLoadState('networkidle');
 
     const productRow = page

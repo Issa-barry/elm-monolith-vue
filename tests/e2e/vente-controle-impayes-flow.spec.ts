@@ -549,19 +549,40 @@ async function activerVehiculeAvecEquipeMinimale(page: Page): Promise<void> {
     const telInput = dialog.locator('[data-testid="telephone-0"]');
     await telInput.click();
     await telInput.pressSequentially(randomDigits(9), { delay: 20 });
-    await dialog.getByRole('button', { name: /suivant/i }).click();
+    await telInput.blur();
+
+    // Le blur ci-dessus déclenche le contrôle live du téléphone (goToStep2,
+    // incident PHP-LARAVEL-66) de façon asynchrone : attendre explicitement
+    // que "Suivant" quitte l'état "Vérification…" avant de cliquer, sinon le
+    // clic peut tomber sur le bouton pendant qu'il est temporairement
+    // désactivé et n'a alors aucun effet (jamais atteindre goToStep2()) — cf.
+    // tests/e2e/equipe-flow.spec.ts::createVehiculeAvecEquipe pour le même
+    // correctif.
+    const suivantEtape1 = dialog.getByRole('button', { name: /suivant/i });
+    await expect(suivantEtape1).toBeEnabled({ timeout: 10_000 });
+    await suivantEtape1.click();
 
     // Étape 2 (Partage) : aucun barème de commission configuré pour ce
     // véhicule (organisation "elm", partagée avec de nombreuses autres specs
     // — aucun CommissionRegle n'y est seedé par défaut). L'étape affiche donc
     // l'état vide ; seule l'activation du véhicule nous intéresse ici, pas la
-    // répartition elle-même (cf. commentaire de fonction ci-dessus).
+    // répartition elle-même (cf. commentaire de fonction ci-dessus). Le
+    // marqueur "aucun barème…" est unique à l'étape 2 (contrairement au texte
+    // de navigation du stepper, toujours présent dans le DOM) : il confirme
+    // qu'on a bien quitté l'étape 1 avant de cliquer à nouveau sur "Suivant".
+    await expect(
+        dialog.getByText(/aucun barème de commission actif/i),
+    ).toBeVisible({ timeout: 5_000 });
     const suivantEtape2 = dialog.getByRole('button', { name: /suivant/i });
     await expect(suivantEtape2).toBeEnabled({ timeout: 5_000 });
     await suivantEtape2.click();
 
     // Étape 3 (Récapitulatif) : enregistrer.
-    await dialog.getByRole('button', { name: /enregistrer l'équipe/i }).click();
+    const enregistrerBtn = dialog.getByRole('button', {
+        name: /enregistrer l'équipe/i,
+    });
+    await expect(enregistrerBtn).toBeVisible({ timeout: 5_000 });
+    await enregistrerBtn.click();
     await expect(dialog).toBeHidden({ timeout: 15_000 });
 }
 
