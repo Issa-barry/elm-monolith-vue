@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\StatutCommission;
 use App\Enums\StatutTransfert;
 use App\Enums\TypeEcartLogistique;
 use App\Jobs\NotifierLivreursTransfertJob;
@@ -20,6 +21,7 @@ use App\Services\VehiculeCapaciteService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -184,8 +186,17 @@ class TransfertLogistiqueController extends Controller
             ];
         }
 
+        // Statut de commission (colonne "Commission" de la liste) : batché en une seule requête
+        // pour toute la page plutôt qu'un mapTransfert() par ligne (N+1), cf. commentaire de
+        // mapTransfert() sur l'origine de ce recalcul à la volée.
+        $enveloppesParTransfert = CommissionEnveloppe::where('source_type', TransfertLogistique::class)
+            ->whereIn('source_id', $transferts->pluck('id'))
+            ->with('parts:id,enveloppe_id,montant_net,montant_verse')
+            ->get()
+            ->groupBy('source_id');
+
         return Inertia::render('Logistique/Index', [
-            'transferts' => $transferts->map(fn ($t) => $this->mapTransfert($t))->values(),
+            'transferts' => $transferts->map(fn ($t) => $this->mapTransfert($t, $enveloppesParTransfert->get($t->id, collect())))->values(),
             'kpis' => $kpis,
             'statuts' => $statutsFiltre,
             'sites' => $sites->map(fn ($site) => ['id' => $site->id, 'nom' => $site->nom])->values(),
@@ -555,9 +566,21 @@ class TransfertLogistiqueController extends Controller
 
     // ── Mapping ───────────────────────────────────────────────────────────────
 
-    private function mapTransfert(TransfertLogistique $t): array
+    /**
+     * $enveloppesGeneriques : enveloppes déjà chargées (avec leur relation `parts`) pour ce
+     * transfert — passées par l'appelant pour éviter un N+1 sur une liste (cf. buildIndex()) ;
+     * requêtées à la volée si omises (usage isolé, ex: mapTransfertDetail()).
+     *
+     * @param  Collection<int, CommissionEnveloppe>|null  $enveloppesGeneriques
+     */
+    private function mapTransfert(TransfertLogistique $t, ?Collection $enveloppesGeneriques = null): array
     {
         $user = auth()->user();
+        $enveloppesGeneriques ??= CommissionEnveloppe::where('source_type', TransfertLogistique::class)
+            ->where('source_id', $t->id)
+            ->with('parts:id,enveloppe_id,montant_net,montant_verse')
+            ->get();
+        $commissionStatut = $this->commissionStatutGenerique($enveloppesGeneriques);
 
         return [
             'id' => $t->id,
@@ -574,8 +597,8 @@ class TransfertLogistiqueController extends Controller
             'date_arrivee_prevue' => $t->date_arrivee_prevue?->format(self::DATE_DISPLAY_FORMAT),
             'date_depart_reelle' => $t->date_depart_reelle?->format(self::DATE_DISPLAY_FORMAT),
             'date_arrivee_reelle' => $t->date_arrivee_reelle?->format(self::DATE_DISPLAY_FORMAT),
-            'commission_statut' => $t->commission?->statut?->value,
-            'commission_statut_label' => $t->commission?->statut_label,
+            'commission_statut' => $commissionStatut?->value,
+            'commission_statut_label' => $commissionStatut?->label(),
             'is_brouillon' => $t->isBrouillon(),
             'is_cloture' => $t->isCloture(),
             'is_terminal' => $t->isTerminal(),
@@ -600,7 +623,14 @@ class TransfertLogistiqueController extends Controller
 
     private function mapTransfertDetail(TransfertLogistique $t): array
     {
-        $base = $this->mapTransfert($t);
+        // Chargée une seule fois ici et transmise à mapTransfert() : évite de requêter deux fois
+        // les mêmes CommissionEnveloppe (statut agrégé du stepper + genere/montant_total ci-dessous).
+        $enveloppesGeneriques = CommissionEnveloppe::where('source_type', TransfertLogistique::class)
+            ->where('source_id', $t->id)
+            ->with('parts:id,enveloppe_id,montant_net,montant_verse')
+            ->get();
+
+        $base = $this->mapTransfert($t, $enveloppesGeneriques);
 
         $base['notes'] = $t->notes;
         $base['vehicule_id'] = $t->vehicule_id;
@@ -647,9 +677,6 @@ class TransfertLogistiqueController extends Controller
         // l'onglet "Commission logistique" affichait indéfiniment "en attente de validation
         // admin" même après une génération réussie, la case ci-dessus restant toujours null
         // (régression constatée le 02/09/2026, cf. incident production).
-        $enveloppesGeneriques = CommissionEnveloppe::where('source_type', TransfertLogistique::class)
-            ->where('source_id', $t->id)
-            ->get();
         $base['commission_generique_genere'] = $enveloppesGeneriques->isNotEmpty();
         $base['commission_generique_montant_total'] = (float) $enveloppesGeneriques->sum('montant_total');
 
@@ -702,6 +729,34 @@ class TransfertLogistiqueController extends Controller
     private function statutDotClass(StatutTransfert $statut): string
     {
         return $statut->dotClass();
+    }
+
+    /**
+     * Statut agrégé (impayé/partiel/payé) de la commission générique d'un transfert.
+     * Contrairement à l'ancien CommissionLogistique::statut (colonne stockée, recalculée par
+     * recalculStatutGlobal()), CommissionEnveloppe ne porte aucun statut propre — seules ses
+     * parts (CommissionEnveloppePart::statut) en portent un — donc recalculé à la volée ici avec
+     * la même règle d'agrégation que l'ancien modèle, pour préserver le même comportement visuel
+     * (badge "Commission" de Logistique/Index.vue et étape "Commission" du stepper de
+     * Logistique/Show.vue). Retourne null tant qu'aucune part n'existe (rien à afficher).
+     *
+     * @param  Collection<int, CommissionEnveloppe>  $enveloppes  Doit avoir sa relation `parts` chargée.
+     */
+    private function commissionStatutGenerique(Collection $enveloppes): ?StatutCommission
+    {
+        $parts = $enveloppes->flatMap(fn (CommissionEnveloppe $e) => $e->parts);
+        if ($parts->isEmpty()) {
+            return null;
+        }
+
+        $totalNet = (float) $parts->sum('montant_net');
+        $totalVerse = (float) $parts->sum('montant_verse');
+
+        return match (true) {
+            $totalNet > 0 && $totalVerse >= $totalNet => StatutCommission::PAYE,
+            $totalVerse > 0 => StatutCommission::PARTIEL,
+            default => StatutCommission::IMPAYE,
+        };
     }
 
     /**

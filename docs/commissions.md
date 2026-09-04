@@ -190,6 +190,37 @@ la répartition d'équipe restent une seule implémentation, partagée par `Comm
   `Parametre::getMontantDefautCommissionLogistiquePack()`) reste exposé dans les Paramètres mais
   n'est plus lu par aucun code de génération — laissé en l'état (hors périmètre de ce retrait),
   puisqu'il s'agit d'un champ de configuration UI distinct, pas d'un mécanisme de génération.
+- **04/09/2026** — `App\Http\Controllers\CommissionVehiculeController` (écran
+  `/backoffice/logistique/commissions`, paiement DIRECT par livreur/véhicule) et
+  `App\Http\Controllers\CommissionPaymentController` (ses deux routes POST) ont été **retirés**
+  (routes, contrôleurs, pages `resources/js/pages/Logistique/Commissions/*.vue` et tests dédiés),
+  contrairement à `Comptabilite\CommissionLogistiqueController` ci-dessus qui reste en place le
+  temps d'une PR de retrait séparée. Différence assumée : cet écran n'avait plus aucun point
+  d'entrée dans la navigation (aucun lien de menu, aucun lien restant depuis
+  `Logistique/Show.vue`) — un simple `git grep` sur `logistique.commissions.` le confirme — alors
+  que l'écran Comptabilité reste, lui, atteignable depuis son propre menu. `LivreurController::show()`
+  (`commissions_url` de la fiche livreur, ex-`route('logistique.commissions.livreur', ...)`)
+  pointe désormais vers `route('commissions.vente.livreur', ...)` sans filtre processus (« Tous
+  les processus » — Vente/Distribution client/Transfert logistique confondus).
+- **04/09/2026** — corrigé dans la foulée (même cause racine, détecté par les tests E2E
+  `logistique-flow.spec.ts`) : le badge "Commission" de `Logistique/Index.vue` et l'étape
+  "Commission" du stepper de `Logistique/Show.vue` (libellé Impayée/Partiellement payée/Payée
+  **et** progression done/current du marqueur) lisaient encore `$t->commission` — la relation
+  legacy ci-dessus, jamais peuplée pour une commission générée après le 03/09/2026. Recalculé à
+  la volée dans `TransfertLogistiqueController::commissionStatutGenerique()` depuis
+  `CommissionEnveloppePart` (même règle d'agrégation que l'ancien
+  `CommissionLogistique::recalculStatutGlobal()`) et exposé sous les mêmes clés
+  `commission_statut`/`commission_statut_label` qu'avant — aucun changement frontend nécessaire
+  pour la liste, seule `Logistique/Show.vue` (stepper) a été mise à jour pour les consommer à la
+  place de `commission?.statut_label`/`commission?.is_versee`.
+- **Point encore ouvert (hors périmètre du retrait ci-dessus, signalé mais non corrigé le
+  04/09/2026)** : l'onglet "Commission logistique" de `Logistique/Show.vue` (détail par
+  bénéficiaire — montants brut/frais/net/versé/restant, historique des versements) calcule
+  toujours `livreurParts`/`aggregateParts` depuis `transfert.commission?.parts`, donc reste vide
+  pour toute commission générée après le 03/09/2026 — seuls le badge et le libellé du stepper
+  ci-dessus ont été raccordés au nouveau moteur. La commission reste consultable en détail via
+  Commission vente (filtre Processus = Transfert logistique) ; ce point nécessite son propre
+  chantier de migration vers `CommissionEnveloppePart`.
 
 ## Partage Livreur par processus (équipe véhicule)
 

@@ -129,6 +129,11 @@ interface Transfert {
     // TransfertLogistiqueController::mapTransfertDetail(), incident du 02/09/2026.
     commission_generique_genere: boolean;
     commission_generique_montant_total: number;
+    // Statut agrégé (impayé/partiel/payé) recalculé côté serveur depuis
+    // CommissionEnveloppePart — alimente le libellé de l'étape "Commission" du stepper
+    // ci-dessous. null tant qu'aucune part n'existe (commission pas encore générée).
+    commission_statut: string | null;
+    commission_statut_label: string | null;
     is_brouillon: boolean;
     is_cloture: boolean;
     is_terminal: boolean;
@@ -191,7 +196,7 @@ const STEPS = computed(() => [
     { key: 'reception', shortLabel: 'Réceptionné', icon: PackageCheck },
     {
         key: 'commission',
-        shortLabel: props.transfert.commission?.statut_label ?? 'Commission',
+        shortLabel: props.transfert.commission_statut_label ?? 'Commission',
         icon: ShieldCheck,
     },
     { key: 'cloture', shortLabel: 'Clôturé', icon: CheckCircle2 },
@@ -202,7 +207,10 @@ const STEPS = computed(() => [
 // afin que "Réceptionné" passe au vert.
 const currentStepIdx = computed(() => {
     const statut = props.transfert.statut;
-    if (statut === 'reception' && props.transfert.commission) return 4;
+    // commission_generique_genere (moteur CommissionEnveloppe, seul moteur depuis le
+    // 03/09/2026) — remplace l'ancien test sur `commission` (relation legacy jamais peuplée
+    // pour une commission générée après cette date, cf. TypeScript ci-dessus).
+    if (statut === 'reception' && props.transfert.commission_generique_genere) return 4;
     const map: Record<string, number> = {
         brouillon: 0,
         chargement: 1,
@@ -217,9 +225,8 @@ const currentStepIdx = computed(() => {
 const commissionStepState = computed((): 'done' | 'current' | 'future' => {
     const s = props.transfert.statut;
     if (s !== 'reception' && s !== 'cloture') return 'future';
-    const c = props.transfert.commission;
-    if (!c) return 'future';
-    if (s === 'cloture' || c.is_versee) return 'done';
+    if (!props.transfert.commission_generique_genere) return 'future';
+    if (s === 'cloture' || props.transfert.commission_statut === 'paye') return 'done';
     return 'current';
 });
 
@@ -662,6 +669,7 @@ function activiteDotClass(action: string): string {
                             style="min-width: 80px"
                         >
                             <div
+                                :data-testid="`stepper-step-${step.key}`"
                                 :class="[
                                     'flex h-9 w-9 items-center justify-center rounded-full transition-all',
                                     stepState(idx) === 'done'

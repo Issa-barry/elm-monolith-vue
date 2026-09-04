@@ -179,7 +179,14 @@ test('« Voir le stock » ouvre la page Stock filtrée sur ce produit, sans les 
         name: /^voir le stock$/i,
     });
     await expect(voirStockItem).toBeVisible({ timeout: 5_000 });
-    await voirStockItem.click();
+    // force: true — l'item ferme le DropdownMenu (animation data-[state=closed]) au moment
+    // même où Inertia <Link> déclenche la navigation ; Playwright interprète parfois ce
+    // détachement concurrent comme une instabilité et relance click() depuis le début, qui
+    // échoue alors car la page a déjà changé (item introuvable sur Stock/Index.vue) — repro
+    // locale fiable (element was detached from the DOM, retrying → timeout 120s). L'élément
+    // est déjà confirmé visible juste au-dessus : force: true saute uniquement la revérification
+    // de stabilité, pas un vrai état caché/désactivé.
+    await voirStockItem.click({ force: true });
 
     await expect(page).toHaveURL(/\/produits\/stock\?search=/, {
         timeout: 15_000,

@@ -16,8 +16,6 @@ use App\Http\Controllers\ClientVehicleController;
 use App\Http\Controllers\CommandeAchatController;
 use App\Http\Controllers\CommandeVenteController;
 use App\Http\Controllers\CommandeVenteStatutController;
-use App\Http\Controllers\CommissionPaymentController;
-use App\Http\Controllers\CommissionVehiculeController;
 use App\Http\Controllers\Comptabilite\CommissionAjustementController;
 use App\Http\Controllers\Comptabilite\CommissionConsultantController;
 use App\Http\Controllers\Comptabilite\CommissionLogistiqueController as ComptabiliteCommissionLogistiqueController;
@@ -682,21 +680,12 @@ Route::prefix('backoffice')->group(function () {
             Route::get('logistique/transferts', [TransfertLogistiqueController::class, 'indexTransferts'])->name('logistique.transferts.index');
             Route::get('logistique/receptions', [TransfertLogistiqueController::class, 'indexReceptions'])->name('logistique.receptions.index');
 
-            // Commissions logistiques — par livreur (système global)
-            Route::get('logistique/commissions', [CommissionVehiculeController::class, 'index'])
-                ->name('logistique.commissions.index');
-            Route::get('logistique/commissions/livreurs/{livreurId}', [CommissionVehiculeController::class, 'showLivreur'])
-                ->name('logistique.commissions.livreur');
-            Route::post('logistique/commissions/livreurs/{livreurId}/paiements', [CommissionPaymentController::class, 'storeLivreur'])
-                ->name('logistique.commissions.livreur.paiements');
-
-            // Rétro-compat : accès par véhicule (depuis page transfert Show)
-            Route::get('logistique/commissions/vehicules/{vehicule}', [CommissionVehiculeController::class, 'show'])
-                ->name('logistique.commissions.vehicule');
-            Route::get('logistique/commissions/vehicules/{vehicule}/beneficiaires/{type}/{beneficiaireId}', [CommissionVehiculeController::class, 'releve'])
-                ->name('logistique.commissions.releve');
-            Route::post('logistique/commissions/vehicules/{vehicule}/paiements', [CommissionPaymentController::class, 'store'])
-                ->name('logistique.commissions.paiements.store');
+            // Écran de paiement direct « /logistique/commissions » retiré le 04/09/2026 (moteur
+            // legacy CommissionLogistique/CommissionLogistiquePart gelé depuis le 03/09/2026,
+            // cf. docs/commissions.md COMM-007 et section Historique/héritage) : les commissions
+            // de transfert logistique apparaissent désormais dans les écrans Commission
+            // vente/sites/propriétaires/consultants (filtre Processus = Transfert logistique,
+            // cible Livreur) et se paient via Comptabilité > Fiches — jamais plus par ici.
 
             Route::get('logistique/creer', [TransfertLogistiqueController::class, 'create'])->name('logistique.create');
             Route::post('logistique', [TransfertLogistiqueController::class, 'store'])->name('logistique.store');

@@ -267,12 +267,15 @@ async function validerPeriodeLivreurCourante(page: Page): Promise<void> {
 
 /**
  * Paie intégralement la commission du livreur correspondant au regex, via sa fiche
- * de paiement (Comptabilité > Fiches). Le paiement DIRECT (page /logistique/commissions)
- * est désormais bloqué par PeriodePayabilityChecker::assertPartsNotClaimedByFiche dès
- * qu'une fiche existe pour la période du bénéficiaire — et valerPeriodeLivreurCourante
- * ci-dessus a déjà déclenché la génération automatique des fiches de tous les livreurs
- * de la période (PeriodeCalculatorService::creerFiche, appelé par le show() de la page
- * période). La fiche est donc le seul canal de paiement encore ouvert ici.
+ * de paiement (Comptabilité > Fiches). L'écran de paiement DIRECT dédié à la logistique
+ * (/backoffice/logistique/commissions) a été retiré le 04/09/2026 (moteur legacy
+ * CommissionLogistique/CommissionLogistiquePart gelé depuis le 03/09/2026, cf.
+ * docs/commissions.md) ; même quand un canal direct existe encore ailleurs (Comptabilité >
+ * Commissions > Logistique), il reste bloqué par PeriodePayabilityChecker::
+ * assertPartsNotClaimedByFiche dès qu'une fiche existe pour la période du bénéficiaire — et
+ * validerPeriodeLivreurCourante ci-dessus a déjà déclenché la génération automatique des
+ * fiches de tous les livreurs de la période (PeriodeCalculatorService::creerFiche, appelé par
+ * le show() de la page période). La fiche est donc le seul canal de paiement ouvert ici.
  */
 async function payFullCommission(
     page: Page,
