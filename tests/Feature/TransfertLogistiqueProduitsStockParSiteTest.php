@@ -29,6 +29,12 @@ use Tests\TestCase;
  * pour permettre au frontend de désactiver un produit en rupture et de plafonner la quantité,
  * SANS jamais dupliquer le calcul serveur (TransfertLogistiqueService::verifierDisponibiliteLignes()
  * reste la seule protection réelle).
+ *
+ * Couvre aussi l'éligibilité au sélecteur (04/09/2026) : `produitsAvecStock()` ne proposait
+ * auparavant AUCUN filtre (tout produit de l'organisation, y compris archivé ou de type
+ * `service`). Filtre désormais sur ACTIF + produitType.gere_stock=true — volontairement plus
+ * large que `vendable=true` (utilisé par CommandeVenteController::produitsActifs() pour
+ * Ventes) car un transfert déplace du stock physique, pas seulement des produits revendables.
  */
 class TransfertLogistiqueProduitsStockParSiteTest extends TestCase
 {
@@ -161,8 +167,13 @@ class TransfertLogistiqueProduitsStockParSiteTest extends TestCase
         $this->assertSame(1000, $ligne['stocks_par_site'][(string) $this->siteDestination->id]);
     }
 
-    public function test_produit_de_type_service_najamais_gere_en_stock(): void
+    public function test_produit_de_type_service_nest_pas_propose_au_transfert(): void
     {
+        // Règle métier du 04/09/2026 : un transfert déplace du stock physique, donc seuls les
+        // types gérés en stock (produitType.gere_stock=true) sont éligibles — un type `service`
+        // (gere_stock=false) n'a physiquement rien à transférer et ne doit plus apparaître dans
+        // le sélecteur, contrairement à `materiel`/`matiere_production` (gere_stock=true mais
+        // vendable=false) qui restent transférables même s'ils ne sont pas vendables en Ventes.
         $produit = $this->makeProduitAvecVariante($this->org, ['nom' => 'Prestation Livraison', 'type' => 'service']);
         VarianteStock::create([
             'organization_id' => $this->org->id,
@@ -173,9 +184,40 @@ class TransfertLogistiqueProduitsStockParSiteTest extends TestCase
 
         $ligne = $this->trouverProduit($this->produitsProp(), 'Prestation Livraison');
 
+        $this->assertNull($ligne);
+    }
+
+    public function test_produit_inactif_nest_pas_propose_au_transfert(): void
+    {
+        $this->makeProduitAvecVariante($this->org, [
+            'nom' => 'Ancien Pack',
+            'type' => 'materiel',
+            'statut' => 'archive',
+        ]);
+
+        $ligne = $this->trouverProduit($this->produitsProp(), 'Ancien Pack');
+
+        $this->assertNull($ligne);
+    }
+
+    public function test_produit_matiere_production_non_vendable_reste_transferable(): void
+    {
+        // matiere_production : gere_stock=true, vendable=false — non vendable en Ventes mais
+        // doit rester transférable entre sites (cf. décision du 04/09/2026, contrairement au
+        // filtre `vendable=true` utilisé par CommandeVenteController::produitsActifs()).
+        $produit = $this->makeProduitAvecVariante($this->org, ['nom' => 'Préforme PET', 'type' => 'matiere_production']);
+        VarianteStock::create([
+            'organization_id' => $this->org->id,
+            'produit_variante_id' => $produit->variantePrincipale()->first()->id,
+            'site_id' => $this->siteSource->id,
+            'qte_stock' => 50,
+        ]);
+
+        $ligne = $this->trouverProduit($this->produitsProp(), 'Préforme PET');
+
         $this->assertNotNull($ligne);
-        $this->assertFalse($ligne['gere_stock']);
-        $this->assertSame([], $ligne['stocks_par_site']);
+        $this->assertTrue($ligne['gere_stock']);
+        $this->assertSame(50, $ligne['stocks_par_site'][(string) $this->siteSource->id]);
     }
 
     public function test_isolation_entre_organisations(): void

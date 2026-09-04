@@ -13,6 +13,7 @@ use App\Features\ModuleFeature;
 use App\Models\Categorie;
 use App\Models\CommissionCibleType;
 use App\Models\CommissionEnveloppe;
+use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionProcessus;
 use App\Models\CommissionRegle;
 use App\Models\EquipeLivraison;
@@ -422,5 +423,100 @@ class CommissionTriggerLogistiqueTest extends TestCase
             ->assertRedirect();
 
         $this->assertDatabaseMissing('commissions_logistiques', ['transfert_logistique_id' => $transfert->id]);
+    }
+
+    // ── Détail par livreur (onglet "Commission logistique" du transfert) ────────
+
+    /**
+     * L'onglet "Commission logistique" de la page transfert (TransfertLogistiqueController::
+     * mapCommissionLivreursGeneriques()) doit exposer directement le détail par livreur — plus
+     * besoin de renvoyer l'utilisateur vers Comptabilité > Commissions pour le voir. Part
+     * unitaire = montant_unitaire_snapshot (partage GNF fixe par catégorie, cf. configurerBareme() :
+     * 60 % / 40 % de 200 = 120/80), montant = ce que chaque livreur a réellement gagné sur ce
+     * transfert (100 packs reçus).
+     */
+    public function test_reception_effectuee_expose_le_detail_par_livreur_sur_la_page_transfert(): void
+    {
+        Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE);
+        $this->configurerBareme(montantParPack: 200);
+
+        $transfert = $this->makeTransfertEnReception(qteRecue: 100);
+
+        $this->actingAs($this->admin)
+            ->post($this->urlValidation($transfert), ['decision' => 'accord'])
+            ->assertRedirect();
+
+        $response = $this->actingAs($this->admin)
+            ->get(route('logistique.show', $transfert))
+            ->assertOk();
+
+        $props = $response->viewData('page')['props']['transfert'];
+
+        $this->assertTrue($props['commission_generique_genere']);
+        $this->assertCount(2, $props['commission_generique_livreurs']);
+
+        $parLivreur = collect($props['commission_generique_livreurs'])->keyBy('id');
+
+        $this->assertEquals(120, $parLivreur[$this->livreur1->id]['montant_unitaire']);
+        $this->assertEquals(12000.0, $parLivreur[$this->livreur1->id]['montant']); // 100 × 120
+        $this->assertEquals(80, $parLivreur[$this->livreur2->id]['montant_unitaire']);
+        $this->assertEquals(8000.0, $parLivreur[$this->livreur2->id]['montant']); // 100 × 80
+
+        // Le seul barème configuré dans ce test est celui de l'équipe de livraison (livreurs) :
+        // le total du détail livreurs doit donc reconstituer exactement le total global de
+        // l'enveloppe, sans commission perdue ni inventée.
+        $sommeLivreurs = collect($props['commission_generique_livreurs'])->sum('montant');
+        $this->assertEquals($props['commission_generique_montant_total'], $sommeLivreurs);
+    }
+
+    /**
+     * Une commission générique peut exister pour une autre cible (ici : site) sans qu'aucun
+     * barème Livreur ne soit configuré pour l'équipe — décision AMOA #4, "absence de règle = 0,
+     * jamais une erreur". Le tableau "Détail par livreur" doit alors rester vide plutôt que
+     * d'inventer un bénéficiaire, et l'onglet doit l'expliquer clairement (cf. Show.vue) au lieu
+     * d'afficher un tableau vide.
+     */
+    public function test_transfert_sans_bareme_livreur_expose_une_liste_livreurs_vide(): void
+    {
+        Parametre::setDeclencheurCommissionLogistique($this->org->id, DeclencheurCommissionLogistique::RECEPTION_EFFECTUEE);
+
+        // Barème SITE uniquement — jamais EQUIPE_LIVRAISON.
+        $processus = CommissionProcessusDefaults::resoudreOuCreer($this->org->id, CommissionProcessus::CODE_LOGISTIQUE_TRANSFERT);
+        $processus->update(['statut' => CommissionActivationStatut::ACTIF->value]);
+        CommissionRegle::create([
+            'organization_id' => $this->org->id,
+            'processus_id' => $processus->id,
+            'libelle' => 'Site — Global',
+            'scope_type' => CommissionScopeType::GLOBAL->value,
+            'scope_id' => null,
+            'cible_type' => CommissionCibleType::CODE_SITE,
+            'mode' => CommissionMode::A_REPARTIR->value,
+            'unite_calcul' => CommissionUniteCalcul::PAR_UNITE_VENDUE->value,
+            'montant' => 50,
+            'effective_from' => now()->subDay()->toDateString(),
+            'statut' => 'active',
+        ]);
+
+        $transfert = $this->makeTransfertEnReception(qteRecue: 100);
+
+        $this->actingAs($this->admin)
+            ->post($this->urlValidation($transfert), ['decision' => 'accord'])
+            ->assertRedirect();
+
+        $enveloppe = $this->enveloppePour($transfert);
+        $this->assertNotNull($enveloppe, 'La cible site doit produire une commission même sans barème livreur.');
+        $this->assertTrue(
+            CommissionEnveloppePart::where('enveloppe_id', $enveloppe->id)
+                ->where('beneficiaire_type', CommissionEnveloppePart::TYPE_LIVREUR)
+                ->doesntExist()
+        );
+
+        $props = $this->actingAs($this->admin)
+            ->get(route('logistique.show', $transfert))
+            ->assertOk()
+            ->viewData('page')['props']['transfert'];
+
+        $this->assertTrue($props['commission_generique_genere']);
+        $this->assertSame([], $props['commission_generique_livreurs']);
     }
 }

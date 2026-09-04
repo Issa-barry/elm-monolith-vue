@@ -2,14 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\ProduitStatut;
 use App\Enums\StatutCommission;
 use App\Enums\StatutTransfert;
 use App\Enums\TypeEcartLogistique;
 use App\Jobs\NotifierLivreursTransfertJob;
 use App\Models\CommissionEnveloppe;
+use App\Models\CommissionEnveloppePart;
 use App\Models\CommissionLogistique;
 use App\Models\CommissionProcessus;
 use App\Models\EquipeLivraison;
+use App\Models\Livreur;
 use App\Models\Produit;
 use App\Models\ProduitVariante;
 use App\Models\Site;
@@ -646,7 +649,7 @@ class TransfertLogistiqueController extends Controller
         // les mêmes CommissionEnveloppe (statut agrégé du stepper + genere/montant_total ci-dessous).
         $enveloppesGeneriques = CommissionEnveloppe::where('source_type', TransfertLogistique::class)
             ->where('source_id', $t->id)
-            ->with('parts:id,enveloppe_id,montant_net,montant_verse')
+            ->with('parts')
             ->get();
 
         $base = $this->mapTransfert($t, $enveloppesGeneriques);
@@ -698,8 +701,57 @@ class TransfertLogistiqueController extends Controller
         // (régression constatée le 02/09/2026, cf. incident production).
         $base['commission_generique_genere'] = $enveloppesGeneriques->isNotEmpty();
         $base['commission_generique_montant_total'] = (float) $enveloppesGeneriques->sum('montant_total');
+        $base['commission_generique_livreurs'] = $this->mapCommissionLivreursGeneriques($enveloppesGeneriques);
 
         return $base;
+    }
+
+    /**
+     * Détail par livreur (moteur générique CommissionEnveloppe/Part, seul moteur depuis le
+     * 03/09/2026) pour l'onglet "Commission logistique" du transfert : Livreur / part unitaire /
+     * montant réellement gagné. Ne remonte QUE le bénéficiaire "livreur" — jamais propriétaire,
+     * site ou consultant, qui restent des cibles distinctes de la même opération (cf.
+     * CommissionEnveloppeGenerator::genererDepuisContexte()) — le total de ce tableau ne
+     * correspond donc volontairement pas à `commission_generique_montant_total` (qui agrège
+     * toutes les cibles) : la vue Vue.js explicite les deux totaux séparément pour ne jamais
+     * laisser croire à une incohérence de calcul.
+     *
+     * `montant_unitaire_snapshot` est un instantané de la RÈGLE appliquée (montant_unitaire_snapshot
+     * peut ne refléter qu'une des catégories de produit si le transfert en mélange plusieurs —
+     * cf. CommissionEnveloppeGenerator, `$montantUnitaireParBeneficiaire` retient la dernière
+     * catégorie traitée) : affiché tel quel, jamais recalculé ici (montant / quantité ne serait
+     * pas fiable dans ce cas).
+     *
+     * @return array<int, array{id: string, nom: string, montant_unitaire: int, montant: float, statut_label: string, statut_dot_class: string}>
+     */
+    private function mapCommissionLivreursGeneriques(Collection $enveloppesGeneriques): array
+    {
+        $parts = $enveloppesGeneriques
+            ->flatMap(fn (CommissionEnveloppe $e) => $e->parts)
+            ->filter(fn (CommissionEnveloppePart $p) => $p->beneficiaire_type === CommissionEnveloppePart::TYPE_LIVREUR
+                && $p->statut !== StatutCommission::ANNULEE)
+            ->values();
+
+        if ($parts->isEmpty()) {
+            return [];
+        }
+
+        $livreurs = Livreur::with('personne')
+            ->whereIn('id', $parts->pluck('beneficiaire_id')->unique())
+            ->get()
+            ->keyBy('id');
+
+        return $parts
+            ->map(fn (CommissionEnveloppePart $p) => [
+                'id' => $p->beneficiaire_id,
+                'nom' => $livreurs->get($p->beneficiaire_id)?->libelleAffichage() ?? '—',
+                'montant_unitaire' => (int) $p->montant_unitaire_snapshot,
+                'montant' => (float) $p->montant_a_payer,
+                'statut_label' => $p->statut->label(),
+                'statut_dot_class' => $p->statut->dotClass(),
+            ])
+            ->values()
+            ->all();
     }
 
     private function mapCommission(CommissionLogistique $c): array
@@ -882,11 +934,19 @@ class TransfertLogistiqueController extends Controller
      * Create.vue doit le traiter comme toujours disponible, à l'image de
      * TransfertLogistiqueService::verifierDisponibiliteLignes() qui l'ignore côté serveur.
      *
+     * Éligibilité (04/09/2026) : ACTIF + type géré en stock (produitType.gere_stock=true).
+     * Volontairement PLUS LARGE que le filtre `vendable=true` de Ventes::produitsActifs() — un
+     * transfert déplace du stock physique entre sites, donc une matière première ou du matériel
+     * (vendable=false mais gere_stock=true) doit rester transférable ; seul le type `service`
+     * (gere_stock=false, jamais stocké) n'a physiquement rien à transférer.
+     *
      * @return array<int, array{id: string, nom: string, categorie_id: ?string, gere_stock: bool, stocks_par_site: array<string, int>}>
      */
     private function produitsAvecStock(string $orgId): array
     {
         $produits = Produit::where('organization_id', $orgId)
+            ->where('statut', ProduitStatut::ACTIF)
+            ->whereHas('produitType', fn ($q) => $q->where('gere_stock', true))
             ->with(['variantes', 'produitType'])
             ->orderBy('nom')
             ->get();

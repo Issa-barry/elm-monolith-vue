@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\StockStatut;
 use App\Models\Categorie;
 use App\Models\DroitAjustementStock;
 use App\Models\MouvementStock;
@@ -184,11 +185,37 @@ class StockIndexTest extends TestCase
     }
 
     /**
-     * Régression 04/09/2026 : le filtre "Disponible" plantait en SQLSTATE[HY093] (Invalid
-     * parameter number) — {$seuil} apparaît deux fois dans la même expression whereRaw
-     * ("(seuil <= 0 OR quantite > seuil)") donc deux `?` à lier, mais un seul binding était
-     * fourni. Couvre les deux branches du OR : un produit sans seuil configuré (seuil
-     * organisation par défaut) et un produit avec un stock strictement supérieur à son seuil.
+     * Garde-fou de couverture (régression 04/09/2026 : `stock_statut=disponible` — et
+     * `stock_negatif` — n'étaient exercés par AUCUN test avant ce correctif, seule branche du
+     * match() de stockQuery() jamais atteinte par la suite). Garantit que chaque valeur de
+     * l'enum reste au moins EXÉCUTÉE (colonnes/jointures valides, pas d'exception PHP). Ne
+     * détecte PAS un mismatch placeholders/bindings dans un whereRaw() : la suite tourne sur
+     * SQLite (phpunit.xml), qui — contrairement à MySQL/HY093 — complète silencieusement un `?`
+     * non lié par NULL au lieu de lever une erreur (vérifié empiriquement en rejouant ce test
+     * contre le bug d'origine : il passait toujours). Le seul test qui détecte réellement ce
+     * mismatch est celui ci-dessous, car il inclut un produit SANS ligne produit_seuils_alerte —
+     * c'est exactement ce cas qui fait basculer le `?` non lié sur NULL et fausse le résultat.
+     */
+    public function test_chaque_valeur_de_stock_statut_sexecute_sans_erreur_sql(): void
+    {
+        $produit = $this->makeProduitAvecVariante($this->organization, [], ['sku' => 'SMOKE-STATUT-001']);
+        $this->stock($produit->variantePrincipale()->first(), $this->siteA, 5);
+
+        foreach (StockStatut::cases() as $statut) {
+            $this->actingAs($this->admin)
+                ->get(route('produits.stock.index', ['stock_statut' => [$statut->value], 'site_ids' => [$this->siteA->id]]))
+                ->assertOk();
+        }
+    }
+
+    /**
+     * Régression 04/09/2026 (SQLSTATE[HY093] en production sur MySQL) : {$seuil} apparaît deux
+     * fois dans la même expression whereRaw ("(seuil <= 0 OR quantite > seuil)") donc deux `?` à
+     * lier, mais un seul binding était fourni. En local/CI (SQLite), ce mismatch ne lève PAS
+     * d'erreur — le `?` non lié est silencieusement traité comme NULL — d'où l'assertion sur les
+     * DONNÉES retournées plutôt que sur l'absence d'exception : `produitSansSeuil` (aucune ligne
+     * produit_seuils_alerte) est le cas précis où le `?` non lié fausse le résultat, car c'est le
+     * seul chemin qui dépend de la valeur de repli portée par ce second placeholder.
      */
     public function test_le_filtre_disponible_ne_leve_pas_derreur_sql_et_retourne_les_lignes_attendues(): void
     {
